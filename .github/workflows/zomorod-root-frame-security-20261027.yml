@@ -1,0 +1,194 @@
+name: Zomorod root-only frame protection with exact rollback
+on:
+  pull_request:
+    paths: [.github/workflows/zomorod-root-frame-security-20261027.yml]
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-root-frame-security-20261027.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-frame-security-20261027
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate root-only scope and automatic exact rollback
+        run: |
+          set -euo pipefail
+          f=.github/workflows/zomorod-root-frame-security-20261027.yml
+          grep -Fq 'ZM_ROOT_FRAME=1' "$f"
+          grep -Fq 'REDIRECT_ZM_ROOT_FRAME' "$f"
+          grep -Fq 'FRAME_SECURITY_ROLLBACK=verified' "$f"
+          grep -Fq 'PROTECTED_SUBPATH_HEADERS=unchanged' "$f"
+          echo ROOT_SECURITY_SOURCE=validated
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Use pinned VPS-to-cPanel SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-frame-security"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_RELAY=verified
+      - name: Back up real root configuration and record protected site state
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zm-frame-security/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1";case "$run" in ''|*[!0-9]*) exit 1;; esac
+          web=/home/zomorod2/public_html
+          original="$web/.htaccess"
+          backup="/home/zomorod2/.backups/zomorod-six-20261027-security/$run"
+          test -d "$web" && test ! -L "$web"
+          test -s "$original" && test ! -L "$original" && test ! -e "$backup"
+          install -d -m 700 "$backup"
+          cp -p "$original" "$backup/.htaccess"
+          cmp -s "$original" "$backup/.htaccess"
+          sha256sum "$original" > "$backup/original.sha256"
+          (cd "$web" && sha256sum index.html search/index.json sitemap.xml store/index.php \
+            about/index.html topics/index.html company/index.html research/index.html \
+            services/index.html) > "$backup/protected.sha256"
+          python3 - "$original" "$backup/candidate.htaccess" <<'PY'
+          from pathlib import Path
+          import sys
+          source=Path(sys.argv[1]).read_bytes()
+          marker=b'# zomorod-root-frame-setenvif-20261027'
+          assert marker not in source
+          addition=b'''# zomorod-root-frame-setenvif-20261027
+          # Only the main domain homepage and its explicit /index.html URL.
+          # This server has been independently verified to support SetEnvIf,
+          # but not response-header expr conditions (run 40483158778).
+          <IfModule mod_setenvif.c>
+          SetEnvIf Request_URI "^/(index\\.html)?$" ZM_ROOT_FRAME=1
+          </IfModule>
+          <IfModule mod_headers.c>
+          Header always set X-Frame-Options "SAMEORIGIN" env=ZM_ROOT_FRAME
+          Header always set X-Frame-Options "SAMEORIGIN" env=REDIRECT_ZM_ROOT_FRAME
+          Header always add Content-Security-Policy "frame-ancestors 'self'" env=ZM_ROOT_FRAME
+          Header always add Content-Security-Policy "frame-ancestors 'self'" env=REDIRECT_ZM_ROOT_FRAME
+          </IfModule>
+          '''
+          result=source+(b'' if source.endswith(b'\n') else b'\n')+addition
+          Path(sys.argv[2]).write_bytes(result)
+          assert result.startswith(source)
+          print('ROOT_FRAME_CANDIDATE=prepared')
+          PY
+          sha256sum "$backup/candidate.htaccess" > "$backup/candidate.sha256"
+          for path in /about/ /topics/ /store/ /business/ /tala/; do
+            headers="$(curl -fsSI --connect-timeout 8 --max-time 25 "https://zomorodmelal.ir$path?before_frame=$run")"
+            filtered="$(printf '%s\n' "$headers" | tr -d '\r' | grep -iE '^(x-frame-options|content-security-policy):' | sort || true)"
+            printf '%s\t%s\n' "$path" "$filtered" >> "$backup/subpath-headers-before.txt"
+          done
+          test -s "$backup/subpath-headers-before.txt"
+          echo ROOT_FRAME_BACKUP=verified
+          echo ROOT_FRAME_BACKUP_PATH="$backup"
+          REMOTE
+      - name: Apply one root configuration atomically and verify public headers with exact rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zm-frame-security/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1";web=/home/zomorod2/public_html
+          b="/home/zomorod2/.backups/zomorod-six-20261027-security/$run"
+          target="$web/.htaccess"
+          tmp="$web/.htaccess.zm-next-$run"
+          test -s "$b/candidate.htaccess" && test -s "$b/.htaccess"
+          test -s "$target" && test ! -L "$target" && test ! -e "$tmp"
+          sha256sum -c --status "$b/original.sha256"
+          (cd "$web" && sha256sum -c --status "$b/protected.sha256")
+          rollback(){
+            set +e
+            if test -s "$b/.htaccess" && test ! -L "$target"; then
+              cp -p "$b/.htaccess" "$target.zm-revert-$run" && mv -f "$target.zm-revert-$run" "$target"
+            fi
+            cmp -s "$target" "$b/.htaccess"
+            if test "$?" -eq 0;then echo FRAME_SECURITY_ROLLBACK=verified;else echo FRAME_SECURITY_ROLLBACK=failed;fi
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" -eq 1;then rollback;fi; exit "$rc"' EXIT
+          cp -p "$b/candidate.htaccess" "$tmp"
+          chmod --reference="$target" "$tmp"
+          mv -T "$tmp" "$target"
+          sha256sum -c --status "$b/candidate.sha256"
+          for path in / /index.html;do
+            headers="$(curl -fsSI --connect-timeout 8 --max-time 25 -H 'Cache-Control: no-cache' "https://zomorodmelal.ir$path?root_frame=$run")"
+            printf '%s\n' "$headers" | grep -iq '^x-frame-options: SAMEORIGIN' || { echo "ROOT_FRAME_XFO_MISSING=$path"; exit 1; }
+            printf '%s\n' "$headers" | grep -iq "frame-ancestors 'self'" || { echo "ROOT_FRAME_CSP_MISSING=$path"; exit 1; }
+            printf '%s\n' "$headers" | grep -iq "base-uri 'self'" || { echo "ROOT_EXISTING_CSP_MISSING=$path"; exit 1; }
+            echo "ROOT_FRAME_HEADERS=verified:$path"
+          done
+          : > "$b/subpath-headers-after.txt"
+          for path in /about/ /topics/ /store/ /business/ /tala/;do
+            headers="$(curl -fsSI --connect-timeout 8 --max-time 25 "https://zomorodmelal.ir$path?after_frame=$run")"
+            filtered="$(printf '%s\n' "$headers" | tr -d '\r' | grep -iE '^(x-frame-options|content-security-policy):' | sort || true)"
+            printf '%s\t%s\n' "$path" "$filtered" >> "$b/subpath-headers-after.txt"
+          done
+          cmp -s "$b/subpath-headers-before.txt" "$b/subpath-headers-after.txt" || { echo SUBPATH_HEADERS_CHANGED; exit 1; }
+          echo PROTECTED_SUBPATH_HEADERS=unchanged
+          (cd "$web" && sha256sum -c --status "$b/protected.sha256")
+          head_code="$(curl -fsSI --max-time 25 'https://zomorodmelal.ir/' | head -n 4)"
+          test -n "$head_code"
+          active=0;trap - EXIT
+          echo ZOMOROD_ROOT_FRAME_SECURITY=live_verified
+          echo ROOT_FRAME_RESTORE_COPY="$b/.htaccess"
+          REMOTE
+      - name: Delete only temporary runner credentials; preserve exact root backup
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/zm-frame-security"
+          if test -d "$d"; then
+            for f in vps.key host.key config vps.known host.known; do
+              if test -f "$d/$f" && test ! -L "$d/$f"; then unlink "$d/$f"; fi
+            done
+            rmdir "$d"
+          fi
