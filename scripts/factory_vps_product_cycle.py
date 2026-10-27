@@ -245,6 +245,31 @@ def _maintain_product_slots(root, recipe_names):
     return [item["recipe"] for item in active]
 
 
+
+# Durable design requests awaiting a valid input or a retry date are backlog,
+# not a broken manufacturer. Never drop them from the published private state.
+EXPECTED_DESIGN_BACKLOG_TYPES = frozenset(
+    ("engineering_rework", "deferred_rework")
+)
+
+
+def _execution_health(failures, admission_failures, designer_failures, research_failures):
+    """Separate real worker faults from explicitly deferred engineering intake."""
+    fatal_design = [
+        row for row in designer_failures
+        if not isinstance(row, dict)
+        or row.get("type") not in EXPECTED_DESIGN_BACKLOG_TYPES
+    ]
+    return {
+        "status": ("needs_rework" if (
+            failures or admission_failures or fatal_design or research_failures
+        ) else "ok"),
+        "expected_design_backlog_count": len(designer_failures) - len(fatal_design),
+        "fatal_design_failure_count": len(fatal_design),
+        "backlog_retained": True,
+    }
+
+
 def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
               enable_designer=False, enable_design_intake=False, design_capacity=1,
               enable_invention_supply=False):
@@ -530,9 +555,12 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         research_rework_counts = repair.summarize_research(root)
         # The outbox is a PRIVATE staging manifest, not a request to a shop.
         # It deliberately does not carry a publish=true flag.
+        runtime_health = _execution_health(
+            failures, admission_failures, designer_failures, research_failures)
         state = {
             "schema_version": 1,
-            "cycle_status": "needs_rework" if failures or admission_failures or designer_failures or research_failures else "ok",
+            "cycle_status": runtime_health["status"],
+            "runtime_health": runtime_health,
             "mode": "autonomous_supply_led",
             "depends_on_orders": False,
             "api_usage": "none",
@@ -611,7 +639,10 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             return value if type(value) is int and value>=0 else 0
         healthy=state['cycle_status']=='ok'
         fresh=state['new_or_updated_product_count']>0
-        reason=None if fresh else 'blocked_design_or_research' if not healthy else 'waiting_for_new_validated_need_or_design'
+        reason = (None if fresh else
+                  'blocked_design_or_research' if not healthy else
+                  'awaiting_independent_quality_clearance' if quality_return_orders and active_recipe_names else
+                  'waiting_for_new_validated_need_or_design')
         state['zero_new_products_reason_code']=reason
         finished=time.time()
         state['cycle_started_at_utc']=datetime.fromtimestamp(started,timezone.utc).isoformat()
@@ -642,7 +673,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         maker.atomic_text(root / "production-state.json",
                           json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
         fcntl.flock(file.fileno(), fcntl.LOCK_UN)
-        return {"status": "needs_rework" if failures or admission_failures or designer_failures or research_failures else "ok",
+        return {"status": runtime_health["status"],
                 "processed": dossier["processed_count"],
                 "manufactured": len(produced),
                 "new_artifacts": sum(bool(p.get("changed")) for p in produced),
