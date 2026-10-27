@@ -205,6 +205,12 @@ test('a living final boss cannot be duplicated by a corrupted spawn flag', () =>
   assert.equal(s.bossSpawned,true);
   assert.equal(reconcileBossEncounter(s),false);
 });
+test('a defeated boss awaiting cleanup does not trigger a duplicate boss spawn', () => {
+  const s={...fresh(),mission:5,bossSpawned:false,enemies:[{x:8.5,y:7.5,type:3,hp:-5,boss:true}]};
+  assert.equal(validateCampaignSave(s),true);
+  assert.equal(reconcileBossEncounter(s),true);
+  assert.equal(s.bossSpawned,true,'next tick must process the existing boss death');
+});
 test('completed and unrelated encounters remain untouched, malformed boss flags fail validation', () => {
   for(const s of [
     {...fresh(),mission:5,bossSpawned:true,objective:{done:0,hold:0,bossDefeated:true}},
