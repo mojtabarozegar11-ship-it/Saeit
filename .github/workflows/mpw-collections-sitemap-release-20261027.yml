@@ -1,0 +1,107 @@
+name: MojPlayWin thematic collection sitemap release
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/mpw_collections_sitemap_release_20261027.py
+      - .github/workflows/mpw-collections-sitemap-release-20261027.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-main-sitemap-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate 18 exact canonical collection entries
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_collections_sitemap_release_20261027.py
+          python3 scripts/mpw_collections_sitemap_release_20261027.py selftest
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-structure-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Preflight existing sitemap PHP and 18 archive files
+        run: |
+          timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 - preflight' < scripts/mpw_collections_sitemap_release_20261027.py
+      - name: Register 18 thematic archive URLs in live sitemap
+        id: release
+        run: |
+          timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel "python3 - publish '$GITHUB_RUN_ID'" < scripts/mpw_collections_sitemap_release_20261027.py
+      - name: Validate XML sitemap routes and protected business paths
+        run: |
+          python3 - <<'PY'
+          import sys,urllib.request,xml.etree.ElementTree as ET
+          sys.path.insert(0,"scripts")
+          from mpw_collections_sitemap_release_20261027 import ROUTES
+          with urllib.request.urlopen('https://mojplaywin.com/sitemap.xml',timeout=30) as response:
+              if response.status!=200:raise RuntimeError('Sitemap HTTP failure')
+              xml=response.read(250000)
+          root=ET.fromstring(xml)
+          locs={x.text for x in root.iter() if x.tag.endswith('loc')}
+          base='https://mojplaywin.com'
+          for route in ROUTES:
+              if base+route not in locs:raise RuntimeError('Missing sitemap canonical: '+route)
+          for route in ('/','/store/','/games/','/mojtaba.roozegar/'):
+              with urllib.request.urlopen(base+route,timeout=25) as response:
+                  if response.status!=200:raise RuntimeError('Protected path unhealthy: '+route)
+          if len(locs)<151:raise RuntimeError('Sitemap page count decreased: '+str(len(locs)))
+          print('MPW_COLLECTIONS_SITEMAP_LIVE_PASS',len(locs),'indexed URLs',len(ROUTES),'collections')
+          PY
+      - name: Restore previous sitemap if publication smoke fails
+        if: failure() && steps.release.outcome == 'success'
+        run: |
+          timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_collections_sitemap_release_20261027.py
+      - name: Clear ephemeral relay keys
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-structure-ssh"
+          if [ -d "$d" ]; then shred -u "$d/vps.key" "$d/host.key" 2>/dev/null || true; fi
