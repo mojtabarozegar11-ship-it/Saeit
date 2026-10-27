@@ -161,6 +161,17 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         self.assertEqual(status,0)
         self.assertFalse((self.output/'production-state.json').exists())
 
+    def test_cli_boolean_flags_accept_positive_and_negative_forms(self):
+        self.output.mkdir()
+        args = ['--db', str(self.db), '--out', str(self.output),
+                '--recipes', str(self.recipes), '--enable-designer',
+                '--no-enable-design-intake', '--no-enable-invention-supply']
+        with (self.output/'.production-cycle.lock').open('a+b') as locked:
+            fcntl.flock(locked.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            status = cycle.main(args)
+        self.assertEqual(status, 0)
+        self.assertFalse((self.output/'production-state.json').exists())
+
     def test_corrupt_manifest_shapes_are_rebuilt_without_false_new_products(self):
         cycle.run_cycle(self.db,self.output,self.recipes)
         manifests=sorted((self.output/'digital-products').glob('*/manufacturing_manifest.json'))
