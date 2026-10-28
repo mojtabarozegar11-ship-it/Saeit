@@ -82,6 +82,21 @@ assert.equal(game.getInput().keys,0,'menu key presses must not latch gameplay in
 assert.equal(menuPrevented,false,'menu Space must retain native browser behavior');
 elements.leaders.handlers.click();assert.match(elements.overlayText.textContent,/Achievements: 2\/15/,'only two valid unique achievements count');const records=elements.leaderList.children[0].children;assert.equal(records.length,2,'malformed score, mode and wave records must be discarded');assert.match(records[0].textContent,/42.*campaign.*wave 2/);assert.match(records[1].textContent,/100.*endless.*wave 3/);
 assert.equal(game.getState().version,121);assert.equal(game.getState().activeJet,'falcon','local forged premium ignored');game.start();assert.equal(game.getState().bank,0,'nonfinite credits must not become maximum credits');assert.equal(game.getState().best,0,'nonfinite best must not become maximum score');assert.equal(game.getState().sector,1,'nonfinite unlocked sector must not skip campaign');assert.equal(game.getState().upgrades.armor,0,'nonfinite saved armor must not boost player');assert.equal(game.getState().hp,100);
+// Keyboard focus on a button, textarea or editable region must not
+// trigger combat or preserve movement held before focus changed.
+document.handlers.keydown({code:'KeyW',target:document.body,repeat:false,preventDefault(){}});
+assert.equal(game.getInput().keys,1);
+let focusedPrevented=false;
+document.handlers.keydown({code:'Space',target:elements.fire,repeat:false,
+  preventDefault(){focusedPrevented=true}});
+assert.equal(game.getInput().keys,0,'focused fire button releases held movement');
+assert.equal(focusedPrevented,false,'native button Space activation is preserved');
+const textEditor=new Element('TEXTAREA');
+document.handlers.keydown({code:'KeyE',target:textEditor,repeat:false,preventDefault(){}});
+assert.equal(game.getInput().keys,0,'typing in textarea must not trigger combat');
+const editable=new Element('DIV');editable.isContentEditable=true;
+document.handlers.keydown({code:'KeyQ',target:editable,repeat:false,preventDefault(){}});
+assert.equal(game.getInput().keys,0,'contenteditable input must not trigger abilities');
 // Actual registered pointer handlers: secondary touches must not steal or
 // release an active drag or fire control. Pointer-capture failure is harmless.
 const pointerEvent=id=>({pointerId:id,clientX:270,clientY:480,preventDefault(){}});
