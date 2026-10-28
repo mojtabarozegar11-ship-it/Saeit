@@ -47,7 +47,7 @@ jobs:
           node-version: "22"
       - name: Install Chromium driver
         run: npm install --no-save --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/arena-browser-test" playwright-core@1.62.1
-      - name: Exercise 49 free activities, 7 Casino Dollar tables and 6 prediction fixtures in six languages on mobile Chromium
+      - name: Exercise 49 free activities, 7 MCD tables, 6 demo prediction markets and real match feeds in six languages
         shell: bash
         env:
           NODE_PATH: ${{ runner.temp }}/arena-browser-test/node_modules
@@ -62,14 +62,59 @@ jobs:
             const browser=await chromium.launch({executablePath:exe,headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
             try{
               const page=await browser.newPage({viewport:{width:390,height:844}});
+
               const errors=[];page.on('pageerror',e=>errors.push(e.message));
+              const future=new Date(Date.now()+36*3600*1000).toISOString();
+              const past=new Date(Date.now()-48*3600*1000).toISOString();
+              const fixture=(id,league,utc,finished=false,h=null,a=null)=>({
+                matchID:id,leagueShortcut:league,matchDateTimeUTC:utc,matchIsFinished:finished,
+                group:{groupOrderID:9},
+                team1:{teamName:league==='bl1'?'Berlin Actual':'Hamburg Actual'},
+                team2:{teamName:league==='bl1'?'Munich Actual':'Bremen Actual'},
+                matchResults:finished?[{resultTypeKind:'After90Minutes',resultTypeID:2,pointsTeam1:h,pointsTeam2:a}]:[]
+              });
+              let liveMock={
+                bl1:[fixture(900001,'bl1',future),fixture(900002,'bl1',past,true,1,1)],
+                bl2:[fixture(910001,'bl2',future)]
+              },feedBroken=false,feedCalls=0;
+              await page.route('https://api.openligadb.de/**',async route=>{
+                feedCalls++;
+                if(feedBroken){await route.fulfill({status:503,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:'{}'});return}
+                const league=route.request().url().includes('/bl2/')?'bl2':'bl1';
+                await route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify(liveMock[league])});
+              });
               await page.goto(pathToFileURL(path.resolve('site_releases/mojplaywin/arena/index.html')).href);
               assert.equal(await page.evaluate(()=>document.activeElement.id),'age-confirm');
               await page.keyboard.press('Tab');
               assert.equal(await page.evaluate(()=>document.activeElement.textContent.trim()),'Leave');
               await page.keyboard.press('Shift+Tab');
               assert.equal(await page.evaluate(()=>document.activeElement.id),'age-confirm');
+
+              assert.equal(feedCalls,0,'No public feed call before age self-declaration');
               await page.locator('#age-confirm').click();
+              await page.locator('#real-match-900001').waitFor({state:'visible'});
+              assert.equal(await page.locator('#real-match-900002 .live-pill').innerText(),'Final');
+              assert.ok(feedCalls>=1,'Public feed was requested after age confirmation');
+              assert.equal(await page.locator('#mcd-balance').innerText(),'1,000.00 MCD');
+              await page.locator('#real-match-900001 input[value="h"]').check();
+              await page.locator('#real-match-900001 button[type=submit]').click();
+              assert.match(await page.locator('#live-history-list').innerText(),/Awaiting final score/);
+              assert.equal(await page.locator('#mcd-rounds').innerText(),'0');
+              await page.locator('#live-league').selectOption('bl2');
+              await page.locator('#real-match-910001').waitFor({state:'visible'});
+              await page.locator('#live-league').selectOption('bl1');
+              await page.locator('#real-match-900001').waitFor({state:'visible'});
+              liveMock.bl1[0]=fixture(900001,'bl1',future,true,2,0);
+              await page.locator('#live-refresh').click();
+              await page.waitForFunction(()=>document.querySelector('#live-history-list')?.textContent.includes('Correct'));
+              assert.match(await page.locator('#live-history-list').innerText(),/Correct/);
+              assert.equal(await page.locator('#mcd-balance').innerText(),'1,000.00 MCD');
+              feedBroken=true;
+              await page.locator('#live-refresh').click();
+              await page.waitForFunction(()=>document.querySelector('#live-status')?.textContent.includes('Data delayed/unavailable'));
+              assert.match(await page.locator('#live-status').innerText(),/Data delayed\/unavailable/);
+              assert.equal(await page.locator('#real-match-900001 form').count(),0);
+              feedBroken=false;
               assert.equal(await page.locator('#game-grid article').count(),16);
               assert.equal(await page.locator('#dice-game-grid article').count(),15);
               assert.equal(await page.locator('#classic-game-grid article').count(),6);
@@ -153,7 +198,7 @@ jobs:
               await page.locator('#oracle-numerology button').click();
               assert.equal(await page.locator('#oracle-numerology .oracle-answer').innerText(),'Choose a birth date.');
               await page.locator('#language').selectOption('fa');
-              assert.equal(await page.locator('#nav-predictions').innerText(),'پیش‌بینی‌ها');
+              assert.equal(await page.locator('#nav-predictions').innerText(),'پیش‌بینی زنده');
               await page.locator('#arena-search').fill('شطرنج');
               assert.equal(await page.locator('#classic-game-grid article:not([hidden])').count(),1);
               await page.locator('#arena-search').fill('فال');
@@ -164,7 +209,7 @@ jobs:
               }
               assert.deepEqual(errors,[]);
               assert.ok((await page.locator('#wager-heading').innerText()).length>15);
-              console.log('ARENA_MOBILE_49_FREE_7_MCD_6_PREDICTIONS_SIX_LANG_PASS');
+              console.log('ARENA_MOBILE_62_ACTIVITIES_REAL_OPENLIGADB_FEED_NO_MONEY_PASS');
             }finally{await browser.close()}
           })().catch(e=>{console.error(e);process.exitCode=1});
           JS
@@ -277,7 +322,7 @@ jobs:
           source=Path('site_releases/mojplaywin/arena/index.html').read_bytes()
           if hashlib.sha256(released).digest()!=hashlib.sha256(source).digest():
               raise SystemExit('Published Arena checksum mismatch')
-          print('ARENA_49_FREE_7_MCD_6_PREDICTIONS_LIVE_SHA256_MATCH')
+          print('ARENA_62_ACTIVITIES_REAL_FIXTURES_LIVE_SHA256_MATCH')
           PY
           for path in / /games/ /store/ /game-releases/20261020/index.html; do
             [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")" == "200" ]]
