@@ -45,6 +45,7 @@ jobs:
 
           root = Path.home() / "factory-runtime"
           ops = root / "operations"
+          app = root / "django-app"
           private = root / "private" / "autonomous-product-cycle"
           if root.is_symlink() or not root.is_dir() or ops.is_symlink() or not ops.is_dir():
               raise SystemExit("FACTORY_STORAGE_ROOT_UNSAFE")
