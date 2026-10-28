@@ -227,6 +227,7 @@ jobs:
               "mount_used_bytes": disk.used,
               "reserve_2048_mib_met": disk.free >= 2048*1024*1024,
               "fixed_groups_bytes": groups,
+              "generation_map": generation_map,
               "backup_composition": backup_breakdown,
               "known_transient_staging": transient,
               "operation_logs": logs,
