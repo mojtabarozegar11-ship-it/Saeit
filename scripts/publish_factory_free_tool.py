@@ -227,7 +227,7 @@ def publish(inbox, webroot, *, release_authorized=False, uncertified_preview=Fal
                 and checksums.read_text(encoding="utf-8").strip() ==
                   digest + "  " + PUBLIC_FILENAME):
             page = (public_dir / "index.html").read_text(encoding="utf-8") if (public_dir / "index.html").is_file() else ""
-            if uncertified_preview and "has not received QC1000" not in page:
+            if uncertified_preview and (not (public_dir / "index.html").is_file() or (public_dir / "index.html").is_symlink() or "has not received QC1000" not in page):
                 raise ValueError("EXISTING_PUBLIC_RELEASE_PREVIEW_STATUS_MISMATCH")
             return {"status": "existing_valid_release", "sha256": digest, "url": PUBLIC_URL}
         raise ValueError("REFUSING_TO_REPLACE_EXISTING_PUBLIC_RELEASE")
@@ -268,7 +268,7 @@ def main(argv=None):
     print("FACTORY_RELEASE_SHA256=" + result["sha256"])
     print("FACTORY_RELEASE_PRICE=FREE")
     print("FACTORY_RELEASE_PAYMENT_ENABLED=false")
-    print("FACTORY_RELEASE_QC1000_CERTIFIED=" + str(result["status"] != "published_public_uncertified_preview").lower())
+    print("FACTORY_RELEASE_QC1000_CERTIFIED=" + str(not args.uncertified_preview).lower())
     return 0
 
 
