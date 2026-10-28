@@ -9,7 +9,7 @@ from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase
 from django.template.loader import render_to_string
 
-from core.academy_views import academy, education_course_detail
+from core.academy_views import academy, education_course_detail, education_lesson
 from core.company_content_views import company_gallery
 from core.newsletter_views import newsletter_home, newsletter_detail
 from core.public_catalog_guard import missing_public_tables, mark_public_data_unavailable
@@ -163,6 +163,23 @@ class PublicCatalogDetailRouteRegressionTests(SimpleTestCase):
         self.assertIn("/academy/", response.content.decode("utf-8"))
         from core.academy_views import Product
         self.assertIn(Product, guard.call_args.args)
+
+    def test_lesson_missing_schema_returns_retryable_503_before_any_lookup(self):
+        request = self.requests.get("/education/course/example/lesson/1/")
+        request.user = SimpleNamespace(is_authenticated=False)
+        with patch("core.academy_views.missing_public_tables", return_value=True) as guard, patch(
+            "core.academy_views.get_object_or_404"
+        ) as lookup:
+            response = education_lesson(request, "example", 1)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
+        self.assertEqual(response["X-Robots-Tag"], "noindex")
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertIn("بازگشت به آموزشگاه", response.content.decode("utf-8"))
+        lookup.assert_not_called()
+        from core.academy_views import EducationEnrollment
+        self.assertIn(EducationEnrollment, guard.call_args.args)
 
     def test_newsletter_detail_missing_schema_is_truthful_retryable_503(self):
         with patch("core.newsletter_views.missing_public_tables", return_value=True) as guard:
