@@ -63,7 +63,7 @@ COURSES=(
     },
 )
 BY_SLUG={c["slug"]:c for c in COURSES}
-ID="mpw-mojtaba-four-course-posters-20261028"
+ID="mpw-four-course-posters-20261028"
 
 def _art(slug, hi, ice):
     if slug=="business":
