@@ -7,6 +7,13 @@ on:
       - "scripts/mojtaba_scholarly_cv_safe_install.py"
       - "tests/test_mojtaba_scholarly_cv.py"
       - ".github/workflows/mojtaba-scholarly-cv-publish-20261024.yml"
+  push:
+    branches: [main]
+    paths:
+      - "content/mojtaba_scholarly_cv_20261024.json"
+      - "scripts/mojtaba_scholarly_cv_safe_install.py"
+      - "tests/test_mojtaba_scholarly_cv.py"
+      - ".github/workflows/mojtaba-scholarly-cv-publish-20261024.yml"
   issues:
     types: [opened]
 
@@ -20,11 +27,12 @@ concurrency:
 jobs:
   verify:
     if: >-
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'issues' &&
-       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
-       github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
-       github.event.issue.title == 'Ops: Publish Mojtaba evidence-based scholarly CV 2026-10-24')
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'pull_request' ||
+       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'issues' &&
+        github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+        github.event.issue.title == 'Ops: Publish Mojtaba evidence-based scholarly CV 2026-10-24'))
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -37,10 +45,11 @@ jobs:
   publish:
     needs: verify
     if: >-
-      github.event_name == 'issues' &&
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
-      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
-      github.event.issue.title == 'Ops: Publish Mojtaba evidence-based scholarly CV 2026-10-24'
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'issues' &&
+        github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+        github.event.issue.title == 'Ops: Publish Mojtaba evidence-based scholarly CV 2026-10-24'))
     runs-on: ubuntu-latest
     timeout-minutes: 16
     steps:
