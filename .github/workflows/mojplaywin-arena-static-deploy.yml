@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Verify guard and 37-game self-contained static payload
+      - name: Verify guarded self-contained static payload
         run: |
           python -m py_compile scripts/deploy_mpw_arena_static.py
           python3 - <<'PY'
@@ -47,7 +47,7 @@ jobs:
           node-version: "22"
       - name: Install Chromium driver
         run: npm install --no-save --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/arena-browser-test" playwright-core@1.62.1
-      - name: Exercise six-language search across 37 games on mobile Chromium
+      - name: Exercise 37 games and 12 symbolic oracles in six languages on mobile Chromium
         shell: bash
         env:
           NODE_PATH: ${{ runner.temp }}/arena-browser-test/node_modules
@@ -68,23 +68,53 @@ jobs:
               assert.equal(await page.locator('#game-grid article').count(),16);
               assert.equal(await page.locator('#dice-game-grid article').count(),15);
               assert.equal(await page.locator('#classic-game-grid article').count(),6);
-              assert.equal(await page.locator('#arena-count').innerText(),'37 games found');
+              assert.equal(await page.locator('#oracle-grid article').count(),12);
+              assert.equal(await page.locator('.arena-categories a').count(),4);
+              assert.equal(await page.locator('#arena-count').innerText(),'49 experiences found');
               await page.locator('#arena-search').fill('chess');
               assert.equal(await page.locator('#classic-game-grid article:not([hidden])').count(),1);
               assert.equal(await page.locator('#dice-festival').isVisible(),false);
+              assert.equal(await page.locator('#fortune-oracles').isVisible(),false);
               await page.locator('#arena-search').fill('no-such-game-xyz');
               assert.equal(await page.locator('#arena-empty').isVisible(),true);
+              await page.locator('#arena-search').fill('tarot');
+              assert.equal(await page.locator('#oracle-grid article:not([hidden])').count(),2);
+              assert.equal(await page.locator('#game-grid article:not([hidden])').count(),0);
               await page.locator('#arena-search').fill('');
-              assert.equal(await page.locator('#arena-count').innerText(),'37 games found');
+              assert.equal(await page.locator('#arena-count').innerText(),'49 experiences found');
+              await page.locator('#oracle-zodiac select').selectOption('8');
+              await page.locator('#oracle-zodiac button').click();
+              const horoscope=await page.locator('#oracle-zodiac .oracle-answer').innerText();
+              assert.ok(horoscope.includes('Sagittarius'));
+              await page.locator('#oracle-zodiac button').click();
+              assert.equal(await page.locator('#oracle-zodiac .oracle-answer').innerText(),horoscope,'same sign on same day must be stable');
+              await page.locator('#oracle-chinese input').fill('2024');
+              await page.locator('#oracle-chinese button').click();
+              assert.match(await page.locator('#oracle-chinese .oracle-answer').innerText(),/Dragon/);
+              await page.locator('#oracle-numerology input').fill('1984-05-22');
+              await page.locator('#oracle-numerology button').click();
+              assert.match(await page.locator('#oracle-numerology .oracle-answer').innerText(),/Life path/);
+              for(const id of ['tarot','tarot3','coffee','runes','iching','dream','poetry','yesno','lucky']){
+                await page.locator('#oracle-'+id+' button').click();
+                const answer=await page.locator('#oracle-'+id+' .oracle-answer').innerText();
+                assert.ok(answer.length>35,id+' must generate a meaningful reading');
+              }
+              assert.equal((await page.locator('#oracle-tarot3 .oracle-answer').innerText()).split('🃏').length-1,3);
+              assert.equal((await page.locator('#oracle-iching .oracle-answer').innerText()).split('━━').length>5,true);
+              await page.locator('#oracle-numerology input').fill('1890-01-01');
+              await page.locator('#oracle-numerology button').click();
+              assert.equal(await page.locator('#oracle-numerology .oracle-answer').innerText(),'Choose a birth date.');
               await page.locator('#language').selectOption('fa');
               await page.locator('#arena-search').fill('شطرنج');
               assert.equal(await page.locator('#classic-game-grid article:not([hidden])').count(),1);
+              await page.locator('#arena-search').fill('فال');
+              assert.ok((await page.locator('#oracle-grid article:not([hidden])').count())>=1);
               for(const lang of ['ar','de','fr','es','en']){
                 await page.locator('#language').selectOption(lang);
                 assert.equal(await page.locator('html').getAttribute('lang'),lang);
               }
               assert.deepEqual(errors,[]);
-              console.log('ARENA_MOBILE_37_GAMES_SIX_LANG_FINDER_PASS');
+              console.log('ARENA_MOBILE_37_GAMES_12_ORACLES_SIX_LANG_PASS');
             }finally{await browser.close()}
           })().catch(e=>{console.error(e);process.exitCode=1});
           JS
@@ -197,7 +227,7 @@ jobs:
           source=Path('site_releases/mojplaywin/arena/index.html').read_bytes()
           if hashlib.sha256(released).digest()!=hashlib.sha256(source).digest():
               raise SystemExit('Published Arena checksum mismatch')
-          print('ARENA_37_GAMES_LIVE_SHA256_MATCH')
+          print('ARENA_37_GAMES_12_ORACLES_LIVE_SHA256_MATCH')
           PY
           for path in / /games/ /store/ /game-releases/20261020/index.html; do
             [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")" == "200" ]]
