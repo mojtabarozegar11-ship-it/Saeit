@@ -43,7 +43,14 @@ def digest_file(path):
     return digest.hexdigest()
 
 
-def landing_page(sha):
+def landing_page(sha, *, uncertified_preview=False):
+    eyebrow = ("Uncertified Public Preview · Version 1.0" if uncertified_preview
+               else "Independent Factory Release · Version 1.0")
+    footer_text = ("Public evaluation preview · independent QC1000 certification not completed." if uncertified_preview
+                   else "An independent MojPlayWin digital tools release.")
+    disclosure = ("Free evaluation preview only. It has not received QC1000, independent scientific, professional, or commercial certification. Results are illustrative; validate inputs and decisions with qualified professionals. This is not investment, yield, tax, or legal advice."
+                  if uncertified_preview else "Technical release information and model limitations are listed below.")
+
     if not re.fullmatch("[0-9a-f]{64}", sha):
         raise ValueError("INVALID_SHA256")
     title = "Farm Enterprise Economics Toolkit — Free Edition"
@@ -85,12 +92,13 @@ footer{margin-top:50px;border-top:1px solid #344752;padding-top:25px;color:#c2d1
 <body>
 <main>
 <nav><a href="https://mojplaywin.com/">MojPlayWin</a> / Digital Tools / Farm Enterprise Economics</nav>
-<p class="eyebrow">Independent Factory Release · Version 1.0</p>
+<p class="eyebrow">""" + html.escape(eyebrow) + """</p>
 <h1>Farm Enterprise<br>Economics Toolkit</h1>
 <p class="lead">An offline, downloadable calculator that helps compare farm business units
 using your own selling prices, units sold and operating costs.</p>
 <a class="cta" href=\"""" + PUBLIC_FILENAME + """" download>Download the Free Toolkit (ZIP)</a>
 <p class="muted">No account, payment, API key, or internet connection is needed to run the calculator.</p>
+<section class="card"><h2>Certification and review status</h2><p>""" + html.escape(disclosure) + """</p></section>
 <section class="grid">
 <div class="card"><h2>Enterprise economics</h2><p>Calculate gross revenue, selling fees,
 variable costs, contribution margin and operating profit for up to 100 enterprises.</p></div>
@@ -150,7 +158,7 @@ def secure_parent(webroot):
     return parent
 
 
-def prepare_private_product(inbox):
+def prepare_private_product(inbox, *, uncertified_preview=False):
     inbox = Path(inbox).expanduser().absolute()
     if inbox.is_symlink() or not inbox.is_dir():
         raise ValueError("SOURCE_INBOX_NOT_VERIFIED")
@@ -177,20 +185,21 @@ def prepare_private_product(inbox):
         raise ValueError("PRODUCT_RELEASE_GATE_FAILED")
     if not 0 < src.stat().st_size <= MAX_BYTES or digest_file(src) != digest:
         raise ValueError("BAD_SOURCE_PACKAGE")
-    guardpath=Path(__file__).resolve().with_name("factory_commercial_quality_release_guard_v1.py")
-    if guardpath.is_symlink() or not guardpath.is_file():
-        raise ValueError("SIGNED_1000_PUBLICATION_GUARD_UNAVAILABLE")
-    spec=importlib.util.spec_from_file_location("factory_1000_public_guard",str(guardpath))
-    guard=importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(guard)
-    clearance=guard.require_quality_clearance(inbox,RECIPE,digest,data,src)
-    if (clearance.get("status")!="VERIFIED_SIGNED_PREMIUM_1000"
-            or clearance.get("1000_quality_verified") is not True):
-        raise ValueError("QC1000_REQUIRED_FOR_FACTORY_EXIT")
+    if not uncertified_preview:
+        guardpath=Path(__file__).resolve().with_name("factory_commercial_quality_release_guard_v1.py")
+        if guardpath.is_symlink() or not guardpath.is_file():
+            raise ValueError("SIGNED_1000_PUBLICATION_GUARD_UNAVAILABLE")
+        spec=importlib.util.spec_from_file_location("factory_1000_public_guard",str(guardpath))
+        guard=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(guard)
+        clearance=guard.require_quality_clearance(inbox,RECIPE,digest,data,src)
+        if (clearance.get("status")!="VERIFIED_SIGNED_PREMIUM_1000"
+                or clearance.get("1000_quality_verified") is not True):
+            raise ValueError("QC1000_REQUIRED_FOR_FACTORY_EXIT")
     return digest, src
 
 
-def publish(inbox, webroot, *, release_authorized=False):
+def publish(inbox, webroot, *, release_authorized=False, uncertified_preview=False):
     if release_authorized is not True:
         raise ValueError("EXPLICIT_PUBLICATION_AUTHORIZATION_REQUIRED")
     requested_root = Path(webroot).expanduser().absolute()
@@ -206,7 +215,7 @@ def publish(inbox, webroot, *, release_authorized=False):
             or not (early_public_dir / "SHA256SUMS.txt").is_file()
             or not (early_public_dir / PUBLIC_FILENAME).is_file()):
         raise ValueError("REFUSING_TO_REPLACE_EXISTING_PUBLIC_RELEASE")
-    digest, source = prepare_private_product(inbox)
+    digest, source = prepare_private_product(inbox, uncertified_preview=uncertified_preview)
     parent = secure_parent(requested_root)
     public_dir = parent / PUBLIC_SLUG
     if public_dir.is_symlink():
@@ -219,6 +228,9 @@ def publish(inbox, webroot, *, release_authorized=False):
                 and digest_file(package) == digest
                 and checksums.read_text(encoding="utf-8").strip() ==
                   digest + "  " + PUBLIC_FILENAME):
+            page = (public_dir / "index.html").read_text(encoding="utf-8") if (public_dir / "index.html").is_file() else ""
+            if uncertified_preview and (not (public_dir / "index.html").is_file() or (public_dir / "index.html").is_symlink() or "has not received QC1000" not in page):
+                raise ValueError("EXISTING_PUBLIC_RELEASE_PREVIEW_STATUS_MISMATCH")
             return {"status": "existing_valid_release", "sha256": digest, "url": PUBLIC_URL}
         raise ValueError("REFUSING_TO_REPLACE_EXISTING_PUBLIC_RELEASE")
     stage = Path(tempfile.mkdtemp(prefix=".saeit-release-", dir=str(parent)))
@@ -234,13 +246,13 @@ def publish(inbox, webroot, *, release_authorized=False):
         checksum.write_text(digest + "  " + PUBLIC_FILENAME + "\n", encoding="utf-8")
         checksum.chmod(0o644)
         home = stage / "index.html"
-        home.write_text(landing_page(digest), encoding="utf-8")
+        home.write_text(landing_page(digest, uncertified_preview=uncertified_preview), encoding="utf-8")
         home.chmod(0o644)
         os.replace(str(stage), str(public_dir))
     finally:
         if stage.exists():
             shutil.rmtree(str(stage))
-    return {"status": "published_public_free_download", "sha256": digest, "url": PUBLIC_URL}
+    return {"status": ("published_public_uncertified_preview" if uncertified_preview else "published_public_free_download"), "sha256": digest, "url": PUBLIC_URL}
 
 
 def main(argv=None):
@@ -248,13 +260,17 @@ def main(argv=None):
     parser.add_argument("--inbox", required=True)
     parser.add_argument("--webroot", required=True)
     parser.add_argument("--authorize-publication", action="store_true")
+    parser.add_argument("--uncertified-preview", action="store_true",
+                        help="Publish a free, clearly disclosed preview without QC1000 certification.")
     args = parser.parse_args(argv)
-    result = publish(args.inbox, args.webroot, release_authorized=args.authorize_publication)
+    result = publish(args.inbox, args.webroot, release_authorized=args.authorize_publication,
+                     uncertified_preview=args.uncertified_preview)
     print("FACTORY_RELEASE_STATUS=" + result["status"])
     print("FACTORY_RELEASE_URL=" + result["url"])
     print("FACTORY_RELEASE_SHA256=" + result["sha256"])
     print("FACTORY_RELEASE_PRICE=FREE")
     print("FACTORY_RELEASE_PAYMENT_ENABLED=false")
+    print("FACTORY_RELEASE_QC1000_CERTIFIED=" + str(not args.uncertified_preview).lower())
     return 0
 
 
@@ -262,6 +278,8 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except (OSError, ValueError, RuntimeError) as error:
-        print("FACTORY_PUBLICATION_FAILED=" + type(error).__name__ + ":" + str(error)[:140],
-              file=sys.stderr)
+        print("FACTORY_PUBLICATION_FAILED=" + type(error).__name__, file=sys.stderr)
+        reason = str(error)
+        if re.fullmatch(r"[A-Z0-9_]{3,80}", reason):
+            print("FACTORY_PUBLICATION_REASON=" + reason, file=sys.stderr)
         sys.exit(1)
