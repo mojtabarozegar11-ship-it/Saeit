@@ -1,0 +1,25 @@
+[Unit]
+Description=Moj Messaging Bridge - WhatsApp linked account %i
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=mojmsg
+Group=mojmsg
+WorkingDirectory=/opt/moj-messaging
+Environment=MOJMSG_STATE_DIR=/var/lib/moj-messaging
+ExecStart=/usr/bin/env node /opt/moj-messaging/whatsapp.mjs daemon --account %i
+Restart=on-failure
+RestartSec=20
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/moj-messaging
+
+[Install]
+WantedBy=multi-user.target
