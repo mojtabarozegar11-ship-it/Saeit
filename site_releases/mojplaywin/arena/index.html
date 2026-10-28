@@ -36,6 +36,8 @@
     .horse-card a{margin-top:auto;align-self:flex-start;color:var(--gold);padding:9px 0;text-decoration:underline;text-underline-offset:3px}
     .horse-label{font-size:.74rem;color:#7fe4c6;font-weight:750;letter-spacing:.03em}
     @media(max-width:890px){.horse-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.horse-grid{grid-template-columns:1fr}}
+      .combat-agenda{margin:18px 0 26px}.combat-agenda .live-data-toolbar{margin:14px 0}.combat-agenda input[type=date]{min-height:46px;border:1px solid #798ba0;background:#1a2635;color:#fff;border-radius:8px;padding:10px 12px;font:inherit;color-scheme:dark}
+    .combat-day-list{margin:14px 0;padding:0;list-style:none;display:grid;gap:12px}.combat-day-list li{padding:14px;border:1px solid #405067;background:#111a29;border-radius:9px}.combat-day-list strong{display:block;color:#f7db9a}.combat-day-list span{font-size:.84rem;color:var(--soft)}
   </style>
   <style>
     .wide-card{grid-column:1/-1}.tabletop-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.tabletop-panel{min-width:0;border:1px solid #394454;border-radius:15px;background:linear-gradient(145deg,#172132,#0c141f);padding:24px}.tabletop-panel h3{font-family:Georgia,serif;color:#f4ddac;font-size:1.45rem;margin:0 0 8px}.tabletop-panel p{font-size:.85rem;color:var(--soft)}.board-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:15px 0}.board-status{border-top:1px solid #394454;margin-top:14px;padding-top:12px;color:#e5d9b9;min-height:45px;font-size:.86rem}.chess-board{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));width:min(100%,520px);border:5px solid #c5a365;border-radius:5px;overflow:hidden}.chess-cell{width:100%;aspect-ratio:1;border:0;border-radius:0;color:#171b20;display:grid;place-items:center;background:#e6d4a9;font-size:clamp(1.1rem,3.8vw,2.25rem);cursor:pointer}.chess-cell:nth-child(16n + 2),.chess-cell:nth-child(16n + 4),.chess-cell:nth-child(16n + 6),.chess-cell:nth-child(16n + 8),.chess-cell:nth-child(16n + 9),.chess-cell:nth-child(16n + 11),.chess-cell:nth-child(16n + 13),.chess-cell:nth-child(16n + 15){background:#76918b}.chess-cell.selected{box-shadow:inset 0 0 0 4px #fdc751}.chess-cell.legal{box-shadow:inset 0 0 0 4px #45d6a7}.chess-cell:focus-visible,.back-point:focus-visible,.memory-tile:focus-visible{outline:3px solid #ffee8c;outline-offset:-3px;z-index:1}.chess-cell:disabled{cursor:default;opacity:1}.back-board-scroll{max-width:100%;overflow-x:auto}.back-board{display:grid;grid-template-columns:repeat(12,minmax(47px,1fr));width:max(100%,660px);border:4px solid #c3a369;border-radius:5px;gap:2px;background:#413224;padding:3px}.back-point{min-height:125px;border:0;border-radius:3px;background:#b08059;color:#fff1dc;font-size:.8rem;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;padding:5px 1px}.back-point:nth-child(2n){background:#5d4434}.back-point.selected{box-shadow:inset 0 0 0 3px #f0d279}.back-point.target{box-shadow:inset 0 0 0 3px #65dfb1}.checker-chip{display:grid;place-items:center;min-width:25px;height:25px;border-radius:50%;border:2px solid #655334;font-weight:900;font-size:.85rem;color:#1b2025;background:#f1e8d9}.checker-chip.dark{background:#1e2938;color:#f3e5c9;border-color:#d6b777}.memory-board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;max-width:400px}.memory-tile{aspect-ratio:1;border:1px solid #ab956a;border-radius:6px;background:#283750;color:#ebd8ab;font-size:1.45rem;cursor:pointer}.memory-tile.found{background:#305749}.wheel-container{display:flex;align-items:center;gap:24px;flex-wrap:wrap}.luck-wheel{width:150px;height:150px;border:6px solid #dfbd7a;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#db765c 0 60deg,#e1c075 60deg 120deg,#6892b5 120deg 180deg,#8c78ab 180deg 240deg,#69b494 240deg 300deg,#bf7f99 300deg 360deg);box-shadow:0 0 0 5px #202530,inset 0 0 15px #0008;transition:transform 1.35s cubic-bezier(.18,.7,.2,1);position:relative}.luck-wheel:before{content:'▲';position:absolute;top:-20px;color:#eec47d;font-size:1.1rem}.luck-wheel:after{content:'✦';color:#fff;font-size:2.5rem;text-shadow:0 0 10px #000}.mini-dice{display:inline-flex;background:#f0e2bd;color:#141b27;border-radius:5px;padding:7px;min-width:36px;min-height:36px;align-items:center;justify-content:center;font-size:1.4rem;font-weight:800;margin:3px}.game-kicker{font-size:.75rem;letter-spacing:.13em;color:var(--gold);text-transform:uppercase}.arena-spacer{margin-top:24px}@media(max-width:900px){.tabletop-grid{grid-template-columns:1fr}.tabletop-panel{padding:18px}}@media(prefers-reduced-motion:reduce){.luck-wheel{transition:none}}
@@ -325,6 +327,17 @@
   <div class="section-head"><div class="eyebrow" id="combat-eyebrow">COMBAT SPORTS · REAL ORGANIZERS · OFFICIAL EVENT CALENDARS</div>
     <h2 id="combat-heading">Boxing, MMA &amp; Wrestling Worldwide</h2>
     <p class="wager-intro" id="combat-intro">Explore boxing, Olympic freestyle and Greco-Roman wrestling, MMA, kickboxing, Muay Thai, judo, taekwondo, karate, Brazilian jiu-jitsu and grappling. Pro wrestling (WWE, AEW, NJPW) is scripted sports entertainment, not an unscripted competitive result.</p>
+  </div>
+  <div class="world-panel combat-agenda" aria-labelledby="combat-day-heading">
+    <h3 id="combat-day-heading">Daily Combat Events · Real Schedule Preview</h3>
+    <p id="combat-day-intro">Browse a selected day's real listed combat events. The public free API returns a maximum of three entries for each date, so this is not a complete fight calendar, fight card or live results service.</p>
+    <div class="live-data-toolbar"><label id="combat-day-label" for="combat-day">Event date (UTC)</label>
+      <input type="date" id="combat-day" name="combat-day" aria-describedby="combat-day-intro" required>
+      <button type="button" id="combat-day-refresh">Refresh date</button>
+    </div>
+    <p id="combat-day-status" class="live-state" role="status" aria-live="polite">Real dates load only after adult self-declaration.</p>
+    <ol id="combat-day-list" class="combat-day-list"></ol>
+    <p class="live-source" id="combat-day-source">Source: <a href="https://www.thesportsdb.com/" target="_blank" rel="noopener noreferrer">TheSportsDB free daily API</a> · at most 3 combat events per selected UTC date. Entries and schedules can be incomplete or corrected; confirm on the organizer's official calendar. No financial wagering.</p>
   </div>
   <div class="horse-filters">
     <label id="combat-kind-label" for="combat-kind">Discipline</label>
@@ -1634,12 +1647,81 @@
     combatRender();
   }
 
+
+  // Daily combat event previews: public read-only API, explicitly capped to three entries by free tier.
+  // Never infer bout results, horse/race odds, stakes or financial outcomes from community listings.
+  const DAILY_COMBAT_ORIGIN='https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=';
+  const dailyCopy={
+    en:{heading:'Daily Combat Events · Real Schedule Preview',intro:'Choose a date to see up to 3 real combat events listed by the free provider. This is not a full card, verified start time, score service or betting market.',date:'Event date (UTC)',refresh:'Refresh date',loading:'Loading provider events…',error:'Daily combat data unavailable; official links remain usable.',empty:'No combat event listed for this date; coverage is incomplete.',count:'listed events · provider preview',time:'Time: confirm with organizer'},
+    fa:{heading:'برنامه روزانه واقعی مبارزات',intro:'یک تاریخ انتخاب کنید تا حداکثر ۳ رویداد رزمی ثبت‌شده در منبع رایگان نمایش داده شود. این فهرست کامل مسابقات یا نتایج زنده نیست و شرط مالی ندارد.',date:'تاریخ رویداد (UTC)',refresh:'تازه‌سازی روز',loading:'دریافت برنامه مسابقات…',error:'داده روزانه در دسترس نیست؛ پیوندهای رسمی فعال‌اند.',empty:'در این روز رویدادی ثبت نشده؛ پوشش منبع کامل نیست.',count:'رویداد ثبت‌شده · داده محدود',time:'ساعت را در سایت برگزارکننده بررسی کنید'},
+    ar:{heading:'جدول أحداث القتال اليومي',intro:'اختر تاريخًا لعرض ما يصل إلى ثلاثة أحداث حقيقية في النسخة المجانية؛ ليست قائمة كاملة ولا رهانات.',date:'تاريخ UTC',refresh:'تحديث اليوم',loading:'جار التحميل…',error:'البيانات غير متاحة.',empty:'لا توجد أحداث مسجلة؛ التغطية محدودة.',count:'أحداث في المصدر',time:'تحقق من التوقيت لدى المنظم'},
+    de:{heading:'Tägliche Kampfsport-Termine',intro:'Wähle ein Datum: höchstens drei gelistete Ereignisse im kostenlosen Feed; kein vollständiger Kampfkalender und keine Wetten.',date:'Datum (UTC)',refresh:'Datum aktualisieren',loading:'Lade Termine…',error:'Quelle nicht verfügbar.',empty:'Keine Ereignisse gelistet; unvollständige Daten.',count:'gelistete Termine',time:'Uhrzeit beim Veranstalter prüfen'},
+    fr:{heading:'Agenda quotidien des sports de combat',intro:'Sélectionnez une date : trois événements maximum dans la source gratuite, sans calendrier complet ni paris.',date:'Date (UTC)',refresh:'Actualiser',loading:'Chargement…',error:'Source indisponible.',empty:'Aucun événement listé; couverture partielle.',count:'événements listés',time:'Horaire à vérifier'},
+    es:{heading:'Agenda diario de combates reales',intro:'Elige una fecha para ver hasta tres eventos reales del proveedor gratuito. No es la cartelera completa ni ofrece apuestas.',date:'Fecha (UTC)',refresh:'Actualizar fecha',loading:'Cargando eventos…',error:'Datos no disponibles.',empty:'Sin eventos registrados; cobertura incompleta.',count:'eventos registrados',time:'Consultar horario con el organizador'}
+  };
+  const dt=k=>(dailyCopy[locale]||dailyCopy.en)[k]||dailyCopy.en[k]||k;
+  const dailyInput=$('#combat-day'),dailyNow=new Date();
+  const dailyBase=new Date(Date.UTC(dailyNow.getUTCFullYear(),dailyNow.getUTCMonth(),dailyNow.getUTCDate()));
+  const dailyISO=d=>d.toISOString().slice(0,10);
+  const dailyMin=new Date(dailyBase);dailyMin.setUTCDate(dailyMin.getUTCDate()-7);
+  const dailyMax=new Date(dailyBase);dailyMax.setUTCDate(dailyMax.getUTCDate()+45);
+  const dailyDefault=new Date(dailyBase);dailyDefault.setUTCDate(dailyDefault.getUTCDate()+(6-dailyDefault.getUTCDay()+7)%7);
+  dailyInput.min=dailyISO(dailyMin);dailyInput.max=dailyISO(dailyMax);dailyInput.value=dailyISO(dailyDefault);
+  const dailyDateAllowed=date=>/^\d{4}-\d\d-\d\d$/.test(date)&&date>=dailyInput.min&&date<=dailyInput.max&&!Number.isNaN(Date.parse(date+'T00:00:00Z'));
+  let dailyRows=[],dailyChecked=0,dailyError=false,dailySeq=0;
+  function dailyRender(){
+    const list=$('#combat-day-list');list.replaceChildren();
+    if(dailyError){$('#combat-day-status').textContent=dt('error');return}
+    if(!dailyChecked){$('#combat-day-status').textContent=dt('loading');return}
+    $('#combat-day-status').textContent=dailyRows.length?dailyRows.length+' '+dt('count')+' · '+dailyInput.value:dt('empty');
+    for(const e of dailyRows){
+      const li=document.createElement('li'),title=document.createElement('strong'),detail=document.createElement('span');
+      title.textContent=e.name;detail.textContent=e.league+' · '+e.day+' · '+dt('time');
+      li.append(title,detail);list.append(li);
+    }
+  }
+  async function dailyLoad(force){
+    if(!$('#age-gate').hidden)return;
+    const date=dailyInput.value;if(!dailyDateAllowed(date))return;
+    const seq=++dailySeq;dailyRows=[];dailyChecked=0;dailyError=false;
+    const key='moj-combat-day-v1-'+date;
+    if(!force)try{
+      const cached=JSON.parse(localStorage.getItem(key)||'null');
+      if(cached&&Number.isFinite(cached.at)&&cached.at<=Date.now()+60000&&Date.now()-cached.at<3600000&&Array.isArray(cached.rows)&&cached.rows.length<=3&&cached.rows.every(e=>e&&typeof e.name==='string'&&e.name.length<=140&&typeof e.league==='string'&&e.league.length<=90&&e.day===date)){
+        dailyRows=cached.rows;dailyChecked=cached.at;dailyRender();return;
+      }
+    }catch(_){}
+    dailyRender();
+    const dayCtrl=new AbortController(),timer=setTimeout(()=>dayCtrl.abort(),12000);
+    try{
+      const url=DAILY_COMBAT_ORIGIN+encodeURIComponent(date)+'&s=Fighting';
+      const response=await fetch(url,{mode:'cors',credentials:'omit',cache:'no-store',signal:dayCtrl.signal});
+      if(!response.ok)throw Error('Daily provider unavailable');
+      const json=await response.json();
+      if(!json||!Object.hasOwn(json,'events')||json.events!==null&&!Array.isArray(json.events))throw Error('Unexpected daily feed');
+      if(Array.isArray(json.events)&&json.events.length>50)throw Error('Oversized daily feed');
+      const rows=(json.events||[]).filter(e=>e&&e.strSport==='Fighting'&&e.dateEvent===date&&Number.isSafeInteger(Number(e.idEvent))&&Number(e.idEvent)>0&&typeof e.strEvent==='string'&&e.strEvent.trim().length>=3).slice(0,3).map(e=>({name:e.strEvent.trim().slice(0,140),league:String(e.strLeague||'Fighting').slice(0,90),day:date}));
+      if(seq!==dailySeq||dailyInput.value!==date)return;
+      dailyRows=rows;dailyChecked=Date.now();dailyError=false;
+      try{localStorage.setItem(key,JSON.stringify({at:dailyChecked,rows}))}catch(_){}
+      dailyRender();
+    }catch(_){if(seq===dailySeq){dailyError=true;dailyRender()}}
+    finally{clearTimeout(timer)}
+  }
+  dailyInput.addEventListener('change',()=>void dailyLoad(false));
+  $('#combat-day-refresh').addEventListener('click',()=>void dailyLoad(true));
+  function translateDaily(){
+    for(const [id,key] of [['combat-day-heading','heading'],['combat-day-intro','intro'],['combat-day-label','date'],['combat-day-refresh','refresh']])
+      $('#'+id).textContent=dt(key);
+    if(dailyChecked||dailyError)dailyRender();
+  }
+
   function translateWorld(){
     const ids={sh:'spotlight-heading',si:'spotlight-intro',ss:'spotlight-select-label',sr:'spotlight-refresh',hh:'horse-heading',hi:'horse-intro',hc:'horse-country-label',hk:'horse-kind-label'};
     for(const [k,id] of Object.entries(ids))$('#'+id).textContent=wt(k);
     horseCountry.options[0].textContent=wt('ha');
     const hs=horseKind.options;hs[0].textContent=wt('hd');hs[1].textContent=wt('hr');hs[2].textContent=wt('he');
-    horseRender();spotlightRender();translateCombat();
+    horseRender();spotlightRender();translateCombat();translateDaily();
   }
 
   // Fictional prediction markets share the existing non-redeemable browser-only MCD ledger.
@@ -1856,7 +1938,7 @@
     else if(!e.shiftKey&&document.activeElement===leave){e.preventDefault();confirm.focus()}
   });
   confirm.addEventListener('click',()=>{outside.forEach(el=>el.inert=false);$('#wager-heading').setAttribute('tabindex','-1');$('#wager-heading').focus()});
-  confirm.addEventListener('click',()=>{void liveLoad(false);void spotlightLoad(false)});
+  confirm.addEventListener('click',()=>{void liveLoad(false);void spotlightLoad(false);void dailyLoad(false)});
   setInterval(()=>{if(gate.hidden&&!document.hidden&&Date.now()-liveAttemptedAt>900000)void liveLoad(false)},60000);
   translate();notice(tr('choose'));odds();bjRender();pokerRender();
 })();
