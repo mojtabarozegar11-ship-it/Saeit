@@ -16,12 +16,23 @@ SUB = "109876543210987654321"
 TOKEN = "header.payload.signature"
 
 
+class HTTPSClient(Client):
+    """All test browser requests use TLS; production HTTP stays fail-closed."""
+    def get(self, *args, **kwargs):
+        kwargs.setdefault("secure", True)
+        return super().get(*args, **kwargs)
+
+    def post(self, *args, **kwargs):
+        kwargs.setdefault("secure", True)
+        return super().post(*args, **kwargs)
+
+
 class BoundaryTests(TestCase):
     def setUp(self):
         p = patch.dict(os.environ, ENV)
         p.start()
         self.addCleanup(p.stop)
-        self.web = Client(enforce_csrf_checks=True)
+        self.web = HTTPSClient(enforce_csrf_checks=True)
 
     def start_login(self):
         r = self.web.get("/auth/start/")
@@ -57,7 +68,7 @@ class BoundaryTests(TestCase):
         self.assertFalse(s["payments_enabled"])
         self.assertFalse(s["financial_kyc_verified"])
         self.assertEqual(LoginChallenge.objects.count(), 1)
-        other = Client()
+        other = HTTPSClient()
         self.assertEqual(other.post("/auth/finish/", data=json.dumps({"credential": TOKEN}),
                                     content_type="application/json").status_code, 400)
 
