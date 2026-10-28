@@ -23,6 +23,7 @@ jobs:
           php -l content/zomorod-business/app.php
           php -l content/zomorod-business/index.php
           git cat-file -e 15aa2ce99abb4f8f3c41da7695023fd6aad7aaa0^{commit}
+          git show 15aa2ce99abb4f8f3c41da7695023fd6aad7aaa0:content/zomorod-business/app.php > "$RUNNER_TEMP/business-prior.php"
           grep -Fq "owner-first-login.txt" content/zomorod-business/app.php
           ! grep -Fq "req('setup_token')" content/zomorod-business/app.php
           python3 - "$RUNNER_TEMP/business-prior.php" content/zomorod-business/app.php "$RUNNER_TEMP" <<'PY'
