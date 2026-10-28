@@ -24,6 +24,21 @@ The narrow editorial question is instead: **what evidence supports each specific
 
 This is a **non-systematic critical narrative review**. Eight studies were selected purposively from documented bibliographic discovery and subsequent targeted source checking because they illustrate different combinations of field measurement, farmer reporting, advisory delivery and modeled scenarios. The set is neither an exhaustive sampling frame nor a denominator for estimating global DSS adoption or effectiveness. Earlier repository retrieval counts (672 bibliographic entries and 604 machine-matched candidate citations) are discovery-process records, **not PRISMA screening counts or a completed systematic search**. No independent dual-human screening, protocol registration or meta-analysis is asserted.
 
+**Transparent post hoc case-selection rationale (C86; not a prospective search protocol).** The eight cases are an editorially purposive set selected to expose distinct inference breaks, not a sample with known inclusion probabilities. Their roles in the argument are specified below so a reader can challenge their selection; this table does **not** establish that these were prespecified eligibility rules or that all eligible literature was found.
+
+| Included case | Distinct inferential contrast motivating inclusion | Limitation retained |
+|---|---|---|
+| Amini (2025) | Within-farm DSS-guided versus customary sections | F7 inconsistency; nonrandom farm-level inference |
+| Cvejić (2020) | Advisory implementation and dated respondent feedback | Recruitment, implementation and item-response frames unresolved |
+| Jamal (2023) | Field observations alongside virtual farmer decisions | Virtual choices are not applied irrigation |
+| Abi Saab (2019) | Replicated research-station water-depth comparisons | Plots do not establish voluntary commercial adoption |
+| Car (2012) | SMS delivery, engagement and perceived decision influence | Source tables and item denominators conflict |
+| Elia (2022) | Commercial-farm seasonal irrigation and N contrasts | Full allocation and action-linkage methods unverified |
+| Baroni (2019) | Six method predictions versus qualitative end-user uptake | Six methods are not six farmer compliance observations |
+| Darouich (2024) | Reported farmer schedules versus optimized counterfactuals | Missing entries and modeled outcomes limit inference |
+
+Lorite's published advisory-versus-applied seasonal comparison and telemetry work, and Ara's adoption review, are discussed as **contextual prior art**, not silently counted among the eight. This editorial distinction is not evidence of their lesser scientific quality. The manuscript offers no PRISMA flow, exhaustive exclusion list, dual-screening record, search cutoff reproducibility or pooled effect estimate; these absences constrain generalization and must be disclosed in any journal submission.
+
 For each example, we distinguish **M**: directly reported physical field measurement; **O**: independently documented implementation of a particular recommendation; **S**: self-report, survey or participant appraisal; **P**: prediction, optimization or simulated counterfactual; and **U**: an unresolved or insufficiently accessible source component. These are descriptive provenance labels, **not a validated ordinal quality score**. A study can contain several classes; a measured input used to validate a model does not turn the model's hypothetical output into a realized effect.
 
 The unit of inference is recorded as person, farm, plot, irrigation event, crop-season or simulated decision. Where original full methods are unavailable, absence of evidence in the inspected abstract must not be presented as proof that the original investigators never collected that evidence. Numerical contradictions are flagged rather than repaired through speculative arithmetic. The intended human author has **not yet finalized study selection, source interpretation, conflict-of-interest disclosures or the final manuscript**.
