@@ -24,6 +24,8 @@ class HTTPSClient(Client):
 
     def post(self, *args, **kwargs):
         kwargs.setdefault("secure", True)
+        # A real same-origin HTTPS browser supplies Origin or Referer for CSRF.
+        kwargs.setdefault("HTTP_REFERER", "https://testserver/")
         return super().post(*args, **kwargs)
 
 
