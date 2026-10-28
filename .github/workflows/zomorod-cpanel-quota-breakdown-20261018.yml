@@ -112,7 +112,7 @@ jobs:
                       item=Path(base)/filename
                       try:
                           if item.is_symlink() or not item.is_file(): continue
-                          stat=item.stat(follow_symlinks=False)
+                          stat=item.lstat()
                           suffix=item.suffix.lower() or "(none)"
                           totals[suffix]["count"]+=1
                           totals[suffix]["bytes"]+=stat.st_size
