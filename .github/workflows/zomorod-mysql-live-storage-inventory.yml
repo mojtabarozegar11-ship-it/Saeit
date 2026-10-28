@@ -99,3 +99,5 @@ jobs:
       - name: Clear connection material
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+
+# Read-only storage and preservation recheck authorized 2026-10-28.
