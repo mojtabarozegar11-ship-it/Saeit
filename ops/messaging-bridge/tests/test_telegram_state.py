@@ -1,3 +1,6 @@
+import asyncio
+import contextlib
+import io
 import json
 import os
 import stat
@@ -10,6 +13,46 @@ import telegram
 
 
 class StateSecurityTests(unittest.TestCase):
+    def test_status_needs_no_credentials_or_dependencies(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.dict(os.environ, {'MOJMSG_STATE_DIR': folder}, clear=True):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    self.assertEqual(asyncio.run(telegram.main('status')), 0)
+                self.assertEqual(output.getvalue().strip(), 'NOT_STARTED')
+
+    def test_heartbeat_reports_real_health(self):
+        class Client:
+            def __init__(self):
+                self.connected = False
+                self.authorized = False
+
+            def is_connected(self):
+                return self.connected
+
+            async def is_user_authorized(self):
+                return self.authorized
+
+        async def check(root):
+            client = Client()
+            task = asyncio.create_task(telegram.heartbeat(root, client, interval=0.02))
+            try:
+                await asyncio.sleep(0.03)
+                self.assertEqual(json.loads((root / 'telegram-status.json').read_text())['status'], 'DISCONNECTED')
+                client.connected = True
+                await asyncio.sleep(0.03)
+                self.assertEqual(json.loads((root / 'telegram-status.json').read_text())['status'], 'LOGIN_REQUIRED')
+                client.authorized = True
+                await asyncio.sleep(0.03)
+                self.assertEqual(json.loads((root / 'telegram-status.json').read_text())['status'], 'CONNECTED')
+            finally:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+
+        with tempfile.TemporaryDirectory() as folder:
+            asyncio.run(check(Path(folder)))
+
     def test_private_dir_atomic_status_without_messages(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder) / 'secret-state'
