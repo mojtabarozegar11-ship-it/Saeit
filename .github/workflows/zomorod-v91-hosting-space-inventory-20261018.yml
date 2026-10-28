@@ -115,6 +115,28 @@ jobs:
           for p in sorted(ventries,key=lambda x:vsizes.get(str(x),-1),reverse=True):
               print("V91_TOP="+json.dumps({"name":p.name,"du_bytes":vsizes.get(str(p),-1)},ensure_ascii=False))
           print("V91_ROOT_FILES="+json.dumps(sorted(p.name for p in v91.iterdir() if p.is_file() and not p.is_symlink())[:80] if v91_present else []))
+          # Read-only metadata inventory of old backup/archive files; never reads file contents.
+          archive_pattern=re.compile(r"(?:backup|archive|snapshot|rollback|legacy|old|generation|\bv\d+\b)",re.I)
+          archive_suffixes={".zip",".tar",".tgz",".gz",".sql",".dump",".bak",".sqlite",".sqlite3"}
+          archive_rows=[]
+          archive_total=0
+          cutoff=__import__("time").time()-30*86400
+          for root,dirs,files in os.walk(home,followlinks=False):
+              dirs[:]=[name for name in dirs if name not in {".git","node_modules",".venv","virtualenv","mail","tmp",".cpanel"} and not (Path(root)/name).is_symlink()]
+              for name in files:
+                  p=Path(root)/name
+                  try:
+                      st=p.lstat()
+                      if not stat.S_ISREG(st.st_mode) or st.st_mtime>=cutoff: continue
+                      if not (archive_pattern.search(name) or p.suffix.lower() in archive_suffixes): continue
+                      if st.st_size < 1024*1024: continue
+                      archive_total += st.st_size
+                      if len(archive_rows)<80:
+                          archive_rows.append({"path":str(p.relative_to(home)),"bytes":st.st_size,"mtime_epoch":int(st.st_mtime)})
+                  except OSError: continue
+          print("OLD_ARCHIVE_FILE_TOTAL_BYTES="+str(archive_total))
+          print("OLD_ARCHIVE_FILE_CANDIDATES="+json.dumps(archive_rows,ensure_ascii=False))
+          print("OLD_ARCHIVE_CANDIDATES_TRUNCATED="+str(archive_total>sum(row["bytes"] for row in archive_rows)))
           refpaths=[
               home/"public_html/.htaccess",home/"public_html/passenger_wsgi.py",
               home/"Saeit/passenger_wsgi.py", home/"Saeit/config/settings.py",
@@ -165,5 +187,5 @@ jobs:
         shell: bash
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
 
-# Owner-requested read-only cPanel hosting audit, 2026-10-28.
+# Owner-requested read-only cPanel hosting audit and old-archive metadata inventory, 2026-10-28.
 # Missing obsolete v91 subtree is reported instead of aborting the account inventory.
