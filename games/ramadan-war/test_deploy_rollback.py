@@ -253,6 +253,27 @@ class ScopedRollbackTests(unittest.TestCase):
             self.assertNotIn("live touched", str(verified.exception))
         self.assertEqual(self.protected.read_bytes(), b"protected home unchanged")
 
+    def test_original_backup_cannot_overwrite_existing_backup(self):
+        path = self.stage / "old-game.js"
+        with self.assertRaisesRegex(RuntimeError, "rollback backup already exists"):
+            deploy.write_backup(self.stage, "game.js", b"unapproved replacement")
+        self.assertEqual(path.read_bytes(), self.old)
+
+    def test_original_backup_rejects_symlinked_nested_parent(self):
+        outside = self.root / "outside-backups"
+        outside.mkdir()
+        (self.stage / "old-three-addons").symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(AssertionError, "linked backup parent"):
+            deploy.write_backup(self.stage, "three-addons/loaders/GLTFLoader.js", self.new)
+        self.assertEqual(list(outside.iterdir()), [])
+
+    def test_original_backup_fsync_failure_does_not_leave_partial_file(self):
+        path = self.stage / "old-index.html"
+        with patch.object(deploy.os, "fsync", side_effect=OSError("disk full")):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                deploy.write_backup(self.stage, "index.html", self.new)
+        self.assertFalse(path.exists())
+
     def test_corrupt_backup_never_replaces_known_good_file(self):
         (self.game / "game.js").write_bytes(self.new)
         (self.stage / "old-game.js").write_bytes(b"corrupt backup")
