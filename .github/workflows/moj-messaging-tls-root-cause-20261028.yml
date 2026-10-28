@@ -35,6 +35,18 @@ jobs:
           PY
           )
           test "${#WA_IPS[@]}" -gt 0
+          python3 - "${WA_IPS[@]}" <<'PY'
+          import sys,socket,ssl
+          good=0
+          for ip in sys.argv[1:]:
+              try:
+                  with socket.create_connection((ip,443),timeout=7) as raw:
+                      with ssl.create_default_context().wrap_socket(raw,server_hostname='web.whatsapp.com') as tls:
+                          good+=1
+              except Exception as exc:
+                  print('MMSG_RUNNER_WA_TLS_ERROR='+type(exc).__name__,flush=True)
+          print('MMSG_RUNNER_WA_TLS='+('PASS' if good else 'FAIL'),flush=True)
+          PY
           timeout 100s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 python3 - "${WA_IPS[@]}" <<'PY'
           import socket,ssl,sys,ipaddress
           def cls(exc):
