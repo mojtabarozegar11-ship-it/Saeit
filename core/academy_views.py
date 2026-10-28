@@ -116,7 +116,7 @@ def education_course_detail(request, slug):
     # A missing schema is not an absent course; never return a misleading 404.
     required = (
         EducationCourse, EducationTrack, EducationLesson, EducationResource,
-        EducationAssessment, EducationEnrollment, EducationProgress,
+        EducationAssessment, EducationQuestion, EducationEnrollment, EducationProgress,
         EducationBookmark, Product,
     )
     if missing_public_tables(*required):
