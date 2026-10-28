@@ -2,7 +2,7 @@ name: Publish isolated ZM financial services portal
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/zm-finance-release-20261027.yml']
+    paths: ['.github/workflows/zm-finance-release-20261027.yml', 'assets/zm-finance/photography/**']
 permissions:
   contents: read
 concurrency:
@@ -11,8 +11,49 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
+      - name: Checkout scoped financial photographs
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: assets/zm-finance/photography
+          sparse-checkout-cone-mode: false
+      - name: Use supported Python image optimization runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Optimize 120 unique service and frame photographs
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet Pillow==11.3.0
+          python3 - <<'PY'
+          import os,re,tarfile,hashlib,io,json
+          from pathlib import Path
+          from PIL import Image,ImageOps
+          source=Path('assets/zm-finance/photography')
+          expected=set(['b01.png','b02.png','b03.png','b04.png','b05.png','b06.png','b07.png','b08.png','b09.png','b10.png','b11.png','b12.png','b13.png','b14.png','b15.png','b16.png','b17.png','b18.png','b19.png','b20.png','b21.png','b22.png','b23.png','b24.png','b25.png','b26.png','b27.png','b28.png','b29.png','b30.png','b31.png','b32.png','bank-frame.png','calc-frame.png','explain-frame.png','faq-frame.png','hero.png','iban-frame.png','journey-frame.png','loan-frame.png','nav-1.png','nav-2.png','nav-3.png','nav-4.png','nav-5.png','nav-6.png','nav-7.png','nav-8.png','q01.png','q02.png','q03.png','q04.png','q05.png','q06.png','q07.png','q08.png','q09.png','q10.png','q11.png','q12.png','q13.png','q14.png','q15.png','q16.png','q17.png','q18.png','q19.png','q20.png','q21.png','q22.png','q23.png','q24.png','q25.png','q26.png','q27.png','q28.png','q29.png','q30.png','q31.png','q32.png','qard-frame.png','request-frame.png','s11.png','s12.png','s13.png','s14.png','s15.png','s16.png','s21.png','s22.png','s23.png','s24.png','s25.png','s26.png','s31.png','s32.png','s33.png','s34.png','s35.png','s36.png','s41.png','s42.png','s43.png','s44.png','s45.png','s46.png','s51.png','s52.png','s53.png','s54.png','s55.png','s56.png','s61.png','s62.png','s63.png','s64.png','s65.png','s66.png','tracking-frame.png','trust-frame.png'])
+          actual=set(p.name for p in source.glob('*.png'))
+          assert len(expected)==120 and actual==expected, 'Financial image catalog mismatch'
+          output=Path(os.environ['RUNNER_TEMP'])/'zm-finance-optimized'
+          output.mkdir(mode=0o700)
+          manifest={}
+          for filename in sorted(expected):
+           with Image.open(source/filename) as opened:
+            assert opened.format=='PNG' and opened.width>=800 and opened.height>=450
+            im=ImageOps.fit(opened.convert('RGB'),(1600,900) if filename=='hero.png' else (960,540),Image.Resampling.LANCZOS)
+            name=filename[:-4]+'.webp'
+            path=output/name
+            im.save(path,format='WEBP',quality=78,method=6)
+            body=path.read_bytes()
+            assert 5000<len(body)<2000000 and body[:4]==b'RIFF' and body[8:12]==b'WEBP'
+            manifest['assets/'+name]=hashlib.sha256(body).hexdigest()
+          assert len(manifest)==120 and len(set(manifest.values()))==120,'Duplicate visual asset'
+          archive=Path(os.environ['RUNNER_TEMP'])/'zm-finance-assets.tar.gz'
+          with tarfile.open(archive,'w:gz') as tar:
+           for name in sorted(manifest):tar.add(output/Path(name).name,arcname=name,recursive=False)
+          assert archive.stat().st_size<60000000,'Image archive unexpectedly large'
+          print('OPTIMIZED_IMAGES=120 ARCHIVE_MIB='+str(round(archive.stat().st_size/1048576,2)))
+          PY
       - name: Establish fingerprint-pinned VPS to cPanel relay
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -57,6 +98,10 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
+      - name: Transfer photos only to existing private finance stage
+        run: |
+          set -euo pipefail
+          timeout 150s scp -F "$RUNNER_TEMP/mpw-structure-ssh/config" "$RUNNER_TEMP/zm-finance-assets.tar.gz" saeit-cpanel:/home/zomorod2/zm-finance-private/visual-assets-next.tar.gz
       - name: Publish isolated portal and verify requests with rollback
         run: |
           timeout 240s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
@@ -69,20 +114,26 @@ jobs:
           assert len([service for service in catalog if service['id'].startswith('q')])==32
           assert len([service for service in catalog if service['id'].startswith('b')])==32
           from pathlib import Path
-          import os,json,hashlib,subprocess,shutil,urllib.request,urllib.error,http.cookiejar,secrets,sqlite3,time
+          import os,json,hashlib,subprocess,shutil,urllib.request,urllib.error,http.cookiejar,secrets,sqlite3,time,tarfile
           root=Path('/home/zomorod2/public_html');target=root/'$$zm';private=Path('/home/zomorod2/zm-finance-private')
           assert root.is_dir() and not root.is_symlink()
           assert not target.is_symlink() and not private.is_symlink(), 'Symlink target is forbidden'
           for p in [Path('/AGENTS.md'),Path('/home/AGENTS.md'),Path('/home/zomorod2/AGENTS.md'),root/'AGENTS.md',target/'AGENTS.md']:
            assert not p.exists(),'New local instructions must be read before deployment'
+          ASSET_IDS=set(['b01','b02','b03','b04','b05','b06','b07','b08','b09','b10','b11','b12','b13','b14','b15','b16','b17','b18','b19','b20','b21','b22','b23','b24','b25','b26','b27','b28','b29','b30','b31','b32','bank-frame','calc-frame','explain-frame','faq-frame','hero','iban-frame','journey-frame','loan-frame','nav-1','nav-2','nav-3','nav-4','nav-5','nav-6','nav-7','nav-8','q01','q02','q03','q04','q05','q06','q07','q08','q09','q10','q11','q12','q13','q14','q15','q16','q17','q18','q19','q20','q21','q22','q23','q24','q25','q26','q27','q28','q29','q30','q31','q32','qard-frame','request-frame','s11','s12','s13','s14','s15','s16','s21','s22','s23','s24','s25','s26','s31','s32','s33','s34','s35','s36','s41','s42','s43','s44','s45','s46','s51','s52','s53','s54','s55','s56','s61','s62','s63','s64','s65','s66','tracking-frame','trust-frame'])
+          ASSET_FILES=set('assets/'+x+'.webp' for x in ASSET_IDS)
+          assert len(ASSET_IDS)==120
           existing=target.is_dir()
           manifest=private/'release-manifest.json'
+          if existing and (target/'assets').exists():
+           assert (target/'assets').is_dir() and not (target/'assets').is_symlink(),'Visual asset directory invalid'
+           assert set('assets/'+p.name for p in (target/'assets').iterdir())==ASSET_FILES,'Unexpected photo assets on production'
           if existing:
            assert private.is_dir() and (private/'rate.key').is_file() and (private/'manage_requests.py').is_file(), 'Private service state missing'
-           assert set(p.name for p in target.iterdir())==set(FILES), 'Unexpected user files in live portal'
+           assert set(p.name for p in target.iterdir()) in (set(FILES),set(FILES)|{'assets'}), 'Unexpected user files in live portal'
            if manifest.is_file():
             expected=json.loads(manifest.read_text(encoding='utf8'))
-            assert set(expected)==set(FILES), 'Manifest content mismatch'
+            assert set(expected) in (set(FILES),set(FILES)|ASSET_FILES), 'Manifest content mismatch'
             for name,digest in expected.items():
              assert hashlib.sha256((target/name).read_bytes()).hexdigest()==digest, 'Unexpected live modification: '+name
            else:
@@ -104,6 +155,18 @@ jobs:
           stage=private/('release-next-'+str(time.time_ns()));stage.mkdir(mode=0o755)
           for name,body in FILES.items():
            p=stage/name;p.write_text(body,encoding='utf8');p.chmod(0o644)
+          archive=private/'visual-assets-next.tar.gz'
+          assert archive.is_file() and archive.stat().st_size<60000000,'Private photo bundle missing or too large'
+          image_dir=stage/'assets';image_dir.mkdir(mode=0o755)
+          with tarfile.open(archive,mode='r:gz') as package:
+           members=package.getmembers()
+           assert len(members)==120 and set(m.name for m in members)==ASSET_FILES,'Unexpected or missing photo assets'
+           for m in members:
+            assert m.isfile() and 5000<m.size<2000000 and m.name.startswith('assets/') and '/' not in m.name[7:],'Invalid photo bundle entry'
+            data=package.extractfile(m).read()
+            assert len(data)==m.size and data[:4]==b'RIFF' and data[8:12]==b'WEBP','Invalid image signature'
+            destination=stage/m.name;destination.write_bytes(data);destination.chmod(0o644)
+          assert len(set(hashlib.sha256((stage/name).read_bytes()).hexdigest() for name in ASSET_FILES))==120,'Duplicate financial photographs'
           php=shutil.which('php')
           if not php:
            php=next((str(p) for p in [Path('/opt/cpanel/ea-php82/root/usr/bin/php'),Path('/opt/alt/php82/usr/bin/php')] if p.exists()),None)
@@ -129,6 +192,9 @@ jobs:
             os.rename(target,backup/'portal-previous')
             old_swapped=True
            os.rename(stage,target)
+           for image_name in ['assets/hero.webp','assets/nav-1.webp','assets/s11.webp','assets/q32.webp','assets/b32.webp']:
+            image_data,image_headers=get(base+image_name)
+            assert len(image_data)>5000 and image_data[:4]==b'RIFF' and image_data[8:12]==b'WEBP','Image publish verification failed: '+image_name
            for name in ['index.html','app.js','style.css','services.json']:
             body,headers=get(base+('' if name=='index.html' else name))
             assert body.decode()==FILES[name],name+' mismatch'
@@ -212,6 +278,7 @@ jobs:
             assert db_check.execute('SELECT count(*) FROM request_replies WHERE request_id=?',(created,)).fetchone()[0]==0,'Reply erasure cascade failed'
             db_check.close()
            next_manifest={name:hashlib.sha256(body.encode('utf8')).hexdigest() for name,body in FILES.items()}
+           next_manifest.update({name:hashlib.sha256((target/name).read_bytes()).hexdigest() for name in ASSET_FILES})
            temp_manifest=private/('release-manifest-'+str(time.time_ns())+'.json')
            temp_manifest.write_text(json.dumps(next_manifest),encoding='utf8')
            temp_manifest.chmod(0o600)
