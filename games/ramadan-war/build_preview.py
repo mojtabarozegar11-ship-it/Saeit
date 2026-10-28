@@ -11,7 +11,14 @@ import os
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
-from deploy import ASSETS
+# Resolve the sibling release manifest explicitly: pytest or another app may
+# already have imported an unrelated module named "deploy".
+import importlib.util
+_DEPLOY_SPEC = importlib.util.spec_from_file_location(
+    "ramadan_preview_deploy", Path(__file__).with_name("deploy.py"))
+_DEPLOY_MODULE = importlib.util.module_from_spec(_DEPLOY_SPEC)
+_DEPLOY_SPEC.loader.exec_module(_DEPLOY_MODULE)
+ASSETS = _DEPLOY_MODULE.ASSETS
 
 MODEL_SIZES = {
     "soldier-rigged-ccby.glb": 3094592,
