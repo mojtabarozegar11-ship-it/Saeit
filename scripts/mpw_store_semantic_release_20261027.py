@@ -18,6 +18,11 @@ SITE = ROOT / "mojplaywin.com"
 STORE = APP / "core/templates/mojplaywin/store.html"
 BASE = APP / "core/templates/mojplaywin/site_base.html"
 WSGI = SITE / "passenger_wsgi.py"
+INVOICE_OLD = b'Never send funds to an address found outside your verified order invoice.</p>'
+INVOICE_NEW = b'Never send funds to an address found outside your verified order invoice. <a href="/commerce/trx-easy/purchases/">View your purchases and invoices</a>.</p>'
+CSS_OLD = b'.mpw-shop-payment p{margin:0;color:var(--muted);font-size:.87rem;line-height:1.7}.mpw-shop-footer'
+CSS_NEW = b'.mpw-shop-payment p{margin:0;color:var(--muted);font-size:.87rem;line-height:1.7}.mpw-shop-payment a{color:#f0d98f!important;text-decoration:underline;text-underline-offset:3px}.mpw-shop-payment a:focus-visible{outline:3px solid #fff;outline-offset:3px;border-radius:2px}.mpw-shop-footer'
+
 OLD_SHA = "9e8fadc16025571383188aad305d76281b41c059ce9ffd1e0fa043a9b1d5690d"
 OLD_START = b'<main class="mpw-shop">'
 NEW_START = b'<div class="mpw-shop">'
@@ -44,15 +49,28 @@ def validate():
 
 
 def patch(data):
-    if NEW_START in data and NEW_END in data and OLD_START not in data and OLD_END not in data:
-        return data
-    if (data.count(OLD_START) != 1 or data.count(OLD_END) != 1
-        or data.count(b"{% endblock %}") < 1):
-        raise RuntimeError("STORE_TEMPLATE_SEMANTIC_DRIFT")
-    if digest(data) != OLD_SHA:
-        raise RuntimeError("STORE_TEMPLATE_BASELINE_HASH_DRIFT:" + digest(data))
-    fixed = data.replace(OLD_START, NEW_START, 1).replace(OLD_END, NEW_END, 1)
-    if fixed.count(NEW_START) != 1 or fixed.count(NEW_END) != 1 or OLD_START in fixed:
+    if (data.count(NEW_START) == 1 and data.count(NEW_END) == 1
+        and OLD_START not in data and OLD_END not in data):
+        fixed = data
+    else:
+        if (data.count(OLD_START) != 1 or data.count(OLD_END) != 1
+            or data.count(b"{% endblock %}") < 1):
+            raise RuntimeError("STORE_TEMPLATE_SEMANTIC_DRIFT")
+        if digest(data) != OLD_SHA:
+            raise RuntimeError("STORE_TEMPLATE_BASELINE_HASH_DRIFT:" + digest(data))
+        fixed = data.replace(OLD_START, NEW_START, 1).replace(OLD_END, NEW_END, 1)
+    for old, new, label in (
+        (INVOICE_OLD, INVOICE_NEW, "INVOICE_RECOVERY"),
+        (CSS_OLD, CSS_NEW, "INVOICE_LINK_ACCESSIBILITY"),
+    ):
+        if fixed.count(new) == 1 and fixed.count(old) == 0:
+            continue
+        if fixed.count(old) != 1 or fixed.count(new) != 0:
+            raise RuntimeError("STORE_" + label + "_DRIFT")
+        fixed = fixed.replace(old, new, 1)
+    if (fixed.count(NEW_START) != 1 or fixed.count(NEW_END) != 1
+        or fixed.count(INVOICE_NEW) != 1 or fixed.count(CSS_NEW) != 1
+        or OLD_START in fixed or OLD_END in fixed):
         raise RuntimeError("STORE_PATCH_FAILED")
     for marker in (b"/store/product/72/", b"/store/product/225/", b"/store/product/879/"):
         if data.count(marker) != fixed.count(marker):
@@ -160,6 +178,15 @@ def selftest():
     assert original.count(OLD_START) == 1
     assert original.replace(OLD_START, NEW_START).replace(OLD_END, NEW_END).count(NEW_START) == 1
     assert OLD_SHA and len(OLD_SHA) == 64
+    fixture = (b'{% block content %}\n<div class="mpw-shop">'
+        + CSS_OLD + b'<a href="/store/product/72/">a</a>'
+        + b'<a href="/store/product/225/">b</a>'
+        + b'<a href="/store/product/879/">c</a>'
+        + INVOICE_OLD + NEW_END)
+    repaired = patch(fixture)
+    assert INVOICE_NEW in repaired and CSS_NEW in repaired
+    assert patch(repaired) == repaired
+    assert repaired.count(b'/store/product/879/') == 1
     print("MPW_STORE_SEMANTIC_SELFTEST=PASS")
 
 
