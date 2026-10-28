@@ -1,0 +1,249 @@
+name: Mojtaba four education posters personal-only live publish
+on:
+  pull_request:
+    paths:
+      - 'social_hub/course_showcase.py'
+      - 'social_hub/urls.py'
+      - 'scripts/mojtaba_four_course_posters_home_20261028.py'
+      - 'tests/test_mojtaba_four_course_posters_20261028.py'
+      - '.github/workflows/mojtaba-four-course-posters-publish-20261028.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'social_hub/course_showcase.py'
+      - 'scripts/mojtaba_four_course_posters_home_20261028.py'
+      - '.github/workflows/mojtaba-four-course-posters-publish-20261028.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-personal-app-installation
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only Django needed for real vector HTTP regression
+        run: python -m pip install -q 'Django>=5.2,<5.3'
+      - name: Check four original SVGs, single-template additive patch and rollback
+        run: |
+          set -euo pipefail
+          python -m compileall -q social_hub/course_showcase.py scripts/mojtaba_four_course_posters_home_20261028.py
+          python -m unittest discover -s tests -p 'test_mojtaba_four_course_posters_20261028.py' -v
+      - name: Existing standalone social package remains compatible
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_mojtaba_social_hub_upgrade_20261026.py' -v
+          python -m unittest discover -s tests -p 'test_mojtaba_social_public_official_20261026.py' -v
+
+  deploy:
+    needs: preflight
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Record baseline: personal, shop and Zomorod homepage
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          for url in ("https://mojplaywin.com/mojtaba.roozegar/","https://mojplaywin.com/","https://zomorodmelal.ir/"):
+              with urlopen(Request(url,headers={"Cache-Control":"no-cache"}),timeout=22) as r:
+                  if r.status!=200:raise RuntimeError("Unhealthy baseline")
+              print("PREDEPLOY_SITE_PRESERVED",url)
+          PY
+      - name: Authenticate to known and fingerprint-pinned cPanel through VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-social-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]); t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SOCIAL_SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Transfer only four-course artwork module and reversible homepage patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          stage="/home/zomorod2/.mpw-personal-course-stage-$GITHUB_RUN_ID"
+          tar -czf "$RUNNER_TEMP/mojtaba-courses-social-hub.tgz" --exclude='__pycache__' --exclude='*.pyc' social_hub
+          timeout 50s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          for asset in mojtaba-courses-social-hub.tgz; do
+            timeout 75s scp -q -F "$SOCIAL_SSH_CONFIG" "$RUNNER_TEMP/$asset" "saeit-host:$stage/$asset"
+          done
+          for filename in scripts/mojtaba_social_hub_install_personal_20261026.py scripts/mojtaba_social_hub_upgrade_personal_20261026.py scripts/mojtaba_four_course_posters_home_20261028.py; do
+            timeout 65s scp -q -F "$SOCIAL_SSH_CONFIG" "$filename" "saeit-host:$stage/$(basename "$filename")"
+          done
+      - name: Deploy to independent personal Django ONLY, test four posters and rollback if necessary
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 480s ssh -T -F "$SOCIAL_SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.mpw-personal-course-stage-$run"
+          script="$stage/mojtaba_four_course_posters_home_20261028.py"
+          upgrader="$stage/mojtaba_social_hub_upgrade_personal_20261026.py"
+          py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
+          pkg_done=0
+          home_done=0
+          verified=0
+          finish() {
+            rc=$?
+            trap - EXIT
+            if test "$verified" = "0"; then
+              if test "$home_done" = "1"; then
+                "$py" "$script" rollback --run-id "$run" && echo 'COURSE_HOME_AUTO_ROLLBACK=PASS' || echo 'COURSE_HOME_MANUAL_RECOVERY_REQUIRED'
+              fi
+              if test "$pkg_done" = "1"; then
+                "$py" "$upgrader" rollback --run-id "$run" && echo 'COURSE_SOCIAL_PACKAGE_AUTO_ROLLBACK=PASS' || echo 'COURSE_PACKAGE_MANUAL_RECOVERY_REQUIRED'
+              fi
+              test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+            fi
+            test ! -d "$stage" || rm -rf -- "$stage"
+            exit "$rc"
+          }
+          trap finish EXIT
+          test -f "$app/manage.py" && test -x "$py" && test -f "$script" && test -f "$upgrader"
+          test ! -L "$app" && test ! -L "$stage" && test ! -L "$app/templates/personal_site/core/home.html"
+          tar -xzf "$stage/mojtaba-courses-social-hub.tgz" -C "$stage" --no-same-owner --no-same-permissions
+          test -f "$stage/social_hub/course_showcase.py"
+          "$py" "$upgrader" check --source "$stage/social_hub"
+          "$py" "$script" check
+          "$py" "$upgrader" upgrade --source "$stage/social_hub" --run-id "$run"
+          pkg_done=1
+          "$py" "$script" install --run-id "$run"
+          home_done=1
+          cd "$app"
+          "$py" manage.py check
+          "$py" - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.test import Client
+          from django.urls import reverse
+          from xml.etree import ElementTree as ET
+          from social_hub.course_showcase import COURSES,ID
+          c=Client(HTTP_HOST="mojplaywin.com")
+          endpoint=reverse("mojtaba_public_courses")
+          if endpoint!="/mojtaba.roozegar/social-command/courses/":
+              raise RuntimeError("Course gallery not publicly mounted")
+          page=c.get(endpoint,secure=True)
+          if page.status_code!=200 or page.content.count(b'mpw-course-card')!=5:
+              # class selector is present in style once, plus four cards.
+              raise RuntimeError("Expected four distinct public course cards missing")
+          if "ثبت‌نام و پرداخت در این صفحه فعال نیست".encode() not in page.content:
+              raise RuntimeError("Course registration is misleading")
+          for course in COURSES:
+              u=reverse("mojtaba_course_poster",kwargs={"slug":course["slug"]})
+              if u!="/mojtaba.roozegar/social-command/posters/"+course["slug"]+".svg":
+                  raise RuntimeError("Poster reverse route mismatch")
+              response=c.get(u,secure=True)
+              if response.status_code!=200 or not response["Content-Type"].startswith("image/svg+xml"):
+                  raise RuntimeError("Course poster route missing: "+course["slug"])
+              try: ET.fromstring(response.content)
+              except Exception as err: raise RuntimeError("Course artwork invalid XML") from err
+              print("PERSONAL_COURSE_POSTER_DJANGO=PASS",course["slug"],flush=True)
+          home=c.get("/mojtaba.roozegar/",secure=True)
+          if home.status_code!=200 or home.content.count(ID.encode())!=1:
+              raise RuntimeError("Four poster home section missing")
+          if home.content.count(b'mpw-course-home-card')!=5:
+              raise RuntimeError("Four poster homepage cards missing")
+          social=c.get("/mojtaba.roozegar/social-command/",secure=True)
+          if social.status_code not in (302,403):
+              raise RuntimeError("Existing social manager became unprotected")
+          print("PERSONAL_FOUR_POSTERS_HOME_DJANGO=PASS",flush=True)
+          print("SOCIAL_STAFF_LOGIN_AND_DB_UNCHANGED=PASS",flush=True)
+          PY
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$py" - <<'PY'
+          import time,urllib.error,urllib.request
+          from xml.etree import ElementTree as ET
+          urls={
+            "https://mojplaywin.com/mojtaba.roozegar/":"home",
+            "https://mojplaywin.com/mojtaba.roozegar/social-command/courses/":"courses",
+            "https://mojplaywin.com/":"preserve",
+            "https://zomorodmelal.ir/":"preserve",
+          }
+          for key in ("business","agriculture","online-income","chatgpt"):
+              urls["https://mojplaywin.com/mojtaba.roozegar/social-command/posters/"+key+".svg"]="svg"
+          for attempt in range(5):
+              broken=[]
+              for u,kind in urls.items():
+                  try:
+                      with urllib.request.urlopen(urllib.request.Request(
+                          u,headers={"Cache-Control":"no-cache","User-Agent":"MojtabaCoursesHealth/1.0"}),
+                          timeout=18) as r:
+                          blob=r.read(1_200_000)
+                          if r.status!=200:raise RuntimeError("Non-200")
+                      if kind=="home" and b'mpw-four-course-posters-20261028' not in blob:
+                          raise RuntimeError("Personal home posters missing")
+                      if kind=="courses" and blob.count(b'mpw-course-card')<4:
+                          raise RuntimeError("Four course list cards missing")
+                      if kind=="svg":ET.fromstring(blob)
+                  except Exception as exc:
+                      broken.append((u,type(exc).__name__))
+              if not broken:
+                  print("PERSONAL_FOUR_EDUCATION_POSTERS_WEB_LIVE=PASS",flush=True)
+                  break
+              print("COURSE_POSTERS_SMOKE_RETRY",attempt+1,broken,flush=True)
+              if attempt==4:raise RuntimeError("Public education page or site health failed")
+              time.sleep(3)
+          PY
+          verified=1
+          echo 'FOUR_PERSONAL_COURSE_POSTERS_RELEASE=SUCCESS'
+          echo 'OTHER_SITES_UNCHANGED_NO_PAYMENTS_NO_AUTO_PUBLISH=PASS'
+          REMOTE
+      - name: Remove temporary relay secrets
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-social-ssh"
