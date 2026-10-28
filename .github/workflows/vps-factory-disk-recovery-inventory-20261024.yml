@@ -176,6 +176,49 @@ jobs:
               "filesystem_type":fs_kind,
               "samples_read_only":True,
           }
+          # Generation map: bounded, read-only names/sizes and active references.
+          crontab_text = subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8).stdout
+          process_text = subprocess.run(["ps","-u","githubops","-o","args="],capture_output=True,text=True,timeout=8).stdout
+          generation_roots = (
+              ("operations_backups", backup_root),
+              ("master_agent_operations", ops / "master-agent"),
+              ("autonomous_factory", private),
+              ("autonomous_product_cycle", private / "autonomous-product-cycle"),
+          )
+          generation_map = {}
+          for label, path in generation_roots:
+              if path.is_symlink() or not path.is_dir():
+                  generation_map[label] = {"present":False,"entries":[]}
+                  continue
+              children = [child for child in path.iterdir()
+                          if not child.is_symlink() and (child.is_dir() or child.is_file())]
+              children = children[:100]
+              sizes = {}
+              if children:
+                  try:
+                      result = subprocess.run(["du","-s","-B1","--"]+[str(child) for child in children],
+                                              check=True,capture_output=True,text=True,timeout=40)
+                      for row in result.stdout.splitlines():
+                          size_text, sep, full_path = row.partition("\\t")
+                          if sep:
+                              sizes[full_path] = int(size_text)
+                  except (OSError,ValueError,subprocess.SubprocessError):
+                      pass
+              rows = []
+              for child in children:
+                  try:
+                      row = {"name":child.name[:120],"bytes":sizes.get(str(child),
+                              child.stat().st_size if child.is_file() else None),
+                             "age_days":round((time.time()-child.stat().st_mtime)/86400,1),
+                             "kind":"dir" if child.is_dir() else "file",
+                             "cron_reference":str(child) in crontab_text or child.name in crontab_text,
+                             "process_reference":str(child) in process_text or child.name in process_text}
+                      rows.append(row)
+                  except OSError:
+                      continue
+              rows.sort(key=lambda row:-(row["bytes"] or 0))
+              generation_map[label] = {"present":True,"entry_count":len(children),
+                                       "entries":rows[:60]}
           status = {
               "schema": "saeit.factory.disk-pressure-inventory.v1",
               "observed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
