@@ -21,6 +21,13 @@ class MasterActivationENOSPCGuardTests(unittest.TestCase):
         p = subprocess.run(["bash", "-n", str(SCRIPT)], capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, p.stderr)
 
+    def test_django_settings_resolve_from_app_root_before_preflight(self):
+        s = self.source
+        # Remote shell starts outside the Django checkout; config.settings
+        # must resolve before the disk guard can enforce fail-closed policy.
+        self.assertLess(s.index('cd "$app"'), s.index('DJANGO_SETTINGS_MODULE=config.settings SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 "$py" -'))
+        self.assertLess(s.index('cd "$app"'), s.index('install -d -m 700 "$master"'))
+
     def test_disk_preflight_before_any_mutating_setup(self):
         s = self.source
         self.assertLess(s.index("MASTER_PREFLIGHT_ENOSPC_BLOCKED"),
