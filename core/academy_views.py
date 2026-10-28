@@ -4,6 +4,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from uuid import uuid4
 
+from .public_catalog_guard import missing_public_tables, mark_public_data_unavailable
+
 from .models import (
     EducationTrack, EducationCourse, EducationResource, EducationLesson,
     EducationEnrollment, EducationProgress, EducationBookmark,
@@ -24,23 +26,29 @@ def academy(request):
         {"key": "ai", "title": "هوش مصنوعی", "meta": "AI · Agents · Automation", "text": "مبانی هوش مصنوعی، عامل‌ها، اتوماسیون، طراحی سیستم و استفاده حرفه‌ای و مسئولانه."},
         {"key": "business", "title": "کسب‌وکار و درآمد", "meta": "Business · Commerce", "text": "بازاریابی، فروش، تجارت الکترونیک، برند، مالی و طراحی مدل درآمدی."},
     ]
-    db_tracks = list(EducationTrack.objects.filter(active=True))
-    if db_tracks:
-        tracks = [{"key": x.key, "title": x.title, "meta": x.meta, "text": x.description} for x in db_tracks]
+    # Keep the existing static learning paths usable if the catalog schema
+    # is absent. Never present missing data as an actually empty catalog.
+    catalog_unavailable = missing_public_tables(EducationTrack, EducationCourse)
+    if not catalog_unavailable:
+        db_tracks = list(EducationTrack.objects.filter(active=True))
+        if db_tracks:
+            tracks = [{"key": x.key, "title": x.title, "meta": x.meta, "text": x.description} for x in db_tracks]
     course_q = request.GET.get("q", "").strip()
     track_key = request.GET.get("track", "").strip()
     access = request.GET.get("access", "").strip()
-    course_qs = EducationCourse.objects.filter(active=True, approved=True).select_related("track")
-    if course_q:
-        from django.db.models import Q
-        course_qs = course_qs.filter(Q(title__icontains=course_q) | Q(summary__icontains=course_q))
-    if track_key:
-        course_qs = course_qs.filter(track__key=track_key)
-    if access == "free":
-        course_qs = course_qs.filter(is_free=True)
-    elif access == "paid":
-        course_qs = course_qs.filter(is_free=False)
-    courses = list(course_qs.order_by("track__sort_order", "title"))
+    courses = []
+    if not catalog_unavailable:
+        course_qs = EducationCourse.objects.filter(active=True, approved=True).select_related("track")
+        if course_q:
+            from django.db.models import Q
+            course_qs = course_qs.filter(Q(title__icontains=course_q) | Q(summary__icontains=course_q))
+        if track_key:
+            course_qs = course_qs.filter(track__key=track_key)
+        if access == "free":
+            course_qs = course_qs.filter(is_free=True)
+        elif access == "paid":
+            course_qs = course_qs.filter(is_free=False)
+        courses = list(course_qs.order_by("track__sort_order", "title"))
     resources = [
         {"kind": "جزوه", "title": "کتابخانه جزوه‌های آموزشی", "text": "جزوه‌های سطح‌بندی‌شده، قابل مطالعه و قابل تکمیل برای هر مسیر.", "access": "رایگان محدود"},
         {"kind": "دوره", "title": "دوره‌های جامع مهارتی", "text": "درس‌نامه، ویدئو، تمرین، پروژه، آزمون و گواهی در مسیرهای منتخب.", "access": "رایگان + پولی"},
@@ -59,7 +67,8 @@ def academy(request):
         "تمرین، پروژه و آزمون جامع",
         "گواهی، مسیر مهارتی و محتوای تخصصی",
     ]
-    return render(request, "core/academy.html", {
+    response = render(request, "core/academy.html", {
+        "catalog_temporarily_unavailable": catalog_unavailable,
         "tracks": tracks,
         "resources": resources,
         "courses": courses,
@@ -67,6 +76,7 @@ def academy(request):
         "free_features": free_features,
         "paid_features": paid_features,
     })
+    return mark_public_data_unavailable(response) if catalog_unavailable else response
 
 
 def education(request):
