@@ -261,7 +261,7 @@ test('runtime persists bounded pickup snapshots without truncating live mission 
 
 test('recovery intel remains stage-local, unique and cannot be duplicated in a save', () => {
   const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
-  const intel=(spotIndex)=>({x:sites[spotIndex][0],y:sites[spotIndex][1],type:'mission-intel',spotIndex,life:3600});
+  const intel=(spotIndex)=>({x:sites[spotIndex]?.[0]??4.5,y:sites[spotIndex]?.[1]??2.5,type:'mission-intel',spotIndex,life:3600});
   const state={...fresh(),mission:2,pickups:[intel(0),intel(1)]};
   assert.equal(validateCampaignSave(state),true);
   for(const pickups of [[intel(0),intel(0)],[intel(3)],[{...intel(1),spotIndex:'1'}]]) {
