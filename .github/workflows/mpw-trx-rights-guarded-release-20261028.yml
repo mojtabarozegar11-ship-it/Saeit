@@ -1,0 +1,146 @@
+name: MojPlayWin guarded live TRX rights gate (non-transactional)
+on:
+  pull_request:
+    paths:
+      - scripts/mpw_trx_rights_live_guard_20261028.py
+      - tests/test_mpw_trx_rights_live_guard_20261028.py
+      - .github/workflows/mpw-trx-rights-guarded-release-20261028.yml
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-trx-rights-guarded-release-20261028.yml"]
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "check is read-only; apply uses private backups and rollback"
+        required: true
+        default: check
+        type: choice
+        options: [check, apply]
+permissions: {contents: read}
+concurrency:
+  group: mpw-trx-rights-guarded-release
+  cancel-in-progress: false
+jobs:
+  contract:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate exact source edits, idempotency, snapshot and rollback without payments
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_trx_rights_live_guard_20261028.py' -v
+          python3 -m py_compile scripts/mpw_trx_rights_live_guard_20261028.py
+  live:
+    needs: contract
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only exact cPanel source drift and release preflight
+        run: |
+          set -euo pipefail
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - check' \
+            < scripts/mpw_trx_rights_live_guard_20261028.py
+      - name: Apply only by explicit workflow dispatch; verify or rollback
+        if: github.event_name == 'workflow_dispatch' && inputs.operation == 'apply'
+        run: |
+          set -euo pipefail
+          config="$RUNNER_TEMP/mpw-invoice-diag-ssh/config"
+          script=scripts/mpw_trx_rights_live_guard_20261028.py
+          run_id="$GITHUB_RUN_ID"
+          applied=0
+          rollback_if_needed() {
+            trap - ERR
+            if [ "$applied" -eq 1 ]; then
+              if ! timeout 90s ssh -T -F "$config" saeit-cpanel \
+                "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback $run_id" < "$script"; then
+                echo '::error::ROLLBACK_NOT_CONFIRMED; preserve snapshot and investigate'
+              fi
+            fi
+          }
+          trap rollback_if_needed ERR
+          output="$(timeout 115s ssh -T -F "$config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - apply $run_id" < "$script")"
+          printf '%s\n' "$output"
+          if [[ "$output" == *'MPW_TRX_RIGHTS_RELEASE=ALREADY_INSTALLED_NO_RESTART'* ]]; then
+            echo 'MPW_RIGHTS_NOOP=SOURCE_ALREADY_GUARDED'
+            exit 0
+          fi
+          [[ "$output" == *'MPW_TRX_RIGHTS_RELEASE=APPLIED_AND_SOURCE_VERIFIED'* ]]
+          applied=1
+          timeout 85s ssh -T -F "$config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - verify $run_id" < "$script"
+          python3 - <<'PY'
+          import json,urllib.error,urllib.request
+          for route in ('/store/','/store/product/72/','/store/product/225/',
+                        '/store/product/879/','/accounts/login/'):
+              req=urllib.request.Request('https://mojplaywin.com'+route,
+                  headers={'User-Agent':'MPWTRXRightsRelease/1'})
+              try:
+                  with urllib.request.urlopen(req,timeout=20) as response:
+                      status=response.status
+              except urllib.error.HTTPError as exc:
+                  status=exc.code
+              print('MPW_RIGHTS_POST_RELEASE_HTTP='+json.dumps({'route':route,'status':status}))
+              if status!=200: raise RuntimeError('POST_RELEASE_ROUTE_FAILED:'+route)
+          PY
+          applied=0
+          trap - ERR
+          echo 'MPW_TRX_RIGHTS_RELEASE=SOURCE_VERIFIED_AND_PUBLIC_HTTP_OK; NO_PAYMENT_CREATED'
+      - name: Delete runner-only SSH material
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          if [ -d "$d" ]; then
+            rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"
+            rmdir "$d"
+          fi
