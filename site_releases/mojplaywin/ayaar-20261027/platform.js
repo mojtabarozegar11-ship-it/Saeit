@@ -179,8 +179,9 @@
     if(!details.ai_processing_consent)throw Error("Applicant AI consent is required");
     const criteria=Object.fromEntries(rubric[details.category].map(([key])=>[key,{score:null,evidence:""}]));
     const packet={
-      schema:"AYAR-EXPERT-ENGINE-REVIEW-PACKET-v1",
+      schema:"AYAR-EXPERT-ENGINE-REVIEW-PACKET-v2",
       case_id:details.case_id,
+      evidence_fingerprint:details.evidence_fingerprint,
       category:details.category,product_name:details.product_name,
       product_version:details.product_version,product_url:details.product_url,
       scope:details.scope,evidence_summary:details.evidence_summary,
@@ -195,6 +196,7 @@
       ],
       expected_review:{
         case_id:details.case_id,review_mode:"ai_assisted",
+        evidence_fingerprint:details.evidence_fingerprint,
         ai_review_reference:"",review_scope:"",methodology_notes:"",
         independence_statement:"AYAR is affiliated with MojPlayWin; this is an AI-assisted internal analytical assessment, not independent human certification.",
         criteria,evidence_examined:false,no_material_conflict:false,publish_report:false
@@ -251,6 +253,7 @@
     addFact(facts,"Created",details.created_at);
     addFact(facts,"Version",details.product_version);
     addFact(facts,"Evidence attachments",details.files.length);
+    addFact(facts,"Evidence snapshot SHA-256",details.evidence_fingerprint);
     addFact(facts,"AI-assisted analysis authorized",details.ai_processing_consent?"Yes":"No");
     target.append(facts);
     target.append(h("h3","Recorded scope"));
@@ -260,6 +263,13 @@
       const list=h("ul","","a-evidence-list");
       for(const f of details.files)list.append(h("li",f.original_name+" · "+Math.ceil(f.size/1024)+" KB · SHA-256 "+f.sha256));
       target.append(list);
+    }
+    if(target.id==="casePanel" && details.ai_processing_consent && details.status!=="reviewed" && details.status!=="declined"){
+      const packet=h("button","Download AI analysis packet (JSON) ↓","a-button a-button-secondary");
+      packet.type="button";packet.addEventListener("click",()=>{
+        try{downloadReviewPacket(details);}catch(error){message(error.message,"error");}
+      });
+      target.append(packet,h("p","The packet contains case evidence descriptions and hashes, not private uploaded files or your access key. Share source files separately only when authorized.","a-small"));
     }
     if(details.review){
       renderReport(target,details.review);
@@ -499,6 +509,8 @@
         const analysis=JSON.parse(importText.value);
         if(analysis.case_id!==details.case_id || analysis.review_mode!=="ai_assisted")
           throw Error("AI report is not for this exact case");
+        if(!details.evidence_fingerprint || analysis.evidence_fingerprint!==details.evidence_fingerprint)
+          throw Error("Evidence snapshot mismatch: regenerate packet and reanalyze latest evidence");
         const expected=rubric[details.category].map(([key])=>key);
         if(!analysis.criteria || Object.keys(analysis.criteria).length!==expected.length)
           throw Error("Eight criteria are required");
@@ -529,6 +541,7 @@
         criteria[key]={score:scoreValue===""?null:Number(scoreValue),evidence:form.elements.namedItem("evidence_"+key).value};
       }
       const review={criteria,review_mode:"ai_assisted",
+        evidence_fingerprint:details.evidence_fingerprint,
         ai_review_reference:form.elements.namedItem("ai_review_reference").value,
         evidence_examined:form.elements.namedItem("evidence_examined").checked,
         independence_statement:form.elements.namedItem("independence_statement").value,
