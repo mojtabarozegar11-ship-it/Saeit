@@ -77,7 +77,7 @@ class SafeJsonBoundedTests(unittest.TestCase):
                 return os.stat_result(current)
 
             with mock.patch.object(os, "fstat", stale_fstat):
-                with self.assertRaisesRegex(RuntimeError, "MISSING_OR_UNSAFE_JSON"):
+                with self.assertRaisesRegex(RuntimeError, "SOURCE_JSON_CHANGED_DURING_READ"):
                     author.safe_json(path, max_bytes=128)
             self.assertGreater(path.stat().st_size, 128)
 
