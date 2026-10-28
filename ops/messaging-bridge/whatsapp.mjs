@@ -49,6 +49,32 @@ if (mode === 'login' && byPairingCode) {
     process.exit(2);
   }
 }
+// Optional Cloudflare Workers egress. Disabled unless both private env
+// values are provided. The token is intentionally WebSocket-only, not a
+// config.options header (Baileys reuses those headers for media uploads).
+const edgeBase = (process.env.MOJMSG_WA_EDGE_BASE || '').trim();
+const edgeToken = (process.env.MOJMSG_WA_EDGE_TOKEN || '').trim();
+let edgeSocketUrl = null;
+if (Boolean(edgeBase) !== Boolean(edgeToken)) {
+  console.error('Both edge base URL and private token must be configured together.');
+  process.exit(2);
+}
+if (edgeBase) {
+  try {
+    const url = new URL(edgeBase);
+    if (url.protocol !== 'wss:' || !url.hostname.endsWith('.workers.dev') ||
+        url.username || url.password || url.hash || url.search ||
+        (url.pathname !== '/' && url.pathname !== '') ||
+        (url.port && url.port !== '443') ||
+        !/^[A-Za-z0-9_-]{43,128}$/.test(edgeToken)) {
+      throw new Error('Invalid endpoint');
+    }
+    edgeSocketUrl = new URL('/bridge/' + edgeToken + '/ws/chat', url).toString();
+  } catch {
+    console.error('Invalid private Workers egress configuration.');
+    process.exit(2);
+  }
+}
 const logger = pino({level:'silent'});
 let running = true;
 let sock;
@@ -64,6 +90,7 @@ async function start() {
   const socket = makeWASocket({
     auth:state, logger, markOnlineOnConnect:false, syncFullHistory:false,
     printQRInTerminal:false,
+    ...(edgeSocketUrl ? {waWebSocketUrl:edgeSocketUrl} : {}),
   });
   sock = socket;
   let requestedPairingCode = false;
