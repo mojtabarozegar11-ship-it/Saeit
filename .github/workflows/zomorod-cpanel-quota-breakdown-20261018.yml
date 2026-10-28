@@ -100,6 +100,31 @@ jobs:
                   r=subprocess.run(["du","-sk",str(p)],capture_output=True,text=True,timeout=50)
                   print("DIRECTORY_BASELINE="+name+" "+r.stdout.strip().split()[0])
               except Exception:pass
+          root=h/".backups"
+          if root.is_dir() and not root.is_symlink():
+              import time,collections
+              totals=collections.defaultdict(lambda:{"count":0,"bytes":0,"allocated_bytes":0})
+              age={"older_30d_count":0,"older_30d_bytes":0,"newer_7d_count":0,"newer_7d_bytes":0}
+              file_count=0; total_bytes=0; allocated=0; errors=0; cutoff=time.time()
+              for base,dirs,names in os.walk(root,followlinks=False):
+                  dirs[:]=[d for d in dirs if not (Path(base)/d).is_symlink()]
+                  for filename in names:
+                      item=Path(base)/filename
+                      try:
+                          if item.is_symlink() or not item.is_file(): continue
+                          stat=item.stat(follow_symlinks=False)
+                          suffix=item.suffix.lower() or "(none)"
+                          totals[suffix]["count"]+=1
+                          totals[suffix]["bytes"]+=stat.st_size
+                          totals[suffix]["allocated_bytes"]+=getattr(stat,"st_blocks",0)*512
+                          file_count+=1; total_bytes+=stat.st_size; allocated+=getattr(stat,"st_blocks",0)*512
+                          age_days=(cutoff-stat.st_mtime)/86400
+                          if age_days>30:
+                              age["older_30d_count"]+=1; age["older_30d_bytes"]+=stat.st_size
+                          if age_days<7:
+                              age["newer_7d_count"]+=1; age["newer_7d_bytes"]+=stat.st_size
+                      except OSError: errors+=1
+              print("BACKUP_TREE_INVENTORY="+json.dumps({"regular_files":file_count,"logical_bytes":total_bytes,"allocated_bytes":allocated,"stat_errors":errors,"age_bands":age,"by_suffix":dict(totals)},sort_keys=True))
           print("BREAKDOWN_AUDIT_COMPLETE=yes")
           PY
           REMOTE
