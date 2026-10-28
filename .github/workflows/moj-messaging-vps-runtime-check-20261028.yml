@@ -70,6 +70,41 @@ jobs:
             if systemctl --user show-environment >/dev/null 2>&1; then echo 'MMSG_USER_SYSTEMD=READY'; else echo 'MMSG_USER_SYSTEMD=UNAVAILABLE'; fi
           fi
           if test -d "$HOME/private-messaging-bridge/releases"; then echo 'MMSG_STAGED_SOURCE_DIR=YES'; else echo 'MMSG_STAGED_SOURCE_DIR=NO'; fi
+          base="$HOME/private-messaging-bridge"
+          if test -L "$base/runtime/current" && test -f "$base/runtime/current/INSTALLED_OK"; then
+            echo MMSG_ACTIVE_PRIVATE_RUNTIME=PASS
+          else
+            echo MMSG_ACTIVE_PRIVATE_RUNTIME=NO_GO
+            exit 9
+          fi
+          if test "$(stat -c '%a' "$base/state")" = 700; then
+            echo MMSG_PRIVATE_STATE_PERMISSIONS=PASS
+          else
+            echo MMSG_PRIVATE_STATE_PERMISSIONS=NO_GO
+            exit 9
+          fi
+          "$base/runtime/current/bin/node" --check "$base/runtime/current/app/whatsapp.mjs"
+          "$base/runtime/current/venv/bin/python" -c 'import telethon'
+          echo MMSG_PRIVATE_NODE_AND_PYTHON=PASS
+          count="$(crontab -l | grep -Fc MMSG_BRIDGE_ROOTLESS_20261028 || true)"
+          if test "$count" = 3; then
+            echo MMSG_ROOTLESS_CRON_MARKERS=PASS
+          else
+            echo MMSG_ROOTLESS_CRON_MARKERS=NO_GO
+            exit 9
+          fi
+          if test -s "$base/state/telegram/account.session"; then
+            echo MMSG_TELEGRAM_PAIRING=PRESENT
+          else
+            echo MMSG_TELEGRAM_PAIRING=NOT_STARTED
+          fi
+          for account in primary secondary; do
+            if test -s "$base/state/whatsapp/$account/creds.json"; then
+              echo "MMSG_WHATSAPP_PAIRING_$account=PRESENT"
+            else
+              echo "MMSG_WHATSAPP_PAIRING_$account=NOT_STARTED"
+            fi
+          done
           echo MMSG_AUDIT_NO_MUTATIONS=PASS
           REMOTE
       - name: Publish audited SSH probe outcome
