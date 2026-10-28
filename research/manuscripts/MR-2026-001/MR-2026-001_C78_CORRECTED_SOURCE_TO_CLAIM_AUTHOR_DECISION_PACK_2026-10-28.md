@@ -58,7 +58,7 @@ The earlier C76 v2 manuscript **overstated three Car (2012) numerical contradict
 
 > For Car et al. (2012), the reported SMS dripper-run-time guidance was not an obligatory event-specific irrigation prescription. The authors describe discretionary irrigation timing and amount, and respondents report accumulating suggested run-time information over several days (25%) or combining it with other decision inputs (79%); the item-level denominators for these percentages were not independently authenticated. Accordingly, neither these reported practices nor the 53/72 decision-consideration measure defines an independently observed advice-event adherence rate. Any future G/D/R/A audit must first distinguish prescriptive, conditional and informational messages and predefine an actionable target and tolerance; otherwise adherence is not defined rather than zero.
 
-**Author decision required:** Accept this conservative distinction and the C76 v8 actionable-event denominator, or remove all Car percentages with unverified item Ns. Do not assign a binary implementation rate retrospectively. Original publisher pages, raw message texts and respondent ledgers remain required for stronger quantitative inference. This correction improves conceptual validity but does not resolve the 40/41, 74/72 or Amini/Cvejić conflicts.
+**Author decision required:** Accept this conservative distinction and the C76 v9 actionable-event denominator, or remove all Car percentages with unverified item Ns. Do not assign a binary implementation rate retrospectively. Original publisher pages, raw message texts and respondent ledgers remain required for stronger quantitative inference. This correction improves conceptual validity but does not resolve the 40/41, 74/72 or Amini/Cvejić conflicts.
 
 ## C81 crosswalk and time-frame acceptance gate
 
@@ -84,7 +84,7 @@ The earlier C76 v2 manuscript **overstated three Car (2012) numerical contradict
 
 ## Acceptance and reproducibility
 
-- **Versioned source:** [C76 v8 manuscript](MR-2026-001_C76_CAR_INFLUENCE_CLAIM_DENOMINATOR_AUDIT_MANUSCRIPT_2026-10-28.md), prior C78 correction commits `b913e3fb93d048baf6e2a6228064260757ebd8cc` and `1e69b9c32caa672f507bc1cf2bdbc458167e54fc`; new source-attribution restriction commit `28fdde777106f702ba74b072f73d1246adbf9d08`.
+- **Versioned source:** [C76 v9 manuscript](MR-2026-001_C76_CAR_INFLUENCE_CLAIM_DENOMINATOR_AUDIT_MANUSCRIPT_2026-10-28.md), prior C78 correction commits `b913e3fb93d048baf6e2a6228064260757ebd8cc` and `1e69b9c32caa672f507bc1cf2bdbc458167e54fc`; new source-attribution restriction commit `28fdde777106f702ba74b072f73d1246adbf9d08`.
 - **Arithmetic:** `19/41*100=46.3414634`; `30/41*100=73.1707317`; `33/41*100=80.4878049`; `26+7+3+6+15+17=74`; `11+10+9+8+3=41`. Calculations are on *published aggregates only*.
 - **Provenance:** author-uploaded Car printed text and UNE institutional metadata; publisher version of record **not authenticated**; no raw individual data.
 - **Output gate:** **READY_FOR_REVIEW** (actual full draft + corrected evidence/claim table). **DELIVERED as author-approved final article: NO.** **Journal submitted: NO.**
