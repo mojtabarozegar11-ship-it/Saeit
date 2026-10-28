@@ -61,12 +61,31 @@ def build_preview(source_dir, output_path, assets, expected_sizes=None):
 
     manifest = {
         "format": "ramadan-war-offline-preview-v1",
+        "source_revision": (os.environ.get("GITHUB_SHA", "").lower()
+                            if len(os.environ.get("GITHUB_SHA", "")) == 40
+                            and all(c in "0123456789abcdef"
+                                    for c in os.environ.get("GITHUB_SHA", "").lower())
+                            else "unversioned"),
         "payment_status": "disabled",
         "files": {name: {"sha256": sha(data), "bytes": len(data)}
                   for name, data in sorted(payload.items())},
     }
     manifest_data = (json.dumps(manifest, ensure_ascii=False, sort_keys=True,
                                 separators=(",", ":")) + "\n").encode("utf-8")
+
+    # The browser's ES modules cannot reliably run from file:// URLs.
+    # Ship an exact, self-contained launch recipe with every preview.
+    readme_data = (
+        "Ramadan War Web — standalone preview\\n"
+        "Revision: " + manifest["source_revision"] + "\\n"
+        "Extract this ZIP, then run from the extracted parent directory:\\n"
+        "  python3 -m http.server 8765 --directory ramadan-war\\n"
+        "Open http://127.0.0.1:8765/ in a desktop or mobile browser.\\n"
+        "Use a local HTTP server; opening index.html via file:// is unsupported.\\n"
+        "The game runs locally; no MOJ1 wallet or payment is enabled.\\n"
+        "This is a QA preview, not a verified public or commercial release.\\n"
+    ).encode("utf-8")
+
     # Never follow an output symlink or an existing linked ancestor. The final
     # archive must be outside the game tree even when the caller uses a relative
     # path or a directory alias.
@@ -98,6 +117,11 @@ def build_preview(source_dir, output_path, assets, expected_sizes=None):
                 info.compress_type = ZIP_DEFLATED
                 info.external_attr = 0o644 << 16
                 archive.writestr(info, manifest_data)
+                info = ZipInfo("ramadan-war/PLAY-README.txt",
+                               date_time=(2020, 1, 1, 0, 0, 0))
+                info.compress_type = ZIP_DEFLATED
+                info.external_attr = 0o644 << 16
+                archive.writestr(info, readme_data)
             temp.flush()
             os.fsync(temp.fileno())
 
@@ -105,11 +129,14 @@ def build_preview(source_dir, output_path, assets, expected_sizes=None):
             if archive.testzip() is not None:
                 raise RuntimeError("preview ZIP CRC validation failed")
             expected_names = {"ramadan-war/" + name for name in payload}
-            expected_names.add("ramadan-war/preview-manifest.json")
+            expected_names.update({"ramadan-war/preview-manifest.json",
+                                   "ramadan-war/PLAY-README.txt"})
             if len(archive.namelist()) != len(expected_names) or set(archive.namelist()) != expected_names:
                 raise RuntimeError("preview ZIP asset list mismatch")
             if archive.read("ramadan-war/preview-manifest.json") != manifest_data:
                 raise RuntimeError("preview manifest mismatch")
+            if archive.read("ramadan-war/PLAY-README.txt") != readme_data:
+                raise RuntimeError("preview launch guide mismatch")
             for rel, data in payload.items():
                 if sha(archive.read("ramadan-war/" + rel)) != sha(data):
                     raise RuntimeError("preview archive SHA-256 mismatch: " + rel)
