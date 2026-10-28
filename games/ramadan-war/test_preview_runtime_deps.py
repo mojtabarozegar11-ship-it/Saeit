@@ -44,7 +44,8 @@ class RuntimeDependencyTests(unittest.TestCase):
 
     def test_payment_policy_remains_disabled(self):
         policy = (ROOT / "moj1-commerce-policy.mjs").read_text("utf-8")
-        self.assertIn("checkoutEnabled:false", policy)\n        self.assertIn("ownerApproved:false", policy)
+        self.assertIn("checkoutEnabled:false", policy)
+        self.assertIn("ownerApproved:false", policy)
         self.assertNotIn("tronWeb.trx.sendTransaction", policy)
         self.assertNotIn("window.tronLink.request", policy)
 
