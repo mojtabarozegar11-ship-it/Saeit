@@ -209,6 +209,103 @@ jobs:
           finally:
               if os.path.exists(tmp):os.unlink(tmp)
           PY
+      - name: Retire only cPanel factory cron and standalone executors with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-cpanel-scope"
+          timeout 130s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,io,tarfile,hashlib,json,subprocess,signal,time
+          h=Path('/home/zomorod2')
+          assert Path.home()==h and not h.is_symlink()
+          backup=h/'.backups/cpanel-factory-decommission-20261028'
+          archive=backup/'code-cron-20261028T132408Z-4e397ca5fb22.tar.gz'
+          expected_archive='511655736da3becff24c020010c6df0e806738890b7f5898a6efe7ab8d09a341'
+          if backup.is_symlink() or archive.is_symlink() or not archive.is_file():raise SystemExit('BACKUP_UNSAFE')
+          if hashlib.sha256(archive.read_bytes()).hexdigest()!=expected_archive:raise SystemExit('BACKUP_SHA_INVALID')
+          with tarfile.open(archive,'r:gz') as tf:
+              old_cron=tf.extractfile('__meta__/crontab.txt').read().decode()
+              manifest=json.loads(tf.extractfile('__meta__/manifest.json').read())
+          files={
+             'Saeit-staging/var/factory/operations/stage1_10s_loop.sh',
+             'Saeit-staging/var/factory/operations/factory_tick_boot.py',
+             '.saeit-factory-inbox/bin/import_factory_store_drafts.py',
+             '.saeit-factory-inbox/bin/personal_factory_adapter.py',
+          }
+          known={x['path']:x['sha256'] for x in manifest}
+          if not files.issubset(known):raise SystemExit('TARGET_NOT_IN_BACKUP')
+          for rel in files:
+              p=h/rel
+              if not p.is_file() or p.is_symlink() or hashlib.sha256(p.read_bytes()).hexdigest()!=known[rel]:
+                  raise SystemExit('TARGET_CHANGED_'+p.name)
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=12,check=True).stdout
+          if cron!=old_cron:raise SystemExit('CRON_CHANGED_AFTER_BACKUP')
+          hashes={
+              '571df48dab391329f131630eca394704cf6896f6b8b34605416da203e4271e92',
+              '265504abe1f68f14d103c6d30fe6cf6037dcf1d9487f6c605563cf82d586d001',
+              '64740596493a32eb972a60a2bc32f8c698b10a74800b80f9ff2c0fbd097bd012',
+          }
+          lines=cron.splitlines(keepends=True)
+          targets=[l for l in lines if hashlib.sha256(l.rstrip('\r\n').encode()).hexdigest() in hashes]
+          if len(targets)!=3:raise SystemExit('CRON_LINE_SET_MISMATCH')
+          clean=''.join(l for l in lines if l not in targets)
+          if len(clean.splitlines())!=len(cron.splitlines())-3:raise SystemExit('CRON_PRESERVATION_CHECK')
+          def set_cron(txt):
+              p=subprocess.run(['crontab','-'],input=txt,text=True,capture_output=True,timeout=20)
+              if p.returncode:raise RuntimeError('CRONTAB_INSTALL_FAILED')
+          def active_pids():
+              names=[str(h/x) for x in files if x.endswith(('.py','.sh'))]
+              found=[]
+              for p in Path('/proc').iterdir():
+                  if not p.name.isdigit() or int(p.name)==os.getpid():continue
+                  try:
+                      if p.stat().st_uid!=os.geteuid():continue
+                      cmd=(p/'cmdline').read_bytes().replace(b'\0',b' ').decode(errors='replace')
+                      if any(n in cmd for n in names):found.append(int(p.name))
+                  except OSError:continue
+              return sorted(set(found))
+          removed=[]
+          applied=False
+          try:
+              set_cron(clean)
+              applied=True
+              for pid in active_pids():
+                  try:os.kill(pid,signal.SIGTERM)
+                  except ProcessLookupError:pass
+              time.sleep(3)
+              if active_pids():raise RuntimeError('FACTORY_PROCESS_STILL_RUNNING')
+              for rel in sorted(files):
+                  p=h/rel
+                  p.unlink()
+                  removed.append(rel)
+                  cache=p.parent/'__pycache__'
+                  if cache.is_dir() and not cache.is_symlink():
+                      for c in cache.glob(p.stem+'.*.pyc'):
+                          if c.is_file() and not c.is_symlink() and c.relative_to(h).as_posix() in known:
+                              c.unlink();removed.append(c.relative_to(h).as_posix())
+              for rel in ['Saeit-staging/var/factory/operations/stage1_10s_supervisor.lock','.saeit-factory-inbox/bin/draft-import.lock','.saeit-factory-inbox/bin/personal-factory.lock']:
+                  p=h/rel
+                  if p.is_file() and not p.is_symlink() and p.stat().st_size==0:
+                      p.unlink();removed.append(rel)
+              now=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=12,check=True).stdout
+              if now!=clean or any((h/rel).exists() for rel in files):raise RuntimeError('VERIFY_FAILED')
+              print('CPANEL_FACTORY_RETIRE_PASS='+json.dumps({'cron_removed':3,'executors_removed':4,'files_unlinked':len(removed),'backup_verified':True,'vps_touched':False,'site_roots_touched':False,'databases_touched':False,'store_products_touched':False},sort_keys=True))
+          except Exception as exc:
+              try:
+                  with tarfile.open(archive,'r:gz') as tf:
+                      for rel in removed:
+                          if rel not in known:continue
+                          data=tf.extractfile(rel).read()
+                          p=h/rel
+                          p.parent.mkdir(parents=True,exist_ok=True)
+                          with p.open('xb') as stream:stream.write(data)
+                  if applied:set_cron(old_cron)
+                  print('CPANEL_FACTORY_RETIRE_ROLLBACK=PASS')
+              except Exception as rollback:
+                  print('CPANEL_FACTORY_RETIRE_ROLLBACK=FAILED:'+type(rollback).__name__)
+              raise SystemExit('FACTORY_RETIRE_ABORT_'+type(exc).__name__)
+          PY
       - name: Erase temporary SSH keys from GitHub runner
         if: always()
         shell: bash
