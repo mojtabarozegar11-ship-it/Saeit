@@ -189,6 +189,20 @@ jobs:
           except OSError:
               proc_truncated = True
 
+          # Independent fast probes: do not require a full mount traversal or root access.
+          # All labels are fixed categories; no private paths or filenames are logged.
+          fs = os.statvfs(home)
+          inode_state = {"total": fs.f_files, "free": fs.f_ffree,
+                         "available": fs.f_favail}
+          hot_roots = {
+              "var_log": "/var/log",
+              "var_lib_docker": "/var/lib/docker",
+              "var_lib_containers": "/var/lib/containers",
+              "factory_operations": str(home / "factory-runtime" / "operations"),
+          }
+          hot_sizes = {label: bounded_du(Path(path), 5)
+                       for label, path in hot_roots.items()}
+
           result = {
               "schema": "saeit.vps.mount-disk-attribution.readonly.v1",
               "observed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -198,6 +212,8 @@ jobs:
               "reserve_2048_mib_met": disk.free >= 2048 * 1024 * 1024,
               "reserve_5_gib_met": disk.free >= 5 * 1024**3,
               "root_du_bytes": root_sizes,
+              "inode_state": inode_state,
+              "bounded_hot_roots": hot_sizes,
               "root_same_device_as_factory": devices,
               "home_known_bytes": known,
               "home_other_largest_bytes": others[:12],
