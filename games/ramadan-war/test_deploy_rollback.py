@@ -54,6 +54,47 @@ class ScopedRollbackTests(unittest.TestCase):
         self.assertFalse((self.game / "index.html").exists())
         self.assertEqual(self.protected.read_bytes(), b"protected home unchanged")
 
+    def test_full_publish_verify_and_rollback_is_scoped_and_reversible(self):
+        """Exercise the real release sequence against an isolated site fixture."""
+        old_html = b"old game index"
+        new_html = b"new game index"
+        new_policy = b"export const policy = true;"
+        route_config = b"PassengerEnabled off\nDirectoryIndex index.html\n"
+        (self.game / "game.js").write_bytes(self.old)
+        (self.game / "index.html").write_bytes(old_html)
+        (self.game / ".htaccess").write_bytes(route_config)
+        (self.stage / "old-index.html").write_bytes(old_html)
+        incoming = self.stage / "incoming"
+        incoming.mkdir()
+        (incoming / "game.js").write_bytes(self.new)
+        (incoming / "index.html").write_bytes(new_html)
+        (incoming / "policy.mjs").write_bytes(new_policy)
+        manifest = {
+            "phase": "prepared",
+            "old": {"game.js": digest(self.old), "index.html": digest(old_html)},
+            "new": {
+                "game.js": digest(self.new),
+                "policy.mjs": digest(new_policy),
+                "index.html": digest(new_html),
+            },
+            "route": digest(route_config),
+            "protected": {"protected-home.html": digest(self.protected.read_bytes())},
+        }
+        deploy.store(self.stage, manifest)
+        with patch.object(deploy, "ASSETS", ["game.js", "policy.mjs", "index.html"]), \
+             patch.object(deploy, "live_card_check", return_value=self.protected):
+            deploy.publish(self.stage, self.run)
+            deploy.verify(self.stage)
+            self.assertEqual((self.game / "game.js").read_bytes(), self.new)
+            self.assertEqual((self.game / "index.html").read_bytes(), new_html)
+            self.assertEqual((self.game / "policy.mjs").read_bytes(), new_policy)
+            deploy.rollback(self.stage, self.run)
+        self.assertEqual((self.game / "game.js").read_bytes(), self.old)
+        self.assertEqual((self.game / "index.html").read_bytes(), old_html)
+        self.assertFalse((self.game / "policy.mjs").exists())
+        self.assertEqual((self.game / ".htaccess").read_bytes(), route_config)
+        self.assertEqual(self.protected.read_bytes(), b"protected home unchanged")
+
     def test_rollback_is_idempotent(self):
         (self.game / "game.js").write_bytes(self.new)
         (self.game / "index.html").write_bytes(b"new asset")
