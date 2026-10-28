@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Fail-closed, reversible live TRX rights gate; no buyer or payment writes.
 
-Applies the six exact edits reviewed in PR #1094 to three existing cPanel
-modules, preserving all unrelated invoice recovery and public site content.
+Applies five exact edits from the reviewed rights-gate design to three existing
+cPanel modules. Preserve public product listings and unrelated invoice recovery;
+block only new unapproved checkouts and invoice creation.
 """
 from __future__ import annotations
 import ast
@@ -42,7 +43,6 @@ WEB_CHECK_NEW='''        if (not _eligible(product) or not rights_cleared_for_sa
 PAGES_IMPORT_OLD="from services.mpw_trx_walletless_core import PaymentHold\n"
 PAGES_IMPORT_NEW=PAGES_IMPORT_OLD+"from services.mpw_trx_commercial_context import rights_cleared_for_sale\n"
 PAGES_CATALOG_OLD="        if not _eligible(p): continue\n"
-PAGES_CATALOG_NEW="        if not _eligible(p) or not rights_cleared_for_sale(p): continue\n"
 PAGES_CHECKOUT_OLD="    if product is None or not _eligible(product): raise Http404\n"
 PAGES_CHECKOUT_NEW="""    if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
         raise Http404
@@ -50,7 +50,7 @@ PAGES_CHECKOUT_NEW="""    if product is None or not _eligible(product) or not ri
 PATCHES={
     "context":[(CONTEXT_OLD,CONTEXT_NEW)],
     "web":[(WEB_IMPORT_OLD,WEB_IMPORT_NEW),(WEB_CHECK_OLD,WEB_CHECK_NEW)],
-    "pages":[(PAGES_IMPORT_OLD,PAGES_IMPORT_NEW),(PAGES_CATALOG_OLD,PAGES_CATALOG_NEW),
+    "pages":[(PAGES_IMPORT_OLD,PAGES_IMPORT_NEW),
              (PAGES_CHECKOUT_OLD,PAGES_CHECKOUT_NEW)],
 }
 
@@ -87,11 +87,15 @@ def check_structure(sources):
             if "rights_cleared_for_sale(product)" not in ast.get_source_segment(src,fn):
                 raise RuntimeError("ORDER_RIGHTS_CHECK_ABSENT")
         elif key=="pages":
-            for name,fragment in (("public_shop","rights_cleared_for_sale(p)"),
-                                  ("product_checkout","rights_cleared_for_sale(product)")):
-                fn=funcs.get(name)
-                if fn is None or fragment not in ast.get_source_segment(src,fn):
-                    raise RuntimeError("PUBLIC_RIGHTS_CHECK_ABSENT:"+name)
+            shop=funcs.get("public_shop")
+            if shop is None:
+                raise RuntimeError("PUBLIC_SHOP_MISSING")
+            shop_source=ast.get_source_segment(src,shop)
+            if PAGES_CATALOG_OLD not in shop_source or "rights_cleared_for_sale(p)" in shop_source:
+                raise RuntimeError("PUBLIC_CATALOG_VISIBILITY_CHANGED")
+            fn=funcs.get("product_checkout")
+            if fn is None or "rights_cleared_for_sale(product)" not in ast.get_source_segment(src,fn):
+                raise RuntimeError("CHECKOUT_RIGHTS_CHECK_ABSENT")
 
 def guard():
     if pwd.getpwuid(os.geteuid()).pw_name!="zomorod2":
