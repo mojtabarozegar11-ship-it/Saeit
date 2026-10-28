@@ -1,0 +1,114 @@
+name: Zomorod English author SEO source mapping read-only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-en-author-source-readonly-20261028.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  map-author:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Locate English author document and safe edit guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,hashlib
+          from pathlib import Path
+          h=Path.home()
+          names=[
+              h/"public_html"/"en/authors/mojtaba-rozegar/index.html",
+              h/"Saeit"/"public/en/authors/mojtaba-rozegar/index.html"
+          ]
+          for path in names:
+              if path.is_file() and not path.is_symlink():
+                  b=path.read_bytes()
+                  print("EN_AUTHOR_STATIC_PATH="+("public_html" if "public_html" in path.parts else "app_public"))
+                  print("EN_AUTHOR_STATIC_SHA256="+hashlib.sha256(b).hexdigest())
+                  print("EN_AUTHOR_STATIC_LENGTH="+str(len(b)))
+                  print("EN_AUTHOR_STATIC_OLD_ROLE="+str(b"CEO of Zomorod Melal" in b))
+                  print("EN_AUTHOR_STATIC_VANCOUVER="+str(b"Vancouver" in b))
+                  print("EN_AUTHOR_STATIC_H1_TAGS="+str(b.lower().count(b"<h1")))
+                  print("EN_AUTHOR_STATIC_OFFICIAL_MARKER="+str(b"mojtaba-roozegar-official-profile-20261021" in b))
+              else:
+                  print("EN_AUTHOR_STATIC_MISSING="+("public_html" if "public_html" in path.parts else "app_public"))
+          roots=[h/"Saeit"/"core"/"templates",h/"Saeit"/"templates",h/"public_html"/"en"]
+          markers=("mojtaba-roozegar-official-profile-20261021","Mojtaba Rozegar is a researcher")
+          found=0
+          for root in roots:
+              if not root.is_dir():continue
+              for directory,dirs,files in os.walk(root):
+                  dirs[:]=[d for d in dirs if d not in (".git","node_modules","venv","static","media")]
+                  for name in files:
+                      if not name.endswith((".html",".htm")):continue
+                      p=Path(directory)/name
+                      if p.is_symlink() or p.stat().st_size>1500000:continue
+                      try:t=p.read_text(errors="replace")
+                      except OSError:continue
+                      for index,marker in enumerate(markers):
+                          if marker in t:
+                              found+=1
+                              # Print only a path relative to the account root, not file contents.
+                              print("EN_AUTHOR_SOURCE_"+str(index+1)+"="+str(p.relative_to(h)))
+                              print("EN_AUTHOR_SOURCE_MARKER_COUNT="+str(t.count(marker)))
+                  if found>=15:break
+          print("EN_AUTHOR_MATCH_COUNT="+str(found))
+          PY
+          REMOTE
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
