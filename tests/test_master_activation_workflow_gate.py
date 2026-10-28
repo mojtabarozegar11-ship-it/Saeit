@@ -33,6 +33,13 @@ class MasterWorkflowReleaseGateTests(unittest.TestCase):
         self.assertIn("required=5*1024**3+128*1024**2", s)
         self.assertIn("raise SystemExit(75)", s)
 
+    def test_staging_is_atomic_and_rejects_links(self):
+        s = self.text
+        for token in ("MASTER_STAGE_ROOT_UNSAFE", "MASTER_STAGE_LINKED_PARENT_REJECTED",
+                      "MASTER_STAGE_LINKED_TARGET_REJECTED", "os.replace(temporary,target)"):
+            self.assertIn(token, s)
+        self.assertNotIn("target.write_bytes(", s)
+
     def test_ssh_pinning_and_single_writer_unchanged(self):
         s = self.text
         self.assertIn("StrictHostKeyChecking=yes", s)
