@@ -62,12 +62,57 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_RELAY=verified"
-      - name: Remove only the verified incomplete dump from the timed-out attempt
+      - name: Validate and recover the uploaded target-table backup
+        id: recover_backup
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-page-compression"
-          ssh -F "$d/config" saeit-vps 'set -eu; f=/home/githubops/.db-backups/zomorod2_sites_main-pre-page-compression-20261028.sql.gz; if [ -e "$f" ]; then test "$(stat -c %s "$f")" = 2398711809; sum=$(sha256sum "$f"); test "${sum%% *}" = fea4dd09eaed889b05731fabbe85fecd539ec6aa27b0f00e1e593ac9f4560d76; rm -f -- "$f"; echo VERIFIED_INCOMPLETE_DUMP_REMOVED=yes; else echo VERIFIED_INCOMPLETE_DUMP_PRESENT=no; fi; set -- $(df -Pk "$HOME" | tail -1); test "$4" -ge 4500000; echo VPS_BACKUP_FREE_KB="$4"'
+          result="$(ssh -F "$d/config" saeit-vps bash -se <<'REMOTE'
+          set -euo pipefail
+          dir=/home/githubops/.db-backups
+          final="$dir/zomorod2_sites_main-pre-page-compression-20261028.sql.gz"
+          upload="$final.upload"
+          expected_bytes=2981105692
+          expected_sha=9f15e25b0b7ce21dfc4588fcf15712c43add276889f44343f3c46b257f6debf3
+          old_bytes=2398711809
+          old_sha=fea4dd09eaed889b05731fabbe85fecd539ec6aa27b0f00e1e593ac9f4560d76
+          if [ -e "$final" ]; then
+            size=$(stat -c %s "$final")
+            sum=$(sha256sum "$final")
+            hash="${sum%% *}"
+            if [ "$size" = "$old_bytes" ] && [ "$hash" = "$old_sha" ]; then
+              rm -f -- "$final"
+              echo OLD_INCOMPLETE_DUMP_REMOVED=yes
+            elif [ "$size" = "$expected_bytes" ] && [ "$hash" = "$expected_sha" ]; then
+              gzip -t "$final"
+              echo EXISTING_TARGET_BACKUP_VERIFIED=yes
+              echo BACKUP_READY=true
+            else
+              echo UNEXPECTED_FINAL_BACKUP_REFUSED=yes
+              exit 1
+            fi
+          fi
+          if [ -e "$upload" ]; then
+            test -f "$upload"
+            test "$(stat -c %s "$upload")" = "$expected_bytes"
+            sum=$(sha256sum "$upload")
+            test "${sum%% *}" = "$expected_sha"
+            gzip -t "$upload"
+            test ! -e "$final"
+            mv "$upload" "$final"
+            echo UPLOADED_TARGET_BACKUP_PROMOTED=yes
+            echo BACKUP_READY=true
+          fi
+          if [ ! -e "$final" ]; then echo BACKUP_READY=false; fi
+          REMOTE
+          )"
+          printf '%s\n' "$result"
+          if [[ "$result" == *"BACKUP_READY=true"* ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Verify staging identity, storage support, quota, and live site
         shell: bash
         run: |
@@ -124,12 +169,13 @@ jobs:
             echo "PRODUCTION_BASELINE=$path:$status"
             test "$status" = "200"
           done
-          ssh -F "$d/config" saeit-vps 'set -eu; df -Pk "$HOME" | awk "NR==2 { if (\$4 < 4500000) exit 1; print \"VPS_BACKUP_FREE_KB=\"\$4 }"'
       - name: Create and verify a lossless backup of the two target tables
+        if: steps.recover_backup.outputs.ready != 'true'
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-page-compression"
+          ssh -F "$d/config" saeit-vps 'set -eu; set -- $(df -Pk "$HOME" | tail -1); test "$4" -ge 4500000; echo VPS_BACKUP_FREE_KB="$4"'
           backup_local="$d/zomorod2_sites_main-pre-page-compression-20261028.sql.gz"
           trap 'rm -f "$backup_local"' EXIT
           timeout 7200s ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY' | gzip -1 > "$backup_local"
@@ -173,7 +219,7 @@ jobs:
             ssh -F "$d/config" saeit-vps "rm -f -- '$tmp_remote'" || true
             exit 1
           fi
-          ssh -F "$d/config" "EXPECTED_BYTES=$backup_bytes EXPECTED_SHA=$backup_sha F_REMOTE=$f_remote TMP_REMOTE=$tmp_remote bash -s" <<'REMOTE'
+          ssh -F "$d/config" saeit-vps "EXPECTED_BYTES=$backup_bytes EXPECTED_SHA=$backup_sha F_REMOTE=$f_remote TMP_REMOTE=$tmp_remote bash -s" <<'REMOTE'
           set -euo pipefail
           test ! -e "$F_REMOTE"
           test -f "$TMP_REMOTE"
