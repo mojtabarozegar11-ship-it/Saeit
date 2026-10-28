@@ -447,8 +447,63 @@ jobs:
           reserve_gap_bytes = max(0, 5 * 1024**3 - conservative_free)
           aged_screening_bytes = operations_inventory["older_archive_log_bytes"]
           recovery_screening_insufficient = aged_screening_bytes < reserve_gap_bytes
+          # Incident-specific read-only cron continuity check. An earlier
+          # failed SQLite backup may have exited before the restore trap
+          # completed. Never modify crontab or print its contents.
+          def cron_continuity():
+              out = {"inspection_ok": False, "current_master_tags": None,
+                     "saved_master_tags": None, "saved_backup_age_seconds": None,
+                     "restore_suspected": False, "cron_daemon_active": None,
+                     "crontab_modified": False}
+              try:
+                  current = subprocess.run(["crontab", "-l"], capture_output=True,
+                                           text=True, timeout=8, check=False)
+                  if current.returncode not in (0, 1):
+                      return out
+                  current_text = current.stdout if current.returncode == 0 else ""
+                  out["current_master_tags"] = sum(
+                      "SAEIT_MASTER_AGENT_V1" in line
+                      for line in current_text.splitlines())
+                  backups = home / "factory-runtime" / "operations" / "backups"
+                  candidates = []
+                  if backups.is_dir() and not backups.is_symlink():
+                      for p in backups.glob("cron-before-master-*.txt"):
+                          if p.is_file() and not p.is_symlink():
+                              candidates.append((p.stat().st_mtime, p))
+                          if len(candidates) >= 200:
+                              break
+                  if candidates:
+                      ts, latest = max(candidates, key=lambda item: item[0])
+                      # Do not expose file name, cron content or other entries.
+                      with latest.open("r", encoding="utf-8", errors="replace") as f:
+                          out["saved_master_tags"] = sum(
+                              "SAEIT_MASTER_AGENT_V1" in line for line in f)
+                      out["saved_backup_age_seconds"] = max(0, int(time.time() - ts))
+                  statuses = []
+                  for daemon in ("cron", "crond"):
+                      try:
+                          p = subprocess.run(["systemctl", "is-active", daemon],
+                                             capture_output=True, text=True,
+                                             timeout=4, check=False)
+                          statuses.append(p.returncode == 0 and
+                                          p.stdout.strip() == "active")
+                      except (OSError, subprocess.TimeoutExpired):
+                          pass
+                  out["cron_daemon_active"] = any(statuses) if statuses else None
+                  out["restore_suspected"] = (
+                      out["current_master_tags"] == 0 and
+                      out["saved_master_tags"] == 2 and
+                      out["saved_backup_age_seconds"] is not None and
+                      out["saved_backup_age_seconds"] < 86400)
+                  out["inspection_ok"] = True
+              except (OSError, ValueError, subprocess.TimeoutExpired):
+                  pass
+              return out
+
+          cron_status = cron_continuity()
           result = {
               "schema": "saeit.vps.mount-disk-attribution.readonly.v1",
+              "master_cron_continuity": cron_status,
               "reserve_5_gib_gap_bytes": reserve_gap_bytes,
               "aged_archive_log_screening_bytes": aged_screening_bytes,
               "aged_archive_log_screening_insufficient": recovery_screening_insufficient,
@@ -506,6 +561,11 @@ jobs:
           assert len(rows) == 1 and rows[0].startswith("VPS_MOUNT_ATTRIBUTION=")
           data = json.loads(rows[0].split("=", 1)[1])
           assert data["mutations"] == data["deleted"] == data["backups_touched"] == 0
+          cron = data["master_cron_continuity"]
+          assert cron["crontab_modified"] is False
+          assert cron["current_master_tags"] is None or cron["current_master_tags"] >= 0
+          assert cron["saved_master_tags"] is None or cron["saved_master_tags"] >= 0
+          assert cron["restore_suspected"] is False or (cron["current_master_tags"] == 0 and cron["saved_master_tags"] == 2)
           inv = data["factory_operations_age_inventory"]
           assert inv["accounting_consistent"] and not inv["older_archive_log_is_safe_to_delete"]
           assert not (inv["complete"] and inv["scan_truncated"])
