@@ -204,8 +204,9 @@ class PublicCatalogDetailRouteRegressionTests(SimpleTestCase):
         self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
         self.assertIn("no-store", response["Cache-Control"])
         self.assertIn("/academy/", response.content.decode("utf-8"))
-        from core.academy_views import Product
+        from core.academy_views import Product, EducationQuestion
         self.assertIn(Product, guard.call_args.args)
+        self.assertIn(EducationQuestion, guard.call_args.args)
 
     def test_lesson_missing_schema_returns_retryable_503_before_any_lookup(self):
         request = self.requests.get("/education/course/example/lesson/1/")
