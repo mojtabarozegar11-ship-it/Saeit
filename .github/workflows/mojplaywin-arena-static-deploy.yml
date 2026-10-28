@@ -115,7 +115,7 @@ jobs:
               await page.waitForFunction(()=>document.querySelector('#spotlight-card h3')?.textContent.includes('Mexico F1 GP'));
               await page.locator('#spotlight-select').selectOption('4464');
               await page.waitForFunction(()=>document.querySelector('#spotlight-status')?.textContent.includes('no next event'));
-              assert.equal(await page.locator('#horse-grid .horse-card').count(),17);
+              assert.equal(await page.locator('#horse-grid .horse-card').count(),18);
               await page.locator('#horse-country').selectOption('Spain');
               assert.equal(await page.locator('#horse-grid .horse-card').count(),2);
               await page.locator('#horse-kind').selectOption('equestrian');
