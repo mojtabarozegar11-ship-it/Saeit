@@ -17,7 +17,7 @@ jobs:
       - name: Keep two verified recovery snapshots and remove redundant raw SQLite backups
         shell: bash
         env:
-          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           umask 077
