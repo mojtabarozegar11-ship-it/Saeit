@@ -24,6 +24,13 @@ case "$1" in
     [[ "$account" == primary || "$account" == secondary ]] || exit 2
     "$RUN/bin/node" "$RUN/app/whatsapp.mjs" login --account "$account"
     ;;
+  whatsapp-code)
+    [[ -t 0 && -t 1 ]] || { echo 'Use a private interactive terminal for the code.' >&2; exit 2; }
+    test "$#" -ge 2 || exit 2
+    account="$2"
+    [[ "$account" == primary || "$account" == secondary ]] || exit 2
+    "$RUN/bin/node" "$RUN/app/whatsapp.mjs" login --account "$account" --pairing-code
+    ;;
   whatsapp-status)
     test "$#" -ge 2 || exit 2
     account="$2"
@@ -31,7 +38,7 @@ case "$1" in
     "$RUN/bin/node" "$RUN/app/whatsapp.mjs" status --account "$account"
     ;;
   *)
-    echo 'Use telegram-login|telegram-status|whatsapp-login [primary|secondary]|whatsapp-status [primary|secondary]' >&2
+    echo 'Use telegram-login|telegram-status|whatsapp-code [primary|secondary]|whatsapp-login [primary|secondary]|whatsapp-status [primary|secondary]' >&2
     exit 2
     ;;
 esac
