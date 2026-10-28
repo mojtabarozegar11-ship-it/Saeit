@@ -42,6 +42,18 @@ class RuntimeDependencyTests(unittest.TestCase):
                 self.assertIn(normalized, declared, (name, dependency, normalized))
                 self.assertTrue((ROOT / normalized).is_file(), normalized)
 
+    def test_live_transfer_matches_the_complete_release_manifest(self):
+        """CI release must stage every asset that deploy.prepare() expects."""
+        workflow = (ROOT.parents[1] / ".github/workflows/zomorod-ramadan-war-web-card.yml").read_text("utf-8")
+        transfers = re.findall(
+            r'^\s*timeout\s+\d+s\s+scp\s+-q\s+-F\s+"\$d/config"\s+games/ramadan-war/(\S+)\s+"host:\$stage/incoming/([^"]+)"\s*$',
+            workflow, re.MULTILINE,
+        )
+        expected = {(name, name) for name in ASSETS}
+        expected |= {("deploy.py", "deploy.py"), ("route.htaccess", ".htaccess")}
+        self.assertEqual(len(transfers), len(expected), "duplicate/missing staging transfers")
+        self.assertEqual(set(transfers), expected, "live staging and deploy.ASSETS differ")
+
     def test_payment_policy_remains_disabled(self):
         policy = (ROOT / "moj1-commerce-policy.mjs").read_text("utf-8")
         self.assertIn("checkoutEnabled:false", policy)
