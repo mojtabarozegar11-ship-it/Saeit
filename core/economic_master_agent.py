@@ -90,6 +90,21 @@ class EconomicMasterAgent:
             "unbudgeted_spend_requires_owner_approval": True,
             "self_upgrade_requires_candidate_benchmark_and_rollback": True,
             "factory_rejected_products_route_to_rework": True,
+            "controlled_production": {
+                "max_master_steps_per_five_minute_cycle": 1,
+                "max_concurrent_master_tasks": 1,
+                "automatic_volume_expansion": False,
+                "parallel_product_builds": False,
+                "public_release_enabled": False,
+                "paid_model_calls_enabled": False,
+            },
+            "qc1000_release_gate": {
+                "distinct_executed_scenarios_required": 1000,
+                "trusted_runner_attestation_required": True,
+                "independent_domain_review_required": True,
+                "rights_and_publication_authorization_required": True,
+                "synthetic_tests_alone_sufficient": False,
+            },
         }
 
     def report_contract(self):
@@ -131,6 +146,8 @@ class EconomicMasterAgent:
                 "Risk gate",
                 "Owner approval where policy requires it",
                 "Audit trail",
+                "Single-step production ceiling; no automatic volume scaling",
+                "QC1000 execution evidence and independent release gates",
             ],
             "hard_stop": sorted(FORBIDDEN_EXECUTION),
         }
