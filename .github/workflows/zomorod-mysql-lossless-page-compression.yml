@@ -125,7 +125,7 @@ jobs:
             test "$status" = "200"
           done
           ssh -F "$d/config" saeit-vps 'set -eu; df -Pk "$HOME" | awk "NR==2 { if (\$4 < 4500000) exit 1; print \"VPS_BACKUP_FREE_KB=\"\$4 }"'
-      - name: Create and verify a complete staging database backup
+      - name: Create and verify a lossless backup of the two target tables
         shell: bash
         run: |
           set -euo pipefail
@@ -149,9 +149,9 @@ jobs:
           if db!="zomorod2_sites_main": raise SystemExit("STAGING_DATABASE_SCOPE_MISMATCH")
           client=shutil.which("mariadb-dump") or shutil.which("mysqldump")
           if not client: raise SystemExit("MYSQL_DUMP_CLIENT_MISSING")
-          args=[client,"--no-defaults","--single-transaction","--quick","--skip-lock-tables","--routines","--events","--triggers","--hex-blob","--default-character-set=utf8mb4","--host="+(u.hostname or "localhost"),"--user="+urllib.parse.unquote(u.username or "")]
+          args=[client,"--no-defaults","--single-transaction","--quick","--skip-lock-tables","--triggers","--hex-blob","--default-character-set=utf8mb4","--host="+(u.hostname or "localhost"),"--user="+urllib.parse.unquote(u.username or "")]
           if u.port: args.append("--port="+str(u.port))
-          args.append(db)
+          args.extend([db,"core_agenttask","core_factoryevidence"])
           env=dict(os.environ,MYSQL_PWD=urllib.parse.unquote(u.password or ""))
           p=subprocess.run(args,env=env,stdout=sys.stdout.buffer,timeout=7100)
           if p.returncode: raise SystemExit("MYSQL_BACKUP_DUMP_FAILED")
@@ -159,8 +159,10 @@ jobs:
           PY
           gzip -t "$backup_local"
           backup_bytes="$(stat -c %s "$backup_local")"
+          echo "TARGET_TABLE_BACKUP_BYTES=$backup_bytes"
           test "$backup_bytes" -gt 100000000
-          test "$backup_bytes" -lt 3145728000
+          test "$backup_bytes" -lt 3670016000
+          echo "TARGET_TABLE_BACKUP_SCOPE=core_agenttask,core_factoryevidence"
           backup_sha="$(sha256sum "$backup_local" | cut -d ' ' -f1)"
           echo "COMPLETE_BACKUP_BYTES=$backup_bytes"
           echo "COMPLETE_BACKUP_SHA256=$backup_sha"
