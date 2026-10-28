@@ -196,6 +196,11 @@ jobs:
               assert.match(await page.locator('#live-status').innerText(),/Data delayed\/unavailable/);
               assert.equal(await page.locator('#real-match-900001 form').count(),0);
               feedBroken=false;
+              liveMock.pl=[];
+              await page.locator('#live-league').selectOption('pl');
+              await page.waitForFunction(()=>document.querySelector('#live-status')?.textContent.includes('Real fixtures loaded'));
+              assert.match(await page.locator('#live-match-grid').innerText(),/No upcoming/,'Empty valid feed is not a provider outage');
+              assert.equal(await page.locator('#live-match-grid form').count(),0);
               assert.equal(await page.locator('#game-grid article').count(),16);
               assert.equal(await page.locator('#dice-game-grid article').count(),15);
               assert.equal(await page.locator('#classic-game-grid article').count(),6);
@@ -280,6 +285,10 @@ jobs:
               assert.equal(await page.locator('#oracle-numerology .oracle-answer').innerText(),'Choose a birth date.');
               await page.locator('#language').selectOption('fa');
               assert.equal(await page.locator('#nav-predictions').innerText(),'پیش‌بینی زنده');
+              assert.equal(await page.locator('#nav-mcd').innerText(),'میزهای مجازی MCD');
+              assert.equal(await page.locator('#live-league option[value="la1"]').innerText(),'🇪🇸 اسپانیا · لالیگا');
+              assert.equal(await page.locator('#live-league option[value="uel2026"]').innerText(),'🇪🇺 اروپا · لیگ اروپا');
+              assert.equal(await page.locator('#horse-country option[value="Spain"]').innerText(),'اسپانیا');
               assert.equal(await page.locator('#combat-heading').innerText(),'بوکس، کشتی و هنرهای رزمی جهان');
               assert.equal(await page.locator('#combat-day-heading').innerText(),'برنامه روزانه مسابقات رزمی');
               assert.equal(await page.locator('.header-right nav a').count(),5);
@@ -312,6 +321,8 @@ jobs:
                 assert.equal(await localized.locator('#prediction-heading').innerText(),'مرکز پیش‌بینی مج‌پلی‌وین');
                 assert.match(await localized.locator('#live-intro').innerText(),/لالیگای اسپانیا/);
                 await localized.locator('#language').selectOption('es');
+                assert.equal(await localized.locator('#live-league option[value="la1"]').innerText(),'🇪🇸 España · LaLiga');
+                assert.equal(await localized.locator('#horse-country option[value="Spain"]').innerText(),'España');
                 const stored=await localized.evaluate(()=>{try{return localStorage.getItem('moj-arena-language')==='es'}catch(_){return false}});
                 if(stored){await localized.reload();assert.equal(await localized.locator('#language').inputValue(),'es')}
               }finally{await faContext.close()}
