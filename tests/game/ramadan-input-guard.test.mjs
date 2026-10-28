@@ -104,10 +104,13 @@ test('browser modifiers and IME composition never activate game shortcuts', () =
   assert.equal(isModifiedOrComposingKey({...unmodified, keyCode:229}), true, 'IME process key');
   assert.equal(isModifiedOrComposingKey(null), false);
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.ok(game.includes('if(isModifiedOrComposingKey(e))return;'), 'modified key guard is wired into gameplay');
-  assert.ok(game.indexOf('if(isModifiedOrComposingKey(e))return;') <
+  const shortcutGuard='if(isModifiedOrComposingKey(e)){keys={};fireHeld=false;return;}';
+  assert.ok(game.includes(shortcutGuard), 'modified key guard must release held movement/fire');
+  assert.ok(game.indexOf(shortcutGuard) <
     game.indexOf('const action=keyboardAction(e.code,screen,e.target,e.repeat);'),
-    'modified/composing keys must be ignored before gameplay actions and preventDefault');
+    'modified/composing keys must release held input before gameplay actions and preventDefault');
+  assert.ok(game.includes("addEventListener('compositionstart',()=>{keys={};fireHeld=false});"),
+    'IME start must release previously held keyboard movement/fire');
 });
 
 

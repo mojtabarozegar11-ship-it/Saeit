@@ -112,6 +112,40 @@ const assert=require('node:assert/strict');
    assert.equal(shortcutCheck.dronesAfter,shortcutCheck.dronesBefore,'Alt+E must not spend drones');
    assert.equal(shortcutCheck.shotsAfter,shortcutCheck.shotsBefore,'browser shortcuts must not fire weapons');
    console.log('RAMADAN_REAL_MODIFIER_IME_PASS',v.name);
+   // A shortcut or IME activation after W/Space is already held must release
+   // those keys. Browsers can swallow the matching keyup, otherwise the hero
+   // walks or shoots until another input arrives.
+   if(localCandidate){
+     const heldInput=await page.evaluate(()=>{
+       const g=window.RamadanWarDebug;
+       const key=(type,code,extra={})=>window.dispatchEvent(new KeyboardEvent(type,{code,bubbles:true,cancelable:true,...extra}));
+       const stopCheck=release=>{
+         g.qaMove(2.5,7.5);
+         key('keydown','KeyW');
+         g.tick(.04);
+         const before=g.qaPosition();
+         release();
+         for(let i=0;i<3;i++)g.tick(.04);
+         const after=g.qaPosition();
+         key('keyup','KeyW');
+         return Math.hypot(after.x-before.x,after.y-before.y);
+       };
+       const shortcutDistance=stopCheck(()=>key('keydown','ControlLeft',{ctrlKey:true}));
+       key('keyup','ControlLeft');
+       const imeDistance=stopCheck(()=>window.dispatchEvent(new Event('compositionstart')));
+       const shotsBefore=g.getState().shots;
+       key('keydown','Space');
+       key('keydown','MetaLeft',{metaKey:true});
+       g.tick(.04);
+       key('keyup','Space');
+       key('keyup','MetaLeft');
+       return {shortcutDistance,imeDistance,shotsBefore,shotsAfter:g.getState().shots};
+     });
+     assert(heldInput.shortcutDistance<1e-8,'Ctrl shortcut must release held W: '+JSON.stringify(heldInput));
+     assert(heldInput.imeDistance<1e-8,'IME composition must release held W: '+JSON.stringify(heldInput));
+     assert.equal(heldInput.shotsAfter,heldInput.shotsBefore,'Meta shortcut must release held Space before firing');
+     console.log('RAMADAN_HELD_KEY_SHORTCUT_IME_PASS',v.name);
+   }
    if(localCandidate){
     await page.evaluate(()=>window.RamadanWarDebug.spawnTestEnemy());
     await page.evaluate(()=>{window.RamadanWarDebug.fire();window.RamadanWarDebug.rocket();window.RamadanWarDebug.drone()});
