@@ -67,7 +67,9 @@ jobs:
           chmod 600 "$d/config"
           source_root=/home/githubops/factory-runtime/private/autonomous-product-cycle/digital-products/farm_enterprise_economics
           ssh -F "$d/config" saeit-vps "test -s '$source_root/manufacturing_manifest.json' && test -s '$source_root/farm_enterprise_economics-internal-qa.zip' && test ! -L '$source_root/manufacturing_manifest.json' && test ! -L '$source_root/farm_enterprise_economics-internal-qa.zip'"
-          ssh -F "$d/config" saeit-vps "python3 - '$source_root' <<'PY'
+          ssh -F "$d/config" saeit-vps bash -s -- "$source_root" <<'REMOTE'
+          set -euo pipefail
+          python3 - "$1" <<'PY'
           import hashlib,json,sys
           from pathlib import Path
           root=Path(sys.argv[1])
@@ -99,7 +101,7 @@ jobs:
           print("FACTORY_PREVIEW_MANIFEST_AND_REWORK_STATE=PASS")
           print("FACTORY_PREVIEW_ARTIFACT_BYTES="+str(archive.stat().st_size))
           PY
-          "
+          REMOTE
           scp -q -F "$d/config" "saeit-vps:$source_root/manufacturing_manifest.json" "$d/manufacturing_manifest.json"
           scp -q -F "$d/config" "saeit-vps:$source_root/farm_enterprise_economics-internal-qa.zip" "$d/farm_enterprise_economics-internal-qa.zip"
           python3 - "$d" <<'PY'
