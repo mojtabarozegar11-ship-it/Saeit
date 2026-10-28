@@ -76,14 +76,14 @@ def build_preview(source_dir, output_path, assets, expected_sizes=None):
     # The browser's ES modules cannot reliably run from file:// URLs.
     # Ship an exact, self-contained launch recipe with every preview.
     readme_data = (
-        "Ramadan War Web — standalone preview\\n"
-        "Revision: " + manifest["source_revision"] + "\\n"
-        "Extract this ZIP, then run from the extracted parent directory:\\n"
-        "  python3 -m http.server 8765 --directory ramadan-war\\n"
-        "Open http://127.0.0.1:8765/ in a desktop or mobile browser.\\n"
-        "Use a local HTTP server; opening index.html via file:// is unsupported.\\n"
-        "The game runs locally; no MOJ1 wallet or payment is enabled.\\n"
-        "This is a QA preview, not a verified public or commercial release.\\n"
+        "Ramadan War Web — standalone preview\n"
+        "Revision: " + manifest["source_revision"] + "\n"
+        "Extract this ZIP, then run from the extracted parent directory:\n"
+        "  python3 -m http.server 8765 --directory ramadan-war\n"
+        "On this computer open http://127.0.0.1:8765/. For a phone on the same LAN,\n"
+        "open http://HOST_LAN_IP:8765/ (only on a trusted private network).\nUse a local HTTP server; file:// is unsupported.\n"
+        "The game runs locally; no MOJ1 wallet or payment is enabled.\n"
+        "This is a QA preview, not a verified public or commercial release.\n"
     ).encode("utf-8")
 
     # Never follow an output symlink or an existing linked ancestor. The final
