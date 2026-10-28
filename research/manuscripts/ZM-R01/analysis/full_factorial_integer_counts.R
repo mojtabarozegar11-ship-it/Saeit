@@ -124,6 +124,48 @@ if (!all(ena_fields %in% names(ena)) || nrow(ena) != 24L ||
     anyDuplicated(ena$run_accession) ||
     !setequal(ena$run_accession, manifest$SRR))
   stop("Pinned ENA metadata does not match 24 SRR libraries; NO DESeq2")
+# C49: validate the GEO GSM-to-SRR-to-BioSample crosswalk against pinned
+# source snapshots, rather than accepting an arbitrary permutation of the
+# 24 GSM/SRR pairs. This is source traceability, NOT independent verification
+# of biological replicates or treatment-assignment units.
+geo_sheet_file <- file.path(dirname(dirname(script_path)),
+                            "ZM-R01_24_LIBRARY_FACTORIAL_SAMPLE_SHEET_DESIGN_ONLY_2026-10-27.tsv")
+if (!file.exists(geo_sheet_file))
+  stop("Pinned GEO factorial crosswalk missing; NO DESeq2")
+geo_size <- file.info(geo_sheet_file)$size
+if (!is.finite(geo_size) || geo_size < 1L || geo_size > 1000000L)
+  stop("Pinned GEO crosswalk size invalid; NO DESeq2")
+geo_raw <- readBin(geo_sheet_file, what="raw", n=as.integer(geo_size))
+geo_blob <- digest::digest(c(charToRaw(paste0("blob ", length(geo_raw))),
+                             as.raw(0), geo_raw),
+                           algo="sha1", serialize=FALSE)
+if (!identical(geo_blob, "988be37b2b8ae02f3c3c3546fb5e6f49865b2099"))
+  stop("Pinned GEO crosswalk Git blob SHA1 mismatch; NO DESeq2")
+geo <- read.delim(geo_sheet_file, check.names=FALSE, stringsAsFactors=FALSE)
+geo_fields <- c("gsm", "biosample", "srr", "D", "H", "C", "cell")
+if (!all(geo_fields %in% names(geo)) || nrow(geo) != 24L ||
+    anyNA(geo[, geo_fields, drop=FALSE]) ||
+    anyDuplicated(geo$gsm) || anyDuplicated(geo$srr) ||
+    anyDuplicated(geo$biosample) ||
+    !setequal(geo$gsm, manifest$GSM) ||
+    !setequal(geo$srr, manifest$SRR))
+  stop("GEO crosswalk lacks 24 unique GSM/SRR/BioSample mappings; NO DESeq2")
+geo_by_gsm <- geo[match(manifest$GSM, geo$gsm), , drop=FALSE]
+if (!identical(as.character(geo_by_gsm$srr), as.character(manifest$SRR)))
+  stop("Submitted manifest GSM-to-SRR pairing differs from pinned GEO; NO DESeq2")
+ena_by_srr <- ena[match(geo_by_gsm$srr, ena$run_accession), , drop=FALSE]
+if (anyNA(ena_by_srr$sample_accession) ||
+    !identical(as.character(geo_by_gsm$biosample),
+               as.character(ena_by_srr$sample_accession)))
+  stop("Pinned GEO/ENA BioSample crosswalk mismatch; NO DESeq2")
+if (any(!geo$D %in% 0:1) || any(!geo$H %in% 0:1) ||
+    any(!geo$C %in% 0:1) ||
+    !identical(as.character(geo$cell), paste0(geo$D, geo$H, geo$C)) ||
+    any(table(factor(geo$cell, levels=c("000","001","010","011",
+                                       "100","101","110","111"))) != 3L))
+  stop("Pinned GEO nominal factorial cells inconsistent; NO DESeq2")
+# The pinned sheet records nominal treatment labels, not validated chamber
+# independence. The separate independent-unit evidence gate still applies.
 ena_md5_values <- tolower(trimws(c(ena$fastq1_md5, ena$fastq2_md5)))
 ena_keys <- c(paste(ena$run_accession, "R1", sep=":"),
               paste(ena$run_accession, "R2", sep=":"))
