@@ -54,7 +54,7 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
         self.assertEqual(context["query"], "orchard")
 
     def test_newsletter_skips_missing_tables_without_fabricating_stories(self):
-        with patch("core.newsletter_views.missing_public_tables", return_value=True), patch(
+        with patch("core.newsletter_views.missing_public_tables", return_value=True) as guard_mock, patch(
             "core.newsletter_views.render", return_value=HttpResponse("newsletter")
         ) as render_mock:
             response = newsletter_home(self.requests.get("/newsletter/"))
@@ -66,6 +66,8 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
         self.assertEqual(context["publications"], [])
         self.assertIsNone(context["schedule"])
         self.assertTrue(context["catalog_temporarily_unavailable"])
+        from core.newsletter_views import Agent
+        self.assertIn(Agent, guard_mock.call_args.args)
 
 
 class PublicCatalogTruthfulTemplateTests(SimpleTestCase):
