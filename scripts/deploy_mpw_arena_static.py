@@ -90,24 +90,27 @@ def payload_preflight(index):
     if index.is_symlink() or not index.is_file():
         raise RuntimeError("Missing or unsafe Arena payload")
     data = index.read_bytes()
-    if not 50_000 < len(data) < 300_000:
+    if not 50_000 < len(data) < 360_000:
         raise RuntimeError("Unexpected Arena payload size")
     text = data.decode("utf-8")
     if not all(marker in text for marker in EXPECTED_MARKERS):
         raise RuntimeError("Missing playable Arena component")
     if text.count("<script>") != 1 or "<script src=" in text or "XMLHttpRequest" in text:
         raise RuntimeError("Not a self-contained owned Arena document")
-    # Exactly two audited read-only public GETs, each fixed to an allowlisted provider.
+    # Exactly three audited read-only public GETs on two fixed allowlisted providers.
     # Live picks never leave this document; no writable API, credentials, or wagering.
     required = (
         "await fetch(url,{mode:'cors',credentials:'omit',cache:'no-store',signal:ctrl.signal,priority:force?'auto':'low'})",
         "await fetch(url,{mode:'cors',credentials:'omit',cache:'no-store',signal:ctrl.signal})",
+        "await fetch(url,{mode:'cors',credentials:'omit',cache:'no-store',signal:dayCtrl.signal})",
         "const LIVE_FEED_ORIGIN='https://api.openligadb.de/getmatchdata/'",
         "const SPOTLIGHT_ORIGIN='https://www.thesportsdb.com/api/v1/json/123/eventsnextleague.php?id='",
+        "const DAILY_COMBAT_ORIGIN='https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d='",
+        "if(!dailyDateAllowed(date))return;",
         "const SPOTLIGHT_NAMES=Object.freeze({",
         "if(!Object.hasOwn(SPOTLIGHT_NAMES,id))return;",
     )
-    if len(re.findall(r"\bfetch\s*\(", text)) != 2 or any(text.count(value) != 1 for value in required):
+    if len(re.findall(r"\bfetch\s*\(", text)) != 3 or any(text.count(value) != 1 for value in required):
         raise RuntimeError("Unapproved external network call in Arena")
     if 'connect-src https://api.openligadb.de https://www.thesportsdb.com;' not in text:
         raise RuntimeError("Live feed CSP restriction missing")
