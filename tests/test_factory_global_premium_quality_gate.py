@@ -24,6 +24,28 @@ def proof(root,name):
             "sha256":hashlib.sha256(p.read_bytes()).hexdigest()}
 
 class GlobalPremiumQualityGateTests(unittest.TestCase):
+    def test_evidence_cannot_escape_root_through_symlinked_directory(self):
+        with tempfile.TemporaryDirectory() as d:
+            workspace=Path(d)
+            private=workspace/"private"
+            external=workspace/"external"
+            private.mkdir()
+            external.mkdir()
+            valid=proof(private,"authentic")
+            outside=proof(external,"borrowed")
+            self.assertTrue(gate.evidence_file(private,valid))
+            (private/"borrowed-folder").symlink_to(external,target_is_directory=True)
+            rel={"path":"borrowed-folder/borrowed.txt","sha256":outside["sha256"]}
+            self.assertFalse(gate.evidence_file(private,rel))
+            inside=private/"inside"
+            inside.mkdir()
+            (private/"inside-link").symlink_to(inside,target_is_directory=True)
+            nested=proof(inside,"nested")
+            self.assertFalse(gate.evidence_file(private,{
+                "path":"inside-link/nested.txt","sha256":nested["sha256"]}))
+            self.assertFalse(gate.evidence_file(private,{
+                "path":"nonexistent/valid.txt","sha256":valid["sha256"]}))
+
     def test_all_40_individual_domain_rubrics_have_stop_ship(self):
         self.assertEqual(len(REGISTRY),40)
         with tempfile.TemporaryDirectory() as d:

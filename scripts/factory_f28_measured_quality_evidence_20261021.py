@@ -24,6 +24,8 @@ HEX = re.compile(r"^[0-9a-f]{64}$")
 SEED = 20261021
 VALID = 160
 INVALID = 64
+METAMORPHIC_CASES = 32
+METAMORPHIC_RELATIONS = 4
 
 
 def require(condition, code):
@@ -134,6 +136,49 @@ def invalid_case(index):
     return original
 
 
+def metamorphic_followups(item):
+    """Four economic invariants, measured on the extracted real customer CLI."""
+    price_up = dict(item, price_per_kg=str(
+        Decimal(str(item["price_per_kg"])) + Decimal("1")))
+    fixed_up = dict(item, fixed_cost_total=item["fixed_cost_total"] + 100)
+    rejection_up = dict(item, rejection_rate_percent=min(
+        100, item["rejection_rate_percent"] + 1))
+    area_doubled = dict(item, area_m2=item["area_m2"] * 2)
+    return (
+        ("price_up", price_up),
+        ("fixed_cost_up", fixed_up),
+        ("rejection_up", rejection_up),
+        ("area_doubled", area_doubled),
+    )
+
+
+def assert_metamorphic(relation, baseline, modified):
+    before = baseline["results"]
+    after = modified["results"]
+    decimal = lambda row, field: Decimal(row[field])
+    if relation == "price_up":
+        require(decimal(after, "net_margin") >= decimal(before, "net_margin"),
+                "F28_METAMORPHIC_PRICE_MARGIN")
+        require(after["total_cost"] == before["total_cost"]
+                and after["break_even_price_per_kg"] == before["break_even_price_per_kg"],
+                "F28_METAMORPHIC_PRICE_COST_INVARIANT")
+    elif relation == "fixed_cost_up":
+        require(decimal(after, "total_cost") - decimal(before, "total_cost") == 100
+                and decimal(before, "net_margin") - decimal(after, "net_margin") == 100,
+                "F28_METAMORPHIC_FIXED_COST")
+    elif relation == "rejection_up":
+        require(decimal(after, "sales_revenue") <= decimal(before, "sales_revenue")
+                and decimal(after, "net_margin") <= decimal(before, "net_margin")
+                and after["total_cost"] == before["total_cost"],
+                "F28_METAMORPHIC_REJECTION")
+    elif relation == "area_doubled":
+        require(decimal(after, "sales_revenue") >= decimal(before, "sales_revenue")
+                and decimal(after, "variable_cost_total") >= decimal(before, "variable_cost_total"),
+                "F28_METAMORPHIC_AREA_SCALING")
+    else:
+        raise RuntimeError("F28_UNKNOWN_METAMORPHIC_RELATION")
+
+
 def run_cli(source, sample, folder):
     inp = folder / "scenario.json"
     inp.write_text(json.dumps(sample, sort_keys=True), encoding="utf8")
@@ -218,6 +263,24 @@ def assess(warehouse, expected_source, expected_artifact, criteria):
             transcript.update(json.dumps(
                 ["invalid", index, case, result.returncode],
                 sort_keys=True, separators=(",", ":")).encode())
+        # Behavioral checks beyond isolated arithmetic examples. These cannot
+        # prove market data, professional field validity or global superiority.
+        metamorphic_rng = random.Random(SEED + 1000)
+        for index in range(METAMORPHIC_CASES):
+            base = valid_case(metamorphic_rng, index)
+            initial = run_cli(calculator, base, directory)
+            require(initial.returncode == 0, "F28_METAMORPHIC_BASELINE_CLI_FAILED")
+            baseline = json.loads(initial.stdout)
+            oracle(base, baseline)
+            for relation, changed in metamorphic_followups(base):
+                output = run_cli(calculator, changed, directory)
+                require(output.returncode == 0, "F28_METAMORPHIC_CUSTOMER_CLI_FAILED")
+                actual = json.loads(output.stdout)
+                oracle(changed, actual)
+                assert_metamorphic(relation, baseline, actual)
+                transcript.update(json.dumps(
+                    ["metamorphic", index, relation, base, changed, baseline, actual],
+                    sort_keys=True, separators=(",", ":")).encode())
     groups = validate_criteria(criteria)
     return {
         "schema": SCHEMA, "family_id": "F28", "recipe": RECIPE,
@@ -231,6 +294,13 @@ def assess(warehouse, expected_source, expected_artifact, criteria):
         "extracted_product_unit_test_count": int(measured_units.group(1)),
         "valid_real_customer_cli_scenarios_oracle_checked": VALID,
         "invalid_customer_cli_scenarios_rejected": INVALID,
+        "metamorphic_customer_scenario_pairs_checked": METAMORPHIC_CASES * METAMORPHIC_RELATIONS,
+        "metamorphic_properties": [
+            "higher_price_cannot_lower_margin",
+            "higher_fixed_cost_lowers_margin_exactly",
+            "higher_rejection_cannot_increase_revenue_or_margin",
+            "double_area_cannot_lower_revenue_or_variable_cost",
+        ],
         "reproducible_seed": SEED, "test_transcript_sha256": transcript.hexdigest(),
         "market_observations_independently_validated": False,
         "real_customer_field_validation_completed": False,
@@ -277,6 +347,7 @@ def store(root, report):
     require(target.read_bytes() == raw, "EVIDENCE_FINAL_READBACK_MISMATCH")
     return {"path": str(target), "sha256": digest(raw), "artifact_sha256": report["artifact_sha256"],
             "valid_scenarios": VALID, "invalid_scenarios": INVALID,
+            "metamorphic_pairs": METAMORPHIC_CASES * METAMORPHIC_RELATIONS,
             "commercial_release_allowed": False, "quality_1000_certified": False}
 
 
@@ -303,6 +374,8 @@ def selftest():
                         repo / "factory_config" / "quality_100_criteria.json")
         assert report["valid_real_customer_cli_scenarios_oracle_checked"] == VALID
         assert report["invalid_customer_cli_scenarios_rejected"] == INVALID
+        assert report["metamorphic_customer_scenario_pairs_checked"] == (
+            METAMORPHIC_CASES * METAMORPHIC_RELATIONS)
         assert report["professional_1000_quality_approved"] is False
         assert store(root, report) == store(root, report)
         try:
