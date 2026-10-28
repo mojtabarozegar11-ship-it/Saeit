@@ -97,23 +97,23 @@ class RawCountIntegrityTests(unittest.TestCase):
 
     def test_count_matrix_accepts_unique_ids_and_counts(self):
         self.assertEqual(check_count_matrix(
-            self.matrix('gene_id\\tL2\\tL1\\ngeneA\\t0\\t2147483647\\n'),
+            self.matrix('gene_id\tL2\tL1\ngeneA\t0\t2147483647\n'),
             self.ids), 1)
 
     def test_count_matrix_rejects_duplicate_library_columns(self):
         with self.assertRaisesRegex(GateError, 'each library ID exactly once'):
             check_count_matrix(
-                self.matrix('gene_id\\tL1\\tL1\\ngeneA\\t1\\t2\\n'), self.ids)
+                self.matrix('gene_id\tL1\tL1\ngeneA\t1\t2\n'), self.ids)
 
     def test_count_matrix_rejects_overflow(self):
         with self.assertRaisesRegex(GateError, '32-bit'):
             check_count_matrix(
-                self.matrix('gene_id\\tL1\\tL2\\ngeneA\\t2147483648\\t0\\n'), self.ids)
+                self.matrix('gene_id\tL1\tL2\ngeneA\t2147483648\t0\n'), self.ids)
 
     def test_count_matrix_rejects_ambiguous_gene_id(self):
         with self.assertRaisesRegex(GateError, 'malformed'):
             check_count_matrix(
-                self.matrix('gene_id\\tL1\\tL2\\ngene A\\t1\\t2\\n'), self.ids)
+                self.matrix('gene_id\tL1\tL2\ngene A\t1\t2\n'), self.ids)
 
 
 if __name__ == '__main__':
