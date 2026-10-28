@@ -733,6 +733,8 @@ def verify_evidence_integrity(db, code, file_id=None):
                     if not block:
                         break
                     digest.update(block)
+        except CaseError:
+            raise
         except (OSError, ValueError) as exc:
             raise CaseError("Evidence unavailable or unsafe for review", 503) from exc
         if not hmac.compare_digest(digest.hexdigest(), record["sha256"]):
