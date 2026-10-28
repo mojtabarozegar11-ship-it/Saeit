@@ -24,6 +24,9 @@ jobs:
         run: node --check banknew/app.js
       - name: Exact fee and wallet fail-closed regression tests
         run: node --test banknew/app.test.js
+      - name: Validate isolated double-entry ledger and tamper detection
+        run: |
+          python3 -m unittest discover -s banknew -p 'test_ledger_core.py' -v
       - name: Refuse production payment activation in this release
         run: |
           node -e "const fs=require('fs'); const s=fs.readFileSync('banknew/app.js','utf8'); if (/\b(?:sendTransaction|signTransaction|signMessage|writeContract)\s*\(/.test(s)) process.exit(1); console.log('No payment, key handling or signing methods introduced');"
