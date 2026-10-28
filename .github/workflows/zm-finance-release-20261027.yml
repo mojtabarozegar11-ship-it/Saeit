@@ -101,7 +101,18 @@ jobs:
       - name: Transfer photos only to existing private finance stage
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          import os,socket,ipaddress
+          from pathlib import Path
+          addrs={row[4][0] for row in socket.getaddrinfo('zomorodmelal.ir',443,type=socket.SOCK_STREAM) if row[0]==socket.AF_INET}
+          assert addrs,'External domain DNS resolution unavailable; do not deploy'
+          site_ip=sorted(addrs)[0]
+          ipaddress.IPv4Address(site_ip)
+          Path(os.environ['RUNNER_TEMP'],'zm-finance-domain-ip.txt').write_text(site_ip+'\n',encoding='ascii')
+          print('VERIFICATION_ADDRESS_RESOLVED_TLS_HOSTNAME_PINNED')
+          PY
           timeout 150s scp -F "$RUNNER_TEMP/mpw-structure-ssh/config" "$RUNNER_TEMP/zm-finance-assets.tar.gz" saeit-cpanel:/home/zomorod2/zm-finance-private/visual-assets-next.tar.gz
+          timeout 60s scp -F "$RUNNER_TEMP/mpw-structure-ssh/config" "$RUNNER_TEMP/zm-finance-domain-ip.txt" saeit-cpanel:/home/zomorod2/zm-finance-private/visual-domain-ip.txt
       - name: Publish isolated portal and verify requests with rollback
         run: |
           timeout 240s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
@@ -114,8 +125,16 @@ jobs:
           assert len([service for service in catalog if service['id'].startswith('q')])==32
           assert len([service for service in catalog if service['id'].startswith('b')])==32
           from pathlib import Path
-          import os,json,hashlib,subprocess,shutil,urllib.request,urllib.error,http.cookiejar,secrets,sqlite3,time,tarfile
+          import os,json,hashlib,subprocess,shutil,urllib.request,urllib.error,http.cookiejar,secrets,sqlite3,time,tarfile,socket,ipaddress
           root=Path('/home/zomorod2/public_html');target=root/'$$zm';private=Path('/home/zomorod2/zm-finance-private')
+          pin_path=private/'visual-domain-ip.txt'
+          assert pin_path.is_file() and not pin_path.is_symlink(),'DNS verification pin missing'
+          site_ip=pin_path.read_text(encoding='ascii').strip()
+          assert ipaddress.ip_address(site_ip).version==4,'Only validated IPv4 permitted'
+          original_dns=socket.getaddrinfo
+          def site_resolver(host,port,*args,**kwargs):
+           return original_dns(site_ip if host=='zomorodmelal.ir' else host,port,*args,**kwargs)
+          socket.getaddrinfo=site_resolver
           assert root.is_dir() and not root.is_symlink()
           assert not target.is_symlink() and not private.is_symlink(), 'Symlink target is forbidden'
           for p in [Path('/AGENTS.md'),Path('/home/AGENTS.md'),Path('/home/zomorod2/AGENTS.md'),root/'AGENTS.md',target/'AGENTS.md']:
