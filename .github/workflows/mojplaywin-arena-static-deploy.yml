@@ -47,7 +47,7 @@ jobs:
           node-version: "22"
       - name: Install Chromium driver
         run: npm install --no-save --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/arena-browser-test" playwright-core@1.62.1
-      - name: Exercise 49 free activities and 7 Casino Dollar practice tables in six languages on mobile Chromium
+      - name: Exercise 49 free activities, 7 Casino Dollar tables and 6 prediction fixtures in six languages on mobile Chromium
         shell: bash
         env:
           NODE_PATH: ${{ runner.temp }}/arena-browser-test/node_modules
@@ -75,8 +75,9 @@ jobs:
               assert.equal(await page.locator('#classic-game-grid article').count(),6);
               assert.equal(await page.locator('#oracle-grid article').count(),12);
               assert.equal(await page.locator('#wager-grid article').count(),7);
-              assert.equal(await page.locator('.arena-categories a').count(),5);
-              assert.equal(await page.locator('#arena-count').innerText(),'56 experiences found');
+              assert.equal(await page.locator('#prediction-grid article').count(),6);
+              assert.equal(await page.locator('.arena-categories a').count(),6);
+              assert.equal(await page.locator('#arena-count').innerText(),'62 experiences found');
               await page.locator('#arena-search').fill('chess');
               assert.equal(await page.locator('#classic-game-grid article:not([hidden])').count(),1);
               assert.equal(await page.locator('#dice-festival').isVisible(),false);
@@ -86,8 +87,32 @@ jobs:
               await page.locator('#arena-search').fill('tarot');
               assert.equal(await page.locator('#oracle-grid article:not([hidden])').count(),2);
               assert.equal(await page.locator('#game-grid article:not([hidden])').count(),0);
+              await page.locator('#arena-search').fill('basketball');
+              assert.equal(await page.locator('#prediction-grid article:not([hidden])').count(),1);
               await page.locator('#arena-search').fill('');
-              assert.equal(await page.locator('#arena-count').innerText(),'56 experiences found');
+              assert.equal(await page.locator('#arena-count').innerText(),'62 experiences found');
+              assert.equal(await page.locator('#mcd-balance').innerText(),'1,000.00 MCD');
+
+              await page.locator('#prediction-ft1 select').selectOption('goals');
+              assert.equal(await page.locator('#prediction-ft1 input[type=radio]').count(),2);
+              await page.locator('#prediction-ft1 input[value=over]').check();
+              await page.locator('#prediction-ft1 button[type=submit]').click();
+              await page.locator('#prediction-bb1 select').selectOption('handicap');
+              await page.locator('#prediction-bb1 button[type=submit]').click();
+              await page.locator('#prediction-tn1 select').selectOption('series');
+              await page.locator('#prediction-tn1 input[value="2-1"]').check();
+              await page.locator('#prediction-tn1 button[type=submit]').click();
+              assert.equal(await page.locator('#prediction-slip-legs li').count(),3);
+              await page.locator('#prediction-ft2 button[type=submit]').click();
+              assert.match(await page.locator('#prediction-message').innerText(),/Maximum three/);
+              assert.equal(await page.locator('#prediction-slip-legs li').count(),3);
+              assert.match(await page.locator('#prediction-slip-odds').innerText(),/[0-9]/);
+              await page.locator('#prediction-submit').click();
+              assert.equal(await page.locator('#mcd-rounds').innerText(),'1');
+              assert.equal(await page.locator('#prediction-slip-legs li').count(),1);
+              assert.equal(await page.locator('#prediction-submit').isDisabled(),true);
+              assert.match(await page.locator('#prediction-message').innerText(),/Virtual result/);
+              await page.locator('#mcd-reset').click();
               assert.equal(await page.locator('#mcd-balance').innerText(),'1,000.00 MCD');
               await page.locator('#mcd-roulette-spin').click();
               await page.locator('[data-mcd-baccarat="player"]').click();
@@ -128,6 +153,7 @@ jobs:
               await page.locator('#oracle-numerology button').click();
               assert.equal(await page.locator('#oracle-numerology .oracle-answer').innerText(),'Choose a birth date.');
               await page.locator('#language').selectOption('fa');
+              assert.equal(await page.locator('#nav-predictions').innerText(),'پیش‌بینی‌ها');
               await page.locator('#arena-search').fill('شطرنج');
               assert.equal(await page.locator('#classic-game-grid article:not([hidden])').count(),1);
               await page.locator('#arena-search').fill('فال');
@@ -138,7 +164,7 @@ jobs:
               }
               assert.deepEqual(errors,[]);
               assert.ok((await page.locator('#wager-heading').innerText()).length>15);
-              console.log('ARENA_MOBILE_37_GAMES_12_ORACLES_7_MCD_TABLES_SIX_LANG_PASS');
+              console.log('ARENA_MOBILE_49_FREE_7_MCD_6_PREDICTIONS_SIX_LANG_PASS');
             }finally{await browser.close()}
           })().catch(e=>{console.error(e);process.exitCode=1});
           JS
@@ -251,7 +277,7 @@ jobs:
           source=Path('site_releases/mojplaywin/arena/index.html').read_bytes()
           if hashlib.sha256(released).digest()!=hashlib.sha256(source).digest():
               raise SystemExit('Published Arena checksum mismatch')
-          print('ARENA_37_GAMES_12_ORACLES_7_MCD_TABLES_LIVE_SHA256_MATCH')
+          print('ARENA_49_FREE_7_MCD_6_PREDICTIONS_LIVE_SHA256_MATCH')
           PY
           for path in / /games/ /store/ /game-releases/20261020/index.html; do
             [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")" == "200" ]]
