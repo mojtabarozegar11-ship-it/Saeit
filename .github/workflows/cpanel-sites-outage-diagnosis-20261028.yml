@@ -92,6 +92,42 @@ jobs:
           find(raw)
           print('CPANEL_DOMAINS='+json.dumps({'status':r.get('status'),'domains_present':sorted(set(values)),'hostname':socket.gethostname()},sort_keys=True))
           PY
+      - name: Inspect DNS zones on current cPanel account (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-cpanel-scope"
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import shutil,subprocess,json,collections
+          exe=shutil.which('cpapi2') or '/usr/local/cpanel/bin/cpapi2'
+          def audit(func,params=None):
+              cmd=[exe,'--user=zomorod2','ZoneEdit',func]+(params or [])
+              try:
+                  p=subprocess.run(cmd,capture_output=True,text=True,timeout=26)
+                  result={'function':func,'exit':p.returncode,'bytes':len(p.stdout)}
+                  try:
+                      j=json.loads(p.stdout)
+                      c=j.get('cpanelresult',{})
+                      result['event_status']=c.get('event',{}).get('result')
+                      rows=c.get('data',[])
+                      result['record_count']=len(rows) if isinstance(rows,list) else -1
+                      if isinstance(rows,list):
+                          summary=[]
+                          for row in rows[:200]:
+                              if not isinstance(row,dict):continue
+                              item={k:row.get(k) for k in ('type','name','domain','address','cname','nsdname','exchange','preference') if row.get(k) is not None}
+                              if item:summary.append(item)
+                              if 'reason' in row:result['reason']=str(row['reason'])[:160]
+                          result['records']=summary[:80]
+                          result['type_counts']=dict(collections.Counter(x.get('type','unknown') for x in rows if isinstance(x,dict)))
+                      else:result['data_type']=type(rows).__name__
+                  except Exception as e:result['parse_error']=type(e).__name__
+                  if p.returncode:result['stderr_type']='nonzero'
+                  return result
+              except Exception as e:return {'function':func,'error_type':type(e).__name__}
+          info=[audit('fetchzones'),audit('fetch_cpanel_generated_domains'),audit('fetchzone',['domain=zomorodmelal.ir']),audit('fetchzone',['domain=mojplaywin.com'])]
+          print('CPANEL_DNS_ZONE_AUDIT='+json.dumps(info,sort_keys=True))
+          PY
       - name: Clear ephemeral SSH keys
         if: always()
         shell: bash
