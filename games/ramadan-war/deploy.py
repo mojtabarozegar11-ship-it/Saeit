@@ -106,13 +106,43 @@ def verify(stage):
     print('RAMADAN_WEB_CLIENT_AND_PROTECTED_PAGES=PASS')
 
 def rollback_files(stage,m,run):
+    """Restore only exact release assets; never trust a corrupted backup or manifest."""
+    problems=[]
     for name,h in m['new'].items():
+        # release.json is persisted on the host; never let an altered manifest
+        # turn rollback into a deletion outside this game's known asset list.
+        if name not in ASSETS:
+            problems.append('unsafe release asset: '+str(name))
+            continue
         p=GAME/name
+        parts=Path(name).parts
+        if (GAME.is_symlink() or any((GAME.joinpath(*parts[:n])).is_symlink()
+                                     for n in range(1,len(parts)))):
+            problems.append('linked release asset parent: '+name)
+            continue
         if name in m['old'] and p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
-            atomic(p,(stage/f'old-{name}').read_bytes(),run);print('RESTORED_OLD_GAME_FILE='+name)
+            backup=stage/f'old-{name}'
+            backup_parts=Path('old-'+name).parts
+            linked=any((stage.joinpath(*backup_parts[:n])).is_symlink()
+                       for n in range(1,len(backup_parts)+1))
+            if not backup.is_file() or linked or not backup.resolve().is_relative_to(stage.resolve()):
+                problems.append('rollback backup missing or linked: '+name)
+                continue
+            data=backup.read_bytes()
+            if digest(data)!=m['old'][name]:
+                problems.append('rollback backup SHA-256 mismatch: '+name)
+                continue
+            atomic(p,data,run)
+            if digest(p.read_bytes())!=m['old'][name]:
+                problems.append('rollback restored SHA-256 mismatch: '+name)
+            else:
+                print('RESTORED_OLD_GAME_FILE='+name)
         elif name not in m['old'] and p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
             p.unlink();print('REMOVED_NEW_GAME_ASSET='+name)
-        else:print('ROLLBACK_SKIPPED_UNEXPECTED_GAME_FILE='+name)
+        else:
+            print('ROLLBACK_SKIPPED_UNEXPECTED_GAME_FILE='+name)
+    if problems:
+        raise RuntimeError('rollback incomplete: '+'; '.join(problems))
 
 def rollback(stage,run):
     if not (stage/'release.json').is_file():print('ROLLBACK_SKIPPED_NO_RELEASE_STATE');return
