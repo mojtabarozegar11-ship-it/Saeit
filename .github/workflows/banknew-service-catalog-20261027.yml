@@ -1,8 +1,12 @@
-name: Update banknew launch authorization and service catalog
+name: Publish isolated MOJ Pay presentation and read-only wallet
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/banknew-service-catalog-20261027.yml', 'banknew/app.js', 'banknew/app.test.js']
+    paths:
+      - '.github/workflows/banknew-service-catalog-20261027.yml'
+      - 'banknew/index.html'
+      - 'banknew/app.js'
+      - 'banknew/app.test.js'
 permissions:
   contents: read
 concurrency:
@@ -13,6 +17,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Checkout version-controlled MOJ Pay page and script
+        uses: actions/checkout@v4
+      - name: Validate the release and exact fee calculation
+        run: |
+          set -euo pipefail
+          node --check banknew/app.js
+          node --test banknew/app.test.js
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          s=Path('banknew/index.html').read_text(encoding='utf-8')
+          class Parser(HTMLParser):
+              def error(self,message): raise AssertionError(message)
+          Parser().feed(s)
+          for required in ('<html lang="en">', 'id="wallet"', 'id="pricing"', 'id="access"', 'Connect a wallet to view balances.', 'operating authorization is pending', 'No customer funds or payments are accepted', '<script src="app.js">'):
+              assert required in s, required
+          assert "noindex,nofollow" in s
+          assert 'Your wallet, connected.' not in s
+          assert 'Website launch authorization:' not in s
+          PY
       - name: Establish fingerprint-pinned VPS to cPanel relay
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -57,74 +81,65 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
-      - name: Update banknew only, verify fresh URL and restore on failure
-        run: |
-          timeout 180s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
-          from pathlib import Path
-          import hashlib,base64,urllib.request,time
-          root=Path('/home/zomorod2/mojplaywin.com'); d=root/'banknew'; p=d/'index.html'
-          assert d.is_dir() and not d.is_symlink() and p.is_file() and not p.is_symlink()
-          url='https://mojplaywin.com/banknew/?_release=04f4e6b5d5a4511a'
-          with urllib.request.urlopen('https://mojplaywin.com/',timeout=25) as r: assert r.status==200
-          old=p.read_bytes(); new=base64.b64decode('PCFkb2N0eXBlIGh0bWw+PGh0bWwgbGFuZz0iZW4iPjxoZWFkPjxtZXRhIGNoYXJzZXQ9InV0Zi04Ij48bWV0YSBuYW1lPSJ2aWV3cG9ydCIgY29udGVudD0id2lkdGg9ZGV2aWNlLXdpZHRoLGluaXRpYWwtc2NhbGU9MSI+PG1ldGEgbmFtZT0icm9ib3RzIiBjb250ZW50PSJub2luZGV4LG5vZm9sbG93Ij48dGl0bGU+TU9KIFBheSDCtyBXYWxsZXQgJiBtZXJjaGFudCB3b3Jrc3BhY2U8L3RpdGxlPjxsaW5rIHJlbD0ic3R5bGVzaGVldCIgaHJlZj0ic3R5bGUuY3NzIj48L2hlYWQ+PGJvZHk+PGFzaWRlPjxhIGNsYXNzPSJicmFuZCIgaHJlZj0iL2JhbmtuZXcvIj48c3BhbiBjbGFzcz0ibG9nbyI+bS48L3NwYW4+IE1PSiBQYXk8L2E+PHNtYWxsPllPVVIgTU9ORVkuIFlPVVIgQ09OVFJPTC48L3NtYWxsPjxuYXY+PGEgaHJlZj0iI292ZXJ2aWV3Ij7il4ggT3ZlcnZpZXc8L2E+PGEgaHJlZj0iI3dhbGxldCI+4pajIFlvdXIgd2FsbGV0PC9hPjxhIGhyZWY9IiNtZXJjaGFudCI+4oaXIE1lcmNoYW50IHBheW1lbnRzPC9hPjxhIGhyZWY9IiNwcmljaW5nIj7il44gUHJpY2luZzwvYT48YSBocmVmPSIjYWNjZXNzIj7impkgQWNjb3VudCBhY2Nlc3M8L2E+PC9uYXY+PGRpdiBjbGFzcz0iYXNpZGUtYm90dG9tIj5QYXJ0IG9mIDxhIGhyZWY9Ii8iPk1valBsYXlXaW4g4oaXPC9hPjxwPlNlbGYtY3VzdG9keSB3b3Jrc3BhY2U8L3A+PC9kaXY+PC9hc2lkZT48bWFpbj48aGVhZGVyPjxzcGFuPldhbGxldCAmIHBheW1lbnRzIC8gT3ZlcnZpZXc8L3NwYW4+PHNwYW4gY2xhc3M9InBpbGwiPlNldHVwIGluIHByb2dyZXNzPC9zcGFuPjwvaGVhZGVyPjxzZWN0aW9uIGlkPSJvdmVydmlldyIgY2xhc3M9Imhlcm8iPjxkaXY+PHAgY2xhc3M9ImV5ZWJyb3ciPkJVSUxUIEFST1VORCBZT1VSIFdBTExFVDwvcD48aDE+QSBjbGVhcmVyIHdheTxicj50byBtYW5hZ2UgY3J5cHRvLjwvaDE+PHAgY2xhc3M9ImludHJvIj5Db25uZWN0IGEgY29tcGF0aWJsZSB3YWxsZXQsIHZpZXcgaXRzIG5hdGl2ZSBiYWxhbmNlIGFuZCB1bmRlcnN0YW5kIG1lcmNoYW50IGZlZXMuIFlvdXIga2V5cyBzdGF5IHdpdGggeW91LjwvcD48YSBjbGFzcz0iYnV0dG9uIiBocmVmPSIjd2FsbGV0Ij5Db25uZWN0IHlvdXIgd2FsbGV0IDxiPuKGlzwvYj48L2E+PC9kaXY+PGRpdiBjbGFzcz0iaGVyby1jYXJkIj48c3Bhbj5QUk9QT1NFRCBNRVJDSEFOVCBTRVJWSUNFIEZFRTwvc3Bhbj48aDI+MC4xPHNwYW4+JTwvc3Bhbj48L2gyPjxwPjEwIGJhc2lzIHBvaW50cy4gQ2xlYXJseSBjYWxjdWxhdGVkLjwvcD48ZGl2IGNsYXNzPSJjYXJkLXJ1bGUiPjwvZGl2PjxwPk5ldHdvcmsgYW5kIHByb3ZpZGVyIGZlZXMgYXJlIHNlcGFyYXRlLjxicj5QYXltZW50IHByb2Nlc3NpbmcgaXMgbm90IGFjdGl2YXRlZC48L3A+PC9kaXY+PC9zZWN0aW9uPjxkaXYgY2xhc3M9Im5vdGljZSI+V2Vic2l0ZSBsYXVuY2ggYXV0aG9yaXphdGlvbjog27PbtNu1L9u127bbt9u427nbtC/buNu327Yv27HbtNuw27Uv27Dbsi/bsduyLiBGaW5hbmNpYWwgc2VydmljZXMgYXJlIGJlaW5nIHByZXBhcmVkOyB0aGUgc2VwYXJhdGUgb3BlcmF0aW5nIGF1dGhvcml6YXRpb24gaXMgcGVuZGluZy4gTm8gY3VzdG9tZXIgZnVuZHMgb3IgcGF5bWVudHMgYXJlIGFjY2VwdGVkIGF0IHRoaXMgc3RhZ2UuPC9kaXY+PHNlY3Rpb24gaWQ9IndhbGxldCI+PGRpdiBjbGFzcz0ic2VjdGlvbi10aXRsZSI+PGRpdj48cCBjbGFzcz0iZXllYnJvdyI+U0VMRi1DVVNUT0RZPC9wPjxoMj5Zb3VyIHdhbGxldCwgY29ubmVjdGVkLjwvaDI+PC9kaXY+PHNwYW4gY2xhc3M9InBpbGwiPlJlYWQtb25seSBhY2Nlc3M8L3NwYW4+PC9kaXY+PGRpdiBjbGFzcz0iZ3JpZCI+PGFydGljbGUgY2xhc3M9InBhbmVsIj48ZGl2IGNsYXNzPSJhc3NldC1pY29uIj7OnjwvZGl2PjxoMz5FdGhlcmV1bS1jb21wYXRpYmxlIHdhbGxldDwvaDM+PHA+VXNlIGEgY29tcGF0aWJsZSB3YWxsZXQgYnJvd3NlciBvciBicm93c2VyIGV4dGVuc2lvbi4gQ29ubmVjdGluZyByZXF1ZXN0cyB5b3VyIHB1YmxpYyBhZGRyZXNzIG9ubHkuPC9wPjxidXR0b24gaWQ9ImNvbm5lY3QiPkNvbm5lY3QgRVZNIHdhbGxldCDihpc8L2J1dHRvbj48YnV0dG9uIGlkPSJkaXNjb25uZWN0IiBjbGFzcz0ic2Vjb25kYXJ5IiBoaWRkZW4+Q2xlYXIgY29ubmVjdGlvbjwvYnV0dG9uPjxwIGlkPSJ3YWxsZXQtbWVzc2FnZSIgcm9sZT0ic3RhdHVzIiBhcmlhLWxpdmU9InBvbGl0ZSI+Tm8gd2FsbGV0IGNvbm5lY3RlZC48L3A+PGRsPjxkdD5OZXR3b3JrIElEPC9kdD48ZGQgaWQ9ImNoYWluIj7igJQ8L2RkPjxkdD5QdWJsaWMgYWRkcmVzczwvZHQ+PGRkIGlkPSJhZGRyZXNzIj7igJQ8L2RkPjxkdD5OYXRpdmUgYmFsYW5jZTwvZHQ+PGRkIGlkPSJiYWxhbmNlIj7igJQ8L2RkPjwvZGw+PHAgY2xhc3M9ImZpbmUiPlRva2VuIGJhbGFuY2VzLCBUUk9OIGFuZCBXYWxsZXRDb25uZWN0IFFSIHBhaXJpbmcgYXJlIG5vdCBpbnRlZ3JhdGVkLiBBIGNvbm5lY3RlZCBhZGRyZXNzIGlzIG5vdCBwcm9vZiBvZiBpZGVudGl0eS48L3A+PC9hcnRpY2xlPjxhcnRpY2xlIGNsYXNzPSJwYW5lbCBkYXJrIj48cCBjbGFzcz0iZXllYnJvdyI+U0VDVVJJVFkgQlkgREVTSUdOPC9wPjxoMz5LZWVwIHRoZSBrZXlzLjxicj5LZWVwIHRoZSBjb250cm9sLjwvaDM+PHVsPjxsaT5ObyBzZWVkIHBocmFzZSBjb2xsZWN0aW9uPC9saT48bGk+Tm8gcHJpdmF0ZSBrZXkgdXBsb2FkczwvbGk+PGxpPk5vIHRva2VuIGFwcHJvdmFsIHJlcXVlc3RzPC9saT48bGk+Tm8gdHJhbnNhY3Rpb24gc2lnbmluZyBvbiB0aGlzIHBhZ2U8L2xpPjwvdWw+PHAgY2xhc3M9ImZpbmUiPkRpc2Nvbm5lY3RpbmcgaGVyZSBjbGVhcnMgdGhlIHBhZ2UuIFJldm9rZSBzaXRlIHBlcm1pc3Npb25zIGluc2lkZSB5b3VyIHdhbGxldCB0byBkaXNjb25uZWN0IGZ1bGx5LjwvcD48L2FydGljbGU+PC9kaXY+PC9zZWN0aW9uPjxzZWN0aW9uIGlkPSJtZXJjaGFudCI+PHAgY2xhc3M9ImV5ZWJyb3ciPkZPUiBCVVNJTkVTU0VTPC9wPjxoMj5NZXJjaGFudCBwYXltZW50czwvaDI+PGRpdiBjbGFzcz0iZ3JpZCB0aHJlZSI+PGFydGljbGUgY2xhc3M9InBhbmVsIj48c3BhbiBjbGFzcz0ic3RlcCI+MDE8L3NwYW4+PGgzPlBheW1lbnQgZ2F0ZXdheSAmIFAyUDwvaDM+PHA+TWVyY2hhbnQgY2hlY2tvdXQsIGludm9pY2VzLCBwYXltZW50IGxpbmtzIGFuZCBwZXJzb24tdG8tcGVyc29uIHRyYW5zZmVycy48L3A+PHNwYW4gY2xhc3M9InBlbmRpbmciPkluIHByZXBhcmF0aW9uPC9zcGFuPjwvYXJ0aWNsZT48YXJ0aWNsZSBjbGFzcz0icGFuZWwiPjxzcGFuIGNsYXNzPSJzdGVwIj4wMjwvc3Bhbj48aDM+TXVsdGktY3VycmVuY3kgd2FsbGV0PC9oMz48cD5DcnlwdG8gYW5kIGZvcmVpZ24tY3VycmVuY3kgYWNjb3VudCBmZWF0dXJlcywgd2l0aCBjbGVhciBjdXN0b2R5IGFuZCBzZXR0bGVtZW50IHJ1bGVzLjwvcD48c3BhbiBjbGFzcz0icGVuZGluZyI+SW4gcHJlcGFyYXRpb248L3NwYW4+PC9hcnRpY2xlPjxhcnRpY2xlIGNsYXNzPSJwYW5lbCI+PHNwYW4gY2xhc3M9InN0ZXAiPjAzPC9zcGFuPjxoMz5DdXJyZW5jeSBleGNoYW5nZSAmIGJ1bGxpb248L2gzPjxwPkN1cnJlbmN5IHNlcnZpY2VzIGFuZCBtZWx0ZWQtZ29sZCB0cmFkaW5nLCBzdWJqZWN0IHRvIGFwcHJvdmVkIHByb3ZpZGVycywgcHJpY2luZyBhbmQgb3BlcmF0aW5nIGF1dGhvcml6YXRpb24uPC9wPjxzcGFuIGNsYXNzPSJwZW5kaW5nIj5JbiBwcmVwYXJhdGlvbjwvc3Bhbj48L2FydGljbGU+PC9kaXY+PC9zZWN0aW9uPjxzZWN0aW9uIGlkPSJwcmljaW5nIiBjbGFzcz0icHJpY2luZyI+PGRpdj48cCBjbGFzcz0iZXllYnJvdyI+Tk8gSElEREVOIE1BVEg8L3A+PGgyPkNhbGN1bGF0ZSB0aGUgc2VydmljZSBmZWUuPC9oMj48cD4wLjElID0gMSB1bml0IHBlciAxLDAwMCB1bml0cyBwcm9jZXNzZWQuPC9wPjxwIGNsYXNzPSJmaW5lIj5JbGx1c3RyYXRpdmUgcXVvdGUgb25seS4gRmVlIGRlZHVjdGVkIGZyb20gdGhlIGVudGVyZWQgYW1vdW50LCByb3VuZGVkIHRvIHRoZSBuZWFyZXN0IGNlbnQuIEFjdHVhbCBhc3NldCBwcmVjaXNpb24gYW5kIHNldHRsZW1lbnQgY29zdHMgcmVxdWlyZSBhbiBhY3RpdmF0ZWQgcGF5bWVudCBpbnRlZ3JhdGlvbi48L3A+PC9kaXY+PGRpdiBjbGFzcz0icGFuZWwiPjxsYWJlbCBmb3I9ImFtb3VudCI+UGF5bWVudCBhbW91bnQgKFVTRCBlcXVpdmFsZW50KTwvbGFiZWw+PGlucHV0IGlkPSJhbW91bnQiIGlucHV0bW9kZT0iZGVjaW1hbCIgdHlwZT0idGV4dCIgdmFsdWU9IjEwMDAuMDAiIG1heGxlbmd0aD0iMTYiPjxkaXYgaWQ9ImZlZS1lcnJvciIgcm9sZT0ic3RhdHVzIj48L2Rpdj48ZGw+PGR0PlNlcnZpY2UgZmVlIMK3IDAuMSU8L2R0PjxkZCBpZD0iZmVlIj4kMS4wMDwvZGQ+PGR0PkFmdGVyIHNlcnZpY2UgZmVlPC9kdD48ZGQgaWQ9Im5ldCI+JDk5OS4wMDwvZGQ+PGR0Pk5ldHdvcmsgLyBwcm92aWRlciBmZWVzPC9kdD48ZGQ+Tm90IGluY2x1ZGVkPC9kZD48L2RsPjwvZGl2Pjwvc2VjdGlvbj48c2VjdGlvbiBpZD0iYWNjZXNzIiBjbGFzcz0icGFuZWwiPjxwIGNsYXNzPSJleWVicm93Ij5BQ0NPVU5UIEFDQ0VTUzwvcD48aDI+U2lnbiBpbiB3aXRoIEdvb2dsZTwvaDI+PHA+R29vZ2xlIHNpZ24taW4gaXMgYXdhaXRpbmcgT0F1dGggY29uZmlndXJhdGlvbi4gQWNjb3VudCBjcmVhdGlvbiBhbmQgZmluYW5jaWFsIGlkZW50aXR5IHZlcmlmaWNhdGlvbiBhcmUgbm90IGFjdGl2ZS48L3A+PHNwYW4gY2xhc3M9InBlbmRpbmciPkdvb2dsZSBPQXV0aCBub3QgY29ubmVjdGVkPC9zcGFuPjxwIGNsYXNzPSJmaW5lIj5BIHZlcmlmaWVkIGVtYWlsIGNvbmZpcm1zIGFjY2VzcyB0byBhIEdvb2dsZSBhY2NvdW50LiBJdCBkb2VzIG5vdCB2ZXJpZnkgYSBjdXN0b21lcidzIGZpbmFuY2lhbCBpZGVudGl0eSBvciBhdXRob3JpemUgY3VzdG9keSBvZiBmdW5kcy48L3A+PC9zZWN0aW9uPjxmb290ZXI+PHNwYW4+wqkgMjAyNiBNT0ogUGF5IMK3IE1valBsYXlXaW48L3NwYW4+PHNwYW4+Tm90IGEgYmFuay4gTm8gZGVwb3NpdCBvciBmaWF0IGFjY291bnQgc2VydmljZXMgYXJlIG9mZmVyZWQuPC9zcGFuPjwvZm9vdGVyPjwvbWFpbj48c2NyaXB0IHNyYz0iYXBwLmpzIj48L3NjcmlwdD48L2JvZHk+PC9odG1sPgo='); backup=d/'.index.html.banknew-release-backup'
-          assert not backup.exists() and not backup.is_symlink()
-          backup.write_bytes(old); backup.chmod(0o600)
-          try:
-           p.write_bytes(new)
-           request=urllib.request.Request(url,headers={'Cache-Control':'no-cache, no-store','Pragma':'no-cache'})
-           with urllib.request.urlopen(request,timeout=25) as r: body=r.read(2000000); assert r.status==200
-           for marker in ('Website launch authorization','۳۴۵/۵۶۷۸۹۴/۸۷۶/۱۴۰۵/۰۲/۱۲','operating authorization is pending','Payment gateway & P2P','Multi-currency wallet','Currency exchange & bullion'):
-            assert marker.encode() in body, 'Public response missing '+marker
-           assert hashlib.sha256(p.read_bytes()).digest()==hashlib.sha256(new).digest()
-           with urllib.request.urlopen('https://mojplaywin.com/',timeout=25) as r: assert r.status==200
-           backup.unlink()
-          except Exception:
-           p.write_bytes(old)
-           if backup.exists():backup.unlink()
-           raise
-          print('BANKNEW_SERVICE_CATALOG_UPDATED_AND_SMOKED='+url)
-          PY
-      - name: Checkout tested banknew source
-        uses: actions/checkout@v4
-      - name: Run isolated banknew unit checks
-        run: |
-          node --check banknew/app.js
-          node --test banknew/app.test.js
-      - name: Upload verified read-only wallet script and auto-rollback on failure
+      - name: Stage only the version-controlled MOJ Pay page and read-only script
         run: |
           set -euo pipefail
+          scp -q -F "$RUNNER_TEMP/mpw-structure-ssh/config" banknew/index.html saeit-cpanel:/home/zomorod2/mojplaywin.com/banknew/.index.html.candidate
           scp -q -F "$RUNNER_TEMP/mpw-structure-ssh/config" banknew/app.js saeit-cpanel:/home/zomorod2/mojplaywin.com/banknew/.app.js.candidate
+      - name: Publish with both-file backup, external verification and rollback
+        run: |
           timeout 180s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
           from pathlib import Path
-          import hashlib,os,urllib.request
+          import hashlib, os, urllib.request
           root=Path('/home/zomorod2/mojplaywin.com')
-          d=root/'banknew'; p=d/'app.js'; candidate=d/'.app.js.candidate'
-          backup=d/'.app.js.banknew-release-backup'
-          assert root.is_dir() and not root.is_symlink()
-          assert d.is_dir() and not d.is_symlink()
-          assert p.is_file() and not p.is_symlink()
-          assert candidate.is_file() and not candidate.is_symlink()
-          assert not backup.exists() and not backup.is_symlink()
-          old=p.read_bytes(); new=candidate.read_bytes()
-          assert len(new)<100000 and b'getTronState' in new and b'eth_requestAccounts' in new
-          assert b'Payment gateway' not in new and b'privateKey' not in new
-          before=hashlib.sha256(old).hexdigest()
-          expected=hashlib.sha256(new).hexdigest()
-          backup.write_bytes(old); backup.chmod(0o600)
+          d=root/'banknew'
+          assert root.is_dir() and not root.is_symlink() and d.is_dir() and not d.is_symlink()
+          files=[('index.html','.index.html.candidate','.index.html.banknew-release-backup'),('app.js','.app.js.candidate','.app.js.banknew-release-backup')]
+          items=[]
+          for name,staging,backname in files:
+              p,candidate,backup=d/name,d/staging,d/backname
+              assert p.is_file() and not p.is_symlink()
+              assert candidate.is_file() and not candidate.is_symlink()
+              assert not backup.exists() and not backup.is_symlink()
+              new=candidate.read_bytes()
+              assert 0<len(new)<100000
+              if name=='index.html':
+                  assert b'<script src="app.js"></script>' in new
+                  assert b'No customer funds or payments are accepted' in new
+                  assert b'Connect a wallet to view balances.' in new
+              else:
+                  assert b'getTronState' in new and b'eth_requestAccounts' in new
+                  assert b'privateKey' not in new
+              items.append((name,p,candidate,backup,new,hashlib.sha256(new).hexdigest()))
+          with urllib.request.urlopen('https://mojplaywin.com/',timeout=25) as response:
+              assert response.status==200
+          for _,p,_,backup,_,_ in items:
+              backup.write_bytes(p.read_bytes())
+              backup.chmod(0o600)
           try:
-           os.replace(candidate,p)
-           assert hashlib.sha256(p.read_bytes()).hexdigest()==expected
-           request=urllib.request.Request('https://mojplaywin.com/banknew/app.js?release='+expected[:20],headers={'Cache-Control':'no-cache, no-store'})
-           with urllib.request.urlopen(request,timeout=25) as r: actual=r.read(200000); assert r.status==200
-           assert hashlib.sha256(actual).hexdigest()==expected
-           with urllib.request.urlopen('https://mojplaywin.com/banknew/',timeout=25) as r: assert r.status==200
-           with urllib.request.urlopen('https://mojplaywin.com/',timeout=25) as r: assert r.status==200
-           backup.unlink()
+              for _,p,candidate,_,_,_ in items:
+                  os.replace(candidate,p)
+              for name,p,_,_,new,expected in items:
+                  assert hashlib.sha256(p.read_bytes()).hexdigest()==expected
+                  url='https://mojplaywin.com/banknew/'+name+'?release='+expected[:20]
+                  request=urllib.request.Request(url,headers={'Cache-Control':'no-cache, no-store','Pragma':'no-cache'})
+                  with urllib.request.urlopen(request,timeout=25) as response:
+                      public=response.read(200000)
+                      assert response.status==200
+                  assert hashlib.sha256(public).hexdigest()==expected, 'Public '+name+' mismatch'
+              with urllib.request.urlopen('https://mojplaywin.com/banknew/',timeout=25) as response:
+                  assert response.status==200
+              with urllib.request.urlopen('https://mojplaywin.com/',timeout=25) as response:
+                  assert response.status==200
           except Exception:
-           os.replace(backup,p)
-           if candidate.exists():candidate.unlink()
-           raise
-          print('BANKNEW_READONLY_WALLET_UPDATED old='+before[:12]+' new='+expected[:12])
+              for _,p,_,backup,_,_ in items:
+                  if backup.exists(): os.replace(backup,p)
+              raise
+          finally:
+              for _,_,candidate,backup,_,_ in items:
+                  if backup.exists(): backup.unlink()
+                  if candidate.exists(): candidate.unlink()
+          print('BANKNEW_HTML_AND_READONLY_SCRIPT_RELEASE_VERIFIED')
           PY
       - name: Remove temporary keys
         if: always()
