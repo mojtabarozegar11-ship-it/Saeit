@@ -118,5 +118,49 @@ class GuardTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError,"NEWER_SOURCE_EDIT"):
                     guard.operation("rollback","202610280003")
 
+    def test_recover_interrupted_partial_install_and_is_idempotent(self):
+        """A timed-out remote apply may have written only some modules."""
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            paths={k:root/(k+".py") for k in fixture()}
+            for k,path in paths.items():
+                path.write_text(fixture()[k],encoding="utf8")
+            with patch.object(guard,"TARGETS",paths),\
+                 patch.object(guard,"BACKUPS",root/"private"),\
+                 patch.object(guard,"guard"),\
+                 patch.object(guard,"runtime_validate"),\
+                 patch.object(guard,"restart") as restart:
+                guard.operation("apply","202610280004")
+                # Simulate an interrupted multi-file write: only one file new.
+                paths["web"].write_text(fixture()["web"],encoding="utf8")
+                paths["pages"].write_text(fixture()["pages"],encoding="utf8")
+                restart.reset_mock()
+                guard.operation("recover","202610280004")
+                self.assertEqual(restart.call_count,1)
+                for k,path in paths.items():
+                    self.assertEqual(path.read_text("utf8"),fixture()[k])
+                guard.operation("recover","202610280004")
+                self.assertEqual(restart.call_count,1)
+
+    def test_recover_refuses_newer_edits_before_any_write(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            paths={k:root/(k+".py") for k in fixture()}
+            for k,path in paths.items():
+                path.write_text(fixture()[k],encoding="utf8")
+            with patch.object(guard,"TARGETS",paths),\
+                 patch.object(guard,"BACKUPS",root/"private"),\
+                 patch.object(guard,"guard"),\
+                 patch.object(guard,"runtime_validate"),\
+                 patch.object(guard,"restart") as restart:
+                guard.operation("apply","202610280005")
+                paths["web"].write_text(paths["web"].read_text("utf8")+"\n# concurrent edit\n",encoding="utf8")
+                before={k:path.read_bytes() for k,path in paths.items()}
+                restart.reset_mock()
+                with self.assertRaisesRegex(RuntimeError,"NEWER_SOURCE_EDIT"):
+                    guard.operation("recover","202610280005")
+                self.assertEqual(before,{k:path.read_bytes() for k,path in paths.items()})
+                restart.assert_not_called()
+
 if __name__=="__main__":
     unittest.main()
