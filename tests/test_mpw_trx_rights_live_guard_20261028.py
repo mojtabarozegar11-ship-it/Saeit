@@ -180,7 +180,7 @@ class GuardTests(unittest.TestCase):
             original_atomic=guard.atomic
             def concurrent_edit(path,raw,expected=None):
                 if path==paths["context"]:
-                    path.write_text(path.read_text("utf8")+"\\n# another agent edit\\n",encoding="utf8")
+                    path.write_text(path.read_text("utf8")+"\n# another agent edit\n",encoding="utf8")
                 return original_atomic(path,raw,expected)
             with patch.object(guard,"TARGETS",paths),\
                  patch.object(guard,"BACKUPS",root/"private"),\
