@@ -215,11 +215,24 @@ def publish(stage,run):
         rollback_files(stage,m,run)
         raise
 
+def verify_protected_pages(protected):
+    """Refuse linked protected routes, including links in intermediate folders."""
+    assert ROOT.is_dir() and not ROOT.is_symlink()
+    allowed={'.htaccess','agriculture/index.html','research/index.html','store/index.html'}
+    for rel,h in protected.items():
+        assert rel in allowed,'unexpected protected route'
+        parts=Path(rel).parts
+        assert not any((ROOT.joinpath(*parts[:n])).is_symlink()
+                       for n in range(1,len(parts)+1)),'linked protected route: '+rel
+        path=ROOT/rel
+        assert path.is_file() and not path.is_symlink(),'protected route missing: '+rel
+        assert digest(path.read_bytes())==h,'protected file changed: '+rel
+
 def verify(stage):
     m=metadata(stage);validate_release_manifest(m);assert m['phase']=='published';live_card_check()
     for name,h in m['new'].items():assert digest((GAME/name).read_bytes())==h,'new game file hash mismatch: '+name
     assert digest((GAME/'.htaccess').read_bytes())==m['route']
-    for rel,h in m['protected'].items():assert digest((ROOT/rel).read_bytes())==h,'protected file changed: '+rel
+    verify_protected_pages(m['protected'])
     print('RAMADAN_WEB_CLIENT_AND_PROTECTED_PAGES=PASS')
 
 def rollback_files(stage,m,run):
