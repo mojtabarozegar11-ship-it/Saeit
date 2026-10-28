@@ -4,7 +4,12 @@ import re
 import unittest
 from pathlib import Path, PurePosixPath
 
-from deploy import ASSETS
+import importlib.util
+_SPEC = importlib.util.spec_from_file_location(
+    "ramadan_runtime_deploy", Path(__file__).with_name("deploy.py"))
+_MODULE = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MODULE)
+ASSETS = _MODULE.ASSETS
 
 ROOT = Path(__file__).resolve().parent
 IMPORTS = re.compile(
