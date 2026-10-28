@@ -60,6 +60,8 @@ def prepare(stage):
     new={name:inputs[name].read_bytes() for name in ASSETS}
     assert len(new['index.html'])>1000 and MARK.encode() in new['index.html']
     assert b'RamadanWarDebug' in new['game.js'] and b'createEngine' in new['game.js'] and b'./game.js' in new['index.html'] and b'./game.css' in new['index.html']
+    assert b'./input-guard.mjs' in new['game.js']
+    assert all(('./'+name).encode() in new['game.js'] for name in ['upgrade-policy.mjs','moj1-commerce-policy.mjs','missile-targets.mjs','enemy-action-policy.mjs','save-validation.mjs'])
     assert b'./engine3d.js' in new['game.js'] and b'./three.module.js' in new['engine3d.js'] and b'./three.core.min.js' in new['three.module.js'] and len(new['three.module.js'])>300000 and len(new['three.core.min.js'])>300000
     assert b'The MIT License' in new['THREE-LICENSE.txt']
     assert b'CC BY 4.0' in new['ASSET-CREDITS.md'] and b'BAMEN' in new['ASSET-CREDITS.md'] and b'Naudaff3D' in new['ASSET-CREDITS.md']
