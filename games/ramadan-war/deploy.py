@@ -6,7 +6,7 @@ import hashlib, json, os, re, sys
 ROOT=Path('/home/zomorod2/public_html')
 ROW='ZM-R25'; GAME_ID='ZM-R25-GAME-RAMADAN-WAR-20261022'; GAME=ROOT/'ramadan-war'
 MARK='ZM-RAMADAN-WAR-WEB-CARD-20261022'
-ASSETS=['index.html','game.js','game.css','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt','ASSET-CREDITS.md','weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-sniper-desert-v2.webp','scene-night.webp','scene-airbase.webp','soldier-rigged-ccby.glb','m24-sniper-ccby.glb','arms_basecolor.webp','arms_normal.webp','three-addons/loaders/GLTFLoader.js','three-addons/utils/BufferGeometryUtils.js','three-addons/utils/SkeletonUtils.js','three-addons/libs/meshopt_decoder.module.js']
+ASSETS=['index.html','game.js','game.css','upgrade-policy.mjs','moj1-commerce-policy.mjs','input-guard.mjs','missile-targets.mjs','enemy-action-policy.mjs','save-validation.mjs','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt','ASSET-CREDITS.md','weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-sniper-desert-v2.webp','scene-night.webp','scene-airbase.webp','soldier-rigged-ccby.glb','m24-sniper-ccby.glb','arms_basecolor.webp','arms_normal.webp','three-addons/loaders/GLTFLoader.js','three-addons/utils/BufferGeometryUtils.js','three-addons/utils/SkeletonUtils.js','three-addons/libs/meshopt_decoder.module.js']
 
 def digest(data): return hashlib.sha256(data).hexdigest()
 def atomic(path,data,run):
