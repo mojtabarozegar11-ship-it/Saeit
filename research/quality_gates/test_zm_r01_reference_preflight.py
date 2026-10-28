@@ -7,7 +7,7 @@ import pathlib
 import tempfile
 import unittest
 
-from zm_r01_preflight import GateError, check_gtf, fasta_contigs, valid_raw_integer_count, check_count_matrix
+from zm_r01_preflight import GateError, check_gtf, fasta_contigs, valid_raw_integer_count, check_count_matrix, validate_refseq_accession
 
 
 class ReferenceIntegrityTests(unittest.TestCase):
@@ -20,6 +20,14 @@ class ReferenceIntegrityTests(unittest.TestCase):
         p = self.root / name
         p.write_text(contents, encoding='utf-8')
         return p
+
+    def test_refseq_versioned_gcf_accepted(self):
+        self.assertEqual(validate_refseq_accession('GCF_000001234.2'), 'GCF_000001234.2')
+
+    def test_refseq_rejects_genbank_and_unversioned(self):
+        for accession in ('GCA_000001234.2', 'GCF_000001234', 'GCF_fake.2'):
+            with self.subTest(accession=accession), self.assertRaisesRegex(GateError, 'RefSeq'):
+                validate_refseq_accession(accession)
 
     def test_fasta_contig_lengths(self):
         p = self.file('ref.fa', '>chr1 description\nACGTRYSWKMBDHVN\n>chr2\nacgt\n')
