@@ -67,6 +67,39 @@ jobs:
           chmod 600 "$d/config"
           source_root=/home/githubops/factory-runtime/private/autonomous-product-cycle/digital-products/farm_enterprise_economics
           ssh -F "$d/config" saeit-vps "test -s '$source_root/manufacturing_manifest.json' && test -s '$source_root/farm_enterprise_economics-internal-qa.zip' && test ! -L '$source_root/manufacturing_manifest.json' && test ! -L '$source_root/farm_enterprise_economics-internal-qa.zip'"
+          ssh -F "$d/config" saeit-vps "python3 - '$source_root' <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          manifest_path=root/"manufacturing_manifest.json"
+          archive=root/"farm_enterprise_economics-internal-qa.zip"
+          doc=json.loads(manifest_path.read_text(encoding="utf8"))
+          if (not isinstance(doc,dict) or doc.get("recipe")!="farm_enterprise_economics"
+                  or doc.get("qa_status")!="passed"
+                  or doc.get("commercial_status")!="private_internal_qa_pass_not_published"
+                  or doc.get("owner_publication_approval") is not False
+                  or doc.get("public_listing_enabled") is not False
+                  or doc.get("price") is not None):
+              raise SystemExit("PREVIEW_SOURCE_MANIFEST_POLICY_INVALID")
+          digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+          if doc.get("artifact_sha256")!=digest:
+              raise SystemExit("PREVIEW_SOURCE_HASH_MISMATCH")
+          ledger=root.parent/"qa-rework"/"farm_enterprise_economics"/"ledger.json"
+          if ledger.is_symlink():
+              raise SystemExit("PREVIEW_REWORK_LEDGER_UNSAFE")
+          if ledger.is_file():
+              state=json.loads(ledger.read_text(encoding="utf8"))
+              history=state.get("history")
+              if (state.get("schema")!="saeit.factory.qa-rework.v1"
+                      or state.get("current_status")!="technical_qa_pass_only_owner_and_content_review_pending"
+                      or not isinstance(history,list) or not history
+                      or not isinstance(history[-1],dict)
+                      or history[-1].get("status")!="technically_recovered"):
+                  raise SystemExit("PREVIEW_PRODUCT_BLOCKED_BY_REWORK")
+          print("FACTORY_PREVIEW_MANIFEST_AND_REWORK_STATE=PASS")
+          print("FACTORY_PREVIEW_ARTIFACT_BYTES="+str(archive.stat().st_size))
+          PY
+          "
           scp -q -F "$d/config" "saeit-vps:$source_root/manufacturing_manifest.json" "$d/manufacturing_manifest.json"
           scp -q -F "$d/config" "saeit-vps:$source_root/farm_enterprise_economics-internal-qa.zip" "$d/farm_enterprise_economics-internal-qa.zip"
           python3 - "$d" <<'PY'
