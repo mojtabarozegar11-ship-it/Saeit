@@ -1,7 +1,7 @@
 # MR-2026-001 — corrected source-to-claim scientific author decision pack (C78)
 **Internal project identifier only:** MR-2026-001. **Date:** 2026-10-28. **Status:** READY_FOR_REVIEW, **NOT** approved for journal submission, publication, public CV claims or external distribution as an accepted paper.
 
-**Working manuscript:** [C76 v8, source-internally triangulated and positive-evidence audited](MR-2026-001_C76_CAR_INFLUENCE_CLAIM_DENOMINATOR_AUDIT_MANUSCRIPT_2026-10-28.md). This pack is the substantive author's source-adjudication aid; it is **not** an independent human review. The intended sole human author must actually review the sources and make substantive scholarly decisions before authorship or submission.
+**Working manuscript:** [C76 v9, source-internally triangulated and abstract-level comparator audited](MR-2026-001_C76_CAR_INFLUENCE_CLAIM_DENOMINATOR_AUDIT_MANUSCRIPT_2026-10-28.md). This pack is the substantive author's source-adjudication aid; it is **not** an independent human review. The intended sole human author must actually review the sources and make substantive scholarly decisions before authorship or submission.
 
 ## Material correction already incorporated in the manuscript
 
@@ -65,6 +65,22 @@ The earlier C76 v2 manuscript **overstated three Car (2012) numerical contradict
 - **Car:** Independent semantic mapping (post-Table-6 interview descriptions) and arithmetic triangulation now jointly support a **source-internal**, not publisher-authenticated, Table 6 attribution. Five descriptions, five table rows; 19/41, 30/41, 33/41 reproduce the published sequence. The 40/41 discrepancy and Table 5 contradictions are not repaired. Never equate self-assessed influence with objectively measured compliance.
 - **Cvejić:** Separate the 2016 35 interested farms, 38.5 ha under signed participation, 2019 66% first-experience reports and literal '46 farmers' e-mail statement, and 2020 83%/71% telephone feedback. The text provides no verified longitudinal respondent crosswalk or per-question N. The 25% water-saving scenario is modeled, not realized conservation.
 - **Next author decision:** Accept the narrowly qualified Car reconstruction and preserve the 2019/2020 Cvejić cohort uncertainty, or exclude the disputed quantities entirely. An authenticated source correction would supersede this internal reconstruction.
+
+## C83 comparator adjudication: Lorite and Baroni (source-limited, author decision)
+
+**Distinct new source checks, not empirical observations:**
+
+| Published source and accessible level | Source-grounded unit and finding | Incorrect inference to exclude | Required author choice |
+|---|---|---|---|
+| [Lorite et al. 2012](https://ideas.repec.org/a/spr/waterr/v26y2012i8p2397-2419.html), bibliographic/publisher-derived abstract | Annual Relative Irrigation Supply (ARIS LIAS), applied irrigation volume versus LIAS-recommended seasonal volume, approximately 0.23 wheat/sunflower to 0.94 maize, heterogeneous farmers | Calling 0.23 or 0.94 'percentage of recommendation events implemented', attributing low ratio exclusively to refusal, or claiming independent causal water savings | Retain as **seasonal volumetric comparator only**; obtain full paper to verify applied-volume measurement, years, denominators and constraints |
+| [Baroni et al. 2019](https://onlinelibrary.wiley.com/doi/10.1002/ird.2337), original Wiley publisher abstract | Six scheduling **methods**, five/six agreeing on seasonal requirement, more disagreement on season and irrigation counts; user interviews qualitatively report rare implementation | Interpreting five/six as farmers adhering, treating seasonal-model agreement as event-level action or inventing a numerical compliance N | Retain as **prior implementation-gap evidence**, qualitative only; require full survey methods and linked action records before a rate |
+| [Elia et al. 2022](https://doi.org/10.17660/ActaHortic.2022.1335.81), publisher abstract previously screened; no new full-text access this cycle | Six commercial farms and DSS/grower-managed plots; authors' seasonal water and nitrogen contrasts | Treating seasonal plot contrast as verified delivery→receipt→action chain, randomization, or subsequent farmer adoption | Retain qualified author-reported seasonal contrast; full design and measurement required |
+
+**Author-ready passage for possible adoption:**
+
+> The source-level comparisons of Lorite et al. (2012) and Baroni et al. (2019) demonstrate that agreement between recommended and applied *seasonal water volumes*, agreement among irrigation models, and verified implementation of *individual actionable advice events* are different estimands. Lorite's reported annual relative irrigation-supply values (approximately 0.23–0.94 across crops) are ratios of seasonal volumes, not event-compliance percentages. Baroni's five-of-six agreement concerns six scheduling methods, not five of six growers following advice, and its rare-implementation conclusion is qualitative in the accessible publisher abstract. These reports therefore establish important prior art but do not supply an authenticated recommendation-delivery-receipt-action ledger for the proposed G/D/R/A protocol. Full original methods are needed for stronger behavioral or causal claims.
+
+**Gate:** Accept or revise the three-estimand separation in C76 v9 §5.4. Do not recode ARIS or five-of-six as G/D/R/A, and do not present this abstract-based adjudication as a completed full-methods review. No new DOI, human peer-review or author sign-off is claimed.
 
 ## Acceptance and reproducibility
 
