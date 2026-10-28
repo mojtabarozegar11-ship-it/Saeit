@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "as_of": "2026-10-24",
+  "schema_version": 2,
+  "as_of": "2026-10-28",
   "identity": {
     "display_name": "Mojtaba Roozegar",
     "persian_name": "مجتبی روزگار",
@@ -43,5 +43,58 @@
       "doi": null
     }
   ],
-  "accuracy_policy": "Only publisher-confirmed submissions with manuscript IDs count as submitted. Only article DOI or publisher records count as accepted/published. Public website essays are not counted as peer-reviewed journal papers."
+  "accuracy_policy": "Only publisher-confirmed submissions with manuscript IDs count as submitted. Only article DOI or publisher records count as accepted/published. Public website essays are not counted as peer-reviewed journal papers.",
+  "professional_profile": {
+    "residence": "Vancouver, British Columbia, Canada",
+    "summary": "Mojtaba Roozegar is a Vancouver-based scientific researcher, entrepreneur and executive. His primary work is applied research at the intersection of agricultural economics, farm management, organizational intelligence and digital systems. He currently leads MojPlayWin and continues managing Zomorod Melal Agro-Industry Company and selected business operations remotely.",
+    "current_roles": [
+      {
+        "title": "Chief Executive Officer",
+        "organization": "MojPlayWin",
+        "scope": "Current · Vancouver-based",
+        "description": "Leadership of digital ventures, applied research, educational initiatives, web products and organizational technology."
+      },
+      {
+        "title": "Chief Executive Officer / Remote Executive Management",
+        "organization": "Zomorod Melal Agro-Industry Company",
+        "scope": "Current · remotely directed from Canada",
+        "description": "Continuing strategic oversight of agricultural and industrial operations, production planning, research and business coordination previously managed in Iran."
+      }
+    ],
+    "previous_experience": "Previously based in Iran, with executive responsibilities at Zomorod Melal and additional activities in agribusiness, trading, jewelry and precious metals, carpets, and hospitality. Specific employment dates and company registrations are not asserted here.",
+    "specializations": [
+      "Scientific and interdisciplinary research",
+      "Agricultural economics and farm management",
+      "Agricultural production and resource efficiency",
+      "Organizational intelligence and process automation",
+      "Smart agriculture and AI-assisted decision support",
+      "Professional website and information-system development",
+      "Business strategy and applied economics"
+    ],
+    "teaching": "Organizer and presenter of business, agriculture, economics, management and digital-technology courses, classes and workshops; course titles, institutions and dates are recorded only when verified.",
+    "writing": "The owner reports authoring books, scientific articles and specialist educational materials. This profile distinguishes drafts and website writing from publisher-confirmed books and peer-reviewed journal publications.",
+    "official_links": [
+      {
+        "label": "Official Persian biography at Zomorod Melal",
+        "url": "https://zomorodmelal.ir/authors/mojtaba-rozegar/"
+      },
+      {
+        "label": "Official personal profile",
+        "url": "https://mojplaywin.com/mojtaba.roozegar/"
+      },
+      {
+        "label": "Research and writing",
+        "url": "https://mojplaywin.com/mojtaba.roozegar/blog/"
+      },
+      {
+        "label": "Professional contact",
+        "url": "https://mojplaywin.com/mojtaba.roozegar/contact/"
+      }
+    ],
+    "evidence_note": "Residence and professional activities are owner-reported; this résumé does not invent employment dates, licenses, teaching appointments, journal acceptance, publisher records or citation counts."
+  },
+  "seo": {
+    "title": "Mojtaba Roozegar | Scientific CV, Research & Executive Experience",
+    "description": "Mojtaba Roozegar: Vancouver-based researcher and MojPlayWin CEO, remotely managing Zomorod Melal. Agricultural economics, smart farming, training and web development."
+  }
 }
