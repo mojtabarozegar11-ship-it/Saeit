@@ -228,7 +228,7 @@ def check_sitemap() -> tuple[Check, int]:
                 and not parsed.path.startswith("//")
                 and not parsed.fragment
                 and url == url.strip()
-                and not any(char in url for char in "\\r\\n\\t")
+                and not any(char in url for char in (chr(13), chr(10), chr(9)))
             )
         except ValueError:
             trusted = False
