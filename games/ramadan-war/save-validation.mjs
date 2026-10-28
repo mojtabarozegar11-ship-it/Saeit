@@ -145,11 +145,22 @@ export function restoreRecoveryPickups(state, sites) {
         Math.abs(p.y-sites[p.spotIndex]?.[1])>=0.001)) return 0;
   let collected=state.objective.collectedSites;
   if (!Array.isArray(collected)) {
-    // A legacy save with partially missing pickups cannot identify which
-    // sites were already rewarded. Guessing re-mints earned points and may
-    // make an old save appear to progress while silently duplicating rewards.
-    // Leave it untouched; never overwrite a missing provenance ledger.
-    if (state.objective.done>0 && existing.length+state.objective.done!==3) return 0;
+    // Old saves did not track collected site IDs. Preserve their bounded,
+    // playable recovery path without fabricating an authoritative ledger:
+    // only the remaining 3-done pickups can be reconstructed, and rewards
+    // are granted solely when the player collects an item in the arena.
+    if (state.objective.done>0 && existing.length+state.objective.done!==3) {
+      let needed=Math.max(0,3-state.objective.done-existing.length),restored=0;
+      for (let i=0;i<sites.length && needed>0;i++) {
+        if (present.has(i)) continue;
+        const site=sites[i];
+        if (!Array.isArray(site)||site.length!==2||
+            !site.every(n=>typeof n==='number'&&Number.isFinite(n)&&n>=0&&n<=16)) continue;
+        state.pickups.push({x:site[0],y:site[1],type:'mission-intel',spotIndex:i,life:3600});
+        needed--;restored++;
+      }
+      return restored;
+    }
     collected=state.objective.done===0?[]:[0,1,2].filter(i=>!present.has(i));
   }
   if (collected.length!==state.objective.done || new Set(collected).size!==collected.length ||
