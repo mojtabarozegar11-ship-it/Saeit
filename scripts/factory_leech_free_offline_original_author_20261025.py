@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import stat
 import tempfile
 
 ORDER = "WO-26102501"
@@ -37,9 +38,21 @@ def digest(doc):
         separators=(",", ":")).encode("utf-8")).hexdigest()
 
 def safe_json(path, max_bytes=300000):
-    if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= max_bytes:
-        reject("MISSING_OR_UNSAFE_JSON_" + path.name)
-    obj = json.loads(path.read_text(encoding="utf-8"))
+    """Read a bounded regular JSON file from one opened inode, never a symlink."""
+    flags = (os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+             | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0))
+    try:
+        with os.fdopen(os.open(path, flags), "rb") as stream:
+            metadata = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(metadata.st_mode)
+                    or not 0 < metadata.st_size <= max_bytes):
+                reject("MISSING_OR_UNSAFE_JSON_" + path.name)
+            raw = stream.read(max_bytes + 1)
+        if not 0 < len(raw) <= max_bytes:
+            reject("MISSING_OR_UNSAFE_JSON_" + path.name)
+        obj = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("LEECH_ZERO_COST_MISSING_OR_UNSAFE_JSON_" + path.name) from exc
     if not isinstance(obj, dict):
         reject("NOT_JSON_OBJECT")
     return obj
