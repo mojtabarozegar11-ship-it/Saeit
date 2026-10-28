@@ -2,6 +2,7 @@
 
 No schema migrations, order/payment creation, or production database writes.
 """
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -11,7 +12,7 @@ from django.template.loader import render_to_string
 
 from core.academy_views import academy, education_course_detail, education_lesson
 from core.company_content_views import company_gallery
-from core.newsletter_views import newsletter_home, newsletter_detail
+from core.newsletter_views import newsletter_home, newsletter_detail, safe_json_ld
 from core.public_catalog_guard import missing_public_tables, mark_public_data_unavailable
 
 
@@ -96,6 +97,14 @@ class PublicCatalogTruthfulTemplateTests(SimpleTestCase):
             "media": [], "catalog_temporarily_unavailable": False,
         })
         self.assertIn("هنوز رسانه‌ای برای انتشار عمومی ثبت نشده است.", html)
+
+    def test_jsonld_cannot_break_out_of_script_tag(self):
+        hostile = "</script><img src=x onerror=alert(1)>&"
+        encoded = safe_json_ld({"headline": hostile, "description": "خبر واقعی"})
+        self.assertNotIn("</script>", encoded)
+        self.assertNotIn("<img", encoded)
+        self.assertIn("\\u003c", encoded)
+        self.assertEqual(json.loads(encoded)["headline"], hostile)
 
     def test_newsletter_degraded_does_not_claim_zero_stories_or_sources(self):
         html = render_to_string("core/newsletter.html", {
