@@ -157,7 +157,7 @@ jobs:
           fs=subprocess.run(["df","-T","/var/lib/mysql"],capture_output=True,text=True,timeout=10,check=True).stdout.splitlines()[-1].split()
           free_kb=int(fs[3])
           if fs[1]!="xfs" or free_kb<20000000: raise SystemExit("MYSQL_STORAGE_PREFLIGHT_FAILED")
-          stats={row.split("\t")[0]:row.split("\t") for row in query("SELECT TABLE_NAME,ENGINE,ROW_FORMAT,DATA_LENGTH,INDEX_LENGTH,CREATE_OPTIONS FROM information_schema.TABLES WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_NAME IN ('core_agenttask','core_factoryevidence')")}
+          stats={row.split("\t")[0]:row.split("\t") for row in query("SELECT TABLE_NAME,ENGINE,ROW_FORMAT,DATA_LENGTH,INDEX_LENGTH,COALESCE(NULLIF(CREATE_OPTIONS,''),'none') FROM information_schema.TABLES WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_NAME IN ('core_agenttask','core_factoryevidence')")}
           if set(stats)!={"core_agenttask","core_factoryevidence"} or any(x[1]!="InnoDB" for x in stats.values()): raise SystemExit("COMPRESSION_TABLE_SCOPE_MISMATCH")
           quota=subprocess.run(["uapi","--output=json","Quota","get_quota_info"],capture_output=True,text=True,timeout=20,check=True)
           qinfo=json.loads(quota.stdout).get("result",{}).get("data",{})
