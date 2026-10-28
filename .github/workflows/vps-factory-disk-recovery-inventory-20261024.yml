@@ -192,3 +192,5 @@ jobs:
           }
           print("FACTORY_STORAGE_INVENTORY="+json.dumps(status, sort_keys=True))
           PY
+
+# Read-only storage and preservation recheck authorized 2026-10-28.
