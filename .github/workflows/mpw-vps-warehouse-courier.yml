@@ -388,5 +388,16 @@ jobs:
         shell: bash
         run: |
           rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
-          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" "$RUNNER_TEMP/mpw-qa-feedback.json" "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl" "$RUNNER_TEMP/mpw-three-product-orders.json" "$RUNNER_TEMP/mpw-real-source-order-triage.jsonl"
+          # Never retain page fingerprints, final readback or rescue/admission
+          # payloads in the runner after a failed or successful private relay.
+          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" \
+            "$RUNNER_TEMP/mpw-qa-feedback.json" \
+            "$RUNNER_TEMP/mpw-qa-feedback-final.json" \
+            "$RUNNER_TEMP/mpw-qa-feedback.snapshot" \
+            "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl" \
+            "$RUNNER_TEMP/mpw-three-product-orders.json" \
+            "$RUNNER_TEMP/mpw-three-product-orders-rescue.json" \
+            "$RUNNER_TEMP/mpw-original-admission.jsonl" \
+            "$RUNNER_TEMP/mpw-rescue-admission.jsonl" \
+            "$RUNNER_TEMP/mpw-real-source-order-triage.jsonl"
 # Reconnect 2026-10-20: owner-requested bounded private warehouse/site receipts and three-workorder check; public release unchanged.
