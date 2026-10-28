@@ -195,6 +195,21 @@ jobs:
               except Exception as err: raise RuntimeError("Course artwork invalid XML") from err
               print("PERSONAL_COURSE_POSTER_DJANGO=PASS",course["slug"],flush=True)
           home=c.get("/mojtaba.roozegar/",secure=True)
+          from django.template.loader import get_template
+          target_template=get_template("personal_site/core/home.html")
+          print("COURSE_RENDER_DIAG status",home.status_code,"length",len(home.content),
+                "section_tags",home.content.count(b'mpw-four-course-posters-20261028'),
+                "card_tags",home.content.count(b'<article class="mpw-course-home-card"'),
+                "body_class",home.content[:250],flush=True)
+          print("COURSE_RENDER_DIAG template_origin",str(target_template.origin.name),
+                "template_has_posters",ID.encode() in
+                open(target_template.origin.name,"rb").read(),flush=True)
+          try:
+              from django.urls import resolve
+              rm=resolve("/mojtaba.roozegar/")
+              print("COURSE_RENDER_DIAG route",rm.view_name,flush=True)
+          except Exception as e:
+              print("COURSE_RENDER_DIAG route_error",type(e).__name__,flush=True)
           if home.status_code!=200 or home.content.count(('<section id="'+ID+'"').encode())!=1:
               raise RuntimeError("Four poster home section missing")
           if home.content.count(b'<article class="mpw-course-home-card"')!=4:
