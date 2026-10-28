@@ -42,31 +42,31 @@ class ScopedRollbackTests(unittest.TestCase):
         (self.stage / "old-game.js").write_bytes(self.old)
         self.metadata = {
             "old": {"game.js": digest(self.old)},
-            "new": {"game.js": digest(self.new), "new-asset.js": digest(b"new asset")},
+            "new": {"game.js": digest(self.new), "index.html": digest(b"new asset")},
         }
 
     def test_partial_release_restores_old_and_removes_only_new_asset(self):
         (self.game / "game.js").write_bytes(self.new)
-        (self.game / "new-asset.js").write_bytes(b"new asset")
+        (self.game / "index.html").write_bytes(b"new asset")
         deploy.rollback_files(self.stage, self.metadata, self.run)
         self.assertEqual((self.game / "game.js").read_bytes(), self.old)
-        self.assertFalse((self.game / "new-asset.js").exists())
+        self.assertFalse((self.game / "index.html").exists())
         self.assertEqual(self.protected.read_bytes(), b"protected home unchanged")
 
     def test_rollback_is_idempotent(self):
         (self.game / "game.js").write_bytes(self.new)
-        (self.game / "new-asset.js").write_bytes(b"new asset")
+        (self.game / "index.html").write_bytes(b"new asset")
         deploy.rollback_files(self.stage, self.metadata, self.run)
         deploy.rollback_files(self.stage, self.metadata, self.run)
         self.assertEqual((self.game / "game.js").read_bytes(), self.old)
-        self.assertFalse((self.game / "new-asset.js").exists())
+        self.assertFalse((self.game / "index.html").exists())
 
     def test_concurrent_unexpected_modifications_are_preserved(self):
         (self.game / "game.js").write_bytes(b"newer publisher's version")
-        (self.game / "new-asset.js").write_bytes(b"newer publisher's asset")
+        (self.game / "index.html").write_bytes(b"newer publisher's asset")
         deploy.rollback_files(self.stage, self.metadata, self.run)
         self.assertEqual((self.game / "game.js").read_bytes(), b"newer publisher's version")
-        self.assertEqual((self.game / "new-asset.js").read_bytes(), b"newer publisher's asset")
+        self.assertEqual((self.game / "index.html").read_bytes(), b"newer publisher's asset")
 
     def test_rollback_refuses_symlinked_asset(self):
         outside = self.root / "outside-game.js"
@@ -113,6 +113,47 @@ class ScopedRollbackTests(unittest.TestCase):
         deploy.atomic(path, self.new, self.run)
         self.assertEqual(path.read_bytes(), self.new)
         self.assertEqual(self.protected.read_bytes(), b"protected home unchanged")
+
+
+    def test_corrupt_backup_never_replaces_known_good_file(self):
+        (self.game / "game.js").write_bytes(self.new)
+        (self.stage / "old-game.js").write_bytes(b"corrupt backup")
+        with self.assertRaisesRegex(RuntimeError, "backup SHA-256 mismatch"):
+            deploy.rollback_files(self.stage, self.metadata, self.run)
+        self.assertEqual((self.game / "game.js").read_bytes(), self.new)
+
+    def test_bad_backup_does_not_prevent_removing_an_exact_new_asset(self):
+        (self.game / "game.js").write_bytes(self.new)
+        (self.game / "index.html").write_bytes(b"new asset")
+        (self.stage / "old-game.js").write_bytes(b"corrupt backup")
+        with self.assertRaisesRegex(RuntimeError, "backup SHA-256 mismatch"):
+            deploy.rollback_files(self.stage, self.metadata, self.run)
+        self.assertEqual((self.game / "game.js").read_bytes(), self.new)
+        self.assertFalse((self.game / "index.html").exists())
+
+    def test_symlinked_backup_is_rejected(self):
+        outside = self.root / "forged-backup"
+        outside.write_bytes(self.old)
+        (self.stage / "old-game.js").unlink()
+        (self.stage / "old-game.js").symlink_to(outside)
+        (self.game / "game.js").write_bytes(self.new)
+        with self.assertRaisesRegex(RuntimeError, "backup missing or linked"):
+            deploy.rollback_files(self.stage, self.metadata, self.run)
+        self.assertEqual((self.game / "game.js").read_bytes(), self.new)
+
+    def test_forged_manifest_cannot_delete_protected_sibling(self):
+        forged = {"old": {}, "new": {"../protected-home.html": digest(self.protected.read_bytes())}}
+        with self.assertRaisesRegex(RuntimeError, "unsafe release asset"):
+            deploy.rollback_files(self.stage, forged, self.run)
+        self.assertEqual(self.protected.read_bytes(), b"protected home unchanged")
+
+    def test_forged_manifest_cannot_delete_unrelated_game_file(self):
+        unrelated = self.game / "customer-content.txt"
+        unrelated.write_bytes(b"do not touch")
+        forged = {"old": {}, "new": {"customer-content.txt": digest(unrelated.read_bytes())}}
+        with self.assertRaisesRegex(RuntimeError, "unsafe release asset"):
+            deploy.rollback_files(self.stage, forged, self.run)
+        self.assertEqual(unrelated.read_bytes(), b"do not touch")
 
 
 if __name__ == "__main__":
