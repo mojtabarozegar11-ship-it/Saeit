@@ -76,12 +76,28 @@ const assert=require('node:assert/strict');
          const end = g.qaPosition();
          return Math.hypot(end.x-origin.x, end.y-origin.y);
        };
-       return {straight:run(['KeyW']), diagonal:run(['KeyW','KeyD'])};
+       return {straight:run(['KeyW']), diagonal:run(['KeyW','KeyD']), neutral:run(['KeyW','KeyS'])};
      });
      assert(speedCheck.straight > .1, 'keyboard forward motion must work');
      assert(speedCheck.diagonal > .1, 'keyboard diagonal motion must work');
      assert(speedCheck.diagonal <= speedCheck.straight * 1.06,
        'W+D must not gain a diagonal speed advantage: '+JSON.stringify(speedCheck));
+     assert(speedCheck.neutral<1e-8,'W+S must cancel rather than walking: '+JSON.stringify(speedCheck));
+     console.log('RAMADAN_OPPOSING_KEYS_NEUTRAL_PASS',v.name);
+     // Run actual game ticks without waiting in wall-clock time: continuous
+     // keyboard fire must resume after the magazine automatically reloads.
+     const heldReload=await page.evaluate(()=>{
+       const g=window.RamadanWarDebug;
+       g.start();
+       window.dispatchEvent(new KeyboardEvent('keydown',{code:'Space',bubbles:true,cancelable:true}));
+       for(let i=0;i<170;i++)g.tick(.04);
+       window.dispatchEvent(new KeyboardEvent('keyup',{code:'Space',bubbles:true,cancelable:true}));
+       const state=g.getState();
+       g.start(); // Reset gameplay for subsequent smoke assertions.
+       return {shots:state.shots,ammo:state.ammo};
+     });
+     assert(heldReload.shots>=9,'held fire must continue after automatic reload: '+JSON.stringify(heldReload));
+     console.log('RAMADAN_HELD_FIRE_AUTO_RELOAD_PASS',v.name);
      console.log('RAMADAN_REAL_DIAGONAL_SPEED_PASS', v.name);
 
    }
