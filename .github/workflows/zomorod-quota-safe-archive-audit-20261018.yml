@@ -116,3 +116,5 @@ jobs:
         if: always()
         shell: bash
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+
+# Owner-requested read-only backup and archive inventory, 2026-10-28.
