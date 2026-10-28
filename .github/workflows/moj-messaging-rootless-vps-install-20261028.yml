@@ -4,6 +4,7 @@ on:
     branches: [feature/private-messaging-bridge-20261028]
     paths:
       - '.github/workflows/moj-messaging-rootless-vps-install-20261028.yml'
+      - 'ops/messaging-bridge/user-install.sh'
 permissions:
   contents: read
   statuses: write
