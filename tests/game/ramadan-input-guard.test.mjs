@@ -152,7 +152,7 @@ test('tablet aiming and mouse drag cannot fire, while primary desktop click stil
     assert.equal(shouldFireCanvasClick(event,screen,width,gesture),expected,label);
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
   assert.match(game,/canvas\.addEventListener\('click',e=>\{const eligible=shouldFireCanvasClick\(e,screen,innerWidth,aimGesture\)/);
-  assert.match(game,/aimGesture\.moved=Math\.max\(aimGesture\.moved,Math\.hypot/);
+  assert.ok(game.includes('recordPointerGestureMovement(aimGesture,e);'), 'move/release displacement must use the shared guard');
   assert.ok(game.includes("function releaseGameInputs(){keys={};fireHeld=false;fireId=null;joyId=null;aimId=null;joyF=joyS=0;aimGesture=null"));
 });
 
