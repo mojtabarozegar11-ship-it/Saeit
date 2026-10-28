@@ -207,7 +207,7 @@ These locators do not imply unrestricted access to publisher originals. The ledg
 **Reproduce without source data:** `const t6={Small:11,Large:10,Significant:9,None:8,Marginal:3}; const n=Object.values(t6).reduce((a,b)=>a+b,0); [n,100*(t6.Large+t6.Significant)/n,100*(t6.Large+t6.Significant+t6.Small)/n,100*(t6.Large+t6.Significant+t6.Small+t6.Marginal)/n]` → [41,46.34146…,73.17073…,80.48780…]. Table 5 sum=74; printed total=72. This is independent arithmetic on reported aggregate counts, **not** original participant-level data or a human peer review.
 
 **Remaining source gates:** authenticate publisher-original Tables 5/6 and confirm the strong source-internal semantic Table 6 crosswalk with the authors or corrected version; resolve Table 6 40/41 and Table 5 74/72, Group 4/5 labels and 68% prose. Preserve exclusions on causal water savings, independently observed event adherence and survey prevalence until data support them.
-## 7.4. C81 independent semantic triangulation of Car Table 6 (new source-level adjudication)
+## 7.4. C81 within-source semantic crosswalk of Car Table 6 (new source-level adjudication)
 
 **Original locator:** [author-uploaded typeset text, pp. 140–142, Table 6 and the following Group 1–5 interview descriptions](https://www.researchgate.net/publication/257018309_Using_a_mobile_phone_Short_Messaging_Service_SMS_for_irrigation_scheduling_in_Australia_-_Farmers%27_participation_and_utility_evaluation). This is a published-text crosswalk, **not** participant-level verification, an erratum, or authenticated Elsevier page-image provenance.
 
