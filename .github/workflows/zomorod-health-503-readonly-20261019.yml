@@ -254,3 +254,4 @@ jobs:
       - name: Remove temporary SSH credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+# 2026-10-28: read-only rerun after reported intermittent mobile HTTP 500; no deployment.
