@@ -193,5 +193,3 @@ if __name__ == "__main__":
     except Exception as exc:
         print("PRUNE_FAILED=" + type(exc).__name__ + ":" + str(exc)[:150], flush=True)
         raise
-
-# Owner requested a current dry-run before retiring these verified prior-generation archives; 2026-10-28.
