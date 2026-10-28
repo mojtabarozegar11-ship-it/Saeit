@@ -172,8 +172,12 @@ import time
 from django.conf import settings
 db=settings.DATABASES["default"]
 assert "sqlite3" in db["ENGINE"], "MASTER_DB_BACKEND_UNEXPECTED"
-src=Path(db["NAME"]).resolve()
-assert src.exists() and src.is_file() and not src.is_symlink(), "MASTER_DB_MISSING"
+src=Path(db["NAME"])
+# Reject a linked database path *before* canonicalization: resolve() would
+# erase evidence that the source itself was a symlink.
+assert src.exists() and src.is_file(), "MASTER_DB_MISSING"
+assert not any(part.is_symlink() for part in (src, *src.parents)), "MASTER_DB_SYMLINK_PATH_REJECTED"
+src=src.resolve(strict=True)
 dst=Path(sys.argv[1])
 # Pre-create with private permissions and close SQLite connections explicitly.
 fd=os.open(dst,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
