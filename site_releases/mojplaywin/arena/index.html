@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#090c12">
+  <meta name="description" content="MOJ Casino Lounge: free casino-style entertainment and simulated sports picks. No real-money gambling, deposits, payouts or prizes.">
+  <title>MOJ CASINO LOUNGE | MojPlayWin</title>
+  <style>
+    :root{color-scheme:dark;--bg:#090c12;--panel:#111824;--panel2:#171f2e;--line:#364152;--gold:#dfbd7a;--soft:#a7b5cb;--white:#f6f4f0;--green:#62ddb5;--red:#e96c77}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(ellipse at 76% -10%,#34291f 0,transparent 38%),radial-gradient(ellipse at 7% 55%,#111d33 0,transparent 44%),var(--bg);color:var(--white);font-family:Inter,ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.6}
+    a{color:inherit;text-decoration:none}button{font:inherit;cursor:pointer}button:disabled{opacity:.38;cursor:not-allowed}button:focus-visible,a:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+    .shell{width:min(1180px,calc(100% - 40px));margin:auto}.topbar{background:#141923;border-bottom:1px solid #384152;padding:9px 20px;text-align:center;color:#e9cf98;font-size:.77rem;letter-spacing:.07em}
+    header{position:sticky;top:0;z-index:20;background:rgba(10,14,20,.88);backdrop-filter:blur(20px);border-bottom:1px solid rgba(223,189,122,.2)}
+    .header{min-height:80px;display:flex;align-items:center;justify-content:space-between;gap:16px}.mark{display:flex;align-items:center;gap:13px;font-weight:900;letter-spacing:.17em;font-size:.9rem}.seal{width:43px;height:43px;border:1px solid var(--gold);border-radius:50%;display:grid;place-items:center;color:var(--gold);font-size:1.35rem;box-shadow:0 0 25px #dfbd7a22}.mark small{display:block;font-size:.58rem;color:var(--soft);letter-spacing:.23em;font-weight:600}.header-right{display:flex;align-items:center;gap:24px}.header-right nav{display:flex;gap:21px;font-size:.84rem;color:#d5dce8}.header-right nav a:hover{color:var(--gold)}
+    .lang{border:1px solid #71644e;background:#1e211e;color:#f2d8a1;border-radius:6px;padding:8px 13px;font-size:.76rem}
+    .hero{padding:104px 0 78px;display:grid;grid-template-columns:1.2fr .8fr;align-items:center;gap:48px;min-height:580px}.eyebrow{font-size:.72rem;color:var(--gold);letter-spacing:.29em;font-weight:700;text-transform:uppercase}.hero h1{font-family:Georgia,'Times New Roman',serif;font-size:clamp(3.5rem,7vw,6.3rem);line-height:1.04;letter-spacing:-.06em;margin:18px 0 24px}.hero h1 em{font-weight:400;color:var(--gold)}.lead{font-size:1.06rem;color:#b8c5d6;max-width:580px}.buttons{display:flex;gap:12px;flex-wrap:wrap;margin-top:34px}.btn{border-radius:7px;padding:13px 20px;border:1px solid #7b6b53;color:var(--white);background:#1e2632;font-weight:700;font-size:.9rem;transition:transform .18s,filter .18s}.btn:hover{transform:translateY(-2px);filter:brightness(1.11)}.btn.primary{color:#171307;background:linear-gradient(135deg,#f2d9a2,#c99b53);border-color:transparent}.btn.outline{background:transparent}.btn.small{padding:9px 13px;font-size:.77rem}
+    .showcase{min-height:375px;position:relative;display:grid;place-items:center;border:1px solid #7b663b70;background:linear-gradient(145deg,#242018 0,#141b27 48%,#10161e 100%);border-radius:18px;box-shadow:0 25px 90px #0007;overflow:hidden}.showcase:before{content:'';position:absolute;inset:-40%;background:repeating-conic-gradient(from 0deg,#dfbd7a12 0deg 8deg,transparent 8deg 26deg);animation:revolve 80s linear infinite}.showcase:after{content:'';position:absolute;inset:14%;border:1px solid #d7b9774f;border-radius:50%;box-shadow:0 0 0 34px #bca16a12,0 0 0 76px #bca16a0b}.showcase-inner{position:relative;z-index:2;text-align:center}.showcase-icon{font-size:4.4rem;color:var(--gold);line-height:1}.showcase-inner strong{display:block;font-family:Georgia,serif;font-size:2.1rem;letter-spacing:.11em}.showcase-inner small{font-size:.75rem;letter-spacing:.3em;color:var(--gold)}
+    .status-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}.pill{font-size:.75rem;letter-spacing:.07em;color:#dfdfd5;border:1px solid #485367;border-radius:99px;padding:6px 12px;background:#19202acc}.pill b{color:var(--green)}
+    .section{padding:68px 0 88px}.section-head{max-width:760px;margin-bottom:35px}.section-head h2{font-family:Georgia,serif;font-size:clamp(2rem,4vw,3.4rem);letter-spacing:-.035em;margin:5px 0 10px}.section-head p{color:var(--soft);margin:0}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.card{min-height:325px;padding:28px;border:1px solid #394454;border-radius:15px;background:linear-gradient(153deg,#192333,#101721 80%);position:relative;overflow:hidden}.card:before{content:'';position:absolute;right:-36px;top:-40px;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,#d5ac5f21,transparent 70%)}.card-title{display:flex;align-items:center;justify-content:space-between;gap:8px}.card h3{margin:0;font-size:1.45rem;font-family:Georgia,serif}.icon{color:var(--gold);font-size:1.5rem}.card p{color:var(--soft);font-size:.87rem;max-width:420px}.gamearea{margin-top:21px;border-top:1px solid #354052;padding-top:18px}.control{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.result{min-height:56px;padding-top:15px;font-size:.88rem;color:#e6dcbe}.result b{color:var(--gold)}.num{font-family:Georgia,serif;font-size:1.8rem;color:var(--gold);margin-right:10px}.cardsline{font-size:1.15rem;letter-spacing:.12em;min-height:28px}.subresult{color:#a5b5c9;font-size:.8rem;min-height:25px}.slot-display{font-size:2rem;letter-spacing:.5em;white-space:nowrap}.pick-options{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}.choice{padding:8px 13px;border:1px solid #657181;border-radius:7px;background:#252d3b;color:#f9f7f4}.choice:focus,.choice.active{background:#e1bf7a;color:#161714;border-color:#e1bf7a}.divider{height:1px;background:linear-gradient(90deg,transparent,#a98b58,transparent);margin:12px 0}
+    .notice{background:#101b25;border-top:1px solid #324353;border-bottom:1px solid #324353;padding:42px 0}.notice-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px}.notice h3{margin:0 0 8px;font-family:Georgia,serif;font-size:1.65rem}.notice p,.notice li{font-size:.88rem;color:#b0c0ce}.notice ul{padding-left:20px}footer{padding:40px 0 55px;color:#9aabba;font-size:.79rem}.footer-row{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap}.foot-brand{color:var(--gold);font-weight:800;letter-spacing:.12em}.foot-links{display:flex;gap:18px;flex-wrap:wrap}
+    .gate{position:fixed;inset:0;z-index:99;background:#03070ce8;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(16px)}.gate[hidden]{display:none}.gatebox{max-width:485px;width:100%;border:1px solid #b79a61;background:linear-gradient(135deg,#192231,#10131b);box-shadow:0 30px 100px #000b;padding:38px;border-radius:16px;text-align:center}.gatebox .seal{margin:auto;width:60px;height:60px;font-size:2rem}.gatebox h2{font-family:Georgia,serif;font-size:2rem;line-height:1.2;margin:20px 0 11px}.gatebox p{color:#b4c2d3;font-size:.91rem}.gate-actions{display:flex;gap:10px;margin-top:25px;justify-content:center;flex-wrap:wrap}.gate-error{color:#f2a4ab;min-height:18px;font-size:.83rem}.skip{position:absolute;left:-9999px}.skip:focus{left:10px;top:10px;z-index:100;background:white;color:black;padding:8px}
+    [dir=rtl] body{font-family:Tahoma,'Segoe UI',sans-serif}[dir=rtl] .hero h1,[dir=rtl] .section-head h2,[dir=rtl] .card h3,[dir=rtl] .notice h3,[dir=rtl] .gatebox h2{font-family:Tahoma,'Segoe UI',sans-serif;letter-spacing:0}[dir=rtl] .notice ul{padding-right:20px;padding-left:0}[dir=rtl] .hero{direction:rtl}
+    @keyframes revolve{to{transform:rotate(360deg)}}@media(max-width:890px){.hero{grid-template-columns:1fr;padding:65px 0}.showcase{min-height:275px}.header-right nav{display:none}.cards{grid-template-columns:1fr}.notice-grid{grid-template-columns:1fr;gap:15px}}@media(max-width:520px){.shell{width:min(100% - 28px,1180px)}.hero h1{font-size:3.4rem}.hero{gap:27px}.card{padding:20px}.showcase{min-height:220px}.showcase-inner strong{font-size:1.6rem}.topbar{font-size:.64rem}.mark{font-size:.76rem}.gatebox{padding:24px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.showcase:before{animation:none}.btn{transition:none}}
+  </style>
+  <style>
+    .wide-card{grid-column:1/-1}.tabletop-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.tabletop-panel{min-width:0;border:1px solid #394454;border-radius:15px;background:linear-gradient(145deg,#172132,#0c141f);padding:24px}.tabletop-panel h3{font-family:Georgia,serif;color:#f4ddac;font-size:1.45rem;margin:0 0 8px}.tabletop-panel p{font-size:.85rem;color:var(--soft)}.board-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:15px 0}.board-status{border-top:1px solid #394454;margin-top:14px;padding-top:12px;color:#e5d9b9;min-height:45px;font-size:.86rem}.chess-board{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));width:min(100%,520px);border:5px solid #c5a365;border-radius:5px;overflow:hidden}.chess-cell{width:100%;aspect-ratio:1;border:0;border-radius:0;color:#171b20;display:grid;place-items:center;background:#e6d4a9;font-size:clamp(1.1rem,3.8vw,2.25rem);cursor:pointer}.chess-cell:nth-child(16n + 2),.chess-cell:nth-child(16n + 4),.chess-cell:nth-child(16n + 6),.chess-cell:nth-child(16n + 8),.chess-cell:nth-child(16n + 9),.chess-cell:nth-child(16n + 11),.chess-cell:nth-child(16n + 13),.chess-cell:nth-child(16n + 15){background:#76918b}.chess-cell.selected{box-shadow:inset 0 0 0 4px #fdc751}.chess-cell.legal{box-shadow:inset 0 0 0 4px #45d6a7}.chess-cell:focus-visible,.back-point:focus-visible,.memory-tile:focus-visible{outline:3px solid #ffee8c;outline-offset:-3px;z-index:1}.chess-cell:disabled{cursor:default;opacity:1}.back-board-scroll{max-width:100%;overflow-x:auto}.back-board{display:grid;grid-template-columns:repeat(12,minmax(47px,1fr));width:max(100%,660px);border:4px solid #c3a369;border-radius:5px;gap:2px;background:#413224;padding:3px}.back-point{min-height:125px;border:0;border-radius:3px;background:#b08059;color:#fff1dc;font-size:.8rem;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;padding:5px 1px}.back-point:nth-child(2n){background:#5d4434}.back-point.selected{box-shadow:inset 0 0 0 3px #f0d279}.back-point.target{box-shadow:inset 0 0 0 3px #65dfb1}.checker-chip{display:grid;place-items:center;min-width:25px;height:25px;border-radius:50%;border:2px solid #655334;font-weight:900;font-size:.85rem;color:#1b2025;background:#f1e8d9}.checker-chip.dark{background:#1e2938;color:#f3e5c9;border-color:#d6b777}.memory-board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;max-width:400px}.memory-tile{aspect-ratio:1;border:1px solid #ab956a;border-radius:6px;background:#283750;color:#ebd8ab;font-size:1.45rem;cursor:pointer}.memory-tile.found{background:#305749}.wheel-container{display:flex;align-items:center;gap:24px;flex-wrap:wrap}.luck-wheel{width:150px;height:150px;border:6px solid #dfbd7a;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#db765c 0 60deg,#e1c075 60deg 120deg,#6892b5 120deg 180deg,#8c78ab 180deg 240deg,#69b494 240deg 300deg,#bf7f99 300deg 360deg);box-shadow:0 0 0 5px #202530,inset 0 0 15px #0008;transition:transform 1.35s cubic-bezier(.18,.7,.2,1);position:relative}.luck-wheel:before{content:'▲';position:absolute;top:-20px;color:#eec47d;font-size:1.1rem}.luck-wheel:after{content:'✦';color:#fff;font-size:2.5rem;text-shadow:0 0 10px #000}.mini-dice{display:inline-flex;background:#f0e2bd;color:#141b27;border-radius:5px;padding:7px;min-width:36px;min-height:36px;align-items:center;justify-content:center;font-size:1.4rem;font-weight:800;margin:3px}.game-kicker{font-size:.75rem;letter-spacing:.13em;color:var(--gold);text-transform:uppercase}.arena-spacer{margin-top:24px}@media(max-width:900px){.tabletop-grid{grid-template-columns:1fr}.tabletop-panel{padding:18px}}@media(prefers-reduced-motion:reduce){.luck-wheel{transition:none}}
+  </style>
+  <style>
+    .memory-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;max-width:440px;margin:12px 0}
+    .memory-tile.revealed{background:#455d61}.memory-tile:disabled{cursor:default;opacity:1}
+    .card-showdown{display:flex;min-height:55px;align-items:center;flex-wrap:wrap;gap:8px;margin:14px 0;color:#f1deb0;font-size:1.15rem;letter-spacing:.03em}
+    .playing-card{font-size:1.1rem;min-width:49px;padding:12px}
+    .back-point .checker-chip{flex:0 0 25px;width:25px}
+    .tabletop-panel .btn:disabled{opacity:.42;cursor:default}
+    @media(max-width:600px){.chess-cell{font-size:clamp(1.25rem,6vw,2rem)}.tabletop-panel h3{font-size:1.25rem}.back-board{width:660px}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#casino-floor">Skip to games</a>
+  <div class="topbar" data-en="FREE-PLAY ENTERTAINMENT ONLY · NO REAL-MONEY BETTING · NO DEPOSITS OR PAYOUTS" data-fa="فقط سرگرمی رایگان · بدون شرط‌بندی پول واقعی · بدون واریز و برداشت">FREE-PLAY ENTERTAINMENT ONLY · NO REAL-MONEY BETTING · NO DEPOSITS OR PAYOUTS</div>
+  <header><div class="shell header"><a class="mark" href="https://mojplaywin.com/" aria-label="MojPlayWin home"><span class="seal">◆</span><span>MOJ CASINO <small>LOUNGE BY MOJPLAYWIN</small></span></a><div class="header-right"><nav><a href="#casino-floor" data-en="Casino Floor" data-fa="بخش کازینو">Casino Floor</a><a href="#sports" data-en="Sports Picks" data-fa="پیش‌بینی ورزشی">Sports Picks</a><a href="#rules" data-en="Rules & Safety" data-fa="قوانین و ایمنی">Rules & Safety</a></nav><label class="skip" for="language">Language</label><select class="lang" id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option></select></div></div></header>
+  <main>
+    <section class="hero shell"><div><div class="eyebrow" data-en="A PRIVATE WORLD OF PLAY" data-fa="جهانی ویژه برای سرگرمی">A PRIVATE WORLD OF PLAY</div><h1 data-en="The thrill.<br><em>Without the wager.</em>" data-fa="هیجان بازی.<br><em>بدون شرط‌بندی مالی.</em>">The thrill.<br><em>Without the wager.</em></h1><p class="lead" data-en="A premium destination for casino-inspired entertainment, strategy and simulated sports predictions. Play the experience, never risk your money." data-fa="فضایی ممتاز برای سرگرمی‌های الهام‌گرفته از کازینو، راهبرد و پیش‌بینی ورزشی شبیه‌سازی‌شده؛ بدون به خطر انداختن پول.">A premium destination for casino-inspired entertainment, strategy and simulated sports predictions. Play the experience, never risk your money.</p><div class="buttons"><a class="btn primary" href="#casino-floor" data-en="Enter the Casino Floor ↗" data-fa="ورود به بخش کازینو ←">Enter the Casino Floor ↗</a><a class="btn outline" href="#sports" data-en="Explore Sports Picks" data-fa="پیش‌بینی ورزشی">Explore Sports Picks</a></div><div class="status-row"><span class="pill">21+ ONLY</span><span class="pill"><b>●</b> FREE PLAY</span><span class="pill">NO CASH VALUE</span></div></div><div class="showcase" aria-hidden="true"><div class="showcase-inner"><div class="showcase-icon">♠</div><strong>MOJ CASINO</strong><small>PRIVATE LOUNGE</small></div></div></section>
+    <div class="shell"><div class="divider"></div></div>
+    <section class="section shell" id="casino-floor"><div class="section-head"><div class="eyebrow" data-en="THE CASINO FLOOR" data-fa="بخش کازینو">THE CASINO FLOOR</div><h2 data-en="Thirty-seven games in one lounge" data-fa="سی‌وهفت بازی سرگرمی در یک صفحه">Thirty-seven games in one lounge</h2><p data-en="All outcomes are simulated locally in your browser. No chips, money, virtual currency, prizes or real-world sports wagers are involved." data-fa="تمام نتیجه‌ها در مرورگر شبیه‌سازی می‌شوند. هیچ پول، اعتبار قابل خرید، ارز مجازی، جایزه یا شرط‌بندی روی مسابقه واقعی وجود ندارد.">All outcomes are simulated locally in your browser. No chips, money, virtual currency, prizes or real-world sports wagers are involved.</p></div><div class="cards" id="game-grid">
+      <article class="card" aria-labelledby="roulette-title"><div class="card-title"><h3 id="roulette-title" data-en="European Roulette" data-fa="رولت اروپایی">European Roulette</h3><span class="icon">◎</span></div><p data-en="Choose red or black, then watch a simulated wheel outcome. Purely for fun—no stakes." data-fa="قرمز یا مشکی را انتخاب کنید و نتیجه چرخ شبیه‌سازی‌شده را ببینید؛ بدون مبلغ شرط.">Choose red or black, then watch a simulated wheel outcome. Purely for fun—no stakes.</p><div class="gamearea"><div class="control"><button type="button" class="btn small" data-roulette="red" data-en="Choose Red" data-fa="انتخاب قرمز">Choose Red</button><button type="button" class="btn small" data-roulette="black" data-en="Choose Black" data-fa="انتخاب مشکی">Choose Black</button></div><div class="result" id="roulette-result" role="status" aria-live="polite">Choose a colour to spin.</div></div></article>
+      <article class="card" aria-labelledby="blackjack-title"><div class="card-title"><h3 id="blackjack-title" data-en="Blackjack Practice" data-fa="تمرین بلک‌جک">Blackjack Practice</h3><span class="icon">♣</span></div><p data-en="Practice hitting or standing against a virtual dealer. No wagers, currency or redeemable scores." data-fa="در برابر کارت‌پخش‌کن مجازی کارت بگیرید یا توقف کنید؛ بدون شرط مالی و امتیاز نقدشونده.">Practice hitting or standing against a virtual dealer. No wagers, currency or redeemable scores.</p><div class="gamearea"><div class="subresult" id="dealer-label">Dealer</div><div class="cardsline" id="dealer-cards">—</div><div class="subresult" id="player-label">Your hand</div><div class="cardsline" id="player-cards">—</div><div class="control" style="margin-top:14px"><button class="btn small primary" type="button" id="deal" data-en="New Hand" data-fa="دست جدید">New Hand</button><button class="btn small" type="button" id="hit" disabled data-en="Hit" data-fa="کارت بگیر">Hit</button><button class="btn small" type="button" id="stand" disabled data-en="Stand" data-fa="توقف">Stand</button></div><div class="result" id="blackjack-result" role="status" aria-live="polite">Select New Hand to begin.</div></div></article>
+      <article class="card" aria-labelledby="slots-title"><div class="card-title"><h3 id="slots-title" data-en="Symbol Reels" data-fa="چرخ نمادها">Symbol Reels</h3><span class="icon">✦</span></div><p data-en="Spin three decorative reels. Matching symbols are an animation result, never a win of value." data-fa="سه ستون نماد را بچرخانید. یکسان شدن نمادها فقط نتیجه سرگرمی است و جایزه‌ای ندارد.">Spin three decorative reels. Matching symbols are an animation result, never a win of value.</p><div class="gamearea"><div class="slot-display" id="slot-display" aria-label="Slot symbols">◆ ♠ ★</div><button class="btn small primary" type="button" id="spin" data-en="Spin for Fun" data-fa="چرخش رایگان">Spin for Fun</button><div class="result" id="slot-result" role="status" aria-live="polite">Free play. No payouts.</div></div></article>
+      <article class="card" id="sports" aria-labelledby="sports-title"><div class="card-title"><h3 id="sports-title" data-en="Virtual Sports Pick'em" data-fa="پیش‌بینی ورزشی مجازی">Virtual Sports Pick'em</h3><span class="icon">◉</span></div><p data-en="Pick an outcome for a fictional match. Results are random simulations, not real sports scores, betting odds or financial predictions." data-fa="نتیجه یک مسابقه خیالی را انتخاب کنید. نتایج تصادفی و شبیه‌سازی‌شده هستند و ارتباطی با مسابقه واقعی یا ضرایب شرط‌بندی ندارند.">Pick an outcome for a fictional match. Results are random simulations, not real sports scores, betting odds or financial predictions.</p><div class="gamearea"><strong data-en="North City vs South United" data-fa="شهر شمالی در برابر جنوب متحد">North City vs South United</strong><div class="pick-options"><button class="choice" data-pick="0" data-en="North" data-fa="شمال">North</button><button class="choice" data-pick="1" data-en="Draw" data-fa="مساوی">Draw</button><button class="choice" data-pick="2" data-en="South" data-fa="جنوب">South</button></div><div class="result" id="sports-result" role="status" aria-live="polite">Make a free pick to reveal a simulated outcome.</div></div></article>
+    </div></section>
+    <section class="section shell" id="classic-tables"><div class="section-head"><div class="eyebrow" id="classic-eyebrow">CLASSIC TABLES & CARDS</div><h2 id="classic-heading">Chess, Backgammon and Card Games</h2><p id="classic-lead">Local two-player table games and interactive card challenges. No stakes, financial prizes or transferable points.</p></div><div class="tabletop-grid" id="classic-game-grid"></div></section>
+    <section class="section shell" id="dice-festival"><div class="section-head"><div class="eyebrow" id="dice-eyebrow">DICE & FORTUNE</div><h2 id="dice-heading">Fifteen Additional Dice & Chance Games</h2><p id="dice-lead">Play different rules and challenges, free of charge. All draws are simulated in your browser.</p></div><div class="cards" id="dice-game-grid"></div></section>
+    <section class="notice" id="rules"><div class="shell notice-grid"><div><h3 data-en="Entertainment, not gambling" data-fa="سرگرمی، نه قمار پول واقعی">Entertainment, not gambling</h3><p data-en="This page offers only free casino-style simulations. It does not operate a sportsbook or licensed gambling service. No money deposits, paid plays, purchaseable credits, withdrawals, valuable prizes, wallet links or token rewards are available." data-fa="این صفحه فقط شبیه‌سازی‌های رایگان ارائه می‌کند؛ نه شرط‌بندی ورزشی واقعی و نه خدمات قمار دارای مجوز. هیچ واریز، بازی پولی، اعتبار قابل خرید، برداشت، جایزه دارای ارزش، اتصال کیف پول یا پاداش توکنی وجود ندارد.">This page offers only free casino-style simulations. It does not operate a sportsbook or licensed gambling service. No money deposits, paid plays, purchaseable credits, withdrawals, valuable prizes, wallet links or token rewards are available.</p></div><div><h3 data-en="Important access rules" data-fa="قوانین مهم دسترسی">Important access rules</h3><ul><li data-en="Intended for adults 21 and older; age confirmation is self-declared and not formal identity verification." data-fa="ویژه افراد ۲۱ سال به بالا؛ تأیید سن صرفاً خوداظهاری است و احراز هویت رسمی محسوب نمی‌شود.">Intended for adults 21 and older; age confirmation is self-declared and not formal identity verification.</li><li data-en="Availability and advertising remain subject to the laws of your country or state." data-fa="دسترسی و تبلیغات تابع قوانین کشور یا ایالت کاربر است.">Availability and advertising remain subject to the laws of your country or state.</li><li data-en="Real-money betting is disabled unless the operator later obtains every required authorization." data-fa="شرط‌بندی پول واقعی تا اخذ مجوزهای لازم غیرفعال خواهد ماند.">Real-money betting is disabled unless the operator later obtains every required authorization.</li></ul></div></div></section>
+  </main>
+  <footer><div class="shell footer-row"><div><div class="foot-brand">MOJ CASINO LOUNGE</div><div data-en="A free-play entertainment page by MojPlayWin." data-fa="صفحه سرگرمی رایگان از مجموعه مج پلی وین.">A free-play entertainment page by MojPlayWin.</div></div><div class="foot-links"><a href="https://mojplaywin.com/" data-en="MojPlayWin Home" data-fa="صفحه اصلی مج پلی وین">MojPlayWin Home</a><a href="#rules" data-en="Rules & Safety" data-fa="قوانین و ایمنی">Rules & Safety</a></div></div></footer>
+  <div class="gate" id="age-gate" role="dialog" aria-modal="true" aria-labelledby="age-title"><div class="gatebox"><div class="seal" aria-hidden="true">◆</div><h2 id="age-title" data-en="Enter the Private Lounge" data-fa="ورود به سالن اختصاصی">Enter the Private Lounge</h2><p data-en="This area contains casino-style simulations for adults. You must be at least 21 years old. There is no real-money gambling or prize of value." data-fa="این بخش شامل بازی‌های شبیه کازینو برای بزرگسالان است. سن شما باید حداقل ۲۱ سال باشد. شرط‌بندی پول واقعی و جایزه باارزش ارائه نمی‌شود.">This area contains casino-style simulations for adults. You must be at least 21 years old. There is no real-money gambling or prize of value.</p><div class="gate-actions"><button class="btn primary" id="age-confirm" data-en="I am 21 or older" data-fa="۲۱ سال یا بیشتر دارم">I am 21 or older</button><a class="btn outline" href="https://mojplaywin.com/" data-en="Leave" data-fa="خروج">Leave</a></div><div class="gate-error" id="age-note"></div></div></div>
+  <script>
+  (()=>{'use strict';
+    const $=s=>document.querySelector(s); let locale='en';
+    const staticTargets=[...document.querySelectorAll('[data-en][data-fa]')];
+    // Complete authored translations for the 43 static UI elements, in DOM order.
+    const coreI18n={
+      ar:[
+        "ترفيه مجاني فقط · لا مراهنات بأموال حقيقية · لا إيداعات أو سحوبات",
+        "صالة الكازينو","توقعات الرياضة","القواعد والسلامة","عالم خاص من الترفيه",
+        "الإثارة.<br><em>دون المراهنة.</em>",
+        "وجهة راقية لألعاب مستوحاة من الكازينو والاستراتيجية والتوقعات الرياضية الافتراضية. استمتع بالتجربة دون المخاطرة بأموالك.",
+        "ادخل صالة الكازينو ←","اكتشف توقعات الرياضة","صالة الكازينو",
+        "سبع وثلاثون تجربة ممتعة",
+        "تتم محاكاة جميع النتائج محلياً في متصفحك. لا رقائق أو أموال أو عملات افتراضية أو جوائز أو رهانات على أحداث رياضية حقيقية.",
+        "روليت أوروبية","اختر الأحمر أو الأسود وشاهد نتيجة محاكاة العجلة. للترفيه فقط ودون رهانات.",
+        "اختر الأحمر","اختر الأسود","تدريب بلاك جاك",
+        "تدرب على طلب ورقة أو التوقف أمام موزع افتراضي. دون رهان أو عملة أو نقاط قابلة للاستبدال.",
+        "يد جديدة","ورقة إضافية","توقف","بكرات الرموز",
+        "أدر ثلاث بكرات زخرفية. تطابق الرموز مجرد نتيجة مرئية وليس جائزة ذات قيمة.",
+        "أدر مجاناً","توقع رياضي افتراضي",
+        "اختر نتيجة مباراة خيالية. النتائج محاكاة عشوائية وليست نتائج حقيقية أو احتمالات مراهنة.",
+        "المدينة الشمالية ضد الاتحاد الجنوبي","الشمال","تعادل","الجنوب",
+        "ترفيه وليس مقامرة مالية",
+        "تقدم هذه الصفحة محاكاة مجانية لألعاب الكازينو فقط. ليست شركة مراهنات ولا خدمة مقامرة مرخصة. لا إيداعات أو لعب مدفوع أو رصيد قابل للشراء أو سحوبات أو جوائز مالية أو محافظ أو مكافآت رقمية.",
+        "قواعد الدخول المهمة",
+        "مخصص لمن أعمارهم 21 عاماً فأكثر؛ الإقرار بالعمر ذاتي ولا يمثل تحققاً رسمياً من الهوية.",
+        "يخضع التوفر والإعلان لقوانين بلدك أو ولايتك.",
+        "تظل المراهنات المالية معطلة إلى أن يحصل المشغل على جميع التراخيص المطلوبة.",
+        "صفحة ترفيه مجانية من MojPlayWin.","الرئيسية MojPlayWin","القواعد والسلامة",
+        "ادخل الصالة الخاصة",
+        "تضم هذه المنطقة ألعاب محاكاة للكازينو للبالغين. يجب أن يكون عمرك 21 عاماً على الأقل. لا توجد مقامرة بأموال حقيقية أو جوائز ذات قيمة.",
+        "أبلغ 21 عاماً أو أكثر","مغادرة"
+      ],
+      de:[
+        "NUR KOSTENLOSE UNTERHALTUNG · KEINE ECHTGELDWETTEN · KEINE EIN- ODER AUSZAHLUNGEN",
+        "Casino-Bereich","Sporttipps","Regeln & Sicherheit","EINE EXKLUSIVE SPIELWELT",
+        "Der Nervenkitzel.<br><em>Ohne Geldeinsatz.</em>",
+        "Ein hochwertiger Ort für Casino-inspirierte Unterhaltung, Strategie und simulierte Sporttipps. Spielen Sie ohne finanzielles Risiko.",
+        "Casino-Bereich betreten ↗","Sporttipps entdecken","CASINO-BEREICH",
+        "Siebenunddreißig interaktive Erlebnisse",
+        "Alle Ergebnisse werden lokal im Browser simuliert. Keine Chips, kein Geld, keine virtuellen Währungen, Preise oder Wetten auf reale Sportereignisse.",
+        "Europäisches Roulette","Wählen Sie Rot oder Schwarz und sehen Sie das simulierte Ergebnis. Nur Unterhaltung, kein Einsatz.",
+        "Rot wählen","Schwarz wählen","Blackjack-Training",
+        "Üben Sie Ziehen oder Halten gegen einen virtuellen Dealer. Ohne Einsätze, Währung oder einlösbare Punkte.",
+        "Neue Runde","Ziehen","Halten","Symbolwalzen",
+        "Drehen Sie drei dekorative Walzen. Gleiche Symbole ergeben keinen Preis oder Geldwert.",
+        "Kostenlos drehen","Virtuelle Sporttipps",
+        "Wählen Sie ein Ergebnis für ein erfundenes Spiel. Zufallssimulation statt echter Sportresultate oder Wettquoten.",
+        "Nordstadt gegen Süd-Union","Nord","Unentschieden","Süd",
+        "Unterhaltung, kein Glücksspiel um Geld",
+        "Diese Seite bietet nur kostenlose Casino-Simulationen. Sie ist kein Sportwettenanbieter oder lizenziertes Glücksspielangebot. Keine Einzahlungen, kostenpflichtigen Spiele, kaufbaren Guthaben, Auszahlungen, wertvollen Preise, Wallets oder Token-Prämien.",
+        "Wichtige Zugangsregeln",
+        "Für Erwachsene ab 21; die Altersbestätigung ist eine Selbstauskunft und keine amtliche Identitätsprüfung.",
+        "Verfügbarkeit und Werbung unterliegen den Gesetzen Ihres Landes oder Bundeslandes.",
+        "Echtgeldwetten bleiben deaktiviert, bis alle erforderlichen Genehmigungen vorliegen.",
+        "Eine kostenlose Unterhaltungsseite von MojPlayWin.","MojPlayWin Startseite","Regeln & Sicherheit",
+        "Exklusive Lounge betreten",
+        "Dieser Bereich enthält Casino-Simulationen für Erwachsene ab 21. Es gibt kein Glücksspiel um echtes Geld oder wertvolle Preise.",
+        "Ich bin mindestens 21","Verlassen"
+      ],
+      fr:[
+        "DIVERTISSEMENT GRATUIT UNIQUEMENT · AUCUN PARI EN ARGENT RÉEL · AUCUN DÉPÔT NI RETRAIT",
+        "Espace casino","Pronostics sportifs","Règles et sécurité","UN UNIVERS DE JEU PRIVILÉGIÉ",
+        "Le frisson.<br><em>Sans mise d'argent.</em>",
+        "Un espace haut de gamme dédié aux jeux inspirés du casino, à la stratégie et aux pronostics sportifs simulés. Jouez sans risquer votre argent.",
+        "Entrer dans le casino ↗","Découvrir les pronostics","ESPACE CASINO",
+        "Trente-sept expériences interactives",
+        "Tous les résultats sont simulés localement dans votre navigateur. Pas de jetons, argent, monnaie virtuelle, prix ou paris sportifs réels.",
+        "Roulette européenne","Choisissez rouge ou noir, puis observez le résultat simulé. Pour le plaisir, sans mise.",
+        "Choisir rouge","Choisir noir","Entraînement blackjack",
+        "Entraînez-vous à tirer ou rester face à un croupier virtuel. Sans mise, monnaie ou points échangeables.",
+        "Nouvelle main","Tirer","Rester","Rouleaux de symboles",
+        "Faites tourner trois rouleaux décoratifs. Des symboles identiques ne donnent aucun prix.",
+        "Tour gratuit","Pronostic sportif virtuel",
+        "Choisissez le résultat d'un match fictif. Les résultats sont aléatoires, sans scores réels ni cotes de paris.",
+        "Nord Ville contre Sud Union","Nord","Nul","Sud",
+        "Divertissement, pas jeu d'argent",
+        "Cette page ne propose que des simulations gratuites de casino. Ce n'est ni un bookmaker ni un service de jeux d'argent agréé. Aucun dépôt, jeu payant, crédit achetable, retrait, prix de valeur, portefeuille ni récompense en jetons.",
+        "Règles d'accès importantes",
+        "Réservé aux personnes de 21 ans et plus ; l'âge est autodéclaré et ne constitue pas une vérification d'identité.",
+        "La disponibilité et la publicité dépendent des lois de votre pays ou région.",
+        "Les paris en argent réel restent désactivés sans toutes les autorisations nécessaires.",
+        "Une page de divertissement gratuite de MojPlayWin.","Accueil MojPlayWin","Règles et sécurité",
+        "Entrer dans le salon privé",
+        "Cet espace contient des simulations de casino pour adultes de 21 ans et plus. Aucun pari en argent réel ni prix de valeur.",
+        "J'ai 21 ans ou plus","Quitter"
+      ],
+      es:[
+        "SOLO ENTRETENIMIENTO GRATUITO · SIN APUESTAS REALES · SIN DEPÓSITOS NI RETIROS",
+        "Sala de casino","Predicciones deportivas","Reglas y seguridad","UN MUNDO PRIVADO DE JUEGO",
+        "La emoción.<br><em>Sin apostar dinero.</em>",
+        "Un espacio premium de entretenimiento inspirado en casinos, estrategia y predicciones deportivas simuladas. Disfruta sin arriesgar tu dinero.",
+        "Entrar al casino ↗","Explorar predicciones","SALA DE CASINO",
+        "Treinta y siete experiencias interactivas",
+        "Todos los resultados se simulan localmente en tu navegador. Sin fichas, dinero, moneda virtual, premios ni apuestas deportivas reales.",
+        "Ruleta europea","Elige rojo o negro y mira un resultado simulado. Solo diversión, sin apuestas.",
+        "Elegir rojo","Elegir negro","Práctica de blackjack",
+        "Practica pedir carta o plantarte frente a un crupier virtual. Sin apuestas, moneda ni puntos canjeables.",
+        "Nueva mano","Pedir","Plantarse","Rodillos de símbolos",
+        "Gira tres rodillos decorativos. Los símbolos coincidentes no otorgan premios de valor.",
+        "Girar gratis","Predicción deportiva virtual",
+        "Elige un resultado para un partido ficticio. Resultados aleatorios, no marcadores reales ni cuotas.",
+        "Ciudad Norte contra Unión Sur","Norte","Empate","Sur",
+        "Entretenimiento, no apuestas por dinero",
+        "Esta página ofrece solo simulaciones gratuitas de casino. No es una casa de apuestas ni un servicio de juego con licencia. Sin depósitos, partidas pagadas, créditos comprables, retiros, premios valiosos, monederos ni recompensas en tokens.",
+        "Reglas importantes de acceso",
+        "Solo para mayores de 21 años; la edad se declara personalmente y no constituye verificación oficial de identidad.",
+        "La disponibilidad y publicidad dependen de las leyes de tu país o región.",
+        "Las apuestas con dinero real siguen desactivadas hasta contar con todas las autorizaciones.",
+        "Página de entretenimiento gratuito de MojPlayWin.","Inicio MojPlayWin","Reglas y seguridad",
+        "Entrar al salón privado",
+        "Esta área contiene simulaciones de casino para adultos mayores de 21 años. No hay apuestas reales ni premios de valor.",
+        "Tengo 21 años o más","Salir"
+      ]
+    };
+    const msg={en:{rouletteStart:'Choose a colour to spin.',roulette:'Wheel: {n} ({colour}). {verdict}',red:'red',black:'black',green:'green',correct:'Your colour matched.',wrong:'No match this time.',blackjackStart:'Select New Hand to begin.',dealer:'Dealer',hand:'Your hand',dealWin:'Blackjack! Practice hand complete.',playerBust:'Over 21. Dealer wins this practice round.',dealerBust:'Dealer went over 21. You win this practice round.',win:'You win this practice round.',lose:'Dealer wins this practice round.',draw:'Push — a tie.',running:'Choose Hit or Stand.',slotStart:'Free play. No payouts.',slotMatch:'Three matching symbols. Visual match only — no prize.',slotNo:'New pattern generated. No prize or payout.',sportStart:'Make a free pick to reveal a simulated outcome.',sportWin:'Simulated result: {team}. Your pick matched.',sportLose:'Simulated result: {team}. Your pick did not match.',north:'North',south:'South',tie:'Draw'},fa:{rouletteStart:'برای چرخش یک رنگ را انتخاب کنید.',roulette:'نتیجه: {n} ({colour}). {verdict}',red:'قرمز',black:'مشکی',green:'سبز',correct:'رنگ انتخابی درست بود.',wrong:'این بار یکسان نبود.',blackjackStart:'برای آغاز، دست جدید را انتخاب کنید.',dealer:'کارت‌پخش‌کن',hand:'دست شما',dealWin:'بلک‌جک! دست تمرینی تمام شد.',playerBust:'بیش از ۲۱ شد؛ این دور تمرینی را باختید.',dealerBust:'کارت‌پخش‌کن از ۲۱ گذشت؛ این دور را بردید.',win:'این دور تمرینی را بردید.',lose:'کارت‌پخش‌کن این دور را برد.',draw:'مساوی.',running:'کارت بگیرید یا توقف کنید.',slotStart:'بازی رایگان؛ بدون پرداخت جایزه.',slotMatch:'سه نماد یکسان شدند؛ فقط نتیجه تصویری، بدون جایزه.',slotNo:'الگوی جدید ساخته شد؛ بدون جایزه.',sportStart:'یکی از نتایج را برای شبیه‌سازی انتخاب کنید.',sportWin:'نتیجه شبیه‌سازی: {team}. انتخاب شما درست بود.',sportLose:'نتیجه شبیه‌سازی: {team}. انتخاب شما درست نبود.',north:'شمال',south:'جنوب',tie:'مساوی'}};
+    Object.assign(msg,{
+      ar:{rouletteStart:'اختر لوناً لتدوير العجلة.',roulette:'العجلة: {n} ({colour}). {verdict}',red:'أحمر',black:'أسود',green:'أخضر',correct:'طابق اختيارك اللون.',wrong:'لم يتطابق اللون هذه المرة.',blackjackStart:'اختر يداً جديدة للبدء.',dealer:'الموزع',hand:'أوراقك',dealWin:'بلاك جاك! انتهت الجولة التدريبية.',playerBust:'تجاوزت 21. فاز الموزع في هذه الجولة.',dealerBust:'تجاوز الموزع 21. فزت بهذه الجولة التدريبية.',win:'فزت بهذه الجولة التدريبية.',lose:'فاز الموزع بهذه الجولة التدريبية.',draw:'تعادل.',running:'اختر ورقة إضافية أو توقف.',slotStart:'لعب مجاني. لا جوائز.',slotMatch:'ثلاثة رموز متطابقة، دون جائزة.',slotNo:'نمط جديد، دون جائزة.',sportStart:'اختر نتيجة مجانية لكشف محاكاة.',sportWin:'نتيجة المحاكاة: {team}. اختيارك مطابق.',sportLose:'نتيجة المحاكاة: {team}. اختيارك غير مطابق.',north:'الشمال',south:'الجنوب',tie:'تعادل'},
+      de:{rouletteStart:'Wählen Sie eine Farbe.',roulette:'Rad: {n} ({colour}). {verdict}',red:'Rot',black:'Schwarz',green:'Grün',correct:'Ihre Farbe stimmt überein.',wrong:'Diesmal keine Übereinstimmung.',blackjackStart:'Beginnen Sie eine neue Runde.',dealer:'Dealer',hand:'Ihre Karten',dealWin:'Blackjack! Übungsrunde beendet.',playerBust:'Über 21. Der Dealer gewinnt diese Übungsrunde.',dealerBust:'Dealer über 21. Sie gewinnen die Übungsrunde.',win:'Sie gewinnen diese Übungsrunde.',lose:'Der Dealer gewinnt diese Übungsrunde.',draw:'Gleichstand.',running:'Ziehen oder Halten wählen.',slotStart:'Kostenlos, keine Auszahlung.',slotMatch:'Drei gleiche Symbole, kein Preis.',slotNo:'Neues Muster, kein Preis.',sportStart:'Wählen Sie einen Tipp für die Simulation.',sportWin:'Simulation: {team}. Ihr Tipp stimmt.',sportLose:'Simulation: {team}. Ihr Tipp stimmt nicht.',north:'Nord',south:'Süd',tie:'Unentschieden'},
+      fr:{rouletteStart:'Choisissez une couleur.',roulette:'Roue : {n} ({colour}). {verdict}',red:'rouge',black:'noir',green:'vert',correct:'Votre couleur correspond.',wrong:'Pas de correspondance.',blackjackStart:'Choisissez une nouvelle main.',dealer:'Croupier',hand:'Votre main',dealWin:'Blackjack ! Fin de la manche.',playerBust:'Plus de 21. Le croupier gagne cette manche.',dealerBust:'Croupier au-dessus de 21. Vous gagnez.',win:'Vous gagnez cette manche.',lose:'Le croupier gagne cette manche.',draw:'Égalité.',running:'Choisissez Tirer ou Rester.',slotStart:'Jeu gratuit, aucun gain.',slotMatch:'Trois symboles identiques, aucun prix.',slotNo:'Nouveau motif, aucun prix.',sportStart:'Choisissez un résultat simulé.',sportWin:'Simulation : {team}. Votre choix correspond.',sportLose:'Simulation : {team}. Votre choix ne correspond pas.',north:'Nord',south:'Sud',tie:'Nul'},
+      es:{rouletteStart:'Elige un color.',roulette:'Ruleta: {n} ({colour}). {verdict}',red:'rojo',black:'negro',green:'verde',correct:'Tu color coincide.',wrong:'No coincide esta vez.',blackjackStart:'Elige Nueva mano para comenzar.',dealer:'Crupier',hand:'Tu mano',dealWin:'¡Blackjack! Fin de ronda.',playerBust:'Más de 21. Gana el crupier.',dealerBust:'El crupier supera 21. Ganas esta ronda.',win:'Ganas esta ronda.',lose:'El crupier gana esta ronda.',draw:'Empate.',running:'Elige Pedir o Plantarse.',slotStart:'Gratis, sin premios.',slotMatch:'Tres símbolos iguales, sin premio.',slotNo:'Nuevo patrón, sin premio.',sportStart:'Elige para revelar una simulación.',sportWin:'Simulación: {team}. Coincide tu elección.',sportLose:'Simulación: {team}. No coincide tu elección.',north:'Norte',south:'Sur',tie:'Empate'}
+    });
+    const t=(k,values={})=>(msg[locale][k]||k).replace(/\{(\w+)\}/g,(_,key)=>String(values[key]??''));
+    const write=(id,value)=>{$('#'+id).textContent=value};
+    const random=n=>{if(!Number.isInteger(n)||n<1)throw Error('Invalid random range');const a=new Uint32Array(1);const max=2**32;const limit=max-(max%n);let v;do{crypto.getRandomValues(a);v=a[0]}while(v>=limit);return v%n};
+    function resetStatuses(){write('roulette-result',t('rouletteStart'));write('blackjack-result',t('blackjackStart'));write('slot-result',t('slotStart'));write('sports-result',t('sportStart'));write('dealer-label',t('dealer'));write('player-label',t('hand'))}
+    const locales=['en','fa','ar','de','fr','es'];
+    if(staticTargets.length!==43||Object.values(coreI18n).some(items=>items.length!==staticTargets.length))throw Error('Translation completeness check failed');
+    $('#language').addEventListener('change',e=>{locale=e.target.value;if(!locales.includes(locale))return;document.documentElement.lang=locale;document.documentElement.dir=['fa','ar'].includes(locale)?'rtl':'ltr';staticTargets.forEach((el,i)=>{el.innerHTML=locale==='en'?el.dataset.en:locale==='fa'?el.dataset.fa:coreI18n[locale][i]});translateExtraGames();translateNewGames();resetStatuses()});
+    $('#age-confirm').addEventListener('click',()=>{$('#age-gate').hidden=true;$('#roulette-title').setAttribute('tabindex','-1');$('#roulette-title').focus()});
+    const reds=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+    document.querySelectorAll('[data-roulette]').forEach(button=>button.addEventListener('click',()=>{const number=random(37);const colour=number===0?'green':reds.has(number)?'red':'black';write('roulette-result',t('roulette',{n:number,colour:t(colour),verdict:colour===button.dataset.roulette?t('correct'):t('wrong')}))}));
+    const symbols=['◆','♠','★','♥','♣','✦'];$('#spin').addEventListener('click',()=>{const roll=Array.from({length:3},()=>symbols[random(symbols.length)]);write('slot-display',roll.join(' '));write('slot-result',t(roll.every(x=>x===roll[0])?'slotMatch':'slotNo'))});
+    document.querySelectorAll('[data-pick]').forEach(button=>button.addEventListener('click',()=>{const choice=Number(button.dataset.pick),outcome=random(3);const team=t(['north','tie','south'][outcome]);write('sports-result',t(choice===outcome?'sportWin':'sportLose',{team}))}));
+    const ranks=['A','2','3','4','5','6','7','8','9','10','J','Q','K'],suits=['♠','♥','♦','♣'];let deck=[],player=[],dealer=[],running=false;
+    function shuffledDeck(){const cards=suits.flatMap(suit=>ranks.map(rank=>({rank,suit})));for(let i=cards.length-1;i>0;i--){const j=random(i+1);[cards[i],cards[j]]=[cards[j],cards[i]]}return cards}
+    function newDeck(){deck=shuffledDeck()}
+    function value(cards){let sum=0,aces=0;cards.forEach(c=>{if(c.rank==='A'){sum+=11;aces++}else sum+=['J','Q','K'].includes(c.rank)?10:Number(c.rank)});while(sum>21&&aces){sum-=10;aces--}return sum}
+    function cardsText(cards){return cards.map(c=>c.rank+c.suit).join('  ')}
+    function render(){write('player-cards',cardsText(player)+'  ('+value(player)+')');write('dealer-cards',running?dealer[0].rank+dealer[0].suit+'  ?':cardsText(dealer)+'  ('+value(dealer)+')');$('#hit').disabled=!running;$('#stand').disabled=!running}
+    function endRound(key){running=false;render();write('blackjack-result',t(key))}
+    $('#deal').addEventListener('click',()=>{newDeck();player=[deck.pop(),deck.pop()];dealer=[deck.pop(),deck.pop()];running=true;render();if(value(player)===21||value(dealer)===21){let key=value(player)===value(dealer)?'draw':value(player)===21?'dealWin':'lose';endRound(key)}else write('blackjack-result',t('running'))});
+    $('#hit').addEventListener('click',()=>{if(!running)return;player.push(deck.pop());render();if(value(player)>21)endRound('playerBust');else if(value(player)===21)$('#stand').click()});
+    $('#stand').addEventListener('click',()=>{if(!running)return;while(value(dealer)<17)dealer.push(deck.pop());const p=value(player),d=value(dealer);endRound(d>21?'dealerBust':p>d?'win':p<d?'lose':'draw')});
+    const locArr=a=>a[locales.indexOf(locale)];
+    const choiceLabels={
+      play:['Play Free','بازی رایگان','العب مجاناً','Kostenlos spielen','Jouer gratuitement','Jugar gratis'],
+      reveal:['Reveal','نمایش نتیجه','اكشف النتيجة','Aufdecken','Révéler','Revelar'],
+      player:['Player','بازیکن','اللاعب','Spieler','Joueur','Jugador'],
+      banker:['Banker','بانکدار','الموزع','Bankhalter','Banquier','Banca'],
+      under:['Under 7','کمتر از ۷','أقل من 7','Unter 7','Moins de 7','Menos de 7'],
+      over:['Over 7','بیشتر از ۷','أكثر من 7','Über 7','Plus de 7','Más de 7'],
+      heads:['Heads','شیر','وجه العملة','Kopf','Pile','Cara'],
+      tails:['Tails','خط','ظهر العملة','Zahl','Face','Cruz'],
+      left:['Left','چپ','يسار','Links','Gauche','Izquierda'],
+      centre:['Centre','وسط','وسط','Mitte','Centre','Centro'],
+      right:['Right','راست','يمين','Rechts','Droite','Derecha'],
+      higher:['Higher','بالاتر','أعلى','Höher','Plus haut','Mayor'],
+      lower:['Lower','پایین‌تر','أقل','Niedriger','Plus bas','Menor'],
+      one:['1','۱','١','1','1','1'],two:['2','۲','٢','2','2','2'],three:['3','۳','٣','3','3','3']
+    };
+    const extras=[
+      {id:'baccarat',icon:'♦',title:['Baccarat: Two-Card Duel','باکارات دوکارتی','باكارات: مبارزة ورقتين','Baccarat: Zwei-Karten-Duell','Baccarat : duel à deux cartes','Bacará: duelo de dos cartas'],desc:['Choose a side; two simulated hands compete by their last digit. This is a simplified practice variant.','یک طرف را انتخاب کنید؛ دو دست شبیه‌سازی‌شده با رقم یکان رقابت می‌کنند. نسخه آموزشی ساده‌شده است.','اختر طرفاً؛ تتنافس يدان افتراضيتان بحسب الرقم الأخير. نسخة تدريبية مبسطة.','Wählen Sie eine Seite. Zwei simulierte Hände vergleichen die letzte Ziffer. Vereinfachte Übung.','Choisissez un camp. Deux mains simulées comparent leur dernier chiffre. Version simplifiée.','Elige un lado. Dos manos simuladas comparan la última cifra. Versión simplificada.'],options:['player','banker']},
+      {id:'poker',icon:'♠',title:['Five-Card Poker Hand','دست پوکر پنج‌کارتی','يد بوكر من خمس ورقات','Fünf-Karten-Pokerhand','Main de poker à cinq cartes','Mano de póker de cinco cartas'],desc:['Reveal a unique five-card hand and its poker classification. No betting or card exchange.','یک دست پنج‌کارتی یکتا و ترکیب پوکر آن را ببینید. بدون شرط یا تعویض کارت.','اكشف خمس ورقات فريدة وتصنيف يد البوكر دون رهان أو تبديل.','Decken Sie fünf verschiedene Karten und ihre Pokerwertung auf. Keine Wetten.','Révélez cinq cartes uniques et leur combinaison. Aucun pari.','Revela cinco cartas distintas y su clasificación. Sin apuestas.'],options:['reveal']},
+      {id:'dice',icon:'⚄',title:['Seven-Dice Challenge','چالش تاس هفت','تحدي النرد سبعة','Siebener-Würfelspiel','Défi des dés : sept','Desafío de dados: siete'],desc:['Call below or above seven, then roll two six-sided dice. Seven counts as neither.','کمتر یا بیشتر از هفت را انتخاب و دو تاس شش‌وجهی پرتاب کنید؛ هفت هیچ‌کدام است.','توقع أقل أو أكثر من سبعة ثم ارمِ نردين. السبعة ليست أيّاً منهما.','Tippen Sie unter oder über sieben und würfeln Sie zweimal. Sieben zählt zu keiner Seite.','Choisissez moins ou plus de sept puis lancez deux dés. Sept ne compte pas.','Elige menos o más de siete y lanza dos dados. Siete no cuenta.'],options:['under','over']},
+      {id:'coin',icon:'◐',title:['Coin Toss','پرتاب سکه','رمي العملة','Münzwurf','Pile ou face','Lanzamiento de moneda'],desc:['Call heads or tails before a fair virtual coin toss.','پیش از پرتاب سکه مجازی، شیر یا خط را انتخاب کنید.','توقع وجه العملة أو ظهرها قبل رميها افتراضياً.','Wählen Sie Kopf oder Zahl vor dem virtuellen Münzwurf.','Choisissez pile ou face avant le lancer virtuel.','Elige cara o cruz antes del lanzamiento virtual.'],options:['heads','tails']},
+      {id:'wheel',icon:'◉',title:['Fortune Symbol Wheel','چرخ نمادها','عجلة الرموز','Symbol-Glücksrad','Roue des symboles','Rueda de símbolos'],desc:['Spin a decorative six-segment wheel; results have no monetary value.','چرخ شش‌بخشی نمادها را بچرخانید؛ نتیجه ارزش پولی ندارد.','أدر عجلة من ستة رموز؛ النتائج بلا قيمة مالية.','Drehen Sie ein Rad mit sechs Symbolen. Keine Geldwerte.','Faites tourner une roue à six symboles sans valeur monétaire.','Gira una rueda de seis símbolos sin valor monetario.'],options:['play']},
+      {id:'keno',icon:'◇',title:['Mini Keno','کینوی کوچک','كينو المصغر','Mini-Keno','Mini Keno','Mini Keno'],desc:['Select one number from 1–10; three different numbers are drawn locally.','یک عدد از ۱ تا ۱۰ انتخاب کنید؛ سه عدد متفاوت در مرورگر انتخاب می‌شوند.','اختر رقماً من 1 إلى 10؛ تُسحب ثلاثة أرقام مختلفة محلياً.','Wählen Sie 1–10; drei verschiedene Zahlen werden lokal gezogen.','Choisissez un numéro de 1 à 10 ; trois numéros distincts sont tirés.','Elige un número del 1 al 10; se extraen tres distintos.'],options:['1','2','3','4','5','6','7','8','9','10']},
+      {id:'bingo',icon:'▦',title:['Mini Bingo Draw','بینگوی کوچک','سحب بينغو مصغر','Mini-Bingo-Ziehung','Mini tirage Bingo','Minisorteo de bingo'],desc:['Compare a random five-number card with five drawn numbers.','پنج عدد کارت تصادفی را با پنج عدد قرعه‌کشی‌شده مقایسه کنید.','قارن بطاقة من خمسة أرقام مع خمسة أرقام مسحوبة.','Vergleichen Sie fünf Kartenzahlen mit fünf gezogenen Zahlen.','Comparez cinq numéros de carte à cinq numéros tirés.','Compara cinco números de cartón con cinco extraídos.'],options:['play']},
+      {id:'mines',icon:'▧',title:['Nine-Tile Mines','مین‌های نه‌خانه‌ای','ألغام التسع خانات','Neun-Felder-Minen','Mines à neuf cases','Minas de nueve casillas'],desc:['Reveal one of nine tiles; two random tiles contain simulated mines.','یکی از نه خانه را باز کنید؛ دو خانه تصادفی مین شبیه‌سازی‌شده دارند.','اكشف خانة من تسع؛ تحتوي خانتان عشوائيتان على ألغام افتراضية.','Wählen Sie eines von neun Feldern. Zwei enthalten virtuelle Minen.','Révélez une case sur neuf ; deux contiennent des mines simulées.','Revela una de nueve casillas; dos tienen minas simuladas.'],options:['1','2','3','4','5','6','7','8','9']},
+      {id:'plinko',icon:'⋄',title:['Plinko Path','مسیر پلینکو','مسار بلينكو','Plinko-Pfad','Parcours Plinko','Camino Plinko'],desc:['Watch an eight-step random left-right path. No bins carry prizes.','مسیر تصادفی هشت‌مرحله‌ای چپ و راست را ببینید؛ هیچ جایزه‌ای ندارد.','شاهد مساراً عشوائياً من ثماني خطوات يميناً ويساراً دون جوائز.','Sehen Sie acht zufällige Schritte nach links oder rechts. Keine Preise.','Regardez huit étapes aléatoires à gauche ou droite, sans prix.','Observa ocho pasos aleatorios a izquierda o derecha, sin premios.'],options:['play']},
+      {id:'race',icon:'♞',title:['Virtual Three-Racer Sprint','مسابقه مجازی سه‌نفره','سباق افتراضي لثلاثة','Virtuelles Rennen zu dritt','Course virtuelle à trois','Carrera virtual de tres'],desc:['Choose one of three imaginary racers; a simulated finish is generated.','یکی از سه شرکت‌کننده خیالی را انتخاب کنید؛ نتیجه مجازی تولید می‌شود.','اختر متسابقاً خيالياً من ثلاثة؛ تُحاكى النتيجة.','Wählen Sie einen von drei Fantasieläufern für ein simuliertes Finale.','Choisissez un des trois concurrents fictifs pour une arrivée simulée.','Elige uno de tres corredores ficticios para un final simulado.'],options:['one','two','three']},
+      {id:'penalty',icon:'⚽',title:['Penalty Direction','جهت ضربه پنالتی','اتجاه ركلة الجزاء','Elfmeterrichtung','Direction du penalty','Dirección del penalti'],desc:['Pick left, centre or right against a virtual goalkeeper.','مقابل دروازه‌بان مجازی، چپ، وسط یا راست را انتخاب کنید.','اختر اليسار أو الوسط أو اليمين أمام حارس افتراضي.','Wählen Sie gegen einen virtuellen Torwart links, Mitte oder rechts.','Choisissez gauche, centre ou droite face à un gardien virtuel.','Elige izquierda, centro o derecha contra un portero virtual.'],options:['left','centre','right']},
+      {id:'hilo',icon:'↟',title:['High–Low Cards','کارت بالاتر یا پایین‌تر','ورقة أعلى أم أقل','Höhere oder niedrigere Karte','Carte plus haute ou plus basse','Carta mayor o menor'],desc:['See a card and predict whether the next rank will be higher or lower.','کارت نخست را ببینید و بالاتر یا پایین‌تر بودن کارت بعدی را پیش‌بینی کنید.','انظر إلى ورقة وتوقع إن كانت التالية أعلى أو أقل.','Sehen Sie eine Karte und tippen Sie, ob die nächste höher oder niedriger ist.','Voyez une carte et prédisez si la suivante sera plus haute ou basse.','Mira una carta y predice si la siguiente será mayor o menor.'],options:['higher','lower']}
+    ];
+    const extraText={
+      en:{ready:'Choose an option for a free simulation.',result:'Result: {x}. No reward or payout.',match:'Your choice matched. No prize.',miss:'Your choice did not match.',first:'Current card: {n}. Choose Higher or Lower.',card:'Current {a} → Next {b}. {state}',safe:'Tile {n}: clear.',mine:'Tile {n}: simulated mine.',count:'{n} matching numbers. No prize.',score:'Result {n}. No prize.',goal:'Simulated goal!',saved:'Virtual goalkeeper saved it!',tie:'Equal value, no match.'},
+      fa:{ready:'برای شبیه‌سازی رایگان یک گزینه انتخاب کنید.',result:'نتیجه: {x}. بدون جایزه یا پرداخت.',match:'انتخاب شما درست بود؛ بدون جایزه.',miss:'انتخاب شما درست نبود.',first:'کارت فعلی: {n}. بالاتر یا پایین‌تر را انتخاب کنید.',card:'کارت فعلی {a} ← کارت بعدی {b}. {state}',safe:'خانه {n}: امن.',mine:'خانه {n}: مین شبیه‌سازی‌شده.',count:'{n} عدد یکسان؛ بدون جایزه.',score:'نتیجه {n}؛ بدون جایزه.',goal:'گل شبیه‌سازی‌شده!',saved:'دروازه‌بان مجازی مهار کرد!',tie:'ارزش برابر؛ انتخاب درست محسوب نمی‌شود.'},
+      ar:{ready:'اختر خياراً لمحاكاة مجانية.',result:'النتيجة: {x}. لا جائزة أو دفعة.',match:'تطابق اختيارك. دون جائزة.',miss:'لم يتطابق اختيارك.',first:'الورقة الحالية: {n}. اختر أعلى أو أقل.',card:'الحالية {a} ← التالية {b}. {state}',safe:'الخانة {n}: آمنة.',mine:'الخانة {n}: لغم افتراضي.',count:'{n} أرقام متطابقة دون جائزة.',score:'النتيجة {n} دون جائزة.',goal:'هدف افتراضي!',saved:'صدّ الحارس الافتراضي!',tie:'قيمة متساوية، لا تطابق.'},
+      de:{ready:'Wählen Sie eine kostenlose Simulation.',result:'Ergebnis: {x}. Keine Prämie.',match:'Ihr Tipp stimmt. Kein Preis.',miss:'Ihr Tipp stimmt nicht.',first:'Aktuelle Karte: {n}. Höher oder niedriger?',card:'Aktuell {a} → Nächste {b}. {state}',safe:'Feld {n}: sicher.',mine:'Feld {n}: virtuelle Mine.',count:'{n} gleiche Zahlen. Kein Preis.',score:'Ergebnis {n}. Kein Preis.',goal:'Simuliertes Tor!',saved:'Virtueller Torwart hält!',tie:'Gleicher Wert, kein Treffer.'},
+      fr:{ready:'Choisissez une simulation gratuite.',result:'Résultat : {x}. Aucun prix.',match:'Votre choix correspond. Aucun prix.',miss:'Votre choix ne correspond pas.',first:'Carte actuelle : {n}. Plus haut ou plus bas ?',card:'Actuelle {a} → Suivante {b}. {state}',safe:'Case {n} : sûre.',mine:'Case {n} : mine simulée.',count:'{n} numéros identiques. Aucun prix.',score:'Résultat {n}. Aucun prix.',goal:'But simulé !',saved:'Arrêt du gardien virtuel !',tie:'Même valeur, sans correspondance.'},
+      es:{ready:'Elige una simulación gratuita.',result:'Resultado: {x}. Sin premios.',match:'Tu elección coincide. Sin premio.',miss:'Tu elección no coincide.',first:'Carta actual: {n}. ¿Mayor o menor?',card:'Actual {a} → Siguiente {b}. {state}',safe:'Casilla {n}: segura.',mine:'Casilla {n}: mina simulada.',count:'{n} números iguales. Sin premio.',score:'Resultado {n}. Sin premio.',goal:'¡Gol simulado!',saved:'¡Parada del portero virtual!',tie:'Valor igual, no coincide.'}
+    };
+    const ex=(k,values={})=>extraText[locale][k].replace(/\{(\w+)\}/g,(_,key)=>String(values[key]??''));
+    const extraUi=new Map();
+    function translateExtraGames(){
+      for(const d of extras){const ui=extraUi.get(d.id);if(!ui)continue;ui.title.textContent=locArr(d.title);ui.desc.textContent=locArr(d.desc);ui.buttons.forEach((button,i)=>button.textContent=choiceLabels[d.options[i]]?locArr(choiceLabels[d.options[i]]):d.options[i]);ui.result.textContent=d.id==='hilo'?ex('first',{n:hiLoCard}):ex('ready')}
+    }
+    function drawUnique(count,max){const nums=Array.from({length:max},(_,i)=>i+1);for(let i=nums.length-1;i>0;i--){let j=random(i+1);[nums[i],nums[j]]=[nums[j],nums[i]]}return nums.slice(0,count)}
+    const handNames={
+      en:['High card','Pair','Two pairs','Three of a kind','Straight','Flush','Full house','Four of a kind','Straight flush'],
+      fa:['کارت بالا','یک جفت','دو جفت','سه کارت هم‌ارزش','ردیف','هم‌خال','فول هاوس','چهار کارت هم‌ارزش','ردیف هم‌خال'],
+      ar:['ورقة عالية','زوج','زوجان','ثلاثية','تسلسل','لون واحد','فول هاوس','رباعية','تسلسل بلون واحد'],
+      de:['Hohe Karte','Paar','Zwei Paare','Drilling','Straße','Flush','Full House','Vierling','Straight Flush'],
+      fr:['Carte haute','Paire','Deux paires','Brelan','Suite','Couleur','Full','Carré','Quinte flush'],
+      es:['Carta alta','Pareja','Dos parejas','Trío','Escalera','Color','Full','Póker','Escalera de color']
+    };
+    function pokerRank(hand){const nums=hand.map(c=>ranks.indexOf(c.rank)+1).map(n=>n===1?14:n).sort((a,b)=>a-b);const freq=[...new Set(nums)].map(n=>nums.filter(x=>x===n).length).sort((a,b)=>b-a);const flush=hand.every(c=>c.suit===hand[0].suit);const straight=new Set(nums).size===5&&(nums[4]-nums[0]===4||nums.join(',')==='2,3,4,5,14');if(straight&&flush)return 8;if(freq[0]===4)return 7;if(freq[0]===3&&freq[1]===2)return 6;if(flush)return 5;if(straight)return 4;if(freq[0]===3)return 3;if(freq[0]===2&&freq[1]===2)return 2;if(freq[0]===2)return 1;return 0}
+    let hiLoCard=2+random(13);
+    function playExtra(d,choice){
+      let output='',n;
+      if(d.id==='baccarat'){const p=(1+random(9)+1+random(9))%10,b=(1+random(9)+1+random(9))%10;const winner=p===b?'tie':p>b?'player':'banker';output=ex('result',{x:locArr(choiceLabels.player)+' '+p+' · '+locArr(choiceLabels.banker)+' '+b})+' '+ex(choice===winner?'match': 'miss')}
+      if(d.id==='poker'){const pokerDeck=shuffledDeck();const hand=Array.from({length:5},()=>pokerDeck.pop());output=ex('result',{x:cardsText(hand)+' — '+handNames[locale][pokerRank(hand)]})}
+      if(d.id==='dice'){const a=random(6)+1,b=random(6)+1,s=a+b;output=ex('result',{x:a+' + '+b+' = '+s})+' '+ex(s===7?'tie':choice===(s<7?'under':'over')?'match':'miss')}
+      if(d.id==='coin'){const drawn=random(2)===0?'heads':'tails';output=ex('result',{x:locArr(choiceLabels[drawn])})+' '+ex(choice===drawn?'match':'miss')}
+      if(d.id==='wheel'){const sector=random(6);wheelTurns+=6;const visual=$('#visual-wheel');if(visual)visual.style.transform='rotate('+((wheelTurns+sector)*60)+'deg)';output=ex('result',{x:['◆','♠','★','♥','♣','✦'][sector]})}
+      if(d.id==='keno'){const draw=drawUnique(3,10);output=ex('result',{x:draw.join(' · ')})+' '+ex(draw.includes(Number(choice))?'match':'miss')}
+      if(d.id==='bingo'){const card=drawUnique(5,20),draw=drawUnique(5,20),matched=card.filter(x=>draw.includes(x)).length;output=ex('result',{x:card.join(', ')+' / '+draw.join(', ')})+' '+ex('count',{n:matched})}
+      if(d.id==='mines'){const mines=drawUnique(2,9);output=ex(mines.includes(Number(choice))?'mine':'safe',{n:choice})}
+      if(d.id==='plinko'){let pos=0,path='';for(let i=0;i<8;i++){const right=random(2)===1;pos+=right?1:-1;path+=right?'→':'←'}output=ex('result',{x:path+' · '+pos})}
+      if(d.id==='race'){n=random(3)+1;output=ex('result',{x:n})+' '+ex(Number(choice)===n?'match':'miss')}
+      if(d.id==='penalty'){const keeper=['left','centre','right'][random(3)];output=ex('result',{x:locArr(choiceLabels[keeper])})+' '+ex(choice===keeper?'saved':'goal')}
+      if(d.id==='hilo'){const next=2+random(13),ok=next===hiLoCard?null:choice===(next>hiLoCard?'higher':'lower');output=ex('card',{a:hiLoCard,b:next,state:ex(ok===null?'tie':ok?'match':'miss')});hiLoCard=next}
+      extraUi.get(d.id).result.textContent=output;
+    }
+    let wheelTurns=0;
+    function buildExtraGames(){
+      const grid=$('#game-grid');
+      for(const d of extras){
+        const card=document.createElement('article');card.className='card';card.id='free-'+d.id;
+        const top=document.createElement('div');top.className='card-title';
+        const h=document.createElement('h3');const icon=document.createElement('span');icon.className='icon';icon.textContent=d.icon;top.append(h,icon);
+        const p=document.createElement('p');const area=document.createElement('div');area.className='gamearea';const controls=document.createElement('div');controls.className='control';
+        const buttons=d.options.map((opt,i)=>{const button=document.createElement('button');button.type='button';button.className='btn small'+(i===0?' primary':'');button.addEventListener('click',()=>playExtra(d,opt));controls.append(button);return button});
+        const result=document.createElement('div');result.className='result';result.setAttribute('role','status');result.setAttribute('aria-live','polite');if(d.id==='wheel'){const wheel=document.createElement('div');wheel.id='visual-wheel';wheel.className='luck-wheel';wheel.setAttribute('aria-hidden','true');wheel.style.marginBottom='22px';area.append(wheel)}area.append(controls,result);card.append(top,p,area);grid.append(card);
+        extraUi.set(d.id,{title:h,desc:p,buttons,result});
+      }
+      translateExtraGames();
+    }
+    // Independent, browser-local dice and chance exercises: no wagering or rewards.
+    const translateSet=a=>a[locales.indexOf(locale)];
+    const extendedHeadings={
+      classicK:['CLASSIC TABLES & CARDS','میزهای کلاسیک و ورق','ألعاب الطاولة والورق','KLASSISCHE BRETT- UND KARTENSPIELE','JEUX DE TABLE ET DE CARTES','JUEGOS DE MESA Y CARTAS'],
+      classicH:['Chess, Backgammon and Card Games','شطرنج، تخته‌نرد و بازی‌های ورق','الشطرنج والطاولة وألعاب الورق','Schach, Backgammon und Kartenspiele','Échecs, backgammon et jeux de cartes','Ajedrez, backgammon y juegos de cartas'],
+      classicP:['Local two-player boards and interactive card games. Free play only.','بازی‌های دونفره روی یک دستگاه و بازی‌های تعاملی ورق؛ فقط رایگان.','ألعاب لوحة لشخصين وألعاب ورق تفاعلية مجانية.','Lokale Brettspiele für zwei und interaktive Kartenspiele. Kostenlos.','Jeux de plateau locaux à deux et jeux de cartes gratuits.','Juegos de mesa locales para dos y cartas interactivas gratis.'],
+      diceK:['DICE & FORTUNE','تاس و شانس','النرد والحظ','WÜRFEL & ZUFALL','DÉS ET HASARD','DADOS Y AZAR'],
+      diceH:['Fifteen Additional Dice & Chance Games','پانزده بازی تازه تاس و شانس','خمسة عشر لعبة جديدة للنرد والحظ','Fünfzehn zusätzliche Würfel- und Glücksspiele','Quinze nouveaux jeux de dés et de hasard','Quince juegos nuevos de dados y azar'],
+      diceP:['Different rules, all browser-local and free. No wagers or valuable prizes.','قوانین متنوع؛ همگی رایگان و در مرورگر، بدون شرط یا جایزه باارزش.','قواعد متنوعة ومحاكاة مجانية في المتصفح دون رهانات أو جوائز.','Verschiedene Regeln, lokal und kostenlos, ohne Einsatz oder Preise.','Des règles variées, sans mise ni prix, dans votre navigateur.','Distintas reglas, gratis y sin apuestas ni premios.']
+    };
+    const diceButtonText={roll:['Roll Dice','پرتاب تاس','ارمِ النرد','Würfeln','Lancer les dés','Lanzar dados'],hold:['Hold','ثبت امتیاز','احتفظ','Halten','Garder','Mantener'],reset:['Restart','شروع دوباره','إعادة البدء','Neustart','Recommencer','Reiniciar'],yes:['Yes','بله','نعم','Ja','Oui','Sí'],no:['No','خیر','لا','Nein','Non','No'],odd:['Odd','فرد','فردي','Ungerade','Impair','Impar'],even:['Even','زوج','زوجي','Gerade','Pair','Par'],low:['Low','کم','منخفض','Niedrig','Bas','Bajo'],mid:['Middle','متوسط','متوسط','Mittel','Moyen','Medio'],high:['High','زیاد','مرتفع','Hoch','Haut','Alto'],first:['First','اول','الأول','Erster','Premier','Primero'],second:['Second','دوم','الثاني','Zweiter','Deuxième','Segundo']};
+    const diceText={
+      en:{ready:'Choose an option to roll free dice.',result:'Dice: {dice}. {message}',match:'Prediction matched. No reward.',miss:'Prediction missed; play again.',crapsWin:'Come-out 7 or 11: practice win.',crapsLose:'Come-out 2, 3 or 12: round over.',crapsPoint:'Point {n}. Roll again to repeat it before 7.',crapsSeven:'Seven before the point; round over.',crapsGoal:'Point repeated; round complete.',pigRoll:'Your round {round}; total {total}. Roll or Hold.',pigBust:'A one erased this round. Computer total {cpu}.',pigHold:'Your total {total}; computer total {cpu}.',pigWin:'You reached 30 first.',pigLose:'Computer reached 30 first.',war:'Your {a} against computer {b}. {message}',draw:'Equal result.',count:'Number of sixes: {n}.',longroll:'Rolled {n}; attempts so far: {a}.',found:'Six after {a} attempts. Start a new run.'},
+      fa:{ready:'برای بازی رایگان گزینه‌ای انتخاب کنید.',result:'تاس‌ها: {dice}. {message}',match:'پیش‌بینی درست بود؛ بدون جایزه.',miss:'پیش‌بینی درست نبود؛ دوباره تلاش کنید.',crapsWin:'۷ یا ۱۱ در دور اول؛ پیروزی تمرینی.',crapsLose:'۲ یا ۳ یا ۱۲؛ دور تمام شد.',crapsPoint:'هدف {n} است؛ پیش از ۷ دوباره همان عدد را بیاورید.',crapsSeven:'قبل از هدف، ۷ آمد؛ دور تمام شد.',crapsGoal:'عدد هدف تکرار شد؛ دور تمام شد.',pigRoll:'امتیاز این دور {round}؛ جمع {total}. تاس یا ثبت.',pigBust:'عدد یک آمد و امتیاز دور از دست رفت. حریف: {cpu}.',pigHold:'امتیاز شما {total}؛ حریف {cpu}.',pigWin:'شما زودتر به ۳۰ رسیدید.',pigLose:'حریف زودتر به ۳۰ رسید.',war:'شما {a}، حریف {b}. {message}',draw:'مساوی.',count:'تعداد شش‌ها: {n}.',longroll:'تاس {n}؛ تعداد تلاش‌ها {a}.',found:'پس از {a} تلاش شش آمد؛ دور جدید شروع می‌شود.'},
+      ar:{ready:'اختر خياراً لرمي النرد مجاناً.',result:'النرد: {dice}. {message}',match:'توقع صحيح، دون جائزة.',miss:'توقع غير صحيح، حاول ثانية.',crapsWin:'ظهور 7 أو 11: نجاح تدريبي.',crapsLose:'ظهور 2 أو 3 أو 12: انتهت الجولة.',crapsPoint:'الهدف {n}. كرره قبل ظهور 7.',crapsSeven:'ظهر 7 قبل الهدف؛ انتهت الجولة.',crapsGoal:'تكرر الهدف؛ انتهت الجولة.',pigRoll:'الجولة {round}؛ المجموع {total}. ارمِ أو احتفظ.',pigBust:'ظهر الرقم 1؛ ضاعت نقاط الجولة. المنافس {cpu}.',pigHold:'مجموعك {total}، المنافس {cpu}.',pigWin:'وصلت إلى 30 أولاً.',pigLose:'وصل المنافس إلى 30 أولاً.',war:'أنت {a} ضد الحاسوب {b}. {message}',draw:'تعادل.',count:'عدد الستات {n}.',longroll:'الرقم {n}، المحاولات {a}.',found:'ظهرت الستة بعد {a} محاولات.'},
+      de:{ready:'Wählen Sie eine kostenlose Würfelaktion.',result:'Würfel: {dice}. {message}',match:'Tipp stimmt. Kein Preis.',miss:'Tipp verfehlt. Noch einmal.',crapsWin:'7 oder 11 beim ersten Wurf: Übungserfolg.',crapsLose:'2, 3 oder 12: Runde beendet.',crapsPoint:'Punkt {n}; noch einmal vor der 7 treffen.',crapsSeven:'7 vor dem Punkt; Runde beendet.',crapsGoal:'Punkt erneut geworfen. Runde beendet.',pigRoll:'Runde {round}; Summe {total}. Würfeln oder Halten.',pigBust:'Eine 1 verliert die Rundenpunkte. Gegner {cpu}.',pigHold:'Ihre Summe {total}; Gegner {cpu}.',pigWin:'Sie erreichen zuerst 30.',pigLose:'Gegner erreicht zuerst 30.',war:'Sie {a}, Computer {b}. {message}',draw:'Gleichstand.',count:'Anzahl Sechsen: {n}.',longroll:'Wurf {n}, Versuche {a}.',found:'Sechs nach {a} Versuchen.'},
+      fr:{ready:'Choisissez un lancer gratuit.',result:'Dés : {dice}. {message}',match:'Prédiction correcte. Aucun prix.',miss:'Prédiction incorrecte. Réessayez.',crapsWin:'7 ou 11 au premier lancer : succès.',crapsLose:'2, 3 ou 12 : manche terminée.',crapsPoint:'Point {n}. Refaire avant le 7.',crapsSeven:'7 avant le point. Fin de manche.',crapsGoal:'Point répété. Fin de manche.',pigRoll:'Manche {round} ; total {total}. Lancer ou garder.',pigBust:'Un 1 annule la manche. Adversaire {cpu}.',pigHold:'Votre total {total} ; adversaire {cpu}.',pigWin:'Vous atteignez 30 en premier.',pigLose:'L’adversaire atteint 30 en premier.',war:'Vous {a}, ordinateur {b}. {message}',draw:'Égalité.',count:'Nombre de six : {n}.',longroll:'Dé {n}, essais {a}.',found:'Six après {a} essais.'},
+      es:{ready:'Elige una tirada gratuita.',result:'Dados: {dice}. {message}',match:'Acertaste. Sin premio.',miss:'No acertaste. Inténtalo de nuevo.',crapsWin:'7 u 11 al comienzo: éxito de práctica.',crapsLose:'2, 3 o 12: fin de ronda.',crapsPoint:'Punto {n}. Repítelo antes del 7.',crapsSeven:'Un 7 antes del punto. Fin de ronda.',crapsGoal:'Punto repetido. Fin de ronda.',pigRoll:'Ronda {round}; total {total}. Lanza o mantén.',pigBust:'Un 1 elimina los puntos de ronda. Rival {cpu}.',pigHold:'Tu total {total}; rival {cpu}.',pigWin:'Llegaste primero a 30.',pigLose:'Rival llegó primero a 30.',war:'Tú {a}, ordenador {b}. {message}',draw:'Empate.',count:'Cantidad de seises: {n}.',longroll:'Dado {n}, intentos {a}.',found:'Seis después de {a} intentos.'}
+    };
+    const df=(key,values={})=>diceText[locale][key].replace(/\{(\w+)\}/g,(_,k)=>String(values[k]??''));
+    const diceDefs=[
+      {id:'exact',icon:'⚀',title:['Exact Face','عدد دقیق تاس','رقم النرد الدقيق','Exakte Augenzahl','Face exacte','Cara exacta'],desc:['Predict a number from one to six.','عدد یک تا شش را پیش‌بینی کنید.','توقع رقماً من واحد إلى ستة.','Tippen Sie eins bis sechs.','Prédisez un nombre de un à six.','Predice del uno al seis.'],options:['1','2','3','4','5','6']},
+      {id:'parity',icon:'⚁',title:['Odd or Even Sum','جمع زوج یا فرد','مجموع فردي أم زوجي','Gerade oder ungerade Summe','Somme paire ou impaire','Suma par o impar'],desc:['Predict the parity of two dice.','زوج یا فرد بودن جمع دو تاس.','توقع مجموع نردين فردياً أو زوجياً.','Gerade oder ungerade mit zwei Würfeln.','Somme de deux dés, paire ou impaire.','Paridad de dos dados.'],options:['odd','even']},
+      {id:'doubles',icon:'⚂',title:['Doubles Hunt','شکار جفت تاس','صيد الزوج المتطابق','Doppeljagd','Chasse aux doubles','Caza de dobles'],desc:['Will both dice show the same face?','آیا دو تاس مساوی می‌شوند؟','هل يتطابق الرقمان؟','Würfeln Sie einen Pasch?','Les deux dés seront-ils égaux ?','¿Saldrán dos dados iguales?'],options:['yes','no']},
+      {id:'range',icon:'⚃',title:['Three-Dice Range','بازهٔ سه تاس','مدى ثلاثة نرود','Drei-Würfel-Bereich','Plage de trois dés','Rango de tres dados'],desc:['Guess low (3–8), middle (9–12) or high (13–18).','بازه کم ۳–۸، متوسط ۹–۱۲ یا زیاد ۱۳–۱۸.','منخفض 3–8 أو وسط 9–12 أو مرتفع 13–18.','Niedrig 3–8, mittel 9–12, hoch 13–18.','Bas 3–8, moyen 9–12, haut 13–18.','Bajo 3–8, medio 9–12, alto 13–18.'],options:['low','mid','high']},
+      {id:'threshold',icon:'⚄',title:['Four-or-More','چهار یا بیشتر','أربعة أو أكثر','Vier oder mehr','Quatre ou plus','Cuatro o más'],desc:['Predict if one die shows at least four.','آیا عدد تاس حداقل چهار است؟','هل يظهر أربعة أو أكثر؟','Zeigt ein Würfel mindestens vier?','Le dé donne-t-il quatre ou plus ?','¿Sale cuatro o más?'],options:['yes','no']},
+      {id:'triple',icon:'⚅',title:['Triple Match','سه تاس یکسان','تطابق ثلاثي','Dreifacher Pasch','Triple égalité','Triple coincidencia'],desc:['Will three dice all match?','آیا سه تاس یکسان خواهند بود؟','هل تتطابق النرود الثلاثة؟','Sind drei Würfel gleich?','Les trois dés sont-ils égaux ?','¿Coincidirán tres dados?'],options:['yes','no']},
+      {id:'craps',icon:'♢',title:['Craps Point Practice','تمرین هدف کرپس','تدريب نقطة كرابس','Craps-Punktübung','Point de craps','Punto de craps'],desc:['Come-out roll, then repeat a point before seven.','اولین پرتاب و سپس تکرار هدف پیش از عدد هفت.','ارمِ أولاً ثم كرر الهدف قبل السبعة.','Punkt vor der Sieben erneut treffen.','Répétez le point avant le sept.','Repite el punto antes del siete.'],options:['roll']},
+      {id:'pig',icon:'◎',title:['Pig Dice to Thirty','تاس پیک تا سی','لعبة بيغ حتى ثلاثين','Pig-Würfel bis dreißig','Dé Pig jusqu’à trente','Pig a treinta'],desc:['Roll or bank points against a simple virtual opponent.','تاس بیندازید یا امتیاز ذخیره کنید؛ رقیب مجازی.','ارمِ أو احتفظ بالنقاط أمام خصم افتراضي.','Würfeln oder Punkte gegen Computer sichern.','Lancez ou gardez vos points face à un rival.','Lanza o guarda puntos frente a un rival.'],options:['roll','hold','reset']},
+      {id:'dicewar',icon:'⚔',title:['Two-Dice Duel','نبرد دو تاس','مبارزة نردين','Zwei-Würfel-Duell','Duel à deux dés','Duelo de dos dados'],desc:['Two dice for you, two for an imaginary rival.','دو تاس برای شما و دو تاس برای حریف خیالی.','نردان لك ونردان للمنافس.','Je zwei Würfel für Sie und Computer.','Deux dés pour vous et votre rival.','Dos dados para ti y el rival.'],options:['roll']},
+      {id:'sequence',icon:'⇢',title:['One-Two-Three Sequence','ترتیب یک دو سه','تسلسل واحد اثنان ثلاثة','Eins-zwei-drei-Folge','Suite un-deux-trois','Secuencia uno-dos-tres'],desc:['Will three dice show 1, 2 and 3 in any order?','آیا سه تاس ۱، ۲ و ۳ می‌شوند؟','هل تظهر 1 و2 و3 بأي ترتيب؟','Erscheinen 1, 2 und 3 beliebig geordnet?','Obtenez 1, 2 et 3 dans tout ordre ?','¿Saldrán 1, 2 y 3 en cualquier orden?'],options:['yes','no']},
+      {id:'sum10',icon:'十',title:['Target Ten','هدف جمع ده','هدف مجموع عشرة','Zielsumme zehn','Objectif dix','Objetivo diez'],desc:['Predict an exact sum of ten from three dice.','جمع دقیق ده با سه تاس را پیش‌بینی کنید.','توقع مجموع عشرة من ثلاثة نرود.','Drei Würfel sollen genau zehn ergeben.','Trois dés donnent-ils exactement dix ?','¿Tres dados sumarán diez?'],options:['yes','no']},
+      {id:'fourkind',icon:'❖',title:['Four of a Kind','چهار تاس مشابه','أربعة متطابقة','Vierling mit Würfeln','Carré de dés','Cuatro iguales'],desc:['Will four dice all show the same face?','آیا چهار تاس همگی برابر خواهند بود؟','هل تتطابق أربعة نرود؟','Sind vier Würfel identisch?','Les quatre dés sont-ils identiques ?','¿Coincidirán cuatro dados?'],options:['yes','no']},
+      {id:'count6',icon:'⑥',title:['Count the Sixes','شمارش شش‌ها','عدّ الستات','Sechsen zählen','Comptez les six','Contar seises'],desc:['Predict 0–4 sixes from four dice.','تعداد شش‌ها در چهار تاس را پیش‌بینی کنید.','توقع عدد الستات في أربعة نرود.','Tippen Sie auf 0–4 Sechsen.','Combien de six sur quatre dés ?','Predice 0–4 seises en cuatro dados.'],options:['0','1','2','3','4']},
+      {id:'closest',icon:'≋',title:['Closest to Seven','نزدیک‌ترین به هفت','الأقرب إلى سبعة','Näher an sieben','Plus proche de sept','Más cerca de siete'],desc:['Which of two dice pairs sums closer to seven?','جمع کدام جفت تاس به هفت نزدیک‌تر است؟','أي زوج أقرب إلى سبعة؟','Welches Paar kommt sieben näher?','Quelle paire est la plus proche de sept ?','¿Qué par se acerca más a siete?'],options:['first','second']},
+      {id:'longroll',icon:'↻',title:['Six-Seeking Run','دنباله یافتن شش','محاولات الوصول إلى ستة','Weg zur Sechs','Chercher le six','Busca el seis'],desc:['Count how many fair rolls it takes to see a six.','شمارش پرتاب‌ها تا رسیدن به شش.','احسب الرميات حتى تظهر الستة.','Zählen Sie Würfe bis zur Sechs.','Comptez les lancers avant un six.','Cuenta tiradas hasta un seis.'],options:['roll','reset']}
+    ];
+    const diceUi=new Map(),diceState={point:0,pigTotal:0,pigRound:0,pigComputer:0,attempts:0};
+    const diceRoll=count=>Array.from({length:count},()=>random(6)+1);
+    function playNewDice(d,choice){
+      if(d.id==='pig'&&choice==='reset'){diceState.pigTotal=0;diceState.pigRound=0;diceState.pigComputer=0}
+      if(d.id==='longroll'&&choice==='reset')diceState.attempts=0;
+      let nums=[],note='';
+      const predict=(correct)=>{note=df(correct?'match':'miss')};
+      if(d.id==='exact'){nums=diceRoll(1);predict(Number(choice)===nums[0])}
+      if(d.id==='parity'){nums=diceRoll(2);predict((nums[0]+nums[1])%2===(choice==='odd'?1:0))}
+      if(d.id==='doubles'){nums=diceRoll(2);predict((nums[0]===nums[1])===(choice==='yes'))}
+      if(d.id==='range'){nums=diceRoll(3);const s=nums.reduce((a,b)=>a+b,0);predict((s<=8?'low':s<=12?'mid':'high')===choice)}
+      if(d.id==='threshold'){nums=diceRoll(1);predict((nums[0]>=4)===(choice==='yes'))}
+      if(d.id==='triple'){nums=diceRoll(3);predict((nums.every(n=>n===nums[0]))===(choice==='yes'))}
+      if(d.id==='craps'){nums=diceRoll(2);const s=nums[0]+nums[1];if(!diceState.point){if(s===7||s===11)note=df('crapsWin');else if([2,3,12].includes(s))note=df('crapsLose');else{diceState.point=s;note=df('crapsPoint',{n:s})}}else if(s===7){diceState.point=0;note=df('crapsSeven')}else if(s===diceState.point){diceState.point=0;note=df('crapsGoal')}else note=df('crapsPoint',{n:diceState.point})}
+      if(d.id==='pig'){
+        if(choice==='roll'){nums=diceRoll(1);if(nums[0]===1){diceState.pigRound=0;diceState.pigComputer+=diceRoll(1)[0];note=df('pigBust',{cpu:diceState.pigComputer})}else{diceState.pigRound+=nums[0];note=df('pigRoll',{round:diceState.pigRound,total:diceState.pigTotal+diceState.pigRound})}}
+        if(choice==='hold'){diceState.pigTotal+=diceState.pigRound;diceState.pigRound=0;diceState.pigComputer+=diceRoll(1)[0]+diceRoll(1)[0];note=df('pigHold',{total:diceState.pigTotal,cpu:diceState.pigComputer})}
+        if(choice==='reset')note=df('ready');
+        if(diceState.pigTotal>=30||diceState.pigComputer>=30){note=df(diceState.pigTotal>=30?'pigWin':'pigLose');diceState.pigTotal=0;diceState.pigRound=0;diceState.pigComputer=0}
+      }
+      if(d.id==='dicewar'){nums=diceRoll(4);const a=nums[0]+nums[1],b=nums[2]+nums[3];note=df('war',{a,b,message:a===b?df('draw'):df(a>b?'match':'miss')})}
+      if(d.id==='sequence'){nums=diceRoll(3);predict((nums.slice().sort().join(',')==='1,2,3')===(choice==='yes'))}
+      if(d.id==='sum10'){nums=diceRoll(3);predict((nums.reduce((a,b)=>a+b,0)===10)===(choice==='yes'))}
+      if(d.id==='fourkind'){nums=diceRoll(4);predict(nums.every(n=>n===nums[0])===(choice==='yes'))}
+      if(d.id==='count6'){nums=diceRoll(4);const n=nums.filter(v=>v===6).length;note=df('count',{n})+' '+df(n===Number(choice)?'match':'miss')}
+      if(d.id==='closest'){nums=diceRoll(4);const a=Math.abs(nums[0]+nums[1]-7),b=Math.abs(nums[2]+nums[3]-7);note=a===b?df('draw'):df((a<b?'first':'second')===choice?'match':'miss')}
+      if(d.id==='longroll'){if(choice==='roll'){nums=diceRoll(1);diceState.attempts++;note=nums[0]===6?df('found',{a:diceState.attempts}):df('longroll',{n:nums[0],a:diceState.attempts});if(nums[0]===6)diceState.attempts=0}else note=df('ready')}
+      diceUi.get(d.id).result.textContent=df('result',{dice:nums.length?nums.join(' · '):'—',message:note});
+    }
+    function buildDiceFestival(){
+      const grid=$('#dice-game-grid');
+      for(const d of diceDefs){const card=document.createElement('article');card.className='card';card.id='dice-'+d.id;
+        const top=document.createElement('div');top.className='card-title';const title=document.createElement('h3');const ico=document.createElement('span');ico.className='icon';ico.textContent=d.icon;top.append(title,ico);
+        const desc=document.createElement('p'),area=document.createElement('div'),controls=document.createElement('div'),result=document.createElement('div');area.className='gamearea';controls.className='control';result.className='result';result.setAttribute('role','status');result.setAttribute('aria-live','polite');
+        const buttons=d.options.map(opt=>{const b=document.createElement('button');b.type='button';b.className='btn small';b.addEventListener('click',()=>playNewDice(d,opt));controls.append(b);return b});area.append(controls,result);card.append(top,desc,area);grid.append(card);diceUi.set(d.id,{title,desc,buttons,result})
+      }
+    }
+    function classicPanel(id){
+      const panel=document.createElement('article');panel.className='tabletop-panel';panel.id='classic-'+id;
+      const title=document.createElement('h3'),desc=document.createElement('p'),body=document.createElement('div'),actions=document.createElement('div'),status=document.createElement('div');
+      actions.className='board-line';status.className='board-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+      panel.append(title,desc,body,actions,status);$('#classic-game-grid').append(panel);return {panel,title,desc,body,actions,status}
+    }
+    function classicButton(place,callback){const b=document.createElement('button');b.type='button';b.className='btn small';b.addEventListener('click',callback);place.append(b);return b}
+    const chessCopy=board=>board.map(row=>row.slice());
+    const chessIcons={wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'};
+    const chessInfo={
+      en:{turn:'{side} to move.',check:'{side} in check.',mate:'Checkmate. {side} wins.',stalemate:'Stalemate. No legal moves.',fifty:'Fifty-move draw.',bare:'Insufficient material. Draw.',select:'Select a piece and then a green target.',white:'White',black:'Black'},
+      fa:{turn:'نوبت {side}.',check:'شاه {side} در کیش است.',mate:'کیش‌ومات. {side} برنده شد.',stalemate:'پات؛ حرکت قانونی نیست.',fifty:'تساوی قانون پنجاه حرکت.',bare:'مهره کافی نیست؛ مساوی.',select:'مهره و سپس خانه سبز را انتخاب کنید.',white:'سفید',black:'سیاه'},
+      ar:{turn:'دور {side}.',check:'ملك {side} تحت الكش.',mate:'كش مات. فاز {side}.',stalemate:'تعادل؛ لا نقلات قانونية.',fifty:'تعادل قاعدة الخمسين حركة.',bare:'قطع غير كافية؛ تعادل.',select:'اختر قطعة ثم مربعاً أخضر.',white:'الأبيض',black:'الأسود'},
+      de:{turn:'{side} ist am Zug.',check:'{side} steht im Schach.',mate:'Schachmatt. {side} gewinnt.',stalemate:'Patt. Keine legalen Züge.',fifty:'Remis nach fünfzig Zügen.',bare:'Unzureichendes Material. Remis.',select:'Figur, dann grünes Zielfeld wählen.',white:'Weiß',black:'Schwarz'},
+      fr:{turn:'Au tour de {side}.',check:'{side} est en échec.',mate:'Échec et mat. {side} gagne.',stalemate:'Pat. Aucun coup légal.',fifty:'Nulle après cinquante coups.',bare:'Matériel insuffisant. Nulle.',select:'Choisissez une pièce puis une case verte.',white:'Blancs',black:'Noirs'},
+      es:{turn:'Turno de {side}.',check:'Jaque a {side}.',mate:'Jaque mate. Gana {side}.',stalemate:'Ahogado. Sin jugadas legales.',fifty:'Tablas por cincuenta movimientos.',bare:'Material insuficiente. Tablas.',select:'Elige pieza y luego una casilla verde.',white:'Blancas',black:'Negras'}
+    };
+    const chessWords={title:['Chess — Two Players','شطرنج دونفره','شطرنج للاعبين','Schach für zwei','Échecs à deux','Ajedrez para dos'],desc:['Legal moves, checks, castling, en passant and automatic queen promotion. Play locally on one device.','حرکت قانونی، کیش، قلعه، آن‌پاسان و ارتقای خودکار پیاده به وزیر؛ دونفره.','حركات قانونية وكش وتبييت وأخذ بالتجاوز وترقية بيدق إلى وزير.','Legale Züge, Schach, Rochade, en passant und automatische Damenumwandlung.','Coups légaux, échec, roque, prise en passant et promotion automatique en dame.','Movimientos legales, jaque, enroque, al paso y coronación automática de dama.'],reset:['New Match','بازی جدید','مباراة جديدة','Neue Partie','Nouvelle partie','Nueva partida'],undo:['Undo Move','بازگشت حرکت','تراجع','Zug zurück','Annuler','Deshacer']};
+    const chessUI=classicPanel('chess');const chessBoard=document.createElement('div');chessBoard.className='chess-board';chessBoard.id='chess-board';chessBoard.setAttribute('role','group');chessUI.body.append(chessBoard);
+    const chessReset=classicButton(chessUI.actions,()=>resetChess()),chessUndo=classicButton(chessUI.actions,()=>undoChess());
+    let chess={board:[],turn:'w',selected:null,rights:{wK:true,wQ:true,bK:true,bQ:true},ep:null,half:0,finished:false,history:[],info:['select',{}]};
+    function resetChess(){
+      chess.board=[['bR','bN','bB','bQ','bK','bB','bN','bR'],Array(8).fill('bP'),...Array.from({length:4},()=>Array(8).fill(null)),Array(8).fill('wP'),['wR','wN','wB','wQ','wK','wB','wN','wR']];
+      chess.turn='w';chess.selected=null;chess.rights={wK:true,wQ:true,bK:true,bQ:true};chess.ep=null;chess.half=0;chess.finished=false;chess.history=[];chess.info=['turn',{side:'white'}];renderChess()
+    }
+    const inside=(r,c)=>r>=0&&r<8&&c>=0&&c<8;
+    function attackedBy(board,r,c,attacker){
+      for(let sr=0;sr<8;sr++)for(let sc=0;sc<8;sc++){const p=board[sr][sc];if(!p||p[0]!==attacker)continue;const type=p[1],dr=r-sr,dc=c-sc,ar=Math.abs(dr),ac=Math.abs(dc);
+        if(type==='P'&&dr===(attacker==='w'?-1:1)&&ac===1)return true;
+        if(type==='N'&&((ar===1&&ac===2)||(ar===2&&ac===1)))return true;
+        if(type==='K'&&Math.max(ar,ac)===1)return true;
+        const diagonal=ar===ac&&ar>0,straight=(dr===0||dc===0)&&(ar+ac>0);
+        if(((type==='B'&&diagonal)||(type==='R'&&straight)||(type==='Q'&&(diagonal||straight)))){
+          const stepR=Math.sign(dr),stepC=Math.sign(dc);let y=sr+stepR,x=sc+stepC,blocked=false;
+          while(y!==r||x!==c){if(board[y][x]){blocked=true;break}y+=stepR;x+=stepC}if(!blocked)return true;
+        }
+      }return false
+    }
+    function kingChecked(board,color){for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]===color+'K')return attackedBy(board,r,c,color==='w'?'b':'w');return true}
+    function legalChessFrom(r,c){
+      const p=chess.board[r][c];if(!p)return [];const color=p[0],type=p[1],enemy=color==='w'?'b':'w',out=[];
+      for(let tr=0;tr<8;tr++)for(let tc=0;tc<8;tc++){
+        const dr=tr-r,dc=tc-c,ar=Math.abs(dr),ac=Math.abs(dc),target=chess.board[tr][tc];if(!dr&&!dc||target&&target[0]===color||target&&target[1]==='K')continue;
+        let valid=false,castle=false,epCapture=false;
+        if(type==='P'){
+          const dir=color==='w'?-1:1,starting=color==='w'?6:1;
+          if(dc===0&&!target&&(dr===dir||(r===starting&&dr===dir*2&&!chess.board[r+dir][c])))valid=true;
+          if(ac===1&&dr===dir){if(target&&target[0]===enemy)valid=true;else if(!target&&chess.ep&&chess.ep.r===tr&&chess.ep.c===tc&&chess.board[r][tc]===enemy+'P'){valid=true;epCapture=true}}
+        }else if(type==='N')valid=(ar===1&&ac===2)||(ar===2&&ac===1);
+        else if(type==='K'){
+          valid=Math.max(ar,ac)===1;
+          if(dr===0&&ac===2&&c===4&&(r===(color==='w'?7:0))){
+            const right=color+(dc>0?'K':'Q'),rookCol=dc>0?7:0,mid=dc>0?5:3;
+            if(chess.rights[right]&&chess.board[r][rookCol]===color+'R'&&![...Array.from({length:Math.abs(rookCol-c)-1},(_,i)=>Math.min(rookCol,c)+i+1)].some(x=>chess.board[r][x])&&!kingChecked(chess.board,color)&&!attackedBy(chess.board,r,mid,enemy)&&!attackedBy(chess.board,r,tc,enemy)){valid=true;castle=true}
+          }
+        }else{
+          const diagonal=ar===ac&&ar>0,straight=(dr===0||dc===0)&&(ar+ac>0);
+          valid=type==='B'?diagonal:type==='R'?straight:(diagonal||straight);
+          if(valid){let y=r+Math.sign(dr),x=c+Math.sign(dc);while(y!==tr||x!==tc){if(chess.board[y][x]){valid=false;break}y+=Math.sign(dr);x+=Math.sign(dc)}}
+        }
+        if(!valid)continue;
+        const trial=chessCopy(chess.board);trial[tr][tc]=type==='P'&&(tr===0||tr===7)?color+'Q':p;trial[r][c]=null;
+        if(epCapture)trial[r][tc]=null;
+        if(castle){const from=dc>0?7:0,to=dc>0?5:3;trial[r][to]=trial[r][from];trial[r][from]=null}
+        if(!kingChecked(trial,color))out.push({r:tr,c:tc,castle,epCapture});
+      }return out
+    }
+    function allChessMoves(color){for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(chess.board[r][c]?.[0]===color&&legalChessFrom(r,c).length)return true;return false}
+    function playChessMove(r,c,dest){
+      chess.history.push({board:chessCopy(chess.board),turn:chess.turn,rights:{...chess.rights},ep:chess.ep?{...chess.ep}:null,half:chess.half});
+      const p=chess.board[r][c],captured=chess.board[dest.r][dest.c],color=p[0],other=color==='w'?'b':'w';
+      chess.board[dest.r][dest.c]=p[1]==='P'&&(dest.r===0||dest.r===7)?color+'Q':p;chess.board[r][c]=null;
+      if(dest.epCapture)chess.board[r][dest.c]=null;
+      if(dest.castle){const from=dest.c>c?7:0,to=dest.c>c?5:3;chess.board[r][to]=chess.board[r][from];chess.board[r][from]=null}
+      if(p[1]==='K'){chess.rights[color+'K']=false;chess.rights[color+'Q']=false}
+      if(p==='wR'&&r===7){if(c===0)chess.rights.wQ=false;if(c===7)chess.rights.wK=false}
+      if(p==='bR'&&r===0){if(c===0)chess.rights.bQ=false;if(c===7)chess.rights.bK=false}
+      if(captured==='wR'&&dest.r===7){if(dest.c===0)chess.rights.wQ=false;if(dest.c===7)chess.rights.wK=false}
+      if(captured==='bR'&&dest.r===0){if(dest.c===0)chess.rights.bQ=false;if(dest.c===7)chess.rights.bK=false}
+      chess.ep=p[1]==='P'&&Math.abs(dest.r-r)===2?{r:(r+dest.r)/2,c}:null;
+      chess.half=p[1]==='P'||captured||dest.epCapture?0:chess.half+1;
+      chess.turn=other;chess.selected=null;
+      if(!allChessMoves(other)){chess.finished=true;chess.info=[kingChecked(chess.board,other)?'mate':'stalemate',{side:color==='w'?'white':'black'}]}
+      else if(chess.half>=100){chess.finished=true;chess.info=['fifty',{}]}
+      else if(chess.board.flat().filter(Boolean).every(x=>x[1]==='K')){chess.finished=true;chess.info=['bare',{}]}
+      else chess.info=[kingChecked(chess.board,other)?'check':'turn',{side:other==='w'?'white':'black'}];
+      renderChess();
+    }
+    function undoChess(){const prev=chess.history.pop();if(!prev)return;Object.assign(chess,prev);chess.selected=null;chess.finished=false;chess.info=['turn',{side:chess.turn==='w'?'white':'black'}];renderChess()}
+    function chooseChess(r,c){
+      if(chess.finished)return;const own=chess.board[r][c]?.[0]===chess.turn;
+      if(chess.selected){const moves=legalChessFrom(chess.selected.r,chess.selected.c);const found=moves.find(m=>m.r===r&&m.c===c);if(found){playChessMove(chess.selected.r,chess.selected.c,found);return}}
+      chess.selected=own?{r,c}:null;renderChess()
+    }
+    function renderChess(){
+      chessBoard.replaceChildren();let legal=new Set();if(chess.selected)legal=new Set(legalChessFrom(chess.selected.r,chess.selected.c).map(m=>m.r+'-'+m.c));
+      for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+        const b=document.createElement('button');b.className='chess-cell';b.type='button';b.textContent=chessIcons[chess.board[r][c]]||'';b.setAttribute('aria-label',String.fromCharCode(97+c)+(8-r)+' '+(chess.board[r][c]||'empty'));
+        if(chess.selected?.r===r&&chess.selected.c===c)b.classList.add('selected');if(legal.has(r+'-'+c))b.classList.add('legal');
+        b.addEventListener('click',()=>chooseChess(r,c));chessBoard.append(b)
+      }
+      const words=chessInfo[locale],details=Object.fromEntries(Object.entries(chess.info[1]).map(([k,v])=>[k,words[v]||v]));
+      chessUI.status.textContent=words[chess.info[0]].replace(/\{(\w+)\}/g,(_,key)=>details[key]??'')+' '+(chess.finished?'':words.select);
+    }
+    const backWords={
+      title:['Backgammon — Two Players','تخته‌نرد دونفره','طاولة الزهر للاعبين','Backgammon für zwei','Backgammon à deux','Backgammon para dos'],
+      desc:['Roll two dice, move checkers toward home, hit singles and bear off. Local practice match.','دو تاس بیندازید، مهره‌ها را به خانه ببرید، مهره تک را بزنید و خارج کنید؛ بازی دونفره.','ارمِ نردين، حرك القطع نحو البيت واضرب المفردة وأخرج القطع.','Zwei Würfel, Steine ziehen, einzelne schlagen und abtragen.','Deux dés, déplacement, frappe des pions seuls et sortie des pions.','Dos dados, mover fichas, capturar fichas solas y retirarlas.'],
+      roll:['Roll Dice','انداختن تاس','ارمِ النرد','Würfeln','Lancer les dés','Lanzar dados'],
+      end:['End Turn','پایان نوبت','إنهاء الدور','Zug beenden','Fin du tour','Terminar turno'],
+      bear:['Bear Off','خارج‌کردن مهره','إخراج قطعة','Stein abtragen','Sortir un pion','Retirar ficha'],
+      reset:['New Match','بازی جدید','مباراة جديدة','Neue Partie','Nouvelle partie','Nueva partida']
+    };
+    const backMsg={
+      en:{turn:'{side}: roll the dice.',choose:'{side}: choose a checker, then a highlighted point. Dice: {dice}',bar:'{side}: move your checker from the bar first. Dice: {dice}',blocked:'No legal moves. Next player rolls.',won:'{side} bore off all 15 checkers and won!',need:'Use an available move before ending your turn.',white:'White',black:'Black'},
+      fa:{turn:'{side}: تاس بیندازید.',choose:'{side}: مهره و سپس خانه روشن را انتخاب کنید. تاس: {dice}',bar:'{side}: اول مهره داخل بار را وارد کنید. تاس: {dice}',blocked:'حرکت قانونی نیست؛ نوبت بازیکن بعد.',won:'{side} هر ۱۵ مهره را خارج کرد و برنده شد!',need:'ابتدا حرکت قانونی موجود را انجام دهید.',white:'سفید',black:'سیاه'},
+      ar:{turn:'{side}: ارمِ النرد.',choose:'{side}: اختر قطعة ثم نقطة مضيئة. النرد: {dice}',bar:'{side}: أدخل القطعة من الشريط أولاً. النرد: {dice}',blocked:'لا حركات قانونية؛ دور التالي.',won:'{side} أخرج القطع الخمس عشرة وفاز!',need:'العب الحركة المتاحة أولاً.',white:'الأبيض',black:'الأسود'},
+      de:{turn:'{side}: Würfeln.',choose:'{side}: Stein und markierten Punkt wählen. Würfel: {dice}',bar:'{side}: Zuerst Stein von der Bar einsetzen. Würfel: {dice}',blocked:'Kein legaler Zug. Nächster Spieler.',won:'{side} trägt alle 15 Steine ab und gewinnt!',need:'Zuerst mögliche Züge ausführen.',white:'Weiß',black:'Schwarz'},
+      fr:{turn:'{side} : lancez les dés.',choose:'{side} : choisissez un pion puis une case marquée. Dés : {dice}',bar:'{side} : entrez le pion de la barre d’abord. Dés : {dice}',blocked:'Aucun coup légal. Joueur suivant.',won:'{side} a sorti 15 pions et gagné !',need:'Jouez un déplacement disponible.',white:'Blancs',black:'Noirs'},
+      es:{turn:'{side}: lanza los dados.',choose:'{side}: elige ficha y punto resaltado. Dados: {dice}',bar:'{side}: entra la ficha desde la barra primero. Dados: {dice}',blocked:'Sin movimientos legales. Siguiente jugador.',won:'{side} retiró las 15 fichas y ganó.',need:'Haz un movimiento disponible primero.',white:'Blancas',black:'Negras'}
+    };
+    const backUI=classicPanel('backgammon'),backBoard=document.createElement('div');backBoard.className='back-board';backBoard.id='back-board';const backScroll=document.createElement('div');backScroll.className='back-board-scroll';backScroll.append(backBoard);backUI.body.append(backScroll);
+    const backTools=document.createElement('div');backTools.className='board-line';backUI.body.append(backTools);
+    const backBarButton=classicButton(backTools,()=>selectBack('bar'));
+    const backRollButton=classicButton(backUI.actions,()=>rollBack());
+    const backEndButton=classicButton(backUI.actions,()=>endBack(false));
+    const backBearButton=classicButton(backUI.actions,()=>bearBack());
+    const backResetButton=classicButton(backUI.actions,()=>resetBack());
+    let back={points:[],bar:{w:0,b:0},off:{w:0,b:0},turn:'w',dice:[],selected:null,winner:null,message:'turn'};
+    const backSign=color=>color==='w'?1:-1;
+    const backOwn=(v,color)=>v*backSign(color)>0;
+    function resetBack(){back={points:Array(24).fill(0),bar:{w:0,b:0},off:{w:0,b:0},turn:'w',dice:[],selected:null,winner:null,message:'turn'};
+      back.points[23]=2;back.points[12]=5;back.points[7]=3;back.points[5]=5;
+      back.points[0]=-2;back.points[11]=-5;back.points[16]=-3;back.points[18]=-5;renderBack()}
+    function backHome(color){if(back.bar[color])return false;for(let i=0;i<24;i++)if(backOwn(back.points[i],color)&&(color==='w'?i>5:i<18))return false;return true}
+    function backMove(source,die,color=back.turn){
+      if(source==='bar'){const target=color==='w'?24-die:die-1;return backOwn(back.points[target],color==='w'?'b':'w')&&Math.abs(back.points[target])>=2?null:target}
+      if(typeof source!=='number'||!backOwn(back.points[source],color)||back.bar[color])return null;
+      const to=source+(color==='w'?-die:die);
+      if(to<0||to>=24){if(!backHome(color))return null;const distance=color==='w'?source+1:24-source;
+        if(die<distance)return null;
+        if(die>distance){for(let i=0;i<24;i++)if(backOwn(back.points[i],color)&&(color==='w'?i>source:i<source))return null}
+        return 'off'}
+      if(backOwn(back.points[to],color==='w'?'b':'w')&&Math.abs(back.points[to])>=2)return null;
+      return to;
+    }
+    function backAvailable(source){return [...new Set(back.dice.map(d=>backMove(source,d)).filter(v=>v!==null))]}
+    function backCanPlay(){const sources=back.bar[back.turn]?['bar']:back.points.map((n,i)=>backOwn(n,back.turn)?i:null).filter(i=>i!==null);return sources.some(s=>backAvailable(s).length>0)}
+    function backMessage(){const m=backMsg[locale],side=m[back.turn==='w'?'white':'black'];return m[back.message].replace(/\{(\w+)\}/g,(_,k)=>({side,dice:back.dice.join(' · ')||'—'})[k]??'')}
+    function renderBack(){backBoard.replaceChildren();
+      const highlights=new Set(back.selected!==null?backAvailable(back.selected):[]);
+      const order=[...Array.from({length:12},(_,i)=>12+i),...Array.from({length:12},(_,i)=>11-i)];
+      for(const i of order){const cell=document.createElement('button');cell.type='button';cell.className='back-point';cell.setAttribute('aria-label','Point '+(i+1)+' '+back.points[i]);
+        const number=document.createElement('span');number.className='point-number';number.textContent=String(i+1);cell.append(number);
+      if(highlights.has(i))cell.classList.add('target');if(back.selected===i)cell.classList.add('selected');
+        const amount=Math.abs(back.points[i]);for(let j=0;j<Math.min(amount,5);j++){const checker=document.createElement('span');checker.className='checker-chip '+(back.points[i]>0?'':'dark');cell.append(checker)}
+        if(amount>5){const more=document.createElement('span');more.textContent='×'+amount;cell.append(more)}
+        cell.addEventListener('click',()=>chooseBack(i));backBoard.append(cell)}
+      const m=backMsg[locale];backBarButton.textContent='BAR ♙ '+back.bar.w+' / ♟ '+back.bar.b+' · OUT ♙ '+back.off.w+' / ♟ '+back.off.b;
+      backRollButton.disabled=back.dice.length>0||!!back.winner;backBearButton.disabled=back.selected===null||!backAvailable(back.selected).includes('off');backEndButton.disabled=!!back.winner;
+      backUI.status.textContent=backMessage();
+    }
+    function endBack(force){if(back.winner)return;if(!force&&back.dice.length&&backCanPlay()){back.message='need';renderBack();return}back.turn=back.turn==='w'?'b':'w';back.dice=[];back.selected=null;back.message='turn';renderBack()}
+    function rollBack(){if(back.winner||back.dice.length)return;const a=diceRoll(2);back.dice=a[0]===a[1]?Array(4).fill(a[0]):a;back.message=back.bar[back.turn]?'bar':'choose';if(!backCanPlay()){endBack(true);back.message='blocked'}renderBack()}
+    function selectBack(source){if(!back.dice.length||back.winner)return;if(source==='bar'?!back.bar[back.turn]:!backOwn(back.points[source],back.turn)||!!back.bar[back.turn])return;back.selected=source;renderBack()}
+    function chooseBack(target){if(!back.dice.length)return;if(back.selected===null){selectBack(target);return}if(back.selected===target){back.selected=null;renderBack();return}if(!attemptBack(target))selectBack(target)}
+    function attemptBack(target){const source=back.selected;const dieIndex=back.dice.findIndex(d=>backMove(source,d)===target);if(dieIndex<0)return false;
+      const color=back.turn,sign=backSign(color),other=color==='w'?'b':'w';if(source==='bar')back.bar[color]--;else back.points[source]-=sign;
+      if(target==='off')back.off[color]++;else {if(back.points[target]===-sign){back.points[target]=0;back.bar[other]++}back.points[target]+=sign}
+      back.dice.splice(dieIndex,1);back.selected=null;if(back.off[color]===15){back.winner=color;back.message='won'}else if(!back.dice.length||!backCanPlay()){endBack(true)}else back.message=back.bar[color]?'bar':'choose';renderBack();return true}
+    function bearBack(){if(back.selected!==null)attemptBack('off')}
+    resetChess();
+    resetBack();
+    const cardGameDefs=[
+      {id:'war',icon:'♠',title:['Card War','جنگ ورق','حرب الورق','Kartenkrieg','Bataille','Guerra de cartas'],desc:['Draw two cards; the higher rank takes the practice round.','دو ورق بکشید؛ ورق بزرگ‌تر برنده این دور است.','اسحب ورقتين؛ الأعلى يفوز بالجولة.','Zwei Karten ziehen, höhere Karte gewinnt.','Tirez deux cartes : la plus forte gagne.','Dos cartas: gana la mayor.']},
+      {id:'memory',icon:'♣',title:['Memory Pairs','جفت‌یابی ورق','مطابقة البطاقات','Kartenpaare merken','Paires mémoire','Parejas de memoria'],desc:['Turn over twelve hidden cards to find six matching pairs.','۱۲ ورق پنهان را باز کنید و شش جفت را بیابید.','اقلب 12 بطاقة للعثور على ستة أزواج.','Zwölf Karten umdrehen und sechs Paare finden.','Retournez douze cartes et trouvez six paires.','Voltea doce cartas y encuentra seis parejas.']},
+      {id:'three',icon:'♥',title:['Three-Card Showdown','رقابت سه ورق','مواجهة ثلاث ورقات','Drei-Karten-Showdown','Duel à trois cartes','Duelo de tres cartas'],desc:['Compare real three-card hand rankings with the computer; no stakes.','سه ورق خود و رایانه را با ارزش‌گذاری دست‌ها مقایسه کنید.','قارن ثلاث أوراق لك وثلاثاً للحاسوب دون رهانات.','Drei-Karten-Wertung gegen den Computer.','Comparez les mains de trois cartes, sans mise.','Compara tres cartas con la máquina, sin apuesta.']},
+      {id:'trick',icon:'♦',title:['Five-Trick Card Duel','نبرد پنج دست ورق','مبارزة خمس جولات','Fünf-Stiche-Duell','Duel de cinq plis','Duelo de cinco bazas'],desc:['Choose a card from your five-card hand. The higher card wins each trick.','از پنج ورق خود یکی را انتخاب کنید؛ ورق بالاتر هر دست را می‌برد.','اختر بطاقة من خمس؛ الأعلى يأخذ الجولة.','Eine von fünf Karten spielen; höhere Karte gewinnt.','Jouez une carte parmi cinq; la plus forte gagne le pli.','Juega una de cinco cartas; gana la mayor.']}
+    ];
+    const cardText={
+      en:{draw:'Draw Cards',reset:'New Game',again:'New Round',new:'Shuffle & Restart',you:'You',cpu:'Computer',tie:'Draw',win:'You win the practice round!',lose:'Computer wins the practice round.',war:'Your {a} · computer {b}. {result}',memory:'Pairs {pairs}/6 · Attempts {tries}.',memoryDone:'All six pairs found in {tries} attempts!',three:'Your {a} ({handA}) · computer {b} ({handB}). {result}',trick:'You played {a}; computer played {b}. {result} · Score {you}–{cpu}.',trickStart:'Select a card below to play one of five tricks.',trickDone:'Match complete · you {you}, computer {cpu}, ties {ties}.',ready:'Ready for a free card game.',high:'High card',pair:'Pair',flush:'Flush',straight:'Straight',triple:'Three of a kind',straightFlush:'Straight flush'},
+      fa:{draw:'کشیدن ورق',reset:'بازی جدید',again:'دور جدید',new:'بر زدن و شروع',you:'شما',cpu:'رایانه',tie:'مساوی',win:'شما برنده این دور شدید!',lose:'رایانه برنده این دور شد.',war:'شما {a} · رایانه {b}. {result}',memory:'جفت‌ها {pairs}/۶ · تلاش‌ها {tries}.',memoryDone:'شش جفت در {tries} تلاش پیدا شد!',three:'شما {a} ({handA}) · رایانه {b} ({handB}). {result}',trick:'شما {a} · رایانه {b}. {result} · امتیاز {you}–{cpu}.',trickStart:'از ورق‌های پایین یکی را برای هر دست انتخاب کنید.',trickDone:'مسابقه پایان یافت · شما {you}، رایانه {cpu}، مساوی {ties}.',ready:'بازی رایگان آماده است.',high:'کارت بالا',pair:'جفت',flush:'هم‌خال',straight:'ردیف',triple:'سه یکسان',straightFlush:'ردیف هم‌خال'},
+      ar:{draw:'اسحب الورق',reset:'لعبة جديدة',again:'جولة جديدة',new:'اخلط وابدأ',you:'أنت',cpu:'الحاسوب',tie:'تعادل',win:'فزت بالجولة!',lose:'فاز الحاسوب بالجولة.',war:'أنت {a} · الحاسوب {b}. {result}',memory:'الأزواج {pairs}/6 · المحاولات {tries}.',memoryDone:'وجدت الأزواج الستة في {tries} محاولات!',three:'أنت {a} ({handA}) · الحاسوب {b} ({handB}). {result}',trick:'أنت {a} · الحاسوب {b}. {result} · النقاط {you}–{cpu}.',trickStart:'اختر ورقة من أوراقك لخمس جولات.',trickDone:'انتهى اللقاء · أنت {you} والحاسوب {cpu} وتعادل {ties}.',ready:'لعبة الورق المجانية جاهزة.',high:'ورقة عالية',pair:'زوج',flush:'لون واحد',straight:'تسلسل',triple:'ثلاثية',straightFlush:'تسلسل بلون واحد'},
+      de:{draw:'Karten ziehen',reset:'Neues Spiel',again:'Neue Runde',new:'Neu mischen',you:'Sie',cpu:'Computer',tie:'Gleichstand',win:'Sie gewinnen die Übungsrunde!',lose:'Computer gewinnt die Übungsrunde.',war:'Sie {a} · Computer {b}. {result}',memory:'Paare {pairs}/6 · Versuche {tries}.',memoryDone:'Alle sechs Paare in {tries} Versuchen!',three:'Sie {a} ({handA}) · Computer {b} ({handB}). {result}',trick:'Sie {a} · Computer {b}. {result} · Punkte {you}–{cpu}.',trickStart:'Eine Ihrer fünf Karten wählen.',trickDone:'Partie beendet · Sie {you}, Computer {cpu}, Remis {ties}.',ready:'Kartenspiel bereit.',high:'Hohe Karte',pair:'Paar',flush:'Flush',straight:'Straße',triple:'Drilling',straightFlush:'Straight Flush'},
+      fr:{draw:'Tirer les cartes',reset:'Nouvelle partie',again:'Nouvelle manche',new:'Mélanger et jouer',you:'Vous',cpu:'Ordinateur',tie:'Égalité',win:'Vous gagnez la manche !',lose:'L’ordinateur gagne la manche.',war:'Vous {a} · ordinateur {b}. {result}',memory:'Paires {pairs}/6 · Essais {tries}.',memoryDone:'Six paires en {tries} essais !',three:'Vous {a} ({handA}) · ordinateur {b} ({handB}). {result}',trick:'Vous {a} · ordinateur {b}. {result} · Score {you}–{cpu}.',trickStart:'Jouez une de vos cinq cartes.',trickDone:'Partie terminée · vous {you}, ordinateur {cpu}, égalités {ties}.',ready:'Jeu de cartes gratuit prêt.',high:'Carte haute',pair:'Paire',flush:'Couleur',straight:'Suite',triple:'Brelan',straightFlush:'Quinte flush'},
+      es:{draw:'Sacar cartas',reset:'Nuevo juego',again:'Nueva ronda',new:'Barajar y empezar',you:'Tú',cpu:'Ordenador',tie:'Empate',win:'¡Ganas la ronda!',lose:'Gana el ordenador.',war:'Tú {a} · ordenador {b}. {result}',memory:'Parejas {pairs}/6 · Intentos {tries}.',memoryDone:'¡Seis parejas en {tries} intentos!',three:'Tú {a} ({handA}) · ordenador {b} ({handB}). {result}',trick:'Tú {a} · ordenador {b}. {result} · Puntos {you}–{cpu}.',trickStart:'Juega una de tus cinco cartas.',trickDone:'Partida completa · tú {you}, ordenador {cpu}, empates {ties}.',ready:'Juego de cartas gratis listo.',high:'Carta alta',pair:'Pareja',flush:'Color',straight:'Escalera',triple:'Trío',straightFlush:'Escalera de color'}
+    };
+    const cf=(key,vars={})=>cardText[locale][key].replace(/\{(\w+)\}/g,(_,k)=>String(vars[k]??''));
+    const cardUi=new Map(),cardState={war:null,memory:null,three:null,trick:null};
+    const cardValue=c=>c.rank==='A'?14:c.rank==='K'?13:c.rank==='Q'?12:c.rank==='J'?11:Number(c.rank);
+    function hand3(h){const sorted=h.map(cardValue).sort((a,b)=>b-a),same=h.every(c=>c.suit===h[0].suit),freq=new Map();sorted.forEach(x=>freq.set(x,(freq.get(x)||0)+1));
+      const counts=[...freq.values()].sort((a,b)=>b-a),ordered=[...freq].sort((a,b)=>b[1]-a[1]||b[0]-a[0]).map(v=>v[0]);
+      const straight=new Set(sorted).size===3&&(sorted[0]-sorted[2]===2||sorted.join(',')==='14,3,2');
+      const highStraight=sorted.join(',')==='14,3,2'?3:sorted[0];
+      if(straight&&same)return {score:[5,highStraight],name:'straightFlush'};
+      if(counts[0]===3)return {score:[4,ordered[0]],name:'triple'};
+      if(straight)return {score:[3,highStraight],name:'straight'};
+      if(same)return {score:[2,...sorted],name:'flush'};
+      if(counts[0]===2)return {score:[1,...ordered],name:'pair'};
+      return {score:[0,...sorted],name:'high'};
+    }
+    function compareScores(a,b){for(let i=0;i<Math.max(a.length,b.length);i++){const delta=(a[i]||0)-(b[i]||0);if(delta)return Math.sign(delta)}return 0}
+    function cardOutcome(n){return cf(n>0?'win':n<0?'lose':'tie')}
+    function resetMemory(){const values=['♠A','♥K','♦Q','♣J','♠10','♥9'];const deck=[...values,...values];for(let i=deck.length-1;i>0;i--){const j=random(i+1);[deck[i],deck[j]]=[deck[j],deck[i]]}
+      cardState.memory={deck,visible:[],matched:new Set(),tries:0,locked:false};renderMemory()}
+    function renderMemory(){const ui=cardUi.get('memory'),s=cardState.memory;ui.field.replaceChildren();s.deck.forEach((face,i)=>{const b=document.createElement('button');b.type='button';b.className='memory-tile';const shown=s.visible.includes(i)||s.matched.has(i);b.textContent=shown?face:'◆';if(shown)b.classList.add('revealed');if(s.matched.has(i))b.classList.add('found');b.disabled=shown||s.locked;b.setAttribute('aria-label',shown?face:'Hidden card '+(i+1));b.addEventListener('click',()=>flipMemory(i));ui.field.append(b)});
+      ui.status.textContent=s.matched.size===12?cf('memoryDone',{tries:s.tries}):cf('memory',{pairs:s.matched.size/2,tries:s.tries});}
+    function flipMemory(i){const s=cardState.memory;if(s.locked||s.matched.has(i)||s.visible.includes(i))return;s.visible.push(i);
+      if(s.visible.length===2){s.tries++;const [a,b]=s.visible;if(s.deck[a]===s.deck[b]){s.matched.add(a);s.matched.add(b);s.visible=[]}else {s.locked=true;setTimeout(()=>{if(cardState.memory!==s)return;s.visible=[];s.locked=false;renderMemory()},850)}}renderMemory()}
+    function resetTrick(){const deck=shuffledDeck();cardState.trick={human:Array.from({length:5},()=>deck.pop()),cpu:Array.from({length:5},()=>deck.pop()),you:0,other:0,ties:0,history:null};renderTrick()}
+    function renderTrick(){const ui=cardUi.get('trick'),s=cardState.trick;ui.field.replaceChildren();s.human.forEach((c,i)=>{const b=document.createElement('button');b.type='button';b.className='btn small playing-card';b.textContent=c.rank+c.suit;b.addEventListener('click',()=>playTrick(i));ui.field.append(b)});
+      ui.status.textContent=s.history?cf(s.human.length?'trick':'trickDone',{...s.history,result:cardOutcome(s.history.resultSign)}):cf('trickStart');}
+    function playTrick(i){const s=cardState.trick;if(!s.human.length)return;const played=s.human.splice(i,1)[0],cpu=s.cpu.splice(random(s.cpu.length),1)[0],result=Math.sign(cardValue(played)-cardValue(cpu));if(result>0)s.you++;else if(result<0)s.other++;else s.ties++;
+      s.history={a:played.rank+played.suit,b:cpu.rank+cpu.suit,resultSign:result,you:s.you,cpu:s.other,ties:s.ties};renderTrick()}
+    function playWar(){const ui=cardUi.get('war'),deck=shuffledDeck(),a=deck.pop(),b=deck.pop();cardState.war={a:a.rank+a.suit,b:b.rank+b.suit,resultSign:Math.sign(cardValue(a)-cardValue(b))};ui.status.textContent=cf('war',{...cardState.war,result:cardOutcome(cardState.war.resultSign)});ui.field.textContent=cardState.war.a+'  VS  '+cardState.war.b}
+    function playThree(){const ui=cardUi.get('three'),deck=shuffledDeck(),a=Array.from({length:3},()=>deck.pop()),b=Array.from({length:3},()=>deck.pop()),ra=hand3(a),rb=hand3(b);
+      cardState.three={a:cardsText(a),b:cardsText(b),resultSign:compareScores(ra.score,rb.score),scoreA:ra.name,scoreB:rb.name};ui.status.textContent=cf('three',{...cardState.three,handA:cf(ra.name),handB:cf(rb.name),result:cardOutcome(cardState.three.resultSign)});ui.field.textContent=cardState.three.a+'  VS  '+cardState.three.b}
+    function buildCardGames(){for(const d of cardGameDefs){const ui=classicPanel('cards-'+d.id),field=document.createElement('div');field.className=d.id==='memory'?'memory-grid':'card-showdown';ui.body.append(field);ui.field=field;
+        const btn=classicButton(ui.actions,d.id==='war'?playWar:d.id==='three'?playThree:d.id==='memory'?resetMemory:resetTrick);
+        cardUi.set(d.id,{...ui,button:btn});if(d.id==='memory')resetMemory();else if(d.id==='trick')resetTrick();else ui.status.textContent=cf('ready')}
+    }
+    buildCardGames();
+    function translateNewGames(){
+      const ids={classicK:'classic-eyebrow',classicH:'classic-heading',classicP:'classic-lead',diceK:'dice-eyebrow',diceH:'dice-heading',diceP:'dice-lead'};
+      for(const [key,id] of Object.entries(ids))$('#'+id).textContent=translateSet(extendedHeadings[key]);
+      for(const d of diceDefs){const ui=diceUi.get(d.id);if(!ui)continue;ui.title.textContent=translateSet(d.title);ui.desc.textContent=translateSet(d.desc);ui.buttons.forEach((button,i)=>{const key=d.options[i];button.textContent=diceButtonText[key]?translateSet(diceButtonText[key]):key});ui.result.textContent=df('ready')}
+      chessUI.title.textContent=translateSet(chessWords.title);chessUI.desc.textContent=translateSet(chessWords.desc);chessReset.textContent=translateSet(chessWords.reset);chessUndo.textContent=translateSet(chessWords.undo);renderChess();
+      backUI.title.textContent=translateSet(backWords.title);backUI.desc.textContent=translateSet(backWords.desc);backRollButton.textContent=translateSet(backWords.roll);backEndButton.textContent=translateSet(backWords.end);backBearButton.textContent=translateSet(backWords.bear);backResetButton.textContent=translateSet(backWords.reset);renderBack();
+      for(const d of cardGameDefs){const ui=cardUi.get(d.id);ui.title.textContent=translateSet(d.title);ui.desc.textContent=translateSet(d.desc);ui.button.textContent=cf(d.id==='war'||d.id==='three'?'draw':d.id==='memory'?'new':'reset');
+        if(d.id==='memory')renderMemory();else if(d.id==='trick')renderTrick();else if(cardState[d.id]){
+          const s=cardState[d.id];ui.status.textContent=d.id==='war'?cf('war',{...s,result:cardOutcome(s.resultSign)}):cf('three',{...s,handA:cf(s.scoreA),handB:cf(s.scoreB),result:cardOutcome(s.resultSign)})
+        }else ui.status.textContent=cf('ready');
+      }
+    }
+    buildExtraGames();
+    buildDiceFestival();
+    translateNewGames();
+    resetStatuses();
+  })();
+  </script>
+</body>
+</html>
+
