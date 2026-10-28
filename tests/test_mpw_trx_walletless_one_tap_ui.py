@@ -66,7 +66,7 @@ class NativeTRXOneTapTests(unittest.TestCase):
         item=next(x for x in p.links if x.get("id")=="mpw-open-trustwallet")
         target=urlparse(item["href"])
         self.assertEqual((target.scheme,target.netloc,target.path),
-            ("trust","","send"))
+            ("trust","send",""))
         self.assertEqual(parse_qs(target.query),{
             "asset":["c195"],"address":[INV.recipient],"amount":["1.234567"],
         })
