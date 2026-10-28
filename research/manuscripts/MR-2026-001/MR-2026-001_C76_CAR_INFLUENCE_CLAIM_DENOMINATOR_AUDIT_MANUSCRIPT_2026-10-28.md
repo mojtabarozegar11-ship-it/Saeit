@@ -1,6 +1,6 @@
 # From Irrigation Recommendations to Field Outcomes: An Evidence-Provenance Critical Narrative Review
 
-**Manuscript ID (internal only):** MR-2026-001 / C76-20261028-v1  
+**Manuscript ID (internal only):** MR-2026-001 / C76-20261028-v2 (editorial consistency repair; not a new evidence cycle)  
 **Document status:** READY_FOR_REVIEW — consolidated, internally checked, AI-assisted **working manuscript**, not a human-author-approved final text, externally peer-reviewed article, accepted work, or journal submission.  
 **Intended sole human author:** Mojtaba Roozegar — exact byline, substantive contribution, affiliation, identity, disclosures and final approval **pending**.  
 **Article type proposed:** Critical narrative review, purposive illustrative corpus; **not** a systematic/scoping review or meta-analysis.  
@@ -160,13 +160,6 @@ These locators do not imply unrestricted access to publisher originals. The ledg
 
 **Adjudication rule:** Preserve all conflicting claims with their separate source locations; do not recode Groups 4/5, force totals to 72, infer an 80% causal behavioral effect, or derive event-level implementation. Obtain the publisher-authenticated pages 139–141 or an author/publisher correction and explicit group coding ledger before quantitative use. This is an editorial consistency audit, not original trial data, independent human peer review, or a correction issued by Car et al.
 
-## 8. Exact-version author and publication gates
-
-**READY_FOR_REVIEW**, not DELIVERED as an approved scientific publication. The intended sole human author must independently inspect and interpret primary sources, make a substantive intellectual contribution, decide the final corpus and argument, and approve this exact version. Source gates: original Car publisher page image and category definitions; Amini F7 conflict; Cvejić survey N; complete Lorite/Baroni/Elia methods; G/D/R/A empirical validation **or** unequivocally conceptual framing. Administrative gates: identity, affiliation, funding, COI, AI disclosure, rights, journal article type, APC/waiver, cover letter and explicit submission permission. No submission, payment, contract, website deployment or PR #1054 merge is authorized.
-
-**Next action:** obtain independently authenticated original-source tables and prospective event-level validation; substantive source adjudication of Car and Amini, followed by author-level scientific revision. C75 retains C74's missingness- and structural-nonreceipt-aware, source-checked working review draft, not a final paper. Amini's table arithmetic and the multi-item Cvejić inference remain explicit; contradictions and direct survey-denominator verification remain open. C74 retains C72's correction of C71's complete-case denominator bias and distinguishes verified nonreceipt from unknown follow-up but has no real event-level implementation data and no validated scale. No human-author approval or journal submission has occurred.
-
-
 ## 7.3. C76 primary-copy arithmetic gate: reported influence percentages and rainfall-event response
 
 **Source and authority limit.** Rechecked 28 October 2026 against the author-uploaded printed article text (Car et al. 2012, pp. 138–141) at [ResearchGate author upload](https://www.researchgate.net/publication/257018309_Using_a_mobile_phone_Short_Messaging_Service_SMS_for_irrigation_scheduling_in_Australia_-_Farmers%27_participation_and_utility_evaluation), cross-referenced to the [UNE institutional abstract](https://rune.une.edu.au/entities/publication/68f9d1ef-6e62-415a-b831-0beb96df9853). This is **not** authenticated Elsevier version-of-record Table 5 or an erratum. Calculations below are independent arithmetic on **reported figures**, not reconstruction of raw observations.
@@ -184,3 +177,11 @@ These locators do not imply unrestricted access to publisher originals. The ledg
 **Reproduction:** with integer counts `[26,7,3,6,15,17]`, evaluate `100*(7+3)/72`, `100*(26+7+3)/72`, `100*(26+7+3+15)/72`, `100*51/54`, and `100*54/72`. The first three contradict the printed influence percentages, while the last two reconstruct Table 4 response proportions. The Table 5 total remains 74 rather than 72. Do not normalize its cells, repair category labels, infer individual behavior, or substitute an institutional abstract for publisher-authenticated original tables.
 
 **Next evidence gate:** obtain original Elsevier page images for Tables 4–6 and an authoritative participant/group crosswalk or correction; until then exclude all group-specific prevalence and downstream causal claims. This appendix is a source-to-claim editorial adjudication, not a new empirical result, field validation or author-approved publication.
+
+
+## 8. Exact-version author and publication gates
+
+**READY_FOR_REVIEW**, not DELIVERED as an approved scientific publication. The intended sole human author must independently inspect and interpret primary sources, make a substantive intellectual contribution, decide the final corpus and argument, and approve this exact version. Source gates: original Car publisher page image and category definitions; Amini F7 conflict; Cvejić survey N; complete Lorite/Baroni/Elia methods; G/D/R/A empirical validation **or** unequivocally conceptual framing. Administrative gates: identity, affiliation, funding, COI, AI disclosure, rights, journal article type, APC/waiver, cover letter and explicit submission permission. No submission, payment, contract, website deployment or PR #1054 merge is authorized.
+
+**Next action:** obtain independently authenticated original-source tables and prospective event-level validation; substantive source adjudication of Car and Amini, followed by author-level scientific revision. C76 retains C74's missingness- and structural-nonreceipt-aware, source-checked working review draft, not a final paper. Amini's table arithmetic and the multi-item Cvejić inference remain explicit; contradictions and direct survey-denominator verification remain open. C74 retains C72's correction of C71's complete-case denominator bias and distinguishes verified nonreceipt from unknown follow-up but has no real event-level implementation data and no validated scale. No human-author approval or journal submission has occurred.
+
