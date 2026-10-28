@@ -211,6 +211,25 @@ def education_issue_certificate(request, slug):
 
 
 def education_lesson(request, slug, lesson_id):
+    # Fail closed before querying missing lesson/enrollment tables. A temporary
+    # schema outage must not look like a deleted lesson or revoke paid access.
+    if missing_public_tables(
+        EducationCourse, EducationLesson, EducationEnrollment,
+        EducationProgress, EducationBookmark,
+    ):
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>درس موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>درس موقتاً در دسترس نیست</h1>'
+            '<p role="status">بازیابی اطلاعات درس در حال پیگیری است؛ '
+            'این وضعیت به معنای حذف درس یا ثبت‌نام نیست.</p>'
+            '<p><a href="/academy/">بازگشت به آموزشگاه</a></p>'
+            '</main></body></html>',
+            status=503,
+            content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     lesson = get_object_or_404(EducationLesson, pk=lesson_id, course=course, active=True)
     lessons = list(course.lessons.filter(active=True))
