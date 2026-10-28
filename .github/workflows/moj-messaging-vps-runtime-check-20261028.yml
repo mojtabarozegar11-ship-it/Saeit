@@ -56,6 +56,20 @@ jobs:
           if command -v python3 >/dev/null 2>&1 && python3 -c 'import venv' >/dev/null 2>&1; then echo MMSG_PY_VENV=PASS; else echo MMSG_PY_VENV=NO_GO; fi
           if command -v systemctl >/dev/null 2>&1; then echo MMSG_SYSTEMD=PASS; else echo MMSG_SYSTEMD=NO_GO; fi
           if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then echo MMSG_SUDO=PASS; else echo MMSG_SUDO=NO_GO; fi
+          echo "MMSG_ARCH=$(uname -m)"
+          echo "MMSG_USER_UID=$(id -u)"
+          if command -v crontab >/dev/null 2>&1; then echo 'MMSG_CRONTAB_BINARY=YES'; else echo 'MMSG_CRONTAB_BINARY=NO'; fi
+          if systemctl is-active --quiet cron 2>/dev/null || systemctl is-active --quiet crond 2>/dev/null; then echo 'MMSG_CRON_DAEMON=ACTIVE'; else echo 'MMSG_CRON_DAEMON=UNKNOWN'; fi
+          if command -v flock >/dev/null 2>&1; then echo 'MMSG_FLOCK=YES'; else echo 'MMSG_FLOCK=NO'; fi
+          if command -v tar >/dev/null 2>&1 && command -v xz >/dev/null 2>&1; then echo 'MMSG_ARCHIVE_TOOLS=YES'; else echo 'MMSG_ARCHIVE_TOOLS=NO'; fi
+          if command -v loginctl >/dev/null 2>&1; then
+            linger="$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null || echo unknown)"
+            echo "MMSG_USER_LINGER=$linger"
+          else echo 'MMSG_USER_LINGER=UNKNOWN'; fi
+          if command -v systemctl >/dev/null 2>&1; then
+            if systemctl --user show-environment >/dev/null 2>&1; then echo 'MMSG_USER_SYSTEMD=READY'; else echo 'MMSG_USER_SYSTEMD=UNAVAILABLE'; fi
+          fi
+          if test -d "$HOME/private-messaging-bridge/releases"; then echo 'MMSG_STAGED_SOURCE_DIR=YES'; else echo 'MMSG_STAGED_SOURCE_DIR=NO'; fi
           echo MMSG_AUDIT_NO_MUTATIONS=PASS
           REMOTE
       - name: Publish audited SSH probe outcome
