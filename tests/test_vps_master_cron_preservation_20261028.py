@@ -33,6 +33,8 @@ class CronPreservationTests(unittest.TestCase):
         self.assertLess(lock_start, source_swap)
         self.assertLess(source_swap, lock_release)
         self.assertLess(lock_release, s.index('if "$master/run-evolution.sh"'))
+        self.assertIn("MASTER_EVOLUTION_LOCK_BUSY_SAFE_ABORT", s)
+        self.assertIn("flock -n 10", s)
 
     def test_cron_drift_fails_closed_and_failed_replacement_restores(self):
         s = self.source
