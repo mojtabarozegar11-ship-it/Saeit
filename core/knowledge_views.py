@@ -21,10 +21,10 @@ def knowledge_article_detail(request, slug):
 
 
 def knowledge_book_detail(request, slug):
-    book = KnowledgeBook.objects.select_related("plan", "domain_ref").filter(code=slug).first()
+    book = KnowledgeBook.objects.select_related("plan", "domain_ref").filter(code=slug, status="published").first()
     if not book:
         raise Http404
-    related = KnowledgeBook.objects.filter(plan=book.plan).exclude(pk=book.pk).order_by("id")[:6]
+    related = KnowledgeBook.objects.filter(plan=book.plan, status="published").exclude(pk=book.pk).order_by("id")[:6]
     context = {"book": book, "related": related, "meta": _meta(book.objective), "free": bool(book.plan and book.plan.public_free)}
     return render(request, "core/knowledge_book_detail.html", context)
 
@@ -33,7 +33,7 @@ def knowledge_domain_detail(request, slug):
     domain = KnowledgeDomain.objects.filter(code=slug, active=True).first()
     if not domain:
         raise Http404
-    books = KnowledgeBook.objects.filter(domain_ref=domain).order_by("id")
+    books = KnowledgeBook.objects.filter(domain_ref=domain, status="published").order_by("id")
     articles = KnowledgeArticle.objects.filter(published=True, title__icontains=domain.title[:40]).order_by("-updated_at")[:12]
     context = {"domain": domain, "books": books, "articles": articles, "meta": _meta(domain.scientific_scope)}
     return render(request, "core/knowledge_domain_detail.html", context)
