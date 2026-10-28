@@ -1,5 +1,6 @@
 name: MojPlayWin guarded live mobile TRX wallet handoff
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
