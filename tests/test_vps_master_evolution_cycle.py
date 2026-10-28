@@ -13,7 +13,7 @@ spec.loader.exec_module(mod)
 
 
 class EvolutionTests(unittest.TestCase):
-    def fixture(self, temp, actions, *, previous_steps=2, failures=0):
+    def fixture(self, temp, actions, *, previous_steps=1, failures=0):
         root = Path(temp)
         db = root / "master.sqlite3"
         state = root / "evolution.json"
