@@ -122,6 +122,55 @@ jobs:
               print("ROOT_DJANGO_CLIENT_HEALTH_ERROR="+type(exc).__name__)
           PY
           REMOTE
+      - name: Diagnose three public 500 routes with read-only Django schema and GET
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/Saeit"
+          export PYTHONDONTWRITEBYTECODE=1
+          "$HOME/virtualenv/Saeit/3.10/bin/python" - <<'PY'
+          import contextlib, io, logging, os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          import django
+          django.setup()
+          from django.db import connections
+          from django.test import Client
+          from core.academy_views import EducationTrack, EducationCourse
+          from core.company_content_views import CompanyGalleryMedia
+          from core.newsletter_views import NewsletterStory, NewsletterSource, NewsletterPublication, NewsletterSchedule
+
+          groups = {
+              "academy": (EducationTrack, EducationCourse),
+              "company_gallery": (CompanyGalleryMedia,),
+              "newsletter": (NewsletterStory, NewsletterSource, NewsletterPublication, NewsletterSchedule),
+          }
+          try:
+              tables = set(connections["default"].introspection.table_names())
+              for group, models in groups.items():
+                  missing = sum(model._meta.db_table not in tables for model in models)
+                  print("PUBLIC500_SCHEMA_GROUP=" + group + " MISSING_TABLE_COUNT=" + str(missing))
+          except Exception as exc:
+              print("PUBLIC500_SCHEMA_ERROR_CLASS=" + type(exc).__name__)
+
+          logging.disable(logging.CRITICAL)
+          client = Client(raise_request_exception=True)
+          for name, route in (
+              ("academy", "/academy/"),
+              ("company_gallery", "/company-gallery/"),
+              ("newsletter", "/newsletter/"),
+          ):
+              try:
+                  with contextlib.redirect_stderr(io.StringIO()):
+                      response = client.get(route, secure=True, HTTP_HOST="zomorodmelal.ir")
+                  print("PUBLIC500_ROUTE=" + name + " DJANGO_STATUS=" + str(response.status_code))
+              except Exception as exc:
+                  print("PUBLIC500_ROUTE=" + name + " ERROR_CLASS=" + type(exc).__name__)
+          PY
+          REMOTE
+
       - name: Inspect own cPanel Passenger processes, capacity and sanitized error counters
         shell: bash
         run: |
