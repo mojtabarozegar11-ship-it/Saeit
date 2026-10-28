@@ -2,6 +2,7 @@
 """Guarded one-path free-play Arena publication, owned update and reversible rollback.
 
 Never edits Django, the shared Passenger entry, protected sites, databases, or finance.
+Public OpenLigaDB data is read only from the static HTML after adult self-declaration.
 An existing /arena/ can only be replaced when its exact owner, hash and contents
 match the previously installed free-only Arena release.
 """
@@ -94,8 +95,16 @@ def payload_preflight(index):
     text = data.decode("utf-8")
     if not all(marker in text for marker in EXPECTED_MARKERS):
         raise RuntimeError("Missing playable Arena component")
-    if text.count("<script>") != 1 or "<script src=" in text or "fetch(" in text or "XMLHttpRequest" in text:
-        raise RuntimeError("Not a self-contained offline game release")
+    if text.count("<script>") != 1 or "<script src=" in text or "XMLHttpRequest" in text:
+        raise RuntimeError("Not a self-contained owned Arena document")
+    # Permit exactly one audited, read-only GET for public OpenLigaDB results.
+    # The HTML also enforces CSP connect-src to the same host; no user picks are uploaded.
+    required_call = "await fetch(url,{mode:'cors',credentials:'omit',cache:'no-store',signal:ctrl.signal,priority:force?'auto':'low'})"
+    required_origin = "const LIVE_FEED_ORIGIN='https://api.openligadb.de/getmatchdata/'"
+    if len(re.findall(r"\bfetch\s*\(", text)) != 1 or required_call not in text or text.count(required_origin) != 1:
+        raise RuntimeError("Unapproved external network call in Arena")
+    if 'connect-src https://api.openligadb.de;' not in text:
+        raise RuntimeError("Live feed CSP restriction missing")
     if any(s in text.lower() for s in ("walletconnect", "window.ethereum", "tronweb", "metamask", "paymentgateway")):
         raise RuntimeError("Financial wallet integration forbidden in free release")
     return hashlib.sha256(data).hexdigest()
