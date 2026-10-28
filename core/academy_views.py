@@ -145,7 +145,7 @@ def education_course_detail(request, slug):
     enrollment = None
     progress_map = {}
     if request.user.is_authenticated:
-        enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status="active").first()
+        enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status__in=("active", "completed")).first()
         if enrollment:
             progress_map = {p.lesson_id: p for p in enrollment.progress.all()}
     lesson_rows = [{"lesson": lesson, "progress": progress_map.get(lesson.id)} for lesson in lessons]
@@ -239,7 +239,7 @@ def education_lesson(request, slug, lesson_id):
     bookmarked = request.user.is_authenticated and EducationBookmark.objects.filter(user=request.user, lesson=lesson).exists()
     enrollment = None
     if request.user.is_authenticated:
-        enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status="active").first()
+        enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status__in=("active", "completed")).first()
     if not enrollment:
         if not (course.is_free and lesson.is_free_preview):
             return JsonResponse({"ok": False, "error": "enrollment_required"}, status=403)
