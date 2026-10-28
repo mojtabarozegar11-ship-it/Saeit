@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
-import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
+import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, restoreEnemyPositions, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
 
 const fresh = () => ({
   hero: 0, mission: 0, lives: 100, x: 2.5, y: 7.5, angle: 0,
@@ -103,7 +103,7 @@ test('in-progress objective state cannot exceed stage-specific site and timer ru
 test('reversible release manifest ships and checks every new imported save module', () => {
   const deploy = readFileSync(new URL('../../games/ramadan-war/deploy.py', import.meta.url), 'utf8');
   const client = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.match(client, /import \{validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove\} from '\.\/save-validation\.mjs'/);
+  assert.match(client, /import \{[^}]*\bcampaignSaveDisposition\b[^}]*\} from '\.\/save-validation\.mjs'/);
   assert.match(deploy, /ASSETS=\[[^\n]*'save-validation\.mjs'/);
   assert.match(deploy, /b'\.\/save-validation\.mjs' in new\['game\.js'\]/);
 });
@@ -240,7 +240,8 @@ test('game contains no direct localStorage access outside guarded helpers', () =
 
 test('persisted pickup snapshots retain recovery objectives without mutating live drops', () => {
   const transient=Array.from({length:80},(_,i)=>({x:2.5,y:7.5,type:'ammo',life:20,serial:i}));
-  const intel=[0,1,2].map(spotIndex=>({x:4.5+spotIndex,y:2.5,type:'mission-intel',spotIndex,life:3600}));
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
+  const intel=[0,1,2].map(spotIndex=>({x:sites[spotIndex][0],y:sites[spotIndex][1],type:'mission-intel',spotIndex,life:3600}));
   const live=[...intel,...transient];
   const snapshot=boundedCampaignPickups(live);
   assert.equal(live.length,83,'live gameplay pickups are never removed');
@@ -259,7 +260,8 @@ test('runtime persists bounded pickup snapshots without truncating live mission 
 });
 
 test('recovery intel remains stage-local, unique and cannot be duplicated in a save', () => {
-  const intel=(spotIndex)=>({x:4.5+spotIndex,y:2.5,type:'mission-intel',spotIndex,life:3600});
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
+  const intel=(spotIndex)=>({x:sites[spotIndex]?.[0]??4.5,y:sites[spotIndex]?.[1]??2.5,type:'mission-intel',spotIndex,life:3600});
   const state={...fresh(),mission:2,pickups:[intel(0),intel(1)]};
   assert.equal(validateCampaignSave(state),true);
   for(const pickups of [[intel(0),intel(0)],[intel(3)],[{...intel(1),spotIndex:'1'}]]) {
@@ -356,7 +358,7 @@ test('valid player position is not moved and an unavailable fallback fails close
 
 test('campaign restore repairs obstructed player location before engine build', () => {
   const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
-  assert.match(client,/restorePlayerPosition\(world,\(x,y\)=>tile\(x,y\)!==0\);hero=world\.hero/);
+  assert.ok(client.includes('restorePlayerPosition(world,(x,y)=>tile(x,y)!==0);if(restoreEnemyPositions(world,(x,y)=>tile(x,y,world.mission)!==0)<0)return false;hero=world.hero;'));
 });
 
 test('restored time stop expires normally and forged permanent freezes fail closed', () => {
@@ -369,8 +371,9 @@ test('restored time stop expires normally and forged permanent freezes fail clos
 
 test('crowded recovery saves retain unique mission intel when the runtime restores 30 pickups', () => {
   const ammo = Array.from({length:57}, (_,i) => ({x:2,y:3,life:20,type:'ammo',serial:i}));
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
   const intel = Array.from({length:3}, (_,i) => ({
-    x:4+i,y:5+i,life:3600,type:'mission-intel',spotIndex:i
+    x:sites[i][0],y:sites[i][1],life:3600,type:'mission-intel',spotIndex:i
   }));
   const saved={...fresh(),mission:2,pickups:[...ammo,...intel]};
   assert.equal(validateCampaignSave(saved),true,'crowded saved recovery stage is valid');
@@ -456,4 +459,92 @@ test('public Ramadan telemetry cannot mutate the campaign or invoke QA-only cont
   runInNewContext(source.slice(start,end),localContext);
   assert.equal(typeof localContext.window.RamadanWarDebug.tick,'function');
   assert.equal(typeof localContext.window.RamadanWarDebug.qaMission,'function');
+});
+
+
+test('new recovery saves restore only uncollected intel sites and remain idempotent', () => {
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
+  const intel=i=>({x:sites[i][0],y:sites[i][1],type:'mission-intel',spotIndex:i,life:3600});
+  const state={...fresh(),mission:2,objective:{done:1,hold:0,bossDefeated:false,collectedSites:[0]},pickups:[intel(1)]};
+  assert.equal(validateCampaignSave(state),true);
+  assert.equal(restoreRecoveryPickups(state,sites),1);
+  assert.deepEqual(state.pickups.filter(p=>p.type==='mission-intel').map(p=>p.spotIndex).sort(),[1,2]);
+  assert.equal(restoreRecoveryPickups(state,sites),0);
+  assert.deepEqual(state.objective.collectedSites,[0]);
+  assert.equal(validateCampaignSave(state),true);
+});
+
+test('new recovery ledger rejects forged rewards, duplicate sites and pickup overlap', () => {
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
+  const intel=i=>({x:sites[i][0],y:sites[i][1],type:'mission-intel',spotIndex:i,life:3600});
+  const state={...fresh(),mission:2,objective:{done:1,hold:0,bossDefeated:false,collectedSites:[0]},pickups:[intel(1),intel(2)]};
+  assert.equal(validateCampaignSave(state),true);
+  for(const collectedSites of [[0,0],[0,3],['0'],[0,1],[],null]) {
+    assert.equal(validateCampaignSave({...state,objective:{...state.objective,collectedSites}}),false,String(collectedSites));
+  }
+  assert.equal(validateCampaignSave({...state,pickups:[intel(0),intel(1)]}),false,'collected site must never be re-awarded');
+  assert.equal(validateCampaignSave({...fresh(),objective:{...fresh().objective,collectedSites:[]}}),false,'ledger belongs only to recovery stage');
+});
+
+test('legacy recovery with missing pickups remains playable but never invents provenance', () => {
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
+  const state={...fresh(),mission:2,objective:{done:1,hold:0,bossDefeated:false},pickups:[]};
+  assert.equal(restoreRecoveryPickups(state,sites),2);
+  assert.equal(state.objective.done,1);
+  assert.equal(state.objective.collectedSites,undefined,'cannot assert which legacy site was collected');
+  assert.equal(validateCampaignSave(state),true);
+});
+
+test('campaign interaction, timed defence and intel rewards save immediately', () => {
+  const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  assert.match(client,/o\.done\+\+;world\.score\+=250;[^\n]*sync\(\);save\(\);return true;/);
+  assert.match(client,/o\.done=1;toast\('دفاع موفق • موقعیت تثبیت شد'\);save\(\)/);
+  assert.match(client,/o\.collectedSites\.push\(index\);/);
+  assert.match(client,/toast\('اطلاعات حیاتی بازیابی شد'\);sync\(\);save\(\);continue/);
+});
+
+
+test('legitimate combat cooldowns and historical absent timers remain playable', () => {
+  assert.equal(validateCampaignSave(fresh()), true);
+  assert.equal(validateCampaignSave({...fresh(), shield:12, hitFlash:.38,
+    skillTimer:15.9, enemyTimer:-3600, shotTimer:.42,
+    droneTimer:7, reloadTimer:1.05, strikeTimer:-.03}), true);
+});
+test('rejects fabricated invulnerability and no-spawn timer values', () => {
+  for (const patch of [{shield:1e8},{hitFlash:1e8},{enemyTimer:1e8},
+    {shotTimer:1e8},{skillTimer:1e8},{reloadTimer:1e8},
+    {shield:-1},{muzzle:50},{recoil:2}]) {
+    assert.equal(validateCampaignSave({...fresh(), ...patch}), false, JSON.stringify(patch));
+  }
+});
+test('rejects fabricated enemy health and impossible projectile damage', () => {
+  const enemy={x:8.5,y:7.5,type:3,hp:410,max:410};
+  assert.equal(validateCampaignSave({...fresh(),enemies:[enemy]}),true);
+  for (const invalid of [{...enemy,hp:10000,max:10000},
+    {...enemy,max:'410'}, {...enemy,hp:500,max:410}]) {
+    assert.equal(validateCampaignSave({...fresh(),enemies:[invalid]}),false);
+  }
+  const bullet={x:8.5,y:7.5,vx:4,vy:0,life:3,hp:14};
+  assert.equal(validateCampaignSave({...fresh(),hostile:[bullet]}),true);
+  assert.equal(validateCampaignSave({...fresh(),hostile:[{...bullet,hp:500}]}),false);
+});
+test('repositions blocked enemies without changing their health or earned rewards', () => {
+  const state={x:2.5,y:7.5,missionKills:2,score:900,
+    enemies:[{x:3.5,y:3.5,hp:40},{x:4.5,y:6.5,hp:410,boss:true},
+      {x:12.5,y:5.5,hp:50}]};
+  const blocked=(x,y)=>x===3&&y===3||x===4&&y===6;
+  assert.equal(restoreEnemyPositions(state,blocked),2);
+  assert.equal(state.enemies[0].hp,40);
+  assert.equal(state.enemies[1].hp,410);
+  assert.equal(state.score,900);
+  assert.equal(state.missionKills,2);
+  assert.deepEqual([state.enemies[2].x,state.enemies[2].y],[12.5,5.5]);
+  assert.equal(state.enemies.some(e=>blocked(Math.floor(e.x),Math.floor(e.y))),false);
+  assert.equal(restoreEnemyPositions(state,blocked),0);
+});
+test('wall recovery is atomic when no safe spawn exists', () => {
+  const state={x:2.5,y:7.5,enemies:[{x:3.5,y:3.5,hp:40}]};
+  const original=JSON.stringify(state);
+  assert.equal(restoreEnemyPositions(state,()=>true),-1);
+  assert.equal(JSON.stringify(state),original);
 });

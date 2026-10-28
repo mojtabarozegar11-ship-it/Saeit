@@ -76,12 +76,29 @@ const assert=require('node:assert/strict');
          const end = g.qaPosition();
          return Math.hypot(end.x-origin.x, end.y-origin.y);
        };
-       return {straight:run(['KeyW']), diagonal:run(['KeyW','KeyD'])};
+       return {straight:run(['KeyW']), diagonal:run(['KeyW','KeyD']), neutral:run(['KeyW','KeyS'])};
      });
      assert(speedCheck.straight > .1, 'keyboard forward motion must work');
      assert(speedCheck.diagonal > .1, 'keyboard diagonal motion must work');
      assert(speedCheck.diagonal <= speedCheck.straight * 1.06,
        'W+D must not gain a diagonal speed advantage: '+JSON.stringify(speedCheck));
+     assert(speedCheck.neutral<1e-8,'W+S must cancel rather than walking: '+JSON.stringify(speedCheck));
+     console.log('RAMADAN_OPPOSING_KEYS_NEUTRAL_PASS',v.name);
+     // Run actual game ticks without waiting in wall-clock time: continuous
+     // keyboard fire must resume after the magazine automatically reloads.
+     const heldReload=await page.evaluate(()=>{
+       const g=window.RamadanWarDebug;
+       g.start();
+       window.dispatchEvent(new KeyboardEvent('keydown',{code:'Space',bubbles:true,cancelable:true}));
+       for(let i=0;i<170;i++)g.tick(.04);
+       window.dispatchEvent(new KeyboardEvent('keyup',{code:'Space',bubbles:true,cancelable:true}));
+       const state=g.getState();
+       g.start(); // Reset gameplay for subsequent smoke assertions.
+       for(let i=0;i<30;i++)g.tick(.04); // Restore the expected spawned-enemy precondition.
+       return {shots:state.shots,ammo:state.ammo};
+     });
+     assert(heldReload.shots>=9,'held fire must continue after automatic reload: '+JSON.stringify(heldReload));
+     console.log('RAMADAN_HELD_FIRE_AUTO_RELOAD_PASS',v.name);
      console.log('RAMADAN_REAL_DIAGONAL_SPEED_PASS', v.name);
 
    }
@@ -180,9 +197,31 @@ const assert=require('node:assert/strict');
     await page.evaluate(()=>{window.RamadanWarDebug.spawnTestPickup('ammo');window.RamadanWarDebug.tick(.04)});
     state=await page.evaluate(()=>window.RamadanWarDebug.getState());
     assert.equal(state.shots,1);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.ammo,8,'ammo pickup restores the magazine');
+    // A non-mission collectible must be durable immediately, not only after
+    // the five-second periodic checkpoint or a manual pause.
+    const collectibleCheckpoint=await page.evaluate(()=>{
+      const g=window.RamadanWarDebug;
+      g.spawnTestPickup('intel');g.tick(.04);
+      const live=g.getState(),saved=JSON.parse(localStorage.getItem('rwNativeCampaign'));
+      return {livePoints:live.points,savedPoints:saved.points,liveScore:live.score,savedScore:saved.score};
+    });
+    assert.equal(collectibleCheckpoint.savedPoints,collectibleCheckpoint.livePoints,
+      'earned pickup points must survive an immediate reload');
+    assert.equal(collectibleCheckpoint.savedScore,collectibleCheckpoint.liveScore,
+      'earned pickup score must survive an immediate reload');
+    console.log('RAMADAN_COLLECTIBLE_IMMEDIATE_SAVE_PASS',v.name);
    }
    const savedBeforeReload=await page.evaluate(()=>window.RamadanWarDebug.getState());
-   await page.locator('#pause').click();await page.locator('#pausePanel:not(.hidden)').waitFor();await page.reload({waitUntil:'domcontentloaded'});
+   // Pausing is a durable checkpoint even when no five-second timer has fired.
+   const pausePosition=await page.evaluate(()=>{
+     const g=window.RamadanWarDebug;
+     if(!g.qaMove(3.5,7.5))throw new Error('known passable pause checkpoint missing');
+     return g.qaPosition();
+   });
+   await page.locator('#pause').click();
+   assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('rwNativeCampaign')).x),
+     pausePosition.x,'pause must immediately persist the latest player position');
+   console.log('RAMADAN_PAUSE_IMMEDIATE_SAVE_PASS',v.name);await page.locator('#pausePanel:not(.hidden)').waitFor();await page.reload({waitUntil:'domcontentloaded'});
    assert.match(await page.locator('#start').innerText(),/ادامه/);
    await page.locator('#start').click();
    state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,savedBeforeReload.rockets);assert.equal(state.drones,savedBeforeReload.drones);assert.equal(state.mode,'game');
@@ -252,8 +291,46 @@ const assert=require('node:assert/strict');
       return a;
     });
     assert(checked.every(Boolean),'campaign objective interaction regression '+JSON.stringify(checked));
+    // A completed reload must persist restored ammunition without waiting
+    // for the next periodic autosave.
+    const reloadCheckpoint=await page.evaluate(()=>{
+      const g=window.RamadanWarDebug;g.start();g.fire();
+      if(!g.reload())throw new Error('manual reload did not start');
+      for(let i=0;i<30;i++)g.tick(.04);
+      const live=g.getState(),saved=JSON.parse(localStorage.getItem('rwNativeCampaign'));
+      return {liveAmmo:live.ammo,savedAmmo:saved.ammo,magazine:saved.magazine,reloading:saved.reloading};
+    });
+    assert.equal(reloadCheckpoint.savedAmmo,reloadCheckpoint.liveAmmo);
+    assert.equal(reloadCheckpoint.savedAmmo,reloadCheckpoint.magazine);
+    assert.equal(reloadCheckpoint.reloading,false);
+    console.log('RAMADAN_RELOAD_COMPLETION_SAVE_PASS',v.name);
     assert.equal(await page.locator('#missionObjective').isVisible(),true);
     console.log('CAMPAIGN_OBJECTIVES_PASS activation=2 intel=3 defend=timer extract=check boss=spawn');
+   }
+   // The unlocked survival mode is separate from the unfinished campaign.
+   // Starting it, pausing it and pagehide must preserve the campaign slot.
+   if(localCandidate){
+    const survivalSave=await page.evaluate(()=>{
+      const g=window.RamadanWarDebug;
+      g.start();
+      const original=localStorage.getItem('rwNativeCampaign');
+      if(!original)throw new Error('campaign save missing before survival');
+      localStorage.setItem('rwWin','1');
+      document.querySelector('#pause').click();
+      document.querySelector('#goHome').click();
+      if(document.querySelector('#survival').classList.contains('hidden'))
+        throw new Error('unlocked survival control not visible');
+      document.querySelector('#survival').click();
+      const survival=g.getState().objectiveKind==='survival';
+      window.dispatchEvent(new Event('pagehide'));
+      document.querySelector('#pause').click();
+      document.querySelector('#goHome').click();
+      return {survival,unchanged:localStorage.getItem('rwNativeCampaign')===original,
+        continueVisible:document.querySelector('#start').textContent.includes('ادامه')};
+    });
+    assert(survivalSave.survival && survivalSave.unchanged && survivalSave.continueVisible,
+      'endless mode must preserve existing campaign progress: '+JSON.stringify(survivalSave));
+    console.log('RAMADAN_SURVIVAL_CAMPAIGN_SAVE_PRESERVED_PASS',v.name);
    }
    assert.equal(errors.length,0,errors.join('\n'));
    await context.close();console.log('RAMADAN_WEB_'+v.name.toUpperCase()+'_PASS native_campaign=6 heroes=30 lives=100 weapons=rocket+drone save=resume pickups=collectible-ammo');
