@@ -83,6 +83,28 @@ class CaseServiceTests(unittest.TestCase):
         with self.assertRaises(service.CaseError):
             service.case_status(item["case_id"], "incorrect-access-key", self.secret)
 
+    def test_specialized_product_categories_support_full_review_rubrics(self):
+        categories = ["course","dataset","website","mobileapp","template","audio","video","model3d"]
+        self.assertEqual(len(service.CASE_TYPES), 12)
+        self.assertTrue(set(categories).issubset(service.CASE_TYPES))
+        for index, category in enumerate(categories):
+            dossier = make_dossier()
+            dossier["category"] = category
+            dossier["product_name"] = "Real category validation - " + category
+            item = service.create_case(dossier, [], "192.0.2." + str(70 + index), self.secret)
+            private = service.case_status(item["case_id"], item["access_key"], self.secret)
+            self.assertEqual(private["category"], category)
+            self.assertEqual(private["status"], "submitted")
+            rubric = service.RUBRICS[category]
+            self.assertEqual(len(rubric), 8)
+            self.assertEqual(sum(weight for _, weight, _ in rubric), 100)
+            self.assertTrue(any(critical for _, _, critical in rubric))
+            criteria = {key: {"score": 4, "evidence": "Reproducible category-specific source check"} for key, _, _ in rubric}
+            scored, score, blockers = service.validate_review(category, criteria)
+            self.assertEqual(len(scored), 8)
+            self.assertAlmostEqual(score, 80.0)
+            self.assertFalse(blockers)
+
     def test_staff_queue_and_lifecycle(self):
         item = self.create(public=True)
         queue = service.staff_list()
