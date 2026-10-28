@@ -182,3 +182,5 @@ jobs:
           python3 -m py_compile scripts/mojplaywin_isolated_restore_capabilities_readonly.py
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 35s ssh -T -F "$d/config" saeit-vps python3 - < scripts/mojplaywin_isolated_restore_capabilities_readonly.py
+
+# Read-only storage and preservation recheck authorized 2026-10-28.
