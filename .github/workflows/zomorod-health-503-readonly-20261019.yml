@@ -423,6 +423,56 @@ jobs:
               print("PROFILE_TODAY_500_STAMP="+stamp+" count="+str(count))
           PY
           REMOTE
+      - name: Read exact author HTTP status from access logs and directory routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,collections
+          h=Path.home()
+          web=h/"public_html"
+          folder=web/"authors"/"mojtaba-rozegar"
+          for label,path in (("directory",folder),("index",folder/"index.html"),("local_htaccess",folder/".htaccess")):
+              print("PROFILE_ROUTING_"+label.upper()+"="+("present" if path.exists() else "absent"))
+          ht=web/".htaccess"
+          if ht.is_file():
+              data=ht.read_text(errors="replace")
+              print("PROFILE_ROUTING_HTACCESS_AUTHOR_RULE_COUNT="+str(data.lower().count("authors/mojtaba-rozegar")))
+              print("PROFILE_ROUTING_DIRECTORYINDEX_ENABLED="+str(any("directoryindex" in x.lower() and "index.html" in x.lower() for x in data.splitlines())))
+              print("PROFILE_ROUTING_REWRITE_ENGINE="+str(any(x.strip().lower()=="rewriteengine on" for x in data.splitlines())))
+          counters=collections.Counter()
+          folders=(h/"logs",h/"access-logs")
+          for directory in folders:
+              if not directory.is_dir():continue
+              for path in list(directory.glob("*zomorod*"))[:22]:
+                  if not path.is_file() or path.is_symlink():continue
+                  try:
+                      with path.open("rb") as f:
+                          f.seek(max(0,path.stat().st_size-2097152))
+                          lines=f.read().decode("utf-8","replace").splitlines()
+                  except OSError:continue
+                  for line in lines:
+                      match=re.search(r'"(GET|HEAD|POST)\s+(\S+)\s+HTTP/[0-9.]+"\s+([1-5][0-9]{2})\b',line)
+                      if not match:continue
+                      method,url,status=match.groups()
+                      if not url.split("?",1)[0].rstrip("/").endswith("/authors/mojtaba-rozegar") and not url.split("?",1)[0].endswith("/authors/mojtaba-rozegar/index.html"):
+                          continue
+                      today=("28/Oct/2026" in line or "2026-10-28" in line)
+                      direct=url.split("?",1)[0].endswith("/index.html")
+                      tracked=("utm_source=" in url)
+                      category=("direct" if direct else "pretty")+"_"+("utm" if tracked else "plain")
+                      counters["all_"+category+"_"+status]+=1
+                      if today:counters["today_"+category+"_"+status]+=1
+                      if today and status=="500":
+                          counters["today_500_android" if "android" in line.lower() else "today_500_non_android"]+=1
+          for key,value in sorted(counters.items()):
+              print("PROFILE_ACCESS_"+key.upper()+"="+str(value))
+          PY
+          REMOTE
       - name: Remove temporary SSH credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
