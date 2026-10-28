@@ -100,6 +100,28 @@ jobs:
           print("MOUNT_TOTAL_BYTES="+str(st.f_blocks*st.f_frsize))
           sizes=du([home],210)
           print("ACCOUNT_DU_BYTES="+str(sizes.get(str(home),-1)))
+          # Size and timestamps for backup-only folders; read-only.
+          for rel in (".backups",".mpw-proof-backups",".mpw-private-db-backups",".mojplaywin-backups"):
+              root=home/rel
+              if not root.is_dir() or root.is_symlink(): continue
+              children=[p for p in root.iterdir() if not p.is_symlink()]
+              child_sizes=du(children,140)
+              for p in sorted(children,key=lambda x:child_sizes.get(str(x),-1),reverse=True):
+                  try:
+                      st=p.lstat()
+                      print("BACKUP_CHILD="+json.dumps({"root":rel,"name":p.name,"bytes":child_sizes.get(str(p),-1),"mtime_epoch":int(st.st_mtime),"directory":stat.S_ISDIR(st.st_mode)},ensure_ascii=False))
+                  except OSError: continue
+              file_rows=[]
+              for base,dirs,files in os.walk(root,followlinks=False):
+                  dirs[:]=[d for d in dirs if not (Path(base)/d).is_symlink()]
+                  for name in files:
+                      p=Path(base)/name
+                      try:
+                          st=p.lstat()
+                          if stat.S_ISREG(st.st_mode) and st.st_size>=10*1024*1024 and len(file_rows)<80:
+                              file_rows.append({"path":str(p.relative_to(home)),"bytes":st.st_size,"mtime_epoch":int(st.st_mtime)})
+                      except OSError: continue
+              print("BACKUP_LARGE_FILES="+json.dumps(file_rows,ensure_ascii=False))
           entries=[]
           for p in home.iterdir():
               try:
