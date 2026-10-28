@@ -38,7 +38,7 @@ jobs:
           bash -n deploy/activate_vps_master_agent.sh
           python3 -m py_compile scripts/vps_master_evolution_cycle.py
           python3 -B -m unittest discover -s tests -p 'test_vps_master_evolution_cycle.py' -v
-          python3 -m py_compile core/management/commands/autonomous_master_loop.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/master_agent_capability_pack.py core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py
+          python3 -m py_compile core/worker_runner.py core/management/commands/autonomous_master_loop.py core/management/commands/seed_online_income_agents.py core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/master_agent_capability_pack.py core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py core/self_funding_policy.py core/task_runtime.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py
       - name: Backup, seed, activate and schedule bounded evolution on VPS
         shell: bash
         env:
