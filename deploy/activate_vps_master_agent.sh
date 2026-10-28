@@ -75,14 +75,14 @@ rollback_sources() {
 restore_all() {
   result=$?
   trap - EXIT
-  if [ "$result" -ne 0 ]; then rollback_sources; fi
+  if [ "$result" -ne 0 ] && [ "${source_deploy_started:-0}" -eq 1 ]; then rollback_sources; fi
   if [ "$result" -ne 0 ] && [ "${backup_verified:-0}" -eq 0 ] && [ -f "$ops/backups/master-before-$stamp.sqlite3" ]; then
     rm -f "$ops/backups/master-before-$stamp.sqlite3"
     echo MASTER_INCOMPLETE_DB_BACKUP_REMOVED
   fi
-  if [ "${cron_paused:-0}" -eq 1 ]; then
+  if [ "$result" -ne 0 ] && [ "${cron_replaced:-0}" -eq 1 ]; then
     crontab "$old"
-    echo MASTER_CRON_RESTORED_AFTER_FAILURE
+    echo MASTER_CRON_RESTORED_AFTER_FAILED_REPLACEMENT
   fi
   return "$result"
 }
@@ -95,23 +95,12 @@ if grep -E 'economic_autorun|autonomous_master_loop' "$old" | grep -v 'SAEIT_MAS
   echo MASTER_COMPETING_EXISTING_CRON_DETECTED
   exit 1
 fi
-cron_paused=1
+# Keep the existing master schedules intact while SQLite takes an online snapshot.
+# A busy writer may make the snapshot fail closed; it must not remove cron.
+cron_replaced=0
+source_deploy_started=0
 trap restore_all EXIT
-paused="$master/cron-paused.tmp"
-grep -v 'SAEIT_MASTER_AGENT_V1' "$old" > "$paused" || true
-chmod 600 "$paused"
-crontab "$paused"
-rm -f "$paused"
-test "$(crontab -l 2>/dev/null | grep -c 'SAEIT_MASTER_AGENT_V1' || true)" -eq 0
-echo MASTER_FACTORY_CRON_PAUSED_FOR_DATABASE_SNAPSHOT
-for lock in "$master/master-cycle.lock" "$master/master-evolution.lock"; do
-  deadline=$((SECONDS+180))
-  until flock -n "$lock" -c true; do
-    if (( SECONDS >= deadline )); then echo MASTER_FACTORY_WORKER_DID_NOT_QUIESCE; exit 1; fi
-    sleep 2
-  done
-done
-echo MASTER_FACTORY_WORKERS_QUIESCENT
+echo MASTER_FACTORY_CRON_PRESERVED_DURING_DATABASE_SNAPSHOT
 # SQLite's online backup API provides a consistent rollback snapshot while application services stay online.
 "$py" - "$ops/backups/master-before-$stamp.sqlite3" <<'PY'
 import os,sqlite3,sys
@@ -126,9 +115,21 @@ dst=Path(sys.argv[1])
 # Pre-create with private permissions and close SQLite connections explicitly.
 fd=os.open(dst,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
 os.close(fd)
+available=os.statvfs(dst.parent).f_bavail*os.statvfs(dst.parent).f_frsize
+assert available >= src.stat().st_size + 2*1024**3, "MASTER_DB_BACKUP_DISK_RESERVE"
 last_report=[0.0]
+started=time.monotonic()
+last_remaining=[None]
+restarts=[0]
 def report_progress(status,remaining,total):
     now=time.monotonic()
+    if now-started > 240:
+        raise TimeoutError("MASTER_DB_BACKUP_BOUNDED_DEADLINE")
+    if last_remaining[0] is not None and remaining > last_remaining[0]+2048:
+        restarts[0]+=1
+        if restarts[0]>=3:
+            raise TimeoutError("MASTER_DB_BACKUP_CONCURRENT_WRITER_RESTART_LIMIT")
+    last_remaining[0]=remaining
     if now-last_report[0]>=15 or remaining==0:
         print(f"MASTER_DB_BACKUP_PROGRESS remaining_pages={remaining} total_pages={total}",flush=True)
         last_report[0]=now
@@ -146,6 +147,14 @@ print("MASTER_DB_BACKUP_INTEGRITY_OK")
 PY
 echo MASTER_BACKUP_VERIFIED
 backup_verified=1
+# Only hold worker locks across source changes, not during the online snapshot.
+# A busy worker causes a safe activation abort; cron itself stays installed.
+exec 9>"$master/master-cycle.lock"
+flock -w 180 9
+exec 10>"$master/master-evolution.lock"
+flock -n 10 || { echo MASTER_EVOLUTION_LOCK_BUSY_SAFE_ABORT; exit 1; }
+echo MASTER_FACTORY_SOURCE_CHANGE_LOCKS_HELD
+source_deploy_started=1
 for module in "${modules[@]}"; do
   target="$app/$module"
   install -D -m 600 "$source_root/$module" "$target.deploy.tmp"
@@ -218,7 +227,6 @@ flock -n "$root/master-evolution.lock" timeout 120 "$py" "$root/evolution.py" --
 SH
 chmod 700 "$master/run-evolution.sh.tmp"
 mv -f "$master/run-evolution.sh.tmp" "$master/run-evolution.sh"
-"$master/run-evolution.sh"
 # Preserve all unrelated cron entries exactly; reject competing master loops.
 if grep -E 'economic_autorun|autonomous_master_loop' "$old" | grep -v 'SAEIT_MASTER_AGENT_V1' >/dev/null; then
   echo MASTER_COMPETING_EXISTING_CRON_DETECTED
@@ -230,10 +238,25 @@ printf '%s\n' \
   '*/5 * * * * /bin/bash /home/githubops/factory-runtime/operations/master-agent/run-cycle.sh >> /home/githubops/factory-runtime/operations/master-agent/cycle.log 2>&1 # SAEIT_MASTER_AGENT_V1' \
   '37 */6 * * * /bin/bash /home/githubops/factory-runtime/operations/master-agent/run-evolution.sh >> /home/githubops/factory-runtime/operations/master-agent/evolution.log 2>&1 # SAEIT_MASTER_AGENT_V1' >> "$tmp"
 chmod 600 "$tmp"
+current="$master/cron-current-before-replace.tmp"
+crontab -l > "$current"
+if ! cmp -s "$old" "$current"; then
+  echo MASTER_CRON_CONCURRENT_EDIT_BLOCKED
+  exit 1
+fi
+rm -f "$current"
+cron_replaced=1
 crontab "$tmp"
 rm -f "$tmp"
 test "$(crontab -l | grep -c 'SAEIT_MASTER_AGENT_V1')" -eq 2
+flock -u 10
+flock -u 9
 trap - EXIT
+if "$master/run-evolution.sh"; then
+  echo MASTER_INITIAL_EVOLUTION_COMPLETED
+else
+  echo MASTER_INITIAL_EVOLUTION_DEFERRED_TO_SCHEDULE
+fi
 if "$master/run-cycle.sh" >> "$master/cycle.log" 2>&1; then
   echo MASTER_INITIAL_CYCLE_COMPLETED
 else
