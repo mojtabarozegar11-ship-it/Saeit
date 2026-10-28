@@ -42,6 +42,29 @@ class GuardTests(unittest.TestCase):
                 patched[key]=new
         guard.check_structure(patched)
 
+    def test_catalog_stays_visible_while_new_checkout_is_guarded(self):
+        """Rights clearance must not remove the three existing public listings."""
+        original=fixture()["pages"]
+        patched,changed=guard.transform("pages",original)
+        self.assertTrue(changed)
+        original_shop=original.split("def public_shop(request):",1)[1].split(
+            "def product_checkout(request, product_id):",1)[0]
+        patched_shop=patched.split("def public_shop(request):",1)[1].split(
+            "def product_checkout(request, product_id):",1)[0]
+        self.assertEqual(original_shop,patched_shop)
+        self.assertIn(guard.PAGES_CATALOG_OLD,patched_shop)
+        self.assertNotIn("rights_cleared_for_sale(p)",patched_shop)
+        self.assertIn("rights_cleared_for_sale(product)",patched)
+        guard.check_structure({"pages":patched})
+
+    def test_catalog_hiding_patch_is_rejected(self):
+        original=fixture()["pages"]
+        patched,_=guard.transform("pages",original)
+        hidden=patched.replace(guard.PAGES_CATALOG_OLD,
+            "        if not _eligible(p) or not rights_cleared_for_sale(p): continue\\n")
+        with self.assertRaisesRegex(RuntimeError,"PUBLIC_CATALOG_VISIBILITY_CHANGED"):
+            guard.check_structure({"pages":hidden})
+
     def test_ambiguous_or_missing_anchor_fails_closed(self):
         for key,src in fixture().items():
             anchor=guard.PATCHES[key][0][0]
