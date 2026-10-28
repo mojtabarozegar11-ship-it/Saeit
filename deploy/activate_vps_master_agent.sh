@@ -24,6 +24,9 @@ fi
 for module in core/management/commands/seed_online_income_agents.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/worker_runner.py core/autonomous_brain.py core/master_agent_capability_pack.py; do
   test -s "$app/$module" || { echo "MASTER_REQUIRED_MODULE_MISSING"; exit 1; }
 done
+# Django settings and relative SQLite paths resolve from the app root.
+# This directory change is read-only and must precede the Python preflight.
+cd "$app"
 # Fail closed before any directory, source, crontab or database write.
 # Reserve the owner's 5 GiB safety margin PLUS one full SQLite snapshot
 # and 128 MiB of bounded deployment headroom. No cleanup is authorized here.
