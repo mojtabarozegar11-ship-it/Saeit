@@ -181,14 +181,14 @@ def _html(course):
     slug=course["slug"]
     url=POSTER_BASE+slug+".svg"
     return ('<article class="mpw-course-card" id="'+slug+'">'
-            '<a class="mpw-course-image" href="'+url+'?v=en-20261028"' target="_blank" rel="noopener noreferrer" '
+            '<a class="mpw-course-image" href="'+url+'?v=en-20261028" target="_blank" rel="noopener noreferrer" '
             'aria-label="View poster: '+escape(course["title"])+'">'
             '<img loading="lazy" decoding="async" width="900" height="1200" src="'+url+'?v=en-20261028" alt="'+
             escape(course["alt"],quote=True)+'"></a>'
             '<div class="mpw-course-copy"><h2>'+escape(course["title"])+'</h2><p>'+
             escape(course["summary"])+'</p><h3>What you will explore</h3><ul>'+features+
             '</ul><p class="mpw-course-status">Course preview | Enrollment and payments are not open</p>'
-            '<div class="mpw-course-actions"><a href="'+url+'?v=en-20261028"' target="_blank" rel="noopener noreferrer">'
+            '<div class="mpw-course-actions"><a href="'+url+'?v=en-20261028" target="_blank" rel="noopener noreferrer">'
             'View poster</a><a href="'+SITE+'contact/">Ask about this course</a></div></div></article>')
 
 @require_GET
