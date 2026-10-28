@@ -105,6 +105,39 @@ def live_card_check():
     assert cards[3].get('slug')=='website-design'
     return home
 
+def write_backup(stage,name,data):
+    """Write an immutable original-asset backup, never following existing links."""
+    assert name in ASSETS
+    assert stage.is_dir() and not stage.is_symlink()
+    backup=stage/f'old-{name}'
+    parent=backup.parent
+    while parent!=stage:
+        assert parent.is_relative_to(stage) and not parent.is_symlink(),'linked backup parent refused'
+        parent=parent.parent
+    backup.parent.mkdir(parents=True,exist_ok=True)
+    assert not backup.parent.is_symlink(),'linked backup parent refused'
+    flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0)
+    try:
+        fd=os.open(backup,flags,0o600)
+    except FileExistsError as exc:
+        raise RuntimeError('rollback backup already exists: '+name) from exc
+    identity=(os.fstat(fd).st_dev,os.fstat(fd).st_ino)
+    try:
+        with os.fdopen(fd,'wb') as output:
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        assert digest(backup.read_bytes())==digest(data),'backup checksum mismatch'
+    except BaseException:
+        try:
+            if not backup.is_symlink():
+                current=backup.stat()
+                if (current.st_dev,current.st_ino)==identity:
+                    backup.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
 def prepare(stage):
     assert ROOT.is_dir() and not ROOT.is_symlink() and GAME.is_dir() and not GAME.is_symlink()
     home=live_card_check()
@@ -140,11 +173,7 @@ def prepare(stage):
         if p.is_file() and not p.is_symlink():protected[rel]=digest(p.read_bytes())
     assert len(protected)>=2,'insufficient protected-page baseline'
     for name,data in old.items():
-        backup=stage/f'old-{name}'
-        assert backup.is_relative_to(stage) and not backup.is_symlink()
-        backup.parent.mkdir(parents=True,exist_ok=True)
-        backup.write_bytes(data)
-        assert digest(backup.read_bytes())==digest(data)
+        write_backup(stage,name,data)
     (stage/'old-home-hash.txt').write_text(digest(home.read_bytes()),encoding='ascii')
     store(stage,{'phase':'prepared','old':{k:digest(v) for k,v in old.items()},'new':{k:digest(v) for k,v in new.items()},'route':digest(inputs['.htaccess'].read_bytes()),'protected':protected})
     print('RAMADAN_WEB_PREPARE=PASS current-card-two-confirmed; old-client-backed-up')
