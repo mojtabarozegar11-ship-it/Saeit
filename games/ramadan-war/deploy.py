@@ -19,8 +19,19 @@ def atomic(path,data,run):
     assert not GAME.is_symlink(),f'symlink directory refused: {GAME}'
     path.parent.mkdir(parents=True,exist_ok=True)
     tmp=path.with_name('.'+path.name+'.ramadan-'+run)
-    assert not tmp.exists() and not tmp.is_symlink(),f'temporary path exists: {tmp}'
-    tmp.write_bytes(data);os.chmod(tmp,0o644)
+    # O_EXCL makes temporary-file creation atomic: a concurrent publisher
+    # cannot insert a symlink/file between a preflight check and write_bytes.
+    flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0)
+    try:
+        fd=os.open(tmp,flags,0o644)
+    except FileExistsError as exc:
+        raise AssertionError(f'temporary path exists: {tmp}') from exc
+    with os.fdopen(fd,'wb') as output:
+        os.fchmod(output.fileno(),0o644)
+        output.write(data)
+        output.flush()
+        os.fsync(output.fileno())
+    assert not tmp.is_symlink(),f'temporary path linked: {tmp}'
     assert digest(tmp.read_bytes())==digest(data)
     os.replace(tmp,path)
 def metadata(stage): return json.loads((stage/'release.json').read_text('utf-8'))

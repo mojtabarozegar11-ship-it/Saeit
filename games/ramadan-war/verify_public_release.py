@@ -13,7 +13,13 @@ def verify_public_assets(base_url, source_dir, assets, opener=urlopen):
     if (not base_url.endswith('/') or parts.scheme != 'https' or not parts.hostname
             or parts.username or parts.password or parts.query or parts.fragment):
         raise ValueError('game URL must be an HTTPS directory without credentials or query')
+    if not assets:
+        raise ValueError('release asset manifest is empty')
+    if len(assets) != len(set(assets)):
+        raise ValueError('duplicate release asset path')
     root = Path(source_dir)
+    if not root.is_dir() or root.is_symlink():
+        raise RuntimeError('release source directory missing or linked')
     for rel in assets:
         path = Path(rel)
         if (not rel or path.is_absolute() or '..' in path.parts

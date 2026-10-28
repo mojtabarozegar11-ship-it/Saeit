@@ -11,7 +11,7 @@ permissions:
 jobs:
   model-and-browser-qa:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 22
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,6 +34,8 @@ jobs:
         run: python3 -m unittest discover -s games/ramadan-war -p 'test_verify_public_release.py' -v
       - name: Verify scoped deployment rollback and concurrent-writer protection (offline)
         run: python3 -m unittest discover -s games/ramadan-war -p 'test_deploy_rollback.py' -v
+      - name: Verify offline preview packaging and failure-mode regression
+        run: python3 -m unittest discover -s games/ramadan-war -p 'test_build_preview.py' -v
       - name: Read-only protection check of currently live IT cards
         run: |
           python3 - <<'PY'
@@ -71,3 +73,15 @@ jobs:
             sleep 1
           done
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-smoke.cjs
+      - name: Build SHA-256-verified standalone playable web preview
+        run: |
+          set -euo pipefail
+          python3 games/ramadan-war/build_preview.py --output "$RUNNER_TEMP/ramadan-war-preview.zip"
+          python3 -m zipfile -t "$RUNNER_TEMP/ramadan-war-preview.zip"
+      - name: Upload playable preview ZIP after successful real-browser QA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ramadan-war-web-preview-${{ github.run_id }}
+          path: ${{ runner.temp }}/ramadan-war-preview.zip
+          if-no-files-found: error
+          retention-days: 14

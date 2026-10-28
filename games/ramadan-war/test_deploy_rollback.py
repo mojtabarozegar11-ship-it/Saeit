@@ -9,6 +9,7 @@ import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location(
     "ramadan_scoped_deploy", Path(__file__).with_name("deploy.py")
@@ -130,6 +131,47 @@ class ScopedRollbackTests(unittest.TestCase):
             deploy.atomic(path, self.new, self.run)
         self.assertEqual(path.read_bytes(), self.old)
         self.assertEqual(pending.read_bytes(), b"other run's temporary data")
+
+    def test_atomic_rejects_symlink_inserted_at_temp_creation(self):
+        # Simulate another writer replacing the old check/write gap.
+        # Exclusive creation must refuse the inserted link without touching it.
+        target = self.game / "game.js"
+        target.write_bytes(self.old)
+        pending = self.game / (".game.js.ramadan-" + self.run)
+        outside = self.root / "outside-customer-file"
+        outside.write_bytes(b"preserve")
+        real_open = deploy.os.open
+
+        def race_open(path, flags, mode=0o777):
+            if Path(path) == pending:
+                pending.symlink_to(outside)
+            return real_open(path, flags, mode)
+
+        with patch.object(deploy.os, "open", side_effect=race_open):
+            with self.assertRaisesRegex(AssertionError, "temporary path exists"):
+                deploy.atomic(target, self.new, self.run)
+        self.assertEqual(target.read_bytes(), self.old)
+        self.assertEqual(outside.read_bytes(), b"preserve")
+        self.assertTrue(pending.is_symlink())
+
+    def test_atomic_new_temp_is_created_with_exclusive_nofollow_flags(self):
+        target = self.game / "game.js"
+        target.write_bytes(self.old)
+        real_open = deploy.os.open
+        observed = []
+
+        def checked_open(path, flags, mode=0o777):
+            observed.append(flags)
+            return real_open(path, flags, mode)
+
+        with patch.object(deploy.os, "open", side_effect=checked_open):
+            deploy.atomic(target, self.new, self.run)
+        self.assertEqual(target.read_bytes(), self.new)
+        self.assertTrue(observed)
+        self.assertTrue(observed[0] & deploy.os.O_EXCL)
+        self.assertTrue(observed[0] & deploy.os.O_CREAT)
+        if hasattr(deploy.os, "O_NOFOLLOW"):
+            self.assertTrue(observed[0] & deploy.os.O_NOFOLLOW)
 
     def test_atomic_success_is_scoped_and_exact(self):
         path = self.game / "game.js"

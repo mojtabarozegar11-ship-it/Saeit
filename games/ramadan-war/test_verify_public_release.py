@@ -92,6 +92,24 @@ class ReleaseGateTests(unittest.TestCase):
                 verify_public_assets('https://example.test/ramadan-war/',
                                      self.root, [rel], self.opener)
 
+    def test_empty_or_duplicate_release_manifest_fails_closed(self):
+        with self.assertRaisesRegex(ValueError, 'manifest is empty'):
+            verify_public_assets('https://example.test/ramadan-war/',
+                                 self.root, [], self.opener)
+        with self.assertRaisesRegex(ValueError, 'duplicate release asset'):
+            verify_public_assets('https://example.test/ramadan-war/',
+                                 self.root, ['game.js', 'game.js'], self.opener)
+        self.assertEqual(self.requests, [], 'invalid manifest must not access the network')
+
+    def test_linked_release_root_fails_before_network(self):
+        linked = self.root.parent / (self.root.name + '-linked')
+        linked.symlink_to(self.root, target_is_directory=True)
+        self.addCleanup(linked.unlink)
+        with self.assertRaisesRegex(RuntimeError, 'source directory missing or linked'):
+            verify_public_assets('https://example.test/ramadan-war/',
+                                 linked, self.assets, self.opener)
+        self.assertEqual(self.requests, [])
+
     def test_missing_local_asset_and_unsafe_path_fail_closed(self):
         (self.root / 'game.js').unlink()
         with self.assertRaisesRegex(RuntimeError, 'missing or linked'):
