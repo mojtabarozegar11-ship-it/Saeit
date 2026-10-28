@@ -70,46 +70,53 @@ jobs:
           ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
           set -euo pipefail
           cd "$HOME/Saeit-staging"
-          SAEIT_ENV=production DJANGO_SETTINGS_MODULE=config.settings /home/zomorod2/Saeit/.venv/bin/python -B - <<'PY'
-          import json, os, shutil, subprocess, tempfile
+          python3 -B - <<'PY'
+          import json, os, re, shutil, subprocess, urllib.parse
           from pathlib import Path
-          from django.conf import settings
-          db=settings.DATABASES["default"]
-          assert db.get("NAME")=="zomorod2_sites_main", "Unexpected live database; refusing query."
-          client=shutil.which("mysql") or shutil.which("mariadb")
-          if not client:
-              raise SystemExit("MYSQL_CLIENT_UNAVAILABLE")
-          def option(value):
-              value=str(value or "")
-              if "\n" in value or "\r" in value:
-                  raise SystemExit("MYSQL_OPTION_VALUE_INVALID")
-              return '"' + value.replace("\\","\\\\").replace('"','\\"') + '"'
-          lines=["[client]"]
-          for key,source in (("user","USER"),("password","PASSWORD"),("host","HOST"),("port","PORT"),("socket","OPTIONS")):
-              if key=="socket":
-                  value=(db.get("OPTIONS") or {}).get("unix_socket","")
-              else:
-                  value=db.get(source,"")
-              if value not in ("",None):
-                  lines.append(key+"="+option(value))
-          fd,path=tempfile.mkstemp(prefix="saeit-mysql-readonly-",dir="/tmp")
-          try:
-              os.fchmod(fd,0o600)
-              with os.fdopen(fd,"w",encoding="utf-8") as f:
-                  f.write("\n".join(lines)+"\n"); f.flush(); os.fsync(f.fileno())
-              summary="""SELECT CONCAT('LIVE_MYSQL_TABLE_COUNT=',COUNT(*)),CONCAT('LIVE_MYSQL_DATA_BYTES=',COALESCE(SUM(DATA_LENGTH),0)),CONCAT('LIVE_MYSQL_INDEX_BYTES=',COALESCE(SUM(INDEX_LENGTH),0)),CONCAT('LIVE_MYSQL_REPORTED_FREE_BYTES=',COALESCE(SUM(DATA_FREE),0)) FROM information_schema.TABLES WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_TYPE='BASE TABLE';"""
-              tables="""SELECT CONCAT('MYSQL_TABLE_SUMMARY=',JSON_OBJECT('name',TABLE_NAME,'engine',ENGINE,'estimated_rows',COALESCE(TABLE_ROWS,0),'data_bytes',COALESCE(DATA_LENGTH,0),'index_bytes',COALESCE(INDEX_LENGTH,0),'free_bytes',COALESCE(DATA_FREE,0))) FROM information_schema.TABLES WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_TYPE='BASE TABLE' ORDER BY DATA_LENGTH+INDEX_LENGTH DESC LIMIT 55;"""
-              for query in (summary,tables):
-                  result=subprocess.run([client,"--defaults-extra-file="+path,"--batch","--skip-column-names","--database=zomorod2_sites_main","-e",query],capture_output=True,text=True,timeout=90)
-                  if result.returncode:
-                      raise SystemExit("MYSQL_INVENTORY_QUERY_FAILED exit="+str(result.returncode))
-                  for line in result.stdout.splitlines():
-                      if line.startswith(("LIVE_MYSQL_","MYSQL_TABLE_SUMMARY=")):
-                          print(line)
-              print("LIVE_MYSQL_STORAGE_INVENTORY=complete")
-          finally:
-              try: os.unlink(path)
-              except FileNotFoundError: pass
+          app=Path.home()/"Saeit-staging"
+          candidates=(app/".env",app/".env.production",app/".env.local",Path.home()/"mojplaywin.com"/".env")
+          urls=[]
+          for path in candidates:
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size>65536: continue
+                  for line in path.read_text(encoding="utf-8",errors="replace").splitlines():
+                      match=re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$",line)
+                      if match:
+                          parsed=urllib.parse.urlsplit(match.group(1).strip().strip('"').strip("'"))
+                          if parsed.scheme.lower() not in {"mysql","mariadb","mysql2"}:
+                              raise SystemExit("MYSQL_CONFIG_SCHEME_UNEXPECTED")
+                          urls.append(parsed)
+              except OSError:
+                  continue
+          if len(urls)!=1: raise SystemExit("MYSQL_CONFIG_URL_NOT_UNIQUE")
+          parsed=urls[0]
+          db=urllib.parse.unquote(parsed.path.lstrip("/"))
+          user=urllib.parse.unquote(parsed.username or "")
+          password=urllib.parse.unquote(parsed.password or "")
+          host=parsed.hostname or "localhost"
+          client=shutil.which("mariadb") or shutil.which("mysql")
+          if not all((db,user,password,client)): raise SystemExit("MYSQL_CONNECTION_CONFIG_INCOMPLETE")
+          if db!="zomorod2_sites_main": raise SystemExit("MYSQL_DATABASE_SCOPE_MISMATCH")
+          uapi=subprocess.run(["uapi","--output=json","Mysql","list_databases"],capture_output=True,timeout=15,check=False)
+          if uapi.returncode or len(uapi.stdout)>300000: raise SystemExit("CPANEL_DATABASE_ALLOWLIST_UNAVAILABLE")
+          payload=json.loads(uapi.stdout).get("result",{})
+          databases=payload.get("data",[])
+          if payload.get("status")!=1 or len(databases)!=1 or databases[0].get("database")!=db:
+              raise SystemExit("CPANEL_DATABASE_ALLOWLIST_MISMATCH")
+          args=[client,"--no-defaults","--batch","--skip-column-names","--host="+host,"--user="+user,
+                "--database="+db,"--connect-timeout=8"]
+          if parsed.port is not None: args.append("--port="+str(parsed.port))
+          env=dict(os.environ,MYSQL_PWD=password)
+          queries=[
+              """SELECT CONCAT('LIVE_MYSQL_TABLE_COUNT=',COUNT(*)),CONCAT('LIVE_MYSQL_DATA_BYTES=',COALESCE(SUM(DATA_LENGTH),0)),CONCAT('LIVE_MYSQL_INDEX_BYTES=',COALESCE(SUM(INDEX_LENGTH),0)),CONCAT('LIVE_MYSQL_REPORTED_FREE_BYTES=',COALESCE(SUM(DATA_FREE),0)) FROM information_schema.TABLES WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_TYPE='BASE TABLE';""",
+              """SELECT CONCAT('MYSQL_TABLE_SUMMARY=',JSON_OBJECT('name',TABLE_NAME,'engine',ENGINE,'estimated_rows',COALESCE(TABLE_ROWS,0),'data_bytes',COALESCE(DATA_LENGTH,0),'index_bytes',COALESCE(INDEX_LENGTH,0),'free_bytes',COALESCE(DATA_FREE,0))) FROM information_schema.TABLES WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_TYPE='BASE TABLE' ORDER BY DATA_LENGTH+INDEX_LENGTH DESC LIMIT 55;"""
+          ]
+          for query in queries:
+              result=subprocess.run(args+["--execute="+query],env=env,capture_output=True,text=True,timeout=90,check=False)
+              if result.returncode: raise SystemExit("MYSQL_INVENTORY_QUERY_FAILED exit="+str(result.returncode))
+              for line in result.stdout.splitlines():
+                  if line.startswith(("LIVE_MYSQL_","MYSQL_TABLE_SUMMARY=")): print(line)
+          print("LIVE_MYSQL_STORAGE_INVENTORY=complete")
           PY
           REMOTE
       - name: Clear connection material
