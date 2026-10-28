@@ -24,8 +24,9 @@ class HTTPSClient(Client):
 
     def post(self, *args, **kwargs):
         kwargs.setdefault("secure", True)
-        # A real same-origin HTTPS browser supplies Origin or Referer for CSRF.
-        kwargs.setdefault("HTTP_REFERER", "https://testserver/")
+        # The live website sets Referrer-Policy: no-referrer. HTTPS browser
+        # fetch POST carries the same-origin Origin header for Django CSRF.
+        kwargs.setdefault("HTTP_ORIGIN", "https://testserver")
         return super().post(*args, **kwargs)
 
 
@@ -79,6 +80,17 @@ class BoundaryTests(TestCase):
         r = self.web.post("/auth/finish/", data=json.dumps({"credential": TOKEN}),
                           content_type="application/json")
         self.assertEqual(r.status_code, 403)
+        self.assertIsNone(LoginChallenge.objects.get().consumed_at)
+
+    def test_cross_origin_post_rejected_even_with_valid_csrf_token(self):
+        state = self.start_login()
+        result = self.web.post(
+            "/auth/finish/", data=json.dumps({"credential": TOKEN}),
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=state["csrf_token"],
+            HTTP_ORIGIN="https://untrusted.example",
+        )
+        self.assertEqual(result.status_code, 403)
         self.assertIsNone(LoginChallenge.objects.get().consumed_at)
 
     def test_success_creates_a_separate_low_privilege_user(self):
