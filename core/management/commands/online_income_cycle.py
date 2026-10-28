@@ -53,6 +53,13 @@ class Command(BaseCommand):
                     "must_execute_not_just_report": True,
                     "success_requires_verified_effect": True,
                     "reobserve_after_execution": True,
+                    "production_limits": {
+                        "max_new_products_per_cycle": 1,
+                        "max_concurrent_master_tasks": 1,
+                        "parallel_product_builds": False,
+                        "automatic_volume_expansion": False,
+                        "private_only_until_qc1000_and_rights_review": True,
+                    },
                 },
             },
             status="queued",
