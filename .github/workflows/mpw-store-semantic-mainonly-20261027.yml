@@ -133,6 +133,10 @@ jobs:
                   good=True;break
               time.sleep(2)
           if not good:raise RuntimeError("STORE_SINGLE_MAIN_NOT_LIVE")
+          if doc.count('href="/commerce/trx-easy/purchases/"') != 1:
+              raise RuntimeError("STORE_INVOICE_RECOVERY_LINK_NOT_LIVE")
+          if '.mpw-shop-payment a:focus-visible' not in doc:
+              raise RuntimeError("STORE_INVOICE_LINK_FOCUS_STYLE_NOT_LIVE")
           for pk in ("72","225","879"):
               if "/store/product/"+pk+"/" not in doc:
                   raise RuntimeError("PRODUCT_LINK_MISSING:"+pk)
