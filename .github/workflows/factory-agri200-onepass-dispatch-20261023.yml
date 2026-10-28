@@ -59,13 +59,78 @@ jobs:
             ssh -T -i "$key_dir/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$key_dir/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
           }
           ssh_vps 'test "$(id -un)" = githubops && test -x "$HOME/factory-runtime/.venv/bin/python" && test -f "$HOME/factory-runtime/private/autonomous-product-cycle/production-instructions/owner-agri200-p0-index.json" && echo AGRI200_VPS_ACCESS=PASS'
+          # Read-only gate: do not mkdir, copy scripts, lock, or run workers when
+          # the mount is exhausted or historical owner cleanup left intake absent.
+          ssh_vps 'python3 -B -' <<'PREFLIGHT'
+          import json
+          import re
+          import shutil
+          from pathlib import Path
+
+          base = Path("/home/githubops/factory-runtime")
+          free = shutil.disk_usage(base).free
+          minimum = 5 * 1024**3 + 128 * 1024**2
+          if free < minimum:
+              print("AGRI200_PREFLIGHT=BLOCKED_DISK_RESERVE free_bytes=" + str(free), flush=True)
+              raise SystemExit(2)
+          root = base / "private/autonomous-product-cycle/production-instructions"
+          index = root / "owner-agri200-p0-index.json"
+          folder = root / "orders"
+          if index.is_symlink() or not index.is_file() or folder.is_symlink() or not folder.is_dir():
+              print("AGRI200_PREFLIGHT=BLOCKED_INTAKE_PATH", flush=True)
+              raise SystemExit(3)
+          try:
+              payload = json.loads(index.read_text(encoding="utf8"))
+              ids = payload.get("order_ids_ranked")
+              valid_index = (
+                  payload.get("topic_count") == 200
+                  and payload.get("edition_goal_count") == 400
+                  and isinstance(ids, list) and len(ids) == 200
+                  and len(set(ids)) == 200
+                  and all(isinstance(n, str) and re.fullmatch(r"WO-[0-9]{8}", n) for n in ids)
+              )
+              if not valid_index:
+                  raise ValueError("invalid owner index")
+              for ident in ids:
+                  p = folder / (ident + ".json")
+                  if p.is_symlink() or not p.is_file() or p.stat().st_size > 250000:
+                      raise ValueError("missing or unsafe order")
+                  order = json.loads(p.read_text(encoding="utf8"))
+                  if (not isinstance(order, dict) or order.get("id") != ident
+                          or order.get("status") not in (
+                              "issued", "in_engineering", "blocked_rework", "completed_verified")
+                          or not re.fullmatch(r"[0-9a-f]{64}", str(order.get("fingerprint", "")))):
+                      raise ValueError("invalid order identity")
+          except (OSError, ValueError, TypeError, AttributeError) as error:
+              print("AGRI200_PREFLIGHT=BLOCKED_INCOMPLETE_INTAKE " + type(error).__name__, flush=True)
+              raise SystemExit(4)
+          # Recheck after the bounded read; an external actor may consume space.
+          if shutil.disk_usage(base).free < minimum:
+              print("AGRI200_PREFLIGHT=BLOCKED_DISK_RACE", flush=True)
+              raise SystemExit(5)
+          print("AGRI200_PREFLIGHT=PASS", flush=True)
+          PREFLIGHT
           staging="/home/githubops/factory-runtime/operations/.agri200-onepass-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh_vps "umask 077; test ! -e '$staging'; install -d -m 700 '$staging'"
           src=scripts/factory_agri200_onepass_dispatch_20261023.py
           cat "$src" | ssh_vps "umask 077; cat > '$staging/dispatch.py'; chmod 600 '$staging/dispatch.py'"
           digest="$(sha256sum "$src" | awk '{print $1}')"
           ssh_vps "test \"\$(sha256sum '$staging/dispatch.py' | awk '{print \$1}')\" = '$digest'"
-          ssh_vps "timeout 710s /home/githubops/factory-runtime/.venv/bin/python -B '$staging/dispatch.py' --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --operations /home/githubops/factory-runtime/operations/production-instructions"
+          report="$(ssh_vps "timeout 710s /home/githubops/factory-runtime/.venv/bin/python -B '$staging/dispatch.py' --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --operations /home/githubops/factory-runtime/operations/production-instructions")"
+          printf '%s\n' "$report"
+          # A green process exit is NOT a finished product or even verified stage progress.
+          FACTORY_DISPATCH_REPORT="$report" python3 - <<'RESULT_GATE'
+          import json
+          import os
+          import sys
+          report = json.loads(os.environ["FACTORY_DISPATCH_REPORT"])
+          if (report.get("production_outcome") != "internal_progress_verified"
+                  or report.get("automated_factory_progress_confirmed") is not True):
+              print("::error::AGRI200_NO_VERIFIED_PRODUCTION_PROGRESS:" +
+                    str(report.get("production_outcome")), flush=True)
+              sys.exit(1)
+          print("AGRI200_INTERNAL_PROGRESS_VERIFIED=PASS", flush=True)
+          RESULT_GATE
       - name: Check main storefronts are responding (not a proof of delivery)
         shell: bash
         run: |
