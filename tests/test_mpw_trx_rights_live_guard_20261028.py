@@ -232,5 +232,53 @@ class GuardTests(unittest.TestCase):
                     self.assertEqual(paths[key].read_text("utf8"),fixture()[key])
                 restart.assert_not_called()
 
+    def test_atomic_source_rename_syncs_parent_directory(self):
+        """A synced temporary file alone does not make its rename durable."""
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/"source.py"
+            path.write_bytes(b"old")
+            directory_syncs=[]
+            original_fsync=guard.os.fsync
+            def observe_fsync(fd):
+                if guard.stat.S_ISDIR(guard.os.fstat(fd).st_mode):
+                    directory_syncs.append(fd)
+                return original_fsync(fd)
+            with patch.object(guard.os,"fsync",side_effect=observe_fsync):
+                guard.atomic(path,b"new",expected=guard.digest(b"old"))
+            self.assertEqual(path.read_bytes(),b"new")
+            self.assertGreaterEqual(len(directory_syncs),1)
+
+    def test_fault_after_rename_rolls_back_current_module(self):
+        """Post-rename failure must not leave an untracked partial install."""
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            paths={k:root/(k+".py") for k in fixture()}
+            for k,path in paths.items():
+                path.write_text(fixture()[k],encoding="utf8")
+            before={k:path.read_bytes() for k,path in paths.items()}
+            original_atomic=guard.atomic
+            def fail_after_replace(path,raw,expected=None):
+                original_atomic(path,raw,expected)
+                if path==paths["context"] and b"rights_cleared_for_sale" in raw:
+                    raise OSError("INJECTED_POST_RENAME_FAILURE")
+            with patch.object(guard,"TARGETS",paths),\
+                 patch.object(guard,"BACKUPS",root/"private"),\
+                 patch.object(guard,"guard"),\
+                 patch.object(guard,"runtime_validate"),\
+                 patch.object(guard,"restart") as restart,\
+                 patch.object(guard,"atomic",side_effect=fail_after_replace):
+                with self.assertRaisesRegex(OSError,"INJECTED_POST_RENAME_FAILURE"):
+                    guard.operation("apply","202610280013")
+                self.assertEqual(before,{k:p.read_bytes() for k,p in paths.items()})
+                restart.assert_called_once()
+                self.assertTrue((root/"private"/"202610280013"/"manifest.json").is_file())
+
+    def test_main_push_rechecks_guard_sources_without_implicit_apply(self):
+        workflow=(SCRIPT.parents[1]/".github/workflows/mpw-trx-rights-guarded-release-20261028.yml").read_text("utf8")
+        push=workflow.split("  push:",1)[1].split("  workflow_dispatch:",1)[0]
+        self.assertIn("scripts/mpw_trx_rights_live_guard_20261028.py",push)
+        self.assertIn("tests/test_mpw_trx_rights_live_guard_20261028.py",push)
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.operation == 'apply'",workflow)
+
 if __name__=="__main__":
     unittest.main()

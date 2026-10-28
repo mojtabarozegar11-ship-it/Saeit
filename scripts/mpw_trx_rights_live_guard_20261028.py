@@ -135,6 +135,10 @@ def atomic(path,raw,expected=None):
         if expected is not None and digest(path.read_bytes())!=expected:
             raise RuntimeError("CONCURRENT_EDIT_BEFORE_REPLACE")
         os.replace(tmp,path)
+        # Persist the rename itself, not only the temporary file contents.
+        dirfd=os.open(path.parent,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
+        try: os.fsync(dirfd)
+        finally: os.close(dirfd)
     finally:
         if os.path.exists(tmp): os.unlink(tmp)
 
@@ -233,18 +237,23 @@ def operation(mode,run_id=None):
                 for k,path in TARGETS.items():
                     if digest(path.read_bytes())!=info["old"][k]:
                         raise RuntimeError("CONCURRENT_EDIT:"+k)
-                    atomic(path,new[k],expected=info["old"][k]);touched.append(k)
+                    # Arm rollback before atomic(): post-rename durability can fail.
+                    touched.append(k)
+                    atomic(path,new[k],expected=info["old"][k])
                 current,_,needed=inspect()
                 if needed or any(digest(current[k])!=info["new"][k] for k in TARGETS):
                     raise RuntimeError("POST_WRITE_MISMATCH")
                 runtime_validate()
                 restart()
             except BaseException:
+                restored=0
                 for k in reversed(touched):
                     path=TARGETS[k]
                     if digest(path.read_bytes())==info["new"][k]:
                         atomic(path,old[k],expected=info["new"][k])
-                if touched: restart()
+                        restored+=1
+                # An optimistic rollback arm is not evidence of a changed file.
+                if restored: restart()
                 print("MPW_TRX_RIGHTS_RELEASE=ROLLED_BACK_AFTER_FAILURE")
                 raise
             print("MPW_TRX_RIGHTS_RELEASE=APPLIED_AND_SOURCE_VERIFIED; ORDERS=0; PAYMENTS=0")
