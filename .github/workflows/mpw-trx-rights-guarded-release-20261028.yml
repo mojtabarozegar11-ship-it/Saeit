@@ -7,7 +7,10 @@ on:
       - .github/workflows/mpw-trx-rights-guarded-release-20261028.yml
   push:
     branches: [main]
-    paths: [".github/workflows/mpw-trx-rights-guarded-release-20261028.yml"]
+    paths:
+      - .github/workflows/mpw-trx-rights-guarded-release-20261028.yml
+      - scripts/mpw_trx_rights_live_guard_20261028.py
+      - tests/test_mpw_trx_rights_live_guard_20261028.py
   workflow_dispatch:
     inputs:
       operation:
