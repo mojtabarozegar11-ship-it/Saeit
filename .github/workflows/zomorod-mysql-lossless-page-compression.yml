@@ -50,8 +50,8 @@ jobs:
             StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
-            ConnectTimeout 10
-            ConnectionAttempts 1
+            ConnectTimeout 30
+            ConnectionAttempts 2
             ServerAliveInterval 30
             ServerAliveCountMax 10
             ForwardAgent no
