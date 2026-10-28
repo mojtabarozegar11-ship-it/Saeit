@@ -28,13 +28,13 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
             self.assertFalse(missing_public_tables(first))
             db.introspection.table_names.assert_called()
 
-    def test_degraded_catalog_noindex_does_not_change_normal_response(self):
+    def test_degraded_catalog_preserves_indexing_and_normal_response(self):
         normal = HttpResponse("healthy catalog")
         self.assertNotIn("X-Robots-Tag", normal)
         self.assertNotIn("X-ZM-Data-Status", normal)
         degraded = mark_public_data_unavailable(HttpResponse("temporary catalog"))
         self.assertEqual(degraded.status_code, 200)
-        self.assertEqual(degraded["X-Robots-Tag"], "noindex")
+        self.assertNotIn("X-Robots-Tag", degraded)
         self.assertEqual(degraded["X-ZM-Data-Status"], "temporarily-unavailable")
         self.assertIn("no-store", degraded["Cache-Control"])
         self.assertNotIn("X-Robots-Tag", normal)
@@ -174,7 +174,6 @@ class PublicCatalogDetailRouteRegressionTests(SimpleTestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response["Retry-After"], "300")
         self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
-        self.assertEqual(response["X-Robots-Tag"], "noindex")
         self.assertIn("no-store", response["Cache-Control"])
         self.assertIn("بازگشت به آموزشگاه", response.content.decode("utf-8"))
         lookup.assert_not_called()
