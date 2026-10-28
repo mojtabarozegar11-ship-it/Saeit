@@ -11,6 +11,22 @@
 - [Original installation proof](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40635762712) and [read-only health check](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40635971584)
 - Latest phone-code onboarding changes require their own successful deployment receipt; do not interpret source commits as live authenticated accounts
 
+## Phone SSH key — live activation (28 October 2026)
+
+The original Termux/ComfyUI public key `comfyui-phone-ui-20261015` has been upgraded **in-place** to allow a single, forced, interactive onboarding command. It retains `restrict` and its existing `127.0.0.1:18188` local-port forwarding allowance; no normal shell, remote commands, SCP/SFTP or other keys were enabled.
+
+- [GitHub Actions installation and restricted-key proof](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40640304169)
+- The forced command executes `/home/githubops/private-messaging-bridge/security/phone-onboard-gate.sh`, which refuses requests without a TTY or that specify a remote command.
+- On the same Android Termux environment holding the older ComfyUI phone private key, connect using the earlier recorded key path:
+
+```bash
+ssh -tt -o PasswordAuthentication=no -i ~/.ssh/comfyui-phone githubops@178.239.147.150
+```
+
+**Do not append a remote command** to this SSH invocation. After successful key authentication, the Telegram/WhatsApp wizard opens automatically and requests private one-time account pairing. No separate `sudo` or server command is needed. An older Termux setup also used `~/comfyui-phone-ui-key` as its local key path; use it only if the `~/.ssh/comfyui-phone` file is missing and that other key is confirmed to correspond to the registered public key.
+
+A matching private key still must exist on the phone. GitHub's successful server-side change **does not verify possession of the phone's private key**, nor does it authenticate Telegram or WhatsApp.
+
 ## One-time authorization — one command in your **private** SSH terminal
 
 After signing in to the VPS via an SSH terminal as `githubops`, run:
