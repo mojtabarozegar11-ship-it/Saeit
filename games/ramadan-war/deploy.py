@@ -95,6 +95,25 @@ def prepare(stage):
     store(stage,{'phase':'prepared','old':{k:digest(v) for k,v in old.items()},'new':{k:digest(v) for k,v in new.items()},'route':digest(inputs['.htaccess'].read_bytes()),'protected':protected})
     print('RAMADAN_WEB_PREPARE=PASS current-card-two-confirmed; old-client-backed-up')
 
+def ensure_publish_capacity(stage, payload_bytes, reserve_bytes=128*1024*1024,
+                            statvfs=os.statvfs):
+    """Recheck free space immediately before any live file replacement.
+
+    The earlier SSH preflight is not enough if another process fills the disk
+    during transfer or backup. Leave headroom for atomic writes and rollback.
+    """
+    assert stage.is_dir() and not stage.is_symlink()
+    assert GAME.is_dir() and not GAME.is_symlink()
+    assert isinstance(payload_bytes,int) and payload_bytes>0
+    game_fs=statvfs(GAME)
+    if game_fs.f_bavail*game_fs.f_frsize < reserve_bytes+2*payload_bytes:
+        raise RuntimeError('live game storage fell below safe publish reserve')
+    if stage.stat().st_dev != GAME.stat().st_dev:
+        stage_fs=statvfs(stage)
+        if stage_fs.f_bavail*stage_fs.f_frsize < reserve_bytes:
+            raise RuntimeError('staging storage fell below safe rollback reserve')
+
+
 def publish(stage,run):
     m=metadata(stage);assert m['phase']=='prepared';live_card_check()
     for name,h in m['old'].items():assert digest((GAME/name).read_bytes())==h,'game file changed concurrently: '+name
@@ -102,6 +121,7 @@ def publish(stage,run):
     assert digest((GAME/'.htaccess').read_bytes())==m['route'],'game route config changed concurrently'
     for name in m['new']:
         data=(stage/f'incoming/{name}').read_bytes();assert digest(data)==m['new'][name]
+    ensure_publish_capacity(stage,sum((stage/f'incoming/{name}').stat().st_size for name in ASSETS))
     try:
         for name in [asset for asset in ASSETS if asset!='index.html']+['index.html']:
             atomic(GAME/name,(stage/f'incoming/{name}').read_bytes(),run)
