@@ -184,6 +184,6 @@ test('pointerup displacement blocks unintended shots even when pointermove was c
   assert.equal(shouldFireCanvasClick(click,'game',1366,invalid), false);
 
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.match(game, /canvas\\.addEventListener\\('pointerup',e=>\\{if\\(e\\.pointerId!==aimId\\)return;recordPointerGestureMovement\\(aimGesture,e\\)/);
-  assert.match(game, /canvas\\.addEventListener\\('pointermove',e=>\\{[\\s\\S]*?recordPointerGestureMovement\\(aimGesture,e\\)/);
+  assert.ok(game.includes("canvas.addEventListener('pointerup',e=>{if(e.pointerId!==aimId)return;recordPointerGestureMovement(aimGesture,e);"), 'release must record final displacement');
+  assert.ok(game.slice(game.indexOf("canvas.addEventListener('pointermove'"),game.indexOf("canvas.addEventListener('pointerup'")).includes('recordPointerGestureMovement(aimGesture,e);'), 'move must record displacement');
 });
