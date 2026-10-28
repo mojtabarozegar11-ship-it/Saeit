@@ -76,10 +76,9 @@ async function start() {
           console.log('Scan this QR with WhatsApp > Linked devices > Link a device:');
           qrTerm.generate(qr,{small:true});
         } else {
-          await status('LOGIN_REQUIRED');
-          // Do not put private QR tokens in service logs.
-          socket.end(undefined);
+          // Settle first: end() may synchronously emit a close event.
           await finish('LOGIN_REQUIRED');
+          socket.end(undefined);
         }
       }
       if (connection === 'open') {
@@ -90,6 +89,7 @@ async function start() {
           await credentialsSaved;
           if (credentialsSaveFailed) {
             await finish('CREDENTIAL_SAVE_FAILED');
+            socket.end(undefined);
           } else {
             console.log('AUTHORIZED: WhatsApp credentials saved in the private state folder.');
             await finish('AUTHORIZED');
@@ -103,7 +103,8 @@ async function start() {
       if (connection === 'close') {
         const code = lastDisconnect?.error?.output?.statusCode;
         await finish(code === DisconnectReason.loggedOut ? 'LOGIN_REQUIRED' :
-                     code === DisconnectReason.connectionReplaced ? 'SESSION_CONFLICT' : 'DISCONNECTED');
+                     code === DisconnectReason.connectionReplaced ? 'SESSION_CONFLICT' :
+                     code === DisconnectReason.restartRequired ? 'PAIRING_RESTART' : 'DISCONNECTED');
       }
     });
   });
@@ -112,7 +113,16 @@ while (running) {
   let outcome;
   try { outcome=await start(); }
   catch (e) { console.error(`Connection failed (${e?.name||'error'}).`); outcome='DISCONNECTED'; }
-  if (mode === 'login' || outcome === 'LOGIN_REQUIRED' || outcome === 'SESSION_CONFLICT' || outcome === 'CREDENTIAL_SAVE_FAILED' || outcome === 'AUTHORIZED' || !running) break;
+  if (outcome === 'AUTHORIZED' || outcome === 'LOGIN_REQUIRED' || outcome === 'SESSION_CONFLICT' || outcome === 'CREDENTIAL_SAVE_FAILED' || !running) {
+    if (mode === 'login' && outcome !== 'AUTHORIZED') process.exitCode = 3;
+    break;
+  }
+  // Initial QR pairing may require a restart before the first authenticated 'open'.
+  if (mode === 'login' && attempts >= 10) {
+    await status('PAIRING_RETRIES_EXCEEDED');
+    process.exitCode = 4;
+    break;
+  }
   attempts++;
   await pause(Math.min(60000, 3000*Math.pow(2,Math.min(attempts,4))));
 }
