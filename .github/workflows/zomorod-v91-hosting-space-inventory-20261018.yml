@@ -198,6 +198,9 @@ jobs:
           print("V91_SYMLINK_REFERENCES="+json.dumps(refs[:45],ensure_ascii=False))
           print("SPACE_INVENTORY_COMPLETE=yes")
           PY
+          echo 'MYSQL_DATADIR_FILESYSTEM_READ_ONLY'
+          df -T /var/lib/mysql || echo MYSQL_DATADIR_FILESYSTEM_UNAVAILABLE
+          df -Pk /var/lib/mysql || echo MYSQL_DATADIR_FREE_SPACE_UNAVAILABLE
           echo 'CPANEL_QUOTA_SNAPSHOT'
           if command -v uapi >/dev/null 2>&1; then
             timeout 20s uapi --output=json Quota get_quota_info 2>/dev/null | python3 -c 'import sys,json;d=json.load(sys.stdin);x=d.get("result",{}).get("data",{}); print("QUOTA_DATA="+json.dumps({k:v for k,v in x.items() if isinstance(v,(str,int,float,bool)) and any(t in k.lower() for t in ("limit","used","quota","mb","byte","percent","total"))},ensure_ascii=False)[:2400])' || echo QUOTA_UNAVAILABLE
