@@ -61,7 +61,7 @@ class GuardTests(unittest.TestCase):
         original=fixture()["pages"]
         patched,_=guard.transform("pages",original)
         hidden=patched.replace(guard.PAGES_CATALOG_OLD,
-            "        if not _eligible(p) or not rights_cleared_for_sale(p): continue\\n")
+            "        if not _eligible(p) or not rights_cleared_for_sale(p): continue\n")
         with self.assertRaisesRegex(RuntimeError,"PUBLIC_CATALOG_VISIBILITY_CHANGED"):
             guard.check_structure({"pages":hidden})
 
