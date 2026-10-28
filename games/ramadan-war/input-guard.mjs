@@ -70,6 +70,18 @@ export function normalizeMovementAxes(forward, side) {
 }
 
 
+// A browser may coalesce pointermove events or deliver none before pointerup.
+// Include release coordinates so a long aim drag cannot masquerade as a click.
+export function recordPointerGestureMovement(gesture, event) {
+  if (!gesture) return;
+  if (![gesture.startX, gesture.startY, event?.clientX, event?.clientY].every(Number.isFinite)) {
+    gesture.moved = Infinity; // Unknown release coordinates never authorize firing.
+    return;
+  }
+  gesture.moved = Math.max(gesture.moved || 0,
+    Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY));
+}
+
 // Only an actual primary desktop mouse click may fire from the 3D canvas.
 // Touch/pencil aiming on wide screens and mouse drags must not consume ammo.
 export function shouldFireCanvasClick(event, screen, viewportWidth, gesture) {

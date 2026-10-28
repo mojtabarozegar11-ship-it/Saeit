@@ -40,26 +40,6 @@ jobs:
         run: python3 -m unittest discover -s games/ramadan-war -p 'test_preview_runtime_deps.py' -v
       - name: Verify integrated campaign save, input, accessibility and security regressions
         run: node --test tests/game/ramadan-input-guard.test.mjs tests/game/ramadan-save-validation.test.mjs
-      - name: Read-only protection check of currently live IT cards
-        run: |
-          python3 - <<'PY'
-          from urllib.request import Request, urlopen
-          import json, re
-          with urlopen(Request('https://zomorodmelal.ir/', headers={'Cache-Control': 'no-cache', 'User-Agent': 'RamadanReadOnlyCardQA/1'}), timeout=40) as response:
-              assert response.status == 200
-              page = response.read(3500000)
-          match = re.search(rb'window[.]ZOMOROD_ORBIT_DATA=([{].*?[}]);</script>', page, re.S)
-          assert match, 'Cannot locate live homepage manifest'
-          rows = json.loads(match.group(1))['rows']
-          row = next(item for item in rows if item.get('id') == 'ZM-R25')
-          cards = row['cards']
-          assert row['title'] == 'فناوری اطلاعات و خدمات دیجیتال' and len(cards) >= 24
-          assert cards[0]['id'] == 'ZM-R25-GAME-FARM-DOMINION-20261019'
-          assert cards[1]['id'] == 'ZM-R25-GAME-RAMADAN-WAR-20261022' and cards[1]['canonicalUrl'] == '/ramadan-war/'
-          assert cards[2]['id'] == 'ZM-R25-GAME-ARROW-ESCAPE-20261022' and cards[2]['canonicalUrl'] == '/arrow-escape/'
-          assert cards[3]['slug'] == 'website-design'
-          print('LIVE_IT_FIRST_FOUR_CARDS=PASS count=',len(cards))
-          PY
       - name: Full desktop and mobile gameplay with real GLB texture loading
         run: |
           set -euo pipefail
@@ -89,3 +69,26 @@ jobs:
           path: ${{ runner.temp }}/ramadan-war-preview.zip
           if-no-files-found: error
           retention-days: 14
+      # Preview is offline and cannot mutate production. Keep the live-card
+      # protection check as a strict job gate, but run it after packaging so
+      # temporary public DNS failures cannot suppress a verified review ZIP.
+      - name: Read-only protection check of currently live IT cards
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request, urlopen
+          import json, re
+          with urlopen(Request('https://zomorodmelal.ir/', headers={'Cache-Control': 'no-cache', 'User-Agent': 'RamadanReadOnlyCardQA/1'}), timeout=40) as response:
+              assert response.status == 200
+              page = response.read(3500000)
+          match = re.search(rb'window[.]ZOMOROD_ORBIT_DATA=([{].*?[}]);</script>', page, re.S)
+          assert match, 'Cannot locate live homepage manifest'
+          rows = json.loads(match.group(1))['rows']
+          row = next(item for item in rows if item.get('id') == 'ZM-R25')
+          cards = row['cards']
+          assert row['title'] == 'فناوری اطلاعات و خدمات دیجیتال' and len(cards) >= 24
+          assert cards[0]['id'] == 'ZM-R25-GAME-FARM-DOMINION-20261019'
+          assert cards[1]['id'] == 'ZM-R25-GAME-RAMADAN-WAR-20261022' and cards[1]['canonicalUrl'] == '/ramadan-war/'
+          assert cards[2]['id'] == 'ZM-R25-GAME-ARROW-ESCAPE-20261022' and cards[2]['canonicalUrl'] == '/arrow-escape/'
+          assert cards[3]['slug'] == 'website-design'
+          print('LIVE_IT_FIRST_FOUR_CARDS=PASS count=',len(cards))
+          PY

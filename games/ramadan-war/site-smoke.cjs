@@ -92,6 +92,28 @@ const assert=require('node:assert/strict');
    let state=await page.evaluate(()=>window.RamadanWarDebug.getState());
    assert(state.hp>0&&state.hp<=100,'hero must be alive');assert.equal(state.lives,100);assert.equal(state.stage,0);assert.equal(state.mode,'game');
    assert.equal(state.rockets,12);assert.equal(state.drones,3);assert.equal(state.ammo,8);assert.equal(state.renderer,'webgl-threejs');assert(state.enemies>0,'mission enemy spawn '+JSON.stringify(state));
+   // Chromium regression for coalesced pointermove: a large displacement on
+   // pointerup alone must not consume ammo. No debug mutation is used.
+   if(localCandidate&&!v.mobile){
+     const releaseWithoutMove=await page.evaluate(()=>{
+       const canvas=document.querySelector('#view'),g=window.RamadanWarDebug;
+       const originalCapture=canvas.setPointerCapture;
+       canvas.setPointerCapture=()=>{}; // Synthetic pointer IDs cannot be natively captured.
+       try{
+         const before=g.getState().shots;
+         const emit=(type,x)=>canvas.dispatchEvent(new PointerEvent(type,{
+           bubbles:true,pointerId:741,pointerType:'mouse',clientX:x,clientY:120,button:0,isPrimary:true
+         }));
+         emit('pointerdown',120);
+         emit('pointerup',270); // Deliberately no pointermove event.
+         canvas.dispatchEvent(new MouseEvent('click',{bubbles:true,button:0,detail:1}));
+         return {before,after:g.getState().shots};
+       }finally{canvas.setPointerCapture=originalCapture}
+     });
+     assert.equal(releaseWithoutMove.after,releaseWithoutMove.before,
+       'coalesced pointerup drag must not fire: '+JSON.stringify(releaseWithoutMove));
+     console.log('RAMADAN_COALESCED_POINTER_RELEASE_NO_FIRE_PASS',v.name);
+   }
    // Real Chromium event dispatch: browser shortcuts and composition must not
    // consume rockets/drones or suppress native key handling on either viewport.
    const shortcutCheck=await page.evaluate(()=>{
