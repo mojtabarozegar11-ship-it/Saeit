@@ -37,7 +37,39 @@ jobs:
           for stage in sorted(root.glob('toolchain-source-*')):
               print('STAGE='+stage.name)
               print(json.dumps({p.name:p.stat().st_size for p in stage.iterdir() if p.is_file()},sort_keys=True))
-          versions=root/'build-toolchain/versions'
+          # Compare the retired transfer bundle against bounded installed model/toolchain candidates.
+import hashlib
+stage=root/'toolchain-source-39232784800-1'
+if stage.is_dir():
+    for name in ('install.sh','prove.py','metadata.json','SHA256SUMS'):
+        p=stage/name
+        if p.is_file():
+            print('STAGED_METADATA_'+name+'='+p.read_text(errors='replace')[:3000].replace('\\n',' '))
+local_roots=[root/'build-toolchain',Path.home()/'.cache/huggingface',Path.home()/'models',Path.home()/'comfyui-isolated']
+found=[]
+visited=0
+for base in local_roots:
+    if not base.is_dir() or base.is_symlink(): continue
+    for walk,dirs,names in os.walk(base,followlinks=False):
+        dirs[:]=[d for d in dirs if not (Path(walk)/d).is_symlink()]
+        for name in names:
+            visited+=1
+            p=Path(walk)/name
+            if p.suffix.lower()=='.gguf' or name=='runtime.tar.xz':
+                try:
+                    size=p.stat().st_size
+                    if size>0:
+                        h=hashlib.sha256()
+                        with p.open('rb') as stream:
+                            for chunk in iter(lambda:stream.read(1024*1024),b''): h.update(chunk)
+                        found.append({'path':str(p),'bytes':size,'sha256':h.hexdigest()})
+                except OSError: pass
+            if visited>=5000: break
+        if visited>=5000: break
+    if visited>=5000: break
+print('INSTALLED_MODEL_RUNTIME_CANDIDATES='+json.dumps(found,sort_keys=True))
+print('MODEL_SCAN_VISITED_FILES='+str(visited))
+versions=root/'build-toolchain/versions'
           if versions.is_dir():
               for version in sorted(versions.iterdir()):
                   if not version.is_dir(): continue
