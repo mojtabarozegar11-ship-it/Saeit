@@ -278,6 +278,8 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except (OSError, ValueError, RuntimeError) as error:
-        print("FACTORY_PUBLICATION_FAILED=" + type(error).__name__ + ":" + str(error)[:140],
-              file=sys.stderr)
+        print("FACTORY_PUBLICATION_FAILED=" + type(error).__name__, file=sys.stderr)
+        reason = str(error)
+        if re.fullmatch(r"[A-Z0-9_]{3,80}", reason):
+            print("FACTORY_PUBLICATION_REASON=" + reason, file=sys.stderr)
         sys.exit(1)
