@@ -1,5 +1,49 @@
 # Moj messaging: persistent Telegram and two WhatsApp accounts
 
+## Live VPS deployment record — 28 October 2026
+
+A rootless runtime was installed and independently verified on the existing VPS as `githubops`:
+[deployment receipt](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40635762712) ·
+[independent health audit](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40635971584).
+
+- Runtime: `/home/githubops/private-messaging-bridge/runtime/current`.
+- Private state: `/home/githubops/private-messaging-bridge/state`, mode `0700`.
+- Persistence: three unique `githubops` cron watchdogs preserving unrelated cron entries. They remain inactive until an account is paired.
+- Runtime passes Node, Baileys and Telethon imports.
+- **Account status after audit:** Telegram `NOT_STARTED`, WhatsApp `primary` `NOT_STARTED`, WhatsApp `secondary` `NOT_STARTED`. No account access, message reading or sending is claimed.
+
+### One-time private account activation (not in GitHub Actions logs)
+
+Connect to the VPS using an authorized private SSH **interactive terminal** for the `githubops` account. Never share one-time authentication codes, QR contents or Telegram API hashes in this conversation or public source control. When pairing:
+
+```bash
+# Telegram only: obtain your own developer API ID and hash at my.telegram.org/apps
+# and put them locally into the owner-only file:
+mkdir -p ~/private-messaging-bridge/secrets
+chmod 700 ~/private-messaging-bridge/secrets
+nano ~/private-messaging-bridge/secrets/telegram.env
+chmod 600 ~/private-messaging-bridge/secrets/telegram.env
+# Exact contents of this PRIVATE file, filled with your own values:
+# TG_API_ID=...
+# TG_API_HASH=...
+
+~/private-messaging-bridge/runtime/current/app/user-control.sh telegram-login
+~/private-messaging-bridge/runtime/current/app/user-control.sh whatsapp-login primary
+~/private-messaging-bridge/runtime/current/app/user-control.sh whatsapp-login secondary
+```
+
+For each WhatsApp login, **scan the terminal QR with its respective phone** using WhatsApp → Linked devices → Link a device. Never paste the QR into public Actions output. After pairing, the cron watchdogs establish and maintain the local sessions without repeated QR prompts unless the providers revoke them. Check:
+
+```bash
+~/private-messaging-bridge/runtime/current/app/user-control.sh telegram-status
+~/private-messaging-bridge/runtime/current/app/user-control.sh whatsapp-status primary
+~/private-messaging-bridge/runtime/current/app/user-control.sh whatsapp-status secondary
+```
+
+These are private session keepers, **not an authenticated ChatGPT connector**. Existing Telegram Chrome Web login is not portable to Telethon. Baileys is not an official Meta integration. Do not run the separate root-level `install.sh` on this VPS; the verified setup is the *unprivileged* installer.
+
+---
+
 **Status:** implementation/source, not proof of server deployment or account authentication.
 Install path: `/opt/moj-messaging`; private session state: `/var/lib/moj-messaging` (mode `0700`). Does not modify Saeit factory, MariaDB, hosting, store or websites. No messages or contacts are exported; both services are **read-only session keepers** until an independently approved private interface is added.
 
