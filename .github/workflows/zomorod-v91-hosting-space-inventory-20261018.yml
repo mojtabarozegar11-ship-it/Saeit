@@ -76,8 +76,10 @@ jobs:
           home=Path.home()
           v91=home/"saeit_v91"
           active=home/"Saeit"
-          assert v91.is_dir() and not v91.is_symlink()
-          assert active.is_dir() and (active/"manage.py").is_file()
+          if v91.is_symlink(): raise SystemExit("V91_ROOT_IS_SYMLINK")
+          v91_present=v91.is_dir()
+          print("V91_ROOT_EXISTS="+("yes" if v91_present else "no"))
+          assert active.is_dir() and not active.is_symlink() and (active/"manage.py").is_file()
           def du(paths,deadline=110):
               if not paths:return {}
               try:
@@ -107,12 +109,12 @@ jobs:
           sizes=du(entries,180)
           for p in sorted(entries,key=lambda x:sizes.get(str(x),-1),reverse=True)[:45]:
               print("ACCOUNT_TOP="+json.dumps({"name":p.name,"du_bytes":sizes.get(str(p),-1)},ensure_ascii=False))
-          ventries=[p for p in v91.iterdir() if p.is_dir() and not p.is_symlink()]
+          ventries=[p for p in v91.iterdir() if p.is_dir() and not p.is_symlink()] if v91_present else []
           vsizes=du(ventries,140)
-          print("V91_TOTAL_DU_BYTES="+str(du([v91],140).get(str(v91),-1)))
+          print("V91_TOTAL_DU_BYTES="+str(du([v91],140).get(str(v91),-1) if v91_present else 0))
           for p in sorted(ventries,key=lambda x:vsizes.get(str(x),-1),reverse=True):
               print("V91_TOP="+json.dumps({"name":p.name,"du_bytes":vsizes.get(str(p),-1)},ensure_ascii=False))
-          print("V91_ROOT_FILES="+json.dumps(sorted(p.name for p in v91.iterdir() if p.is_file() and not p.is_symlink())[:80]))
+          print("V91_ROOT_FILES="+json.dumps(sorted(p.name for p in v91.iterdir() if p.is_file() and not p.is_symlink())[:80] if v91_present else []))
           refpaths=[
               home/"public_html/.htaccess",home/"public_html/passenger_wsgi.py",
               home/"Saeit/passenger_wsgi.py", home/"Saeit/config/settings.py",
@@ -164,3 +166,4 @@ jobs:
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
 
 # Owner-requested read-only cPanel hosting audit, 2026-10-28.
+# Missing obsolete v91 subtree is reported instead of aborting the account inventory.
