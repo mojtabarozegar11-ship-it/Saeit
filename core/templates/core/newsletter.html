@@ -5,6 +5,7 @@
 {% block body_class %}page-newsletter{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'site/newsletter.css' %}">{% endblock %}
 {% block content %}
+{% if catalog_temporarily_unavailable %}<p role="status" aria-live="polite">اطلاعات خبرنامه موقتاً در دسترس نیست؛ این وضعیت به معنای نبودن یا حذف خبرهای منتشرشده نیست.</p>{% endif %}
 <div class="newsletter-page">
   <section class="newsletter-hero">
     <div class="newsletter-hero-grid"></div>
