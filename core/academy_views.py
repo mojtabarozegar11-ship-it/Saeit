@@ -214,7 +214,7 @@ def education_lesson(request, slug, lesson_id):
     # Fail closed before querying missing lesson/enrollment tables. A temporary
     # schema outage must not look like a deleted lesson or revoke paid access.
     if missing_public_tables(
-        EducationCourse, EducationLesson, EducationEnrollment,
+        EducationCourse, EducationTrack, EducationLesson, EducationEnrollment,
         EducationProgress, EducationBookmark,
     ):
         response = HttpResponse(
