@@ -127,7 +127,9 @@ class PublicCatalogDetailRouteRegressionTests(SimpleTestCase):
         course = MagicMock()
         course.lessons.filter.return_value = []
         course.resources.filter.return_value = []
-        with patch("core.academy_views.get_object_or_404", return_value=course), patch(
+        with patch("core.academy_views.missing_public_tables", return_value=False), patch(
+            "core.academy_views.get_object_or_404", return_value=course
+        ), patch(
             "core.academy_views.EducationEnrollment.objects.filter"
         ) as enrollment_filter, patch(
             "core.academy_views.EducationBookmark.objects.filter"
@@ -139,6 +141,17 @@ class PublicCatalogDetailRouteRegressionTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(render_mock.call_args.args[1], "core/education_course_detail.html")
         bookmark_filter.assert_not_called()
+
+    def test_course_detail_missing_schema_is_truthful_retryable_503(self):
+        with patch("core.academy_views.missing_public_tables", return_value=True) as guard:
+            response = education_course_detail(self.requests.get("/education/course/example/"), "example")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertIn("/academy/", response.content.decode("utf-8"))
+        from core.academy_views import Product
+        self.assertIn(Product, guard.call_args.args)
 
     def test_newsletter_detail_missing_schema_is_truthful_retryable_503(self):
         with patch("core.newsletter_views.missing_public_tables", return_value=True) as guard:
