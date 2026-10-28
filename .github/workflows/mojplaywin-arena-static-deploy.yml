@@ -281,7 +281,7 @@ jobs:
               await page.locator('#language').selectOption('fa');
               assert.equal(await page.locator('#nav-predictions').innerText(),'پیش‌بینی زنده');
               assert.equal(await page.locator('#combat-heading').innerText(),'بوکس، کشتی و هنرهای رزمی جهان');
-              assert.equal(await page.locator('#combat-day-heading').innerText(),'برنامه روزانه واقعی مبارزات');
+              assert.equal(await page.locator('#combat-day-heading').innerText(),'برنامه روزانه مسابقات رزمی');
               await page.locator('#arena-search').fill('شطرنج');
               assert.equal(await page.locator('#classic-game-grid article:not([hidden])').count(),1);
               await page.locator('#arena-search').fill('فال');
