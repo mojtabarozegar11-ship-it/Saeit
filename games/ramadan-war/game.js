@@ -1,7 +1,7 @@
 import {createEngine} from './engine3d.js';
 import {canApplyEarnedUpgrade,applyEarnedUpgrade} from './upgrade-policy.mjs';
 import {MOJ1_COMMERCE} from './moj1-commerce-policy.mjs';
-import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, joystickAxes, normalizeMovementAxes, canCaptureGameplayPointer, isOwnedGameplayPointer, shouldFireCanvasClick} from './input-guard.mjs';
+import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, joystickAxes, normalizeMovementAxes, canCaptureGameplayPointer, isOwnedGameplayPointer, recordPointerGestureMovement, shouldFireCanvasClick} from './input-guard.mjs';
 import {removeEnemyAndRetargetMissiles,missilePathBlocked,missileMotionValid} from './missile-targets.mjs';
 import {canEnemyAct,restoreEnemyRuntime,advanceHostileProjectile,shouldCleanupEnemy,activateTimeStop,advanceTimeStop} from './enemy-action-policy.mjs';
 import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from './save-validation.mjs';
@@ -135,10 +135,10 @@ canvas.addEventListener('pointerdown',e=>{
 });
 canvas.addEventListener('pointermove',e=>{
  if(aimId!==e.pointerId||!world)return;
- if(aimGesture)aimGesture.moved=Math.max(aimGesture.moved,Math.hypot(e.clientX-aimGesture.startX,e.clientY-aimGesture.startY));
+ recordPointerGestureMovement(aimGesture,e);
  let dx=e.clientX-aimLast,dy=e.clientY-aimY;world.angle-=dx*(W<700?.008:.0045);engine.look(0,dy,W);aimLast=e.clientX;aimY=e.clientY
 });
-canvas.addEventListener('pointerup',e=>{if(e.pointerId!==aimId)return;aimId=null;if(aimGesture)aimGesture.finished=true});
+canvas.addEventListener('pointerup',e=>{if(e.pointerId!==aimId)return;recordPointerGestureMovement(aimGesture,e);aimId=null;if(aimGesture)aimGesture.finished=true});
 canvas.addEventListener('pointercancel',e=>{if(e.pointerId!==aimId)return;aimId=null;if(aimGesture)aimGesture.cancelled=true});
 canvas.addEventListener('lostpointercapture',e=>{if(e.pointerId!==aimId)return;aimId=null;if(aimGesture&&!aimGesture.finished)aimGesture.cancelled=true});
 canvas.addEventListener('click',e=>{const eligible=shouldFireCanvasClick(e,screen,innerWidth,aimGesture);aimGesture=null;if(eligible)fire()});
