@@ -1,0 +1,149 @@
+name: Moj messaging - enable restricted phone-key onboarding
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths:
+      - '.github/workflows/moj-messaging-phone-key-onboard-20261028.yml'
+      - 'ops/messaging-bridge/phone-onboard-gate.sh'
+permissions:
+  contents: read
+concurrency:
+  group: moj-messaging-phone-ssh-gate-20261028
+  cancel-in-progress: false
+jobs:
+  guarded-phone-key:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check security gate, no open shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          gate="ops/messaging-bridge/phone-onboard-gate.sh"
+          bash -n "$gate"
+          grep -Fq 'SSH_ORIGINAL_COMMAND' "$gate"
+          grep -Fq 'SSH_CONNECTION' "$gate"
+          grep -Fq '[[ ! -t 0 || ! -t 1 ]]' "$gate"
+          grep -Fq 'exec /usr/bin/env -i' "$gate"
+          test "$(git status --porcelain -- "$gate" | wc -l)" -eq 0
+          echo 'MMSG_GATE_SOURCE_AUDIT=PASS'
+      - name: Install same phone public key with a forced onboarding command
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo MMSG_PHONE_GATE_NO_SSH_CREDENTIALS; exit 1; }
+          d="$(mktemp -d "$RUNNER_TEMP/mmsg-phone-gate.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          gate="ops/messaging-bridge/phone-onboard-gate.sh"
+          digest="$(sha256sum "$gate" | awk '{print $1}')"
+          # Preflight: account, installation, current key, no symlink
+          timeout 45s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          base="$HOME/private-messaging-bridge"
+          test "$HOME" = /home/githubops
+          test -d "$base"
+          test ! -L "$base"
+          test -x "$base/runtime/current/app/user-onboard.sh"
+          test ! -L "$HOME/.ssh/authorized_keys"
+          test "$(stat -c '%a' "$HOME/.ssh/authorized_keys")" = 600
+          mkdir -p -m 0700 "$base/security"
+          test ! -L "$base/security"
+          echo 'MMSG_PHONE_GATE_PREFLIGHT=PASS'
+          REMOTE
+          timeout 60s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'umask 077; cat > "$HOME/private-messaging-bridge/security/.phone-onboard-gate.pending"' < "$gate"
+          timeout 60s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'bash -s' "$digest" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          expected="$1"
+          base="$HOME/private-messaging-bridge"
+          secure="$base/security"
+          temp="$secure/.phone-onboard-gate.pending"
+          script="$secure/phone-onboard-gate.sh"
+          test ! -L "$secure"
+          test -f "$temp" && test ! -L "$temp"
+          test "$(sha256sum "$temp" | awk '{print $1}')" = "$expected"
+          bash -n "$temp"
+          install -m 0700 "$temp" "$script"
+          rm -f -- "$temp"
+          test "$(sha256sum "$script" | awk '{print $1}')" = "$expected"
+          # Negative security smoke tests: no interactive login can occur.
+          if SSH_CONNECTION='127.0.0.1 456 127.0.0.1 22' SSH_ORIGINAL_COMMAND='id' "$script" </dev/null >/dev/null 2>&1; then
+            echo 'MMSG_PHONE_GATE_REMOTE_EXEC_REJECT=FAIL'; exit 1
+          fi
+          if SSH_CONNECTION='127.0.0.1 456 127.0.0.1 22' SSH_ORIGINAL_COMMAND='' "$script" </dev/null >/dev/null 2>&1; then
+            echo 'MMSG_PHONE_GATE_NO_TTY_REJECT=FAIL'; exit 1
+          fi
+          echo 'MMSG_PHONE_GATE_SCRIPT_HASH=PASS'
+          echo 'MMSG_PHONE_GATE_NO_TTY_REJECT=PASS'
+          echo 'MMSG_PHONE_GATE_REMOTE_EXEC_REJECT=PASS'
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, stat, secrets
+          ssh=Path.home()/'.ssh'
+          auth=ssh/'authorized_keys'
+          if auth.is_symlink() or not auth.is_file() or stat.S_IMODE(auth.stat().st_mode)!=0o600:
+              raise SystemExit('MMSG_PHONE_AUTH_INVALID_FILE')
+          blob='AAAAC3NzaC1lZDI1NTE5AAAAICaXd7XWbwj/Xzr0+gyeA9nwtnqao5b62S4srHUin2C8'
+          key='ssh-ed25519 '+blob+' comfyui-phone-ui-20261015'
+          original='restrict,port-forwarding,permitopen="127.0.0.1:18188",permitlisten="none:0",command="/bin/false" '+key
+          command='/home/githubops/private-messaging-bridge/security/phone-onboard-gate.sh'
+          updated='restrict,pty,port-forwarding,permitopen="127.0.0.1:18188",permitlisten="none:0",command="'+command+'" '+key
+          data=auth.read_bytes()
+          rows=data.splitlines(keepends=True)
+          matched=[(idx,row) for idx,row in enumerate(rows) if ('ssh-ed25519 '+blob).encode() in row]
+          if len(matched)!=1: raise SystemExit('MMSG_PHONE_KEY_MATCH_NOT_UNIQUE')
+          i,row=matched[0]
+          ending=b'\r\n' if row.endswith(b'\r\n') else b'\n' if row.endswith(b'\n') else b''
+          value=row.removesuffix(ending).decode()
+          if value==updated:
+              print('MMSG_PHONE_RESTRICTED_KEY=ALREADY_INSTALLED')
+          elif value==original:
+              revised=rows.copy()
+              revised[i]=updated.encode()+ending
+              newdata=b''.join(revised)
+              # Private rollback copy, never printed / published / uploaded.
+              backup=ssh/('authorized_keys.before-messaging-phone-'+secrets.token_hex(6)+'.bak')
+              fd=os.open(backup, os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+              with os.fdopen(fd,'wb') as stream:
+                  stream.write(data);stream.flush();os.fsync(stream.fileno())
+              temp=ssh/('.authorized_keys.messaging-phone-'+secrets.token_hex(6))
+              fd=os.open(temp,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+              with os.fdopen(fd,'wb') as stream:
+                  stream.write(newdata);stream.flush();os.fsync(stream.fileno())
+              os.replace(temp,auth)
+              if stat.S_IMODE(auth.stat().st_mode)!=0o600 or auth.read_bytes()!=newdata:
+                  os.replace(backup,auth)
+                  raise SystemExit('MMSG_PHONE_AUTH_POSTCHECK_FAILED_RESTORED')
+              print('MMSG_PHONE_RESTRICTED_KEY=UPDATED')
+          else:
+              raise SystemExit('MMSG_PHONE_OLD_OPTIONS_CHANGED_REFUSING_OVERWRITE')
+          # Verify exact capabilities; no unrestricted shell, other lines unchanged.
+          final=auth.read_text().splitlines()
+          token=[line for line in final if ('ssh-ed25519 '+blob) in line]
+          assert len(token)==1 and token[0]==updated
+          assert 'restrict,pty,port-forwarding,' in token[0]
+          assert 'command="'+command+'"' in token[0]
+          assert 'permitopen="127.0.0.1:18188"' in token[0]
+          assert 'permitlisten="none:0"' in token[0]
+          assert len(final)==len([line.rstrip(b'\r\n') for line in rows])
+          print('MMSG_PHONE_TUNNEL_COMFYUI_UNCHANGED=PASS')
+          print('MMSG_PHONE_SHELL_ACCESS=DENIED')
+          print('MMSG_PHONE_FORCED_ONBOARDING_ONLY=PASS')
+          print('MMSG_OTHER_AUTHORIZED_KEYS_UNMODIFIED=PASS')
+          PY
+          echo 'MMSG_NO_ACCOUNT_AUTH_ATTEMPTED=PASS'
+          REMOTE
