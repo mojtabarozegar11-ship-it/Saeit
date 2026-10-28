@@ -268,7 +268,8 @@ jobs:
               parts=before_layout.split("|",3)
               if len(parts)<4: raise SystemExit("TABLE_LAYOUT_UNAVAILABLE")
               print("TABLE_COUNT_BEFORE="+json.dumps({"table":table,"row_count":before,"row_format":parts[0],"data_bytes":int(parts[1]),"index_bytes":int(parts[2]),"create_options":parts[3]},ensure_ascii=False))
-              already_compressed="page_compressed=1" in parts[3].lower()
+              normalized_options=parts[3].lower().replace("`","").replace("'","").replace(" ","")
+              already_compressed="page_compressed=1" in normalized_options
               if not already_compressed:
                   sql="ALTER TABLE "+table+" PAGE_COMPRESSED=1, PAGE_COMPRESSION_LEVEL=6, ALGORITHM=INPLACE, LOCK=NONE"
                   run(sql,timeout=5400)
@@ -279,7 +280,8 @@ jobs:
               delta=int(after)-int(before)
               print("TABLE_COUNT_AFTER="+json.dumps({"table":table,"row_count":after,"delta_during_online_operation":delta},ensure_ascii=False))
               if delta<0: raise SystemExit("ROW_COUNT_DECREASED_DURING_ONLINE_OPERATION:"+table)
-              if len(after_layout)<4 or "page_compressed=1" not in after_layout[3].lower(): raise SystemExit("PAGE_COMPRESSION_NOT_RECORDED:"+table)
+              after_options=after_layout[3].lower().replace("`","").replace("'","").replace(" ","") if len(after_layout)>=4 else ""
+              if len(after_layout)<4 or "page_compressed=1" not in after_options: raise SystemExit("PAGE_COMPRESSION_NOT_RECORDED:"+table)
               print("TABLE_COMPRESSION_VERIFIED="+json.dumps({"table":table,"row_count_after":after,"row_count_delta":delta,"row_format":after_layout[0],"data_bytes":int(after_layout[1]),"index_bytes":int(after_layout[2]),"create_options":after_layout[3]},ensure_ascii=False))
           totals=run("SELECT CONCAT(COALESCE(SUM(DATA_LENGTH+INDEX_LENGTH),0)) FROM information_schema.TABLES WHERE TABLE_SCHEMA='"+db+"' AND TABLE_TYPE='BASE TABLE'")[0]
           print("MYSQL_TOTAL_TABLE_BYTES_AFTER="+totals)
