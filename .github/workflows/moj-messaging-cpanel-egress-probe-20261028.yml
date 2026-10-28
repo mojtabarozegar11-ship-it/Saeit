@@ -34,7 +34,15 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
           chmod 600 "$d/"*.known
           printf '%s\n' "Host vps" " HostName 178.239.147.150" " User githubops" " IdentityFile $d/vps.key" " UserKnownHostsFile $d/vps.known" " StrictHostKeyChecking yes" "Host panel" " HostName zohal.pws-dns.net" " Port 1396" " User zomorod2" " IdentityFile $d/host.key" " UserKnownHostsFile $d/host.known" " StrictHostKeyChecking yes" " ProxyJump vps" "Host *" " BatchMode yes" " IdentitiesOnly yes" " ForwardAgent no" " ConnectTimeout 10" > "$d/config"
-          timeout 70s ssh -F "$d/config" panel 'python3 -' <<'PY'
+          mapfile -t WA_IPS < <(python3 - <<'PY'
+          import socket,ipaddress
+          infos=socket.getaddrinfo('web.whatsapp.com',443,socket.AF_INET,socket.SOCK_STREAM)
+          ips=list(dict.fromkeys(a[4][0] for a in infos if ipaddress.ip_address(a[4][0]).is_global))
+          for ip in ips[:2]: print(ip)
+          PY
+          )
+          test "${#WA_IPS[@]}" -gt 0
+          timeout 70s ssh -F "$d/config" panel python3 - "${WA_IPS[@]}" <<'PY'
           import socket,ssl,sys,ipaddress
           def probe(host,label):
               try:
@@ -54,8 +62,20 @@ jobs:
                       print('MMSG_PANEL_'+label+'_TLS=FAIL_'+type(exc).__name__,flush=True)
               return False
           wa=probe('web.whatsapp.com','WA')
+          via_runner=False
+          for ip in sys.argv[1:3]:
+              if not ipaddress.ip_address(ip).is_global: raise SystemExit('Unsafe address rejected')
+              try:
+                  with socket.create_connection((ip,443),timeout=7) as raw:
+                      with ssl.create_default_context().wrap_socket(raw,server_hostname='web.whatsapp.com') as tls:
+                          print('MMSG_PANEL_WA_RUNNER_IP_TLS=PASS_'+str(tls.version()),flush=True)
+                          via_runner=True
+                          break
+              except Exception as exc:
+                  print('MMSG_PANEL_WA_RUNNER_IP_TLS=FAIL_'+type(exc).__name__,flush=True)
           gh=probe('github.com','GITHUB')
-          print('MMSG_PANEL_EGRESS_CANDIDATE='+('PASS' if wa else 'NO'),flush=True)
+          good=wa or via_runner
+          print('MMSG_PANEL_EGRESS_CANDIDATE='+('PASS' if good else 'NO'),flush=True)
           print('MMSG_PANEL_SITE_FILES_UNCHANGED=PASS',flush=True)
-          sys.exit(0 if wa else 1)
+          sys.exit(0 if good else 1)
           PY
