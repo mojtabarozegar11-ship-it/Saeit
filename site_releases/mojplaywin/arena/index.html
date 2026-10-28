@@ -106,7 +106,7 @@
           const show=!query||normalizeFind(title+' '+description).includes(query);
           item.hidden=!show;if(show)count++;
         }
-        grid.closest('section').hidden=count===0&&query&&cards.length>0?cards.every(x=>x.hidden):false;
+        grid.closest('section').hidden=!!query&&cards.length>0&&cards.every(x=>x.hidden);
       }
       $('#arena-count').textContent=finderCopy[locale].count.replace('{n}',String(count));
       $('#arena-empty').hidden=count!==0;
