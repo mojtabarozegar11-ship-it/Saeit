@@ -64,7 +64,7 @@ jobs:
           set -euo pipefail
           timeout 120s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
           from pathlib import Path
-          import importlib.util, os, sys
+          import importlib.util, os, shutil, sys
           root=Path('/home/zomorod2/mojplaywin.com')
           page=root/'banknew'
           assert root.is_dir() and not root.is_symlink(), 'EXPECTED_ROOT_MISSING'
@@ -79,6 +79,10 @@ jobs:
           print('BANKNEW_LOCAL_AUTH_ROUTE_DIR='+str((page/'auth').is_dir()))
           print('BANKNEW_HOST_PYTHON='+str(sys.version_info.major)+'.'+str(sys.version_info.minor))
           print('BANKNEW_HOST_DJANGO_AVAILABLE='+str(importlib.util.find_spec('django') is not None))
+          print('BANKNEW_PYTHON311_IN_PATH='+str(shutil.which('python3.11') is not None))
+          print('BANKNEW_PYTHON312_IN_PATH='+str(shutil.which('python3.12') is not None))
+          print('BANKNEW_CLOUDLINUX_PY311='+str(Path('/opt/alt/python311/bin/python3.11').is_file()))
+          print('BANKNEW_CLOUDLINUX_PY312='+str(Path('/opt/alt/python312/bin/python3.12').is_file()))
           print('BANKNEW_ISOLATED_API_MOUNT_CONFIGURED='+str((page/'auth'/'passenger_wsgi.py').is_file()))
           print('BANKNEW_CONTENT_ROOT_WRITABLE='+str(os.access(page,os.W_OK)))
           print('READ_ONLY_NO_CONFIG_OR_CUSTOMER_DATA_EMITTED=YES')
