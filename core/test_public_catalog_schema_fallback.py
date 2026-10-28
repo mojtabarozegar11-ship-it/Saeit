@@ -152,6 +152,7 @@ class PublicCatalogDetailRouteRegressionTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(render_mock.call_args.args[1], "core/education_course_detail.html")
         bookmark_filter.assert_not_called()
+        self.assertEqual(enrollment_filter.call_args.kwargs["status__in"], ("active", "completed"))
 
     def test_completed_enrollment_retains_course_and_lesson_read_access(self):
         request = self.requests.get("/education/course/example/lesson/1/")
