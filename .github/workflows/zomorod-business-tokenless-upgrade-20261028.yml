@@ -23,14 +23,27 @@ jobs:
           php -l content/zomorod-business/app.php
           php -l content/zomorod-business/index.php
           git cat-file -e 15aa2ce99abb4f8f3c41da7695023fd6aad7aaa0^{commit}
-          git show 15aa2ce99abb4f8f3c41da7695023fd6aad7aaa0:content/zomorod-business/app.php > "$RUNNER_TEMP/business-prior.php"
-          old_sha="$(sha256sum "$RUNNER_TEMP/business-prior.php" | awk '{print $1}')"
-          new_sha="$(sha256sum content/zomorod-business/app.php | awk '{print $1}')"
-          test "$old_sha" != "$new_sha"
           grep -Fq "owner-first-login.txt" content/zomorod-business/app.php
           ! grep -Fq "req('setup_token')" content/zomorod-business/app.php
-          echo "EXPECTED_OLD_SHA=$old_sha" >> "$GITHUB_ENV"
-          echo "EXPECTED_NEW_SHA=$new_sha" >> "$GITHUB_ENV"
+          python3 - "$RUNNER_TEMP/business-prior.php" content/zomorod-business/app.php "$RUNNER_TEMP" <<'PY'
+          import pathlib,sys
+          old=pathlib.Path(sys.argv[1]).read_bytes()
+          new=pathlib.Path(sys.argv[2]).read_bytes()
+          target=pathlib.Path(sys.argv[3])
+          begin=b"    if($count===0){"
+          end=b"    if(($_GET['page']??'')==='logout')"
+          def block(source):
+              assert source.count(begin)==1 and source.count(end)==1
+              a=source.index(begin)
+              b=source.index(end,a)
+              assert 200 < b-a < 15000
+              return source[a:b]
+          old_block,new_block=block(old),block(new)
+          assert old_block!=new_block and b"setup_token" in old_block and b"setup_token" not in new_block
+          (target/"zomorod-old-block.bin").write_bytes(old_block)
+          (target/"zomorod-new-block.bin").write_bytes(new_block)
+          PY
+          echo "OLD_BLOCK_SHA=$(sha256sum "$RUNNER_TEMP/zomorod-old-block.bin" | awk '{print $1}')" >> "$GITHUB_ENV"
       - name: Connect through pinned VPS to cPanel
         shell: bash
         env:
@@ -84,7 +97,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-business-tokenless"
-          ssh -F "$d/config" saeit-cpanel bash -se -- "$EXPECTED_OLD_SHA" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" <<'REMOTE'
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$OLD_BLOCK_SHA" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" <<'REMOTE'
           set -euo pipefail
           oldsha="$1"; sha="$2"; runid="$3"; attempt="$4"
           private="$HOME/.private/zomorod-business"
@@ -97,11 +110,12 @@ jobs:
           test -f "$web/index.php" && test -f "$web/.htaccess" || fail "missing_web_entry"
           test ! -e "$private/owner-first-login.txt" || fail "private_receipt_already_exists"
           test ! -e "$stage" || fail "snapshot_path_exists"
-          test "$(sha256sum "$private/app.php" | awk '{print $1}')" = "$oldsha" || fail "source_checksum_mismatch"
           test "$(stat -c %s "$private/management.sqlite3")" -le 52428800 || fail "database_size_limit"
           phpbin="$(command -v php || true)"
           if test -z "$phpbin"; then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php"; fi
           "$phpbin" -r 'exit(extension_loaded("pdo_sqlite")?0:1);' || fail "sqlite_extension_unavailable"
+          live_block_sha="$("$phpbin" -r '$s=file_get_contents($argv[1]);$a=strpos($s,"    if(\$count===0){");$b=$a===false?false:strpos($s,"    if((\$_GET[",$a);if($a===false||$b===false)exit(41);echo hash("sha256",substr($s,$a,$b-$a));' "$private/app.php")" || fail "setup_block_not_found"
+          test "$live_block_sha" = "$oldsha" || fail "setup_block_mismatch"
           count="$("$phpbin" -r '$d=new PDO("sqlite:".$argv[1]); echo $d->query("SELECT COUNT(*) FROM users")->fetchColumn();' "$private/management.sqlite3")" || fail "user_count_unreadable"
           test "$count" = 0 || fail "admin_or_other_user_already_exists"
           mkdir -p "$(dirname "$stage")"
@@ -115,26 +129,29 @@ jobs:
             if test -f "$HOME/public_html/$subsite/index.html"; then sha256sum "$HOME/public_html/$subsite/index.html" >> "$stage/public-unchanged.sha256"; fi
           done
           "$phpbin" -l "$stage/app.php.before"
-          echo "BUSINESS_PRECHECK=exact_source_private_backup_ready"
+          echo "BUSINESS_PRECHECK=exact_setup_block_private_backup_ready"
           REMOTE
           stage="/home/zomorod2/.backups/zomorod-business-tokenless/$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          tar -cf - -C content/zomorod-business app.php | ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
+          tar -cf - -C "$RUNNER_TEMP" zomorod-old-block.bin zomorod-new-block.bin | ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
       - name: Atomic private app upgrade and isolated functional verification
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-business-tokenless"
-          ssh -F "$d/config" saeit-cpanel bash -se -- "$EXPECTED_OLD_SHA" "$EXPECTED_NEW_SHA" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" <<'REMOTE'
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$OLD_BLOCK_SHA" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" <<'REMOTE'
           set -euo pipefail
-          oldsha="$1"; newsha="$2"; sha="$3"; runid="$4"; attempt="$5"
+          oldsha="$1"; sha="$2"; runid="$3"; attempt="$4"
           private="$HOME/.private/zomorod-business"
           stage="$HOME/.backups/zomorod-business-tokenless/$sha-$runid-$attempt"
           phpbin="$(command -v php || true)"
           if test -z "$phpbin"; then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php"; fi
-          test "$(sha256sum "$private/app.php" | awk '{print $1}')" = "$oldsha"
-          test "$(sha256sum "$stage/app.php" | awk '{print $1}')" = "$newsha"
-          "$phpbin" -l "$stage/app.php"
-          install -m 600 "$stage/app.php" "$private/app.php.next-$sha"
+          test "$(sha256sum "$stage/zomorod-old-block.bin" | awk '{print $1}')" = "$oldsha"
+          test -s "$stage/zomorod-new-block.bin"
+          "$phpbin" -r '$live=file_get_contents($argv[1]);$old=file_get_contents($argv[2]);$new=file_get_contents($argv[3]);if($live===false||$old===false||$new===false||$old===""||$new===""||substr_count($live,$old)!==1||strpos($new,"setup_token")!==false)exit(41);$patched=str_replace($old,$new,$live);if(file_put_contents($argv[4],$patched,LOCK_EX)!==strlen($patched))exit(42);' "$private/app.php" "$stage/zomorod-old-block.bin" "$stage/zomorod-new-block.bin" "$stage/candidate.php"
+          chmod 600 "$stage/candidate.php"
+          "$phpbin" -l "$stage/candidate.php"
+          newsha="$(sha256sum "$stage/candidate.php" | awk '{print $1}')"
+          install -m 600 "$stage/candidate.php" "$private/app.php.next-$sha"
           swapped=0
           rollback() {
             if test "$swapped" = 1; then
