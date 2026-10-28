@@ -152,7 +152,7 @@ backup_verified=1
 exec 9>"$master/master-cycle.lock"
 flock -w 180 9
 exec 10>"$master/master-evolution.lock"
-flock -w 180 10
+flock -n 10 || { echo MASTER_EVOLUTION_LOCK_BUSY_SAFE_ABORT; exit 1; }
 echo MASTER_FACTORY_SOURCE_CHANGE_LOCKS_HELD
 source_deploy_started=1
 for module in "${modules[@]}"; do
