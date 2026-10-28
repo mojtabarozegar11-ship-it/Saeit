@@ -41,10 +41,11 @@ if (!acceptedHost||!approvedInvoice||!launchTarget) {
 } else {
   const p={url:launchTarget,action:"open",protocol:"TronLink",version:"1.0"};
   appButton.href="tronlinkoutside://pull.activity?param="+encodeURIComponent(JSON.stringify(p));
+  appButton.hidden=false;
 }
 if(!/^\d+\.\d{6}$/.test(amount)||!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(recipient)||
    sun<=0n||sun>BigInt(Number.MAX_SAFE_INTEGER)||BigInt(amount.replace(".",""))!==sun){
-  payButton.hidden=true;note.textContent="Wallet transfer is unavailable. Contact support before paying.";
+  payButton.hidden=true;appButton.hidden=true;note.textContent="Wallet transfer is unavailable. Contact support before paying.";
   return;
 }
 const canSend=Boolean(app && app.trx && typeof app.trx.sendTransaction==="function");
@@ -53,6 +54,7 @@ if (!canSend) {
   note.textContent="On a phone, choose Open in Trust Wallet or TronLink; or use the QR and exact amount in any TRX wallet.";
 } else {
   appButton.hidden=true;
+  payButton.hidden=false;
 }
 // A wallet call can time out after a broadcast; never offer a rapid second
 // payment on the same invoice based solely on a client-side error or reply.
@@ -80,10 +82,11 @@ payButton.addEventListener("click",async()=>{
 })();"""
 
 BUTTONS = """<section aria-label="Easy TRX payment">
-<button id="mpw-easy-pay" type="button">Pay TRX in my wallet</button>
-<a id="mpw-open-wallet" class="buy" rel="noopener noreferrer" href="#" role="button">Open in TronLink</a>
+<button id="mpw-easy-pay" type="button" hidden>Pay TRX in my wallet</button>
+<a id="mpw-open-wallet" class="buy" rel="noopener noreferrer" href="#" role="button" hidden>Open in TronLink</a>
 {trust_wallet_link}
 <p id="mpw-wallet-note" role="status" aria-live="polite">The wallet will ask you to approve payment; download unlocks only after blockchain confirmation.</p>
+<p>If the wallet buttons do not open an installed app, use <strong>Copy receiving address</strong> and <strong>Copy exact TRX amount</strong> below, open TRX &gt; Send in your wallet, and compare both values and the network before confirmation. Never pay an expired invoice.</p>
 </section>"""
 
 
@@ -101,13 +104,13 @@ def render_one_tap_invoice(invoice: InvoiceIntent, *, status_path: str, guest_ch
     # Parameters are generated exclusively from the immutable server invoice.
     # A wallet confirmation is still required; this URL grants no entitlement.
     amount=f"{Decimal(invoice.amount_sun)/Decimal(SUN_PER_TRX):.6f}"
-    trust_wallet_url="https://link.trustwallet.com/send?"+urlencode({
+    trust_wallet_url="trust://send?"+urlencode({
         "asset":"c195", "address":invoice.recipient, "amount":amount,
     })
     trust_wallet_link=(
         '<a id="mpw-open-trustwallet" class="buy" role="button" '
         'rel="noopener noreferrer" href="'+escape(trust_wallet_url,quote=True)
-        +'">Open in Trust Wallet (TRX)</a>'
+        +'">Open installed Trust Wallet (TRX)</a>'
     )
     html=old.decode("utf8")
     if html.count('<p>QR contains the address only.') != 1:
