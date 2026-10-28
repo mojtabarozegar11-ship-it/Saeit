@@ -97,3 +97,9 @@ export function shouldFireCanvasClick(event, screen, viewportWidth, gesture) {
     event?.button === 0 && event.detail > 0 &&
     (event.pointerType === undefined || event.pointerType === 'mouse');
 }
+
+// Keyboard and touch can hold fire concurrently. Releasing one source must not
+// cancel the other; a stale/invalid pointer id must never keep firing.
+export function isFireHeld(spaceKeyDown, activeFirePointerId) {
+  return spaceKeyDown === true || (Number.isInteger(activeFirePointerId) && activeFirePointerId >= 0);
+}
