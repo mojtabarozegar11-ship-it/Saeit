@@ -64,6 +64,15 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_RELAY=verified"
+      - name: Verify public site before cache cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /agents/; do
+            status="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "CACHE_BEFORE_HEALTH=$path:$status"
+            test "$status" = 200
+          done
       - name: Delete disposable npm/pip/Gradle download caches only
         shell: bash
         run: |
