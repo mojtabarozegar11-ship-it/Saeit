@@ -73,6 +73,11 @@ def check_gtf(p, contigs):
     if other: raise GateError(f'Annotation seqnames absent from FASTA: {sorted(other)[:8]}')
     return seen
 
+def valid_raw_integer_count(cell):
+    """Only ASCII base-10 counts are portable to downstream R/DESeq2 readers."""
+    return isinstance(cell, str) and cell.isascii() and cell.isdecimal()
+
+
 def validate(manifest_file):
     root=manifest_file.parent
     m=json.loads(manifest_file.read_text(encoding='utf-8'))
@@ -118,7 +123,7 @@ def validate(manifest_file):
             if len(row)!=25:raise GateError('Count-matrix row width mismatch')
             if not row[0] or row[0] in genes: raise GateError('Missing or duplicate gene ID')
             genes.add(row[0]); n+=1
-            if any(not x.isdecimal() for x in row[1:]):
+            if any(not valid_raw_integer_count(x) for x in row[1:]):
                 raise GateError('Non-integer, negative or missing raw counts')
     if n==0:raise GateError('Empty count matrix')
     return {'manifest':'FILE_INTEGRITY_AND_METADATA_PASS_ONLY','libraries':24,'fastq_files':48,'genes':n,'conditions':dict(conditions),
