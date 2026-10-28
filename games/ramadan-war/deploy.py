@@ -106,13 +106,58 @@ def verify(stage):
     print('RAMADAN_WEB_CLIENT_AND_PROTECTED_PAGES=PASS')
 
 def rollback_files(stage,m,run):
+    """Restore only known release assets; fail if any file cannot be restored.
+
+    An already-restored old asset or an absent new-only asset is safe for
+    idempotent retries. Unexpected concurrent writes must remain untouched,
+    but MUST NOT be reported as a successful rollback.
+    """
+    problems=[]
     for name,h in m['new'].items():
+        if name not in ASSETS:
+            problems.append('unsafe release asset: '+str(name))
+            continue
         p=GAME/name
-        if name in m['old'] and p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
-            atomic(p,(stage/f'old-{name}').read_bytes(),run);print('RESTORED_OLD_GAME_FILE='+name)
-        elif name not in m['old'] and p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
-            p.unlink();print('REMOVED_NEW_GAME_ASSET='+name)
-        else:print('ROLLBACK_SKIPPED_UNEXPECTED_GAME_FILE='+name)
+        parts=Path(name).parts
+        if (GAME.is_symlink() or any((GAME.joinpath(*parts[:n])).is_symlink()
+                                     for n in range(1,len(parts)+1))):
+            problems.append('linked release asset parent: '+name)
+            continue
+        if name in m['old']:
+            if p.is_file() and not p.is_symlink():
+                current=digest(p.read_bytes())
+                if current==m['old'][name]:
+                    continue  # Idempotent: already restored or never published.
+                if current==h:
+                    backup=stage/f'old-{name}'
+                    backup_parts=Path('old-'+name).parts
+                    linked=any((stage.joinpath(*backup_parts[:n])).is_symlink()
+                               for n in range(1,len(backup_parts)+1))
+                    if (not backup.is_file() or linked or
+                            not backup.resolve().is_relative_to(stage.resolve())):
+                        problems.append('rollback backup missing or linked: '+name)
+                        continue
+                    data=backup.read_bytes()
+                    if digest(data)!=m['old'][name]:
+                        problems.append('rollback backup SHA-256 mismatch: '+name)
+                        continue
+                    atomic(p,data,run)
+                    if digest(p.read_bytes())!=m['old'][name]:
+                        problems.append('rollback restored SHA-256 mismatch: '+name)
+                    else:
+                        print('RESTORED_OLD_GAME_FILE='+name)
+                    continue
+            problems.append('rollback conflict, original asset not restored: '+name)
+        else:
+            if not p.exists() and not p.is_symlink():
+                continue  # Idempotent: new-only asset already absent.
+            if p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
+                p.unlink()
+                print('REMOVED_NEW_GAME_ASSET='+name)
+            else:
+                problems.append('rollback conflict, new asset not removed: '+name)
+    if problems:
+        raise RuntimeError('rollback incomplete: '+'; '.join(problems))
 
 def rollback(stage,run):
     if not (stage/'release.json').is_file():print('ROLLBACK_SKIPPED_NO_RELEASE_STATE');return
