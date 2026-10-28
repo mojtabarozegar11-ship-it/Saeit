@@ -21,6 +21,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/mpw_invoice_owner_safe_recovery_20261026.py
+      - name: Prove guarded invoice recovery is idempotent without live writes
+        run: python3 -m unittest discover -s tests -p 'test_mpw_invoice_owner_idempotent_20261028.py' -v
       - name: Verify baseline MojPlayWin products and customer login
         run: |
           python3 - <<'PY'

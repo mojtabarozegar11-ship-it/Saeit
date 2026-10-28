@@ -183,6 +183,12 @@ def main():
     if sys.argv[1] == "check":
         print("MPW_FIX_PREFLIGHT=" + json.dumps({"keys": list(changes), "safe": True}))
         return
+    if not changes:
+        # A previous verified release must not create redundant backups or
+        # restart the shared Passenger application and its protected subsites.
+        validate()
+        print("MPW_INVOICE_OWNER_SAFE_RELEASE=ALREADY_APPLIED_VERIFIED")
+        return
     backup_root = APP / ".release-backups"
     backup_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     backup_dir = backup_root / ("owner-safe-invoice-" + str(int(time.time())))
