@@ -64,12 +64,13 @@ SITEMAP_URLS = (
     "/ventures/agriculture/",
 )
 PROTECTED_PRODUCT_IDS = (72, 225, 879)
+CHECKOUT_PATHS = frozenset(f"/store/product/{pk}/checkout/" for pk in PROTECTED_PRODUCT_IDS)
 # Only approved public pages and the two established login endpoints may be
 # fetched through a redirect. Never follow a redirect to an unknown app,
 # a different host, or an HTTP URL during a read-only audit.
 REDIRECT_PATHS = frozenset(REQUIRED_PATHS) | frozenset({
     "/sitemap.xml", "/picm/login/", "/accounts/login/",
-    *(f"/store/product/{pk}/checkout/" for pk in PROTECTED_PRODUCT_IDS),
+    *CHECKOUT_PATHS,
 })
 
 
@@ -85,6 +86,11 @@ class ScopedRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         try:
             target = urllib.parse.urlsplit(newurl)
+            params = urllib.parse.parse_qsl(target.query, keep_blank_values=True)
+            query_safe = (
+                len(params) == 1 and params[0][0] == "next"
+                and params[0][1] in CHECKOUT_PATHS
+            ) if target.path == "/accounts/login/" else not target.query
             allowed = (
                 target.scheme == "https"
                 and target.hostname == "mojplaywin.com"
@@ -92,6 +98,7 @@ class ScopedRedirect(urllib.request.HTTPRedirectHandler):
                 and target.username is None
                 and target.password is None
                 and target.path in REDIRECT_PATHS
+                and query_safe
                 and not target.fragment
             )
         except ValueError:
@@ -138,7 +145,27 @@ class Check:
     title: str = ""
 
 
+def _approved_direct_get(url: str) -> bool:
+    """Reject accidental out-of-scope initial requests before opening a socket."""
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        return (
+            parsed.scheme == "https"
+            and parsed.hostname == "mojplaywin.com"
+            and parsed.port in (None, 443)
+            and parsed.username is None
+            and parsed.password is None
+            and parsed.path in REDIRECT_PATHS
+            and not parsed.query
+            and not parsed.fragment
+        )
+    except ValueError:
+        return False
+
+
 def get(url: str, *, max_bytes: int = 950000, attempts: int = 3) -> tuple[Check, bytes]:
+    if not _approved_direct_get(url):
+        raise UnsafeRedirect("Direct GET outside exact public MojPlayWin scope")
     last_error: Exception | None = None
     for attempt in range(attempts):
         start = time.monotonic()
@@ -245,6 +272,9 @@ def check_authentication_gate(product_id: int) -> Check:
         raise RuntimeError(f"Checkout {product_id} resolved outside store: {check.effective}")
     if landing.path != "/accounts/login/":
         raise RuntimeError(f"Checkout {product_id} bypassed login: {check.effective}")
+    params = urllib.parse.parse_qs(landing.query, keep_blank_values=True)
+    if params != {"next": [path]}:
+        raise RuntimeError(f"Checkout {product_id} lost its exact post-login return path")
     return check
 
 
