@@ -2,6 +2,7 @@
 """No-network regression for the standalone Ramadan War preview artifact."""
 import hashlib
 import json
+import os
 import tempfile
 import unittest
 from unittest import mock
@@ -93,6 +94,18 @@ class PreviewArchiveTests(unittest.TestCase):
             build_preview(self.root, self.root / "preview.zip", self.assets)
         self.assertFalse((self.root / "preview.zip").exists())
 
+
+    def test_preview_contains_revision_and_local_launch_instructions(self):
+        with mock.patch.dict(os.environ, {"GITHUB_SHA": "a" * 40}):
+            self.build()
+        with ZipFile(self.out) as archive:
+            manifest = json.loads(archive.read("ramadan-war/preview-manifest.json"))
+            guide = archive.read("ramadan-war/PLAY-README.txt").decode("utf-8")
+        self.assertEqual(manifest["source_revision"], "a" * 40)
+        self.assertIn("python3 -m http.server 8765", guide)
+        self.assertIn("HOST_LAN_IP:8765", guide)
+        self.assertIn("MOJ1 wallet or payment is enabled", guide)
+        self.assertGreaterEqual(guide.count("\\n"), 6)
 
     def test_failed_build_preserves_previous_verified_archive(self):
         self.build()
