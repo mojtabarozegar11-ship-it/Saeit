@@ -37,6 +37,7 @@ jobs:
           import os
           from pathlib import Path
           import shutil
+          import sqlite3
           import stat
           import subprocess
           import time
@@ -127,6 +128,7 @@ jobs:
           # Never print actual file names, paths, record contents or identifiers.
           django_types = {}
           django_type_counts = {}
+          sqlite_candidates = []
           def django_file_class(name):
               n = name.lower()
               if n.endswith(("-wal", "-journal")):
@@ -174,6 +176,8 @@ jobs:
                       file_class = django_file_class(candidate.name)
                       django_types[file_class] = django_types.get(file_class, 0) + allocated
                       django_type_counts[file_class] = django_type_counts.get(file_class, 0) + 1
+                      if file_class == "database_main" and len(sqlite_candidates) < 3:
+                          sqlite_candidates.append(candidate)
                   largest_recent.append((allocated, category))
                   recent["scanned_large"] += 1
                   recent["allocated_bytes"] += allocated
@@ -186,6 +190,33 @@ jobs:
           recent["top_ten_anonymous"] = [
               {"allocated_bytes": size, "category": cat}
               for size, cat in sorted(largest_recent, reverse=True)[:10]]
+          # Constant-time, immutable read-only SQLite header/PRAGMA inspection.
+          # No SQL rows or table names read; no WAL/shm creation, no DB changes.
+          sqlite_health = []
+          for candidate in sqlite_candidates:
+              entry = {"readable": False, "file_bytes": None,
+                       "page_count": None, "page_size": None,
+                       "freelist_pages": None, "freelist_bytes": None,
+                       "live_consistency_verified": False}
+              try:
+                  entry["file_bytes"] = candidate.stat().st_size
+                  connection = sqlite3.connect(
+                      candidate.as_uri() + "?mode=ro&immutable=1",
+                      uri=True, timeout=1)
+                  try:
+                      connection.execute("PRAGMA query_only=ON")
+                      pages = int(connection.execute("PRAGMA page_count").fetchone()[0])
+                      size = int(connection.execute("PRAGMA page_size").fetchone()[0])
+                      free_pages = int(connection.execute("PRAGMA freelist_count").fetchone()[0])
+                      if pages >= 0 and 0 < size <= 65536 and 0 <= free_pages <= pages:
+                          entry.update({"readable": True, "page_count": pages,
+                                        "page_size": size, "freelist_pages": free_pages,
+                                        "freelist_bytes": free_pages * size})
+                  finally:
+                      connection.close()
+              except (OSError, ValueError, sqlite3.Error):
+                  pass
+              sqlite_health.append(entry)
           # Deleted-but-open regular files visible to this user; no file names.
           deleted_count = 0
           deleted_allocated = 0
@@ -249,6 +280,7 @@ jobs:
               "home_inventory_complete": home_complete,
               "home_entries_scanned": len(entries),
               "recent_large_files": recent,
+              "factory_sqlite_readonly_header": sqlite_health,
               "open_deleted_visible_fd_count": deleted_count,
               "open_deleted_visible_allocated_bytes": deleted_allocated,
               "open_deleted_proc_scanned": proc_scanned,
