@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from uuid import uuid4
@@ -9,7 +9,7 @@ from .public_catalog_guard import missing_public_tables, mark_public_data_unavai
 from .models import (
     EducationTrack, EducationCourse, EducationResource, EducationLesson,
     EducationEnrollment, EducationProgress, EducationBookmark,
-    EducationAssessment, EducationQuestion, EducationAttempt, EducationCertificate,
+    EducationAssessment, EducationQuestion, EducationAttempt, EducationCertificate, Product,
 )
 
 
@@ -113,6 +113,26 @@ def education_dashboard(request):
 
 
 def education_course_detail(request, slug):
+    # A missing schema is not an absent course; never return a misleading 404.
+    required = (
+        EducationCourse, EducationTrack, EducationLesson, EducationResource,
+        EducationAssessment, EducationEnrollment, EducationProgress,
+        EducationBookmark, Product,
+    )
+    if missing_public_tables(*required):
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>دوره موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>اطلاعات دوره موقتاً در دسترس نیست</h1>'
+            '<p role="status">اطلاعات این دوره پس از بازیابی سامانه نمایش داده می‌شود؛ '
+            'این وضعیت به معنای حذف دوره یا ثبت‌نام نیست.</p>'
+            '<p><a href="/academy/">بازگشت به آموزشگاه</a></p>'
+            '</main></body></html>',
+            status=503,
+            content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
     course = get_object_or_404(
         EducationCourse.objects.select_related("track", "product").prefetch_related("lessons", "resources"),
         slug=slug,
