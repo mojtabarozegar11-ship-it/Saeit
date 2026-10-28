@@ -1,6 +1,6 @@
 # Research and CV delivery checkpoint — 2026-10-28
 
-**Scope:** research branch only; no live-site publication. **Evidence cut:** verified GitHub read-back after three new commits.  
+**Scope:** publicly accessible GitHub research branch only; no live-site publication. The repository is public, so review-only labels do not make files confidential. **Evidence cut:** verified GitHub read-back after three new commits.  
 **No new experiments, DOIs, peer reviews, journal submissions or verified academic qualifications claimed.**
 
 | ID | Before | After / usable artifact | Git blob SHA read-back | Result | Remaining gate |
