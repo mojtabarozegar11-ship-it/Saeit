@@ -94,6 +94,7 @@ const assert=require('node:assert/strict');
        window.dispatchEvent(new KeyboardEvent('keyup',{code:'Space',bubbles:true,cancelable:true}));
        const state=g.getState();
        g.start(); // Reset gameplay for subsequent smoke assertions.
+       for(let i=0;i<30;i++)g.tick(.04); // Restore the expected spawned-enemy precondition.
        return {shots:state.shots,ammo:state.ammo};
      });
      assert(heldReload.shots>=9,'held fire must continue after automatic reload: '+JSON.stringify(heldReload));
