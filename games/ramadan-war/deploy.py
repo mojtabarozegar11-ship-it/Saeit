@@ -65,7 +65,7 @@ def prepare(stage):
     assert all(('./'+name).encode() in new['game.js'] for name in ['upgrade-policy.mjs','moj1-commerce-policy.mjs','missile-targets.mjs','enemy-action-policy.mjs','save-validation.mjs'])
     assert b'./engine3d.js' in new['game.js'] and b'./three.module.js' in new['engine3d.js'] and b'./three.core.min.js' in new['three.module.js'] and len(new['three.module.js'])>300000 and len(new['three.core.min.js'])>300000
     assert b'The MIT License' in new['THREE-LICENSE.txt']
-    assert b'CC BY 4.0' in new['ASSET-CREDITS.md'] and b'BAMEN' in new['ASSET-CREDITS.md'] and b'Naudaff3D' in new['ASSET-CREDITS.md']
+    assert b'CC BY 4.0' in new['ASSET-CREDITS.md'] and b'BAMEN' in new['ASSET-CREDITS.md'] and b'Naudaff3D' in new['ASSET-CREDITS.md'] and b'DJMaesen' in new['ASSET-CREDITS.md'] and b'https://creativecommons.org/licenses/by/4.0/' in new['ASSET-CREDITS.md']
     assert all(len(new[n])>50000 for n in ['weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-sniper-desert-v2.webp','scene-night.webp','scene-airbase.webp'])
     assert len(new['soldier-rigged-ccby.glb'])>1000000 and len(new['m24-sniper-ccby.glb'])>500000
     assert len(new['arms_basecolor.webp'])>50000 and len(new['arms_normal.webp'])>50000
