@@ -1,0 +1,217 @@
+name: Zomorod staging MySQL lossless page compression
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-mysql-lossless-page-compression.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-mysql-lossless-page-compression
+  cancel-in-progress: false
+jobs:
+  compress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Verify staging identity, storage support, quota, and live site
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          python3 - <<'PY'
+          import json,os,re,shutil,subprocess,urllib.parse
+          from pathlib import Path
+          app=Path.home()/"Saeit-staging"
+          urls=[]
+          for path in (app/".env",app/".env.production",app/".env.local"):
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size>65536: continue
+                  for line in path.read_text(encoding="utf-8",errors="replace").splitlines():
+                      m=re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$",line)
+                      if m:
+                          u=urllib.parse.urlsplit(m.group(1).strip().strip('"').strip("'"))
+                          if u.scheme.lower() not in {"mysql","mariadb","mysql2"}: raise SystemExit("STAGING_MYSQL_SCHEME_MISMATCH")
+                          urls.append(u)
+              except OSError: pass
+          if len(urls)!=1: raise SystemExit("STAGING_DATABASE_URL_NOT_UNIQUE")
+          u=urls[0]; db=urllib.parse.unquote(u.path.lstrip("/"))
+          if db!="zomorod2_sites_main": raise SystemExit("STAGING_DATABASE_SCOPE_MISMATCH")
+          client=shutil.which("mariadb") or shutil.which("mysql")
+          if not client: raise SystemExit("MYSQL_CLIENT_MISSING")
+          args=[client,"--no-defaults","--batch","--skip-column-names","--host="+(u.hostname or "localhost"),"--user="+urllib.parse.unquote(u.username or ""),"--database="+db,"--connect-timeout=8"]
+          if u.port: args.append("--port="+str(u.port))
+          env=dict(os.environ,MYSQL_PWD=urllib.parse.unquote(u.password or ""))
+          def query(sql):
+              p=subprocess.run(args+["--execute="+sql],env=env,capture_output=True,text=True,timeout=60)
+              if p.returncode: raise SystemExit("MYSQL_PREFLIGHT_QUERY_FAILED")
+              return p.stdout.strip().splitlines()
+          q=json.loads(query("SELECT JSON_OBJECT('database',DATABASE(),'version',@@version,'host',@@hostname,'datadir',@@datadir)")[0])
+          if q["database"]!="zomorod2_sites_main" or "MariaDB" not in q["version"]: raise SystemExit("MYSQL_SERVER_IDENTITY_MISMATCH")
+          engines=query("SELECT ENGINE,COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_TYPE='BASE TABLE' GROUP BY ENGINE")
+          if not engines or not all(row.split("\t")[0]=="InnoDB" for row in engines): raise SystemExit("MIXED_ENGINE_BACKUP_NOT_ALLOWED")
+          caps={row.split("\t")[0]:row.split("\t")[1] for row in query("SELECT VARIABLE_NAME,VARIABLE_VALUE FROM information_schema.GLOBAL_VARIABLES WHERE VARIABLE_NAME IN ('INNODB_FILE_PER_TABLE','INNODB_COMPRESSION_ALGORITHM')")}
+          if caps.get("INNODB_FILE_PER_TABLE")!="ON" or caps.get("INNODB_COMPRESSION_ALGORITHM")!="zlib": raise SystemExit("MYSQL_PAGE_COMPRESSION_CAPABILITY_MISMATCH")
+          fs=subprocess.run(["df","-T","/var/lib/mysql"],capture_output=True,text=True,timeout=10,check=True).stdout.splitlines()[-1].split()
+          free_kb=int(fs[3])
+          if fs[1]!="xfs" or free_kb<20000000: raise SystemExit("MYSQL_STORAGE_PREFLIGHT_FAILED")
+          stats={row.split("\t")[0]:row.split("\t") for row in query("SELECT TABLE_NAME,ENGINE,ROW_FORMAT,DATA_LENGTH,INDEX_LENGTH,CREATE_OPTIONS FROM information_schema.TABLES WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_NAME IN ('core_agenttask','core_factoryevidence')")}
+          if set(stats)!={"core_agenttask","core_factoryevidence"} or any(x[1]!="InnoDB" for x in stats.values()): raise SystemExit("COMPRESSION_TABLE_SCOPE_MISMATCH")
+          quota=subprocess.run(["uapi","--output=json","Quota","get_quota_info"],capture_output=True,text=True,timeout=20,check=True)
+          qinfo=json.loads(quota.stdout).get("result",{}).get("data",{})
+          print("STAGING_DB_PREFLIGHT="+json.dumps({"database":q["database"],"version":q["version"],"host":q["host"],"datadir":q["datadir"],"filesystem":fs[1],"mysql_free_kb":free_kb,"table_rows_format":{k:v[2] for k,v in stats.items()},"quota_used_mb":qinfo.get("megabytes_used")},ensure_ascii=False))
+          PY
+          REMOTE
+          for path in / /agents/ /admin/login/; do
+            status="$(curl -sS --max-time 14 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "PRODUCTION_BASELINE=$path:$status"
+            test "$status" = "200"
+          done
+          ssh -F "$d/config" saeit-vps 'set -eu; df -Pk "$HOME" | awk "NR==2 { if (\$4 < 4500000) exit 1; print \"VPS_BACKUP_FREE_KB=\"\$4 }"'
+      - name: Stream a compressed full staging database backup to the VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          timeout 1800s ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY' | gzip -1 | timeout 1800s ssh -F "$d/config" saeit-vps 'bash -c '"'"'set -eu; umask 077; dir=/home/githubops/.db-backups; mkdir -p "$dir"; final="$dir/zomorod2_sites_main-pre-page-compression-20261028.sql.gz"; test ! -e "$final"; tmp="$final.tmp.$$"; trap "rm -f \"$tmp\"" EXIT; ulimit -f 3145728; cat > "$tmp"; gzip -t "$tmp"; stat -c "BACKUP_BYTES=%s" "$tmp"; sha256sum "$tmp"; mv "$tmp" "$final"; trap - EXIT; echo BACKUP_PATH="$final"'"'"''
+          import json,os,re,shutil,subprocess,sys,urllib.parse
+          from pathlib import Path
+          app=Path.home()/"Saeit-staging"
+          matches=[]
+          for path in (app/".env",app/".env.production",app/".env.local"):
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size>65536: continue
+                  for line in path.read_text(encoding="utf-8",errors="replace").splitlines():
+                      m=re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$",line)
+                      if m: matches.append(urllib.parse.urlsplit(m.group(1).strip().strip('"').strip("'")))
+              except OSError: pass
+          if len(matches)!=1: raise SystemExit("STAGING_DATABASE_URL_NOT_UNIQUE")
+          u=matches[0]; db=urllib.parse.unquote(u.path.lstrip("/"))
+          if db!="zomorod2_sites_main": raise SystemExit("STAGING_DATABASE_SCOPE_MISMATCH")
+          client=shutil.which("mariadb-dump") or shutil.which("mysqldump")
+          if not client: raise SystemExit("MYSQL_DUMP_CLIENT_MISSING")
+          args=[client,"--no-defaults","--single-transaction","--quick","--skip-lock-tables","--routines","--events","--triggers","--hex-blob","--default-character-set=utf8mb4","--host="+(u.hostname or "localhost"),"--user="+urllib.parse.unquote(u.username or ""),"--database="+db,"--connect-timeout=8"]
+          if u.port: args.append("--port="+str(u.port))
+          env=dict(os.environ,MYSQL_PWD=urllib.parse.unquote(u.password or ""))
+          p=subprocess.run(args,env=env,stdout=sys.stdout.buffer,timeout=1500)
+          if p.returncode: raise SystemExit("MYSQL_BACKUP_DUMP_FAILED")
+          print("STAGING_DATABASE_DUMP_STREAM_COMPLETE",file=sys.stderr)
+          PY
+      - name: Apply online lossless page compression and verify rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,shutil,subprocess,urllib.parse
+          from pathlib import Path
+          app=Path.home()/"Saeit-staging"; matches=[]
+          for path in (app/".env",app/".env.production",app/".env.local"):
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size>65536: continue
+                  for line in path.read_text(encoding="utf-8",errors="replace").splitlines():
+                      m=re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$",line)
+                      if m: matches.append(urllib.parse.urlsplit(m.group(1).strip().strip('"').strip("'")))
+              except OSError: pass
+          if len(matches)!=1: raise SystemExit("STAGING_DATABASE_URL_NOT_UNIQUE")
+          u=matches[0]; db=urllib.parse.unquote(u.path.lstrip("/"))
+          if db!="zomorod2_sites_main": raise SystemExit("STAGING_DATABASE_SCOPE_MISMATCH")
+          client=shutil.which("mariadb") or shutil.which("mysql")
+          args=[client,"--no-defaults","--batch","--skip-column-names","--host="+(u.hostname or "localhost"),"--user="+urllib.parse.unquote(u.username or ""),"--database="+db,"--connect-timeout=8"]
+          if u.port: args.append("--port="+str(u.port))
+          env=dict(os.environ,MYSQL_PWD=urllib.parse.unquote(u.password or ""))
+          def run(sql,timeout=3600):
+              p=subprocess.run(args+["--execute="+sql],env=env,capture_output=True,text=True,timeout=timeout)
+              if p.returncode: raise SystemExit("MYSQL_OPERATION_FAILED: "+p.stderr[-1000:])
+              return p.stdout.strip().splitlines()
+          if run("SELECT DATABASE()")[0]!=db: raise SystemExit("MYSQL_DATABASE_SCOPE_MISMATCH")
+          tables=("core_agenttask","core_factoryevidence")
+          for table in tables:
+              before=run("SELECT COUNT(*) FROM "+table)[0]
+              before_layout=run("SELECT CONCAT(ROW_FORMAT,'|',DATA_LENGTH,'|',INDEX_LENGTH,'|',CREATE_OPTIONS) FROM information_schema.TABLES WHERE TABLE_SCHEMA='"+db+"' AND TABLE_NAME='"+table+"'")[0]
+              parts=before_layout.split("|",3)
+              if len(parts)<4: raise SystemExit("TABLE_LAYOUT_UNAVAILABLE")
+              if "page_compressed=1" not in parts[3].lower():
+                  sql="ALTER TABLE "+table+" PAGE_COMPRESSED=1, PAGE_COMPRESSION_LEVEL=6, ALGORITHM=INPLACE, LOCK=NONE"
+                  run(sql,timeout=5400)
+              after_layout=run("SELECT CONCAT(ROW_FORMAT,'|',DATA_LENGTH,'|',INDEX_LENGTH,'|',CREATE_OPTIONS) FROM information_schema.TABLES WHERE TABLE_SCHEMA='"+db+"' AND TABLE_NAME='"+table+"'")[0].split("|",3)
+              after=run("SELECT COUNT(*) FROM "+table)[0]
+              if before!=after: raise SystemExit("ROW_COUNT_CHANGED:"+table)
+              if len(after_layout)<4 or "page_compressed=1" not in after_layout[3].lower(): raise SystemExit("PAGE_COMPRESSION_NOT_RECORDED:"+table)
+              print("TABLE_COMPRESSION_VERIFIED="+json.dumps({"table":table,"row_count":after,"row_format":after_layout[0],"data_bytes":int(after_layout[1]),"index_bytes":int(after_layout[2]),"create_options":after_layout[3]},ensure_ascii=False))
+          totals=run("SELECT CONCAT(COALESCE(SUM(DATA_LENGTH+INDEX_LENGTH),0)) FROM information_schema.TABLES WHERE TABLE_SCHEMA='"+db+"' AND TABLE_TYPE='BASE TABLE'")[0]
+          print("MYSQL_TOTAL_TABLE_BYTES_AFTER="+totals)
+          chk=run("CHECK TABLE core_agenttask, core_factoryevidence QUICK",timeout=1800)
+          if any("\t" in x and not x.endswith("\tOK") for x in chk): raise SystemExit("MYSQL_CHECK_TABLE_FAILED")
+          print("MYSQL_CHECK_TABLE=OK")
+          PY
+          echo "CPANEL_QUOTA_AFTER"
+          uapi --output=json Quota get_quota_info | python3 -c 'import json,sys;d=json.load(sys.stdin).get("result",{}).get("data",{}); print("QUOTA_AFTER="+json.dumps({k:d.get(k) for k in ("megabytes_used","megabyte_limit","megabytes_remain","under_quota_overall")},ensure_ascii=False))'
+          REMOTE
+      - name: Verify public pages still respond
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /agents/ /admin/login/; do
+            status="$(curl -sS --max-time 14 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "PUBLIC_AFTER=$path:$status"
+            test "$status" = "200"
+          done
+      - name: Remove temporary SSH identities
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-page-compression"
+# Lossless, online page-compression migration: staging MySQL only; production Saeit uses SQLite.
