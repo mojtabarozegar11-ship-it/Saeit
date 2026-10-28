@@ -33,6 +33,7 @@ jobs:
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           timeout 210s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY' | awk '/^VPS_MOUNT_ATTRIBUTION=/{print;fflush()}' | tee "$RUNNER_TEMP/vps-mount-attribution-receipt.txt"
           import datetime
+          import heapq
           import json
           import os
           from pathlib import Path
@@ -287,6 +288,10 @@ jobs:
                   return out
               started = time.monotonic()
               groups = {}
+              group_classes = {}
+              group_ages = {}
+              top_database_files = []
+              top_other_files = []
               seen_inodes = set()
               def on_walk_error(_error):
                   out["scan_errors"] += 1
@@ -345,6 +350,19 @@ jobs:
                               relative = candidate.relative_to(root).parts
                               group = "root" if len(relative) == 1 else relative[0]
                               groups[group] = groups.get(group, 0) + allocated
+                              class_totals = group_classes.setdefault(group, {})
+                              class_totals[kind] = class_totals.get(kind, 0) + allocated
+                              age_totals = group_ages.setdefault(group, {})
+                              age_totals[age] = age_totals.get(age, 0) + allocated
+                              if kind == "database":
+                                  heapq.heappush(top_database_files,
+                                                 (allocated, out["files_scanned"], candidate, age))
+                                  if len(top_database_files) > 8:
+                                      heapq.heappop(top_database_files)
+                              elif kind == "other":
+                                  heapq.heappush(top_other_files, allocated)
+                                  if len(top_other_files) > 8:
+                                      heapq.heappop(top_other_files)
                           except (OSError, ValueError):
                               out["scan_errors"] += 1
                               continue
@@ -360,6 +378,45 @@ jobs:
               if not out["accounting_consistent"]:
                   out["complete"] = False
               out["largest_groups_anonymous"] = sorted(groups.values(), reverse=True)[:12]
+              out["largest_groups_anonymous_class_age"] = [
+                  {"allocated_bytes": total,
+                   "by_class_bytes": dict(sorted(group_classes[group].items())),
+                   "by_age_bytes": dict(sorted(group_ages[group].items()))}
+                  for group, total in sorted(groups.items(),
+                                             key=lambda item: item[1], reverse=True)[:8]]
+              out["largest_other_files_anonymous"] = sorted(top_other_files, reverse=True)
+              # Header bytes only, no SQL, rows, names, file hashes, or write locks.
+              # SQLite header page/freelist counters may lag an active WAL.
+              out["database_header_probe_is_consistency_check"] = False
+              out["largest_database_files_anonymous"] = []
+              for allocated, _, candidate, age in sorted(top_database_files, reverse=True):
+                  entry = {"allocated_bytes": allocated, "age_bucket": age,
+                           "sqlite_header_valid": False, "file_bytes": None,
+                           "header_page_size": None, "header_page_count": None,
+                           "header_freelist_pages": None}
+                  try:
+                      flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                      fd = os.open(candidate, flags)
+                      try:
+                          st = os.fstat(fd)
+                          if stat.S_ISREG(st.st_mode) and st.st_dev == device:
+                              entry["file_bytes"] = st.st_size
+                              header = os.read(fd, 100)
+                              if len(header) == 100 and header[:16] == b"SQLite format 3\x00":
+                                  size = int.from_bytes(header[16:18], "big")
+                                  size = 65536 if size == 1 else size
+                                  pages = int.from_bytes(header[28:32], "big")
+                                  free = int.from_bytes(header[36:40], "big")
+                                  if size in (512, 1024, 2048, 4096, 8192, 16384, 32768, 65536) and free <= pages:
+                                      entry.update({"sqlite_header_valid": True,
+                                                    "header_page_size": size,
+                                                    "header_page_count": pages,
+                                                    "header_freelist_pages": free})
+                      finally:
+                          os.close(fd)
+                  except OSError:
+                      pass
+                  out["largest_database_files_anonymous"].append(entry)
               out["scan_seconds"] = round(time.monotonic() - started, 1)
               return out
 
@@ -431,6 +488,12 @@ jobs:
           inv = data["factory_operations_age_inventory"]
           assert inv["accounting_consistent"] and not inv["older_archive_log_is_safe_to_delete"]
           assert inv["older_archive_log_bytes"] <= inv["allocated_bytes_scanned"]
+          assert inv["database_header_probe_is_consistency_check"] is False
+          assert sum(x["allocated_bytes"] for x in inv["largest_database_files_anonymous"]) <= inv["class_allocated_bytes"].get("database", 0)
+          assert sum(inv["largest_other_files_anonymous"]) <= inv["class_allocated_bytes"].get("other", 0)
+          assert all(sum(x["by_class_bytes"].values()) == x["allocated_bytes"] == sum(x["by_age_bytes"].values())
+                     for x in inv["largest_groups_anonymous_class_age"])
+          assert len(inv["largest_database_files_anonymous"]) <= 8
           assert data["reserve_5_gib_gap_bytes"] == max(0, 5 * 1024**3 - data["mount_free_bytes"])
           assert data["aged_archive_log_screening_bytes"] == inv["older_archive_log_bytes"]
           assert data["aged_archive_log_screening_insufficient"] == (inv["older_archive_log_bytes"] < data["reserve_5_gib_gap_bytes"])
