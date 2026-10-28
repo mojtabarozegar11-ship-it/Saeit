@@ -122,6 +122,26 @@ jobs:
               raw = ""
           buckets = {}
           largest_recent = []
+          # Fixed labels only: identify whether recent factory Django growth is
+          # database/WAL, logs, archives, event streams or another file class.
+          # Never print actual file names, paths, record contents or identifiers.
+          django_types = {}
+          django_type_counts = {}
+          def django_file_class(name):
+              n = name.lower()
+              if n.endswith(("-wal", "-journal")):
+                  return "sqlite_write_ahead_or_journal"
+              if n.endswith((".sqlite3", ".sqlite", ".db")):
+                  return "database_main"
+              if n.endswith((".log", ".log.1")):
+                  return "log"
+              if n.endswith((".jsonl", ".ndjson")):
+                  return "event_stream"
+              if n.endswith((".zip", ".gz", ".zst", ".tar")):
+                  return "archive"
+              if n.endswith((".sqlite3-shm", ".db-shm")):
+                  return "sqlite_shared_memory"
+              return "other"
           for line in raw.splitlines()[:3000]:
               length, sep, filename = line.partition("\t")
               if not sep or not length.isdigit():
@@ -150,12 +170,19 @@ jobs:
                           ".rustup": "rust_toolchain",
                       }.get(rel[0], "home_other")
                   buckets[category] = buckets.get(category, 0) + allocated
+                  if category == "factory_django":
+                      file_class = django_file_class(candidate.name)
+                      django_types[file_class] = django_types.get(file_class, 0) + allocated
+                      django_type_counts[file_class] = django_type_counts.get(file_class, 0) + 1
                   largest_recent.append((allocated, category))
                   recent["scanned_large"] += 1
                   recent["allocated_bytes"] += allocated
               except (OSError, ValueError):
                   continue
           recent["by_category_allocated_bytes"] = dict(sorted(buckets.items()))
+          recent["factory_django_by_file_class_bytes"] = dict(sorted(django_types.items()))
+          recent["factory_django_by_file_class_counts"] = dict(sorted(django_type_counts.items()))
+          recent["factory_django_classification_complete"] = recent["complete"] and recent["scanned_large"] <= 3000
           recent["top_ten_anonymous"] = [
               {"allocated_bytes": size, "category": cat}
               for size, cat in sorted(largest_recent, reverse=True)[:10]]
