@@ -606,24 +606,44 @@ def import_site(batch, root=DEST):
     return report
 
 
-def feedback_site(root=DEST):
+def feedback_site(root=DEST, after=None):
+    """Return a bounded keyset page of immutable QA receipts.
+
+    Only a successfully delivered page advances the runner cursor. A later
+    hourly run starts from the beginning, making retries lossless/idempotent.
+    """
     root = target_root(root)
+    if after is not None:
+        require(isinstance(after, str)
+                and re.fullmatch(r"[a-z][a-z0-9_]{1,63}-[a-f0-9]{64}", after),
+                "RETURN_CURSOR_INVALID")
     folder = root/"returns"
     private_new(folder)
     rows = []
+    last_identity = None
+    has_more = False
     for product in sorted(folder.iterdir()):
         require(product.is_dir() and not product.is_symlink()
                 and RECIPE.fullmatch(product.name), "RETURN_DIRECTORY_INVALID")
         for item in sorted(product.iterdir()):
             require(item.is_file() and not item.is_symlink()
                     and item.suffix == ".json" and SHA.fullmatch(item.stem), "RETURN_NAME_INVALID")
+            identity = product.name+"-"+item.stem
+            if after is not None and identity <= after:
+                continue
             value = json_file(item,100_000)
             require(value.get("tenant")==TENANT and value.get("schema")==RETURN_SCHEMA
                     and value.get("product_id")==product.name
                     and value.get("source_sha256")==item.stem, "RETURN_IDENTITY_INVALID")
+            if len(rows) == MAX_ITEMS:
+                has_more = True
+                break
             rows.append(value)
-            require(len(rows)<=MAX_ITEMS,"RETURN_COUNT_LIMIT")
-    return json_blob({"schema":RETURN_SCHEMA,"tenant":TENANT,"returns":rows})
+            last_identity = identity
+        if has_more:
+            break
+    return json_blob({"schema":RETURN_SCHEMA,"tenant":TENANT,"returns":rows,
+                      "next_after":last_identity if has_more else None})
 
 
 def receive_factory_returns(raw, root=VPS):
@@ -694,7 +714,9 @@ def triage_factory_stage1(root=VPS):
     descriptor = os.open(str(lock_path), os.O_RDWR | os.O_CREAT | getattr(os,"O_NOFOLLOW",0), 0o600)
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
-        items = []
+        newly_created = 0
+        previously_created = 0
+        pending_untriaged = 0
         seen = set()
         for path in sorted(intake.iterdir()):
             require(path.is_file() and not path.is_symlink()
@@ -748,14 +770,18 @@ def triage_factory_stage1(root=VPS):
             if result.exists() or result.is_symlink():
                 require(result.is_file() and not result.is_symlink()
                         and json_file(result,100_000) == details, "STAGE1_WORK_ORDER_DRIFT")
-            else:
+                previously_created += 1
+            elif newly_created < MAX_ITEMS:
                 atomic(result,json_blob(details))
-            items.append(details)
-            require(len(items)<=MAX_ITEMS,"STAGE1_QUEUE_CAPACITY")
+                newly_created += 1
+            else:
+                pending_untriaged += 1
         state = {"schema":RETURN_SCHEMA,"tenant":TENANT,
-                 "actual_site_returns_accepted":len(items),
-                 "factory_stage1_work_items":len(items),
-                 "unresolved_independent_review_items":len(items),
+                 "actual_site_returns_accepted":len(seen),
+                 "factory_stage1_work_items":newly_created+previously_created,
+                 "unresolved_independent_review_items":newly_created+previously_created,
+                 "new_stage1_work_items_this_run":newly_created,
+                 "pending_untriaged":pending_untriaged,
                  "physical_rebuild_claimed":False,"commercial_approval_claimed":False,
                  "all_source_archives_preserved":True,
                  "review_work_directory":"design-state/mojplaywin-stage1-qa-work",
@@ -1221,6 +1247,10 @@ def main():
         print("MPW_COURIER_SITE_INGEST=PASS", file=sys.stderr)
     elif mode=="site-feedback":
         sys.stdout.buffer.write(feedback_site())
+    elif mode.startswith("site-feedback-after-"):
+        match=re.fullmatch(r"site-feedback-after-([a-z][a-z0-9_]{1,63})-([a-f0-9]{64})",mode)
+        require(match is not None,"RETURN_CURSOR_INVALID")
+        sys.stdout.buffer.write(feedback_site(after=match.group(1)+"-"+match.group(2)))
     elif mode=="vps-return":
         report=receive_factory_returns(sys.stdin.buffer.read(1_000_001))
         print("MPW_COURIER_FACTORY_STAGE1="+json.dumps(report,sort_keys=True))
