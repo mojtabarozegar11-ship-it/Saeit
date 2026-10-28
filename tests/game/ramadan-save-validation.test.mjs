@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
-import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
+import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, restoreEnemyPositions, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from '../../games/ramadan-war/save-validation.mjs';
 
 const fresh = () => ({
   hero: 0, mission: 0, lives: 100, x: 2.5, y: 7.5, angle: 0,
@@ -501,4 +501,50 @@ test('campaign interaction, timed defence and intel rewards save immediately', (
   assert.match(client,/o\.done=1;toast\('دفاع موفق • موقعیت تثبیت شد'\);save\(\)/);
   assert.match(client,/o\.collectedSites\.push\(index\);/);
   assert.match(client,/toast\('اطلاعات حیاتی بازیابی شد'\);sync\(\);save\(\);continue/);
+});
+
+
+test('legitimate combat cooldowns and historical absent timers remain playable', () => {
+  assert.equal(validateCampaignSave(fresh()), true);
+  assert.equal(validateCampaignSave({...fresh(), shield:12, hitFlash:.38,
+    skillTimer:15.9, enemyTimer:-3600, shotTimer:.42,
+    droneTimer:7, reloadTimer:1.05, strikeTimer:-.03}), true);
+});
+test('rejects fabricated invulnerability and no-spawn timer values', () => {
+  for (const patch of [{shield:1e8},{hitFlash:1e8},{enemyTimer:1e8},
+    {shotTimer:1e8},{skillTimer:1e8},{reloadTimer:1e8},
+    {shield:-1},{muzzle:50},{recoil:2}]) {
+    assert.equal(validateCampaignSave({...fresh(), ...patch}), false, JSON.stringify(patch));
+  }
+});
+test('rejects fabricated enemy health and impossible projectile damage', () => {
+  const enemy={x:8.5,y:7.5,type:3,hp:410,max:410};
+  assert.equal(validateCampaignSave({...fresh(),enemies:[enemy]}),true);
+  for (const invalid of [{...enemy,hp:10000,max:10000},
+    {...enemy,max:'410'}, {...enemy,hp:500,max:410}]) {
+    assert.equal(validateCampaignSave({...fresh(),enemies:[invalid]}),false);
+  }
+  const bullet={x:8.5,y:7.5,vx:4,vy:0,life:3,hp:14};
+  assert.equal(validateCampaignSave({...fresh(),hostile:[bullet]}),true);
+  assert.equal(validateCampaignSave({...fresh(),hostile:[{...bullet,hp:500}]}),false);
+});
+test('repositions blocked enemies without changing their health or earned rewards', () => {
+  const state={x:2.5,y:7.5,missionKills:2,score:900,
+    enemies:[{x:3.5,y:3.5,hp:40},{x:4.5,y:6.5,hp:410,boss:true},
+      {x:12.5,y:5.5,hp:50}]};
+  const blocked=(x,y)=>x===3&&y===3||x===4&&y===6;
+  assert.equal(restoreEnemyPositions(state,blocked),2);
+  assert.equal(state.enemies[0].hp,40);
+  assert.equal(state.enemies[1].hp,410);
+  assert.equal(state.score,900);
+  assert.equal(state.missionKills,2);
+  assert.deepEqual([state.enemies[2].x,state.enemies[2].y],[12.5,5.5]);
+  assert.equal(state.enemies.some(e=>blocked(Math.floor(e.x),Math.floor(e.y))),false);
+  assert.equal(restoreEnemyPositions(state,blocked),0);
+});
+test('wall recovery is atomic when no safe spawn exists', () => {
+  const state={x:2.5,y:7.5,enemies:[{x:3.5,y:3.5,hp:40}]};
+  const original=JSON.stringify(state);
+  assert.equal(restoreEnemyPositions(state,()=>true),-1);
+  assert.equal(JSON.stringify(state),original);
 });
