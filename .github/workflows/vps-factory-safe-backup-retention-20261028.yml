@@ -1,0 +1,108 @@
+name: VPS factory safe backup retention
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-factory-safe-backup-retention-20261028.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vps-factory-safe-backup-retention
+  cancel-in-progress: false
+jobs:
+  retain:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Keep two verified recovery snapshots and remove redundant raw SQLite backups
+        shell: bash
+        env:
+          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-retention"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","\n").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          lock="$base/operations/master-agent/activation.lock"
+          exec 9>"$lock"
+          flock -n 9 || { echo FACTORY_RETENTION_ABORT_ACTIVE_DEPLOYMENT; exit 1; }
+          python3 - "$base/operations/backups" <<'PY'
+          import json, os, re, sqlite3, sys, time
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          if root.is_symlink() or not root.is_dir():
+              raise SystemExit("RETENTION_ABORT_UNSAFE_BACKUP_ROOT")
+          pattern=re.compile(r"^master-before-\d{8}T\d{6}Z\.sqlite3$")
+          files=sorted(
+              [p for p in root.iterdir() if pattern.fullmatch(p.name) and p.is_file() and not p.is_symlink()],
+              key=lambda p:(p.stat().st_mtime_ns,p.name), reverse=True
+          )
+          verified=[]
+          for p in files:
+              if p.stat().st_size < 4096:
+                  print(f"RETENTION_INVALID_SNAPSHOT name={p.name} bytes={p.stat().st_size}", flush=True)
+                  continue
+              try:
+                  conn=sqlite3.connect(p.as_uri()+"?mode=ro",uri=True,timeout=20)
+                  result=conn.execute("PRAGMA quick_check").fetchone()[0]
+                  pages=conn.execute("PRAGMA page_count").fetchone()[0]
+                  conn.close()
+                  if result=="ok":
+                      verified.append((p,p.stat().st_size,pages))
+                      print(f"RETENTION_VERIFIED name={p.name} bytes={p.stat().st_size} pages={pages}",flush=True)
+              except Exception as exc:
+                  print(f"RETENTION_CHECK_FAILED name={p.name} error={type(exc).__name__}",flush=True)
+              if len(verified)>=2:
+                  break
+          if len(verified)<2:
+              raise SystemExit("RETENTION_ABORT_LESS_THAN_TWO_VERIFIED_SNAPSHOTS")
+          keep={item[0] for item in verified}
+          remove=[p for p in files if p not in keep]
+          before=os.statvfs(root)
+          free_before=before.f_bavail*before.f_frsize
+          manifest={
+              "schema":"factory-backup-retention.v1",
+              "created_utc":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),
+              "policy":"retain_newest_two_verified_master_before_sqlite_snapshots",
+              "kept":[{"name":p.name,"bytes":size,"pages":pages} for p,size,pages in verified],
+              "planned_remove":[{"name":p.name,"bytes":p.stat().st_size} for p in remove],
+              "status":"planned"
+          }
+          manifest_path=root/("master-retention-"+time.strftime("%Y%m%dT%H%M%SZ",time.gmtime())+".json")
+          temp=manifest_path.with_suffix(".tmp")
+          fd=os.open(temp,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+          with os.fdopen(fd,"w",encoding="utf-8") as f:
+              json.dump(manifest,f,sort_keys=True); f.flush(); os.fsync(f.fileno())
+          os.replace(temp,manifest_path)
+          reclaimed=0
+          for p in remove:
+              if p in keep or p.is_symlink() or not pattern.fullmatch(p.name):
+                  raise SystemExit("RETENTION_ABORT_PATH_CHANGED")
+              size=p.stat().st_size
+              p.unlink()
+              reclaimed+=size
+              print(f"RETENTION_REMOVED name={p.name} bytes={size}",flush=True)
+          after=os.statvfs(root)
+          free_after=after.f_bavail*after.f_frsize
+          manifest["status"]="complete"
+          manifest["reclaimed_bytes"]=reclaimed
+          manifest["free_before_bytes"]=free_before
+          manifest["free_after_bytes"]=free_after
+          temp=manifest_path.with_suffix(".tmp")
+          fd=os.open(temp,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+          with os.fdopen(fd,"w",encoding="utf-8") as f:
+              json.dump(manifest,f,sort_keys=True); f.flush(); os.fsync(f.fileno())
+          os.replace(temp,manifest_path)
+          print(f"RETENTION_COMPLETE kept={len(verified)} removed={len(remove)} reclaimed_bytes={reclaimed} free_before={free_before} free_after={free_after}")
+          PY
+          REMOTE
