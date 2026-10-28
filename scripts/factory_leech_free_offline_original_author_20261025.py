@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import stat
 import tempfile
 
 ORDER = "WO-26102501"
@@ -36,10 +37,52 @@ def digest(doc):
     return hashlib.sha256(json.dumps(doc, sort_keys=True, ensure_ascii=False,
         separators=(",", ":")).encode("utf-8")).hexdigest()
 
+def _open_json_no_symlink_parents(path, flags):
+    """Pin every parent directory fd; reject symlinks at every path component."""
+    path = Path(path)
+    if not path.name or ".." in path.parts:
+        reject("UNSAFE_JSON_PATH")
+    directory_flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                       | getattr(os, "O_NOFOLLOW", 0)
+                       | getattr(os, "O_CLOEXEC", 0))
+    directory = os.open("/" if path.is_absolute() else ".", directory_flags)
+    components = path.parts[1:] if path.is_absolute() else path.parts
+    try:
+        for component in components[:-1]:
+            child = os.open(component, directory_flags, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        return os.open(components[-1], flags, dir_fd=directory)
+    finally:
+        os.close(directory)
+
+
 def safe_json(path, max_bytes=300000):
-    if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= max_bytes:
-        reject("MISSING_OR_UNSAFE_JSON_" + path.name)
-    obj = json.loads(path.read_text(encoding="utf-8"))
+    """Bounded inode-bound read with symlink-safe pinned ancestor directories."""
+    path = Path(path)
+    flags = (os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+             | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0))
+    try:
+        with os.fdopen(_open_json_no_symlink_parents(path, flags), "rb") as stream:
+            metadata = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(metadata.st_mode)
+                    or not 0 < metadata.st_size <= max_bytes):
+                reject("MISSING_OR_UNSAFE_JSON_" + path.name)
+            raw = stream.read(max_bytes + 1)
+            metadata_after = os.fstat(stream.fileno())
+            # Reject in-place truncation/rewrite during the bounded read.
+            # Pinning the inode alone does not make its bytes immutable.
+            identity = lambda st: (st.st_dev, st.st_ino, st.st_size,
+                                   st.st_mtime_ns, st.st_ctime_ns)
+            if (not stat.S_ISREG(metadata_after.st_mode)
+                    or identity(metadata) != identity(metadata_after)
+                    or len(raw) != metadata.st_size):
+                reject("SOURCE_JSON_CHANGED_DURING_READ_" + path.name)
+        if not 0 < len(raw) <= max_bytes:
+            reject("MISSING_OR_UNSAFE_JSON_" + path.name)
+        obj = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("LEECH_ZERO_COST_MISSING_OR_UNSAFE_JSON_" + path.name) from exc
     if not isinstance(obj, dict):
         reject("NOT_JSON_OBJECT")
     return obj
