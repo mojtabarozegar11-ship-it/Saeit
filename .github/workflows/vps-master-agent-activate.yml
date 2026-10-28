@@ -90,9 +90,11 @@ jobs:
           stage="$HOME/factory-runtime/operations/master-activation-source"
           printf '%s  %s\n' "$expected" "$stage/bundle.tar" | sha256sum -c --status
           python3 - "$stage" <<'PY'
-          import sys,tarfile
+          import os,sys,tarfile
           from pathlib import Path
           root=Path(sys.argv[1])
+          if root.is_symlink() or not root.is_dir():
+              raise SystemExit("MASTER_STAGE_ROOT_UNSAFE")
           expected={"deploy/activate_vps_master_agent.sh","scripts/vps_master_evolution_cycle.py",
                     "core/autonomous_brain.py","core/economic_tool_pack.py","core/economic_master_agent.py",
                     "core/self_funding_policy.py","core/task_runtime.py",
@@ -108,9 +110,30 @@ jobs:
               assert all(m.isfile() and not m.issym() and not m.islnk() for m in members)
               for item in members:
                   target=root/item.name
-                  target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
-                  target.write_bytes(archive.extractfile(item).read())
-                  target.chmod(0o700 if item.name.endswith(".sh") else 0o600)
+                  # Reject linked stage components before any write. A prior
+                  # interrupted run must not redirect extraction outside root.
+                  relative=target.relative_to(root)
+                  parent=root
+                  for part in relative.parts[:-1]:
+                      parent=parent/part
+                      if parent.is_symlink():
+                          raise SystemExit("MASTER_STAGE_LINKED_PARENT_REJECTED")
+                      parent.mkdir(mode=0o700,exist_ok=True)
+                  if target.is_symlink():
+                      raise SystemExit("MASTER_STAGE_LINKED_TARGET_REJECTED")
+                  temporary=target.with_name(target.name+".master-stage-new")
+                  fd=os.open(temporary,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
+                  try:
+                      with os.fdopen(fd,"wb") as out:
+                          out.write(archive.extractfile(item).read())
+                          out.flush()
+                          os.fsync(out.fileno())
+                      os.chmod(temporary,0o700 if item.name.endswith(".sh") else 0o600)
+                      os.replace(temporary,target)
+                  except BaseException:
+                      if temporary.is_file() and not temporary.is_symlink():
+                          temporary.unlink()
+                      raise
           print("MASTER_DEPLOY_SOURCE_INTEGRITY_VERIFIED")
           PY
           rm -f "$stage/bundle.tar"
