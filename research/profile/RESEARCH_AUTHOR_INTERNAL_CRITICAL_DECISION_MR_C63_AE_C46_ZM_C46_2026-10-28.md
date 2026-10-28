@@ -1,0 +1,17 @@
+# Internal AI critical review and owner decision packet — 28 October 2026
+
+**Scope:** MR-2026-001 C63, AE-2026-001 C46, ZM-R01 C46. **Role:** AI research administrator / internal critical reviewer, **not** a human author, human peer reviewer or owner approval. No journal submission, invented DOI or Manuscript ID.
+
+## MR — Cvejić denominator triangulation
+**New:** independent indexed abstract corroborates implementation on 35 farms; a separate 35-person telephone-survey denominator remains **conditional**, not source-confirmed. The 2019 46-advice-recipient population must not be merged with the 2020 implementation and survey populations. Source: https://infra.eurekamag.com/research/071/061/071061017.php . **Adversarial objection:** matching numbers can arise from the same 35-farm recruitment pool without proving complete telephone response or question-specific denominators. The current MR manuscript now explicitly records that distinction. **Gate:** retrieve original questionnaire response count, resolve Car Table 5, Amini F7, Lorite/Baroni/Elia full methods, obtain actual G/D/R/A field evidence, and verify novelty against direct prior art. **Decision: MAJOR REVISION / NO SUBMISSION.**
+
+## AE — baseline selection decomposition
+**New:** source-recomputed regional accounting contributions sum to the 169-vs-153 mean shift +0.2684068989 log-pp/year; MENA +0.145936, SSA +0.146783, Europe/Central Asia +0.051301, East Asia/Pacific −0.075613. **Adversarial objection:** the decomposition is an accounting identity, not causal missingness evidence or novel estimator; existing C45 cohort means are not new. The author-review manuscript now distinguishes the mean result from the +0.084671 median shift. **Gate:** obtain/verify dated WDI vintages and ILOSTAT historical/current provenance, test employment denominator dependence, execute direct countryatlas benchmark on identical 155-country release-locked inputs, establish nontrivial contribution. C13/C14 were read as old evidence, not counted as fresh science. **Decision: MAJOR REVISION / NO SUBMISSION.**
+
+## ZM — source reference verification
+**New:** the R pipeline now fails closed if actual local FASTA and GTF bytes are unavailable or their SHA256 hashes mismatch declared provenance. **Adversarial objection:** self-declared provenance flags, assembly labels and hash equality do not establish version identity, compatible annotation, independent experimental chambers, full 24-library FASTQ MD5 or a 24-column integer-count matrix. R and DESeq2 were **not executed** in this cycle. **Gate:** exact RefSeq v2.0 assembly/annotation/license, read multimapping and strandedness, 24 local byte MD5s and verified count matrix, biological independence, prespecified inferential protocol. **Decision: DATA REBUILD / NO SUBMISSION.**
+
+## Owner approval and publication firewall
+Before any external submission or legal/financial commitment, require explicit case-specific author confirmation of final manuscript, genuine author contribution, name/identity/affiliation, funding, conflicts, AI use, rights/licensing, selected journal/APC, cover letter, and publication permission. No approval is implied by the existence of this packet. No live site deployment, PR #1054 merge, social account interaction or paid computation is authorized by this record.
+
+**Next priority:** resolve original primary-source/experimental-data gates for the three active studies before promoting any of the 46 future-topic registry entries.
