@@ -41,6 +41,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
+      - name: Reject stale main checkout before production relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin refs/heads/main
+          current_main="$(git rev-parse FETCH_HEAD)"
+          if [[ "${GITHUB_SHA}" != "${current_main}" ]]; then
+            echo "::error::Stale workflow commit: re-dispatch from current main"
+            exit 1
+          fi
+          echo "MPW_RIGHTS_CURRENT_MAIN_GUARD=PASS"
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
