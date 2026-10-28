@@ -32,16 +32,24 @@ def request(method='GET',page=None,post=None):
     sid=(base/'sid.result').read_text().strip()
     assert sid
     return result.stdout
+# The legacy setup token must never be required on the public form.
+(private/'setup.token').write_text('synthetic-obsolete-token')
 initial=request()
-assert 'راه‌اندازی امن میز مدیریت' in initial
+assert 'ورود مدیر و حسابدار' in initial
+assert 'توکن فعال‌سازی' not in initial
+assert not (private/'setup.token').exists()
+receipt=private/'owner-first-login.txt'
+assert receipt.is_file()
+assert receipt.stat().st_mode & 0o777 == 0o600
+credentials=receipt.read_text()
+username=re.search(r'^Username: (.+)$',credentials,re.M).group(1)
+previous=re.search(r'^Initial password: (.+)$',credentials,re.M).group(1)
+assert username=='ZomorodOwner' and len(previous)>=40
+assert previous not in initial
 csrf=re.search(r'name="csrf" value="([0-9a-f]{64})"',initial)
 assert csrf
 csrf=csrf.group(1)
-token=(private/'setup.token').read_text().strip()
-assert len(token)==64
-request('POST',post={'csrf':csrf,'setup_token':token,'username':'TestOnlyAdmin','password':'SyntheticOnlyPassword2026!'})
-assert not (private/'setup.token').exists()
-previous='SyntheticOnlyPassword2026!'
+request('POST',post={'csrf':csrf,'username':username,'password':previous})
 updated='SyntheticNewPassword2026!Changing'
 changed=request('POST','security',{'csrf':csrf,'action':'password_change','previous_password':previous,'new_password':updated,'new_password_confirmation':updated})
 assert not 'درخواست انجام نشد' in changed
