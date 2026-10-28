@@ -50,6 +50,17 @@ def file_with_digest(root, raw_path, expected, digest):
         raise GateError(f'{digest} mismatch for {p}: {actual}')
     return p
 
+def validate_refseq_accession(accession):
+    """This ZM-R01 gate requires a versioned NCBI RefSeq assembly (GCF_).
+
+    A GenBank GCA_ record is not silently interchangeable with a RefSeq GCF_
+    assembly; this validates identifier syntax, NOT actual FASTA provenance.
+    """
+    if not isinstance(accession, str) or not re.fullmatch(r'GCF_[0-9]+\.[0-9]+', accession):
+        raise GateError('Versioned NCBI RefSeq GCF_ assembly accession required')
+    return accession
+
+
 IUPAC_DNA = frozenset('ACGTRYSWKMBDHVN')
 
 def fasta_contigs(p):
@@ -152,8 +163,7 @@ def validate(manifest_file):
         raise GateError('Reference metadata must be a JSON object')
     missing=[k for k in REQUIRED_REF if not ref.get(k)]
     if missing: raise GateError('Missing reference metadata: '+', '.join(missing))
-    if not re.fullmatch(r'GC[FA]_[0-9]+\.[0-9]+',str(ref['assembly_accession'])):
-        raise GateError('Versioned RefSeq/GenBank assembly accession required')
+    validate_refseq_accession(ref['assembly_accession'])
     fasta=file_with_digest(root,ref['fasta'],ref['fasta_sha256'],'sha256')
     gtf=file_with_digest(root,ref['gtf'],ref['gtf_sha256'],'sha256')
     check_gtf(gtf, fasta_contigs(fasta))
