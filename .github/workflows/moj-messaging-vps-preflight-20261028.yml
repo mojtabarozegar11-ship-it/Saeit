@@ -11,6 +11,7 @@ on:
       - 'ops/messaging-bridge/**'
 permissions:
   contents: read
+  statuses: write
 concurrency:
   group: moj-messaging-preflight-20261028
   cancel-in-progress: false
@@ -67,20 +68,48 @@ jobs:
           test -d /home/githubops/factory-runtime
           test "$(uname -s)" = Linux
           echo 'MMSG_VPS_IDENTITY=PASS'
-          echo 'MMSG_FACTORY_UNMODIFIED=PASS'
+          echo 'MMSG_FACTORY_PATH_PRESENT=PASS'
           available_kib="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
           case "$available_kib" in ''|*[!0-9]*) echo MMSG_DISK_CHECK=ERROR; exit 1;; esac
           echo "MMSG_FREE_DISK_MIB=$((available_kib/1024))"
-          if [ "$available_kib" -ge 524288 ]; then echo 'MMSG_DISK_GATE=PASS'; else echo 'MMSG_DISK_GATE=NO_GO'; fi
+          admit=PASS
+          if [ "$available_kib" -ge 524288 ]; then echo 'MMSG_DISK_GATE=PASS'; else echo 'MMSG_DISK_GATE=NO_GO'; admit=NO_GO; fi
+          memory_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+          case "$memory_kib" in ''|*[!0-9]*) memory_kib=0;; esac
+          if [ "$memory_kib" -ge 524288 ]; then echo 'MMSG_MEMORY_GATE=PASS'; else echo 'MMSG_MEMORY_GATE=NO_GO'; admit=NO_GO; fi
           if command -v node >/dev/null 2>&1; then
             node_major="$(node -p 'process.versions.node.split(".")[0]')"
             echo "MMSG_NODE_MAJOR=$node_major"
-            if [ "$node_major" -ge 20 ]; then echo 'MMSG_NODE_GATE=PASS'; else echo 'MMSG_NODE_GATE=NO_GO'; fi
+            if [ "$node_major" -ge 20 ]; then echo 'MMSG_NODE_GATE=PASS'; else echo 'MMSG_NODE_GATE=NO_GO'; admit=NO_GO; fi
           else
-            echo 'MMSG_NODE_GATE=NO_GO'
+            echo 'MMSG_NODE_GATE=NO_GO'; admit=NO_GO
           fi
-          if command -v python3 >/dev/null 2>&1 && python3 -c 'import venv' >/dev/null 2>&1; then echo 'MMSG_PYTHON_VENV_GATE=PASS'; else echo 'MMSG_PYTHON_VENV_GATE=NO_GO'; fi
-          if command -v systemctl >/dev/null 2>&1; then echo 'MMSG_SYSTEMD_TOOL=YES'; else echo 'MMSG_SYSTEMD_TOOL=NO'; fi
-          if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then echo 'MMSG_NONINTERACTIVE_SUDO=YES'; else echo 'MMSG_NONINTERACTIVE_SUDO=UNCONFIRMED'; fi
+          if command -v npm >/dev/null 2>&1; then echo 'MMSG_NPM_GATE=PASS'; else echo 'MMSG_NPM_GATE=NO_GO'; admit=NO_GO; fi
+          if command -v python3 >/dev/null 2>&1 && python3 -c 'import venv' >/dev/null 2>&1; then echo 'MMSG_PYTHON_VENV_GATE=PASS'; else echo 'MMSG_PYTHON_VENV_GATE=NO_GO'; admit=NO_GO; fi
+          if command -v systemctl >/dev/null 2>&1; then echo 'MMSG_SYSTEMD_TOOL=YES'; else echo 'MMSG_SYSTEMD_TOOL=NO'; admit=NO_GO; fi
+          if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then echo 'MMSG_NONINTERACTIVE_SUDO=YES'; else echo 'MMSG_NONINTERACTIVE_SUDO=UNCONFIRMED'; admit=NO_GO; fi
+          echo "MMSG_RUNTIME_ADMISSION=$admit"
+          test "$admit" = PASS
           echo 'MMSG_VPS_READONLY_PREFLIGHT_FINISHED_NO_INSTALL_NO_ACCOUNT_LOGIN'
           REMOTE
+
+      - name: Publish runtime admission result to commit (PASS)
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success -f context=moj-messaging-vps-runtime-admission \
+            -f description='Runtime gates passed; no installation or account login'
+      - name: Publish runtime admission result to commit (BLOCKED)
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=failure -f context=moj-messaging-vps-runtime-admission \
+            -f description='Runtime gate blocked; no installation or account login'
