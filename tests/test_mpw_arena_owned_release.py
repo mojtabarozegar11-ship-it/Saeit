@@ -97,9 +97,11 @@ class GuardedArenaPublicationTests(unittest.TestCase):
         self.assertEqual(len(guard.payload_preflight(candidate)), 64)
         forbidden = (
             content.replace("https://api.openligadb.de/getmatchdata/", "https://unapproved.example/getmatchdata/"),
+            content.replace("https://www.thesportsdb.com/api/v1/json/123/eventsnextleague.php?id=", "https://evil.example/events?id="),
             content.replace("await fetch(url,{mode:'cors'", "await fetch(url,{mode:'no-cors'"),
-            content.replace("connect-src https://api.openligadb.de;", "connect-src *;"),
+            content.replace("connect-src https://api.openligadb.de https://www.thesportsdb.com;", "connect-src *;"),
             content.replace("await fetch(url,{", "await fetch('https://unapproved.example',{"),
+            content.replace("if(!Object.hasOwn(SPOTLIGHT_NAMES,id))return;", "if(id)return;"),
             content + "\n<!-- fetch('https://unapproved.example/') -->",
         )
         for bad in forbidden:
