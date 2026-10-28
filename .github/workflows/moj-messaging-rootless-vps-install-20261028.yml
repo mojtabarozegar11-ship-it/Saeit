@@ -105,6 +105,17 @@ jobs:
           mkdir -p -m 0700 src
           tar --no-same-owner --no-same-permissions -xzf deps-bundle.tar.gz -C src app/user-install.sh
           bash src/app/user-install.sh "$dir/deps-bundle.tar.gz" "$rev"
+          app="$HOME/private-messaging-bridge/runtime/current/app"
+          test -x "$app/user-onboard.sh"
+          test -x "$app/user-control.sh"
+          test -x "$app/user-launch.sh"
+          bash -n "$app/user-onboard.sh" "$app/user-control.sh" "$app/user-launch.sh"
+          test "$(stat -c '%a' "$HOME/private-messaging-bridge/state")" = 700
+          test "$(crontab -l | grep -Fc 'MMSG_BRIDGE_ROOTLESS_20261028')" -eq 3
+          echo 'MMSG_PRIVATE_ONBOARDING_EXECUTABLE=PASS'
+          echo 'MMSG_CRON_KEEPERS_EXACTLY_THREE=PASS'
+          echo 'MMSG_STATE_DIRECTORY_0700=PASS'
+          echo 'MMSG_ACCOUNT_AUTH_NOT_ATTEMPTED=PASS'
           REMOTE
       - name: Record installation gate on exact commit
         if: always()
