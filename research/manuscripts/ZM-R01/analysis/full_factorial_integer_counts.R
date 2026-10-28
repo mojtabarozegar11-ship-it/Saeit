@@ -95,6 +95,47 @@ for (run in manifest$SRR) {
   if (!setequal(fq$read[fq$SRR == run], c("R1", "R2")))
     stop("Each SRR must have exactly R1 and R2; NO DESeq2")
 }
+# C48: A self-consistent user-supplied MD5 list is NOT evidence of ENA provenance.
+# Before hashing 149.54 GB of local files, match each run/read MD5 to the
+# exact independently retained ENA metadata snapshot pinned by Git blob SHA1.
+# The pinned repository snapshot is a source traceability gate, not proof that
+# ENA itself has not changed or that the original sample design is valid.
+script_flags <- grep("^--file=", commandArgs(trailingOnly=FALSE), value=TRUE)
+if (length(script_flags) != 1L)
+  stop("Cannot locate Rscript path for pinned ENA source; NO DESeq2")
+script_path <- normalizePath(sub("^--file=", "", script_flags[[1L]]), mustWork=TRUE)
+ena_source_file <- file.path(dirname(dirname(script_path)),
+                             "ENA_PRJNA1249400_OFFICIAL_24_RUN_PAIRED_FASTQ_MD5_2026-10-25.tsv")
+if (!file.exists(ena_source_file))
+  stop("Pinned repository ENA manifest missing; NO DESeq2")
+ena_size <- file.info(ena_source_file)$size
+if (!is.finite(ena_size) || ena_size < 1L || ena_size > 1000000L)
+  stop("Pinned ENA manifest size invalid; NO DESeq2")
+ena_raw <- readBin(ena_source_file, what="raw", n=as.integer(ena_size))
+ena_git_blob <- digest::digest(c(charToRaw(paste0("blob ", length(ena_raw))),
+                                 as.raw(0), ena_raw),
+                                algo="sha1", serialize=FALSE)
+if (!identical(ena_git_blob, "d9231121dc27bc13999e120349a80af05aad5e15"))
+  stop("Pinned ENA source Git blob SHA1 mismatch; NO DESeq2")
+ena <- read.delim(ena_source_file, check.names=FALSE, stringsAsFactors=FALSE)
+ena_fields <- c("run_accession", "sample_accession", "fastq1_md5", "fastq2_md5")
+if (!all(ena_fields %in% names(ena)) || nrow(ena) != 24L ||
+    anyNA(ena[, ena_fields, drop=FALSE]) ||
+    anyDuplicated(ena$run_accession) ||
+    !setequal(ena$run_accession, manifest$SRR))
+  stop("Pinned ENA metadata does not match 24 SRR libraries; NO DESeq2")
+ena_md5_values <- tolower(trimws(c(ena$fastq1_md5, ena$fastq2_md5)))
+ena_keys <- c(paste(ena$run_accession, "R1", sep=":"),
+              paste(ena$run_accession, "R2", sep=":"))
+if (any(!grepl("^[0-9a-f]{32}$", ena_md5_values)) ||
+    anyDuplicated(ena_keys))
+  stop("Pinned ENA run/read MD5 entries invalid; NO DESeq2")
+expected_ena_md5 <- setNames(ena_md5_values, ena_keys)
+submitted_keys <- paste(fq$SRR, fq$read, sep=":")
+if (!setequal(names(expected_ena_md5), submitted_keys) ||
+    !identical(unname(expected_ena_md5[submitted_keys]), fq$ena_md5))
+  stop("Local FASTQ manifest differs from pinned ENA source MD5; NO DESeq2")
+# Only now incur the expensive local byte-level FASTQ MD5 verification.
 observed_fastq_md5 <- unname(tools::md5sum(fq$fastq_path))
 if (anyNA(observed_fastq_md5) ||
     !identical(tolower(observed_fastq_md5), fq$ena_md5))
