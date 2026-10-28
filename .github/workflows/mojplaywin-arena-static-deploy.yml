@@ -47,7 +47,7 @@ jobs:
           node-version: "22"
       - name: Install Chromium driver
         run: npm install --no-save --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/arena-browser-test" playwright-core@1.62.1
-      - name: Exercise 62 free experiences, Spain/UEFA, multisport schedules and world horse calendars in six languages
+      - name: Exercise Spain/UEFA, UFC/boxing/WWE, 22 combat calendars, 18 horse calendars and free games
         shell: bash
         env:
           NODE_PATH: ${{ runner.temp }}/arena-browser-test/node_modules
@@ -93,7 +93,10 @@ jobs:
                 sportCalls++;
                 const id=new URL(route.request().url()).searchParams.get('id');
                 const events=id==='4387'?[{idEvent:'123456',strEvent:'Sample NBA — Indiana vs Philadelphia',dateEvent:'2026-11-05',strTime:'20:00:00'}]:
-                  id==='4370'?[{idEvent:'234567',strEvent:'Sample Mexico F1 GP',dateEvent:'2026-11-07',strTime:'13:00:00'}]:null;
+                  id==='4370'?[{idEvent:'234567',strEvent:'Sample Mexico F1 GP',dateEvent:'2026-11-07',strTime:'13:00:00'}]:
+                  id==='4443'?[{idEvent:'345678',strEvent:'Sample UFC Madrid MMA',dateEvent:'2026-11-21',strTime:'20:00:00'}]:
+                  id==='4444'?[{idEvent:'456789',strEvent:'Sample WWE SmackDown Show',dateEvent:'2026-11-20',strTime:'20:00:00'}]:
+                  id==='4445'?[{idEvent:'567890',strEvent:'Sample Boxing World Title Night',dateEvent:'2026-11-22',strTime:'20:00:00'}]:null;
                 await route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({events})});
               });
               await page.goto(pathToFileURL(path.resolve('site_releases/mojplaywin/arena/index.html')).href);
@@ -113,8 +116,24 @@ jobs:
               assert.match(await page.locator('#spotlight-card h3').innerText(),/Indiana vs Philadelphia/);
               await page.locator('#spotlight-select').selectOption('4370');
               await page.waitForFunction(()=>document.querySelector('#spotlight-card h3')?.textContent.includes('Mexico F1 GP'));
+              await page.locator('#spotlight-select').selectOption('4443');
+              await page.waitForFunction(()=>document.querySelector('#spotlight-card h3')?.textContent.includes('UFC Madrid MMA'));
+              await page.locator('#spotlight-select').selectOption('4444');
+              await page.waitForFunction(()=>document.querySelector('#spotlight-card h3')?.textContent.includes('WWE SmackDown'));
+              await page.locator('#spotlight-select').selectOption('4445');
+              await page.waitForFunction(()=>document.querySelector('#spotlight-card h3')?.textContent.includes('Boxing World Title'));
               await page.locator('#spotlight-select').selectOption('4464');
               await page.waitForFunction(()=>document.querySelector('#spotlight-status')?.textContent.includes('no next event'));
+              assert.equal(await page.locator('#combat-grid .horse-card').count(),22);
+              await page.locator('#combat-country').selectOption('Spain');
+              assert.equal(await page.locator('#combat-grid .horse-card').count(),4);
+              await page.locator('#combat-kind').selectOption('wrestling');
+              assert.equal(await page.locator('#combat-grid .horse-card').count(),1);
+              await page.locator('#combat-country').selectOption('all');
+              await page.locator('#combat-kind').selectOption('prowrestling');
+              assert.equal(await page.locator('#combat-grid .horse-card').count(),3);
+              assert.match(await page.locator('#combat-grid').innerText(),/Scripted pro-wrestling/);
+              await page.locator('#combat-kind').selectOption('all');
               assert.equal(await page.locator('#horse-grid .horse-card').count(),18);
               await page.locator('#horse-country').selectOption('Spain');
               assert.equal(await page.locator('#horse-grid .horse-card').count(),2);
@@ -238,6 +257,7 @@ jobs:
               assert.equal(await page.locator('#oracle-numerology .oracle-answer').innerText(),'Choose a birth date.');
               await page.locator('#language').selectOption('fa');
               assert.equal(await page.locator('#nav-predictions').innerText(),'پیش‌بینی زنده');
+              assert.equal(await page.locator('#combat-heading').innerText(),'بوکس، کشتی و هنرهای رزمی جهان');
               await page.locator('#arena-search').fill('شطرنج');
               assert.equal(await page.locator('#classic-game-grid article:not([hidden])').count(),1);
               await page.locator('#arena-search').fill('فال');
@@ -248,7 +268,7 @@ jobs:
               }
               assert.deepEqual(errors,[]);
               assert.ok((await page.locator('#wager-heading').innerText()).length>15);
-              console.log('ARENA_MOBILE_62_ACTIVITIES_SPAIN_UEFA_MULTISPORT_HORSE_OFFICIAL_CALENDARS_NO_MONEY_PASS');
+              console.log('ARENA_MOBILE_SPAIN_UEFA_UFC_BOXING_WWE_22_COMBAT_18_HORSE_FREE_ONLY_PASS');
             }finally{await browser.close()}
           })().catch(e=>{console.error(e);process.exitCode=1});
           JS

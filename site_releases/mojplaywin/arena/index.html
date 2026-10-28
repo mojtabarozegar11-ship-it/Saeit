@@ -309,15 +309,31 @@
 </section>
 
 <section class="section shell" id="sport-spotlight" aria-labelledby="spotlight-heading">
-  <div class="section-head"><div class="eyebrow" id="spotlight-eyebrow">OTHER SPORTS · REAL SCHEDULES · LIMITED COVERAGE</div><h2 id="spotlight-heading">World Sports Event Spotlight</h2><p class="wager-intro" id="spotlight-intro">Basketball, Formula 1, tennis, cricket and more European leagues. The free third-party feed offers a limited next-event glimpse per competition, not complete fixtures or reliable live scores. No bets, money, prizes or odds.</p></div>
+  <div class="section-head"><div class="eyebrow" id="spotlight-eyebrow">OTHER SPORTS · REAL SCHEDULES · LIMITED COVERAGE</div><h2 id="spotlight-heading">World Sports Event Spotlight</h2><p class="wager-intro" id="spotlight-intro">Basketball, Formula 1, tennis, cricket, combat sports including UFC and boxing, pro-wrestling shows and European leagues. The free third-party feed shows only one next event per competition, not fight-card details, complete fixtures or live scores. No bets, money, prizes or odds.</p></div>
   <div class="live-data-toolbar"><label id="spotlight-select-label" for="spotlight-select">Competition</label>
     <select id="spotlight-select" name="spotlight-select">
       <optgroup label="International · other sports"><option value="4387">🏀 NBA · Basketball</option><option value="4370">🏎️ Formula 1 · Motorsport</option><option value="4464">🎾 ATP Tour · Tennis</option><option value="4517">🎾 WTA Tour · Tennis</option><option value="4461">🏏 Big Bash · Cricket</option></optgroup>
+      <optgroup label="Combat sports · next listed event"><option value="4443">🥊 UFC · MMA</option><option value="4445">🥊 Boxing · Pro fight cards</option><option value="4495">🥋 ONE · MMA, Muay Thai &amp; Kickboxing</option><option value="5430">🥋 PFL · MMA</option><option value="5702">🥋 OKTAGON · European MMA</option><option value="4444">🎭 WWE · Pro Wrestling / scripted</option><option value="4563">🎭 AEW · Pro Wrestling / scripted</option><option value="4449">🎭 NJPW · Pro Wrestling / scripted</option></optgroup>
       <optgroup label="European football · next event preview"><option value="4332">🇮🇹 Italy · Serie A</option><option value="4334">🇫🇷 France · Ligue 1</option><option value="4337">🇳🇱 Netherlands · Eredivisie</option><option value="4338">🇧🇪 Belgium · Pro League</option><option value="4329">🏴 England · Championship</option><option value="4330">🏴 Scotland · Premiership</option><option value="4336">🇬🇷 Greece · Super League</option></optgroup>
     </select><button type="button" id="spotlight-refresh">Refresh event</button></div>
   <p class="live-state" id="spotlight-status" role="status" aria-live="polite">Loads only after age confirmation. Select a competition for its provider's next listed event.</p>
   <div id="spotlight-card" class="world-panel" aria-live="polite"></div>
   <p class="live-source" id="spotlight-source">Next-event preview supplied by <a href="https://www.thesportsdb.com/" target="_blank" rel="noopener noreferrer">TheSportsDB</a> (free API; one event per league, sometimes none). Schedules can be delayed, missing or changed; check each organizer. No real-time scoring, race results, bookmaker odds or official data licence is claimed.</p>
+</section>
+
+<section class="section shell" id="combat-world" aria-labelledby="combat-heading">
+  <div class="section-head"><div class="eyebrow" id="combat-eyebrow">COMBAT SPORTS · REAL ORGANIZERS · OFFICIAL EVENT CALENDARS</div>
+    <h2 id="combat-heading">Boxing, MMA &amp; Wrestling Worldwide</h2>
+    <p class="wager-intro" id="combat-intro">Explore boxing, Olympic freestyle and Greco-Roman wrestling, MMA, kickboxing, Muay Thai, judo, taekwondo, karate, Brazilian jiu-jitsu and grappling. Pro wrestling (WWE, AEW, NJPW) is scripted sports entertainment, not an unscripted competitive result.</p>
+  </div>
+  <div class="horse-filters">
+    <label id="combat-kind-label" for="combat-kind">Discipline</label>
+    <select id="combat-kind" name="combat-kind"><option value="all">All combat sports</option><option value="boxing">Boxing</option><option value="wrestling">Competitive wrestling</option><option value="prowrestling">Professional wrestling · scripted</option><option value="mma">Mixed martial arts</option><option value="kickboxing">Kickboxing</option><option value="muaythai">Muay Thai</option><option value="judo">Judo</option><option value="taekwondo">Taekwondo</option><option value="karate">Karate</option><option value="grappling">BJJ / submission grappling</option></select>
+    <label id="combat-country-label" for="combat-country">Country / region</label><select id="combat-country" name="combat-country"><option value="all">All regions</option></select>
+  </div>
+  <p class="live-state" id="combat-status" role="status" aria-live="polite"></p>
+  <div id="combat-grid" class="horse-grid"></div>
+  <p class="live-source" id="combat-source">These are organizer and federation calendar links, not a live fight score feed, complete bout list, bookmaker prices or guaranteed event dates. Verify all fight cards and results with the linked source. Free-provider UFC, boxing, MMA and scripted pro-wrestling next-event previews are selectable in the World Sports Event Spotlight above. No monetary bets or prizes.</p>
 </section>
 <section class="section shell" id="horse-world" aria-labelledby="horse-heading">
   <div class="section-head"><div class="eyebrow" id="horse-eyebrow">WORLD HORSE RACING &amp; EQUESTRIAN · OFFICIAL CALENDARS</div><h2 id="horse-heading">Global Horse Racing &amp; Equestrian Events</h2><p class="wager-intro" id="horse-intro">From Spain to Ascot, Dubai, Japan, America and Australia. Horse racing is distinct from jumping, dressage and eventing. This is an editorial directory of organizers' official calendars—not a live race data feed, racecard, odds board or betting service.</p></div>
@@ -1455,7 +1471,8 @@
     '4387':'NBA · Basketball','4370':'Formula 1 · Motorsport','4464':'ATP Tour · Tennis',
     '4517':'WTA Tour · Tennis','4461':'Big Bash · Cricket','4332':'Italy · Serie A',
     '4334':'France · Ligue 1','4337':'Netherlands · Eredivisie','4338':'Belgium · Pro League',
-    '4329':'England · Championship','4330':'Scotland · Premiership','4336':'Greece · Super League'
+    '4329':'England · Championship','4330':'Scotland · Premiership','4336':'Greece · Super League',
+    '4443':'UFC · MMA','4445':'Boxing · Pro fight cards','4495':'ONE · MMA / Muay Thai / Kickboxing','5430':'PFL · MMA','5702':'OKTAGON · European MMA','4444':'WWE · scripted pro wrestling','4563':'AEW · scripted pro wrestling','4449':'NJPW · scripted pro wrestling'
   });
   const horseEvents=[
     {name:'Madrid · Hipódromo de la Zarzuela',country:'Spain',kind:'racing',note:'Spanish racing calendar and official results',url:'https://www.hipodromodelazarzuela.es/carreras'},
@@ -1478,12 +1495,12 @@
     {name:'FEI Eventing Calendar',country:'International',kind:'equestrian',note:'Official eventing competitions by country',url:'https://www.fei.org/eventing/events'}
   ];
   const worldCopy={
-    en:{sh:'World Sports Event Spotlight',si:'Basketball, Formula 1, tennis, cricket and European football previews. The public free feed offers at most one next event per competition, not complete schedules or live scores. No wagers or odds.',ss:'Competition',sr:'Refresh event',sw:'Choose a league to load its next listed event.',sl:'Loading next-event data…',se:'Event feed unavailable; retry later.',sn:'Provider lists no next event for this league; this is not proof that none are scheduled.',sa:'Provider listing; verify with organizer',sv:'Next listed event',sp:'Provider does not supply a verified date for this record.',hh:'Global Horse Racing & Equestrian Events',hi:'Official calendars from Spain and around the world: racing, show jumping, dressage and eventing. Directory only—not a live racing feed, horse entry list or betting board.',hc:'Country',hk:'Discipline',ha:'All countries',hd:'All disciplines',hr:'Horse racing',he:'Equestrian / show sport',hn:'official calendar links',ho:'Official schedule ↗',hf:'No matching events.'},
-    fa:{sh:'رویدادهای ورزش‌های جهان',si:'بسکتبال، فرمول یک، تنیس، کریکت و لیگ‌های دیگر اروپا. منبع رایگان فقط یک رویداد بعدی را برای هر لیگ نشان می‌دهد؛ بدون شرط و ضریب مالی.',ss:'مسابقات',sr:'تازه‌سازی رویداد',sw:'برای دیدن رویداد بعدی یک مسابقه را انتخاب کنید.',sl:'دریافت برنامه واقعی…',se:'منبع رویداد در دسترس نیست.',sn:'منبع فعلاً رویداد بعدی ثبت نکرده است؛ به معنای برگزار نشدن مسابقه نیست.',sa:'اطلاعات منبع؛ نزد برگزارکننده بررسی شود',sv:'رویداد بعدی ثبت‌شده',sp:'زمان قابل تأیید در منبع وجود ندارد.',hh:'اسب‌دوانی و سوارکاری مهم جهان',hi:'تقویم‌های رسمی اسپانیا و جهان؛ تفکیک اسب‌دوانی از پرش، درساژ و سه‌روزه. این بخش خوراک زنده نتایج یا شرط‌بندی نیست.',hc:'کشور',hk:'رشته',ha:'همه کشورها',hd:'همه رشته‌ها',hr:'اسب‌دوانی',he:'سوارکاری و ورزش نمایشی',hn:'پیوند تقویم رسمی',ho:'برنامه رسمی ←',hf:'رویدادی با این فیلتر پیدا نشد.'},
-    ar:{sh:'أحداث الرياضات العالمية',si:'كرة السلة والفورمولا 1 والتنس والكريكيت ودوريات أوروبا. حدث قادم واحد فقط لكل دوري في الواجهة المجانية، دون رهانات.',ss:'المسابقة',sr:'تحديث الحدث',sw:'اختر مسابقة لعرض الحدث التالي.',sl:'جار تحميل الأحداث…',se:'البيانات غير متاحة.',sn:'لا يوجد حدث تالٍ مدرج في المصدر.',sa:'تحقق من المنظم',sv:'الحدث التالي',sp:'التاريخ غير مؤكد.',hh:'سباقات الخيل والفروسية العالمية',hi:'روابط الجداول الرسمية؛ ليست نتائج مباشرة أو منصة مراهنات.',hc:'البلد',hk:'الاختصاص',ha:'جميع البلدان',hd:'جميع الاختصاصات',hr:'سباق الخيل',he:'الفروسية',hn:'روابط رسمية',ho:'الجدول الرسمي',hf:'لا توجد أحداث مطابقة.'},
-    de:{sh:'Internationale Sportereignisse',si:'Basketball, Formel 1, Tennis, Cricket und europäische Ligen. Kostenlose Quelle mit höchstens einem nächsten Ereignis pro Liga; keine Wetten.',ss:'Wettbewerb',sr:'Ereignis aktualisieren',sw:'Wettbewerb auswählen.',sl:'Lade…',se:'Quelle nicht verfügbar.',sn:'Kein nächstes Ereignis eingetragen.',sa:'Beim Veranstalter prüfen',sv:'Nächstes Ereignis',sp:'Datum nicht bestätigt.',hh:'Pferderennen und Reitsport weltweit',hi:'Offizielle Kalender statt Live-Renndaten oder Wetten.',hc:'Land',hk:'Disziplin',ha:'Alle Länder',hd:'Alle Disziplinen',hr:'Pferderennen',he:'Reitsport',hn:'offizielle Links',ho:'Offizieller Kalender',hf:'Keine passenden Ereignisse.'},
-    fr:{sh:'Événements sportifs internationaux',si:'Basket, Formule 1, tennis, cricket et ligues européennes. Un seul prochain événement par ligue dans l’offre gratuite; aucun pari.',ss:'Compétition',sr:'Actualiser',sw:'Choisissez une compétition.',sl:'Chargement…',se:'Source indisponible.',sn:'Aucun prochain événement indiqué.',sa:'À confirmer auprès de l’organisateur',sv:'Prochain événement',sp:'Date non confirmée.',hh:'Courses hippiques et sports équestres',hi:'Calendriers officiels, sans flux de courses en direct ni paris.',hc:'Pays',hk:'Discipline',ha:'Tous les pays',hd:'Toutes disciplines',hr:'Courses hippiques',he:'Sports équestres',hn:'liens officiels',ho:'Calendrier officiel',hf:'Aucun événement correspondant.'},
-    es:{sh:'Eventos deportivos internacionales',si:'Baloncesto, Fórmula 1, tenis, críquet y ligas europeas. La fuente gratuita muestra como máximo un próximo evento por liga; sin apuestas.',ss:'Competición',sr:'Actualizar evento',sw:'Elige una competición.',sl:'Cargando…',se:'Fuente no disponible.',sn:'No figura ningún próximo evento.',sa:'Verificar con el organizador',sv:'Próximo evento',sp:'Fecha sin confirmar.',hh:'Hípica y carreras de caballos del mundo',hi:'Calendarios oficiales, con prioridad a España. No son resultados de carreras en directo ni apuestas.',hc:'País',hk:'Disciplina',ha:'Todos los países',hd:'Todas las disciplinas',hr:'Carreras de caballos',he:'Deportes ecuestres',hn:'calendarios oficiales',ho:'Calendario oficial',hf:'No se encontraron eventos.'}
+    en:{sh:'World Sports Event Spotlight',si:'Basketball, Formula 1, tennis, cricket, boxing, UFC, MMA, scripted pro wrestling and European leagues. One next event per competition from the free source; no live scores or wagering.',ss:'Competition',sr:'Refresh event',sw:'Choose a league to load its next listed event.',sl:'Loading next-event data…',se:'Event feed unavailable; retry later.',sn:'Provider lists no next event for this league; this is not proof that none are scheduled.',sa:'Provider listing; verify with organizer',sv:'Next listed event',sp:'Provider does not supply a verified date for this record.',hh:'Global Horse Racing & Equestrian Events',hi:'Official calendars from Spain and around the world: racing, show jumping, dressage and eventing. Directory only—not a live racing feed, horse entry list or betting board.',hc:'Country',hk:'Discipline',ha:'All countries',hd:'All disciplines',hr:'Horse racing',he:'Equestrian / show sport',hn:'official calendar links',ho:'Official schedule ↗',hf:'No matching events.'},
+    fa:{sh:'رویدادهای ورزش‌های جهان',si:'بسکتبال، فرمول یک، تنیس، کریکت، بوکس، UFC، MMA، کشتی کج و لیگ‌های اروپا. منبع رایگان حداکثر یک رویداد بعدی نشان می‌دهد؛ بدون شرط مالی یا نتیجه زنده.',ss:'مسابقات',sr:'تازه‌سازی رویداد',sw:'برای دیدن رویداد بعدی یک مسابقه را انتخاب کنید.',sl:'دریافت برنامه واقعی…',se:'منبع رویداد در دسترس نیست.',sn:'منبع فعلاً رویداد بعدی ثبت نکرده است؛ به معنای برگزار نشدن مسابقه نیست.',sa:'اطلاعات منبع؛ نزد برگزارکننده بررسی شود',sv:'رویداد بعدی ثبت‌شده',sp:'زمان قابل تأیید در منبع وجود ندارد.',hh:'اسب‌دوانی و سوارکاری مهم جهان',hi:'تقویم‌های رسمی اسپانیا و جهان؛ تفکیک اسب‌دوانی از پرش، درساژ و سه‌روزه. این بخش خوراک زنده نتایج یا شرط‌بندی نیست.',hc:'کشور',hk:'رشته',ha:'همه کشورها',hd:'همه رشته‌ها',hr:'اسب‌دوانی',he:'سوارکاری و ورزش نمایشی',hn:'پیوند تقویم رسمی',ho:'برنامه رسمی ←',hf:'رویدادی با این فیلتر پیدا نشد.'},
+    ar:{sh:'أحداث الرياضات العالمية',si:'سلة وفورمولا وتنس وكريكيت وملاكمة وMMA وUFC والمصارعة الترفيهية. حدث واحد تالٍ لكل دوري في المصدر المجاني، بلا مراهنات.',ss:'المسابقة',sr:'تحديث الحدث',sw:'اختر مسابقة لعرض الحدث التالي.',sl:'جار تحميل الأحداث…',se:'البيانات غير متاحة.',sn:'لا يوجد حدث تالٍ مدرج في المصدر.',sa:'تحقق من المنظم',sv:'الحدث التالي',sp:'التاريخ غير مؤكد.',hh:'سباقات الخيل والفروسية العالمية',hi:'روابط الجداول الرسمية؛ ليست نتائج مباشرة أو منصة مراهنات.',hc:'البلد',hk:'الاختصاص',ha:'جميع البلدان',hd:'جميع الاختصاصات',hr:'سباق الخيل',he:'الفروسية',hn:'روابط رسمية',ho:'الجدول الرسمي',hf:'لا توجد أحداث مطابقة.'},
+    de:{sh:'Internationale Sportereignisse',si:'Basketball, Formel 1, Tennis, Cricket, Boxen, MMA, UFC und Show-Wrestling. Kostenlose Quelle: höchstens ein nächstes Ereignis pro Liga; keine Wetten.',ss:'Wettbewerb',sr:'Ereignis aktualisieren',sw:'Wettbewerb auswählen.',sl:'Lade…',se:'Quelle nicht verfügbar.',sn:'Kein nächstes Ereignis eingetragen.',sa:'Beim Veranstalter prüfen',sv:'Nächstes Ereignis',sp:'Datum nicht bestätigt.',hh:'Pferderennen und Reitsport weltweit',hi:'Offizielle Kalender statt Live-Renndaten oder Wetten.',hc:'Land',hk:'Disziplin',ha:'Alle Länder',hd:'Alle Disziplinen',hr:'Pferderennen',he:'Reitsport',hn:'offizielle Links',ho:'Offizieller Kalender',hf:'Keine passenden Ereignisse.'},
+    fr:{sh:'Événements sportifs internationaux',si:'Basket, Formule 1, tennis, cricket, boxe, MMA, UFC et catch scénarisé. Un prochain événement par ligue dans la source gratuite; aucun pari.',ss:'Compétition',sr:'Actualiser',sw:'Choisissez une compétition.',sl:'Chargement…',se:'Source indisponible.',sn:'Aucun prochain événement indiqué.',sa:'À confirmer auprès de l’organisateur',sv:'Prochain événement',sp:'Date non confirmée.',hh:'Courses hippiques et sports équestres',hi:'Calendriers officiels, sans flux de courses en direct ni paris.',hc:'Pays',hk:'Discipline',ha:'Tous les pays',hd:'Toutes disciplines',hr:'Courses hippiques',he:'Sports équestres',hn:'liens officiels',ho:'Calendrier officiel',hf:'Aucun événement correspondant.'},
+    es:{sh:'Eventos deportivos internacionales',si:'Baloncesto, F1, tenis, críquet, boxeo, UFC, MMA y lucha libre teatral. Fuente gratuita: un próximo evento por liga; sin apuestas.',ss:'Competición',sr:'Actualizar evento',sw:'Elige una competición.',sl:'Cargando…',se:'Fuente no disponible.',sn:'No figura ningún próximo evento.',sa:'Verificar con el organizador',sv:'Próximo evento',sp:'Fecha sin confirmar.',hh:'Hípica y carreras de caballos del mundo',hi:'Calendarios oficiales, con prioridad a España. No son resultados de carreras en directo ni apuestas.',hc:'País',hk:'Disciplina',ha:'Todos los países',hd:'Todas las disciplinas',hr:'Carreras de caballos',he:'Deportes ecuestres',hn:'calendarios oficiales',ho:'Calendario oficial',hf:'No se encontraron eventos.'}
   };
   const wt=k=>(worldCopy[locale]||worldCopy.en)[k]||worldCopy.en[k]||k;
   const horseCountry=$('#horse-country'),horseKind=$('#horse-kind');
@@ -1553,12 +1570,76 @@
   }
   $('#spotlight-select').addEventListener('change',()=>void spotlightLoad(false));
   $('#spotlight-refresh').addEventListener('click',()=>void spotlightLoad(true));
+
+  // Official combat-sport calendars. Pro wrestling is scripted entertainment, separately labeled.
+  // These links are editorial navigation, never live fight outcomes or financial market inputs.
+  const combatEvents=[
+    {name:'Spanish Boxing Federation · RFEBox',region:'Spain',kind:'boxing',note:'Spanish boxing competition calendar',url:'https://feboxeo.es/calendario-de-eventos/'},
+    {name:'Spain Olympic Wrestling · FELODA',region:'Spain',kind:'wrestling',note:'Spanish freestyle, Greco-Roman, MMA and grappling calendars',url:'https://www.felucha.com/calendarios/'},
+    {name:'Spanish Judo Federation · RFEJYDA',region:'Spain',kind:'judo',note:'Spain national judo and associated championships',url:'https://www.rfejudo.com/events/'},
+    {name:'Spanish Taekwon-Do ITF Federation',region:'Spain',kind:'taekwondo',note:'Spanish ITF tournament and league dates',url:'https://www.taekwondoitf.es/calendario/'},
+    {name:'World Boxing · World Cup & Championships',region:'International',kind:'boxing',note:'International competitive boxing calendar',url:'https://worldboxing.org/calendar/list/'},
+    {name:'UFC · Fight Nights & Events',region:'International',kind:'mma',note:'Official MMA fight card and event schedule',url:'https://www.ufc.com/events'},
+    {name:'ONE Championship',region:'Asia',kind:'mma',note:'MMA, kickboxing, Muay Thai and submission grappling',url:'https://www.onefc.com/events/'},
+    {name:'Professional Fighters League · PFL',region:'International',kind:'mma',note:'International MMA and PFL Europe cards',url:'https://pflmma.com/events/'},
+    {name:'OKTAGON MMA · Europe',region:'Europe',kind:'mma',note:'European professional MMA event schedule',url:'https://oktagonmma.com/en/events/'},
+    {name:'WWE · Professional Wrestling',region:'International',kind:'prowrestling',note:'Scripted sports-entertainment show dates, not sporting contests',url:'https://www.wwe.com/events'},
+    {name:'AEW · All Elite Wrestling',region:'United States',kind:'prowrestling',note:'Scripted pro-wrestling show dates, not sporting contests',url:'https://www.allelitewrestling.com/aew-events'},
+    {name:'NJPW · New Japan Pro-Wrestling',region:'Japan',kind:'prowrestling',note:'Scripted pro-wrestling show dates and tours',url:'https://www.njpw1972.com/schedule'},
+    {name:'United World Wrestling · Freestyle',region:'International',kind:'wrestling',note:'Freestyle wrestling World Championships and continental events',url:'https://uww.org/events'},
+    {name:'United World Wrestling · Greco-Roman',region:'International',kind:'wrestling',note:'Greco-Roman wrestling and women’s wrestling championships',url:'https://uww.org/events'},
+    {name:'International Judo Federation · IJF',region:'International',kind:'judo',note:'Grand Slam, Grand Prix and World Championships',url:'https://www.ijf.org/calendar'},
+    {name:'World Taekwondo · WT',region:'International',kind:'taekwondo',note:'Olympic taekwondo championships and World Grand Prix',url:'https://results.worldtaekwondo.org/competitions'},
+    {name:'World Karate Federation · WKF',region:'International',kind:'karate',note:'Karate1 Premier League, World Cup and championships',url:'https://www.wkf.net/calendar'},
+    {name:'WAKO · Kickboxing',region:'International',kind:'kickboxing',note:'International kickboxing World Cups and championships',url:'https://www.wako.sport/events'},
+    {name:'GLORY Kickboxing',region:'Europe',kind:'kickboxing',note:'Professional kickboxing fight events and tournaments',url:'https://glorykickboxing.com/events'},
+    {name:'IFMA · Muaythai',region:'International',kind:'muaythai',note:'Official Muay Thai world and continental championships',url:'https://muaythai.sport/events-calendar/'},
+    {name:'IBJJF · Brazilian Jiu-Jitsu',region:'International',kind:'grappling',note:'Gi and no-gi Brazilian jiu-jitsu competition calendar',url:'https://ibjjf.com/events/calendar'},
+    {name:'ADCC · Submission Fighting',region:'International',kind:'grappling',note:'Submission grappling world championship events',url:'https://adcombat.com/event-category/adcc-worlds/'}
+  ];
+  const combatCopy={
+    en:{heading:'Boxing, MMA & Wrestling Worldwide',intro:'Discover boxing, Olympic freestyle and Greco-Roman wrestling, MMA, kickboxing, Muay Thai, judo, taekwondo, karate and grappling. WWE, AEW and NJPW are scripted sports entertainment, distinct from competitive wrestling.',kind:'Discipline',country:'Country / region',all:'All combat sports',regions:'All regions',source:'official event calendar links',visit:'Official events ↗',empty:'No matching competitions.',cats:['All combat sports','Boxing','Competitive wrestling','Pro wrestling · scripted','Mixed martial arts','Kickboxing','Muay Thai','Judo','Taekwondo','Karate','BJJ / submission grappling']},
+    fa:{heading:'بوکس، کشتی و هنرهای رزمی جهان',intro:'بوکس، کشتی آزاد و فرنگی، MMA، کیک‌بوکسینگ، موی‌تای، جودو، تکواندو، کاراته و جوجیتسو. کشتی کج WWE و AEW و NJPW نمایشی و دارای سناریو است؛ با کشتی رقابتی تفاوت دارد.',kind:'رشته رزمی',country:'کشور / منطقه',all:'همه رشته‌های رزمی',regions:'همه مناطق',source:'پیوند تقویم‌های رسمی',visit:'برنامه رسمی ←',empty:'موردی با این فیلتر یافت نشد.',cats:['همه رشته‌ها','بوکس','کشتی آزاد و فرنگی','کشتی کج نمایشی','هنرهای رزمی ترکیبی MMA','کیک‌بوکسینگ','موی‌تای','جودو','تکواندو','کاراته','جوجیتسو / گراپلینگ']},
+    ar:{heading:'الملاكمة والمصارعة والفنون القتالية',intro:'ملاكمة ومصارعة حرة ورومانية وMMA وكيك بوكسينغ ومواي تاي وجودو وتايكوندو وكاراتيه. عروض WWE وAEW مكتوبة ومختلفة عن المصارعة التنافسية.',kind:'التخصص',country:'البلد / المنطقة',all:'كل الرياضات القتالية',regions:'كل المناطق',source:'روابط التقويم الرسمي',visit:'الأحداث الرسمية',empty:'لا توجد نتائج.',cats:['الكل','ملاكمة','مصارعة تنافسية','مصارعة ترفيهية','MMA','كيك بوكسينغ','مواي تاي','جودو','تايكوندو','كاراتيه','جوجيتسو']},
+    de:{heading:'Boxen, MMA und Ringen weltweit',intro:'Boxen, Freistil und griechisch-römisches Ringen, MMA, Kickboxen, Muay Thai, Judo, Taekwondo und Karate. WWE, AEW und NJPW sind inszeniertes Entertainment.',kind:'Disziplin',country:'Land / Region',all:'Alle Kampfsportarten',regions:'Alle Regionen',source:'offizielle Kalenderlinks',visit:'Offizielle Termine',empty:'Keine passenden Veranstaltungen.',cats:['Alle','Boxen','Sportliches Ringen','Show-Wrestling','MMA','Kickboxen','Muay Thai','Judo','Taekwondo','Karate','BJJ / Grappling']},
+    fr:{heading:'Boxe, MMA et lutte dans le monde',intro:'Boxe, lutte libre et gréco-romaine, MMA, kick-boxing, muay-thaï, judo, taekwondo et karaté. WWE, AEW et NJPW sont des spectacles scénarisés.',kind:'Discipline',country:'Pays / région',all:'Tous sports de combat',regions:'Toutes régions',source:'calendriers officiels',visit:'Calendrier officiel',empty:'Aucun événement correspondant.',cats:['Tous','Boxe','Lutte sportive','Catch scénarisé','MMA','Kick-boxing','Muay-thaï','Judo','Taekwondo','Karaté','Jiu-jitsu / Grappling']},
+    es:{heading:'Boxeo, MMA y lucha mundial',intro:'Boxeo, lucha libre y grecorromana, MMA, kickboxing, muay thai, judo, taekwondo y karate. WWE, AEW y NJPW son espectáculos con guion, distintos de la lucha deportiva.',kind:'Disciplina',country:'País / región',all:'Todos los deportes de combate',regions:'Todas las regiones',source:'calendarios oficiales',visit:'Eventos oficiales',empty:'No hay resultados.',cats:['Todos','Boxeo','Lucha deportiva','Lucha libre teatral','MMA','Kickboxing','Muay Thai','Judo','Taekwondo','Karate','Jiu-jitsu / Grappling']}
+  };
+  const combatText=k=>(combatCopy[locale]||combatCopy.en)[k]||combatCopy.en[k]||k;
+  const combatKind=$('#combat-kind'),combatCountry=$('#combat-country');
+  for(const region of [...new Set(combatEvents.map(e=>e.region))].sort((a,b)=>a.localeCompare(b))){
+    const option=document.createElement('option');option.value=region;option.textContent=region;combatCountry.append(option);
+  }
+  function combatRender(){
+    const grid=$('#combat-grid');grid.replaceChildren();
+    const events=combatEvents.filter(e=>(combatKind.value==='all'||combatKind.value===e.kind)&&(combatCountry.value==='all'||combatCountry.value===e.region));
+    for(const event of events){
+      const card=document.createElement('article'),meta=document.createElement('span'),title=document.createElement('h3'),description=document.createElement('p'),link=document.createElement('a');
+      card.className='horse-card';meta.className='horse-label';
+      const category=[...combatKind.options].find(o=>o.value===event.kind)?.textContent||event.kind;
+      meta.textContent=event.region+' · '+category;
+      title.textContent=event.name;description.textContent=event.note;
+      link.href=event.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=combatText('visit');
+      card.append(meta,title,description,link);grid.append(card);
+    }
+    $('#combat-status').textContent=events.length+' '+combatText('source')+(events.length?'':' · '+combatText('empty'));
+  }
+  combatKind.addEventListener('change',combatRender);combatCountry.addEventListener('change',combatRender);
+  function translateCombat(){
+    for(const [id,key] of [['combat-heading','heading'],['combat-intro','intro'],['combat-kind-label','kind'],['combat-country-label','country']])
+      $('#'+id).textContent=combatText(key);
+    const items=combatCopy[locale]?.cats||combatCopy.en.cats;
+    for(let i=0;i<combatKind.options.length;i++)combatKind.options[i].textContent=items[i];
+    combatCountry.options[0].textContent=combatText('regions');
+    combatRender();
+  }
+
   function translateWorld(){
     const ids={sh:'spotlight-heading',si:'spotlight-intro',ss:'spotlight-select-label',sr:'spotlight-refresh',hh:'horse-heading',hi:'horse-intro',hc:'horse-country-label',hk:'horse-kind-label'};
     for(const [k,id] of Object.entries(ids))$('#'+id).textContent=wt(k);
     horseCountry.options[0].textContent=wt('ha');
     const hs=horseKind.options;hs[0].textContent=wt('hd');hs[1].textContent=wt('hr');hs[2].textContent=wt('he');
-    horseRender();spotlightRender();
+    horseRender();spotlightRender();translateCombat();
   }
 
   // Fictional prediction markets share the existing non-redeemable browser-only MCD ledger.
