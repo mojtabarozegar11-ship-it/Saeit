@@ -137,7 +137,7 @@ test('combined keyboard directions cannot exceed single-axis movement speed', ()
   assert.deepEqual(normalizeMovementAxes(0, NaN), {forward: 0, side: 0});
   assert.equal(Math.hypot(...Object.values(normalizeMovementAxes(-20, 30))) <= 1, true);
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.ok(game.includes('const movement=normalizeMovementAxes(forward,side);forward=movement.forward;side=movement.side;move('), 'normalization is wired into engine movement');
+  assert.ok(game.includes('const movement=resolveMovementAxes(joyF,joyS,keys);const forward=movement.forward,side=movement.side;move('), 'normalized blended axes are wired into engine movement');
 });
 
 
@@ -229,9 +229,10 @@ test('keyboard and touch movement blend at bounded speed', () => {
 
 test('automatic and manual reload preserve input ownership for resumed fire', () => {
   const game=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
-  const reload=game.match(/function reload\\(manual=false\\)\\{[^\\n]+/);
+  const start=game.indexOf('function reload(manual=false){');
+  const reload=start<0?'':game.slice(start,game.indexOf('\nfunction fire()',start));
   assert.ok(reload);
-  assert.ok(!reload[0].includes('fireHeld=false'),'reload must not drop held touch/keyboard ownership');
+  assert.ok(!reload.includes('fireHeld=false'),'reload must not drop held touch/keyboard ownership');
   assert.ok(game.includes('if(fireHeld)fire();'));
   assert.ok(game.includes('if(world.reloadTimer>0)return;'),'reload must suppress shots until completed');
   assert.ok(game.includes('const movement=resolveMovementAxes(joyF,joyS,keys);'));
