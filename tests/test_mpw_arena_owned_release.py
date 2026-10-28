@@ -90,5 +90,24 @@ class GuardedArenaPublicationTests(unittest.TestCase):
         self.assert_protected_intact()
 
 
+    def test_public_data_read_is_tightly_allowlisted(self):
+        content = (SRC / "site_releases/mojplaywin/arena/index.html").read_text(encoding="utf-8")
+        candidate = self.home / "network-check.html"
+        candidate.write_text(content, encoding="utf-8")
+        self.assertEqual(len(guard.payload_preflight(candidate)), 64)
+        forbidden = (
+            content.replace("https://api.openligadb.de/getmatchdata/", "https://unapproved.example/getmatchdata/"),
+            content.replace("await fetch(url,{mode:'cors'", "await fetch(url,{mode:'no-cors'"),
+            content.replace("connect-src https://api.openligadb.de;", "connect-src *;"),
+            content.replace("await fetch(url,{", "await fetch('https://unapproved.example',{"),
+            content + "\n<!-- fetch('https://unapproved.example/') -->",
+        )
+        for bad in forbidden:
+            with self.subTest(variant=bad[-100:]):
+                candidate.write_text(bad, encoding="utf-8")
+                with self.assertRaisesRegex(RuntimeError, "Unapproved external network|CSP restriction"):
+                    guard.payload_preflight(candidate)
+
+
 if __name__ == "__main__":
     unittest.main()
