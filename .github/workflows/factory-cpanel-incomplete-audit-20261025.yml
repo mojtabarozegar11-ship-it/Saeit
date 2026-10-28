@@ -105,3 +105,4 @@ jobs:
           print("CPANEL_DEEP_STAGING_READ_ONLY="+json.dumps({"families":result,"backup_biggest_types":backup_files[:12],"mount_free_gib":round(shutil.disk_usage(h).free/2**30,3),"deleted":0,"store_products_untouched":True},sort_keys=True))
           PY
           rm -rf "$d"
+# Read-only fresh generation-map audit for owner-authorized storage cleanup 2026-10-28.
