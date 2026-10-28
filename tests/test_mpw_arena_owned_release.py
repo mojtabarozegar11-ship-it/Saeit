@@ -97,6 +97,19 @@ class GuardedArenaPublicationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "payload size"):
             guard.payload_preflight(candidate)
 
+    def test_public_copy_has_unambiguous_brand_and_no_build_labels(self):
+        content = (SRC / "site_releases/mojplaywin/arena/index.html").read_text(encoding="utf-8")
+        self.assertIn("MojPlayWin Prediction Center", content)
+        self.assertIn("مرکز پیش‌بینی مج‌پلی‌وین", content)
+        self.assertIn("SPORTS PREDICTIONS · FREE PLAY", content)
+        self.assertIn("Real-money betting unavailable", content)
+        self.assertIn('id="age-gate"', content)
+        self.assertIn('id="rules"', content)
+        self.assertNotRegex(content, r"\bMOJ\b|Ministry of Justice|وزارت دادگستری")
+        self.assertNotIn("FICTIONAL PREDICTIONS · DEMO ONLY", content)
+        self.assertNotIn("Future licensed finance: DISABLED", content)
+        self.assertNotIn("browser-local toy probability models", content)
+
     def test_public_data_read_is_tightly_allowlisted(self):
         content = (SRC / "site_releases/mojplaywin/arena/index.html").read_text(encoding="utf-8")
         candidate = self.home / "network-check.html"
