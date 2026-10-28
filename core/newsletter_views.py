@@ -9,6 +9,18 @@ from .public_catalog_guard import missing_public_tables, mark_public_data_unavai
 EDITORIAL_START = "۱۳۹۸/۰۸/۲۵"
 
 
+def safe_json_ld(payload):
+    """Escape HTML-significant characters inside JSON-LD script content.
+
+    The template embeds this JSON as |safe inside <script type=application/ld+json>.
+    Raw </script> in an editorial title must never terminate that script.
+    """
+    return (json.dumps(payload, ensure_ascii=False)
+            .replace("<", "\\u003c")
+            .replace(">", "\\u003e")
+            .replace("&", "\\u0026"))
+
+
 def newsletter_home(request):
     from django.utils import timezone
     catalog_unavailable = missing_public_tables(
@@ -74,7 +86,7 @@ def newsletter_detail(request, slug):
         raise Http404("Newsletter story not found")
     related = NewsletterStory.objects.filter(status="published").exclude(pk=story.pk).filter(story_type=story.story_type)[:6]
     publications = story.publications.order_by("channel")
-    article_jsonld = json.dumps({
+    article_jsonld = safe_json_ld({
         "@context": "https://schema.org",
         "@type": "NewsArticle",
         "headline": story.title,
@@ -85,7 +97,7 @@ def newsletter_detail(request, slug):
         "publisher": {"@type": "Organization", "name": "شرکت کشت و صنعت زمرد ملل", "url": "https://zomorodmelal.ir/"},
         "image": [request.build_absolute_uri(story.image.url)] if story.image else [],
         "mainEntityOfPage": {"@type": "WebPage", "@id": f"https://zomorodmelal.ir/newsletter/{story.slug}/"}
-    }, ensure_ascii=False)
+    })
     return render(request, "core/newsletter_detail.html", {"story": story, "related": related, "publications": publications, "article_jsonld": article_jsonld})
 
 
