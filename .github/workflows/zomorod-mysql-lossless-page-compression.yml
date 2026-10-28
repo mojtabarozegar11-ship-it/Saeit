@@ -119,12 +119,18 @@ jobs:
             test "$status" = "200"
           done
           ssh -F "$d/config" saeit-vps 'set -eu; df -Pk "$HOME" | awk "NR==2 { if (\$4 < 4500000) exit 1; print \"VPS_BACKUP_FREE_KB=\"\$4 }"'
+      - name: Remove only the verified 20-byte failed dump artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          ssh -F "$d/config" saeit-vps 'set -eu; f=/home/githubops/.db-backups/zomorod2_sites_main-pre-page-compression-20261028.sql.gz; if [ -e "$f" ]; then test "$(stat -c %s "$f")" = 20; rm -f -- "$f"; echo EMPTY_BACKUP_ARTIFACT_REMOVED=yes; else echo EMPTY_BACKUP_ARTIFACT_PRESENT=no; fi'
       - name: Stream a compressed full staging database backup to the VPS
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-page-compression"
-          timeout 1800s ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY' | gzip -1 | timeout 1800s ssh -F "$d/config" saeit-vps 'bash -c '"'"'set -eu; umask 077; dir=/home/githubops/.db-backups; mkdir -p "$dir"; final="$dir/zomorod2_sites_main-pre-page-compression-20261028.sql.gz"; test ! -e "$final"; tmp="$final.tmp.$$"; trap "rm -f \"$tmp\"" EXIT; ulimit -f 3145728; cat > "$tmp"; gzip -t "$tmp"; stat -c "BACKUP_BYTES=%s" "$tmp"; sha256sum "$tmp"; mv "$tmp" "$final"; trap - EXIT; echo BACKUP_PATH="$final"'"'"''
+          timeout 1800s ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY' | gzip -1 | timeout 1800s ssh -F "$d/config" saeit-vps 'bash -c '"'"'set -eu; umask 077; dir=/home/githubops/.db-backups; mkdir -p "$dir"; final="$dir/zomorod2_sites_main-pre-page-compression-20261028.sql.gz"; test ! -e "$final"; tmp="$final.tmp.$$"; trap "rm -f \"$tmp\"" EXIT; ulimit -f 3145728; cat > "$tmp"; gzip -t "$tmp"; test "$(stat -c %s "$tmp")" -gt 100000000; stat -c "BACKUP_BYTES=%s" "$tmp"; sha256sum "$tmp"; mv "$tmp" "$final"; trap - EXIT; echo BACKUP_PATH="$final"'"'"''
           import json,os,re,shutil,subprocess,sys,urllib.parse
           from pathlib import Path
           app=Path.home()/"Saeit-staging"
@@ -141,8 +147,9 @@ jobs:
           if db!="zomorod2_sites_main": raise SystemExit("STAGING_DATABASE_SCOPE_MISMATCH")
           client=shutil.which("mariadb-dump") or shutil.which("mysqldump")
           if not client: raise SystemExit("MYSQL_DUMP_CLIENT_MISSING")
-          args=[client,"--no-defaults","--single-transaction","--quick","--skip-lock-tables","--routines","--events","--triggers","--hex-blob","--default-character-set=utf8mb4","--host="+(u.hostname or "localhost"),"--user="+urllib.parse.unquote(u.username or ""),"--database="+db,"--connect-timeout=8"]
+          args=[client,"--no-defaults","--single-transaction","--quick","--skip-lock-tables","--routines","--events","--triggers","--hex-blob","--default-character-set=utf8mb4","--host="+(u.hostname or "localhost"),"--user="+urllib.parse.unquote(u.username or "")]
           if u.port: args.append("--port="+str(u.port))
+          args.append(db)
           env=dict(os.environ,MYSQL_PWD=urllib.parse.unquote(u.password or ""))
           p=subprocess.run(args,env=env,stdout=sys.stdout.buffer,timeout=1500)
           if p.returncode: raise SystemExit("MYSQL_BACKUP_DUMP_FAILED")
