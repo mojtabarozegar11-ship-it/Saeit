@@ -141,7 +141,7 @@ jobs:
               try:
                   if path.is_symlink() or not path.is_file() or path.stat().st_size>65536: continue
                   for line in path.read_text(encoding="utf-8",errors="replace").splitlines():
-                      m=re.match(r"^\\s*(?:export\\s+)?DATABASE_URL\\s*=\\s*(.*?)\\s*$",line)
+                      m=re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$",line)
                       if m: matches.append(urllib.parse.urlsplit(m.group(1).strip().strip('"').strip("'")))
               except OSError: pass
           if len(matches)!=1: raise SystemExit("STAGING_DATABASE_URL_NOT_UNIQUE")
