@@ -1,7 +1,7 @@
 # MR-2026-001 — C67 author-review decision packet and claim/evidence matrix
 
 **ID:** MR-C67-20261028-v1  
-**Status:** READY_FOR_REVIEW (internal AI-assisted critical review; not human peer review, validated framework or a completed manuscript).  
+**Status:** READY_FOR_REVIEW (AI-assisted editorial review stored in a publicly accessible GitHub branch; not human peer review, validated framework or a completed manuscript).  
 **Source manuscript:** [C50 clean eight-case author-review draft](MR-2026-001_C50_CLEAN_EIGHT_CASE_AUTHOR_REVIEW_MANUSCRIPT_2026-10-27.md), reviewed on 2026-10-28, Git blob `bceb7b98e1c57826e09bd275c8383d1106d95678`.  
 **Prior checkpoint:** [C66 geographic dependence](MR-2026-001_C66_GENIL_CABRA_EVIDENCE_CLUSTER_NONINDEPENDENCE_AUDIT_2026-10-28.md).  
 **Deliverable purpose:** a usable source-claim adjudication sheet for the intended human author, not an assertion that any outstanding source conflict has been solved.
