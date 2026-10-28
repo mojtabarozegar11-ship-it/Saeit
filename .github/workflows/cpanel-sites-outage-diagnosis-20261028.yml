@@ -164,6 +164,39 @@ jobs:
               call('parse_zone',['zone=mojplaywin.com'])
           ],sort_keys=True))
           PY
+      - name: Summarize current cPanel DNS zone without TXT secrets (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-cpanel-scope"
+          timeout 70s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import subprocess,json,base64,collections
+          def decode(s):
+              try:return base64.b64decode(s).decode('utf-8','replace')[:220]
+              except:return '<invalid>'
+          for zone in ('zomorodmelal.ir','mojplaywin.com'):
+              p=subprocess.run(['uapi','--output=json','DNS','parse_zone','zone='+zone],capture_output=True,text=True,timeout=25)
+              j=json.loads(p.stdout)['result']
+              rows=j.get('data') or []
+              items=[]
+              for row in rows:
+                  if row.get('type')!='record':continue
+                  t=str(row.get('record_type','')).upper()
+                  if t not in ('A','AAAA','CNAME','NS','SOA','MX'):continue
+                  item={'type':t,'name':decode(row.get('dname_b64','')),'ttl':row.get('ttl')}
+                  if isinstance(row.get('data_b64'),list):item['values']=[decode(x) for x in row['data_b64']][:10]
+                  items.append(item)
+              print('CPANEL_DNS_DETAIL='+json.dumps({'zone':zone,'status':j.get('status'),'parsed_lines':len(rows),'public_records':items},sort_keys=True))
+          PY
+      - name: Compare local and delegated authoritative nameservers (read only)
+        shell: bash
+        run: |
+          set -u
+          for ip in 178.239.147.125 91.99.125.113 178.239.147.71; do
+            echo "DNS_SERVER_IP=$ip"
+            timeout 5s dig @"$ip" zomorodmelal.ir SOA +time=2 +tries=1 +norecurse +noall +comments +answer 2>&1 | tail -n 9 || true
+            timeout 5s dig @"$ip" zomorodmelal.ir A +time=2 +tries=1 +norecurse +noall +comments +answer 2>&1 | tail -n 9 || true
+          done
       - name: Clear ephemeral SSH keys
         if: always()
         shell: bash
