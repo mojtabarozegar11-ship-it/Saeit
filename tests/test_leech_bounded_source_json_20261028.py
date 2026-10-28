@@ -101,6 +101,34 @@ class SafeJsonBoundedTests(unittest.TestCase):
                 author.safe_json(path, max_bytes=6)
 
 
+    def test_in_place_rewrite_detected_by_second_fstat(self):
+        """A pinned inode is not immutable: reject changed metadata mid-read."""
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "source.json"
+            path.write_text('{"safe": true}', encoding="utf-8")
+            original = path.read_bytes()
+            actual_fstat = os.fstat
+            calls = 0
+
+            def changed_fstat(fd):
+                nonlocal calls
+                calls += 1
+                metadata = actual_fstat(fd)
+                if calls == 2:
+                    from types import SimpleNamespace
+                    return SimpleNamespace(
+                        st_mode=metadata.st_mode, st_dev=metadata.st_dev,
+                        st_ino=metadata.st_ino, st_size=metadata.st_size,
+                        st_mtime_ns=metadata.st_mtime_ns + 1,
+                        st_ctime_ns=metadata.st_ctime_ns)
+                return metadata
+
+            with mock.patch.object(os, "fstat", changed_fstat):
+                with self.assertRaisesRegex(RuntimeError, "SOURCE_JSON_CHANGED_DURING_READ"):
+                    author.safe_json(path)
+            self.assertGreaterEqual(calls, 2)
+            self.assertEqual(path.read_bytes(), original)
+
     def test_symlinked_ancestor_directory_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
