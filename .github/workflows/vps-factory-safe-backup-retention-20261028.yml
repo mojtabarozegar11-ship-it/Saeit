@@ -1,5 +1,7 @@
 name: VPS factory safe backup retention
 on:
+  schedule:
+    - cron: '17 3 * * *'
   push:
     branches: [main]
     paths: [.github/workflows/vps-factory-safe-backup-retention-20261028.yml]
