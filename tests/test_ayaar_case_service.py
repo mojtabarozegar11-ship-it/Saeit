@@ -51,6 +51,7 @@ def make_review(conflict=False):
         },
         "review_mode": "ai_assisted",
         "ai_review_reference": "AYAR manual analysis session case evidence reviewed 2026-10-27",
+        "evidence_fingerprint": service.staff_case(service.staff_list()[0]["case_id"])["evidence_fingerprint"],
         "evidence_examined": True,
         "independence_statement": "AYAR Expert Engine is a MojPlayWin-affiliated AI-assisted process, not an independent human reviewer.",
         "review_scope": "Full EPUB and rights chain for version 1.0",
@@ -283,6 +284,50 @@ class CaseServiceTests(unittest.TestCase):
         review["review_mode"] = "human"
         with self.assertRaises(service.CaseError):
             service.submit_review(code, "staff:5", review, self.secret)
+
+
+    def test_evidence_fingerprint_binds_review_to_exact_applicant_revision(self):
+        item = self.create()
+        code, key = item["case_id"], item["access_key"]
+        first = service.case_status(code, key, self.secret)["evidence_fingerprint"]
+        self.assertEqual(first, service.staff_case(code)["evidence_fingerprint"])
+        self.assertEqual(len(first), 64)
+        old_analysis = make_review()
+        service.set_status(code, "needs_information", "staff:8",
+                           "Provide a signed authorization file for the latest edition")
+        answer = service.append_case_evidence(
+            code, key, "Signed authorization attached for the revised edition",
+            [FakeEvidence("rights.txt", b"Rights verification for latest edition")],
+            self.secret
+        )
+        self.assertEqual(answer["status"], "submitted")
+        second = service.staff_case(code)["evidence_fingerprint"]
+        self.assertNotEqual(first, second)
+        service.set_status(code, "in_review", "staff:8",
+                           "Reopened with applicant's additional evidence")
+        with self.assertRaises(service.CaseError) as outdated:
+            service.submit_review(code, "staff:8", old_analysis, self.secret)
+        self.assertEqual(outdated.exception.status, 409)
+        current = make_review()
+        self.assertEqual(current["evidence_fingerprint"], second)
+        self.assertEqual(service.submit_review(code, "staff:8", current, self.secret)["status"], "reviewed")
+        final = service.case_status(code, key, self.secret)
+        self.assertEqual(final["review"]["evidence_fingerprint"], second)
+        self.assertTrue(final["review_integrity_valid"])
+
+    def test_missing_or_forged_evidence_fingerprint_rejected(self):
+        item = self.create()
+        code = item["case_id"]
+        service.set_status(code, "in_review", "staff:6", "Review started")
+        review = make_review()
+        review.pop("evidence_fingerprint")
+        with self.assertRaises(service.CaseError):
+            service.submit_review(code, "staff:6", review, self.secret)
+        review["evidence_fingerprint"] = "0" * 64
+        with self.assertRaises(service.CaseError) as mismatch:
+            service.submit_review(code, "staff:6", review, self.secret)
+        self.assertEqual(mismatch.exception.status, 409)
+        self.assertEqual(service.staff_case(code)["status"], "in_review")
 
     def test_private_file_access_and_owner_erasure(self):
         raw = b"%PDF-1.7\nexample controlled test evidence\n%%EOF"
