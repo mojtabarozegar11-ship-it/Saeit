@@ -251,6 +251,56 @@ jobs:
               except (ValueError,TypeError):print("ROOT_HEALTH_BODY_PARSE=invalid")
           if status!=200:raise SystemExit(1)
           PY
+      - name: Isolate mobile author HTTP 500 via sanitized read-only probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for proto in -4 -6; do
+            for suffix in "?utm_source=chatgpt.com" "?utm_source=chatgpt.com&diag=20261028"; do
+              result="$(curl "$proto" -sS -L --max-time 17 -A "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36" -H "Cache-Control: no-cache" -o /dev/null -w '%{http_code}|%{num_redirects}|%{content_type}' "https://zomorodmelal.ir/authors/mojtaba-rozegar/$suffix" 2>/dev/null || true)"
+              echo "PROFILE_PUBLIC proto=$proto tracked=$([ "$suffix" = "?utm_source=chatgpt.com" ] && echo yes || echo cachebuster) status=$result"
+            done
+          done
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, collections
+          from pathlib import Path
+          home=Path.home()
+          candidates=[home/"Saeit"/"stderr.log",home/"public_html"/"error_log"]
+          for folder in (home/"logs",home/"access-logs"):
+              if folder.is_dir():
+                  candidates.extend(list(folder.glob("*zomorod*"))[:15])
+                  candidates.extend(list(folder.glob("*error*"))[:5])
+          allowed=("OperationalError","DatabaseError","ConnectionError","TimeoutError",
+              "ImportError","ModuleNotFoundError","PermissionError","FileNotFoundError",
+              "InternalServerError","DisallowedHost","RuntimeError","ValueError",
+              "MemoryError","ImproperlyConfigured","InterfaceError","ProgrammingError")
+          counts=collections.Counter()
+          found=0
+          for path in dict.fromkeys(candidates):
+              if not path.is_file() or path.is_symlink():continue
+              try:
+                  with path.open("rb") as stream:
+                      stream.seek(max(0,path.stat().st_size-524288))
+                      data=stream.read().decode("utf-8","replace")
+              except OSError:
+                  continue
+              found+=1
+              counts["author_path_mentions"]+=data.lower().count("/authors/mojtaba-rozegar/")
+              counts["traceback_markers"]+=data.count("Traceback (most recent call last)")
+              counts["generic_server_500"]+=len(re.findall(r"(?i)\b(?:HTTP[/ ]\S+\s+500|status[=: ]+500|server error \(500\))\b",data))
+              for key in allowed:
+                  counts["exception_"+key]+=len(re.findall(r"(?m)^\s*(?:[A-Za-z_][\w.]*\.)?"+re.escape(key)+r"\s*:",data))
+          print("PROFILE_LOG_FILES_SCANNED="+str(found))
+          for key in ("author_path_mentions","traceback_markers","generic_server_500"):
+              print("PROFILE_LOG_"+key.upper()+"="+str(counts[key]))
+          for key in allowed:
+              if counts["exception_"+key]:
+                  print("PROFILE_EXCEPTION_"+key+"="+str(counts["exception_"+key]))
+          PY
+          REMOTE
       - name: Remove temporary SSH credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
