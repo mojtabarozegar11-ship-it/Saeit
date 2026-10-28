@@ -1,5 +1,5 @@
 import json
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import render
 
 from .models import Agent, NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory
@@ -50,6 +50,22 @@ def newsletter_archive(request):
 
 
 def newsletter_detail(request, slug):
+    # Article data cannot be reconstructed from a missing schema. Return a
+    # truthful, temporary failure instead of an OperationalError/false 404.
+    if missing_public_tables(NewsletterStory, NewsletterSource, NewsletterPublication, Agent):
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>خبرنامه موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>خبرنامه موقتاً در دسترس نیست</h1>'
+            '<p role="status">بازیابی اطلاعات این خبر در حال پیگیری است؛ '
+            'این وضعیت به معنای حذف مطلب نیست.</p>'
+            '<p><a href="/newsletter/">بازگشت به خبرنامه</a></p>'
+            '</main></body></html>',
+            status=503,
+            content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
     from django.utils import timezone
     story = NewsletterStory.objects.select_related("source", "agent").filter(
         slug=slug, status="published", published_at__lte=timezone.now()
