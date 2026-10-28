@@ -7,14 +7,26 @@ const assert=require('node:assert/strict');
    const context=await browser.newContext({viewport:{width:v.width,height:v.height},isMobile:v.mobile,hasTouch:v.mobile});
    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push('page: '+e.message));page.on('console',m=>{if(m.type()==='error')errors.push('console: '+m.text())});page.on('requestfailed',r=>errors.push('request: '+r.url()+' '+(r.failure()?.errorText||'')));
    const response=await page.goto(process.env.GAME_URL,{waitUntil:'domcontentloaded',timeout:45000});assert.equal(response.status(),200);
+   const localCandidate=['127.0.0.1','localhost'].includes(new URL(process.env.GAME_URL).hostname);
    await page.locator('#home h1').waitFor();
    await page.waitForFunction(()=>window.RamadanWarDebug&&Array.isArray(window.RamadanWarDebug.heroes),null,{timeout:10000}).catch(e=>{throw new Error(e.message+'\n'+errors.join('\n'))});
    assert.equal(await page.evaluate(()=>window.RamadanWarDebug.heroes.length),30);
    assert.equal(await page.evaluate(()=>window.RamadanWarDebug.skills.length),6);
-   await page.evaluate(()=>window.RamadanWarDebug.selectHero(1));
-   assert.equal(await page.locator('#heroName').innerText(),'حاج قاسم — قاسم سلیمانی');
-   await page.evaluate(()=>window.RamadanWarDebug.selectHero(0));
-   await page.evaluate(()=>window.RamadanWarDebug.start());
+   if(localCandidate){
+    await page.evaluate(()=>window.RamadanWarDebug.selectHero(1));
+    assert.equal(await page.locator('#heroName').innerText(),'حاج قاسم — قاسم سلیمانی');
+    await page.evaluate(()=>window.RamadanWarDebug.selectHero(0));
+    await page.evaluate(()=>window.RamadanWarDebug.start());
+   }else{
+    assert.equal(await page.evaluate(()=>typeof window.RamadanWarDebug.tick),'undefined','public build must not expose simulation mutators');
+    assert.equal(await page.evaluate(()=>typeof window.RamadanWarDebug.spawnTestPickup),'undefined','public build must not expose free pickups');
+    await page.locator('#chooseHero').click();
+    await page.locator('#heroGrid button').nth(1).click();
+    assert.equal(await page.locator('#heroName').innerText(),'حاج قاسم — قاسم سلیمانی');
+    await page.locator('#chooseHero').click();
+    await page.locator('#heroGrid button').first().click();
+    await page.locator('#start').click();
+   }
    await page.locator('#hud:not(.hidden)').waitFor();
    await page.waitForFunction(()=>document.querySelector('#weaponArt').complete&&document.querySelector('#weaponArt').naturalWidth>0);
    await page.waitForFunction(()=>{const s=window.RamadanWarDebug.getState();return s&&s.soldierModel&&s.weaponModel},null,{timeout:20000}).catch(e=>{throw new Error('3D model assets did not load\n'+errors.join('\n')+'\n'+e.message)});
@@ -24,22 +36,241 @@ const assert=require('node:assert/strict');
    assert.equal(await page.locator('#game').evaluate(el=>el.classList.contains('three-world-ready')),true);
    assert.equal(await page.locator('#missionBackdrop').evaluate(el=>getComputedStyle(el).display),'block');assert.equal(await page.locator('#fullscreen').count(),1);
    assert.equal(await page.locator('#weaponArt').evaluate(el=>getComputedStyle(el).display),'none');
-   await page.evaluate(()=>{for(let i=0;i<30;i++)window.RamadanWarDebug.tick(.04)});
+   if(localCandidate)await page.evaluate(()=>{for(let i=0;i<30;i++)window.RamadanWarDebug.tick(.04)});
+   else await page.waitForTimeout(1200);
    const controls=await page.evaluate(()=>({stick:document.querySelector('#stick').getBoundingClientRect().x,fire:document.querySelector('#fire').getBoundingClientRect().x}));assert(controls.stick<controls.fire,'movement pad should be on the left of fire controls');
+   // Real pointer capture and animation frames: dragging up must advance,
+   // dragging right must strafe, including on the mobile viewport.
+   if (['127.0.0.1','localhost'].includes(new URL(process.env.GAME_URL).hostname)) {
+     const stick = await page.locator('#stick').boundingBox();
+     assert(stick && stick.width > 30, 'joystick must be rendered');
+     const cx = stick.x + stick.width / 2, cy = stick.y + stick.height / 2;
+     const drag = async (dx, dy) => {
+       await page.mouse.move(cx, cy);
+       await page.mouse.down();
+       await page.mouse.move(cx + dx, cy + dy, {steps: 4});
+       await page.waitForTimeout(260);
+       await page.mouse.up();
+       return page.evaluate(() => window.RamadanWarDebug.qaPosition());
+     };
+     const before = await page.evaluate(() => window.RamadanWarDebug.qaPosition());
+     assert(before, 'local-only position inspection must be available');
+     const afterUp = await drag(0, -stick.height * .3);
+     assert(afterUp.x > before.x + .05, 'upward joystick drag must move forward');
+     assert(Math.abs(afterUp.y - before.y) < .12, 'upward drag must not strafe');
+     const afterRight = await drag(stick.width * .3, 0);
+     assert(afterRight.y > afterUp.y + .05, 'rightward joystick drag must strafe right');
+     assert(Math.abs(afterRight.x - afterUp.x) < .12, 'rightward drag must not advance');
+     console.log('RAMADAN_REAL_JOYSTICK_PASS', v.name);
+     // Exercise the real Chromium keyboard event path and engine ticks. The
+     // diagonal distance must not exceed straight-line distance by sqrt(2).
+     const speedCheck = await page.evaluate(() => {
+       const g = window.RamadanWarDebug;
+       const press = (code, kind) => window.dispatchEvent(new KeyboardEvent(kind, {code, bubbles:true}));
+       const run = codes => {
+         g.qaMove(2.5, 7.5);
+         const origin = g.qaPosition();
+         codes.forEach(code => press(code, 'keydown'));
+         for(let i=0;i<3;i++)g.tick(.04);
+         codes.forEach(code => press(code, 'keyup'));
+         const end = g.qaPosition();
+         return Math.hypot(end.x-origin.x, end.y-origin.y);
+       };
+       return {straight:run(['KeyW']), diagonal:run(['KeyW','KeyD']), neutral:run(['KeyW','KeyS'])};
+     });
+     assert(speedCheck.straight > .1, 'keyboard forward motion must work');
+     assert(speedCheck.diagonal > .1, 'keyboard diagonal motion must work');
+     assert(speedCheck.diagonal <= speedCheck.straight * 1.06,
+       'W+D must not gain a diagonal speed advantage: '+JSON.stringify(speedCheck));
+     assert(speedCheck.neutral<1e-8,'W+S must cancel rather than walking: '+JSON.stringify(speedCheck));
+     console.log('RAMADAN_OPPOSING_KEYS_NEUTRAL_PASS',v.name);
+     // Run actual game ticks without waiting in wall-clock time: continuous
+     // keyboard fire must resume after the magazine automatically reloads.
+     const heldReload=await page.evaluate(()=>{
+       const g=window.RamadanWarDebug;
+       g.start();
+       window.dispatchEvent(new KeyboardEvent('keydown',{code:'Space',bubbles:true,cancelable:true}));
+       for(let i=0;i<170;i++)g.tick(.04);
+       window.dispatchEvent(new KeyboardEvent('keyup',{code:'Space',bubbles:true,cancelable:true}));
+       const state=g.getState();
+       g.start(); // Reset gameplay for subsequent smoke assertions.
+       for(let i=0;i<30;i++)g.tick(.04); // Restore the expected spawned-enemy precondition.
+       return {shots:state.shots,ammo:state.ammo};
+     });
+     assert(heldReload.shots>=9,'held fire must continue after automatic reload: '+JSON.stringify(heldReload));
+     console.log('RAMADAN_HELD_FIRE_AUTO_RELOAD_PASS',v.name);
+     console.log('RAMADAN_REAL_DIAGONAL_SPEED_PASS', v.name);
+
+   }
    await page.locator('#scope').click();assert.equal(await page.locator('#game').evaluate(el=>el.classList.contains('scope-mode')),true);
    assert.equal(await page.locator('#view').evaluate(el=>el.getContext('webgl2')||el.getContext('webgl')?true:false),true);
    await page.locator('#scope').click();assert.equal(await page.locator('#game').evaluate(el=>el.classList.contains('scope-mode')),false);
    await page.waitForFunction(()=>document.querySelector('#view').getContext('webgl2')||document.querySelector('#view').getContext('webgl'),null,{timeout:10000});
    let state=await page.evaluate(()=>window.RamadanWarDebug.getState());
-   assert.equal(state.hp,100);assert.equal(state.lives,100);assert.equal(state.stage,0);assert.equal(state.mode,'game');
+   assert(state.hp>0&&state.hp<=100,'hero must be alive');assert.equal(state.lives,100);assert.equal(state.stage,0);assert.equal(state.mode,'game');
    assert.equal(state.rockets,12);assert.equal(state.drones,3);assert.equal(state.ammo,8);assert.equal(state.renderer,'webgl-threejs');assert(state.enemies>0,'mission enemy spawn '+JSON.stringify(state));
-   await page.evaluate(()=>window.RamadanWarDebug.spawnTestEnemy());
-   await page.evaluate(()=>{window.RamadanWarDebug.fire();window.RamadanWarDebug.rocket();window.RamadanWarDebug.drone()});
-   await page.evaluate(()=>{window.RamadanWarDebug.spawnTestPickup('ammo');window.RamadanWarDebug.tick(.04)});state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.shots,1);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.ammo,8,'ammo pickup restores the magazine');
-   await page.locator('#pause').click();await page.locator('#pausePanel:not(.hidden)').waitFor();await page.reload({waitUntil:'domcontentloaded'});
+   // Chromium regression for coalesced pointermove: a large displacement on
+   // pointerup alone must not consume ammo. No debug mutation is used.
+   if(localCandidate&&!v.mobile){
+     const releaseWithoutMove=await page.evaluate(()=>{
+       const canvas=document.querySelector('#view'),g=window.RamadanWarDebug;
+       const originalCapture=canvas.setPointerCapture;
+       canvas.setPointerCapture=()=>{}; // Synthetic pointer IDs cannot be natively captured.
+       try{
+         const before=g.getState().shots;
+         const emit=(type,x)=>canvas.dispatchEvent(new PointerEvent(type,{
+           bubbles:true,pointerId:741,pointerType:'mouse',clientX:x,clientY:120,button:0,isPrimary:true
+         }));
+         emit('pointerdown',120);
+         emit('pointerup',270); // Deliberately no pointermove event.
+         canvas.dispatchEvent(new MouseEvent('click',{bubbles:true,button:0,detail:1}));
+         return {before,after:g.getState().shots};
+       }finally{canvas.setPointerCapture=originalCapture}
+     });
+     assert.equal(releaseWithoutMove.after,releaseWithoutMove.before,
+       'coalesced pointerup drag must not fire: '+JSON.stringify(releaseWithoutMove));
+     console.log('RAMADAN_COALESCED_POINTER_RELEASE_NO_FIRE_PASS',v.name);
+   }
+   // Real Chromium event dispatch: browser shortcuts and composition must not
+   // consume rockets/drones or suppress native key handling on either viewport.
+   const shortcutCheck=await page.evaluate(()=>{
+     const before=window.RamadanWarDebug.getState(),results=[];
+     for(const opts of [
+       {code:'KeyQ',ctrlKey:true},{code:'KeyE',altKey:true},
+       {code:'KeyF',metaKey:true},{code:'KeyQ',isComposing:true}
+     ]){
+       const event=new KeyboardEvent('keydown',{bubbles:true,cancelable:true,...opts});
+       results.push(document.dispatchEvent(event));
+     }
+     const after=window.RamadanWarDebug.getState();
+     return {results,rocketsBefore:before.rockets,rocketsAfter:after.rockets,
+       dronesBefore:before.drones,dronesAfter:after.drones,shotsBefore:before.shots,shotsAfter:after.shots};
+   });
+   assert(shortcutCheck.results.every(Boolean),'modified/composing shortcuts must not be preventDefault-ed');
+   assert.equal(shortcutCheck.rocketsAfter,shortcutCheck.rocketsBefore,'Ctrl+Q or IME must not spend rockets');
+   assert.equal(shortcutCheck.dronesAfter,shortcutCheck.dronesBefore,'Alt+E must not spend drones');
+   assert.equal(shortcutCheck.shotsAfter,shortcutCheck.shotsBefore,'browser shortcuts must not fire weapons');
+   console.log('RAMADAN_REAL_MODIFIER_IME_PASS',v.name);
+   // A shortcut or IME activation after W/Space is already held must release
+   // those keys. Browsers can swallow the matching keyup, otherwise the hero
+   // walks or shoots until another input arrives.
+   if(localCandidate){
+     const heldInput=await page.evaluate(()=>{
+       const g=window.RamadanWarDebug;
+       const key=(type,code,extra={})=>window.dispatchEvent(new KeyboardEvent(type,{code,bubbles:true,cancelable:true,...extra}));
+       const stopCheck=release=>{
+         g.qaMove(2.5,7.5);
+         key('keydown','KeyW');
+         g.tick(.04);
+         const before=g.qaPosition();
+         release();
+         for(let i=0;i<3;i++)g.tick(.04);
+         const after=g.qaPosition();
+         key('keyup','KeyW');
+         return Math.hypot(after.x-before.x,after.y-before.y);
+       };
+       const shortcutDistance=stopCheck(()=>key('keydown','ControlLeft',{ctrlKey:true}));
+       key('keyup','ControlLeft');
+       const imeDistance=stopCheck(()=>window.dispatchEvent(new Event('compositionstart')));
+       const focusDistance=stopCheck(()=>{
+         const scope=document.querySelector('#scope');
+         scope.blur();
+         scope.focus();
+       });
+       const shotsBefore=g.getState().shots;
+       key('keydown','Space');
+       key('keydown','MetaLeft',{metaKey:true});
+       g.tick(.04);
+       key('keyup','Space');
+       key('keyup','MetaLeft');
+       return {shortcutDistance,imeDistance,focusDistance,shotsBefore,shotsAfter:g.getState().shots};
+     });
+     assert(heldInput.shortcutDistance<1e-8,'Ctrl shortcut must release held W: '+JSON.stringify(heldInput));
+     assert(heldInput.imeDistance<1e-8,'IME composition must release held W: '+JSON.stringify(heldInput));
+     assert(heldInput.focusDistance<1e-8,'HUD keyboard focus must release held W: '+JSON.stringify(heldInput));
+     assert.equal(heldInput.shotsAfter,heldInput.shotsBefore,'Meta shortcut must release held Space before firing');
+     console.log('RAMADAN_HELD_KEY_SHORTCUT_IME_PASS',v.name);
+   }
+   if(localCandidate){
+    await page.evaluate(()=>window.RamadanWarDebug.spawnTestEnemy());
+    await page.evaluate(()=>{window.RamadanWarDebug.fire();window.RamadanWarDebug.rocket();window.RamadanWarDebug.drone()});
+    await page.evaluate(()=>{window.RamadanWarDebug.spawnTestPickup('ammo');window.RamadanWarDebug.tick(.04)});
+    state=await page.evaluate(()=>window.RamadanWarDebug.getState());
+    assert.equal(state.shots,1);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.ammo,8,'ammo pickup restores the magazine');
+    // A non-mission collectible must be durable immediately, not only after
+    // the five-second periodic checkpoint or a manual pause.
+    const collectibleCheckpoint=await page.evaluate(()=>{
+      const g=window.RamadanWarDebug;
+      g.spawnTestPickup('intel');g.tick(.04);
+      const live=g.getState(),saved=JSON.parse(localStorage.getItem('rwNativeCampaign'));
+      return {livePoints:live.points,savedPoints:saved.points,liveScore:live.score,savedScore:saved.score};
+    });
+    assert.equal(collectibleCheckpoint.savedPoints,collectibleCheckpoint.livePoints,
+      'earned pickup points must survive an immediate reload');
+    assert.equal(collectibleCheckpoint.savedScore,collectibleCheckpoint.liveScore,
+      'earned pickup score must survive an immediate reload');
+    console.log('RAMADAN_COLLECTIBLE_IMMEDIATE_SAVE_PASS',v.name);
+   }
+   const savedBeforeReload=await page.evaluate(()=>window.RamadanWarDebug.getState());
+   // Pausing is a durable checkpoint even when no five-second timer has fired.
+   const pausePosition=await page.evaluate(()=>{
+     const g=window.RamadanWarDebug;
+     if(!g.qaMove(3.5,7.5))throw new Error('known passable pause checkpoint missing');
+     return g.qaPosition();
+   });
+   await page.locator('#pause').click();
+   assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('rwNativeCampaign')).x),
+     pausePosition.x,'pause must immediately persist the latest player position');
+   console.log('RAMADAN_PAUSE_IMMEDIATE_SAVE_PASS',v.name);await page.locator('#pausePanel:not(.hidden)').waitFor();await page.reload({waitUntil:'domcontentloaded'});
    assert.match(await page.locator('#start').innerText(),/ادامه/);
    await page.locator('#start').click();
-   state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.mode,'game');
+   state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,savedBeforeReload.rockets);assert.equal(state.drones,savedBeforeReload.drones);assert.equal(state.mode,'game');
+   // A real pointer click exercises the published control path, unlike debug.fire().
+   assert((await page.locator('#pause').getAttribute('aria-label'))?.length>=3,'pause needs a screen-reader name');
+   if(localCandidate)await page.evaluate(()=>{for(let i=0;i<40;i++)window.RamadanWarDebug.tick(.04)});
+   else await page.waitForTimeout(1200);
+   // A desktop mouse drag aims without firing; a stationary primary click fires once.
+   if(localCandidate&&!v.mobile){
+     const box=await page.locator('#view').boundingBox();
+     assert(box&&box.width>200,'3D canvas must be visible');
+     const cx=box.x+box.width/2,cy=box.y+box.height/2;
+     const before=await page.evaluate(()=>window.RamadanWarDebug.getState().shots);
+     await page.mouse.move(cx,cy);
+     await page.mouse.down();
+     await page.mouse.move(cx+90,cy+20,{steps:8});
+     await page.mouse.up();
+     assert.equal(await page.evaluate(()=>window.RamadanWarDebug.getState().shots),before,'mouse aim drag must not spend ammo');
+     await page.mouse.click(cx,cy);
+     await page.waitForFunction(n=>window.RamadanWarDebug.getState().shots===n+1,before,{timeout:5000});
+     await page.evaluate(()=>{for(let i=0;i<15;i++)window.RamadanWarDebug.tick(.04)});
+     console.log('RAMADAN_MOUSE_AIM_NO_FIRE_AND_CLICK_FIRE_PASS',v.name);
+   }
+   const shotsBefore=await page.evaluate(()=>window.RamadanWarDebug.getState().shots);
+   await page.locator('#fire').click();
+   await page.waitForFunction(n=>window.RamadanWarDebug.getState().shots>n,shotsBefore,{timeout:5000});
+   console.log('RAMADAN_REAL_POINTER_FIRE_PASS',v.name);
+
+   // Browser-level ownership regression: an unrelated finger's pointerup must
+   // not stop a genuine held fire pointer. Run only against the local candidate.
+   if(['127.0.0.1','localhost'].includes(new URL(process.env.GAME_URL).hostname)){
+     const fireBox=await page.locator('#fire').boundingBox();
+     assert(fireBox&&fireBox.width>10,'fire control must be rendered');
+     await page.evaluate(()=>{window.__ramadanFireOwner=null;document.querySelector('#fire').addEventListener('pointerdown',e=>{if(e.isTrusted)window.__ramadanFireOwner=e.pointerId},{once:true})});
+     await page.mouse.move(fireBox.x+fireBox.width/2,fireBox.y+fireBox.height/2);
+     try{
+       await page.mouse.down();
+       assert.equal(await page.evaluate(()=>document.querySelector('#fire').hasPointerCapture(window.__ramadanFireOwner)),true,'real owner must hold pointer capture');
+       await page.evaluate(()=>{
+         const button=document.querySelector('#fire');
+         button.dispatchEvent(new PointerEvent('pointerdown',{pointerId:777,pointerType:'touch',bubbles:true}));
+         button.dispatchEvent(new PointerEvent('pointerup',{pointerId:777,pointerType:'touch',bubbles:true}));
+       });
+       assert.equal(await page.evaluate(()=>document.querySelector('#fire').hasPointerCapture(window.__ramadanFireOwner)),true,'unrelated pointer release must preserve owner capture');
+       console.log('RAMADAN_FIRE_POINTER_OWNERSHIP_PASS',v.name);
+     }finally{await page.mouse.up()}
+   }
+
+
 
    // Exercise the actual objective interactions on the local release candidate.
    if(['127.0.0.1','localhost'].includes(new URL(process.env.GAME_URL).hostname)){
@@ -60,11 +291,68 @@ const assert=require('node:assert/strict');
       return a;
     });
     assert(checked.every(Boolean),'campaign objective interaction regression '+JSON.stringify(checked));
+    // A completed reload must persist restored ammunition without waiting
+    // for the next periodic autosave.
+    const reloadCheckpoint=await page.evaluate(()=>{
+      const g=window.RamadanWarDebug;g.start();g.fire();
+      if(!g.reload())throw new Error('manual reload did not start');
+      for(let i=0;i<30;i++)g.tick(.04);
+      const live=g.getState(),saved=JSON.parse(localStorage.getItem('rwNativeCampaign'));
+      return {liveAmmo:live.ammo,savedAmmo:saved.ammo,magazine:saved.magazine,reloading:saved.reloading};
+    });
+    assert.equal(reloadCheckpoint.savedAmmo,reloadCheckpoint.liveAmmo);
+    assert.equal(reloadCheckpoint.savedAmmo,reloadCheckpoint.magazine);
+    assert.equal(reloadCheckpoint.reloading,false);
+    console.log('RAMADAN_RELOAD_COMPLETION_SAVE_PASS',v.name);
     assert.equal(await page.locator('#missionObjective').isVisible(),true);
     console.log('CAMPAIGN_OBJECTIVES_PASS activation=2 intel=3 defend=timer extract=check boss=spawn');
+   }
+   // The unlocked survival mode is separate from the unfinished campaign.
+   // Starting it, pausing it and pagehide must preserve the campaign slot.
+   if(localCandidate){
+    const survivalSave=await page.evaluate(()=>{
+      const g=window.RamadanWarDebug;
+      g.start();
+      const original=localStorage.getItem('rwNativeCampaign');
+      if(!original)throw new Error('campaign save missing before survival');
+      localStorage.setItem('rwWin','1');
+      document.querySelector('#pause').click();
+      document.querySelector('#goHome').click();
+      if(document.querySelector('#survival').classList.contains('hidden'))
+        throw new Error('unlocked survival control not visible');
+      document.querySelector('#survival').click();
+      const survival=g.getState().objectiveKind==='survival';
+      window.dispatchEvent(new Event('pagehide'));
+      document.querySelector('#pause').click();
+      document.querySelector('#goHome').click();
+      return {survival,unchanged:localStorage.getItem('rwNativeCampaign')===original,
+        continueVisible:document.querySelector('#start').textContent.includes('ادامه')};
+    });
+    assert(survivalSave.survival && survivalSave.unchanged && survivalSave.continueVisible,
+      'endless mode must preserve existing campaign progress: '+JSON.stringify(survivalSave));
+    console.log('RAMADAN_SURVIVAL_CAMPAIGN_SAVE_PRESERVED_PASS',v.name);
    }
    assert.equal(errors.length,0,errors.join('\n'));
    await context.close();console.log('RAMADAN_WEB_'+v.name.toUpperCase()+'_PASS native_campaign=6 heroes=30 lives=100 weapons=rocket+drone save=resume pickups=collectible-ammo');
   }
+  // Real 1024px touch viewport: the old width-only canvas click handler
+  // consumed ammo on a finger tap even though the finger was aiming.
+  const tablet=await browser.newContext({viewport:{width:1024,height:768},isMobile:true,hasTouch:true});
+  try{
+    const page=await tablet.newPage(),errors=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    await page.goto(process.env.GAME_URL,{waitUntil:'domcontentloaded',timeout:45000});
+    await page.waitForFunction(()=>window.RamadanWarDebug&&window.RamadanWarDebug.start,null,{timeout:15000});
+    await page.evaluate(()=>window.RamadanWarDebug.start());
+    await page.locator('#hud:not(.hidden)').waitFor();
+    const box=await page.locator('#view').boundingBox();
+    assert(box&&box.width>700,'tablet canvas must be wide enough to reproduce prior defect');
+    const before=await page.evaluate(()=>window.RamadanWarDebug.getState().shots);
+    await page.touchscreen.tap(box.x+box.width/2,box.y+box.height/2);
+    await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(()=>window.RamadanWarDebug.getState().shots),before,'tablet touch aim must not fire');
+    assert.equal(errors.length,0,errors.join('\n'));
+    console.log('RAMADAN_TABLET_TOUCH_AIM_NO_FIRE_PASS');
+  }finally{await tablet.close()}
  }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exit(1)});
