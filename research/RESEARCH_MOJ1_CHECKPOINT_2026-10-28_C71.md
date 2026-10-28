@@ -32,3 +32,8 @@ The existing hourly **research and CV** automation was updated with the C71 work
 **Next technically defensible milestones:** retrieve authenticated Car publisher image or source erratum; secure full original Lorite/Baroni/Elia methods; obtain the three archived WDI ZIP files and their verified bytes/hashes before any historic benchmark; obtain actual ZM reference/FASTQ/counts and rerun preflight on real data; secure a genuinely independent, fully funded security audit. Do not promote incomplete source checks, code existence or internal AI review into a final scientific/financial approval.
 
 **Final manuscript submissions/accepted articles: 0. New empirical validation datasets: 0. Independent MOJ1 audits completed: 0. Public websites changed: 0.**
+
+## Follow-up: C72 targeted bibliography and novelty audit
+- [C72 verified DOI/title and prior-art memo](manuscripts/MR-2026-001/MR-2026-001_C72_ADDITIONAL_BIBLIOGRAPHY_AND_NOVELTY_AUDIT_2026-10-28.md) committed as [4ddfde1e3a33e925c9b7e7a9f2d02a7a99d38f2d](https://github.com/mojtabarozegar11-ship-it/Saeit/commit/4ddfde1e3a33e925c9b7e7a9f2d02a7a99d38f2d); re-read blob `53cac2a979a4ba114e222534af95d3d88e840dcb`.
+- Six cited DOI-to-title mappings and several named-author identities independently compared to journal/bibliographic records. Direct prior-art overlap for 2023 scoping review and 2024 field-scale systematic review explicitly recorded. Full 17-item bibliographic verification NOT complete; no validation of a new field technology or priority claim.
+- Original C71 is the current full **manuscript**; C72 is a companion bibliographic audit, **not** a superseding completed paper. Author/journal gates unchanged.
