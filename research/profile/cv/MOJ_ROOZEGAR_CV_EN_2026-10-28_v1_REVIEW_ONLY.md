@@ -2,7 +2,7 @@
 
 **Document ID:** CV-MR-EN-20261028-v1  
 **As of:** 28 October 2026  
-**Status:** READY_FOR_REVIEW — private editorial version; **not authorized for public publication, institutional submission or credential verification**.  
+**Status:** READY_FOR_REVIEW — editorial review version on a **publicly accessible GitHub branch** (not confidential); **not authorized for public publication, institutional submission or credential verification**.  
 **Evidence standard:** repository artifacts establish the existence/status of projects, not identity, academic qualifications, legal registration, human authorship or peer-reviewed publication. Owner-supplied career statements are clearly distinguished from independently verified facts.
 
 ## Identity and professional focus
