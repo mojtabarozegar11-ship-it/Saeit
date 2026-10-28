@@ -268,16 +268,22 @@ jobs:
           def factory_operations_age_inventory(root):
               out = {"complete": False, "files_scanned": 0, "dirs_scanned": 0,
                      "allocated_bytes_scanned": 0, "age_allocated_bytes": {},
-                     "class_allocated_bytes": {}, "largest_groups_anonymous": [],
-                     "scan_seconds": None, "hardlink_duplicates_skipped": 0}
+                     "class_allocated_bytes": {}, "class_age_allocated_bytes": {},
+                     "older_archive_log_bytes": 0, "older_archive_log_is_safe_to_delete": False,
+                     "largest_groups_anonymous": [], "scan_seconds": None,
+                     "hardlink_duplicates_skipped": 0, "scan_errors": 0,
+                     "accounting_consistent": False}
               if root.is_symlink() or not root.is_dir():
                   return out
               started = time.monotonic()
               groups = {}
               seen_inodes = set()
+              def on_walk_error(_error):
+                  out["scan_errors"] += 1
               try:
                   device = root.stat().st_dev
-                  for base, dirs, files in os.walk(root, topdown=True, followlinks=False):
+                  for base, dirs, files in os.walk(root, topdown=True, followlinks=False,
+                                                  onerror=on_walk_error):
                       if time.monotonic() - started > 18 or out["files_scanned"] >= 120000:
                           break
                       here = Path(base)
@@ -321,15 +327,28 @@ jobs:
                               out["allocated_bytes_scanned"] += allocated
                               out["age_allocated_bytes"][age] = out["age_allocated_bytes"].get(age, 0) + allocated
                               out["class_allocated_bytes"][kind] = out["class_allocated_bytes"].get(kind, 0) + allocated
+                              class_ages = out["class_age_allocated_bytes"].setdefault(kind, {})
+                              class_ages[age] = class_ages.get(age, 0) + allocated
+                              if age == "ge_30d" and kind in ("archive", "log"):
+                                  # A screening figure only; never an approved deletion set.
+                                  out["older_archive_log_bytes"] += allocated
                               relative = candidate.relative_to(root).parts
                               group = "root" if len(relative) == 1 else relative[0]
                               groups[group] = groups.get(group, 0) + allocated
                           except (OSError, ValueError):
+                              out["scan_errors"] += 1
                               continue
                   else:
-                      out["complete"] = True
+                      out["complete"] = out["scan_errors"] == 0
               except (OSError, ValueError):
-                  pass
+                  out["scan_errors"] += 1
+              out["accounting_consistent"] = (
+                  out["allocated_bytes_scanned"] == sum(out["age_allocated_bytes"].values())
+                  == sum(out["class_allocated_bytes"].values())
+                  == sum(sum(ages.values()) for ages in out["class_age_allocated_bytes"].values())
+              )
+              if not out["accounting_consistent"]:
+                  out["complete"] = False
               out["largest_groups_anonymous"] = sorted(groups.values(), reverse=True)[:12]
               out["scan_seconds"] = round(time.monotonic() - started, 1)
               return out
