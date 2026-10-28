@@ -108,7 +108,7 @@ jobs:
           if len(matched)!=1: raise SystemExit('MMSG_PHONE_KEY_MATCH_NOT_UNIQUE')
           i,row=matched[0]
           ending=b'\r\n' if row.endswith(b'\r\n') else b'\n' if row.endswith(b'\n') else b''
-          value=row.removesuffix(ending).decode()
+          value=(row[:-len(ending)] if ending else row).decode()
           if value==updated:
               print('MMSG_PHONE_RESTRICTED_KEY=ALREADY_INSTALLED')
           elif value==original:
