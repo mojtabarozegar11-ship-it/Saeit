@@ -2,7 +2,7 @@
 """Bounded VPS master-agent strategy evolution from private, verified task states.
 
 No database writes, network calls, financial actions or self-editing source code.
-Only the private master runner's max-steps parameter may change (1..3).
+The private master runner is permanently capped at one step per cycle.
 """
 import argparse
 import json
@@ -67,14 +67,19 @@ def evaluate(db_path: Path, state_path: Path):
     # Compare only the newly completed portion, not historical successes.
     recent_new = recent_verified_actions[:min(max(delta_completed, 0), len(recent_verified_actions))]
     diversity = len(set(recent_new))
-    if delta_failed > 0 or delta_blocked > 0:
-        steps, decision = 1, "rollback_to_conservative_after_regression"
-    elif delta_completed >= 2 and diversity < 2:
-        steps, decision = 1, "rollback_repeated_or_unverified_completions"
+    # The owner requested controlled production with no volume expansion.
+    # Keep one master task per five-minute cycle even after diverse successes.
+    steps = 1
+    if old_steps != 1:
+        decision = "rollback_to_single_step_volume_cap"
+    elif delta_failed > 0 or delta_blocked > 0:
+        decision = "hold_single_step_after_regression"
     elif delta_completed >= 2 and diversity >= 2 and counts["blocked"] == 0:
-        steps, decision = min(3, old_steps + 1), "diverse_verified_actions_expand_bounded_cycle"
+        decision = "hold_single_step_after_verified_progress"
+    elif delta_completed >= 2:
+        decision = "hold_single_step_no_verified_diversity"
     else:
-        steps, decision = old_steps, "hold_strategy_until_measurable_progress"
+        decision = "hold_single_step_until_verified_progress"
     report = {
         "schema": "saeit.master.evolution.v1",
         "evaluated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -86,6 +91,9 @@ def evaluate(db_path: Path, state_path: Path):
         "recent_new_verified_action_types": diversity,
         "repeat_completion_is_not_diverse_progress": True,
         "max_steps": steps,
+        "hard_max_steps_cap": 1,
+        "volume_scaling_enabled": False,
+        "parallel_master_tasks": False,
         "previous_max_steps": old_steps,
         "decision": decision,
         "revision": int(previous.get("revision", 0)) + int(steps != old_steps),
