@@ -4,6 +4,7 @@ import hashlib
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -91,6 +92,36 @@ class PreviewArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outside game source"):
             build_preview(self.root, self.root / "preview.zip", self.assets)
         self.assertFalse((self.root / "preview.zip").exists())
+
+
+    def test_failed_build_preserves_previous_verified_archive(self):
+        self.build()
+        previous = self.out.read_bytes()
+        with mock.patch.object(_MODULE, "ZipFile", side_effect=OSError("disk full")):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                self.build()
+        self.assertEqual(self.out.read_bytes(), previous)
+        self.assertEqual(list(self.base.glob(".ramadan-preview-*.zip")), [])
+
+    def test_rejects_symlinked_output_and_parent_without_touching_target(self):
+        outside = self.base / "existing-customer-file"
+        outside.write_bytes(b"preserve-me")
+        self.out.symlink_to(outside)
+        with self.assertRaisesRegex(ValueError, "symlinked preview output"):
+            self.build()
+        self.assertEqual(outside.read_bytes(), b"preserve-me")
+        self.out.unlink()
+        linked_dir = self.base / "alias"
+        linked_dir.symlink_to(self.root, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "symlinked preview output"):
+            build_preview(self.root, linked_dir / "preview.zip", self.assets)
+        self.assertFalse((self.root / "preview.zip").exists())
+
+    def test_rejects_reserved_manifest_asset_without_writing_archive(self):
+        (self.root / "preview-manifest.json").write_text("{}")
+        with self.assertRaises(ValueError):
+            self.build(assets=["index.html", "preview-manifest.json"])
+        self.assertFalse(self.out.exists())
 
 
 if __name__ == "__main__":
