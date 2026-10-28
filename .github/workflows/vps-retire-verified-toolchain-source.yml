@@ -56,8 +56,12 @@ jobs:
               raise SystemExit('SOURCE_CANDIDATE_TOO_NEW')
           expected_files={'qwen2.5-coder-0.5b-instruct-q4_k_m.gguf','runtime.tar.xz','SHA256SUMS','install.sh','prove.py','metadata.json'}
           entries=list(candidate.iterdir())
+          entry_report=[]
+          for p in entries:
+              try: entry_report.append({'name':p.name,'kind':'symlink' if p.is_symlink() else 'dir' if p.is_dir() else 'file' if p.is_file() else 'other','bytes':p.stat().st_size if p.is_file() and not p.is_symlink() else None})
+              except OSError: entry_report.append({'name':p.name,'kind':'unreadable'})
           if any(p.is_symlink() or not p.is_file() for p in entries) or {p.name for p in entries}!=expected_files:
-              raise SystemExit('SOURCE_CANDIDATE_CONTENTS_CHANGED')
+              raise SystemExit('SOURCE_CANDIDATE_CONTENTS_CHANGED='+json.dumps(entry_report,sort_keys=True))
           checksums={}
           for line in (candidate/'SHA256SUMS').read_text().splitlines():
               digest, name=line.split(None,1)
