@@ -411,6 +411,42 @@ class CaseServiceTests(unittest.TestCase):
         self.assertEqual(mismatch.exception.status, 409)
         self.assertEqual(service.staff_case(code)["status"], "in_review")
 
+    def test_staff_download_refuses_same_length_file_tampering(self):
+        original = b"%PDF-1.7\\nverified bytes 1234\\n%%EOF"
+        item = self.create(uploads=[FakeEvidence("tamper.pdf", original)])
+        stored = service.staff_case(item["case_id"])["files"][0]
+        path, _ = service.staff_file(item["case_id"], stored["id"])
+        path.write_bytes(original.replace(b"1234", b"9999"))
+        with self.assertRaises(service.CaseError) as check:
+            service.staff_file(item["case_id"], stored["id"])
+        self.assertEqual(check.exception.status, 409)
+        with self.assertRaises(service.CaseError):
+            service.staff_case(item["case_id"])
+
+    def test_final_review_refuses_corrupted_evidence_before_signing(self):
+        original = b"%PDF-1.7\\nreviewable original\\n%%EOF"
+        item = self.create(uploads=[FakeEvidence("report.pdf", original)])
+        code = item["case_id"]
+        service.set_status(code, "in_review", "staff:17", "Authorized assessment started")
+        proposed = make_review()
+        stored = service.staff_case(code)["files"][0]
+        path, _ = service.staff_file(code, stored["id"])
+        path.write_bytes(original[:-2])
+        with self.assertRaises(service.CaseError) as check:
+            service.submit_review(code, "staff:17", proposed, self.secret)
+        self.assertEqual(check.exception.status, 409)
+        with service.database() as db:
+            self.assertEqual(db.execute("SELECT status FROM cases WHERE code=?", (code,)).fetchone()[0], "in_review")
+
+    def test_reviewer_cannot_read_missing_evidence_file(self):
+        item = self.create(uploads=[FakeEvidence("source.txt", b"Original user notes")])
+        stored = service.staff_case(item["case_id"])["files"][0]
+        path, _ = service.staff_file(item["case_id"], stored["id"])
+        path.unlink()
+        with self.assertRaises(service.CaseError) as check:
+            service.staff_file(item["case_id"], stored["id"])
+        self.assertEqual(check.exception.status, 503)
+
     def test_private_file_access_and_owner_erasure(self):
         raw = b"%PDF-1.7\nexample controlled test evidence\n%%EOF"
         item = self.create(uploads=[FakeEvidence("review.pdf", raw)])
