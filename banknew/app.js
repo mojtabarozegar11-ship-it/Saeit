@@ -23,7 +23,60 @@ function formatSun(value) {
   return whole.toString() + (fractional ? '.' + fractional : '') + ' TRX';
 }
 
-/** Requests only an account address and a read-only native balance. Never signs or sends funds. */
+const USDT_ETHEREUM = '0xdac17f958d2ee523a2206206994597c13d831ec7';
+const USDT_TRON = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+
+function formatTokenUnits(raw, decimals, symbol) {
+  if (typeof raw === 'number' && !Number.isSafeInteger(raw)) throw Error('Unsafe token precision.');
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) throw Error('Invalid token decimals.');
+  const quantity = BigInt(String(raw));
+  if (quantity < 0n) throw Error('Invalid token amount.');
+  const base = 10n ** BigInt(decimals);
+  const fraction = decimals ?
+    (quantity % base).toString().padStart(decimals, '0').replace(/0+$/, '') : '';
+  return (quantity / base).toString() + (fraction ? '.' + fraction : '') + ' ' + symbol;
+}
+
+/** Mainnet-only eth_call; never signs or broadcasts a transaction. */
+async function getErc20Usdt(provider, address) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) throw Error('Invalid EVM address.');
+  const chainBefore = await provider.request({ method: 'eth_chainId' });
+  if (chainBefore !== '0x1') throw Error('USDT ERC20 is shown only on Ethereum mainnet.');
+  const data = '0x70a08231' + address.slice(2).toLowerCase().padStart(64, '0');
+  const balance = await provider.request({
+    method: 'eth_call', params: [{ to: USDT_ETHEREUM, data }, 'latest']
+  });
+  const decimalsHex = await provider.request({
+    method: 'eth_call', params: [{ to: USDT_ETHEREUM, data: '0x313ce567' }, 'latest']
+  });
+  if (!/^0x[0-9a-fA-F]+$/.test(balance) || !/^0x[0-9a-fA-F]+$/.test(decimalsHex)) {
+    throw Error('Malformed ERC20 response.');
+  }
+  if (Number(BigInt(decimalsHex)) !== 6) throw Error('Unexpected USDT contract precision.');
+  const [chainAfter, accountsAfter] = await Promise.all([
+    provider.request({ method: 'eth_chainId' }),
+    provider.request({ method: 'eth_accounts' })
+  ]);
+  if (chainAfter !== chainBefore || !Array.isArray(accountsAfter) || !accountsAfter[0] ||
+      accountsAfter[0].toLowerCase() !== address.toLowerCase()) {
+    throw Error('EVM account or network changed during token read.');
+  }
+  return formatTokenUnits(BigInt(balance), 6, 'USDT');
+}
+
+/** TRC20 contract calls are read-only through the authorized wallet provider. */
+async function getTrc20Usdt(tronWeb, address) {
+  if (!tronWeb || typeof tronWeb.contract !== 'function') throw Error('TRC20 unavailable.');
+  const token = await tronWeb.contract().at(USDT_TRON);
+  if (!token || !token.balanceOf || !token.decimals) throw Error('Invalid TRC20 contract.');
+  const amount = await token.balanceOf(address).call();
+  const decimalsRaw = await token.decimals().call();
+  const decimals = Number(decimalsRaw.toString());
+  if (decimals !== 6) throw Error('Unexpected TRC20 USDT precision.');
+  return formatTokenUnits(amount.toString(), decimals, 'USDT');
+}
+
+/** Requests only an address and read-only balances. Never signs or sends funds. */
 async function getTronState(provider) {
   if (!provider || typeof provider.request !== 'function') {
     throw Error('Open the page with a compatible TRON wallet such as TronLink.');
@@ -42,15 +95,26 @@ async function getTronState(provider) {
   const amountSun = await tronWeb.trx.getBalance(address);
   const freshAddress = tronWeb.defaultAddress && tronWeb.defaultAddress.base58;
   if (freshAddress !== address) throw Error('Wallet changed during balance refresh.');
-  return { address, balance: formatSun(amountSun) };
+  let usdt = null;
+  try { usdt = await getTrc20Usdt(tronWeb, address); } catch (_) { /* Never misreport unavailable as zero. */ }
+  if (!tronWeb.defaultAddress || tronWeb.defaultAddress.base58 !== address) {
+    throw Error('Wallet changed during token refresh.');
+  }
+  return usdt ? { address, balance: formatSun(amountSun), usdt } :
+    { address, balance: formatSun(amountSun) };
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { quote, money, formatSun, getTronState };
+  module.exports = { quote, money, formatSun, formatTokenUnits, getTronState, getErc20Usdt, getTrc20Usdt };
 }
 
 if (typeof document !== 'undefined') {
   const el = id => document.getElementById(id);
+  const evmTokenDisplay = document.createElement('p');
+  evmTokenDisplay.setAttribute('role', 'status');
+  evmTokenDisplay.textContent = 'USDT ERC20: connect an Ethereum mainnet wallet to view.';
+  const evmPanel = document.querySelector('#wallet article.panel');
+  if (evmPanel) evmPanel.appendChild(evmTokenDisplay);
   let provider = null;
   let epoch = 0;
 
@@ -77,6 +141,7 @@ if (typeof document !== 'undefined') {
     provider = null;
     for (const k of ['chain', 'address', 'balance']) el(k).textContent = '—';
     el('wallet-message').textContent = 'No wallet connected.';
+    evmTokenDisplay.textContent = 'USDT ERC20: connect an Ethereum mainnet wallet to view.';
     el('disconnect').hidden = true;
   }
 
@@ -129,6 +194,16 @@ if (typeof document !== 'undefined') {
         p.on('chainChanged', changed);
         p.on('disconnect', clear);
       }
+      if (chain === '0x1') {
+        try {
+          const tokenBalance = await getErc20Usdt(p, address);
+          if (e === epoch) evmTokenDisplay.textContent = 'USDT ERC20: ' + tokenBalance;
+        } catch (_) {
+          if (e === epoch) evmTokenDisplay.textContent = 'USDT ERC20: unavailable (not zero).';
+        }
+      } else {
+        evmTokenDisplay.textContent = 'USDT ERC20: select Ethereum mainnet to view.';
+      }
     } catch (error) {
       if (e === epoch) {
         el('wallet-message').textContent = error.code === 4001 ?
@@ -145,7 +220,7 @@ if (typeof document !== 'undefined') {
   const legacyDisclaimer = document.querySelector('#wallet article.panel .fine');
   if (legacyDisclaimer) {
     legacyDisclaimer.textContent =
-      'Token balances and WalletConnect QR pairing are not integrated. ' +
+      'Other token balances and WalletConnect QR pairing are not integrated. ' +
       'A connected address is not proof of identity.';
   }
   if (walletGrid) {
@@ -168,7 +243,7 @@ if (typeof document !== 'undefined') {
     notice.className = 'fine';
     notice.textContent =
       'Read-only: no private keys, transactions, signatures or token approvals. ' +
-      'TRC20 balances and QR pairing are not enabled.';
+      'USDT TRC20 is read-only when supported by the wallet. QR pairing is not enabled.';
     panel.append(heading, description, button, message, details, notice);
     walletGrid.append(panel);
 
@@ -202,7 +277,7 @@ if (typeof document !== 'undefined') {
         const result = await getTronState(p);
         if (sequence !== tronEpoch) return;
         tronProvider = p;
-        details.textContent = 'Public address: ' + result.address + ' · Balance: ' + result.balance;
+        details.textContent = 'Public address: ' + result.address + ' · TRX: ' + result.balance + ' · USDT TRC20: ' + (result.usdt || 'unavailable (not zero)');
         message.textContent = 'Wallet connected (read-only).';
         if (p.on) {
           p.on('accountsChanged', changedTron);
