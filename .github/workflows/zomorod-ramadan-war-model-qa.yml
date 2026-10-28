@@ -40,7 +40,7 @@ jobs:
       - name: Verify all preview runtime imports and fail-closed MOJ1 policy
         run: python3 -m unittest discover -s games/ramadan-war -p 'test_preview_runtime_deps.py' -v
       - name: Verify integrated campaign save, input, accessibility and security regressions
-        run: node --test tests/game/ramadan-input-guard.test.mjs tests/game/ramadan-save-validation.test.mjs tests/game/ramadan-save-provenance.test.mjs tests/game/ramadan-legacy-recovery-guard.test.mjs
+        run: node --test tests/game/ramadan-input-guard.test.mjs tests/game/ramadan-save-validation.test.mjs tests/game/ramadan-save-provenance.test.mjs tests/game/ramadan-legacy-recovery-guard.test.mjs tests/game/ramadan-campaign-checkpoint.test.mjs
       - name: Full desktop and mobile gameplay with real GLB texture loading
         run: |
           set -euo pipefail
