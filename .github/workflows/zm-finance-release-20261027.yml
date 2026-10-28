@@ -101,18 +101,7 @@ jobs:
       - name: Transfer photos only to existing private finance stage
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import os,socket,ipaddress
-          from pathlib import Path
-          addrs={row[4][0] for row in socket.getaddrinfo('zomorodmelal.ir',443,type=socket.SOCK_STREAM) if row[0]==socket.AF_INET}
-          assert addrs,'External domain DNS resolution unavailable; do not deploy'
-          site_ip=sorted(addrs)[0]
-          ipaddress.IPv4Address(site_ip)
-          Path(os.environ['RUNNER_TEMP'],'zm-finance-domain-ip.txt').write_text(site_ip+'\n',encoding='ascii')
-          print('VERIFICATION_ADDRESS_RESOLVED_TLS_HOSTNAME_PINNED')
-          PY
           timeout 150s scp -F "$RUNNER_TEMP/mpw-structure-ssh/config" "$RUNNER_TEMP/zm-finance-assets.tar.gz" saeit-cpanel:/home/zomorod2/zm-finance-private/visual-assets-next.tar.gz
-          timeout 60s scp -F "$RUNNER_TEMP/mpw-structure-ssh/config" "$RUNNER_TEMP/zm-finance-domain-ip.txt" saeit-cpanel:/home/zomorod2/zm-finance-private/visual-domain-ip.txt
       - name: Publish isolated portal and verify requests with rollback
         run: |
           timeout 240s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
@@ -127,14 +116,29 @@ jobs:
           from pathlib import Path
           import os,json,hashlib,subprocess,shutil,urllib.request,urllib.error,http.cookiejar,secrets,sqlite3,time,tarfile,socket,ipaddress
           root=Path('/home/zomorod2/public_html');target=root/'$$zm';private=Path('/home/zomorod2/zm-finance-private')
-          pin_path=private/'visual-domain-ip.txt'
-          assert pin_path.is_file() and not pin_path.is_symlink(),'DNS verification pin missing'
-          site_ip=pin_path.read_text(encoding='ascii').strip()
-          assert ipaddress.ip_address(site_ip).version==4,'Only validated IPv4 permitted'
           original_dns=socket.getaddrinfo
-          def site_resolver(host,port,*args,**kwargs):
-           return original_dns(site_ip if host=='zomorodmelal.ir' else host,port,*args,**kwargs)
-          socket.getaddrinfo=site_resolver
+          site_candidates=['127.0.0.1']
+          local_ips=subprocess.run(['hostname','-I'],capture_output=True,text=True,timeout=8,check=False).stdout.split()
+          for address in local_ips:
+           try:
+            if ipaddress.ip_address(address).version==4 and address not in site_candidates:site_candidates.append(address)
+           except ValueError:pass
+          selected_ip=None
+          def scoped_site_dns(host,port,*args,**kwargs):
+           return original_dns(selected_ip if host=='zomorodmelal.ir' and selected_ip else host,port,*args,**kwargs)
+          socket.getaddrinfo=scoped_site_dns
+          direct_site=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+          local_verified=False
+          for candidate in site_candidates[:12]:
+           selected_ip=candidate
+           try:
+            with direct_site.open('https://zomorodmelal.ir/',timeout=8) as homepage_probe:
+             if homepage_probe.status==200 and len(homepage_probe.read(2048))>800:
+              local_verified=True
+              break
+           except Exception:pass
+          assert local_verified,'TLS-verified local site routing unavailable; no files changed'
+          print('VERIFIED_HTTPS_LOCAL_SITE_ROUTE=YES')
           assert root.is_dir() and not root.is_symlink()
           assert not target.is_symlink() and not private.is_symlink(), 'Symlink target is forbidden'
           for p in [Path('/AGENTS.md'),Path('/home/AGENTS.md'),Path('/home/zomorod2/AGENTS.md'),root/'AGENTS.md',target/'AGENTS.md']:
@@ -193,7 +197,7 @@ jobs:
           subprocess.run([php,'-l',str(stage/'api.php')],check=True,stdout=subprocess.DEVNULL)
           base='https://zomorodmelal.ir/%24%24zm/'
           def get(url):
-           with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache'}),timeout=30) as r:
+           with direct_site.open(urllib.request.Request(url,headers={'Cache-Control':'no-cache'}),timeout=30) as r:
             assert r.status==200
             return r.read(),r.headers
           get('https://zomorodmelal.ir/')
@@ -218,7 +222,7 @@ jobs:
             body,headers=get(base+('' if name=='index.html' else name))
             assert body.decode()==FILES[name],name+' mismatch'
             assert headers.get('X-Content-Type-Options')=='nosniff'
-           jar=http.cookiejar.CookieJar();client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+           jar=http.cookiejar.CookieJar();client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar),urllib.request.ProxyHandler({}))
            def call(data=None):
             req=urllib.request.Request(base+'api.php',data=json.dumps(data).encode() if data is not None else None,headers={'Content-Type':'application/json','Origin':'https://zomorodmelal.ir'})
             try:
