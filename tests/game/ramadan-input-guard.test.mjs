@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, shouldReleaseHeldKeysOnFocus, isFireHeld, normalizeMovementAxes, recordPointerGestureMovement, shouldFireCanvasClick} from '../../games/ramadan-war/input-guard.mjs';
+import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, shouldReleaseHeldKeysOnFocus, isFireHeld, normalizeMovementAxes, resolveMovementAxes, recordPointerGestureMovement, shouldFireCanvasClick} from '../../games/ramadan-war/input-guard.mjs';
 
 const arena = {closest: () => null};
 const menuButton = {closest: selector => selector.includes('button') ? {} : null};
@@ -210,4 +210,30 @@ test('touch and keyboard firing remain independent across release, IME and focus
   assert.ok(game.includes('function updateHeldFire(){fireHeld=isFireHeld(keys.Space,fireId)}'));
   assert.ok(game.includes("addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='Space')updateHeldFire()});"));
   assert.ok(game.includes("function endFire(e){if(!isOwnedGameplayPointer(fireId,e.pointerId))return;fireId=null;updateHeldFire()}"));
+});
+
+
+test('opposing keyboard movement cancels without overriding touch', () => {
+  assert.deepEqual(resolveMovementAxes(0,0,{KeyW:true,KeyS:true}),{forward:0,side:0});
+  assert.deepEqual(resolveMovementAxes(0,0,{ArrowUp:true,ArrowDown:true,KeyA:true,KeyD:true}),{forward:0,side:0});
+  assert.deepEqual(resolveMovementAxes(.5,-.2,{KeyW:true,KeyS:true}),{forward:.5,side:-.2});
+});
+
+test('keyboard and touch movement blend at bounded speed', () => {
+  const result=resolveMovementAxes(.6,.2,{KeyS:true,KeyD:true});
+  assert.ok(Math.abs(result.forward-(-.4/Math.hypot(-.4,1)))<1e-12);
+  assert.ok(Math.abs(result.side-(1/Math.hypot(-.4,1)))<1e-12);
+  assert.ok(Math.hypot(result.forward,result.side)<=1+1e-12);
+  assert.deepEqual(resolveMovementAxes(NaN,Infinity,{KeyW:true}),{forward:1,side:0});
+});
+
+test('automatic and manual reload preserve input ownership for resumed fire', () => {
+  const game=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  const reload=game.match(/function reload\\(manual=false\\)\\{[^\\n]+/);
+  assert.ok(reload);
+  assert.ok(!reload[0].includes('fireHeld=false'),'reload must not drop held touch/keyboard ownership');
+  assert.ok(game.includes('if(fireHeld)fire();'));
+  assert.ok(game.includes('if(world.reloadTimer>0)return;'),'reload must suppress shots until completed');
+  assert.ok(game.includes('const movement=resolveMovementAxes(joyF,joyS,keys);'));
+  assert.ok(!game.includes('if(keys.KeyW||keys.ArrowUp)forward=1'));
 });
