@@ -226,18 +226,16 @@ class ScopedRollbackTests(unittest.TestCase):
         from types import SimpleNamespace
         original = self.game / "game.js"
         original.write_bytes(self.old)
-        with patch.object(deploy.os, "statvfs", return_value=SimpleNamespace(
-                f_bavail=0, f_frsize=4096)):
-            with self.assertRaisesRegex(RuntimeError, "safe publish reserve"):
-                deploy.ensure_publish_capacity(self.stage, len(self.new))
+        fake_fs = lambda _: SimpleNamespace(f_bavail=0, f_frsize=4096)
+        with self.assertRaisesRegex(RuntimeError, "safe publish reserve"):
+            deploy.ensure_publish_capacity(self.stage, len(self.new), statvfs=fake_fs)
         self.assertEqual(original.read_bytes(), self.old)
         self.assertEqual(self.protected.read_bytes(), b"protected home unchanged")
 
     def test_publish_capacity_recheck_accepts_safe_reserve(self):
         from types import SimpleNamespace
-        with patch.object(deploy.os, "statvfs", return_value=SimpleNamespace(
-                f_bavail=250000, f_frsize=4096)):
-            deploy.ensure_publish_capacity(self.stage, len(self.new))
+        fake_fs = lambda _: SimpleNamespace(f_bavail=250000, f_frsize=4096)
+        deploy.ensure_publish_capacity(self.stage, len(self.new), statvfs=fake_fs)
 
 
 if __name__ == "__main__":
