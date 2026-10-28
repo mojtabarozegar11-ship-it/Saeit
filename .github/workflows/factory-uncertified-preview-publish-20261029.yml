@@ -93,7 +93,7 @@ jobs:
           echo CPANEL_RELEASE_FREE_KIB="$cpanel_free_kib"
           echo CPANEL_RELEASE_REQUIRED_KIB="$required_kib"
           inbox=/home/zomorod2/.saeit-factory-inbox
-          receiver_stage="$HOME/.preview-receiver-$GITHUB_RUN_ID"
+          receiver_stage="/tmp/saeit-preview-$GITHUB_RUN_ID"
           ssh -F "$d/config" saeit-cpanel "umask 077; test ! -e '$receiver_stage'; mkdir -m 700 '$receiver_stage'"
           scp -q -F "$d/config" scripts/store_receiver.py scripts/publish_factory_free_tool.py "saeit-cpanel:$receiver_stage/"
           ssh -F "$d/config" saeit-cpanel "python3 '$receiver_stage/store_receiver.py' prepare farm_enterprise_economics '$digest' --root '$inbox'"
@@ -108,4 +108,4 @@ jobs:
           echo FACTORY_PREVIEW_PUBLICATION=verified
           echo FACTORY_PREVIEW_QC1000_CERTIFIED=false
           echo FACTORY_PREVIEW_PAYMENT_ENABLED=false
-          REMOTE
+          ssh -F "$d/config" saeit-cpanel "rm -rf -- $receiver_stage"
