@@ -169,7 +169,7 @@ class GuardTests(unittest.TestCase):
         def receipt(missing=None):
             products={str(sku):{"exists":sku!=missing,"explicit_rights":False}
                       for sku in (72,225,879)}
-            return "MPW_TRX_RIGHTS_RUNTIME="+json.dumps({"products":products})+"\\n"
+            return "MPW_TRX_RIGHTS_RUNTIME="+json.dumps({"products":products})+"\n"
         for missing in (72,225,879):
             with self.subTest(missing=missing), patch.object(
                 guard.subprocess,"run",
@@ -189,11 +189,11 @@ class GuardTests(unittest.TestCase):
             for k,path in paths.items():
                 path.write_text(fixture()[k],encoding="utf8")
             original={k:p.read_bytes() for k,p in paths.items()}
-            with patch.object(guard,"TARGETS",paths),\\
-                 patch.object(guard,"BACKUPS",root/"private"),\\
-                 patch.object(guard,"guard"),\\
-                 patch.object(guard,"runtime_validate"),\\
-                 patch.object(guard,"restart") as restart,\\
+            with patch.object(guard,"TARGETS",paths),\
+                 patch.object(guard,"BACKUPS",root/"private"),\
+                 patch.object(guard,"guard"),\
+                 patch.object(guard,"runtime_validate"),\
+                 patch.object(guard,"restart") as restart,\
                  patch.object(guard.os,"open",side_effect=OSError("directory sync denied")):
                 with self.assertRaisesRegex(OSError,"directory sync denied"):
                     guard.operation("apply","202610280011")
