@@ -101,3 +101,15 @@ class PublicCatalogTruthfulTemplateTests(SimpleTestCase):
         })
         self.assertIn("هنوز مطلبی برای انتشار عمومی ثبت نشده است.", html)
         self.assertIn("منبع بیرونی ثبت نشده است.", html)
+
+    def test_gallery_video_controls_have_accessible_title(self):
+        item = SimpleNamespace(
+            media_type="video", title="نمونه ویدئو",
+            video=SimpleNamespace(url="/media/example.mp4"),
+            image=None, research_domain="", description="", target_path="",
+        )
+        html = render_to_string("core/company_gallery.html", {
+            "media": [item], "catalog_temporarily_unavailable": False,
+        })
+        self.assertIn('aria-label="نمونه ویدئو"', html)
+        self.assertIn('src="/media/example.mp4"', html)
