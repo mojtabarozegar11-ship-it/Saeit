@@ -261,5 +261,5 @@ test('secondary mouse or pen presses cannot spend consumables or capture gamepla
   }
   assert.ok(game.includes("$('#fire').onpointerdown=e=>{if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer"));
   assert.ok(game.includes("stick.onpointerdown=e=>{if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer"));
-  assert.ok(game.includes("canvas.addEventListener('pointerdown',e=>{\\n if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer"));
+  assert.ok(game.includes("canvas.addEventListener('pointerdown',e=>{\n if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer"));
 });
