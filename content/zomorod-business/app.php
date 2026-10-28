@@ -105,7 +105,7 @@ try {
             $setupTransaction=true;
             if((int)one($db,'SELECT COUNT(*) FROM users')===0){
                 if(file_exists($receipt))throw new RuntimeException('Private owner receipt already exists; manual recovery required.');
-                $username='ZomorodOwner';
+                $username='09175814408';
                 $password=rtrim(strtr(base64_encode(random_bytes(36)),'+/','-_'),'=');
                 $hash=password_hash($password,PASSWORD_DEFAULT);
                 if(!is_string($hash)||!password_verify($password,$hash))throw new RuntimeException('Password generation failed.');
