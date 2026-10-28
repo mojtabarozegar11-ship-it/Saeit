@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import io
+import importlib.util
 import json
 import os
 import stat
@@ -9,7 +10,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import telegram
+# Load by absolute path: repository-wide pytest does not add this sibling directory
+# to sys.path, and a different installed "telegram" package must not be imported.
+MODULE_PATH = Path(__file__).resolve().parents[1] / 'telegram.py'
+MODULE_SPEC = importlib.util.spec_from_file_location('moj_messaging_telegram', MODULE_PATH)
+telegram = importlib.util.module_from_spec(MODULE_SPEC)
+MODULE_SPEC.loader.exec_module(telegram)
 
 
 class StateSecurityTests(unittest.TestCase):
