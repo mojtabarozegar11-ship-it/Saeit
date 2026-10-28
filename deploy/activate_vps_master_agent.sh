@@ -24,6 +24,34 @@ fi
 for module in core/management/commands/seed_online_income_agents.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/worker_runner.py core/autonomous_brain.py core/master_agent_capability_pack.py; do
   test -s "$app/$module" || { echo "MASTER_REQUIRED_MODULE_MISSING"; exit 1; }
 done
+# Django settings and relative SQLite paths resolve from the app root.
+# This directory change is read-only and must precede the Python preflight.
+cd "$app"
+# Fail closed before any directory, source, crontab or database write.
+# Reserve the owner's 5 GiB safety margin PLUS one full SQLite snapshot
+# and 128 MiB of bounded deployment headroom. No cleanup is authorized here.
+DJANGO_SETTINGS_MODULE=config.settings SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 "$py" - <<'PY'
+import os
+import shutil
+import sys
+from pathlib import Path
+from django.conf import settings
+base = Path.home() / "factory-runtime"
+db = settings.DATABASES["default"]
+if "sqlite3" not in db["ENGINE"]:
+    raise SystemExit("MASTER_PREFLIGHT_UNEXPECTED_DB_BACKEND")
+source = Path(db["NAME"])
+if not source.is_file() or source.is_symlink():
+    raise SystemExit("MASTER_PREFLIGHT_DB_UNSAFE")
+free = shutil.disk_usage(base).free
+snapshot = source.stat().st_size
+required = 5 * 1024**3 + snapshot + 128 * 1024**2
+if free < required:
+    print("MASTER_PREFLIGHT_ENOSPC_BLOCKED", flush=True)
+    print("MASTER_PREFLIGHT_CRON_UNCHANGED", flush=True)
+    raise SystemExit(75)
+print("MASTER_PREFLIGHT_CAPACITY_OK", flush=True)
+PY
 install -d -m 700 "$master" "$private" "$ops/backups"
 exec 8>"$master/activation.lock"
 flock -w 20 8
@@ -60,32 +88,56 @@ for module in "${modules[@]}"; do
   fi
 done
 rollback_sources() {
+  local failed=0
   for module in "${modules[@]}"; do
     backup="$source_backup/$module"
     target="$app/$module"
     if [ -s "$backup" ] && [ ! -L "$backup" ] && [ ! -L "$target" ]; then
-      install -D -m 600 "$backup" "$target.rollback.tmp"
-      mv -f "$target.rollback.tmp" "$target"
+      if install -D -m 600 "$backup" "$target.rollback.tmp"; then
+        mv -f "$target.rollback.tmp" "$target" || failed=1
+      else
+        failed=1
+      fi
     elif [ -f "$backup.absent" ] && [ ! -L "$target" ]; then
-      rm -f "$target"
+      rm -f "$target" || failed=1
+    else
+      failed=1
     fi
   done
+  if [ "$failed" -ne 0 ]; then
+    echo MASTER_SOURCE_ROLLBACK_INCOMPLETE
+    return 1
+  fi
   echo MASTER_SOURCE_ROLLBACK_COMPLETED
 }
 restore_all() {
   result=$?
   trap - EXIT
-  if [ "$result" -ne 0 ]; then rollback_sources; fi
-  if [ "$result" -ne 0 ] && [ "${backup_verified:-0}" -eq 0 ] && [ -f "$ops/backups/master-before-$stamp.sqlite3" ]; then
-    rm -f "$ops/backups/master-before-$stamp.sqlite3"
-    echo MASTER_INCOMPLETE_DB_BACKUP_REMOVED
-  fi
+  # Restore the original cron BEFORE any potentially failing disk writes.
+  # This is essential when the SQLite backup fails with ENOSPC.
   if [ "${cron_paused:-0}" -eq 1 ]; then
-    crontab "$old"
-    echo MASTER_CRON_RESTORED_AFTER_FAILURE
+    if crontab "$old"; then
+      echo MASTER_CRON_RESTORED_AFTER_FAILURE
+    else
+      echo MASTER_CRON_RESTORE_FAILED_REQUIRES_MANUAL_RECOVERY
+    fi
+  fi
+  # A failed backup occurs before application sources are changed. Do not
+  # attempt unnecessary rollback writes that can fail and mask cron recovery.
+  if [ "$result" -ne 0 ] && [ "${source_apply_started:-0}" -eq 1 ]; then
+    if ! rollback_sources; then
+      echo MASTER_SOURCE_ROLLBACK_FAILED_REQUIRES_MANUAL_RECOVERY
+    fi
+  fi
+  # Preserve incomplete backup for manual, verified disposition; never
+  # silently delete private evidence or claim it is restorable.
+  if [ "$result" -ne 0 ] && [ "${backup_verified:-0}" -eq 0 ] &&
+     [ -f "$ops/backups/master-before-$stamp.sqlite3" ]; then
+    echo MASTER_INCOMPLETE_DB_BACKUP_QUARANTINE_MANUAL_REVIEW
   fi
   return "$result"
 }
+
 old="$ops/backups/cron-before-master-$stamp.txt"
 crontab -l > "$old" 2>/dev/null || : > "$old"
 chmod 600 "$old"
@@ -146,6 +198,7 @@ print("MASTER_DB_BACKUP_INTEGRITY_OK")
 PY
 echo MASTER_BACKUP_VERIFIED
 backup_verified=1
+source_apply_started=1
 for module in "${modules[@]}"; do
   target="$app/$module"
   install -D -m 600 "$source_root/$module" "$target.deploy.tmp"
