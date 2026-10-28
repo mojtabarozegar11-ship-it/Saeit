@@ -23,7 +23,7 @@ try:
             ROOT_URLCONF="social_hub.urls",INSTALLED_APPS=[],USE_I18N=True)
     django.setup()
     from django.test import RequestFactory
-    from social_hub.course_showcase import COURSES,BY_SLUG,svg_for,poster,gallery
+    from social_hub.course_showcase import COURSES,BY_SLUG,svg_for,poster,gallery,ID
     DJANGO_AVAILABLE=True
 except ImportError:
     DJANGO_AVAILABLE=False
@@ -96,6 +96,12 @@ class HomepageInstallationTests(unittest.TestCase):
         if self.prev is None:os.environ.pop("MPW_COURSE_POSTERS_TEST",None)
         else:os.environ["MPW_COURSE_POSTERS_TEST"]=self.prev
         self.temp.cleanup()
+
+    @unittest.skipUnless(DJANGO_AVAILABLE,"Django unavailable")
+    def test_public_page_marker_matches_reversible_home_installer_exactly(self):
+        self.assertEqual(ID,HOME.MARKER.split('"')[1])
+        content=HOME.patch(self.original)
+        self.assertEqual(content.count('<section id="'+ID+'"'),1)
 
     def test_home_adds_four_with_no_existing_markup_removed_and_rolls_back(self):
         report=HOME.check(self.app)
