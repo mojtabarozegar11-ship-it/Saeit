@@ -5,6 +5,9 @@ on:
     paths:
       - ".github/workflows/mojplaywin-ayaar-evidence-integrity-scoped-20261029.yml"
       - "scripts/deploy_ayaar_evidence_integrity_scoped_20261029.py"
+      - "core/ayaar_case_service.py"
+      - "core/ayaar_views.py"
+      - "tests/test_ayaar_case_service.py"
   workflow_dispatch:
 permissions:
   contents: read
