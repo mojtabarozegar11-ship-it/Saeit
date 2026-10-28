@@ -80,7 +80,7 @@ The [Wiley publisher abstract](https://onlinelibrary.wiley.com/doi/10.1002/ird.2
 
 ### 3.8 Darouich et al. (2024): farmer schedules compared with optimized alternatives
 
-The original post-evaluation addresses 20 center-pivot maize plots in Portugal and directly examines farmer schedules relative to optimized recommendations. Weekly applied irrigation information was collected via technician surveys, with temporary assumptions of compliance when entries were delayed. Modeled evapotranspiration and yield for alternative schedules must not be presented as directly measured causal gains. The article's abstract and body differ on the second comparison year (**2020 versus 2022**); that unresolved discrepancy must be retained. This study refutes any novelty claim based solely on comparing advice with farmer practice. [Original publication](https://doi.org/10.3390/agronomy14010066).
+The original post-evaluation addresses 20 center-pivot maize plots in Portugal and directly examines farmer schedules relative to optimized recommendations. Weekly applied irrigation information was collected via technician surveys, with temporary assumptions of compliance when entries were delayed. Modeled evapotranspiration and yield for alternative schedules must not be presented as directly measured causal gains. The publisher's abstract names **2019 and 2020**, while Methods §2.3 and the Results discuss **2019 and 2022**; this is a source-internal year conflict, not two independently verified comparisons. Until clarified, do not attribute any seasonal numerical contrast to an unambiguous second year. This study refutes any novelty claim based solely on comparing advice with farmer practice. [Original publication](https://doi.org/10.3390/agronomy14010066).
 
 ## 4. Claim-level evidence and inference boundaries
 
@@ -94,6 +94,8 @@ The original post-evaluation addresses 20 center-pivot maize plots in Portugal a
 | Elia 2022 | Six farms, paired management plots | Publisher-reported seasonal M; delivery described | Independently verified receipt/action, causal precision or persistence | Complete methods, plot measurements |
 | Baroni 2019 | Six methods; surveyed users | S; implementation gap described | Exact event adherence rate or water saving | Full text, survey and field denominators |
 | Darouich 2024 | 20 plots; technician-surveyed schedules | S and P; applied inputs reported | Modeled yield/ET as measured causal outcome | Event log, time-window reconciliation |
+
+**Publisher metadata check (2026-10-29):** The first eight reference entries now include source-verified article titles, author lists, volumes and article/page locators from the original publisher pages (or UNE institutional record for Car). This is a bibliographic correction, not a verification of the complete original methods or of disputed numerical data. The remaining nine reference entries still require full title/author verification before submission.
 
 **Reproducible source-to-claim companion:** [Eight-case structured claim ledger](MR-2026-001_C87_EIGHT_CASE_CLAIM_LEDGER_2026-10-29.tsv) records each case's observational unit, admissible claim, restricted inference, source provenance and missing validation. This is an editorial dataset extracted from published material, not a participant-level dataset or independent study replication.
 
@@ -153,14 +155,14 @@ A recommendation delivered, a farmer engaged, an irrigation event implemented an
 
 ## References
 
-1. Amini A, Emami S, Dehghanisanij H. (2025). *Scientific Reports*. https://doi.org/10.1038/s41598-025-26567-z
-2. Cvejić R, Černič-Istenič M, Honzak L, Pečan U, Železnikar Š, Pintar M. (2020). *Agronomy*, 10, 1238. https://doi.org/10.3390/agronomy10091238
-3. Jamal A et al. (2023). *Water Resources Research*, e2023WR035810. https://doi.org/10.1029/2023WR035810
-4. Abi Saab MT et al. (2019). *Water*, 11, 252. https://doi.org/10.3390/w11020252
-5. Car NJ, Christen EW, Hornbuckle J, Moore GA. (2012). *Computers and Electronics in Agriculture*, 84, 132–143. https://doi.org/10.1016/j.compag.2012.03.003
-6. Elia A et al. (2022). *Acta Horticulturae*, 1335. https://doi.org/10.17660/ActaHortic.2022.1335.81
-7. Baroni G et al. (2019). *Irrigation and Drainage*, 68, 520–530. https://doi.org/10.1002/ird.2337
-8. Darouich H et al. (2024). *Agronomy*, 14, 66. https://doi.org/10.3390/agronomy14010066
+1. Amini A, Emami S, Dehghanisanij H. (2025). Participatory evaluation of an irrigation decision support system for water-saving and productivity gains in Lake Urmia Basin. *Scientific Reports*, 15, 42480. https://doi.org/10.1038/s41598-025-26567-z
+2. Cvejić R, Černič-Istenič M, Honzak L, Pečan U, Železnikar Š, Pintar M. (2020). Farmers Try to Improve Their Irrigation Practices by Using Daily Irrigation Recommendations—The Vipava Valley Case, Slovenia. *Agronomy*, 10, 1238. https://doi.org/10.3390/agronomy10091238
+3. Jamal A, Cai X, Qiao X, Garcia L, Wang J, Amori A, Yang H. (2023). Real-Time Irrigation Scheduling Based on Weather Forecasts, Field Observations, and Human-Machine Interactions. *Water Resources Research*, 59, e2023WR035810. https://doi.org/10.1029/2023WR035810
+4. Abi Saab MT, Jomaa I, Skaf S, Fahed S, Todorovic M. (2019). Assessment of a Smartphone Application for Real-Time Irrigation Scheduling in Mediterranean Environments. *Water*, 11, 252. https://doi.org/10.3390/w11020252
+5. Car NJ, Christen EW, Hornbuckle JW, Moore GA. (2012). Using a mobile phone Short Messaging Service (SMS) for irrigation scheduling in Australia—Farmers’ participation and utility evaluation. *Computers and Electronics in Agriculture*, 84, 132–143. https://doi.org/10.1016/j.compag.2012.03.003
+6. Elia A, Lazzizera C, La Rotonda P, Conversa G. (2022). Agronomical effects and response of growers in the application of the GesCoN DSS at the commercial farm scale. *Acta Horticulturae*, 1335. https://doi.org/10.17660/ActaHortic.2022.1335.81
+7. Baroni G, Drastig K, Lichtenfeld A-U, Jost L, Claas P. (2019). Assessment of Irrigation Scheduling Systems in Germany: Survey of the Users and Comparative Study. *Irrigation and Drainage*, 68, 520–530. https://doi.org/10.1002/ird.2337
+8. Darouich H, Simionesei L, Oliveira AR, Neves R, Ramos TB. (2024). Assessing the Impact of IrrigaSys Decision Support System on Farmers’ Irrigation Practices in Southern Portugal: A Post Evaluation Study. *Agronomy*, 14, 66. https://doi.org/10.3390/agronomy14010066
 9. Ara I et al. (2021). *Agricultural Water Management*, 257, 107161. https://doi.org/10.1016/j.agwat.2021.107161
 10. Lorite IJ et al. (2012). *Water Resources Management*, 26, 2397–2419. https://doi.org/10.1007/s11269-012-0023-3
 11. Berthold TA, Ajaz A, Olsovsky T, Kathuria D. (2021). *Smart Agricultural Technology*, 1, 100016. https://doi.org/10.1016/j.atech.2021.100016
