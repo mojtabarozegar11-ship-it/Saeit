@@ -12,7 +12,7 @@ concurrency:
 jobs:
   compress:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 240
     steps:
       - name: Prepare pinned cPanel relay
         shell: bash
@@ -119,19 +119,21 @@ jobs:
             test "$status" = "200"
           done
           ssh -F "$d/config" saeit-vps 'set -eu; df -Pk "$HOME" | awk "NR==2 { if (\$4 < 4500000) exit 1; print \"VPS_BACKUP_FREE_KB=\"\$4 }"'
-      - name: Remove only the verified 20-byte failed dump artifact
+      - name: Remove only the verified incomplete dump from the timed-out attempt
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-page-compression"
-          ssh -F "$d/config" saeit-vps 'set -eu; f=/home/githubops/.db-backups/zomorod2_sites_main-pre-page-compression-20261028.sql.gz; if [ -e "$f" ]; then test "$(stat -c %s "$f")" = 20; rm -f -- "$f"; echo EMPTY_BACKUP_ARTIFACT_REMOVED=yes; else echo EMPTY_BACKUP_ARTIFACT_PRESENT=no; fi'
-      - name: Stream a compressed full staging database backup to the VPS
+          ssh -F "$d/config" saeit-vps 'set -eu; f=/home/githubops/.db-backups/zomorod2_sites_main-pre-page-compression-20261028.sql.gz; if [ -e "$f" ]; then test "$(stat -c %s "$f")" = 2398711809; test "$(sha256sum "$f" | awk "{print \\\$1}")" = fea4dd09eaed889b05731fabbe85fecd539ec6aa27b0f00e1e593ac9f4560d76; rm -f -- "$f"; echo VERIFIED_INCOMPLETE_DUMP_REMOVED=yes; else echo VERIFIED_INCOMPLETE_DUMP_PRESENT=no; fi; df -Pk "$HOME" | awk "NR==2 { if (\\$4 < 4500000) exit 1; print \\\"VPS_BACKUP_FREE_KB=\\\"\\$4 }"'
+      - name: Create and verify a complete staging database backup
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-page-compression"
-          timeout 1800s ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY' | gzip -1 | timeout 1800s ssh -F "$d/config" saeit-vps 'bash -c '"'"'set -eu; umask 077; dir=/home/githubops/.db-backups; mkdir -p "$dir"; final="$dir/zomorod2_sites_main-pre-page-compression-20261028.sql.gz"; test ! -e "$final"; tmp="$final.tmp.$$"; trap "rm -f \"$tmp\"" EXIT; ulimit -f 3145728; cat > "$tmp"; gzip -t "$tmp"; test "$(stat -c %s "$tmp")" -gt 100000000; stat -c "BACKUP_BYTES=%s" "$tmp"; sha256sum "$tmp"; mv "$tmp" "$final"; trap - EXIT; echo BACKUP_PATH="$final"'"'"''
-          import json,os,re,shutil,subprocess,sys,urllib.parse
+          backup_local="$d/zomorod2_sites_main-pre-page-compression-20261028.sql.gz"
+          trap 'rm -f "$backup_local"' EXIT
+          timeout 7200s ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY' | gzip -1 > "$backup_local"
+          import os,re,shutil,subprocess,sys,urllib.parse
           from pathlib import Path
           app=Path.home()/"Saeit-staging"
           matches=[]
@@ -139,7 +141,7 @@ jobs:
               try:
                   if path.is_symlink() or not path.is_file() or path.stat().st_size>65536: continue
                   for line in path.read_text(encoding="utf-8",errors="replace").splitlines():
-                      m=re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$",line)
+                      m=re.match(r"^\\s*(?:export\\s+)?DATABASE_URL\\s*=\\s*(.*?)\\s*$",line)
                       if m: matches.append(urllib.parse.urlsplit(m.group(1).strip().strip('"').strip("'")))
               except OSError: pass
           if len(matches)!=1: raise SystemExit("STAGING_DATABASE_URL_NOT_UNIQUE")
@@ -151,10 +153,25 @@ jobs:
           if u.port: args.append("--port="+str(u.port))
           args.append(db)
           env=dict(os.environ,MYSQL_PWD=urllib.parse.unquote(u.password or ""))
-          p=subprocess.run(args,env=env,stdout=sys.stdout.buffer,timeout=1500)
+          p=subprocess.run(args,env=env,stdout=sys.stdout.buffer,timeout=7100)
           if p.returncode: raise SystemExit("MYSQL_BACKUP_DUMP_FAILED")
           print("STAGING_DATABASE_DUMP_STREAM_COMPLETE",file=sys.stderr)
           PY
+          gzip -t "$backup_local"
+          backup_bytes="$(stat -c %s "$backup_local")"
+          test "$backup_bytes" -gt 100000000
+          test "$backup_bytes" -lt 3145728000
+          backup_sha="$(sha256sum "$backup_local" | awk '{print $1}')"
+          echo "COMPLETE_BACKUP_BYTES=$backup_bytes"
+          echo "COMPLETE_BACKUP_SHA256=$backup_sha"
+          d_remote=/home/githubops/.db-backups
+          f_remote="$d_remote/zomorod2_sites_main-pre-page-compression-20261028.sql.gz"
+          tmp_remote="$f_remote.upload"
+          if ! scp -F "$d/config" "$backup_local" "saeit-vps:$tmp_remote"; then
+            ssh -F "$d/config" saeit-vps "rm -f -- '$tmp_remote'" || true
+            exit 1
+          fi
+          ssh -F "$d/config" saeit-vps "set -eu; test ! -e '$f_remote'; test -f '$tmp_remote'; test \\$(stat -c %s '$tmp_remote') = '$backup_bytes'; test \\$(sha256sum '$tmp_remote' | awk '{print \\\$1}') = '$backup_sha'; gzip -t '$tmp_remote'; mv '$tmp_remote' '$f_remote'; echo BACKUP_PATH='$f_remote'; echo BACKUP_VERIFIED=complete"
       - name: Apply online lossless page compression and verify rows
         shell: bash
         run: |
