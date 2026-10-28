@@ -161,7 +161,7 @@ jobs:
           if set(stats)!={"core_agenttask","core_factoryevidence"} or any(x[1]!="InnoDB" for x in stats.values()): raise SystemExit("COMPRESSION_TABLE_SCOPE_MISMATCH")
           quota=subprocess.run(["uapi","--output=json","Quota","get_quota_info"],capture_output=True,text=True,timeout=20,check=True)
           qinfo=json.loads(quota.stdout).get("result",{}).get("data",{})
-          print("STAGING_DB_PREFLIGHT="+json.dumps({"database":q["database"],"version":q["version"],"host":q["host"],"datadir":q["datadir"],"filesystem":fs[1],"mysql_free_kb":free_kb,"table_rows_format":{k:v[2] for k,v in stats.items()},"quota_used_mb":qinfo.get("megabytes_used")},ensure_ascii=False))
+          print("STAGING_DB_PREFLIGHT="+json.dumps({"database":q["database"],"version":q["version"],"host":q["host"],"datadir":q["datadir"],"filesystem":fs[1],"mysql_free_kb":free_kb,"table_layout":{k:{"row_format":v[2],"data_bytes":int(v[3]),"index_bytes":int(v[4]),"create_options":v[5]} for k,v in stats.items()},"quota_used_mb":qinfo.get("megabytes_used")},ensure_ascii=False))
           PY
           REMOTE
           for path in / /agents/ /admin/login/; do
@@ -267,14 +267,20 @@ jobs:
               before_layout=run("SELECT CONCAT(ROW_FORMAT,'|',DATA_LENGTH,'|',INDEX_LENGTH,'|',CREATE_OPTIONS) FROM information_schema.TABLES WHERE TABLE_SCHEMA='"+db+"' AND TABLE_NAME='"+table+"'")[0]
               parts=before_layout.split("|",3)
               if len(parts)<4: raise SystemExit("TABLE_LAYOUT_UNAVAILABLE")
-              if "page_compressed=1" not in parts[3].lower():
+              print("TABLE_COUNT_BEFORE="+json.dumps({"table":table,"row_count":before,"row_format":parts[0],"data_bytes":int(parts[1]),"index_bytes":int(parts[2]),"create_options":parts[3]},ensure_ascii=False))
+              already_compressed="page_compressed=1" in parts[3].lower()
+              if not already_compressed:
                   sql="ALTER TABLE "+table+" PAGE_COMPRESSED=1, PAGE_COMPRESSION_LEVEL=6, ALGORITHM=INPLACE, LOCK=NONE"
                   run(sql,timeout=5400)
+              else:
+                  print("TABLE_COMPRESSION_ALREADY_PRESENT="+table)
               after_layout=run("SELECT CONCAT(ROW_FORMAT,'|',DATA_LENGTH,'|',INDEX_LENGTH,'|',CREATE_OPTIONS) FROM information_schema.TABLES WHERE TABLE_SCHEMA='"+db+"' AND TABLE_NAME='"+table+"'")[0].split("|",3)
               after=run("SELECT COUNT(*) FROM "+table)[0]
-              if before!=after: raise SystemExit("ROW_COUNT_CHANGED:"+table)
+              delta=int(after)-int(before)
+              print("TABLE_COUNT_AFTER="+json.dumps({"table":table,"row_count":after,"delta_during_online_operation":delta},ensure_ascii=False))
+              if delta<0: raise SystemExit("ROW_COUNT_DECREASED_DURING_ONLINE_OPERATION:"+table)
               if len(after_layout)<4 or "page_compressed=1" not in after_layout[3].lower(): raise SystemExit("PAGE_COMPRESSION_NOT_RECORDED:"+table)
-              print("TABLE_COMPRESSION_VERIFIED="+json.dumps({"table":table,"row_count":after,"row_format":after_layout[0],"data_bytes":int(after_layout[1]),"index_bytes":int(after_layout[2]),"create_options":after_layout[3]},ensure_ascii=False))
+              print("TABLE_COMPRESSION_VERIFIED="+json.dumps({"table":table,"row_count_after":after,"row_count_delta":delta,"row_format":after_layout[0],"data_bytes":int(after_layout[1]),"index_bytes":int(after_layout[2]),"create_options":after_layout[3]},ensure_ascii=False))
           totals=run("SELECT CONCAT(COALESCE(SUM(DATA_LENGTH+INDEX_LENGTH),0)) FROM information_schema.TABLES WHERE TABLE_SCHEMA='"+db+"' AND TABLE_TYPE='BASE TABLE'")[0]
           print("MYSQL_TOTAL_TABLE_BYTES_AFTER="+totals)
           chk=run("CHECK TABLE core_agenttask, core_factoryevidence QUICK",timeout=1800)
