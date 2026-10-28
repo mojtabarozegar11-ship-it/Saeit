@@ -38,6 +38,12 @@ export function isKeyboardOrAssistiveClick(event) {
   return Boolean(event && event.detail === 0);
 }
 
+// Moving focus onto a HUD/menu control must release held WASD/Space.
+// Browsers may swallow keyup during keyboard or assistive focus transitions.
+export function shouldReleaseHeldKeysOnFocus(screen, target) {
+  return screen === 'game' && isInteractiveTarget(target);
+}
+
 // A second touch must not steal a joystick or camera pointer already in use.
 // Do not require isPrimary: players must be able to move and aim with two fingers.
 export function canCaptureGameplayPointer(activePointerId, incomingPointerId, screen) {
