@@ -2,7 +2,7 @@
 """Guarded one-path free-play Arena publication, owned update and reversible rollback.
 
 Never edits Django, the shared Passenger entry, protected sites, databases, or finance.
-Public OpenLigaDB data is read only from the static HTML after adult self-declaration.
+Public OpenLigaDB and TheSportsDB data are read only after adult self-declaration.
 An existing /arena/ can only be replaced when its exact owner, hash and contents
 match the previously installed free-only Arena release.
 """
@@ -97,13 +97,19 @@ def payload_preflight(index):
         raise RuntimeError("Missing playable Arena component")
     if text.count("<script>") != 1 or "<script src=" in text or "XMLHttpRequest" in text:
         raise RuntimeError("Not a self-contained owned Arena document")
-    # Permit exactly one audited, read-only GET for public OpenLigaDB results.
-    # The HTML also enforces CSP connect-src to the same host; no user picks are uploaded.
-    required_call = "await fetch(url,{mode:'cors',credentials:'omit',cache:'no-store',signal:ctrl.signal,priority:force?'auto':'low'})"
-    required_origin = "const LIVE_FEED_ORIGIN='https://api.openligadb.de/getmatchdata/'"
-    if len(re.findall(r"\bfetch\s*\(", text)) != 1 or required_call not in text or text.count(required_origin) != 1:
+    # Exactly two audited read-only public GETs, each fixed to an allowlisted provider.
+    # Live picks never leave this document; no writable API, credentials, or wagering.
+    required = (
+        "await fetch(url,{mode:'cors',credentials:'omit',cache:'no-store',signal:ctrl.signal,priority:force?'auto':'low'})",
+        "await fetch(url,{mode:'cors',credentials:'omit',cache:'no-store',signal:ctrl.signal})",
+        "const LIVE_FEED_ORIGIN='https://api.openligadb.de/getmatchdata/'",
+        "const SPOTLIGHT_ORIGIN='https://www.thesportsdb.com/api/v1/json/123/eventsnextleague.php?id='",
+        "const SPOTLIGHT_NAMES=Object.freeze({",
+        "if(!Object.hasOwn(SPOTLIGHT_NAMES,id))return;",
+    )
+    if len(re.findall(r"\bfetch\s*\(", text)) != 2 or any(text.count(value) != 1 for value in required):
         raise RuntimeError("Unapproved external network call in Arena")
-    if 'connect-src https://api.openligadb.de;' not in text:
+    if 'connect-src https://api.openligadb.de https://www.thesportsdb.com;' not in text:
         raise RuntimeError("Live feed CSP restriction missing")
     if any(s in text.lower() for s in ("walletconnect", "window.ethereum", "tronweb", "metamask", "paymentgateway")):
         raise RuntimeError("Financial wallet integration forbidden in free release")
