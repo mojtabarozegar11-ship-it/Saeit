@@ -16,11 +16,10 @@ class KnowledgeInternalPagesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "حوزه آزمایشی")
 
-    def test_book_page_is_public_and_does_not_claim_publication(self):
+    def test_unpublished_book_detail_is_not_public(self):
+        # The default status is a non-public draft. Public routes must fail closed.
         response = self.client.get(reverse("knowledge_book_detail", args=[self.book.code]))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "کتاب آزمایشی")
-        self.assertContains(response, "محتوای این عنوان هنوز تولید یا تأیید نشده است")
+        self.assertEqual(response.status_code, 404)
 
     def test_knowledge_index_exposes_agent_governance_and_publication_gate(self):
         response = self.client.get("/knowledge/")
@@ -29,8 +28,8 @@ class KnowledgeInternalPagesTests(TestCase):
         self.assertContains(response, "OWNER APPROVAL")
         self.assertContains(response, "هنوز مقاله‌ای با وضعیت انتشار عمومی ثبت نشده است.")
 
-    def test_sitemap_contains_knowledge_book_and_domain(self):
+    def test_sitemap_excludes_unpublished_book_but_keeps_public_domain(self):
         response = self.client.get("/sitemap.xml")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, f"/knowledge/book/{self.book.code}/")
+        self.assertNotContains(response, f"/knowledge/book/{self.book.code}/")
         self.assertContains(response, f"/knowledge/domain/{self.domain.code}/")
