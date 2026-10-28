@@ -169,6 +169,13 @@ print("MPW_TRX_RIGHTS_RUNTIME="+json.dumps({"read_only":True,"no_invoices_create
         raise RuntimeError("RIGHTS_GATE_RUNTIME_IMPORT_FAILED:"+result.stderr[-400:])
     evidence=[line for line in result.stdout.splitlines() if line.startswith("MPW_TRX_RIGHTS_RUNTIME=")]
     if len(evidence)!=1: raise RuntimeError("RUNTIME_EVIDENCE_MISSING")
+    try:
+        payload=json.loads(evidence[0].split("=",1)[1])
+        products=payload["products"]
+        if any(products[str(sku)]["exists"] is not True for sku in (72,225,879)):
+            raise RuntimeError("RIGHTS_REQUIRED_PRODUCT_MISSING")
+    except (ValueError,KeyError,TypeError) as exc:
+        raise RuntimeError("RIGHTS_RUNTIME_RECEIPT_INVALID") from exc
     print(evidence[0])
 
 def private_root():
@@ -216,6 +223,11 @@ def operation(mode,run_id=None):
             with (folder/"manifest.json").open("x",encoding="utf8") as f:
                 os.fchmod(f.fileno(),0o600)
                 json.dump(info,f,sort_keys=True);f.flush();os.fsync(f.fileno())
+            # Make the private originals and manifest durable before any source edit.
+            for directory in (folder,BACKUPS):
+                dirfd=os.open(directory,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
+                try: os.fsync(dirfd)
+                finally: os.close(dirfd)
             touched=[]
             try:
                 for k,path in TARGETS.items():
