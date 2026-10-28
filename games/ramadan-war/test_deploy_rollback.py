@@ -218,6 +218,41 @@ class ScopedRollbackTests(unittest.TestCase):
         self.assertEqual(stale.read_bytes(), b"unrelated pending state")
         self.assertEqual(deploy.metadata(self.stage)["phase"], "prepared")
 
+    def valid_release_manifest(self):
+        return {
+            "phase": "prepared",
+            "old": {"game.js": "a" * 64},
+            "new": {name: "b" * 64 for name in deploy.ASSETS},
+            "route": "c" * 64,
+            "protected": {".htaccess": "d" * 64, "store/index.html": "e" * 64},
+        }
+
+    def test_valid_release_journal_passes_strict_schema(self):
+        self.assertTrue(deploy.validate_release_manifest(self.valid_release_manifest()))
+
+    def test_forged_release_journal_cannot_escape_game_or_protected_paths(self):
+        for field, bad_key in (("new", "../outside-private-state"),
+                               ("old", "../outside-private-state"),
+                               ("protected", "../outside-private-state")):
+            with self.subTest(field=field):
+                forged = self.valid_release_manifest()
+                forged[field][bad_key] = "f" * 64
+                with self.assertRaises(AssertionError):
+                    deploy.validate_release_manifest(forged)
+
+    def test_publish_and_verify_reject_forged_journal_before_live_reads(self):
+        forged = self.valid_release_manifest()
+        forged["new"]["../outside-private-state"] = "f" * 64
+        deploy.store(self.stage, forged)
+        with patch.object(deploy, "live_card_check", side_effect=AssertionError("live touched")):
+            with self.assertRaises(AssertionError) as published:
+                deploy.publish(self.stage, self.run)
+            self.assertNotIn("live touched", str(published.exception))
+            with self.assertRaises(AssertionError) as verified:
+                deploy.verify(self.stage)
+            self.assertNotIn("live touched", str(verified.exception))
+        self.assertEqual(self.protected.read_bytes(), b"protected home unchanged")
+
     def test_corrupt_backup_never_replaces_known_good_file(self):
         (self.game / "game.js").write_bytes(self.new)
         (self.stage / "old-game.js").write_bytes(b"corrupt backup")
