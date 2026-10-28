@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import os
+import tempfile
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
@@ -40,7 +41,7 @@ def build_preview(source_dir, output_path, assets, expected_sizes=None):
         raise ValueError("preview asset list empty or contains duplicates")
     payload = {}
     for rel in assets:
-        if not isinstance(rel, str) or not rel or "\\" in rel:
+        if not isinstance(rel, str) or not rel or rel == "preview-manifest.json" or "\\" in rel:
             raise ValueError("unsafe preview asset name")
         path = Path(rel)
         if path.is_absolute() or ".." in path.parts or path.as_posix() != rel:
@@ -66,36 +67,63 @@ def build_preview(source_dir, output_path, assets, expected_sizes=None):
     }
     manifest_data = (json.dumps(manifest, ensure_ascii=False, sort_keys=True,
                                 separators=(",", ":")) + "\n").encode("utf-8")
-    output.parent.mkdir(parents=True, exist_ok=True)
-    if output.is_symlink() or output.resolve() == root or output.is_relative_to(root):
+    # Never follow an output symlink or an existing linked ancestor. The final
+    # archive must be outside the game tree even when the caller uses a relative
+    # path or a directory alias.
+    if any(part.is_symlink() for part in (output, *output.parents)):
+        raise ValueError("symlinked preview output path")
+    if output.resolve().is_relative_to(root):
         raise ValueError("preview archive must be outside game source")
-    with ZipFile(output, "w", compression=ZIP_DEFLATED, compresslevel=6) as archive:
-        for rel, data in sorted(payload.items()):
-            info = ZipInfo("ramadan-war/" + rel, date_time=(2020, 1, 1, 0, 0, 0))
-            info.compress_type = ZIP_DEFLATED
-            info.external_attr = 0o644 << 16
-            archive.writestr(info, data)
-        info = ZipInfo("ramadan-war/preview-manifest.json",
-                       date_time=(2020, 1, 1, 0, 0, 0))
-        info.compress_type = ZIP_DEFLATED
-        info.external_attr = 0o644 << 16
-        archive.writestr(info, manifest_data)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if any(part.is_symlink() for part in (output, *output.parents)):
+        raise ValueError("symlinked preview output path")
 
-    with ZipFile(output) as archive:
-        if archive.testzip() is not None:
-            raise RuntimeError("preview ZIP CRC validation failed")
-        expected_names = {"ramadan-war/" + name for name in payload}
-        expected_names.add("ramadan-war/preview-manifest.json")
-        if set(archive.namelist()) != expected_names:
-            raise RuntimeError("preview ZIP asset list mismatch")
-        if archive.read("ramadan-war/preview-manifest.json") != manifest_data:
-            raise RuntimeError("preview manifest mismatch")
-        for rel, data in payload.items():
-            if sha(archive.read("ramadan-war/" + rel)) != sha(data):
-                raise RuntimeError("preview archive SHA-256 mismatch: " + rel)
-    return {"asset_count": len(payload), "archive_sha256": sha(output.read_bytes()),
-            "archive_bytes": output.stat().st_size}
+    # Do not truncate a previously verified preview if the new build fails,
+    # runs out of space, or fails CRC/SHA validation. Publish atomically only
+    # after every byte has been checked, and clean up incomplete temp files.
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+                mode="w+b", dir=output.parent, prefix=".ramadan-preview-",
+                suffix=".zip", delete=False) as temp:
+            temp_path = Path(temp.name)
+            with ZipFile(temp, "w", compression=ZIP_DEFLATED, compresslevel=6) as archive:
+                for rel, data in sorted(payload.items()):
+                    info = ZipInfo("ramadan-war/" + rel, date_time=(2020, 1, 1, 0, 0, 0))
+                    info.compress_type = ZIP_DEFLATED
+                    info.external_attr = 0o644 << 16
+                    archive.writestr(info, data)
+                info = ZipInfo("ramadan-war/preview-manifest.json",
+                               date_time=(2020, 1, 1, 0, 0, 0))
+                info.compress_type = ZIP_DEFLATED
+                info.external_attr = 0o644 << 16
+                archive.writestr(info, manifest_data)
+            temp.flush()
+            os.fsync(temp.fileno())
 
+        with ZipFile(temp_path) as archive:
+            if archive.testzip() is not None:
+                raise RuntimeError("preview ZIP CRC validation failed")
+            expected_names = {"ramadan-war/" + name for name in payload}
+            expected_names.add("ramadan-war/preview-manifest.json")
+            if len(archive.namelist()) != len(expected_names) or set(archive.namelist()) != expected_names:
+                raise RuntimeError("preview ZIP asset list mismatch")
+            if archive.read("ramadan-war/preview-manifest.json") != manifest_data:
+                raise RuntimeError("preview manifest mismatch")
+            for rel, data in payload.items():
+                if sha(archive.read("ramadan-war/" + rel)) != sha(data):
+                    raise RuntimeError("preview archive SHA-256 mismatch: " + rel)
+        archive_sha = sha(temp_path.read_bytes())
+        archive_bytes = temp_path.stat().st_size
+        if output.is_symlink() or any(p.is_symlink() for p in output.parents):
+            raise ValueError("symlinked preview output path")
+        os.replace(temp_path, output)
+        temp_path = None
+        return {"asset_count": len(payload), "archive_sha256": archive_sha,
+                "archive_bytes": archive_bytes}
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
