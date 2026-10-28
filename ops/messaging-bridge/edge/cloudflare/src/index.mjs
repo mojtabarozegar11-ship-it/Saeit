@@ -54,10 +54,14 @@ export default {
         headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
       });
     }
-    if (request.method !== 'GET' || url.pathname !== '/ws/chat') {
+    // A private path token is supported for clients that cannot attach a
+    // WebSocket-only header. It must be high entropy and never appear in logs.
+    const privatePath = /^\/bridge\/([A-Za-z0-9_-]{43,128})\/ws\/chat$/.exec(url.pathname);
+    if (request.method !== 'GET' || (url.pathname !== '/ws/chat' && !privatePath)) {
       return new Response('Not found', { status: 404 });
     }
-    if (!sameSecret(request.headers.get('X-Moj-Bridge-Token'), env?.BRIDGE_SHARED_TOKEN)) {
+    const suppliedSecret = request.headers.get('X-Moj-Bridge-Token') || privatePath?.[1];
+    if (!sameSecret(suppliedSecret, env?.BRIDGE_SHARED_TOKEN)) {
       return new Response('Unauthorized', { status: 401, headers: { 'Cache-Control': 'no-store' } });
     }
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
