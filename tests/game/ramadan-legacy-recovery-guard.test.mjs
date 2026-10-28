@@ -9,10 +9,14 @@ const state=(done,ids=[],collected)=>({mission:2,
   objective:{done,hold:0,bossDefeated:false,...(collected?{collectedSites:collected}:{})},
   pickups:ids.map(pickup),score:300*done,points:done});
 
-test('ambiguous legacy save never fabricates an unearned recovery pickup',()=>{
+test('ambiguous legacy save restores bounded items without minting rewards or a false ledger',()=>{
   const s=state(1,[]),before=structuredClone(s);
+  assert.equal(restoreRecoveryPickups(s,sites),2);
+  assert.equal(s.score,before.score);
+  assert.equal(s.points,before.points);
+  assert.equal(s.objective.done,before.objective.done);
+  assert.equal(s.objective.collectedSites,undefined);
   assert.equal(restoreRecoveryPickups(s,sites),0);
-  assert.deepEqual(s,before);
 });
 test('complete remaining legacy pickups infer an exact provenance ledger without points',()=>{
   const s=state(1,[1,2]);
