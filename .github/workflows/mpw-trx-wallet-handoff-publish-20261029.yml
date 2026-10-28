@@ -147,8 +147,17 @@ jobs:
         run: |
           set -euo pipefail
           remote="/home/zomorod2/.mpw-trx-handoff-20261029-$GITHUB_RUN_ID"
-          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-trx-handoff-ssh/config" saeit-cpanel "python3 '$remote/installer.py' publish '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'"
+          output="$(timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-trx-handoff-ssh/config" saeit-cpanel "python3 '$remote/installer.py' publish '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'")"
+          printf '%s\n' "$output"
+          if [[ "$output" == *MPW_TRX_HANDOFF_ALREADY_APPLIED* ]]; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo 'MPW_TRX_HANDOFF_NOOP_RESTART_SKIPPED=true'
+          else
+            [[ "$output" == *MPW_TRX_HANDOFF_ATOMIC_PUBLISH_OK:* ]] || { echo '::error::UNRECOGNIZED_INSTALL_RESULT'; exit 1; }
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
       - name: Refresh existing Passenger app without editing other files
+        if: steps.install.outputs.changed == 'true'
         run: |
           remote="/home/zomorod2/.mpw-trx-handoff-20261029-$GITHUB_RUN_ID"
           timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-trx-handoff-ssh/config" saeit-cpanel "python3 '$remote/installer.py' refresh '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'"
@@ -180,7 +189,7 @@ jobs:
           print("MPW_TRX_HANDOFF_POSTDEPLOY_PROTECTED_ROUTES=OK")
           PY
       - name: Roll back only our module on a failed install or smoke
-        if: failure() && steps.install.outcome == 'success'
+        if: failure() && steps.install.outcome == 'success' && steps.install.outputs.changed == 'true'
         run: |
           remote="/home/zomorod2/.mpw-trx-handoff-20261029-$GITHUB_RUN_ID"
           timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-trx-handoff-ssh/config" saeit-cpanel "python3 '$remote/installer.py' rollback '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'"
