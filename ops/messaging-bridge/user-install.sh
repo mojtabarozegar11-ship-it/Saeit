@@ -45,8 +45,28 @@ PY
   "$TEMP/bin/node" -e "import('node:crypto').then(()=>console.log('MMSG_NODE_RUNTIME=PASS'))"
   "$TEMP/bin/node" --check "$TEMP/app/whatsapp.mjs"
   (cd "$TEMP/app"; "$TEMP/bin/node" --input-type=module -e "import('@whiskeysockets/baileys').then(()=>console.log('MMSG_BAILEYS_PACKAGE=PASS'))")
-  python3 -m venv "$TEMP/venv"
-  "$TEMP/venv/bin/python" -m pip install --disable-pip-version-check --no-index --find-links "$TEMP/wheels" -r "$TEMP/app/requirements.txt" --quiet
+  # Debian VPS has no ensurepip and githubops has no sudo. Never touch system Python.
+  python3 -m venv --without-pip "$TEMP/venv"
+  "$TEMP/venv/bin/python" - "$TEMP/wheels" <<'PY'
+import pathlib, sys, sysconfig, zipfile
+wheels = sorted(pathlib.Path(sys.argv[1]).glob('*.whl'))
+if not wheels: raise SystemExit('No bundled Python wheels')
+site = pathlib.Path(sysconfig.get_paths()['purelib'])
+site.mkdir(parents=True, exist_ok=True)
+for wheel in wheels:
+    if not wheel.name.endswith('-none-any.whl'):
+        raise SystemExit('Wheel is not universal; refusing direct extraction')
+    with zipfile.ZipFile(wheel) as z:
+        names = z.namelist()
+        wheels_meta = [n for n in names if n.endswith('.dist-info/WHEEL')]
+        if len(wheels_meta) != 1 or 'Root-Is-Purelib: true' not in z.read(wheels_meta[0]).decode():
+            raise SystemExit('Wheel metadata is not purelib')
+        for n in names:
+            p = pathlib.PurePosixPath(n)
+            if p.is_absolute() or '..' in p.parts: raise SystemExit('Unsafe wheel member')
+        z.extractall(site)
+print('MMSG_PYTHON_WHEELS_INSTALLED_PRIVATE=PASS')
+PY
   "$TEMP/venv/bin/python" -c "import telethon; print('MMSG_TELETHON_PACKAGE=PASS')"
   MOJMSG_STATE_DIR="$BASE/state" "$TEMP/venv/bin/python" "$TEMP/app/telegram.py" status >/dev/null
   MOJMSG_STATE_DIR="$BASE/state" "$TEMP/bin/node" "$TEMP/app/whatsapp.mjs" status --account primary >/dev/null
