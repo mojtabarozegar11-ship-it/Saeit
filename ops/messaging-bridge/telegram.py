@@ -25,13 +25,28 @@ def status_write(root, status):
     os.replace(tmp, path)
 
 
-async def heartbeat(root, interval=30):
+async def heartbeat(root, client, interval=30):
+    """Report observed connection health, never an unconditional CONNECTED flag."""
     while True:
-        status_write(root, 'CONNECTED')
+        if not client.is_connected():
+            status_write(root, 'DISCONNECTED')
+        else:
+            try:
+                authorized = await asyncio.wait_for(client.is_user_authorized(), timeout=15)
+            except (Exception, asyncio.TimeoutError):
+                status_write(root, 'DEGRADED')
+            else:
+                status_write(root, 'CONNECTED' if authorized else 'LOGIN_REQUIRED')
         await asyncio.sleep(interval)
 
 
 async def main(mode):
+    # Read-only status must work without API keys, Telethon or a logged-in session.
+    if mode == 'status':
+        root = Path(os.environ.get('MOJMSG_STATE_DIR', '/var/lib/moj-messaging')).resolve()
+        file = root / 'telegram-status.json'
+        print(file.read_text().strip() if file.exists() else 'NOT_STARTED')
+        return 0
     from telethon import TelegramClient
     api_id = os.environ.get('TG_API_ID')
     api_hash = os.environ.get('TG_API_HASH')
@@ -53,17 +68,13 @@ async def main(mode):
             print('AUTHORIZED: Telegram session saved privately; never commit *.session.')
             status_write(root, 'AUTHORIZED')
             return 0
-        if mode == 'status':
-            file = root / 'telegram-status.json'
-            print(file.read_text().strip() if file.exists() else 'NOT_STARTED')
-            return 0
         await client.connect()
         if not await client.is_user_authorized():
             status_write(root, 'LOGIN_REQUIRED')
             print('LOGIN_REQUIRED: use local control.sh telegram-login', file=sys.stderr)
             return 3
         status_write(root, 'CONNECTED')
-        beat = asyncio.create_task(heartbeat(root))
+        beat = asyncio.create_task(heartbeat(root, client))
         try:
             await client.run_until_disconnected()
         finally:
