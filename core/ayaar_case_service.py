@@ -282,6 +282,37 @@ def create_case(payload, uploads, remote_addr, secret_key):
     }
 
 
+
+def evidence_snapshot(db, code, row=None):
+    """Stable SHA-256 of applicant-supplied evidence, excluding staff workflow events.
+
+    New files or applicant follow-ups change this digest. Staff status changes
+    alone do not. No contact email, access key, or file bytes are exported.
+    """
+    if row is None:
+        row = db.execute("SELECT * FROM cases WHERE code=?", (code,)).fetchone()
+    if row is None:
+        raise CaseError("Case not found", 404)
+    fields = ("category", "product_name", "product_version", "product_url",
+              "scope", "evidence_summary")
+    statement = {
+        "schema": "AYAR-EVIDENCE-SNAPSHOT-v1",
+        "case_id": code,
+        "dossier": {field: row[field] for field in fields},
+        "files": [dict(item) for item in db.execute(
+            "SELECT id,original_name,size,sha256 FROM files WHERE code=? ORDER BY id",
+            (code,)
+        )],
+        "applicant_history": [dict(item) for item in db.execute(
+            "SELECT occurred_at,action,detail FROM events WHERE code=? "
+            "AND action IN ('submitted','customer_followup') ORDER BY id", (code,)
+        )],
+    }
+    encoded = json.dumps(statement, sort_keys=True, ensure_ascii=False,
+                         separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def as_case(db, code, include_private=False):
     row = db.execute("SELECT * FROM cases WHERE code=?", (code,)).fetchone()
     if row is None:
@@ -293,6 +324,7 @@ def as_case(db, code, include_private=False):
         "product_name": row["product_name"], "product_version": row["product_version"],
         "product_url": row["product_url"], "scope": row["scope"],
         "evidence_summary": row["evidence_summary"],
+        "evidence_fingerprint": evidence_snapshot(db, code, row),
         "ai_processing_consent": bool(db.execute(
             "SELECT 1 FROM events WHERE code=? AND action='ai_processing_consent' LIMIT 1", (code,)
         ).fetchone()),
@@ -595,6 +627,12 @@ def submit_review(code, actor, payload, secret_key):
         ).fetchone()
         if not consent:
             raise CaseError("The applicant has not authorized AI-assisted review", 403)
+        supplied_snapshot = payload.get("evidence_fingerprint")
+        if not isinstance(supplied_snapshot, str) or not re.fullmatch(r"[a-f0-9]{64}", supplied_snapshot):
+            raise CaseError("A current AYAR evidence snapshot fingerprint is required")
+        actual_snapshot = evidence_snapshot(db, code, row)
+        if not hmac.compare_digest(supplied_snapshot, actual_snapshot):
+            raise CaseError("Case evidence has changed; refresh the packet and repeat the analysis", 409)
         criteria, score, blockers = validate_review(row["category"], payload.get("criteria"))
         grade = ("Critical gate failure" if blockers else "Excellent" if score >= 90
                  else "Strong" if score >= 80 else "Acceptable with corrections" if score >= 70
@@ -606,6 +644,7 @@ def submit_review(code, actor, payload, secret_key):
             "notice": "AI-assisted assessment, NOT independent human review or official certification",
             "reviewed_at": now(), "reviewer_account": actor,
             "ai_review_reference": source,
+            "evidence_fingerprint": actual_snapshot,
             "independence_statement": independence, "review_scope": scope,
             "methodology_notes": methodology_notes, "grade": grade,
             "score": score, "blocking_criteria": blockers, "criteria": criteria,
