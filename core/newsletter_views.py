@@ -3,6 +3,7 @@ from django.http import Http404
 from django.shortcuts import render
 
 from .models import NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory
+from .public_catalog_guard import missing_public_tables, mark_public_data_unavailable
 
 
 EDITORIAL_START = "۱۳۹۸/۰۸/۲۵"
@@ -10,11 +11,20 @@ EDITORIAL_START = "۱۳۹۸/۰۸/۲۵"
 
 def newsletter_home(request):
     from django.utils import timezone
-    stories = NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()).select_related("source", "agent")[:50]
-    sources = NewsletterSource.objects.filter(active=True)[:12]
-    publications = NewsletterPublication.objects.select_related("story").order_by("-created_at")[:20]
-    schedule = NewsletterSchedule.objects.filter(active=True).first()
+    catalog_unavailable = missing_public_tables(
+        NewsletterStory, NewsletterSource, NewsletterPublication, NewsletterSchedule
+    )
+    if catalog_unavailable:
+        stories, sources, publications, schedule = [], [], [], None
+    else:
+        stories = NewsletterStory.objects.filter(
+            status="published", published_at__lte=timezone.now()
+        ).select_related("source", "agent")[:50]
+        sources = NewsletterSource.objects.filter(active=True)[:12]
+        publications = NewsletterPublication.objects.select_related("story").order_by("-created_at")[:20]
+        schedule = NewsletterSchedule.objects.filter(active=True).first()
     context = {
+        "catalog_temporarily_unavailable": catalog_unavailable,
         "stories": stories,
         "sources": sources,
         "publications": publications,
@@ -31,7 +41,8 @@ def newsletter_home(request):
             "Telegram", "Eitaa", "Rubika", "Bale",
         ],
     }
-    return render(request, "core/newsletter.html", context)
+    response = render(request, "core/newsletter.html", context)
+    return mark_public_data_unavailable(response) if catalog_unavailable else response
 
 
 def newsletter_archive(request):
