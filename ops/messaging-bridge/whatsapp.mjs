@@ -4,6 +4,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import readline from 'node:readline/promises';
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import qrTerm from 'qrcode-terminal';
@@ -12,7 +13,8 @@ process.umask(0o077);
 const mode = process.argv[2];
 const index = process.argv.indexOf('--account');
 const account = index >= 0 ? process.argv[index + 1] : 'primary';
-if (!['login', 'daemon', 'status'].includes(mode) || !['primary', 'secondary'].includes(account)) {
+const byPairingCode = process.argv.includes('--pairing-code');
+if (!['login', 'daemon', 'status'].includes(mode) || !['primary', 'secondary'].includes(account) || (byPairingCode && mode !== 'login')) {
   console.error('Usage: node whatsapp.mjs login|daemon|status --account primary|secondary');
   process.exit(2);
 }
@@ -32,15 +34,26 @@ if (mode === 'status') {
 // Status probes must not create or alter private authentication directories.
 await fs.mkdir(authDir, {recursive:true, mode:0o700});
 await fs.chmod(authDir, 0o700);
-if (mode === 'login' && !process.stdout.isTTY) {
-  console.error('For security, QR is displayed only in an interactive terminal.');
+if (mode === 'login' && (!process.stdin.isTTY || !process.stdout.isTTY)) {
+  console.error('For security, pairing is allowed only in an interactive private terminal.');
   process.exit(2);
+}
+if (mode === 'login' && byPairingCode) {
+  const rl = readline.createInterface({input:process.stdin, output:process.stdout});
+  try {
+    phoneNumber = (await rl.question('WhatsApp phone with country code (digits only, no +): ')).trim();
+  } finally { rl.close(); }
+  if (!/^[1-9][0-9]{7,14}$/.test(phoneNumber)) {
+    console.error('Invalid international phone number.');
+    process.exit(2);
+  }
 }
 const logger = pino({level:'silent'});
 let running = true;
 let sock;
 let attempts = 0;
 let beat;
+let phoneNumber = null;
 const pause = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 process.on('SIGTERM', ()=> {running=false; clearInterval(beat); sock?.end(undefined);});
 process.on('SIGINT', ()=> {running=false; clearInterval(beat); sock?.end(undefined);});
@@ -53,6 +66,7 @@ async function start() {
     printQRInTerminal:false,
   });
   sock = socket;
+  let requestedPairingCode = false;
   let credentialsSaved = Promise.resolve();
   let credentialsSaveFailed = false;
   socket.ev.on('creds.update', () => {
@@ -74,8 +88,20 @@ async function start() {
     socket.ev.on('connection.update', async ({connection, qr, lastDisconnect}) => {
       if (qr) {
         if (mode === 'login') {
-          console.log('Scan this QR with WhatsApp > Linked devices > Link a device:');
-          qrTerm.generate(qr,{small:true});
+          if (byPairingCode && !requestedPairingCode && !socket.authState.creds.registered) {
+            requestedPairingCode = true;
+            try {
+              const pairingCode = await socket.requestPairingCode(phoneNumber);
+              console.log('PAIRING CODE (enter on your WhatsApp phone; never share):', pairingCode);
+              console.log('WhatsApp > Linked devices > Link a device > Link with phone number instead');
+            } catch {
+              await finish('PAIRING_CODE_FAILED');
+              socket.end(undefined);
+            }
+          } else if (!byPairingCode) {
+            console.log('Scan this QR with WhatsApp > Linked devices > Link a device:');
+            qrTerm.generate(qr,{small:true});
+          }
         } else {
           // Settle first: end() may synchronously emit a close event.
           await finish('LOGIN_REQUIRED');
@@ -115,7 +141,7 @@ while (running) {
   let outcome;
   try { outcome=await start(); }
   catch (e) { console.error(`Connection failed (${e?.name||'error'}).`); outcome='DISCONNECTED'; }
-  if (outcome === 'AUTHORIZED' || outcome === 'LOGIN_REQUIRED' || outcome === 'SESSION_CONFLICT' || outcome === 'CREDENTIAL_SAVE_FAILED' || !running) {
+  if (outcome === 'AUTHORIZED' || outcome === 'LOGIN_REQUIRED' || outcome === 'SESSION_CONFLICT' || outcome === 'CREDENTIAL_SAVE_FAILED' || outcome === 'PAIRING_CODE_FAILED' || !running) {
     if (mode === 'login' && outcome !== 'AUTHORIZED') process.exitCode = 3;
     break;
   }
