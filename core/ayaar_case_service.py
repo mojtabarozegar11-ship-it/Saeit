@@ -16,6 +16,7 @@ import pwd
 import re
 import secrets
 import sqlite3
+import stat
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -605,7 +606,9 @@ def staff_list(limit=40):
 
 def staff_case(code):
     with database() as db:
-        return as_case(db, clean(code, 28, True), include_private=True)
+        safe_code = clean(code, 28, True)
+        verify_evidence_integrity(db, safe_code)
+        return as_case(db, safe_code, include_private=True)
 
 
 def set_status(code, status, actor, note):
@@ -692,6 +695,51 @@ def checked_report_proof(row, report, secret_key):
     return recorded if hmac.compare_digest(recorded, expected) else None
 
 
+def verify_evidence_integrity(db, code, file_id=None):
+    """Refuse review or staff delivery if stored evidence differs from its intake hash.
+
+    Checks the actual bytes, not the applicant-provided name or a cached
+    fingerprint. O_NOFOLLOW and fstat avoid symlink-based file substitution.
+    An integrity failure must be repaired/investigated, never silently ignored.
+    """
+    directory = root() / "evidence"
+    if not directory.is_dir() or directory.is_symlink():
+        raise CaseError("Private evidence workspace unavailable", 503)
+    query = "SELECT id,stored_name,size,sha256 FROM files WHERE code=?"
+    params = (code,)
+    if file_id is not None:
+        query += " AND id=?"
+        params = (code, file_id)
+    records = db.execute(query + " ORDER BY id", params).fetchall()
+    if file_id is not None and not records:
+        raise CaseError("Evidence file not found", 404)
+    for record in records:
+        stored = record["stored_name"]
+        if not isinstance(stored, str) or not re.fullmatch(
+                r"[0-9a-f]{24}\.(?:pdf|png|jpe?g|txt)", stored):
+            raise CaseError("Unsafe evidence storage reference", 503)
+        if not isinstance(record["size"], int) or not 0 < record["size"] <= MAX_FILE:
+            raise CaseError("Invalid recorded evidence length", 409)
+        candidate = directory / stored
+        try:
+            descriptor = os.open(str(candidate), os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(descriptor, "rb") as stream:
+                info = os.fstat(stream.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_size != record["size"]:
+                    raise CaseError("Evidence file length or type changed", 409)
+                digest = hashlib.sha256()
+                while True:
+                    block = stream.read(65536)
+                    if not block:
+                        break
+                    digest.update(block)
+        except (OSError, ValueError) as exc:
+            raise CaseError("Evidence unavailable or unsafe for review", 503) from exc
+        if not hmac.compare_digest(digest.hexdigest(), record["sha256"]):
+            raise CaseError("Evidence integrity mismatch: original file changed", 409)
+    return len(records)
+
+
 def submit_review(code, actor, payload, secret_key):
     """Staff attestation, not a representation of independent accreditation."""
     if not isinstance(payload, dict):
@@ -730,6 +778,7 @@ def submit_review(code, actor, payload, secret_key):
         actual_snapshot = evidence_snapshot(db, code, row)
         if not hmac.compare_digest(supplied_snapshot, actual_snapshot):
             raise CaseError("Case evidence has changed; refresh the packet and repeat the analysis", 409)
+        verify_evidence_integrity(db, code)
         criteria, score, blockers = validate_review(row["category"], payload.get("criteria"))
         grade = ("Critical gate failure" if blockers else "Excellent" if score >= 90
                  else "Strong" if score >= 80 else "Acceptable with corrections" if score >= 70
@@ -830,7 +879,6 @@ def staff_file(code, file_id):
         ).fetchone()
         if row is None:
             raise CaseError("Evidence file not found", 404)
+        verify_evidence_integrity(db, clean(code, 28, True), clean(file_id, 30, True))
         path = root() / "evidence" / row["stored_name"]
-        if not path.is_file() or path.is_symlink():
-            raise CaseError("Evidence file unavailable", 404)
         return path, row["original_name"]
