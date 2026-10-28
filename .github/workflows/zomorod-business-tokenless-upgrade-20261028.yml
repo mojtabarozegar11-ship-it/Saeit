@@ -90,19 +90,20 @@ jobs:
           private="$HOME/.private/zomorod-business"
           web="$HOME/public_html/business"
           stage="$HOME/.backups/zomorod-business-tokenless/$sha-$runid-$attempt"
-          test -d "$private" && test -d "$web"
-          test -f "$private/app.php" && test ! -L "$private/app.php"
-          test -f "$private/management.sqlite3" && test ! -L "$private/management.sqlite3"
-          test -f "$web/index.php" && test -f "$web/.htaccess"
-          test ! -e "$private/owner-first-login.txt"
-          test ! -e "$stage"
-          test "$(sha256sum "$private/app.php" | awk '{print $1}')" = "$oldsha"
-          test "$(stat -c %s "$private/management.sqlite3")" -le 52428800
+          fail() { echo "BUSINESS_PREFLIGHT_BLOCK=$1"; exit 30; }
+          test -d "$private" && test -d "$web" || fail "missing_directories"
+          test -f "$private/app.php" && test ! -L "$private/app.php" || fail "missing_or_symlink_app"
+          test -f "$private/management.sqlite3" && test ! -L "$private/management.sqlite3" || fail "missing_or_symlink_db"
+          test -f "$web/index.php" && test -f "$web/.htaccess" || fail "missing_web_entry"
+          test ! -e "$private/owner-first-login.txt" || fail "private_receipt_already_exists"
+          test ! -e "$stage" || fail "snapshot_path_exists"
+          test "$(sha256sum "$private/app.php" | awk '{print $1}')" = "$oldsha" || fail "source_checksum_mismatch"
+          test "$(stat -c %s "$private/management.sqlite3")" -le 52428800 || fail "database_size_limit"
           phpbin="$(command -v php || true)"
           if test -z "$phpbin"; then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php"; fi
-          "$phpbin" -r 'exit(extension_loaded("pdo_sqlite")?0:1);'
-          count="$("$phpbin" -r '$d=new PDO("sqlite:".$argv[1]); echo $d->query("SELECT COUNT(*) FROM users")->fetchColumn();' "$private/management.sqlite3")"
-          test "$count" = 0
+          "$phpbin" -r 'exit(extension_loaded("pdo_sqlite")?0:1);' || fail "sqlite_extension_unavailable"
+          count="$("$phpbin" -r '$d=new PDO("sqlite:".$argv[1]); echo $d->query("SELECT COUNT(*) FROM users")->fetchColumn();' "$private/management.sqlite3")" || fail "user_count_unreadable"
+          test "$count" = 0 || fail "admin_or_other_user_already_exists"
           mkdir -p "$(dirname "$stage")"
           mkdir -m 700 "$stage"
           cp -p "$private/app.php" "$stage/app.php.before"
