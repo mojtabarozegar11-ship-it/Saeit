@@ -102,7 +102,8 @@ async function start() {
       }
       if (connection === 'close') {
         const code = lastDisconnect?.error?.output?.statusCode;
-        await finish(code === DisconnectReason.loggedOut ? 'LOGIN_REQUIRED' :
+        await finish(credentialsSaveFailed ? 'CREDENTIAL_SAVE_FAILED' :
+                     code === DisconnectReason.loggedOut ? 'LOGIN_REQUIRED' :
                      code === DisconnectReason.connectionReplaced ? 'SESSION_CONFLICT' :
                      code === DisconnectReason.restartRequired ? 'PAIRING_RESTART' : 'DISCONNECTED');
       }
