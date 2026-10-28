@@ -12,7 +12,7 @@ process.umask(0o077);
 const mode = process.argv[2];
 const index = process.argv.indexOf('--account');
 const account = index >= 0 ? process.argv[index + 1] : 'primary';
-if (!['login', 'daemon', 'status'].includes(mode) || !/^[a-z][a-z0-9_-]{0,30}$/.test(account)) {
+if (!['login', 'daemon', 'status'].includes(mode) || !['primary', 'secondary'].includes(account)) {
   console.error('Usage: node whatsapp.mjs login|daemon|status --account primary|secondary');
   process.exit(2);
 }
@@ -52,7 +52,15 @@ async function start() {
     printQRInTerminal:false,
   });
   sock = socket;
-  socket.ev.on('creds.update', () => saveCreds().catch(()=>console.error('Unable to save credentials')));
+  let credentialsSaved = Promise.resolve();
+  let credentialsSaveFailed = false;
+  socket.ev.on('creds.update', () => {
+    credentialsSaved = credentialsSaved.then(() => saveCreds()).catch(() => {
+      credentialsSaveFailed = true;
+      console.error('Unable to save credentials; login must not be treated as durable.');
+      socket.end(undefined);
+    });
+  });
   return new Promise(resolve => {
     let settled=false;
     const finish = async (reason) => {
@@ -78,10 +86,15 @@ async function start() {
         attempts=0;
         await status('CONNECTED');
         if (mode === 'login') {
-          console.log('AUTHORIZED: WhatsApp credentials saved in the private state folder.');
-          await pause(2000);
-          socket.end(undefined);
-          await finish('AUTHORIZED');
+          await pause(1500);
+          await credentialsSaved;
+          if (credentialsSaveFailed) {
+            await finish('CREDENTIAL_SAVE_FAILED');
+          } else {
+            console.log('AUTHORIZED: WhatsApp credentials saved in the private state folder.');
+            socket.end(undefined);
+            await finish('AUTHORIZED');
+          }
         } else {
           clearInterval(beat);
           beat=setInterval(()=> status('CONNECTED').catch(()=>{}),30000);
@@ -89,7 +102,8 @@ async function start() {
       }
       if (connection === 'close') {
         const code = lastDisconnect?.error?.output?.statusCode;
-        await finish(code === DisconnectReason.loggedOut ? 'LOGIN_REQUIRED' : 'DISCONNECTED');
+        await finish(code === DisconnectReason.loggedOut ? 'LOGIN_REQUIRED' :
+                     code === DisconnectReason.connectionReplaced ? 'SESSION_CONFLICT' : 'DISCONNECTED');
       }
     });
   });
@@ -98,7 +112,7 @@ while (running) {
   let outcome;
   try { outcome=await start(); }
   catch (e) { console.error(`Connection failed (${e?.name||'error'}).`); outcome='DISCONNECTED'; }
-  if (mode === 'login' || outcome === 'LOGIN_REQUIRED' || outcome === 'AUTHORIZED' || !running) break;
+  if (mode === 'login' || outcome === 'LOGIN_REQUIRED' || outcome === 'SESSION_CONFLICT' || outcome === 'CREDENTIAL_SAVE_FAILED' || outcome === 'AUTHORIZED' || !running) break;
   attempts++;
   await pause(Math.min(60000, 3000*Math.pow(2,Math.min(attempts,4))));
 }
