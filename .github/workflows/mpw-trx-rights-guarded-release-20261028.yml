@@ -102,16 +102,19 @@ jobs:
             trap - ERR
             if [ "$applied" -eq 1 ]; then
               if ! timeout 90s ssh -T -F "$config" saeit-cpanel \
-                "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback $run_id" < "$script"; then
+                "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - recover $run_id" < "$script"; then
                 echo '::error::ROLLBACK_NOT_CONFIRMED; preserve snapshot and investigate'
               fi
             fi
           }
           trap rollback_if_needed ERR
+          # Arm recovery before remote apply: SSH timeout can happen after file writes.
+          applied=1
           output="$(timeout 115s ssh -T -F "$config" saeit-cpanel \
             "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - apply $run_id" < "$script")"
           printf '%s\n' "$output"
           if [[ "$output" == *'MPW_TRX_RIGHTS_RELEASE=ALREADY_INSTALLED_NO_RESTART'* ]]; then
+            applied=0
             echo 'MPW_RIGHTS_NOOP=SOURCE_ALREADY_GUARDED'
             exit 0
           fi
