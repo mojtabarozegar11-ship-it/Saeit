@@ -33,6 +33,8 @@ jobs:
           test "$(wc -c < games/ramadan-war/m24-sniper-ccby.glb)" -eq 1247684
       - name: Exercise fail-closed release SHA-256 verification (offline)
         run: python3 -m unittest discover -s games/ramadan-war -p 'test_verify_public_release.py' -v
+      - name: Assert all imported game assets are included in the production stage contract
+        run: python3 -m unittest discover -s games/ramadan-war -p 'test_release_workflow_assets.py' -v
       - name: Verify scoped deployment rollback and concurrent-writer protection (offline)
         run: python3 -m unittest discover -s games/ramadan-war -p 'test_deploy_rollback.py' -v
       - name: Verify offline preview packaging and failure-mode regression
