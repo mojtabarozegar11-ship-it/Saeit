@@ -321,7 +321,9 @@ jobs:
                               if not subdir.is_symlink() and subdir.stat().st_dev == device:
                                   safe_dirs.append(dirname)
                           except OSError:
-                              pass
+                              # Unreadable directory metadata invalidates a
+                              # claimed complete scan; never silently omit it.
+                              out["scan_errors"] += 1
                       dirs[:] = safe_dirs
                       out["dirs_scanned"] += 1
                       for filename in files:
