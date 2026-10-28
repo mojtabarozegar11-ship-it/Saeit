@@ -1,0 +1,187 @@
+name: AYAR twelve specialized digital product disciplines - scoped release
+on:
+  push:
+    branches: [release/ayaar-specialized-disciplines-20261028]
+    paths:
+      - ".github/workflows/mojplaywin-ayaar-specialized-disciplines-scoped-20261028.yml"
+      - "scripts/deploy_ayaar_specialized_disciplines_scoped_20261028.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-ayaar-one-authorized-shared-django-restart
+  cancel-in-progress: false
+jobs:
+  exact-ayaar-upgrade:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/release/ayaar-specialized-disciplines-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify twelve real specialized rubrics, original safeguards and English assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest -q tests/test_ayaar_case_service.py
+          node --check site_releases/mojplaywin/ayaar-20261027/platform.js
+          python3 - <<'PY'
+          import ast,subprocess
+          from pathlib import Path
+          baseline='70ac4ae85c33f984d6d3ed543f37fcb1da9af1aa'
+          root=Path('site_releases/mojplaywin/ayaar-20261027')
+          files=('services.html','submit.html','track.html','reviewer.html',
+                 'registry.html','privacy.html','platform.js')
+          paths=['core/ayaar_case_service.py']+[str(root/name) for name in files]
+          for path in paths:
+              source=Path(path)
+              assert source.is_file() and not source.is_symlink()
+              old=subprocess.check_output(['git','show',baseline+':'+path])
+              assert old and len(old)<400000
+          for name in ('core/ayaar_case_service.py','scripts/deploy_ayaar_specialized_disciplines_scoped_20261028.py'):
+              ast.parse(Path(name).read_text('utf-8'),filename=name)
+          from core import ayaar_case_service as cases
+          expected={'ebook','game','software','media','course','dataset','website','mobileapp','template','audio','video','model3d'}
+          assert cases.CASE_TYPES==expected
+          assert all(len(cases.RUBRICS[key])==8 and sum(weight for _,weight,_ in cases.RUBRICS[key])==100 for key in expected)
+          script=(root/'platform.js').read_text('utf-8')
+          for category in expected:
+              assert category+': [' in script
+          assert 'function reviewPacketData' in script and 'private-receipt.txt' in script
+          for name in files[:6]:
+              html=(root/name).read_text('utf-8')
+              assert '<html lang="en" dir="ltr">' in html
+              assert 'platform.js?v=platform-10' in html and 'platform.css?v=platform-3' in html
+          form=(root/'submit.html').read_text('utf-8')
+          for category in expected:
+              assert 'value="'+category+'"' in form
+          print('AYAR_SPECIALIZED_DISCIPLINES_QA=PASS')
+          PY
+      - name: Verify live AYAR and protected MojPlayWin baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in / /store/ /saman/ /taniya/ /mojtaba.roozegar/ /ayaar/ /ayaar/track.html /ayaar/submit.html; do
+            status="$(curl --connect-timeout 9 --max-time 26 -L -sS -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route")"
+            echo "BASELINE_ROUTE=$route:$status"
+            test "$status" = 200
+          done
+      - name: Prepare strictly pinned private SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/ayaar-disciplines-pinned-relay"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            path="$d/${item}.key"
+            printf '%s' "${!item}" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$path"
+            chmod 600 "$path"
+            ssh-keygen -y -P '' -f "$path" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 13
+          EOF
+          chmod 600 "$d/config"
+      - name: Atomically replace only eight AYAR-owned service and page files
+        shell: bash
+        run: |
+          set -euo pipefail
+          conf="$RUNNER_TEMP/ayaar-disciplines-pinned-relay/config"
+          rid="$GITHUB_RUN_ID"_"$GITHUB_RUN_ATTEMPT"
+          sha="$GITHUB_SHA"
+          timeout 60s ssh -T -F "$conf" saeit-cpanel "python3 - preflight '$rid' '$sha'" < scripts/deploy_ayaar_specialized_disciplines_scoped_20261028.py
+          payload="$RUNNER_TEMP/ayaar-disciplines-payload"
+          install -d -m 700 "$payload"
+          cp -- core/ayaar_case_service.py "$payload/ayaar_case_service.py"
+          for name in services.html submit.html track.html reviewer.html registry.html privacy.html platform.js; do
+            cp -- "site_releases/mojplaywin/ayaar-20261027/$name" "$payload/$name"
+          done
+          AYAAR_PAYLOAD="$payload" AYAAR_RUN="$rid" AYAAR_SHA="$sha" python3 - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          stage=Path(os.environ['AYAAR_PAYLOAD'])
+          names=('ayaar_case_service.py','services.html','submit.html','track.html',
+                 'reviewer.html','registry.html','privacy.html','platform.js')
+          baseline='70ac4ae85c33f984d6d3ed543f37fcb1da9af1aa'
+          prefix='site_releases/mojplaywin/ayaar-20261027/'
+          old={name:hashlib.sha256(subprocess.check_output(['git','show',baseline+':'+('core/ayaar_case_service.py' if name=='ayaar_case_service.py' else prefix+name)])).hexdigest() for name in names}
+          current={name:hashlib.sha256((stage/name).read_bytes()).hexdigest() for name in names}
+          (stage/'release.json').write_text(json.dumps({'identity':'MPW_AYAAR_DISCIPLINES_V6',
+            'run':os.environ['AYAAR_RUN'],'sha':os.environ['AYAAR_SHA'],
+            'before':old,'after':current},sort_keys=True),encoding='utf-8')
+          PY
+          timeout 55s ssh -T -F "$conf" saeit-cpanel "mkdir -m 700 '/home/zomorod2/.mpw-ayaar-disciplines-stage-$rid'"
+          tar -C "$payload" -cf - . | timeout 75s ssh -T -F "$conf" saeit-cpanel "tar -C '/home/zomorod2/.mpw-ayaar-disciplines-stage-$rid' -xf -"
+          timeout 110s ssh -T -F "$conf" saeit-cpanel "python3 - deploy '$rid' '$sha'" < scripts/deploy_ayaar_specialized_disciplines_scoped_20261028.py
+      - name: Check public API, cache-busted forms and protected routes with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          conf="$RUNNER_TEMP/ayaar-disciplines-pinned-relay/config"
+          rid="${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          sha="$GITHUB_SHA"
+          healthy=true
+          for attempt in 1 2 3 4 5; do
+            config="$(curl --connect-timeout 9 --max-time 25 -sS "https://mojplaywin.com/ayaar/api?op=config&v=$rid" || true)"
+            if printf '%s' "$config" | python3 -c 'import json,sys;d=json.load(sys.stdin); assert d["ok"] and d["case_tracking"] and d["manual_ai_review"] and not d["model_api_enabled"] and not d["payment_enabled"]; assert set(d["categories"])=={"ebook","game","software","media","course","dataset","website","mobileapp","template","audio","video","model3d"}'; then
+              break
+            fi
+            if test "$attempt" = 5; then healthy=false; else sleep 4; fi
+          done
+          public_check="$(curl --connect-timeout 9 --max-time 25 -sS 'https://mojplaywin.com/ayaar/api?op=verify&case_id=AYR-26-000000000000&proof=0000000000000000000000000000000000000000000000000000000000000000' || true)"
+          if ! printf '%s' "$public_check" | python3 -c 'import json,sys;d=json.load(sys.stdin);assert d["ok"] and d["verified"] is False and "product_name" not in d'; then healthy=false; fi
+          for route in /ayaar/services.html /ayaar/submit.html /ayaar/track.html /ayaar/reviewer.html /ayaar/registry.html /ayaar/privacy.html; do
+            page="$RUNNER_TEMP/ayaar-check-$(basename "$route")"
+            code="$(curl --connect-timeout 9 --max-time 28 -sS -o "$page" -w '%{http_code}' "https://mojplaywin.com$route?v=$rid" || true)"
+            echo "AYAR_UPGRADE_PAGE=$route:$code"
+            if test "$code" != 200 || ! grep -q 'platform.js?v=platform-10' "$page" || ! grep -q 'platform.css?v=platform-3' "$page"; then healthy=false; fi
+          done
+          page="$RUNNER_TEMP/ayaar-specialized-submit.html"
+          code="$(curl --connect-timeout 9 --max-time 28 -sS -o "$page" -w '%{http_code}' "https://mojplaywin.com/ayaar/submit.html?v=$rid" || true)"
+          echo "AYAR_SPECIALIZED_SUBMIT=$code"
+          if test "$code" != 200 || ! grep -q 'value="model3d"' "$page" || ! grep -q 'value="dataset"' "$page"; then healthy=false; fi
+          script="$RUNNER_TEMP/ayaar-specialized-platform.js"
+          script_code="$(curl --connect-timeout 9 --max-time 28 -sS -o "$script" -w '%{http_code}' "https://mojplaywin.com/ayaar/platform.js?v=$rid" || true)"
+          echo "AYAR_SPECIALIZED_JS=$script_code"
+          if test "$script_code" != 200 || ! grep -q 'model3d: ' "$script" || ! grep -q 'course: ' "$script"; then healthy=false; fi
+          for route in /ayaar/index.html /ayaar/methodology.html /ayaar/platform.js /ayaar/platform.css /ayaar/ / /store/ /saman/ /taniya/ /mojtaba.roozegar/; do
+            code="$(curl --connect-timeout 9 --max-time 28 -L -sS -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route?v=$rid" || true)"
+            echo "PRESERVED_ROUTE=$route:$code"
+            if test "$code" != 200; then healthy=false; fi
+          done
+          if test "$healthy" != true; then
+            echo 'AYAR_DISCIPLINES_HEALTH_FAILED_ROLLING_BACK_EXACT_FILES'
+            timeout 110s ssh -T -F "$conf" saeit-cpanel "python3 - rollback '$rid' '$sha'" < scripts/deploy_ayaar_specialized_disciplines_scoped_20261028.py
+            exit 1
+          fi
+          echo 'AYAR_TWELVE_DISCIPLINES_LIVE=TRUE'
+          echo 'AYAR_OTHER_MOJPLAYWIN_ROUTES_UNCHANGED=TRUE'
