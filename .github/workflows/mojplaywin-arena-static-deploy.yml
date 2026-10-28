@@ -47,7 +47,7 @@ jobs:
           node-version: "22"
       - name: Install Chromium driver
         run: npm install --no-save --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/arena-browser-test" playwright-core@1.62.1
-      - name: Exercise 37 games and 12 symbolic oracles in six languages on mobile Chromium
+      - name: Exercise 49 free activities and 7 Casino Dollar practice tables in six languages on mobile Chromium
         shell: bash
         env:
           NODE_PATH: ${{ runner.temp }}/arena-browser-test/node_modules
@@ -64,13 +64,19 @@ jobs:
               const page=await browser.newPage({viewport:{width:390,height:844}});
               const errors=[];page.on('pageerror',e=>errors.push(e.message));
               await page.goto(pathToFileURL(path.resolve('site_releases/mojplaywin/arena/index.html')).href);
+              assert.equal(await page.evaluate(()=>document.activeElement.id),'age-confirm');
+              await page.keyboard.press('Tab');
+              assert.equal(await page.evaluate(()=>document.activeElement.textContent.trim()),'Leave');
+              await page.keyboard.press('Shift+Tab');
+              assert.equal(await page.evaluate(()=>document.activeElement.id),'age-confirm');
               await page.locator('#age-confirm').click();
               assert.equal(await page.locator('#game-grid article').count(),16);
               assert.equal(await page.locator('#dice-game-grid article').count(),15);
               assert.equal(await page.locator('#classic-game-grid article').count(),6);
               assert.equal(await page.locator('#oracle-grid article').count(),12);
-              assert.equal(await page.locator('.arena-categories a').count(),4);
-              assert.equal(await page.locator('#arena-count').innerText(),'49 experiences found');
+              assert.equal(await page.locator('#wager-grid article').count(),7);
+              assert.equal(await page.locator('.arena-categories a').count(),5);
+              assert.equal(await page.locator('#arena-count').innerText(),'56 experiences found');
               await page.locator('#arena-search').fill('chess');
               assert.equal(await page.locator('#classic-game-grid article:not([hidden])').count(),1);
               assert.equal(await page.locator('#dice-festival').isVisible(),false);
@@ -81,7 +87,24 @@ jobs:
               assert.equal(await page.locator('#oracle-grid article:not([hidden])').count(),2);
               assert.equal(await page.locator('#game-grid article:not([hidden])').count(),0);
               await page.locator('#arena-search').fill('');
-              assert.equal(await page.locator('#arena-count').innerText(),'49 experiences found');
+              assert.equal(await page.locator('#arena-count').innerText(),'56 experiences found');
+              assert.equal(await page.locator('#mcd-balance').innerText(),'1,000.00 MCD');
+              await page.locator('#mcd-roulette-spin').click();
+              await page.locator('[data-mcd-baccarat="player"]').click();
+              await page.locator('#mcd-slots-spin').click();
+              await page.locator('#mcd-sports-play').click();
+              await page.locator('#mcd-bj-deal').click();
+              if(await page.locator('#mcd-bj-stand').isEnabled())await page.locator('#mcd-bj-stand').click();
+              await page.locator('#mcd-poker-deal').click();
+              await page.locator('#mcd-poker-cards button').first().click();
+              await page.locator('#mcd-poker-draw').click();
+              for(let attempts=0;attempts<100&&Number(await page.locator('#mcd-rounds').innerText())<7;attempts++)
+                await page.locator('#mcd-craps-roll').click();
+              assert.equal(await page.locator('#mcd-rounds').innerText(),'7');
+              assert.equal(await page.locator('#mcd-history li').count(),7);
+              assert.equal(await page.locator('#mcd-reset').isEnabled(),true);
+              await page.locator('#mcd-reset').click();
+              assert.equal(await page.locator('#mcd-balance').innerText(),'1,000.00 MCD');
               await page.locator('#oracle-zodiac select').selectOption('8');
               await page.locator('#oracle-zodiac button').click();
               const horoscope=await page.locator('#oracle-zodiac .oracle-answer').innerText();
@@ -114,7 +137,8 @@ jobs:
                 assert.equal(await page.locator('html').getAttribute('lang'),lang);
               }
               assert.deepEqual(errors,[]);
-              console.log('ARENA_MOBILE_37_GAMES_12_ORACLES_SIX_LANG_PASS');
+              assert.ok((await page.locator('#wager-heading').innerText()).length>15);
+              console.log('ARENA_MOBILE_37_GAMES_12_ORACLES_7_MCD_TABLES_SIX_LANG_PASS');
             }finally{await browser.close()}
           })().catch(e=>{console.error(e);process.exitCode=1});
           JS
@@ -227,7 +251,7 @@ jobs:
           source=Path('site_releases/mojplaywin/arena/index.html').read_bytes()
           if hashlib.sha256(released).digest()!=hashlib.sha256(source).digest():
               raise SystemExit('Published Arena checksum mismatch')
-          print('ARENA_37_GAMES_12_ORACLES_LIVE_SHA256_MATCH')
+          print('ARENA_37_GAMES_12_ORACLES_7_MCD_TABLES_LIVE_SHA256_MATCH')
           PY
           for path in / /games/ /store/ /game-releases/20261020/index.html; do
             [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")" == "200" ]]
