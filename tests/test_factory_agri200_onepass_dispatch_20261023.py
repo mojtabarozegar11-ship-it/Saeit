@@ -122,9 +122,9 @@ class OnePassTests(unittest.TestCase):
         workflow = (SOURCE.parents[1] / ".github/workflows/"
                     "factory-agri200-onepass-dispatch-20261023.yml")
         text = workflow.read_text(encoding="utf8")
-        start = "ssh_vps 'python3 -B -' <<'PREFLIGHT'\\n"
+        start = "ssh_vps 'python3 -B -' <<'PREFLIGHT'\n"
         assert start in text
-        program = text.split(start, 1)[1].split("\\n          PREFLIGHT", 1)[0]
+        program = text.split(start, 1)[1].split("\n          PREFLIGHT", 1)[0]
         return text, textwrap.dedent(program)
 
     def test_schedule_has_readonly_gate_before_any_vps_write(self):
@@ -132,7 +132,7 @@ class OnePassTests(unittest.TestCase):
         self.assertLess(text.index("AGRI200_PREFLIGHT=PASS"),
                         text.index("install -d -m 700 '$staging'"))
         self.assertLess(text.index("AGRI200_PREFLIGHT=PASS"),
-                        text.index('cat > \\'$staging/dispatch.py\\''))
+                        text.index("cat > '$staging/dispatch.py'"))
         self.assertIn("5 * 1024**3 + 128 * 1024**2", program)
         self.assertIn("BLOCKED_INCOMPLETE_INTAKE", program)
         self.assertIn("BLOCKED_DISK_RACE", program)
