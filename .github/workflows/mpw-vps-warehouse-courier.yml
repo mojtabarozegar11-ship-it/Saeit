@@ -159,19 +159,37 @@ jobs:
               sleep "$((attempt * 3))"
             done
           }
-          ssh_retry_capture "$RUNNER_TEMP/mpw-qa-feedback.json" 60s -T -F "$d/config" saeit-cpanel \
-            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-feedback"
-          python3 - <<'PY'
-          import json,os
+          cursor=""
+          next=""
+          for batch in $(seq 1 100); do
+            mode="site-feedback"
+            if [ -n "$cursor" ]; then mode="site-feedback-after-$cursor"; fi
+            ssh_retry_capture "$RUNNER_TEMP/mpw-qa-feedback.json" 60s -T -F "$d/config" saeit-cpanel \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' $mode"
+            next="$(python3 - <<'PY'
+          import json,os,re
           data=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-qa-feedback.json'))
           assert data.get('tenant')=='mojplaywin-main'
           assert data.get('schema')=='mpw.factory.return-to-stage1.v1'
-          assert isinstance(data.get('returns'),list)
-          assert len(data['returns']) <= 50
-          print('MPW_FACTORY_QA_RETURN_RECEIPTS='+str(len(data['returns'])))
+          rows=data.get('returns')
+          assert isinstance(rows,list) and len(rows)<=50
+          cursor=data.get('next_after')
+          if cursor is None:
+              print('DONE')
+          else:
+              assert re.fullmatch(r'[a-z][a-z0-9_]{1,63}-[a-f0-9]{64}',cursor)
+              assert len(rows)==50
+              assert cursor==rows[-1]['product_id']+'-'+rows[-1]['source_sha256']
+              print(cursor)
           PY
-          ssh_retry_stdin 75s "$RUNNER_TEMP/mpw-qa-feedback.json" -T -F "$d/config" saeit-vps \
-            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return"
+          )"
+            ssh_retry_stdin 75s "$RUNNER_TEMP/mpw-qa-feedback.json" -T -F "$d/config" saeit-vps \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return"
+            echo "MPW_FACTORY_QA_RETURN_BATCH_DELIVERED=$batch"
+            if [ "$next" = DONE ]; then break; fi
+            cursor="$next"
+          done
+          test "$next" = DONE
           echo 'MPW_FACTORY_STAGE1_RETURN_CHANNEL=PASS'
       - name: Prove old site work orders and classify actual specialist blockers before new intake
         shell: bash
