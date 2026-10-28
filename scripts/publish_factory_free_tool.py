@@ -46,6 +46,8 @@ def digest_file(path):
 def landing_page(sha, *, uncertified_preview=False):
     eyebrow = ("Uncertified Public Preview · Version 1.0" if uncertified_preview
                else "Independent Factory Release · Version 1.0")
+    footer_text = ("Public evaluation preview · independent QC1000 certification not completed." if uncertified_preview
+                   else "An independent MojPlayWin digital tools release.")
     disclosure = ("Free evaluation preview only. It has not received QC1000, independent scientific, professional, or commercial certification. Results are illustrative; validate inputs and decisions with qualified professionals. This is not investment, yield, tax, or legal advice."
                   if uncertified_preview else "Technical release information and model limitations are listed below.")
 
