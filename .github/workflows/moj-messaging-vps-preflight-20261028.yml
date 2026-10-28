@@ -118,6 +118,11 @@ jobs:
         run: |
           set -euo pipefail
           blockers="$(grep -E '^MMSG_(DISK_GATE|MEMORY_GATE|NODE_GATE|NPM_GATE|PYTHON_VENV_GATE|SYSTEMD_TOOL|NONINTERACTIVE_SUDO)=(NO_GO|NO|UNCONFIRMED)
+          test -n "$blockers" || blockers=SSH_OR_AUTH_OR_CHECK
+          description="Blocked: $blockers; no installation"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=failure -f context=moj-messaging-vps-runtime-admission \
+            -f description="$description"
  "$RUNNER_TEMP/mmsg-runtime-probe.txt" 2>/dev/null | sed -E 's/^MMSG_//;s/=.*$//' | paste -sd ',' - || true)"
           test -n "$blockers" || blockers=SSH_OR_AUTH_OR_CHECK
           description="Blocked: $blockers; no installation"
