@@ -21,7 +21,7 @@ if ! systemctl is-active --quiet cron 2>/dev/null && ! systemctl is-active --qui
   echo MASTER_CRON_DAEMON_INACTIVE
   exit 1
 fi
-for module in core/management/commands/seed_online_income_agents.py core/management/commands/autonomous_master_loop.py core/autonomous_brain.py core/master_agent_capability_pack.py; do
+for module in core/management/commands/seed_online_income_agents.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/management/commands/worker_runner.py core/worker_runner.py core/autonomous_brain.py core/master_agent_capability_pack.py; do
   test -s "$app/$module" || { echo "MASTER_REQUIRED_MODULE_MISSING"; exit 1; }
 done
 install -d -m 700 "$master" "$private" "$ops/backups"
@@ -40,6 +40,9 @@ modules=(
   core/management/commands/seed_online_income_agents.py
   core/management/commands/run_economic_worker.py
   core/management/commands/economic_worker.py
+  core/worker_runner.py
+  core/management/commands/autonomous_master_loop.py
+  core/management/commands/online_income_cycle.py
   core/recovery_scheduler.py
   core/management/commands/recover_stale_tasks.py
 )
