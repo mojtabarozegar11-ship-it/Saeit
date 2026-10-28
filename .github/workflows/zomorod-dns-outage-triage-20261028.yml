@@ -119,6 +119,26 @@ jobs:
                   print("ORIGIN_BYPASS_DNS="+path+":"+(p.stdout.strip() if p.returncode==0 else "000"))
           PY
           REMOTE
+      - name: Inspect only cPanel ZoneEdit visibility for the affected domain
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import collections,json,shutil,subprocess
+          if not shutil.which("cpapi2"):
+              print("ZONEEDIT_API2_AVAILABLE=no")
+          else:
+              p=subprocess.run(["cpapi2","--output=json","ZoneEdit","fetchzone_records","domain=zomorodmelal.ir"],capture_output=True,text=True,timeout=25)
+              try:d=json.loads(p.stdout).get("cpanelresult",{})
+              except ValueError:d={}
+              data=d.get("data")
+              types=collections.Counter(str(x.get("type","")).upper() for x in data if isinstance(x,dict)) if isinstance(data,list) else {}
+              print("ZONEEDIT_API2="+json.dumps({"exit_status":p.returncode,"api_status":d.get("event",{}).get("result") if isinstance(d.get("event"),dict) else None,"record_counts_by_type":dict(types),"zone_visible":isinstance(data,list) and len(data)>0,"errors_present":bool(d.get("error"))},ensure_ascii=False))
+          PY
+          REMOTE
       - name: Clean ephemeral SSH material
         if: always()
         shell: bash
