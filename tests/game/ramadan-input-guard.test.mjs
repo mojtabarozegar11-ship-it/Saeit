@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, shouldReleaseHeldKeysOnFocus, isFireHeld, normalizeMovementAxes, resolveMovementAxes, recordPointerGestureMovement, shouldFireCanvasClick} from '../../games/ramadan-war/input-guard.mjs';
+import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, shouldReleaseHeldKeysOnFocus, isFireHeld, isPrimaryGameplayPress, normalizeMovementAxes, resolveMovementAxes, recordPointerGestureMovement, shouldFireCanvasClick} from '../../games/ramadan-war/input-guard.mjs';
 
 const arena = {closest: () => null};
 const menuButton = {closest: selector => selector.includes('button') ? {} : null};
@@ -237,4 +237,29 @@ test('automatic and manual reload preserve input ownership for resumed fire', ()
   assert.ok(game.includes('if(world.reloadTimer>0)return;'),'reload must suppress shots until completed');
   assert.ok(game.includes('const movement=resolveMovementAxes(joyF,joyS,keys);'));
   assert.ok(!game.includes('if(keys.KeyW||keys.ArrowUp)forward=1'));
+});
+
+test('horizontal arrow keys strafe, cancel against WASD and stay speed-clamped', () => {
+  assert.deepEqual(resolveMovementAxes(0,0,{ArrowLeft:true}),{forward:0,side:-1});
+  assert.deepEqual(resolveMovementAxes(0,0,{ArrowRight:true}),{forward:0,side:1});
+  assert.deepEqual(resolveMovementAxes(0,0,{ArrowLeft:true,KeyD:true}),{forward:0,side:0});
+  assert.deepEqual(resolveMovementAxes(0,0,{ArrowRight:true,KeyD:true}),{forward:0,side:1});
+  assert.deepEqual(resolveMovementAxes(0,0,{ArrowLeft:true,ArrowRight:true}),{forward:0,side:0});
+  const diagonal=resolveMovementAxes(0,0,{ArrowRight:true,ArrowUp:true});
+  assert.ok(Math.abs(Math.hypot(diagonal.forward,diagonal.side)-1)<1e-12);
+});
+
+test('secondary mouse or pen presses cannot spend consumables or capture gameplay pointers', () => {
+  for (const button of [1,2,3,4]) assert.equal(isPrimaryGameplayPress({pointerType:'mouse',button}),false);
+  assert.equal(isPrimaryGameplayPress({pointerType:'pen',button:2}),false);
+  assert.equal(isPrimaryGameplayPress({pointerType:'touch',button:0,isPrimary:false}),true);
+  assert.equal(isPrimaryGameplayPress({pointerType:'mouse',button:0}),true);
+  assert.equal(isPrimaryGameplayPress(null),false);
+  const game=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  for (const name of ['rocket','drone','special','interact']) {
+    assert.ok(game.includes("$('#"+name+"').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;"));
+  }
+  assert.ok(game.includes("$('#fire').onpointerdown=e=>{if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer"));
+  assert.ok(game.includes("stick.onpointerdown=e=>{if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer"));
+  assert.ok(game.includes("canvas.addEventListener('pointerdown',e=>{\\n if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer"));
 });
