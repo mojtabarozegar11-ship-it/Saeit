@@ -192,7 +192,8 @@ try:
     steps=int(json.loads(p.read_text(encoding="utf-8")).get("max_steps",1))
 except (FileNotFoundError,ValueError,TypeError,KeyError):
     steps=1
-print(steps if 1<=steps<=3 else 1)
+# Enforce the owner's single-step volume ceiling even if stored state is stale.
+print(1)
 PY
 )"
 flock -n "$root/master-cycle.lock" timeout 30 "$py" manage.py recover_stale_tasks --agent-code economic-master-agent --limit 20 --stale-after 900
