@@ -128,7 +128,9 @@ let aimY=0;canvas.addEventListener('pointerdown',e=>{if(!canCaptureGameplayPoint
 function releaseGameInputs(){keys={};fireHeld=false;fireId=null;joyId=null;aimId=null;joyF=joyS=0;knob.style.transform=''}
 addEventListener('keydown',e=>{
  if(screen!=='game'||isInteractiveTarget(e.target))return;
- if(isModifiedOrComposingKey(e))return;
+ // Release keyboard-held movement/fire on browser shortcuts or IME input.
+ // The browser may swallow keyup while a Ctrl/Alt/Meta shortcut is active.
+ if(isModifiedOrComposingKey(e)){keys={};fireHeld=false;return;}
  const action=keyboardAction(e.code,screen,e.target,e.repeat);
  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
  if(action==='pause'){e.preventDefault();$('#pause').click();return}
@@ -141,6 +143,7 @@ addEventListener('keydown',e=>{
  else if(action==='fire')fireHeld=true;
 });
 addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='Space')fireHeld=false});
+addEventListener('compositionstart',()=>{keys={};fireHeld=false});
 addEventListener('blur',()=>{releaseGameInputs();if(screen==='game')$('#pause').click()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){releaseGameInputs();if(screen==='game')$('#pause').click()}});
 addEventListener('pagehide',save);setInterval(save,5000);
