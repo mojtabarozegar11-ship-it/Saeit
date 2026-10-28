@@ -181,6 +181,43 @@ class ScopedRollbackTests(unittest.TestCase):
         self.assertEqual(self.protected.read_bytes(), b"protected home unchanged")
 
 
+    def test_atomic_write_failure_cleans_own_partial_temp(self):
+        target = self.game / "game.js"
+        target.write_bytes(self.old)
+        pending = self.game / (".game.js.ramadan-" + self.run)
+        with patch.object(deploy.os, "fsync", side_effect=OSError("disk full")):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                deploy.atomic(target, self.new, self.run)
+        self.assertEqual(target.read_bytes(), self.old)
+        self.assertFalse(pending.exists(), "failed atomic write leaked disk space")
+
+    def test_release_state_rejects_planted_symlink_without_external_write(self):
+        outside = self.root / "outside-private-state"
+        outside.write_bytes(b"keep private file")
+        (self.stage / "release.json.tmp").symlink_to(outside)
+        with self.assertRaisesRegex(RuntimeError, "temporary file already exists"):
+            deploy.store(self.stage, {"phase": "prepared"})
+        self.assertEqual(outside.read_bytes(), b"keep private file")
+        self.assertTrue((self.stage / "release.json.tmp").is_symlink())
+
+    def test_release_state_fsync_failure_cleans_partial_metadata(self):
+        with patch.object(deploy.os, "fsync", side_effect=OSError("disk full")):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                deploy.store(self.stage, {"phase": "prepared"})
+        self.assertFalse((self.stage / "release.json.tmp").exists())
+        self.assertFalse((self.stage / "release.json").exists())
+
+    def test_release_state_is_exact_and_rejects_stale_temporary_file(self):
+        deploy.store(self.stage, {"phase": "prepared", "new": {"game.js": "sha"}})
+        self.assertEqual(deploy.metadata(self.stage)["phase"], "prepared")
+        self.assertFalse((self.stage / "release.json.tmp").exists())
+        stale = self.stage / "release.json.tmp"
+        stale.write_bytes(b"unrelated pending state")
+        with self.assertRaisesRegex(RuntimeError, "temporary file already exists"):
+            deploy.store(self.stage, {"phase": "published"})
+        self.assertEqual(stale.read_bytes(), b"unrelated pending state")
+        self.assertEqual(deploy.metadata(self.stage)["phase"], "prepared")
+
     def test_corrupt_backup_never_replaces_known_good_file(self):
         (self.game / "game.js").write_bytes(self.new)
         (self.stage / "old-game.js").write_bytes(b"corrupt backup")
