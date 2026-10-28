@@ -355,13 +355,13 @@ jobs:
               print("MYSQL_TABLE_COLUMNS="+json.dumps({"table":table,"columns":cols},ensure_ascii=False))
               dates=[name for name,typ in cols if typ.lower() in {"date","datetime","timestamp"}]
               for name in dates:
-                  ident="\`"+name.replace("\`","\`\`")+"\`"
-                  row=query("SELECT MIN("+ident+"),MAX("+ident+"),COUNT(*),SUM("+ident+" < DATE_SUB(NOW(),INTERVAL 180 DAY)) FROM \`"+table+"\` WHERE "+ident+" IS NOT NULL")[0]
+                  ident=name
+                  row=query(f"SELECT MIN({ident}),MAX({ident}),COUNT(*),SUM({ident} < DATE_SUB(NOW(),INTERVAL 180 DAY)) FROM {table} WHERE {ident} IS NOT NULL")[0]
                   print("MYSQL_DATE_COVERAGE="+json.dumps({"table":table,"column":name,"min":row[0],"max":row[1],"non_null_rows":row[2],"older_than_180d":row[3]},ensure_ascii=False))
               for name,typ in cols:
                   if name.lower() in {"status","state"}:
-                      ident="\`"+name.replace("\`","\`\`")+"\`"
-                      rows=query("SELECT COALESCE(CAST("+ident+" AS CHAR),'[NULL]'),COUNT(*) FROM \`"+table+"\` GROUP BY "+ident+" ORDER BY COUNT(*) DESC LIMIT 20")
+                  ident=name
+                      rows=query(f"SELECT COALESCE(CAST({ident} AS CHAR),CHAR(91,78,85,76,76,93)),COUNT(*) FROM {table} GROUP BY {ident} ORDER BY COUNT(*) DESC LIMIT 20")
                       print("MYSQL_STATUS_DISTRIBUTION="+json.dumps({"table":table,"column":name,"counts":rows},ensure_ascii=False))
           PY
           REMOTE
