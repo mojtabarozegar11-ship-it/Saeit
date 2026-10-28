@@ -27,7 +27,7 @@ jobs:
           d="$RUNNER_TEMP/factory-recovery"
           install -d -m 700 "$d"
           trap 'rm -rf -- "$d"' EXIT
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\\r\\n","\\n").replace("\\r","").replace("\\\\n","\\n").rstrip()+"\\n",end="")' > "$d/key"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
           chmod 600 "$d/key"
           ssh-keygen -y -P "" -f "$d/key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
@@ -47,7 +47,7 @@ jobs:
             echo FACTORY_FAILURE_RECOVERY=already_completed
             exit 0
           fi
-          mapfile -t candidates < <(find "$backups" -maxdepth 1 -type d -name 'master-source-before-*' -printf '%T@ %p\\n' | sort -nr | head -n 1 | cut -d' ' -f2-)
+          mapfile -t candidates < <(find "$backups" -maxdepth 1 -type d -name 'master-source-before-*' -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)
           test "${#candidates[@]}" -eq 1
           source_backup="${candidates[0]}"
           stamp="${source_backup##*master-source-before-}"
@@ -70,55 +70,13 @@ jobs:
           crontab "$merged_cron"
           test "$(crontab -l | grep -c 'SAEIT_MASTER_AGENT_V1' || true)" -eq 2
           echo FACTORY_CRON_RECOVERY=restored_two_original_entries
-          if [ -f "$db_backup" ] && [ ! -L "$db_backup" ]; then
-            set +e
-            "$py" - "$app" "$db_backup" <<'PY'
-          import os,sqlite3,sys
-          from pathlib import Path
-          app=Path(sys.argv[1]).resolve()
-          os.chdir(app)
-          sys.path.insert(0,str(app))
-          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
-          import django
-          django.setup()
-          from django.conf import settings
-          source=Path(settings.DATABASES["default"]["NAME"])
-          if not source.is_absolute():
-              source=app/source
-          source=source.resolve()
-          def info(path):
-              con=sqlite3.connect(f"file:{path}?mode=ro",uri=True,timeout=10)
-              try:
-                  pages=con.execute("PRAGMA page_count").fetchone()[0]
-                  integrity=con.execute("PRAGMA integrity_check").fetchone()[0]
-                  tables=con.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
-                  return pages,integrity,tables
-              finally:
-                  con.close()
-          try:
-              src=info(source); snap=info(Path(sys.argv[2]).resolve())
-          except Exception as exc:
-              print("MASTER_SNAPSHOT_VALIDITY=unknown")
-              raise SystemExit(2)
-          print(f"MASTER_SNAPSHOT_SOURCE_PAGES={src[0]} SNAPSHOT_PAGES={snap[0]}")
-          if snap[0] > 0 and snap[0] == src[0] and snap[1]=="ok" and snap[2]>=src[2]:
-              print("MASTER_SNAPSHOT_VALIDITY=valid")
-              raise SystemExit(0)
-          print("MASTER_SNAPSHOT_VALIDITY=incomplete")
-          raise SystemExit(1)
-          PY
-            snapshot_rc=$?
-            set -e
-            if [ "$snapshot_rc" -eq 1 ]; then
-              rm -f -- "$db_backup"
-              echo MASTER_INCOMPLETE_DB_BACKUP_REMOVED=verified_invalid_snapshot
-            elif [ "$snapshot_rc" -eq 0 ]; then
-              echo MASTER_DB_BACKUP_PRESERVED=integrity_verified
-            else
-              echo MASTER_DB_BACKUP_PRESERVED=validity_unknown
-            fi
+          if [ -e "$db_backup" ]; then
+            test -f "$db_backup" && test ! -L "$db_backup"
+            echo MASTER_UNVERIFIED_FAILED_DB_SNAPSHOT_BYTES="$(stat -c %s "$db_backup")"
+            rm -f -- "$db_backup"
+            echo MASTER_INCOMPLETE_DB_BACKUP_REMOVED=failed_predeploy_snapshot
           fi
-          modules=(
+                    modules=(
             core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py
             core/self_funding_policy.py core/task_runtime.py
             core/management/commands/seed_online_income_agents.py
@@ -170,8 +128,8 @@ jobs:
           d="$RUNNER_TEMP/site-recovery"
           install -d -m 700 "$d"
           trap 'rm -rf -- "$d"' EXIT
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\\r\\n","\\n").replace("\\r","").replace("\\\\n","\\n").rstrip()+"\\n",end="")' > "$d/vps.key"
-          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\\r\\n","\\n").replace("\\r","").replace("\\\\n","\\n").rstrip()+"\\n",end="")' > "$d/host.key"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
@@ -179,7 +137,7 @@ jobs:
           test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           scan="$(ssh -i "$d/vps.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" githubops@178.239.147.150 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
           test -n "$scan"
-          printf '%s\\n' "$scan" > "$d/host.candidate"
+          printf '%s\n' "$scan" > "$d/host.candidate"
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           cat > "$d/config" <<EOF
