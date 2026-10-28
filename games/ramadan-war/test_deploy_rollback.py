@@ -268,7 +268,7 @@ class ScopedRollbackTests(unittest.TestCase):
     def valid_release_manifest(self):
         return {
             "phase": "prepared",
-            "old": {"game.js": "a" * 64},
+            "old": {name: "a" * 64 for name in ("index.html", "game.js", "game.css", "engine3d.js", "three.module.js", "three.core.min.js", "THREE-LICENSE.txt")},
             "new": {name: "b" * 64 for name in deploy.ASSETS},
             "route": "c" * 64,
             "protected": {".htaccess": "d" * 64, "store/index.html": "e" * 64},
@@ -276,6 +276,18 @@ class ScopedRollbackTests(unittest.TestCase):
 
     def test_valid_release_journal_passes_strict_schema(self):
         self.assertTrue(deploy.validate_release_manifest(self.valid_release_manifest()))
+
+    def test_forged_release_journal_cannot_delete_original_baseline(self):
+        forged = self.valid_release_manifest()
+        forged["old"].pop("index.html")
+        with self.assertRaisesRegex(AssertionError, "original release baseline missing"):
+            deploy.validate_release_manifest(forged)
+
+    def test_forged_release_journal_cannot_delete_all_originals(self):
+        forged = self.valid_release_manifest()
+        forged["old"].clear()
+        with self.assertRaisesRegex(AssertionError, "original release baseline missing"):
+            deploy.validate_release_manifest(forged)
 
     def test_forged_release_journal_cannot_escape_game_or_protected_paths(self):
         for field, bad_key in (("new", "../outside-private-state"),
