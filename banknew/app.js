@@ -220,8 +220,9 @@ if (typeof document !== 'undefined') {
   const legacyDisclaimer = document.querySelector('#wallet article.panel .fine');
   if (legacyDisclaimer) {
     legacyDisclaimer.textContent =
-      'Other token balances and WalletConnect QR pairing are not integrated. ' +
-      'A connected address is not proof of identity.';
+      'ETH, TRX and supported USDT balances are read-only. ' +
+      'Other assets and WalletConnect QR pairing are not supported. ' +
+      'Wallet connection does not verify financial identity.';
   }
   if (walletGrid) {
     const panel = document.createElement('article');
@@ -288,7 +289,7 @@ if (typeof document !== 'undefined') {
         if (sequence === tronEpoch) {
           message.textContent = error.code === 4001 ?
             'TRON wallet connection declined.' :
-            'Unable to read TRON wallet: ' + String(error.message || 'connection failed');
+            'Unable to read TRON wallet. Check the wallet connection and retry.';
         }
       } finally {
         button.disabled = false;
