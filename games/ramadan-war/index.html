@@ -1,9 +1,17 @@
 <!doctype html>
 <html lang="fa" dir="rtl">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#08191e"><meta name="description" content="نسخهٔ وب جنگ رمضان؛ شوتر سه‌بعدی اول‌شخص با محیط صحرایی، دژ سنگی، تفنگ دوربین‌دار، ۳۰ قهرمان، موشک، پهپاد و کارزار شش‌مرحله‌ای.">
-<title>جنگ رمضان | نسخهٔ وب بازی موبایل</title><link rel="stylesheet" href="./game.css">
+<title>جنگ رمضان | نسخهٔ وب بازی موبایل</title>
+<link rel="canonical" href="https://zomorodmelal.ir/ramadan-war/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="fa_IR">
+<meta property="og:title" content="جنگ رمضان | بازی سه‌بعدی مرورگری">
+<meta property="og:description" content="بازی تخیلی سه‌بعدی با شش مأموریت، ۳۰ شخصیت و کنترل موبایل و رایانه.">
+<meta property="og:url" content="https://zomorodmelal.ir/ramadan-war/">
+<meta name="twitter:card" content="summary">
+<link rel="stylesheet" href="./game.css">
 </head>
 <body>
 <main id="game" aria-label="جنگ رمضان">
@@ -16,9 +24,9 @@
   <header class="hud-top"><div class="hud-brand"><b>جنگ رمضان</b><small id="missionName">دفاع از پایتخت</small></div><div class="vitals"><div class="vital-line"><span>جان</span><b id="hpText">۱۰۰</b><span>×</span><b id="lifeText">۱۰۰</b></div><div class="bar"><i id="hpBar"></i></div><div class="vital-line secondary"><span>مرحله</span><b id="stageText">۱</b><span>پاکسازی</span><b id="progress">۰ / ۹</b></div></div></header>
   <div class="arsenal"><span>مهمات <b id="ammoText">۸ / ۸</b></span><span>ترکیب <b id="comboText">۰×</b></span><span>🚀 <b id="rocketText">۱۲</b></span><span>🛸 <b id="droneText">۳</b></span><span>اعتبار <b id="pointText">۰</b></span><span>امتیاز <b id="scoreText">۰</b></span></div>
   <div id="missionObjective" aria-label="هدف مأموریت"><span id="objectiveArrow">▲</span><div><b id="objectiveTitle">هدف مأموریت</b><small id="objectiveDetail">به علامت نورانی برس</small></div><span id="objectiveRange">—</span></div>
-  <div id="toast" class="toast"></div>
-  <div id="controls"><div class="move-zone"><div id="stick" aria-label="جوی‌استیک حرکت"><i id="knob"></i></div><small>حرکت</small></div><div class="action-zone"><button id="scope" class="button scope" aria-label="نشانه‌گیری دوربین‌دار">◎<small>دوربین</small></button><button id="fire" class="button fire" aria-label="شلیک تک‌تیرانداز"><b>شلیک</b><small>تک‌تیر</small></button><div class="aux-actions"><button id="rocket" class="button rocket" aria-label="شلیک موشک">🚀<small>موشک</small></button><button id="drone" class="button drone" aria-label="حمله پهپاد">🛸<small>پهپاد</small></button></div></div></div>
-  <button id="interact" class="button interact hidden" aria-label="تعامل با هدف مأموریت">◉ <small>فعال‌سازی</small></button><button id="special" class="button special" aria-label="توانایی ویژه">✦ <small>ویژه</small></button><button id="fullscreen" class="button fullscreen" aria-label="تمام‌صفحه">⛶</button><button id="pause" class="button pause">Ⅱ</button>
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="controls"><div class="move-zone"><div id="stick" aria-label="جوی‌استیک حرکت"><i id="knob"></i></div><small>حرکت</small></div><div class="action-zone"><button id="scope" class="button scope" aria-label="نشانه‌گیری دوربین‌دار" aria-pressed="false">◎<small>دوربین</small></button><button id="fire" class="button fire" aria-label="شلیک تک‌تیرانداز"><b>شلیک</b><small>تک‌تیر</small></button><div class="aux-actions"><button id="rocket" class="button rocket" aria-label="شلیک موشک">🚀<small>موشک</small></button><button id="drone" class="button drone" aria-label="حمله پهپاد">🛸<small>پهپاد</small></button></div></div></div>
+  <button id="interact" class="button interact hidden" aria-label="تعامل با هدف مأموریت">◉ <small>فعال‌سازی</small></button><button id="special" class="button special" aria-label="توانایی ویژه">✦ <small>ویژه</small></button><button id="fullscreen" class="button fullscreen" aria-label="تمام‌صفحه">⛶</button><button id="pause" class="button pause" aria-label="توقف موقت بازی">Ⅱ</button>
  </div>
  <section id="home" class="panel">
   <div class="eyebrow">MOJPLAYWIN · SHOOTER سه‌بعدی</div><div class="emblem">✦</div><h1>جنگ رمضان</h1><p>شش عملیات با هدف‌های متفاوت: فعال‌سازی سامانه‌ها، دفاع از موضع، بازیابی اطلاعات، قطع رادار، استخراج و نبرد با فرماندهٔ زرهی. مسیر هدف را دنبال کن، درگیر شو و مأموریت را به پایان برسان.</p>
@@ -29,6 +37,6 @@
  </section>
  <section id="heroes" class="panel hidden"><div class="eyebrow">۳۰ شخصیت قابل انتخاب</div><h2>قهرمانت را انتخاب کن</h2><div id="heroGrid" class="hero-grid"></div><div class="menu-actions"><button id="heroBack" class="primary">بازگشت به بازی</button></div></section>
  <section id="pausePanel" class="panel hidden"><div class="emblem">Ⅱ</div><h2>نبرد متوقف شد</h2><p>پیشرفت همین مرحله ذخیره شده است.</p><div class="menu-actions"><button id="resume" class="primary">ادامه نبرد</button><button id="openUpgrades">کارگاه ارتقا · <span id="upgradePoints">۰</span></button><button id="goHome">خانه</button></div></section>
- <section id="upgradePanel" class="panel hidden"><h2>کارگاه ارتقا</h2><p>امتیاز آماده: <b id="upgradePoints2">۰</b></p><div class="upgrade-grid"><button data-up="0">قدرت شلیک</button><button data-up="1">زره و ترمیم</button><button data-up="2">موشک بیشتر</button><button data-up="3">پشتیبانی پهپادی</button></div><button id="upgradeBack" class="primary">بازگشت به نبرد</button></section>
+ <section id="upgradePanel" class="panel hidden"><h2>کارگاه ارتقا</h2><p>امتیاز کسب‌شده در بازی: <b id="upgradePoints2">۰</b></p><p class="legal" id="moj1Status" role="status" aria-live="polite">خرید با MOJ1 فعلاً غیرفعال است؛ هیچ پرداختی انجام نمی‌شود.</p><div class="upgrade-grid"><button data-up="0">قدرت شلیک</button><button data-up="1">زره و ترمیم</button><button data-up="2">موشک بیشتر</button><button data-up="3">پشتیبانی پهپادی</button></div><button id="upgradeBack" class="primary">بازگشت به نبرد</button></section>
  <section id="result" class="panel hidden"><div class="emblem" id="resultMark">✦</div><h2 id="resultTitle"></h2><p id="resultText"></p><div class="menu-actions"><button id="continue" class="primary">مرحله بعد</button><button id="retry">کارزار تازه</button><button id="resultHome">خانه</button></div></section>
 </main><script type="module" src="./game.js"></script></body></html>
