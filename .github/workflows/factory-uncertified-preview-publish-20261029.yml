@@ -109,14 +109,26 @@ jobs:
           scp -q -F "$d/config" "saeit-vps:$source_root/manufacturing_manifest.json" "$d/manufacturing_manifest.json"
           scp -q -F "$d/config" "saeit-vps:$source_root/farm_enterprise_economics-internal-qa.zip" "$d/farm_enterprise_economics-internal-qa.zip"
           python3 - "$d" <<'PY'
-          import importlib.util,sys
+          import importlib.util,sys,zipfile
           from pathlib import Path
           root=Path(sys.argv[1])
           spec=importlib.util.spec_from_file_location("factory_sender","scripts/factory_store_sender.py")
           module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          archive_path=root/"farm_enterprise_economics-internal-qa.zip"
           digest=module.verify_source(root/"manufacturing_manifest.json",
-              root/"farm_enterprise_economics-internal-qa.zip","farm_enterprise_economics")
+              archive_path,"farm_enterprise_economics")
+          source=Path("product_recipes/farm_enterprise_economics")
+          files=sorted(path.relative_to(source).as_posix() for path in source.rglob("*")
+              if path.is_file() and not any(part.startswith(".") or part=="__pycache__"
+                                             for part in path.relative_to(source).parts))
+          with zipfile.ZipFile(archive_path) as archive:
+              if set(archive.namelist())!={"farm_enterprise_economics/"+name for name in files}:
+                  raise SystemExit("PREVIEW_ARCHIVE_SOURCE_FILE_SET_MISMATCH")
+              for name in files:
+                  if archive.read("farm_enterprise_economics/"+name)!=(source/name).read_bytes():
+                      raise SystemExit("PREVIEW_ARCHIVE_SOURCE_BYTES_MISMATCH")
           print("FACTORY_PREVIEW_SOURCE_TECHNICAL_QA_AND_HASH=PASS")
+          print("FACTORY_PREVIEW_MATCHES_TESTED_REPOSITORY_SOURCE=PASS")
           print("FACTORY_PREVIEW_ARTIFACT_SHA256="+digest)
           PY
           digest="$(python3 - "$d/manufacturing_manifest.json" <<'PY'
