@@ -158,21 +158,28 @@ def secure_parent(webroot):
     return parent
 
 
-def prepare_private_product(inbox, *, uncertified_preview=False):
+def prepare_private_product(inbox, *, uncertified_preview=False, expected_sha256=None):
     inbox = Path(inbox).expanduser().absolute()
     if inbox.is_symlink() or not inbox.is_dir():
         raise ValueError("SOURCE_INBOX_NOT_VERIFIED")
     receiver = _receiver()
-    receipt_dir = inbox / "receipts" / RECIPE
-    receipts = sorted(receipt_dir.glob("*.json")) if receipt_dir.is_dir() else []
-    verified = []
-    for receipt in receipts:
-        digest = receipt.stem
-        if re.fullmatch(r"[0-9a-f]{64}", digest) and receiver.status(inbox, RECIPE, digest):
-            verified.append(digest)
-    if len(verified) != 1:
-        raise ValueError("REQUIRE_EXACTLY_ONE_VERIFIED_RELEASE")
-    digest = verified[0]
+    if expected_sha256 is not None:
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+            raise ValueError("EXPECTED_SHA256_INVALID")
+        if not receiver.status(inbox, RECIPE, expected_sha256):
+            raise ValueError("EXPECTED_RELEASE_NOT_VERIFIED")
+        digest = expected_sha256
+    else:
+        receipt_dir = inbox / "receipts" / RECIPE
+        receipts = sorted(receipt_dir.glob("*.json")) if receipt_dir.is_dir() else []
+        verified = []
+        for receipt in receipts:
+            digest = receipt.stem
+            if re.fullmatch(r"[0-9a-f]{64}", digest) and receiver.status(inbox, RECIPE, digest):
+                verified.append(digest)
+        if len(verified) != 1:
+            raise ValueError("REQUIRE_EXACTLY_ONE_VERIFIED_RELEASE")
+        digest = verified[0]
     src = inbox / "packages" / RECIPE / (digest + ".zip")
     manifest_path = inbox / "packages" / RECIPE / (digest + ".json")
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -199,7 +206,8 @@ def prepare_private_product(inbox, *, uncertified_preview=False):
     return digest, src
 
 
-def publish(inbox, webroot, *, release_authorized=False, uncertified_preview=False):
+def publish(inbox, webroot, *, release_authorized=False, uncertified_preview=False,
+            expected_sha256=None):
     if release_authorized is not True:
         raise ValueError("EXPLICIT_PUBLICATION_AUTHORIZATION_REQUIRED")
     requested_root = Path(webroot).expanduser().absolute()
@@ -215,7 +223,9 @@ def publish(inbox, webroot, *, release_authorized=False, uncertified_preview=Fal
             or not (early_public_dir / "SHA256SUMS.txt").is_file()
             or not (early_public_dir / PUBLIC_FILENAME).is_file()):
         raise ValueError("REFUSING_TO_REPLACE_EXISTING_PUBLIC_RELEASE")
-    digest, source = prepare_private_product(inbox, uncertified_preview=uncertified_preview)
+    digest, source = prepare_private_product(
+        inbox, uncertified_preview=uncertified_preview,
+        expected_sha256=expected_sha256)
     parent = secure_parent(requested_root)
     public_dir = parent / PUBLIC_SLUG
     if public_dir.is_symlink():
@@ -262,9 +272,12 @@ def main(argv=None):
     parser.add_argument("--authorize-publication", action="store_true")
     parser.add_argument("--uncertified-preview", action="store_true",
                         help="Publish a free, clearly disclosed preview without QC1000 certification.")
+    parser.add_argument("--expected-sha256",
+                        help="Require the exact checksum selected by the caller.")
     args = parser.parse_args(argv)
     result = publish(args.inbox, args.webroot, release_authorized=args.authorize_publication,
-                     uncertified_preview=args.uncertified_preview)
+                     uncertified_preview=args.uncertified_preview,
+                     expected_sha256=args.expected_sha256)
     print("FACTORY_RELEASE_STATUS=" + result["status"])
     print("FACTORY_RELEASE_URL=" + result["url"])
     print("FACTORY_RELEASE_SHA256=" + result["sha256"])
