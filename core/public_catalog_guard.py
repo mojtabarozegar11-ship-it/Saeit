@@ -14,10 +14,7 @@ def missing_public_tables(*models):
 
 
 def mark_public_data_unavailable(response):
-    """Do not cache or index incomplete public catalogs as genuine empty pages."""
+    """Avoid caching a degraded catalog or implying that its data is absent."""
     response["Cache-Control"] = "private, no-store"
     response["X-ZM-Data-Status"] = "temporarily-unavailable"
-    # Keep a temporary empty catalog out of search results until recovery.
-    # Do not modify the normal response path or existing canonical URLs.
-    response["X-Robots-Tag"] = "noindex"
     return response
