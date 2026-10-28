@@ -12,7 +12,7 @@ from django.template.loader import render_to_string
 from core.academy_views import academy, education_course_detail
 from core.company_content_views import company_gallery
 from core.newsletter_views import newsletter_home, newsletter_detail
-from core.public_catalog_guard import missing_public_tables
+from core.public_catalog_guard import missing_public_tables, mark_public_data_unavailable
 
 
 class PublicCatalogSchemaFallbackTests(SimpleTestCase):
@@ -27,6 +27,17 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
             self.assertTrue(missing_public_tables(first, second))
             self.assertFalse(missing_public_tables(first))
             db.introspection.table_names.assert_called()
+
+    def test_degraded_catalog_noindex_does_not_change_normal_response(self):
+        normal = HttpResponse("healthy catalog")
+        self.assertNotIn("X-Robots-Tag", normal)
+        self.assertNotIn("X-ZM-Data-Status", normal)
+        degraded = mark_public_data_unavailable(HttpResponse("temporary catalog"))
+        self.assertEqual(degraded.status_code, 200)
+        self.assertEqual(degraded["X-Robots-Tag"], "noindex")
+        self.assertEqual(degraded["X-ZM-Data-Status"], "temporarily-unavailable")
+        self.assertIn("no-store", degraded["Cache-Control"])
+        self.assertNotIn("X-Robots-Tag", normal)
 
     def test_academy_retains_static_tracks_without_catalog_tables(self):
         with patch("core.academy_views.missing_public_tables", return_value=True), patch(
