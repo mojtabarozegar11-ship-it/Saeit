@@ -16,6 +16,17 @@ REQUIRED_LIB = ('library_id','condition','biological_replicate_id','fastq_r1','m
 class GateError(ValueError):
     pass
 
+EXPECTED_CONDITIONS = {format(i, '03b') for i in range(8)}
+
+def validate_factorial_design(conditions):
+    """Metadata-only 2x2x2 layout check; does NOT establish biological independence."""
+    if set(conditions) != EXPECTED_CONDITIONS:
+        missing = sorted(EXPECTED_CONDITIONS - set(conditions))
+        extra = sorted(str(x) for x in set(conditions) - EXPECTED_CONDITIONS)
+        raise GateError(f'Expected exactly eight 2x2x2 factorial cells; missing={missing}, extra={extra}')
+    if any(conditions[c] != 3 for c in EXPECTED_CONDITIONS):
+        raise GateError('Each of eight factorial cells requires exactly three recorded libraries')
+
 def sha_file(p, name):
     h = hashlib.new(name)
     with p.open('rb') as f:
@@ -91,8 +102,7 @@ def validate(manifest_file):
             p=file_with_digest(root,fn,expected,'md5')
             if p.resolve() in used_files: raise GateError('Reused FASTQ file: '+str(p))
             used_files.add(p.resolve())
-    if len(conditions)<2 or any(n<2 for n in conditions.values()):
-        raise GateError('At least two conditions and two reported replicates per condition required')
+    validate_factorial_design(conditions)
     if not m.get('multimapping_policy') or not m.get('independence_documentation'):
         raise GateError('Multimapping policy and biological provenance documentation required')
     counts=m.get('raw_integer_counts')
