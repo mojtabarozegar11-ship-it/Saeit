@@ -363,6 +363,66 @@ jobs:
               print("PROFILE_SIGNATURE_"+str(index)+"_SAFE_WORDS="+signature)
           PY
           REMOTE
+      - name: Correlate today's author 500 with WSGI runtime read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime,timezone
+          import re,collections
+          h=Path.home()
+          app=h/"Saeit"
+          wsgi=app/"passenger_wsgi.py"
+          if wsgi.is_file():
+              w=wsgi.read_text(errors="replace")
+              print("PROFILE_WSGI_FILE_MTIME_UTC="+datetime.fromtimestamp(wsgi.stat().st_mtime,timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+              print("PROFILE_WSGI_USE_ADDSITEDIR="+str(bool(re.search(r"^\s*site\.addsitedir\s*\(",w,re.M))))
+              print("PROFILE_WSGI_DIRECT_CONFIG_IMPORT="+str("from config.wsgi import application" in w))
+              print("PROFILE_WSGI_GUARD_LIB64="+str("lib64" in w))
+          stderr=app/"stderr.log"
+          if stderr.is_file():
+              print("PROFILE_STDERR_MTIME_UTC="+datetime.fromtimestamp(stderr.stat().st_mtime,timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+          paths=[stderr,h/"public_html"/"error_log"]
+          for folder in (h/"logs",h/"access-logs"):
+              if folder.is_dir():
+                  paths.extend(list(folder.glob("*zomorod*"))[:15])
+                  paths.extend(list(folder.glob("*error*"))[:5])
+          dates=collections.Counter()
+          names=collections.Counter()
+          today=collections.Counter()
+          for path in dict.fromkeys(paths):
+              if not path.is_file() or path.is_symlink():continue
+              try:
+                  with path.open("rb") as f:
+                      f.seek(max(0,path.stat().st_size-1048576))
+                      lines=f.read().decode("utf-8","replace").splitlines()
+              except OSError:continue
+              for line in lines:
+                  low=line.lower()
+                  author="/authors/mojtaba-rozegar" in low
+                  is500=bool(re.search(r"(?<!\d)500(?!\d)",line))
+                  is_today=("2026-10-28" in line or "28/Oct/2026" in line)
+                  if author and is500:today["author_any_500"]+=1
+                  if author and is_today:today["author_today_any"]+=1
+                  if author and is_today and is500:today["author_today_500"]+=1
+                  if is_today and is500:today["today_500"]+=1
+                  m=re.search(r"ModuleNotFoundError:\s*No module named ['\"]([a-zA-Z_][\w.]{0,75})['\"]",line)
+                  if m:names[m.group(1)]+=1
+                  if is500 and is_today:
+                      stamp=re.search(r"(2026-10-28(?:[T ][0-9:]+)?|28/Oct/2026(?::[0-9:]+)?)",line)
+                      if stamp:dates[stamp.group(1)]+=1
+          for key in ("author_any_500","author_today_any","author_today_500","today_500"):
+              print("PROFILE_TODAY_"+key.upper()+"="+str(today[key]))
+          for name,count in names.most_common(5):
+              print("PROFILE_MISSING_MODULE="+name+" count="+str(count))
+          for stamp,count in dates.most_common(5):
+              print("PROFILE_TODAY_500_STAMP="+stamp+" count="+str(count))
+          PY
+          REMOTE
       - name: Remove temporary SSH credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
