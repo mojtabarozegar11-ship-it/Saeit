@@ -47,7 +47,21 @@ def atomic(path,data,run):
         except FileNotFoundError:
             pass
         raise
-def metadata(stage): return json.loads((stage/'release.json').read_text('utf-8'))
+def safe_release_file(root, relative):
+    """Read a regular release file only within an unlinked directory tree."""
+    root=Path(root)
+    rel=Path(relative)
+    assert root.is_dir() and not root.is_symlink(),'linked release directory refused'
+    assert not rel.is_absolute() and rel.parts and '..' not in rel.parts
+    for n in range(1,len(rel.parts)+1):
+        assert not root.joinpath(*rel.parts[:n]).is_symlink(),'linked release file or parent refused: '+str(relative)
+    candidate=root/rel
+    assert candidate.is_file(),'release file missing: '+str(relative)
+    assert candidate.resolve().is_relative_to(root.resolve()),'release file escapes root'
+    return candidate
+
+def metadata(stage):
+    return json.loads(safe_release_file(stage,'release.json').read_text('utf-8'))
 def store(stage,value):
     # Release metadata is security-critical: refuse a planted temporary link
     # rather than following it with Path.write_text on the cPanel host.
@@ -141,7 +155,7 @@ def write_backup(stage,name,data):
 def prepare(stage):
     assert ROOT.is_dir() and not ROOT.is_symlink() and GAME.is_dir() and not GAME.is_symlink()
     home=live_card_check()
-    inputs={name:(stage/f'incoming/{name}') for name in ASSETS+['.htaccess']}
+    inputs={name:safe_release_file(stage/'incoming',name) for name in ASSETS+['.htaccess']}
     assert all(p.is_file() and not p.is_symlink() for p in inputs.values())
     assert inputs['.htaccess'].read_text('utf-8')=='PassengerEnabled off\nDirectoryIndex index.html\n'
     new={name:inputs[name].read_bytes() for name in ASSETS}
@@ -161,7 +175,7 @@ def prepare(stage):
     assert b'weapon-overlay.webp' in new['index.html'] and b'soldier-enemy.webp' in new['engine3d.js'] and b'missionBackdrop' in new['index.html'] and b'scene-sniper-desert-v2.webp' in new['game.js'] and b'alpha:true' in new['engine3d.js']
     assert b'GLTFLoader' in new['engine3d.js'] and b'soldier-rigged-ccby.glb' in new['engine3d.js'] and b'm24-sniper-ccby.glb' in new['engine3d.js'] and b'MeshoptDecoder' in new['engine3d.js']
     assert (GAME/'.htaccess').is_file() and (GAME/'.htaccess').read_bytes()==inputs['.htaccess'].read_bytes()
-    old={name:(GAME/name).read_bytes() for name in ASSETS if (GAME/name).is_file() and not (GAME/name).is_symlink()}
+    old={name:safe_release_file(GAME,name).read_bytes() for name in ASSETS if (GAME/name).is_file()}
     assert all(name in old for name in ['index.html','game.js','game.css','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt'])
     for name in set(new)-set(old):
         assert not (GAME/name).exists() and not (GAME/name).is_symlink(),f'new asset already exists: {name}'
@@ -199,15 +213,15 @@ def ensure_publish_capacity(stage, payload_bytes, reserve_bytes=128*1024*1024,
 
 def publish(stage,run):
     m=metadata(stage);validate_release_manifest(m);assert m['phase']=='prepared';live_card_check()
-    for name,h in m['old'].items():assert digest((GAME/name).read_bytes())==h,'game file changed concurrently: '+name
+    for name,h in m['old'].items():assert digest(safe_release_file(GAME,name).read_bytes())==h,'game file changed concurrently: '+name
     for name in set(m['new'])-set(m['old']):assert not (GAME/name).exists() and not (GAME/name).is_symlink(),'new asset appeared concurrently: '+name
-    assert digest((GAME/'.htaccess').read_bytes())==m['route'],'game route config changed concurrently'
+    assert digest(safe_release_file(GAME,'.htaccess').read_bytes())==m['route'],'game route config changed concurrently'
     for name in m['new']:
-        data=(stage/f'incoming/{name}').read_bytes();assert digest(data)==m['new'][name]
-    ensure_publish_capacity(stage,sum((stage/f'incoming/{name}').stat().st_size for name in ASSETS))
+        data=safe_release_file(stage/'incoming',name).read_bytes();assert digest(data)==m['new'][name]
+    ensure_publish_capacity(stage,sum(safe_release_file(stage/'incoming',name).stat().st_size for name in ASSETS))
     try:
         for name in [asset for asset in ASSETS if asset!='index.html']+['index.html']:
-            atomic(GAME/name,(stage/f'incoming/{name}').read_bytes(),run)
+            atomic(GAME/name,safe_release_file(stage/'incoming',name).read_bytes(),run)
             assert digest((GAME/name).read_bytes())==m['new'][name]
         m['phase']='published';store(stage,m)
         print('RAMADAN_WEB_CLIENT_UPDATED=PASS; route and card position preserved')
@@ -230,8 +244,8 @@ def verify_protected_pages(protected):
 
 def verify(stage):
     m=metadata(stage);validate_release_manifest(m);assert m['phase']=='published';live_card_check()
-    for name,h in m['new'].items():assert digest((GAME/name).read_bytes())==h,'new game file hash mismatch: '+name
-    assert digest((GAME/'.htaccess').read_bytes())==m['route']
+    for name,h in m['new'].items():assert digest(safe_release_file(GAME,name).read_bytes())==h,'new game file hash mismatch: '+name
+    assert digest(safe_release_file(GAME,'.htaccess').read_bytes())==m['route']
     verify_protected_pages(m['protected'])
     print('RAMADAN_WEB_CLIENT_AND_PROTECTED_PAGES=PASS')
 
