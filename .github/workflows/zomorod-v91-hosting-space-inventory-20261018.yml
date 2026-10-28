@@ -62,6 +62,12 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_RELAY=verified"
+      - name: Check VPS backup capacity without making changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-vps 'set -euo pipefail; echo VPS_BACKUP_TARGET_HOME="$HOME"; df -B1 -P "$HOME"; echo VPS_BACKUP_TARGET_CAPACITY_CHECK=complete'
       - name: Read-only cPanel account sizes, V91 subtree, quota and live dependencies
         shell: bash
         run: |
