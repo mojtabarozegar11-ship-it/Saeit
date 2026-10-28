@@ -125,6 +125,21 @@ jobs:
                               age["newer_7d_count"]+=1; age["newer_7d_bytes"]+=stat.st_size
                       except OSError: errors+=1
               print("BACKUP_TREE_INVENTORY="+json.dumps({"regular_files":file_count,"logical_bytes":total_bytes,"allocated_bytes":allocated,"stat_errors":errors,"age_bands":age,"by_suffix":dict(totals)},sort_keys=True))
+          for root_name in ("Saeit",".backups"):
+              root=h/root_name
+              if not root.is_dir() or root.is_symlink(): continue
+              rows=[]
+              try:
+                  for item in root.iterdir():
+                      if item.is_symlink(): continue
+                      if item.is_dir():
+                          size=subprocess.run(["du","-skx",str(item)],capture_output=True,text=True,timeout=30)
+                          if size.returncode==0:
+                              rows.append((int(size.stdout.split()[0])*1024,item.name,item.stat().st_mtime))
+                  rows.sort(reverse=True)
+                  print("TOPLEVEL_DIR_INVENTORY="+json.dumps({"root":root_name,"directories":[{"name":name[:80],"allocated_bytes":size,"mtime_epoch":int(mtime)} for size,name,mtime in rows[:40]]},sort_keys=True))
+              except Exception as exc:
+                  print("TOPLEVEL_DIR_INVENTORY_ERROR="+root_name+":"+type(exc).__name__)
           print("BREAKDOWN_AUDIT_COMPLETE=yes")
           PY
           REMOTE
