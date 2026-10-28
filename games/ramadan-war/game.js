@@ -1,7 +1,7 @@
 import {createEngine} from './engine3d.js';
 import {canApplyEarnedUpgrade,applyEarnedUpgrade} from './upgrade-policy.mjs';
 import {MOJ1_COMMERCE} from './moj1-commerce-policy.mjs';
-import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, joystickAxes, normalizeMovementAxes, canCaptureGameplayPointer, isOwnedGameplayPointer, recordPointerGestureMovement, shouldFireCanvasClick} from './input-guard.mjs';
+import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, shouldReleaseHeldKeysOnFocus, joystickAxes, normalizeMovementAxes, canCaptureGameplayPointer, isOwnedGameplayPointer, recordPointerGestureMovement, shouldFireCanvasClick} from './input-guard.mjs';
 import {removeEnemyAndRetargetMissiles,missilePathBlocked,missileMotionValid} from './missile-targets.mjs';
 import {canEnemyAct,restoreEnemyRuntime,advanceHostileProjectile,shouldCleanupEnemy,activateTimeStop,advanceTimeStop} from './enemy-action-policy.mjs';
 import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, resumeCampaignScreen, readHeroChoice, storageRead, storageWrite, storageRemove} from './save-validation.mjs';
@@ -161,6 +161,9 @@ addEventListener('keydown',e=>{
 });
 addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='Space')fireHeld=false});
 addEventListener('compositionstart',()=>{keys={};fireHeld=false});
+// Keyboard focus may move to a HUD control without a window blur or keyup.
+// Preserve a genuinely held touch fire pointer while releasing keyboard input.
+document.addEventListener('focusin',e=>{if(shouldReleaseHeldKeysOnFocus(screen,e.target)){keys={};if(fireId===null)fireHeld=false}});
 addEventListener('blur',()=>{releaseGameInputs();if(screen==='game')$('#pause').click()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){releaseGameInputs();if(screen==='game')$('#pause').click()}});
 addEventListener('pagehide',save);setInterval(save,5000);
