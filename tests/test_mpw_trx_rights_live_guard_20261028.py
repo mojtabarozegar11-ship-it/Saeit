@@ -273,5 +273,12 @@ class GuardTests(unittest.TestCase):
                 restart.assert_called_once()
                 self.assertTrue((root/"private"/"202610280013"/"manifest.json").is_file())
 
+    def test_main_push_rechecks_guard_sources_without_implicit_apply(self):
+        workflow=(SCRIPT.parents[1]/".github/workflows/mpw-trx-rights-guarded-release-20261028.yml").read_text("utf8")
+        push=workflow.split("  push:",1)[1].split("  workflow_dispatch:",1)[0]
+        self.assertIn("scripts/mpw_trx_rights_live_guard_20261028.py",push)
+        self.assertIn("tests/test_mpw_trx_rights_live_guard_20261028.py",push)
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.operation == 'apply'",workflow)
+
 if __name__=="__main__":
     unittest.main()
