@@ -3,6 +3,7 @@ from django.urls import path
 from django.contrib import admin
 from .portal import dashboard, read_status, connection_plan
 from .official import public_channels, public_channels_json
+from .course_showcase import gallery as course_gallery, poster as course_poster
 from .activation_views import activation_page, activation_json
 
 urlpatterns = [
@@ -14,4 +15,6 @@ urlpatterns = [
     path("activation.json", activation_json, name="mojtaba_social_activation_json"),
     path("official/", public_channels, name="mojtaba_official_channels"),
     path("official.json", public_channels_json, name="mojtaba_official_channels_json"),
+    path("courses/", course_gallery, name="mojtaba_public_courses"),
+    path("posters/<slug:slug>.svg", course_poster, name="mojtaba_course_poster"),
 ]
