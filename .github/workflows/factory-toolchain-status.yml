@@ -38,13 +38,13 @@ jobs:
               print('STAGE='+stage.name)
               print(json.dumps({p.name:p.stat().st_size for p in stage.iterdir() if p.is_file()},sort_keys=True))
           # Compare the retired transfer bundle against bounded installed model/toolchain candidates.
-          import hashlib
+          import hashlib, os
           stage=root/'toolchain-source-39232784800-1'
           if stage.is_dir():
               for name in ('install.sh','prove.py','metadata.json','SHA256SUMS'):
                   p=stage/name
                   if p.is_file():
-                      print('STAGED_METADATA_'+name+'='+p.read_text(errors='replace')[:3000].replace('\\n',' '))
+                      print('STAGED_METADATA_'+name+'='+json.dumps(p.read_text(errors='replace')[:3000]))
           local_roots=[root/'build-toolchain',Path.home()/'.cache/huggingface',Path.home()/'models',Path.home()/'comfyui-isolated']
           found=[]
           visited=0
