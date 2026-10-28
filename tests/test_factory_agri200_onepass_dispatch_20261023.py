@@ -2,7 +2,9 @@
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import tempfile
+import textwrap
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -113,6 +115,68 @@ class OnePassTests(unittest.TestCase):
             "technical_preflight_and_rework", "source_specific_revision_brief"])
         self.assertTrue(all("publish" not in label and "approve" not in label
                             for label in labels))
+
+
+    @staticmethod
+    def _preflight_program():
+        workflow = (SOURCE.parents[1] / ".github/workflows/"
+                    "factory-agri200-onepass-dispatch-20261023.yml")
+        text = workflow.read_text(encoding="utf8")
+        start = "ssh_vps 'python3 -B -' <<'PREFLIGHT'\\n"
+        assert start in text
+        program = text.split(start, 1)[1].split("\\n          PREFLIGHT", 1)[0]
+        return text, textwrap.dedent(program)
+
+    def test_schedule_has_readonly_gate_before_any_vps_write(self):
+        text, program = self._preflight_program()
+        self.assertLess(text.index("AGRI200_PREFLIGHT=PASS"),
+                        text.index("install -d -m 700 '$staging'"))
+        self.assertLess(text.index("AGRI200_PREFLIGHT=PASS"),
+                        text.index('cat > \\'$staging/dispatch.py\\''))
+        self.assertIn("5 * 1024**3 + 128 * 1024**2", program)
+        self.assertIn("BLOCKED_INCOMPLETE_INTAKE", program)
+        self.assertIn("BLOCKED_DISK_RACE", program)
+        self.assertIn("StrictHostKeyChecking=yes", text)
+        self.assertIn("AGRI200_NO_VERIFIED_PRODUCTION_PROGRESS", text)
+        compile(program, "<read-only-preflight>", "exec")
+
+    def test_real_preflight_blocks_missing_intake_before_mutations(self):
+        _, program = self._preflight_program()
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "private/autonomous-product-cycle/production-instructions"
+            root.mkdir(parents=True)
+            (root / "orders").mkdir()
+            ids = ["WO-%08d" % i for i in range(1, 201)]
+            (root / "owner-agri200-p0-index.json").write_text(json.dumps({
+                "topic_count": 200, "edition_goal_count": 400,
+                "order_ids_ranked": ids}), encoding="utf8")
+            replacement = (
+                'base = Path("/home/githubops/factory-runtime")',
+                "base = Path(" + repr(str(base)) + ")")
+            simulation = program.replace(*replacement)
+            simulation = simulation.replace("free = shutil.disk_usage(base).free",
+                                            "free = 6 * 1024**3")
+            simulation = simulation.replace("if shutil.disk_usage(base).free < minimum:",
+                                            "if False:")
+            blocked = subprocess.run(["python3", "-B", "-"], input=simulation,
+                                     text=True, capture_output=True, check=False)
+            self.assertEqual(blocked.returncode, 4, blocked.stderr)
+            self.assertIn("BLOCKED_INCOMPLETE_INTAKE", blocked.stdout)
+            self.assertEqual(list((root / "orders").iterdir()), [])
+            for ident in ids:
+                (root / "orders" / (ident + ".json")).write_text(json.dumps({
+                    "id": ident, "status": "issued", "fingerprint": "b" * 64}),
+                    encoding="utf8")
+            allowed = subprocess.run(["python3", "-B", "-"], input=simulation,
+                                     text=True, capture_output=True, check=False)
+            self.assertEqual(allowed.returncode, 0, allowed.stderr)
+            self.assertIn("AGRI200_PREFLIGHT=PASS", allowed.stdout)
+            no_space = simulation.replace("free = 6 * 1024**3", "free = 1")
+            rejected = subprocess.run(["python3", "-B", "-"], input=no_space,
+                                      text=True, capture_output=True, check=False)
+            self.assertEqual(rejected.returncode, 2, rejected.stderr)
+            self.assertIn("BLOCKED_DISK_RESERVE", rejected.stdout)
 
 
 if __name__ == "__main__":
