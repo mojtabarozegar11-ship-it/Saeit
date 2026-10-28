@@ -101,6 +101,63 @@ jobs:
           others = sorted((size for path, size in home_du.items()
                            if Path(path).name not in labels), reverse=True)
 
+          # Read-only bounded scan for recently modified large files; never emit names.
+          # This can attribute rapid growth even when full du hits a timeout.
+          recent = {"complete": False, "scanned_large": 0,
+                    "allocated_bytes": 0, "by_category_allocated_bytes": {},
+                    "top_ten_anonymous": []}
+          cmd = ["find", str(home), "-xdev", "-type", "f",
+                 "-mmin", "-180", "-size", "+8M", "-printf", "%s\t%p\n"]
+          try:
+              scan = subprocess.run(cmd, capture_output=True, text=True,
+                                    timeout=45, check=False)
+              raw = scan.stdout
+              recent["complete"] = scan.returncode == 0
+          except subprocess.TimeoutExpired as exc:
+              raw = exc.stdout or b""
+              if isinstance(raw, bytes):
+                  raw = raw.decode("utf-8", errors="replace")
+          except OSError:
+              raw = ""
+          buckets = {}
+          largest_recent = []
+          for line in raw.splitlines()[:3000]:
+              length, sep, filename = line.partition("\t")
+              if not sep or not length.isdigit():
+                  continue
+              try:
+                  candidate = Path(filename)
+                  rel = candidate.relative_to(home).parts
+                  if not rel or candidate.is_symlink():
+                      continue
+                  st = candidate.stat()
+                  if not stat.S_ISREG(st.st_mode):
+                      continue
+                  allocated = st.st_blocks * 512
+                  if rel[0] == "factory-runtime":
+                      sub = rel[1] if len(rel) > 1 else "root"
+                      category = {
+                          "operations": "factory_operations",
+                          "django-app": "factory_django",
+                          "private": "factory_private",
+                          ".venv": "factory_python",
+                      }.get(sub, "factory_other")
+                  else:
+                      category = {
+                          ".cache": "user_cache", ".local": "user_local",
+                          ".npm": "npm_cache", ".cargo": "cargo_cache",
+                          ".rustup": "rust_toolchain",
+                      }.get(rel[0], "home_other")
+                  buckets[category] = buckets.get(category, 0) + allocated
+                  largest_recent.append((allocated, category))
+                  recent["scanned_large"] += 1
+                  recent["allocated_bytes"] += allocated
+              except (OSError, ValueError):
+                  continue
+          recent["by_category_allocated_bytes"] = dict(sorted(buckets.items()))
+          recent["top_ten_anonymous"] = [
+              {"allocated_bytes": size, "category": cat}
+              for size, cat in sorted(largest_recent, reverse=True)[:10]]
           # Deleted-but-open regular files visible to this user; no file names.
           deleted_count = 0
           deleted_allocated = 0
@@ -147,6 +204,7 @@ jobs:
               "home_other_total_observed_bytes": sum(others),
               "home_inventory_complete": home_complete,
               "home_entries_scanned": len(entries),
+              "recent_large_files": recent,
               "open_deleted_visible_fd_count": deleted_count,
               "open_deleted_visible_allocated_bytes": deleted_allocated,
               "open_deleted_proc_scanned": proc_scanned,
