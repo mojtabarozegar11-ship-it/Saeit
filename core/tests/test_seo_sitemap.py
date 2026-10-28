@@ -20,7 +20,7 @@ class SitemapRegressionTests(TestCase):
     def test_sitemap_includes_public_platform_sections_without_duplicate_archive(self):
         locations = self.read_sitemap_locations()
         for path in (
-            "/education/",
+            "/amozeshgah/",
             "/weather/",
             "/economy/",
             "/studio/",
@@ -29,6 +29,9 @@ class SitemapRegressionTests(TestCase):
         ):
             with self.subTest(path=path):
                 self.assertIn(f"https://zomorodmelal.ir{path}", locations)
+        # The legacy /education/ page remains reachable but declares
+        # /amozeshgah/ as canonical; do not advertise both in the sitemap.
+        self.assertNotIn("https://zomorodmelal.ir/education/", locations)
         self.assertNotIn("https://zomorodmelal.ir/newsletter/archive/", locations)
         self.assertEqual(len(locations), len(set(locations)))
 
@@ -36,6 +39,15 @@ class SitemapRegressionTests(TestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "SERVICES<br><strong>15</strong>")
+
+
+    def test_legacy_education_route_keeps_canonical_and_content(self):
+        canonical = '<link rel="canonical" href="https://zomorodmelal.ir/amozeshgah/">'
+        for path in ("/amozeshgah/", "/education/"):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, canonical, html=True)
 
     def test_studio_has_its_own_topic_page_not_the_contact_fallback(self):
         response = self.client.get("/studio/")
