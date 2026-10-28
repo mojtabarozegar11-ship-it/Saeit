@@ -182,7 +182,7 @@ def receipt(run_id):
     return folder,json.loads(manifest.read_text("utf8"))
 
 def operation(mode,run_id=None):
-    if mode not in ("check","apply","verify","rollback"): raise RuntimeError("UNKNOWN_MODE")
+    if mode not in ("check","apply","verify","rollback","recover"): raise RuntimeError("UNKNOWN_MODE")
     if mode!="check" and (run_id is None or not re.fullmatch(r"[0-9]{6,20}",run_id)):
         raise RuntimeError("INVALID_RUN_ID")
     guard()
@@ -244,18 +244,35 @@ def operation(mode,run_id=None):
                 raise RuntimeError("BACKUP_HASH_MISMATCH")
             if digest(path.read_bytes())!=info["new"][k]:
                 raise RuntimeError("NEWER_SOURCE_EDIT_OR_WRONG_RELEASE")
-        if mode=="verify":
-            _,_,needed=inspect()
-            if needed: raise RuntimeError("RIGHTS_GATE_MISSING")
-            runtime_validate()
-            print("MPW_TRX_RIGHTS_RELEASE=VERIFIED")
-        else:
+        if mode=="recover":
+            # The remote apply process can be terminated between atomic file writes.
+            # Refuse all recovery writes unless every target is exactly old or new.
+            current={k:digest(path.read_bytes()) for k,path in TARGETS.items()}
+            if any(current[k] not in (info["old"][k],info["new"][k]) for k in TARGETS):
+                raise RuntimeError("NEWER_SOURCE_EDIT_OR_WRONG_RELEASE")
+            restored=0
             for k,path in TARGETS.items():
-                atomic(path,(folder/(k+".original.py")).read_bytes())
-            restart()
-            print("MPW_TRX_RIGHTS_RELEASE=ROLLED_BACK_EXACT_RELEASE")
+                if current[k]==info["new"][k]:
+                    atomic(path,(folder/(k+".original.py")).read_bytes())
+                    restored+=1
+            if restored:
+                restart()
+            if any(digest(path.read_bytes())!=info["old"][k] for k,path in TARGETS.items()):
+                raise RuntimeError("RECOVERY_VERIFICATION_FAILED")
+            print("MPW_TRX_RIGHTS_RELEASE=RECOVERED_EXACT_SNAPSHOT; FILES="+str(restored))
+        else:
+            if mode=="verify":
+                _,_,needed=inspect()
+                if needed: raise RuntimeError("RIGHTS_GATE_MISSING")
+                runtime_validate()
+                print("MPW_TRX_RIGHTS_RELEASE=VERIFIED")
+            else:
+                for k,path in TARGETS.items():
+                    atomic(path,(folder/(k+".original.py")).read_bytes())
+                restart()
+                print("MPW_TRX_RIGHTS_RELEASE=ROLLED_BACK_EXACT_RELEASE")
 
 if __name__=="__main__":
     if len(sys.argv)==2 and sys.argv[1]=="check": operation("check")
     elif len(sys.argv)==3: operation(sys.argv[1],sys.argv[2])
-    else: raise SystemExit("check | apply RUN_ID | verify RUN_ID | rollback RUN_ID")
+    else: raise SystemExit("check | apply RUN_ID | verify RUN_ID | rollback RUN_ID | recover RUN_ID")
