@@ -184,6 +184,7 @@ jobs:
           crontab_text = subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8).stdout
           process_text = subprocess.run(["ps","-u","githubops","-o","args="],capture_output=True,text=True,timeout=8).stdout
           generation_roots = (
+              ("operations_root", ops),
               ("operations_backups", backup_root),
               ("master_agent_operations", ops / "master-agent"),
               ("django_application", app),
