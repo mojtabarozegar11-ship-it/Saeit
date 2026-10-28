@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase
+from django.template.loader import render_to_string
 
 from core.academy_views import academy
 from core.company_content_views import company_gallery
@@ -65,3 +66,36 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
         self.assertEqual(context["publications"], [])
         self.assertIsNone(context["schedule"])
         self.assertTrue(context["catalog_temporarily_unavailable"])
+
+
+class PublicCatalogTruthfulTemplateTests(SimpleTestCase):
+    """Verify rendered fallback copy does not contradict the outage banner."""
+
+    def test_gallery_degraded_does_not_claim_zero_published_media(self):
+        html = render_to_string("core/company_gallery.html", {
+            "media": [], "catalog_temporarily_unavailable": True,
+        })
+        self.assertIn("وضعیت انتشار رسانه‌ها پس از بازیابی سامانه مشخص می‌شود.", html)
+        self.assertNotIn("هنوز رسانه‌ای برای انتشار عمومی ثبت نشده است.", html)
+
+    def test_gallery_normal_empty_state_unchanged(self):
+        html = render_to_string("core/company_gallery.html", {
+            "media": [], "catalog_temporarily_unavailable": False,
+        })
+        self.assertIn("هنوز رسانه‌ای برای انتشار عمومی ثبت نشده است.", html)
+
+    def test_newsletter_degraded_does_not_claim_zero_stories_or_sources(self):
+        html = render_to_string("core/newsletter.html", {
+            "stories": [], "sources": [], "catalog_temporarily_unavailable": True,
+        })
+        self.assertIn("نمایش خبرهای منتشرشده موقتاً امکان‌پذیر نیست.", html)
+        self.assertIn("نمایش منابع ثبت‌شده موقتاً امکان‌پذیر نیست.", html)
+        self.assertNotIn("هنوز مطلبی برای انتشار عمومی ثبت نشده است.", html)
+        self.assertNotIn("منبع بیرونی ثبت نشده است.", html)
+
+    def test_newsletter_normal_empty_state_unchanged(self):
+        html = render_to_string("core/newsletter.html", {
+            "stories": [], "sources": [], "catalog_temporarily_unavailable": False,
+        })
+        self.assertIn("هنوز مطلبی برای انتشار عمومی ثبت نشده است.", html)
+        self.assertIn("منبع بیرونی ثبت نشده است.", html)
