@@ -159,6 +159,84 @@
       container.append(h("p","This is an AYAR platform record check, not an independent quality certificate.","a-small"));
     }
   }
+
+  function printAssessment(details) {
+    const report=details.review;
+    if(details.status!=="reviewed" || details.review_integrity_valid!==true ||
+       !report || !Array.isArray(report.criteria) || report.criteria.length!==8 ||
+       !report.integrity?.proof)throw Error("A completed, integrity-verified AYAR report is required");
+    if(typeof window.print!=="function")throw Error("Printing is not supported by this browser");
+    document.getElementById("ayaarPrintReport")?.remove();
+    const sheet=h("section","","ayaar-print-sheet");
+    sheet.id="ayaarPrintReport";
+    sheet.setAttribute("aria-label","AYAR private analytical assessment print version");
+    const top=h("div","","ayaar-print-top");
+    const mark=h("div","AYAR.","ayaar-print-brand");
+    const heading=h("div","","ayaar-print-heading");
+    heading.append(h("small","CONFIDENTIAL CASE REPORT / AI-ASSISTED ASSESSMENT"));
+    heading.append(h("h1","Documented product assessment"));
+    top.append(mark,heading);sheet.append(top);
+    const summary=h("div","","ayaar-print-summary");
+    summary.append(h("div",""+report.score+" / 100","ayaar-print-score"));
+    const verdict=h("div","","ayaar-print-verdict");
+    verdict.append(h("small","FINAL ANALYTICAL GRADE"),h("h2",report.grade));
+    verdict.append(h("p","This report documents an AYAR Expert Engine AI-assisted internal assessment. It is not a human independent certification."));
+    summary.append(verdict);sheet.append(summary);
+    const meta=h("div","","ayaar-print-meta");
+    for(const [key,val] of [
+      ["Case reference",details.case_id],["Product",details.product_name],
+      ["Product version",details.product_version||"Not provided"],
+      ["Category",details.category],["Review date (UTC)",report.reviewed_at],
+      ["Review process",report.reviewer_alias||"AYAR assessment"],
+      ["Evidence snapshot",report.evidence_fingerprint||"Legacy report"]
+    ]){
+      const item=h("div","","ayaar-print-meta-item");
+      item.append(h("span",key),h("strong",String(val||"Not provided")));
+      meta.append(item);
+    }
+    sheet.append(meta);
+    sheet.append(h("h3","Eight-criterion technical review","ayaar-print-section"));
+    const table=h("table","","ayaar-print-table"),head=h("tr");
+    ["Criterion","Weight","Finding","Evidence and limitations"].forEach(x=>head.append(h("th",x)));
+    const thead=h("thead");thead.append(head);table.append(thead);
+    for(const item of report.criteria) {
+      const row=h("tr");
+      [item.criterion, String(item.weight)+"%",String(item.score)+"/5",item.evidence].forEach(v=>row.append(h("td",String(v))));
+      table.append(row);
+    }
+    sheet.append(table);
+    const notes=h("div","","ayaar-print-notes");
+    for(const [title,value] of [
+      ["Assessment scope",report.review_scope],
+      ["Methods and reproducibility",report.methodology_notes],
+      ["Independence and affiliation disclosure",report.independence_statement],
+      ["Analysis reference",report.ai_review_reference],
+      ["Critical criteria",report.blocking_criteria?.length?report.blocking_criteria.join(", "):"No critical scoring gates failed"]
+    ]){
+      notes.append(h("h4",title),h("p",String(value||"Not recorded")));
+    }
+    sheet.append(notes);
+    const proof=h("div","","ayaar-print-proof");
+    proof.append(h("h4","AYAR record integrity reference"));
+    proof.append(h("p",report.integrity.proof,"ayaar-print-digest"));
+    proof.append(h("p","This HMAC record marker can be verified only against the AYAR service. It does not prove external independence, professional credentials, scientific validity or official accreditation."));
+    proof.append(h("p",report.final_disclaimer||"AI-assisted findings may contain errors and do not constitute an external certification."));
+    sheet.append(proof);
+    sheet.append(h("div","MojPlayWin / AYAR Expert Engine · Private case "+details.case_id+" · Not a regulatory certificate","ayaar-print-footer"));
+    document.body.append(sheet);
+    document.body.classList.add("ayaar-printing");
+    let cleaned=false;
+    const cleanup=()=>{
+      if(cleaned)return;
+      cleaned=true;
+      document.body.classList.remove("ayaar-printing");
+      sheet.remove();
+      window.removeEventListener("afterprint",cleanup);
+    };
+    window.addEventListener("afterprint",cleanup,{once:true});
+    setTimeout(cleanup,120000);
+    try{window.print();}catch(error){cleanup();throw error;}
+  }
   function downloadCaseReport(details) {
     const exportData={
       schema:"AYAR-PRIVATE-REVIEW-EXPORT-v1",
@@ -279,6 +357,16 @@
       const exportButton=h("button","Download documented review (JSON) ↓","a-button a-button-secondary");
       exportButton.type="button";exportButton.addEventListener("click",()=>downloadCaseReport(details));
       target.append(exportButton);
+      if(target.id==="casePanel" && details.status==="reviewed"){
+        if(details.review_integrity_valid===true){
+          const print=h("button","Print / Save as PDF ↓","a-button a-button-secondary");
+          print.type="button";
+          print.addEventListener("click",()=>{try{printAssessment(details);}catch(error){message(error.message,"error");}});
+          target.append(print,h("p","Use the browser print dialog and choose Save as PDF. The signed record marker remains included; this is an AI-assisted report, not independent certification.","a-small"));
+        }else{
+          target.append(h("p","Printable report unavailable until the AYAR integrity reference is verified.","a-small"));
+        }
+      }
     }
     target.append(h("h3","Case history"));
     for(const event of details.events){
