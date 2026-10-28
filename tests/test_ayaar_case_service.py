@@ -72,6 +72,66 @@ class CaseServiceTests(unittest.TestCase):
     def create(self, public=False, uploads=None, address="192.0.2.45"):
         return service.create_case(make_dossier(public), uploads or [], address, self.secret)
 
+    def test_idempotent_retry_recovers_same_case_and_private_key_without_duplicate(self):
+        token = "a4" * 32
+        original = make_dossier()
+        original["client_request_id"] = token
+        pdf = b"%PDF-1.7\\noriginal user evidence\\n%%EOF"
+        first = service.create_case(original, [FakeEvidence("evidence.pdf", pdf)],
+                                    "192.0.2.20", self.secret)
+        retry = service.create_case(original, [FakeEvidence("evidence.pdf", pdf)],
+                                    "192.0.2.20", self.secret)
+        self.assertTrue(retry["recovered"])
+        self.assertEqual(first["case_id"], retry["case_id"])
+        self.assertEqual(first["access_key"], retry["access_key"])
+        self.assertEqual(service.staff_list()[0]["case_id"], first["case_id"])
+        self.assertEqual(len(service.staff_list()), 1)
+        with service.database() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM files").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT count(*) FROM intake_limiter").fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT count(*) FROM intake_requests").fetchone()[0], 1)
+            row = db.execute("SELECT * FROM intake_requests").fetchone()
+            self.assertNotIn(token, str(dict(row)))
+            self.assertEqual(row["case_code"], first["case_id"])
+
+    def test_idempotent_retry_rejects_changed_content_and_attachments(self):
+        token = "b7" * 32
+        original = make_dossier()
+        original["client_request_id"] = token
+        pdf = b"%PDF-1.7\\noriginal evidence\\n%%EOF"
+        first = service.create_case(original, [FakeEvidence("evidence.pdf", pdf)],
+                                    "192.0.2.21", self.secret)
+        changed = dict(original)
+        changed["scope"] = "Something different from the original dossier"
+        with self.assertRaises(service.CaseError) as changed_error:
+            service.create_case(changed, [FakeEvidence("evidence.pdf", pdf)],
+                                "192.0.2.21", self.secret)
+        self.assertEqual(changed_error.exception.status, 409)
+        with self.assertRaises(service.CaseError) as upload_error:
+            service.create_case(original,
+                                [FakeEvidence("evidence.pdf", b"%PDF-1.7\\nother evidence\\n%%EOF")],
+                                "192.0.2.21", self.secret)
+        self.assertEqual(upload_error.exception.status, 409)
+        self.assertEqual(len(service.staff_list()), 1)
+        self.assertEqual(service.staff_list()[0]["case_id"], first["case_id"])
+
+    def test_case_erasure_removes_idempotent_mapping(self):
+        original = make_dossier()
+        original["client_request_id"] = "c8" * 32
+        first = service.create_case(original, [], "192.0.2.22", self.secret)
+        service.delete_case(first["case_id"], first["access_key"], self.secret)
+        with service.database() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM intake_requests").fetchone()[0], 0)
+        replacement = service.create_case(original, [], "192.0.2.22", self.secret)
+        self.assertNotEqual(first["case_id"], replacement["case_id"])
+
+    def test_invalid_retry_tokens_rejected(self):
+        for token in ("bad", "X" * 64, "a" * 63, 1234):
+            dossier = make_dossier()
+            dossier["client_request_id"] = token
+            with self.assertRaises(service.CaseError):
+                service.create_case(dossier, [], "192.0.2.23", self.secret)
+
     def test_private_receipt_and_status(self):
         item = self.create()
         self.assertTrue(item["case_id"].startswith("AYR-"))
