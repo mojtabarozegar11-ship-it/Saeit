@@ -102,3 +102,5 @@ jobs:
       - name: Remove ephemeral keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+
+# Owner-requested read-only production/staging database binding audit, 2026-10-28.
