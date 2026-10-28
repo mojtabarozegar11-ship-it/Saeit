@@ -57,6 +57,7 @@ async def main(mode):
     session_base = str(root / 'telegram' / 'account')
     (root / 'telegram').mkdir(mode=0o700, exist_ok=True)
     os.chmod(root / 'telegram', 0o700)
+    terminal_status = None
     client = TelegramClient(session_base, int(api_id), api_hash, auto_reconnect=True,
                             connection_retries=5, request_retries=3)
     try:
@@ -70,7 +71,8 @@ async def main(mode):
             return 0
         await client.connect()
         if not await client.is_user_authorized():
-            status_write(root, 'LOGIN_REQUIRED')
+            terminal_status = 'LOGIN_REQUIRED'
+            status_write(root, terminal_status)
             print('LOGIN_REQUIRED: use local control.sh telegram-login', file=sys.stderr)
             return 3
         status_write(root, 'CONNECTED')
@@ -86,7 +88,7 @@ async def main(mode):
     finally:
         await client.disconnect()
         if mode == 'daemon':
-            status_write(root, 'DISCONNECTED')
+            status_write(root, terminal_status or 'DISCONNECTED')
 
 
 if __name__ == '__main__':
