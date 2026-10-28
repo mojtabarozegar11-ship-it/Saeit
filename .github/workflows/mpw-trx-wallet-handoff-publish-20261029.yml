@@ -1,0 +1,191 @@
+name: MojPlayWin guarded live mobile TRX wallet handoff
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/mpw_trx_wallet_handoff_deploy_20261029.py
+      - .github/workflows/mpw-trx-wallet-handoff-publish-20261029.yml
+permissions:
+  contents: read
+concurrency:
+  group: mpw-trx-wallet-handoff-single-module
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 8f45b8d5e276a5de596597237b5171827a93dffe
+          path: old-release
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 30c8b5ef09cf24bc8d7fc2efbb0c9d84ef349069
+          path: new-release
+          persist-credentials: false
+      - name: Validate exact pinned reviewed source, tests and deployment script
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_trx_wallet_handoff_deploy_20261029.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, os
+          rel=Path("services/mpw_trx_walletless_one_tap_ui.py")
+          original=Path("old-release")/rel
+          updated=Path("new-release")/rel
+          assert original.is_file() and updated.is_file()
+          old=original.read_bytes()
+          new=updated.read_bytes()
+          assert old != new
+          assert b'https://link.trustwallet.com/send?' in old
+          assert b'trust://send?' in new
+          assert b'Never pay an expired invoice.' in new
+          assert b' type="button" hidden' in new
+          with open(os.environ["GITHUB_ENV"],"a") as e:
+              e.write("MPW_OLD_SHA="+hashlib.sha256(old).hexdigest()+"\n")
+              e.write("MPW_NEW_SHA="+hashlib.sha256(new).hexdigest()+"\n")
+          print("PINNED_REVIEWED_WALLET_SOURCE=PASS")
+          PY
+          cd new-release
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_trx_walletless_one_tap_ui.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,os
+          source=Path("services/mpw_trx_walletless_one_tap_ui.py").read_text()
+          script=re.search(r'WALLET_ACTION_JS = r"""([\s\S]*?)"""',source)
+          assert script
+          Path(os.environ["RUNNER_TEMP"],"wallet-handoff-check.js").write_text(script.group(1))
+          PY
+          node --check "$RUNNER_TEMP/wallet-handoff-check.js"
+      - name: Snapshot protected live pages before change
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request
+          origin="https://mojplaywin.com"
+          paths=("/", "/store/", "/store/product/72/", "/store/product/225/",
+              "/store/product/879/", "/store/product/779/")
+          before={}
+          for path in paths:
+              request=urllib.request.Request(origin+path,headers={"Cache-Control":"no-cache"})
+              with urllib.request.urlopen(request,timeout=25) as response:
+                  if response.status != 200: raise RuntimeError("PRECHECK_NOT_200:"+path)
+                  body=response.read(220000).decode("utf8","replace")
+              if path=="/store/" and "/store/product/72/" not in body:
+                  raise RuntimeError("STORE_PRODUCT_NAV_MISSING")
+              before[path]=200
+          with open(os.path.join(os.environ["RUNNER_TEMP"],"mpw-trx-handoff-precheck.json"),"w") as f:
+              json.dump(before,f)
+          print("MPW_TRX_HANDOFF_PROTECTED_ROUTES_BEFORE=OK")
+          PY
+      - name: Establish existing fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-trx-handoff-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage installer and reviewed one-module file on cPanel only
+        run: |
+          set -euo pipefail
+          remote="/home/zomorod2/.mpw-trx-handoff-20261029-$GITHUB_RUN_ID"
+          config="$RUNNER_TEMP/mpw-trx-handoff-ssh/config"
+          timeout 45s ssh -T -F "$config" saeit-cpanel "install -d -m 700 '$remote'"
+          timeout 50s scp -O -q -F "$config" scripts/mpw_trx_wallet_handoff_deploy_20261029.py "saeit-cpanel:$remote/installer.py"
+          timeout 50s scp -O -q -F "$config" new-release/services/mpw_trx_walletless_one_tap_ui.py "saeit-cpanel:$remote/reviewed.py"
+          timeout 45s ssh -T -F "$config" saeit-cpanel "chmod 600 '$remote/installer.py' '$remote/reviewed.py'"
+      - name: Fail closed unless live cPanel module matches exact reviewed baseline
+        run: |
+          set -euo pipefail
+          remote="/home/zomorod2/.mpw-trx-handoff-20261029-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-trx-handoff-ssh/config" saeit-cpanel "python3 '$remote/installer.py' audit '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'"
+      - name: Atomically publish only verified TRX invoice handoff module
+        id: install
+        run: |
+          set -euo pipefail
+          remote="/home/zomorod2/.mpw-trx-handoff-20261029-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-trx-handoff-ssh/config" saeit-cpanel "python3 '$remote/installer.py' publish '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'"
+      - name: Refresh existing Passenger app without editing other files
+        run: |
+          remote="/home/zomorod2/.mpw-trx-handoff-20261029-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-trx-handoff-ssh/config" saeit-cpanel "python3 '$remote/installer.py' refresh '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'"
+      - name: Verify live-server invoice render without payment or order creation
+        run: |
+          remote="/home/zomorod2/.mpw-trx-handoff-20261029-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-trx-handoff-ssh/config" saeit-cpanel "python3 '$remote/installer.py' check_render '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'"
+      - name: Verify protected storefront routes still work
+        run: |
+          python3 - <<'PY'
+          import json,os,time,urllib.request
+          before=json.load(open(os.path.join(os.environ["RUNNER_TEMP"],"mpw-trx-handoff-precheck.json")))
+          origin="https://mojplaywin.com"
+          for path,status in before.items():
+              ok=False
+              for _ in range(4):
+                  try:
+                      request=urllib.request.Request(origin+path,headers={"Cache-Control":"no-cache"})
+                      with urllib.request.urlopen(request,timeout=25) as response:
+                          body=response.read(220000).decode("utf8","replace")
+                          ok=(response.status==status)
+                          if path=="/store/":
+                              ok=ok and all("/store/product/"+x+"/" in body for x in ("72","225","879"))
+                      if ok:break
+                  except Exception:
+                      pass
+                  time.sleep(3)
+              if not ok:raise RuntimeError("PROTECTED_ROUTE_CHANGED:"+path)
+          print("MPW_TRX_HANDOFF_POSTDEPLOY_PROTECTED_ROUTES=OK")
+          PY
+      - name: Roll back only our module on a failed install or smoke
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          remote="/home/zomorod2/.mpw-trx-handoff-20261029-$GITHUB_RUN_ID"
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-trx-handoff-ssh/config" saeit-cpanel "python3 '$remote/installer.py' rollback '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'"
+          timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-trx-handoff-ssh/config" saeit-cpanel "python3 '$remote/installer.py' refresh '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'"
+      - name: Remove ephemeral transport keys
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-trx-handoff-ssh"
+          if [ -d "$d" ]; then rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"; rmdir "$d"; fi
