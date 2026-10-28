@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  statuses: write
 concurrency:
   group: moj-messaging-source-stage-20261028
   cancel-in-progress: false
@@ -87,3 +88,25 @@ jobs:
           echo 'MMSG_VPS_SOURCE_STAGE_SHA256=PASS'
           echo 'MMSG_NO_INSTALL_NO_SERVICE_NO_PAIRING=PASS'
           REMOTE
+      - name: Record source-stage proof against exact commit SHA
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context=moj-messaging-vps-source-stage \
+            -f description='Isolated source archive SHA256 verified; no services or logins'
+      - name: Record blocked source-stage proof (no secret data)
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=failure \
+            -f context=moj-messaging-vps-source-stage \
+            -f description='Source staging blocked; no login or service activation'
