@@ -1,5 +1,9 @@
 name: Publish free uncertified farm economics preview
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/factory-uncertified-preview-publish-20261029.yml"
+      - "scripts/publish_factory_free_tool.py"
   push:
     branches: [main]
     paths:
@@ -13,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[owner-authorized-uncertified-preview-20261029]')
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[owner-authorized-uncertified-preview-20261029]')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
