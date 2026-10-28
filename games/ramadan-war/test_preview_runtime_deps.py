@@ -54,6 +54,20 @@ class RuntimeDependencyTests(unittest.TestCase):
         self.assertEqual(len(transfers), len(expected), "duplicate/missing staging transfers")
         self.assertEqual(set(transfers), expected, "live staging and deploy.ASSETS differ")
 
+    def test_asset_attribution_retains_all_three_authors_and_license(self):
+        credits = (ROOT / "ASSET-CREDITS.md").read_text("utf-8")
+        for source in (
+            "sketchfab.com/3d-models/free-military-soldier-rigged-e9c56308a67d4a3db62e914fafa4d198",
+            "sketchfab.com/3d-models/m24-bounty-hunter-sniper-rifle-d40e74e2259549f5b025807163f1028c",
+            "sketchfab.com/3d-models/fps-arms-9452ce4cddde4110a4fd73e555a8e412",
+            "creativecommons.org/licenses/by/4.0/",
+        ):
+            self.assertIn(source, credits)
+        for creator in ("BAMEN", "Naudaff3D", "DJMaesen"):
+            self.assertIn(creator, credits)
+        self.assertIn("CC BY 4.0", credits)
+        self.assertIn("Meshopt Decoder", credits)
+
     def test_payment_policy_remains_disabled(self):
         policy = (ROOT / "moj1-commerce-policy.mjs").read_text("utf-8")
         self.assertIn("checkoutEnabled:false", policy)
