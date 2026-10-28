@@ -1,0 +1,126 @@
+name: Zomorod domain DNS outage diagnosis 20261028
+on:
+  push:
+    branches: [ops/zomorod-retention-proof-20261028]
+    paths: [".github/workflows/zomorod-dns-outage-triage-20261028.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-dns-outage-triage
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 2
+            ServerAliveInterval 30
+            ServerAliveCountMax 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Compare authoritative DNS answers from delegated server IPs (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v dig >/dev/null 2>&1; then
+            for server in 91.99.125.113 178.239.147.71; do
+              echo "AUTH_DNS_SERVER=$server"
+              timeout 8s dig +time=3 +tries=1 +noall +comments +answer "@$server" zomorodmelal.ir SOA || true
+              timeout 8s dig +time=3 +tries=1 +noall +comments +answer "@$server" zomorodmelal.ir A || true
+            done
+          else
+            echo DIG_MISSING=yes
+          fi
+          python3 - <<'PY'
+          import json,urllib.request
+          for name in ("zomorodmelal.ir","www.zomorodmelal.ir"):
+              for kind in ("A","NS"):
+                  url="https://dns.google/resolve?name="+name+"&type="+kind
+                  try:
+                      with urllib.request.urlopen(url,timeout=12) as r:d=json.loads(r.read(16000))
+                      print("PUBLIC_DOH="+json.dumps({"name":name,"type":kind,"status":d.get("Status"),"comment":d.get("Comment"),"answer":[{"type":x.get("type"),"data":x.get("data")} for x in d.get("Answer",[]) if x.get("type") in (1,2,5)]},ensure_ascii=False))
+                  except Exception as e:print("PUBLIC_DOH_ERROR="+name+":"+kind+":"+type(e).__name__)
+          PY
+      - name: Inspect cPanel domain registration and bypass DNS for origin health (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import ipaddress,json,subprocess
+          def uapi(*args):
+              p=subprocess.run(["uapi","--output=json",*args],capture_output=True,text=True,timeout=25)
+              if p.returncode:return None
+              try:return json.loads(p.stdout).get("result",{})
+              except (ValueError,TypeError):return None
+          domain="zomorodmelal.ir"
+          r=uapi("DomainInfo","single_domain_data","domain="+domain)
+          d=r.get("data") if isinstance(r,dict) else None
+          print("CPANEL_DOMAININFO_AVAILABLE="+str(isinstance(d,dict)))
+          ip=d.get("ip") if isinstance(d,dict) else None
+          try:ip=str(ipaddress.ip_address(str(ip)))
+          except ValueError:ip=None
+          print("CPANEL_CONFIGURED_ORIGIN_IPV4="+str(ip or "unavailable"))
+          z=uapi("DNS","list_zones")
+          raw=z.get("data") if isinstance(z,dict) else None
+          print("CPANEL_ZONE_LIST_AVAILABLE="+str(isinstance(raw,(list,dict))))
+          if ip:
+              for path in ("/","/agents/","/admin/login/"):
+                  p=subprocess.run(["curl","-k","-sS","--max-time","12","-o","/dev/null","-w","%{http_code}","--resolve",domain+":443:"+ip,"https://"+domain+path],capture_output=True,text=True,timeout=18)
+                  print("ORIGIN_BYPASS_DNS="+path+":"+(p.stdout.strip() if p.returncode==0 else "000"))
+          PY
+          REMOTE
+      - name: Clean ephemeral SSH material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-page-compression"
+# Diagnostic only; does not alter DNS, cPanel, or live site.
