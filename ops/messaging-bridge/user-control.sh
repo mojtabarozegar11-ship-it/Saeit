@@ -5,6 +5,17 @@ umask 077
 BASE="$HOME/private-messaging-bridge"
 RUN="$BASE/runtime/current"
 export MOJMSG_STATE_DIR="$BASE/state"
+# For private interactive WhatsApp pairing only; never load in CI or status probes.
+load_whatsapp_edge() {
+  local edge_env="$BASE/secrets/whatsapp-edge.env"
+  [[ -e "$edge_env" || -L "$edge_env" ]] || return 0
+  [[ -f "$edge_env" && ! -L "$edge_env" ]] || return 4
+  [[ "$(stat -c %u "$edge_env")" == "$(id -u)" ]] || return 4
+  local edge_mode
+  edge_mode="$(stat -c %a "$edge_env")"
+  [[ "$edge_mode" == 600 || "$edge_mode" == 400 ]] || return 4
+  set -a; source "$edge_env"; set +a
+}
 test "$#" -ge 1 || exit 2
 case "$1" in
   telegram-login)
@@ -22,6 +33,7 @@ case "$1" in
     test "$#" -ge 2 || exit 2
     account="$2"
     [[ "$account" == primary || "$account" == secondary ]] || exit 2
+    load_whatsapp_edge
     "$RUN/bin/node" "$RUN/app/whatsapp.mjs" login --account "$account"
     ;;
   whatsapp-code)
@@ -29,6 +41,7 @@ case "$1" in
     test "$#" -ge 2 || exit 2
     account="$2"
     [[ "$account" == primary || "$account" == secondary ]] || exit 2
+    load_whatsapp_edge
     "$RUN/bin/node" "$RUN/app/whatsapp.mjs" login --account "$account" --pairing-code
     ;;
   whatsapp-status)
