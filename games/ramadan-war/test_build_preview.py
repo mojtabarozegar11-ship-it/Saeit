@@ -105,7 +105,7 @@ class PreviewArchiveTests(unittest.TestCase):
         self.assertIn("python3 -m http.server 8765", guide)
         self.assertIn("HOST_LAN_IP:8765", guide)
         self.assertIn("MOJ1 wallet or payment is enabled", guide)
-        self.assertGreaterEqual(guide.count("\\n"), 6)
+        self.assertGreaterEqual(guide.count("\n"), 6)
 
     def test_failed_build_preserves_previous_verified_archive(self):
         self.build()
