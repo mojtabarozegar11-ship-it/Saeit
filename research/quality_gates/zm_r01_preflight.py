@@ -61,6 +61,23 @@ def validate_refseq_accession(accession):
     return accession
 
 
+def validate_reference_identity(ref):
+    """Reject known false assembly-version attribution; syntax alone is insufficient.
+
+    NCBI identifies GCF_018294505.1 as IWGSC CS RefSeq v2.1, NOT v2.0.
+    This limited guard does not authenticate other accessions, licensing,
+    original FASTA/annotation bytes or release metadata.
+    """
+    accession = validate_refseq_accession(ref['assembly_accession'])
+    version = ref.get('assembly_version')
+    if not isinstance(version, str) or not version.strip():
+        raise GateError('Non-empty assembly version string required')
+    normalized = version.strip().lower().replace(' ', '')
+    if accession == 'GCF_018294505.1' and re.search(r'(?:v)?2\.0(?!\d)', normalized):
+        raise GateError('GCF_018294505.1 is IWGSC RefSeq v2.1, not v2.0; source-identity mismatch')
+    return accession
+
+
 IUPAC_DNA = frozenset('ACGTRYSWKMBDHVN')
 
 def fasta_contigs(p):
@@ -163,7 +180,7 @@ def validate(manifest_file):
         raise GateError('Reference metadata must be a JSON object')
     missing=[k for k in REQUIRED_REF if not ref.get(k)]
     if missing: raise GateError('Missing reference metadata: '+', '.join(missing))
-    validate_refseq_accession(ref['assembly_accession'])
+    validate_reference_identity(ref)
     fasta=file_with_digest(root,ref['fasta'],ref['fasta_sha256'],'sha256')
     gtf=file_with_digest(root,ref['gtf'],ref['gtf_sha256'],'sha256')
     check_gtf(gtf, fasta_contigs(fasta))
