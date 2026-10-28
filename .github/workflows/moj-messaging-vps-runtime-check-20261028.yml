@@ -1,0 +1,78 @@
+name: "Moj messaging - VPS admission probe (READ ONLY)"
+on:
+  push:
+    branches:
+      - feature/private-messaging-bridge-20261028
+    paths:
+      - '.github/workflows/moj-messaging-vps-runtime-check-20261028.yml'
+permissions:
+  contents: read
+  statuses: write
+jobs:
+  vps-readonly:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Read-only SSH probe of VPS runtime
+        id: inspect
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if test -z "$VPS_KEY"; then
+            echo 'MMSG_SSH_KEY=NO_GO'
+            exit 10
+          fi
+          d="$(mktemp -d "$RUNNER_TEMP/mmsg-ssh.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          timeout 45s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -eu
+          test "$(id -un)" = githubops
+          test -d /home/githubops/factory-runtime
+          printf 'MMSG_REMOTE_IDENTITY=PASS\n'
+          available_kib="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
+          case "$available_kib" in ''|*[!0-9]*) available_kib=0;; esac
+          echo "MMSG_DISK_AVAILABLE_MIB=$((available_kib/1024))"
+          available_mem_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+          case "$available_mem_kib" in ''|*[!0-9]*) available_mem_kib=0;; esac
+          echo "MMSG_MEMORY_AVAILABLE_MIB=$((available_mem_kib/1024))"
+          if [ "$available_kib" -ge 524288 ]; then echo MMSG_DISK=PASS; else echo MMSG_DISK=NO_GO; fi
+          if [ "$available_mem_kib" -ge 524288 ]; then echo MMSG_MEMORY=PASS; else echo MMSG_MEMORY=NO_GO; fi
+          if command -v node >/dev/null 2>&1; then
+            version="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+            echo "MMSG_NODE_MAJOR=$version"
+            if [ "$version" -ge 20 ]; then echo MMSG_NODE=PASS; else echo MMSG_NODE=NO_GO; fi
+          else echo MMSG_NODE=NO_GO; fi
+          if command -v npm >/dev/null 2>&1; then echo MMSG_NPM=PASS; else echo MMSG_NPM=NO_GO; fi
+          if command -v python3 >/dev/null 2>&1 && python3 -c 'import venv' >/dev/null 2>&1; then echo MMSG_PY_VENV=PASS; else echo MMSG_PY_VENV=NO_GO; fi
+          if command -v systemctl >/dev/null 2>&1; then echo MMSG_SYSTEMD=PASS; else echo MMSG_SYSTEMD=NO_GO; fi
+          if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then echo MMSG_SUDO=PASS; else echo MMSG_SUDO=NO_GO; fi
+          echo MMSG_AUDIT_NO_MUTATIONS=PASS
+          REMOTE
+      - name: Publish audited SSH probe outcome
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if test "${{ steps.inspect.outcome }}" = success; then
+            result=success
+            desc='VPS read-only probe completed; review exact job gates before install'
+          else
+            result=failure
+            desc='VPS read-only probe blocked (SSH, host pin or permissions)'
+          fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state="$result" \
+            -f context=moj-messaging-ssh-probe \
+            -f description="$desc"
