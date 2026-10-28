@@ -62,6 +62,15 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_RELAY=verified"
+      - name: Verify public site before cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /agents/; do
+            status="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "CLEAN_BEFORE=$path:$status"
+            test "$status" = 200
+          done
       - name: Confirm SHA-256 identity and discard two redundant ZIP copies
         shell: bash
         run: |
