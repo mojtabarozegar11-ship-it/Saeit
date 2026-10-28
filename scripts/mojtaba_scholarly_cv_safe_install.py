@@ -52,13 +52,13 @@ def load_data(path: Path) -> dict:
     if not path.is_file() or path.is_symlink():
         raise ValueError("Missing trusted JSON source")
     d = json.loads(path.read_text(encoding="utf-8"))
-    if d.get("schema_version") != 1:
+    if d.get("schema_version") != 2:
         raise ValueError("Unsupported scientific CV schema")
     if d.get("identity", {}).get("display_name") != "Mojtaba Roozegar":
         raise ValueError("Author byline is not the owner-approved name")
     for field in ("identity", "education", "research_interests", "researcher_ids",
                   "verified_peer_reviewed_publications", "verified_journal_submissions",
-                  "research_pipeline", "accuracy_policy"):
+                  "research_pipeline", "accuracy_policy", "professional_profile", "seo"):
         if field not in d:
             raise ValueError("Missing required section: " + field)
     if not isinstance(d["education"], list) or not d["education"]:
@@ -80,7 +80,90 @@ def load_data(path: Path) -> dict:
         seen.add(entry["id"])
         if "submitted" in entry["status"].lower() or "accepted" in entry["status"].lower():
             raise ValueError("Working pipeline cannot self-certify submission or acceptance")
+    professional = d["professional_profile"]
+    for field in ("residence", "summary", "current_roles", "previous_experience",
+                  "specializations", "teaching", "writing", "official_links", "evidence_note"):
+        if not professional.get(field):
+            raise ValueError("Incomplete professional resume: " + field)
+    if len(professional["current_roles"]) < 2 or len(professional["official_links"]) < 2:
+        raise ValueError("Current executive roles and official links required")
+    for role in professional["current_roles"]:
+        if not all(role.get(k) for k in ("title", "organization", "scope", "description")):
+            raise ValueError("Incomplete current role")
+    allowed_origins = ("https://mojplaywin.com/", "https://zomorodmelal.ir/")
+    for link in professional["official_links"]:
+        if not link.get("label") or not any(link.get("url", "").startswith(o) for o in allowed_origins):
+            raise ValueError("Official CV links restricted to known sites")
+    if not d["seo"].get("title") or not d["seo"].get("description"):
+        raise ValueError("Resume title and description required")
     return d
+
+def render_professional(data: dict) -> str:
+    """Render owner-reported roles without manufacturing dates or credentials."""
+    p = data["professional_profile"]
+    out = [
+        '<div class="mr-professional" id="mr-professional-resume-20261028">',
+        '<span class="mr-eyebrow">Vancouver · Research · Executive leadership</span>',
+        '<h3>Professional profile and current roles</h3>',
+        '<p class="mr-intro">' + escape(p["summary"]) + '</p>',
+        '<p><strong>Current residence:</strong> ' + escape(p["residence"]) + '</p>',
+        '<div class="mr-cards">',
+    ]
+    for role in p["current_roles"]:
+        out.append('<article class="mr-card"><span class="mr-label">' +
+                   escape(role["scope"]) + '</span><strong>' +
+                   escape(role["title"]) + '</strong><span>' +
+                   escape(role["organization"]) + '</span><p>' +
+                   escape(role["description"]) + '</p></article>')
+    out += [
+        '</div><h3>Previous executive and business experience</h3>',
+        '<p>' + escape(p["previous_experience"]) + '</p>',
+        '<h3>Core specializations</h3><div class="mr-badges">',
+    ]
+    out += ['<span class="mr-badge">' + escape(s) + '</span>'
+            for s in p["specializations"]]
+    out += [
+        '</div><h3>Teaching, workshops and knowledge sharing</h3>',
+        '<p>' + escape(p["teaching"]) + '</p>',
+        '<h3>Books, articles and scientific writing</h3>',
+        '<p>' + escape(p["writing"]) + '</p>',
+        '<p class="mr-note">' + escape(p["evidence_note"]) + '</p>',
+        '<h3>Official professional links</h3><p class="mr-links">',
+    ]
+    out += ['<a href="' + escape(link["url"]) +
+            '" rel="noopener">' + escape(link["label"]) + '</a>'
+            for link in p["official_links"]]
+    # A distinct CV WebPage references the same authoritative Person @id.
+    graph = {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "@id": "https://mojplaywin.com/mojtaba.roozegar/resume/#webpage",
+        "url": "https://mojplaywin.com/mojtaba.roozegar/resume/",
+        "name": data["seo"]["title"],
+        "description": data["seo"]["description"],
+        "inLanguage": "en",
+        "about": {"@id": "https://mojplaywin.com/mojtaba.roozegar/#person"},
+        "isPartOf": {"@id": "https://mojplaywin.com/mojtaba.roozegar/#webpage"}
+    }
+    structured = json.dumps(graph, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
+    out += ['</p><script type="application/ld+json">' + structured +
+            '</script></div>']
+    return "\n".join(out)
+
+
+def replace_resume_meta(template: str, data: dict) -> str:
+    """Only update page-local Django title/description blocks, if present."""
+    for name, value in (("title", data["seo"]["title"]),
+                        ("description", data["seo"]["description"])):
+        pat = re.compile(r"({%\s*block\s+" + name +
+                         r"\s*%})(.*?)({%\s*endblock\s*%})", re.S)
+        matches = list(pat.finditer(template))
+        if len(matches) > 1:
+            raise ValueError("Ambiguous SEO block: " + name)
+        if matches:
+            m = matches[0]
+            template = template[:m.start()] + m.group(1) + escape(value) + m.group(3) + template[m.end():]
+    return template
 
 def render(data: dict) -> str:
     ident = data["identity"]
@@ -98,6 +181,7 @@ def render(data: dict) -> str:
            escape(ident["affiliation"]) + '</strong><span>' + escape(ident["role"]) + '</span></div>',
            '</div>',
            '<p class="mr-note">Academic degree and professional background above are owner-reported. No graduation date, university verification, journal acceptance or citation count is asserted without supporting evidence.</p>',
+           render_professional(data),
            '<h3>Research interests</h3><div class="mr-badges">']
     out += ['<span class="mr-badge">' + escape(s) + '</span>' for s in data["research_interests"]]
     out += ['</div><h3>Researcher identifiers</h3><div class="mr-cards">']
@@ -157,7 +241,7 @@ def patch(template: str, data: dict) -> str:
     for marker in EXISTING_MARKERS:
         if updated.count(marker) != 1:
             raise ValueError("Existing content preservation failed")
-    return updated
+    return replace_resume_meta(updated, data)
 
 def execute(mode: str, data_path: Path | None, app: Path, backup: Path | None) -> None:
     if app.is_symlink() or not (app / "manage.py").is_file():
