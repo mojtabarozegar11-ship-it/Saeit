@@ -77,6 +77,20 @@ def store(stage,value):
         except FileNotFoundError:
             pass
         raise
+def validate_release_manifest(m):
+    """Fail closed on a corrupted or path-traversing on-host release journal."""
+    assert isinstance(m,dict) and m.get('phase') in ('prepared','published')
+    old,new,protected=m.get('old'),m.get('new'),m.get('protected')
+    assert isinstance(old,dict) and isinstance(new,dict) and isinstance(protected,dict)
+    allowed=set(ASSETS)
+    assert set(new)==allowed and set(old).issubset(allowed)
+    assert set(protected).issubset({'.htaccess','agriculture/index.html',
+                                    'research/index.html','store/index.html'})
+    assert len(protected)>=2
+    hashes=list(old.values())+list(new.values())+list(protected.values())+[m.get('route')]
+    assert all(isinstance(h,str) and re.fullmatch(r'[0-9a-f]{64}',h) for h in hashes)
+    return True
+
 def live_card_check():
     home=ROOT/'index.html';assert home.is_file() and not home.is_symlink()
     text=home.read_text('utf-8');m=re.search(r'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',text,re.S)
@@ -155,7 +169,7 @@ def ensure_publish_capacity(stage, payload_bytes, reserve_bytes=128*1024*1024,
 
 
 def publish(stage,run):
-    m=metadata(stage);assert m['phase']=='prepared';live_card_check()
+    m=metadata(stage);validate_release_manifest(m);assert m['phase']=='prepared';live_card_check()
     for name,h in m['old'].items():assert digest((GAME/name).read_bytes())==h,'game file changed concurrently: '+name
     for name in set(m['new'])-set(m['old']):assert not (GAME/name).exists() and not (GAME/name).is_symlink(),'new asset appeared concurrently: '+name
     assert digest((GAME/'.htaccess').read_bytes())==m['route'],'game route config changed concurrently'
@@ -173,7 +187,7 @@ def publish(stage,run):
         raise
 
 def verify(stage):
-    m=metadata(stage);assert m['phase']=='published';live_card_check()
+    m=metadata(stage);validate_release_manifest(m);assert m['phase']=='published';live_card_check()
     for name,h in m['new'].items():assert digest((GAME/name).read_bytes())==h,'new game file hash mismatch: '+name
     assert digest((GAME/'.htaccess').read_bytes())==m['route']
     for rel,h in m['protected'].items():assert digest((ROOT/rel).read_bytes())==h,'protected file changed: '+rel
@@ -235,7 +249,7 @@ def rollback_files(stage,m,run):
 
 def rollback(stage,run):
     if not (stage/'release.json').is_file():print('ROLLBACK_SKIPPED_NO_RELEASE_STATE');return
-    m=metadata(stage);rollback_files(stage,m,run)
+    m=metadata(stage);validate_release_manifest(m);rollback_files(stage,m,run)
     print('OLD_GAME_CLIENT_RESTORED; HOMEPAGE_CARD_UNCHANGED')
 
 def main():
