@@ -72,6 +72,8 @@ jobs:
           node --check games/ramadan-war/three-addons/utils/SkeletonUtils.js
           node --check games/ramadan-war/three-addons/utils/BufferGeometryUtils.js
           node --check games/ramadan-war/three-addons/libs/meshopt_decoder.module.js
+      - name: Reject missing runtime module transfers before touching VPS
+        run: python3 -m unittest discover -s games/ramadan-war -p 'test_release_workflow_assets.py' -v
       - name: Reject unsafe rollback before any relay or production staging
         run: |
           set -euo pipefail
