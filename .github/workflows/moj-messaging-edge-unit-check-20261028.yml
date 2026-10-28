@@ -6,6 +6,8 @@ on:
       - '.github/workflows/moj-messaging-edge-unit-check-20261028.yml'
       - 'ops/messaging-bridge/edge/cloudflare/**'
       - 'ops/messaging-bridge/whatsapp.mjs'
+      - 'ops/messaging-bridge/user-launch.sh'
+      - 'ops/messaging-bridge/user-control.sh'
 permissions:
   contents: read
 jobs:
@@ -23,6 +25,8 @@ jobs:
           set -euo pipefail
           node --check ops/messaging-bridge/edge/cloudflare/src/index.mjs
           node --check ops/messaging-bridge/whatsapp.mjs
+          bash -n ops/messaging-bridge/user-launch.sh
+          bash -n ops/messaging-bridge/user-control.sh
           node --test ops/messaging-bridge/edge/cloudflare/tests/worker.test.mjs
           python3 - <<'PY'
           import tomllib
