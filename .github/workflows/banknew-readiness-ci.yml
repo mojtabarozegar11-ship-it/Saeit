@@ -24,6 +24,24 @@ jobs:
         run: node --check banknew/app.js
       - name: Exact fee and wallet fail-closed regression tests
         run: node --test banknew/app.test.js
+      - name: Audit the versioned public page and guarded deployment
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          page=Path('banknew/index.html').read_text(encoding='utf-8')
+          workflow=Path('.github/workflows/banknew-service-catalog-20261027.yml').read_text(encoding='utf-8')
+          class PageParser(HTMLParser): pass
+          parser=PageParser(); parser.feed(page); parser.close()
+          for item in ('<html lang="en">', 'id="wallet"', 'id="pricing"', 'id="access"', 'Connect a wallet to view balances.', 'Website-construction authorization', 'not independently verified', 'operating authorization is pending', 'No customer funds or payments are accepted', 'Google OAuth not connected', 'noindex,nofollow'):
+              assert item in page, item
+          assert 'Your wallet, connected.' not in page
+          assert 'Website launch authorization:' not in page
+          assert '<form' not in page.lower()
+          assert 'banknew/index.html' in workflow
+          assert 'b64decode' not in workflow
+          assert 'rollback' in workflow.lower()
+          PY
       - name: Validate isolated double-entry ledger and tamper detection
         run: |
           python3 -m unittest discover -s banknew -p 'test_ledger_core.py' -v
