@@ -190,9 +190,104 @@ def rollback(app,backup,run_id):
         raise RuntimeError("Poster homepage rollback failed")
     return {"status":"restored","database_preserved":True,"only_personal_home":True}
 
+
+def translate_existing_section(old):
+    """Update only our existing section, never reinsert it or touch other homepage content."""
+    if old.count(MARKER)!=1:
+        raise RuntimeError("Existing four-course section is absent or duplicated")
+    opening="<section "+MARKER
+    if old.count(opening)!=1:
+        raise RuntimeError("Existing course section opening tag changed")
+    start=old.index(opening)
+    final=old.find("</section>",start)
+    if final<0:
+        raise RuntimeError("Existing course section closing tag missing")
+    end=final+len("</section>")
+    current_section=old[start:end]
+    if (current_section.count('<article class="mpw-course-home-card"')!=4
+        or current_section.count("<section")!=1
+        or any("/posters/"+slug+".svg" not in current_section for slug,_,_ in POSTERS)
+        or len(current_section)<2500):
+        raise RuntimeError("Unexpected edits inside course section; refuse destructive overwrite")
+    translated=section_html().strip()
+    if (translated.count('<article class="mpw-course-home-card"')!=4
+        or translated.count(MARKER)!=1
+        or re.search(r"[\u0600-\u06ff]",translated)):
+        raise RuntimeError("English poster section validation failed")
+    updated=old[:start]+translated+old[end:]
+    if updated[:start]!=old[:start] or updated[start+len(translated):]!=old[end:]:
+        raise RuntimeError("Course translation touched content outside protected section")
+    return updated
+
+def check_english(app):
+    target=_safe_target(app)
+    previous=target.read_bytes()
+    new=translate_existing_section(previous.decode("utf-8")).encode("utf-8")
+    return {"status":"already_english" if previous==new else "ready_english",
+            "old_sha":sha(previous),"new_sha":sha(new),
+            "previous_section_preserved_outside":True,"course_count":4}
+
+def upgrade_english(app,backup,run_id):
+    target=_safe_target(app)
+    run_id=_run_id(run_id)
+    original=target.read_bytes()
+    new=translate_existing_section(original.decode("utf-8")).encode("utf-8")
+    if original==new:
+        return {"status":"already_english","home_changed":False}
+    if not backup.is_absolute() or not backup.parent.is_dir() or backup.parent.is_symlink():
+        raise RuntimeError("Backup parent unavailable")
+    if backup.exists() and (backup.is_symlink() or backup.stat().st_mode & 0o077):
+        raise RuntimeError("Unsafe backup root")
+    if not backup.exists():
+        backup.mkdir(mode=0o700)
+    folder=backup/run_id
+    if folder.exists() or folder.is_symlink():
+        raise RuntimeError("Duplicate release run ID")
+    folder.mkdir(mode=0o700)
+    prev=folder/"home_before_english.html"
+    prev.write_bytes(original)
+    os.chmod(prev,0o600)
+    manifest={"kind":"four_course_home_english_upgrade",
+              "target":str(target),"before_sha":sha(original),"after_sha":sha(new)}
+    m=folder/"english_manifest.json"
+    m.write_text(json.dumps(manifest,sort_keys=True),encoding="utf-8")
+    os.chmod(m,0o600)
+    if sha(target.read_bytes())!=manifest["before_sha"]:
+        raise RuntimeError("Homepage was concurrently edited")
+    _write_atomic(target,new)
+    if sha(target.read_bytes())!=manifest["after_sha"]:
+        if sha(target.read_bytes())==manifest["before_sha"]:
+            raise RuntimeError("Failed to write the English homepage")
+        _write_atomic(target,original)
+        raise RuntimeError("English homepage checksum mismatch; original restored")
+    return {"status":"english_installed","course_count":4,
+            "home_changed":True,"backup":str(folder),
+            "other_site_files_touched":False,"database_preserved":True}
+
+def rollback_english(app,backup,run_id):
+    target=_safe_target(app)
+    folder=backup/_run_id(run_id)
+    manifest_path=folder/"english_manifest.json"
+    previous_path=folder/"home_before_english.html"
+    if (folder.is_symlink() or not folder.is_dir()
+        or manifest_path.is_symlink() or previous_path.is_symlink()
+        or not manifest_path.is_file() or not previous_path.is_file()):
+        raise RuntimeError("English rollout backup unavailable")
+    data=json.loads(manifest_path.read_text(encoding="utf-8"))
+    previous=previous_path.read_bytes()
+    if (data.get("kind")!="four_course_home_english_upgrade"
+        or data.get("target")!=str(target)
+        or sha(previous)!=data.get("before_sha")
+        or sha(target.read_bytes())!=data.get("after_sha")):
+        raise RuntimeError("Unsafe English rollback: homepage changed after installation")
+    _write_atomic(target,previous)
+    if sha(target.read_bytes())!=data["before_sha"]:
+        raise RuntimeError("English homepage rollback checksum mismatch")
+    return {"status":"original_home_restored","other_sites_untouched":True}
+
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument("action",choices=("check","install","rollback"))
+    parser.add_argument("action",choices=("check","install","rollback","check-english","upgrade-english","rollback-english"))
     parser.add_argument("--run-id",default="")
     parser.add_argument("--test-app-root",default="")
     parser.add_argument("--backup-root",default=str(BACKUPS))
@@ -204,7 +299,10 @@ def main():
     try:
         if args.action=="check": result=check(app)
         elif args.action=="install": result=install(app,backup,args.run_id)
-        else: result=rollback(app,backup,args.run_id)
+        elif args.action=="rollback": result=rollback(app,backup,args.run_id)
+        elif args.action=="check-english": result=check_english(app)
+        elif args.action=="upgrade-english": result=upgrade_english(app,backup,args.run_id)
+        else: result=rollback_english(app,backup,args.run_id)
         print(json.dumps(result,sort_keys=True,ensure_ascii=False))
     except (OSError,RuntimeError,UnicodeError,ValueError) as exc:
         print(json.dumps({"status":"blocked","reason":str(exc)},ensure_ascii=False))
