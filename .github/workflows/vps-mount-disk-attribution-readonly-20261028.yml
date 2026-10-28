@@ -1,0 +1,161 @@
+name: VPS mount-wide read-only disk attribution
+on:
+  pull_request:
+    paths:
+      - .github/workflows/vps-mount-disk-attribution-readonly-20261028.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-mount-attribution-readonly
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Bounded read-only VPS mount attribution without private filenames
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-mount-attribution"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 210s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          import datetime
+          import json
+          import os
+          from pathlib import Path
+          import shutil
+          import stat
+          import subprocess
+          import time
+
+          home = Path.home()
+          if home.is_symlink() or not home.is_dir():
+              raise SystemExit("HOME_UNSAFE")
+          start = time.monotonic()
+          disk = shutil.disk_usage(home)
+
+          def bounded_du(path, seconds=12):
+              if path.is_symlink() or not path.is_dir():
+                  return {"bytes": None, "complete": False}
+              try:
+                  p = subprocess.run(
+                      ["du", "-x", "-s", "-B1", "--", str(path)],
+                      capture_output=True, text=True, timeout=seconds, check=False)
+                  first = p.stdout.splitlines()[0].split()[0] if p.stdout.strip() else ""
+                  size = int(first) if first.isdigit() else None
+                  return {"bytes": size, "complete": p.returncode == 0}
+              except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
+                  return {"bytes": None, "complete": False}
+
+          # Per-root numeric totals only; never print private paths or filenames.
+          roots = {"home": "/home", "var": "/var", "usr": "/usr",
+                   "opt": "/opt", "tmp": "/tmp", "srv": "/srv"}
+          root_sizes = {label: bounded_du(Path(path), 13) for label, path in roots.items()}
+          # All categories are on the same device only when st_dev agrees.
+          devices = {}
+          for label, path in roots.items():
+              try:
+                  devices[label] = os.stat(path).st_dev == os.stat(home).st_dev
+              except OSError:
+                  devices[label] = None
+
+          # Bounded immediate-home inventory; non-factory entries are anonymized.
+          try:
+              entries = [p for p in home.iterdir()
+                         if not p.is_symlink() and p.is_dir()][:70]
+          except OSError:
+              entries = []
+          home_du = {}
+          if entries:
+              try:
+                  p = subprocess.run(
+                      ["du", "-x", "-s", "-B1", "--"] + [str(x) for x in entries],
+                      capture_output=True, text=True, timeout=45, check=False)
+                  for line in p.stdout.splitlines():
+                      size, sep, path = line.partition("\t")
+                      if sep and size.isdigit():
+                          home_du[path] = int(size)
+                  home_complete = p.returncode == 0
+              except (OSError, subprocess.TimeoutExpired):
+                  home_complete = False
+          else:
+              home_complete = False
+          labels = {"factory-runtime": "factory_runtime",
+                    ".cache": "user_cache", ".local": "user_local",
+                    ".npm": "npm_cache", ".cargo": "cargo_cache",
+                    ".rustup": "rust_toolchain"}
+          known = {label: home_du.get(str(home / name))
+                   for name, label in labels.items()}
+          others = sorted((size for path, size in home_du.items()
+                           if Path(path).name not in labels), reverse=True)
+
+          # Deleted-but-open regular files visible to this user; no file names.
+          deleted_count = 0
+          deleted_allocated = 0
+          fd_scanned = 0
+          proc_scanned = 0
+          proc_truncated = False
+          try:
+              pids = [p for p in Path("/proc").iterdir() if p.name.isdigit()]
+              for proc in pids:
+                  if proc_scanned >= 180:
+                      proc_truncated = True
+                      break
+                  try:
+                      if proc.stat().st_uid != os.getuid():
+                          continue
+                      proc_scanned += 1
+                      for fd in list((proc / "fd").iterdir())[:256]:
+                          fd_scanned += 1
+                          try:
+                              if os.readlink(fd).endswith(" (deleted)"):
+                                  s = os.stat(fd)
+                                  if stat.S_ISREG(s.st_mode):
+                                      deleted_count += 1
+                                      deleted_allocated += s.st_blocks * 512
+                          except OSError:
+                              continue
+                  except OSError:
+                      continue
+          except OSError:
+              proc_truncated = True
+
+          result = {
+              "schema": "saeit.vps.mount-disk-attribution.readonly.v1",
+              "observed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "mount_total_bytes": disk.total,
+              "mount_used_bytes": disk.used,
+              "mount_free_bytes": disk.free,
+              "reserve_2048_mib_met": disk.free >= 2048 * 1024 * 1024,
+              "reserve_5_gib_met": disk.free >= 5 * 1024**3,
+              "root_du_bytes": root_sizes,
+              "root_same_device_as_factory": devices,
+              "home_known_bytes": known,
+              "home_other_largest_bytes": others[:12],
+              "home_other_total_observed_bytes": sum(others),
+              "home_inventory_complete": home_complete,
+              "home_entries_scanned": len(entries),
+              "open_deleted_visible_fd_count": deleted_count,
+              "open_deleted_visible_allocated_bytes": deleted_allocated,
+              "open_deleted_proc_scanned": proc_scanned,
+              "open_deleted_fd_scanned": fd_scanned,
+              "open_deleted_scan_truncated": proc_truncated,
+              "inspection_seconds": round(time.monotonic() - start, 1),
+              "mutations": 0,
+              "deleted": 0,
+              "backups_touched": 0,
+          }
+          print("VPS_MOUNT_ATTRIBUTION=" + json.dumps(result, sort_keys=True))
+          PY
