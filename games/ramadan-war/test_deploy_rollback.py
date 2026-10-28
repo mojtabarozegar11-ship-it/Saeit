@@ -64,7 +64,8 @@ class ScopedRollbackTests(unittest.TestCase):
     def test_concurrent_unexpected_modifications_are_preserved(self):
         (self.game / "game.js").write_bytes(b"newer publisher's version")
         (self.game / "index.html").write_bytes(b"newer publisher's asset")
-        deploy.rollback_files(self.stage, self.metadata, self.run)
+        with self.assertRaisesRegex(RuntimeError, "rollback conflict, original asset not restored"):
+            deploy.rollback_files(self.stage, self.metadata, self.run)
         self.assertEqual((self.game / "game.js").read_bytes(), b"newer publisher's version")
         self.assertEqual((self.game / "index.html").read_bytes(), b"newer publisher's asset")
 
@@ -72,9 +73,32 @@ class ScopedRollbackTests(unittest.TestCase):
         outside = self.root / "outside-game.js"
         outside.write_bytes(self.new)
         (self.game / "game.js").symlink_to(outside)
-        deploy.rollback_files(self.stage, self.metadata, self.run)
+        with self.assertRaisesRegex(RuntimeError, "linked release asset parent"):
+            deploy.rollback_files(self.stage, self.metadata, self.run)
         self.assertTrue((self.game / "game.js").is_symlink())
         self.assertEqual(outside.read_bytes(), self.new)
+
+    def test_partial_publish_with_old_file_untouched_is_safe_to_retry(self):
+        # Publish failed before changing game.js, but had created index.html.
+        (self.game / "game.js").write_bytes(self.old)
+        (self.game / "index.html").write_bytes(b"new asset")
+        deploy.rollback_files(self.stage, self.metadata, self.run)
+        self.assertEqual((self.game / "game.js").read_bytes(), self.old)
+        self.assertFalse((self.game / "index.html").exists())
+        deploy.rollback_files(self.stage, self.metadata, self.run)
+
+    def test_missing_original_asset_is_not_falsely_reported_restored(self):
+        (self.game / "index.html").write_bytes(b"new asset")
+        with self.assertRaisesRegex(RuntimeError, "original asset not restored"):
+            deploy.rollback_files(self.stage, self.metadata, self.run)
+        self.assertFalse((self.game / "index.html").exists())
+
+    def test_unexpected_new_only_asset_preserved_but_rollback_fails(self):
+        (self.game / "game.js").write_bytes(self.old)
+        (self.game / "index.html").write_bytes(b"another publisher's file")
+        with self.assertRaisesRegex(RuntimeError, "new asset not removed"):
+            deploy.rollback_files(self.stage, self.metadata, self.run)
+        self.assertEqual((self.game / "index.html").read_bytes(), b"another publisher's file")
 
     def test_atomic_rejects_path_outside_game(self):
         with self.assertRaises(AssertionError):
