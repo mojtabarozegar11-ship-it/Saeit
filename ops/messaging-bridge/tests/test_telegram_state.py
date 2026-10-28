@@ -59,6 +59,28 @@ class StateSecurityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             asyncio.run(check(Path(folder)))
 
+    def test_daemon_preserves_login_required_on_cleanup(self):
+        class FakeClient:
+            def __init__(self, *_args, **_kwargs):
+                pass
+            async def connect(self):
+                pass
+            async def is_user_authorized(self):
+                return False
+            async def disconnect(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.dict(os.environ, {'MOJMSG_STATE_DIR': folder, 'TG_API_ID': '123', 'TG_API_HASH': 'test'}, clear=True):
+                import sys
+                from types import ModuleType
+                module = ModuleType('telethon')
+                module.TelegramClient = FakeClient
+                with patch.dict(sys.modules, {'telethon': module}):
+                    self.assertEqual(asyncio.run(telegram.main('daemon')), 3)
+                result = json.loads((Path(folder) / 'telegram-status.json').read_text())
+                self.assertEqual(result['status'], 'LOGIN_REQUIRED')
+
     def test_private_dir_atomic_status_without_messages(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder) / 'secret-state'
