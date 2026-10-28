@@ -20,10 +20,10 @@ BACKUPS=Path("/home/zomorod2/.backups/mojtaba-personal-education-posters-2026102
 TEMPLATE=Path("templates/personal_site/core/home.html")
 MARKER='id="mpw-four-course-posters-20261028"'
 POSTERS=(
-    ("business","دوره کسب‌وکار","برنامه‌ریزی، مدیریت، بازاریابی و فروش"),
-    ("agriculture","دوره افزایش درآمد کشاورزی","بهره‌وری، مدیریت منابع و بازار محصول"),
-    ("online-income","دوره آموزش کسب درآمد از اینترنت","مهارت‌های دیجیتال و تجارت آنلاین"),
-    ("chatgpt","دوره تخصصی آموزش چت‌جی‌پی‌تی","پرامپت‌نویسی و کاربرد حرفه‌ای ChatGPT"),
+    ("business","Business Development Course","Business models, sustainable sales and operations"),
+    ("agriculture","Increasing Agricultural Income","Farm economics, productivity and market access"),
+    ("online-income","How to Earn Money Online","Digital skills, freelancing and online business"),
+    ("chatgpt","Advanced ChatGPT Training","Prompt engineering, AI research and practical workflows"),
 )
 SITE="/mojtaba.roozegar/"
 HUB=SITE+"social-command/"
@@ -49,16 +49,16 @@ def _run_id(value):
 def section_html():
     posters=[]
     for slug,title,desc in POSTERS:
-        svg=HUB+"posters/"+slug+".svg"
+        svg=HUB+"posters/"+slug+".svg?v=en-20261028"
         detail=HUB+"courses/#"+slug
         posters.append(
             '<article class="mpw-course-home-card">'
-            '<a href="'+detail+'" aria-label="آشنایی با '+title+'">'
+            '<a href="'+detail+'" aria-label="Learn more about '+title+'">'
             '<img src="'+svg+'" loading="lazy" decoding="async" width="900" height="1200" alt="'+
-            title+'؛ پوستر طراحی گرافیکی بدون تصویر مدرس"></a>'
+            title+'; original vector poster with no fabricated instructor portrait"></a>'
             '<div class="mpw-course-home-copy"><h3>'+title+'</h3>'
             '<p>'+desc+'</p>'
-            '<a class="mpw-course-home-more" href="'+detail+'">جزئیات و سرفصل‌ها</a></div></article>'
+            '<a class="mpw-course-home-more" href="'+detail+'">Course overview</a></div></article>'
         )
     css=r"""
 <style id="mpw-four-course-posters-style-20261028">
@@ -91,16 +91,16 @@ padding:7px 11px;border-radius:8px;color:#1d251d!important;text-decoration:none;
 #mpw-four-course-posters-20261028 .mpw-course-home-copy p{font-size:12px}}
 </style>"""
     return (
-        '\n<section '+MARKER+' dir="rtl" lang="fa" aria-labelledby="mpw-four-courses-title">'
+        '\n<section '+MARKER+' dir="ltr" lang="en" aria-labelledby="mpw-four-courses-title">'
         +css+
         '<div class="mpw-course-home-header"><div class="mpw-course-home-eyebrow">'
         'MOJTABA ROOZEGAR · EDUCATION</div>'
-        '<h2 id="mpw-four-courses-title">چهار دوره برای توسعه مهارت و کسب‌وکار</h2>'
-        '<p>با چهار مسیر یادگیری در کسب‌وکار، اقتصاد کشاورزی، درآمد اینترنتی و استفاده حرفه‌ای '
-        'از ChatGPT آشنا شوید.</p></div>'
+        '<h2 id="mpw-four-courses-title">Four Courses to Build Practical Skills</h2>'
+        '<p>Explore business growth, agricultural economics, online earning skills and advanced '
+        'ChatGPT workflows.</p></div>'
         '<div class="mpw-course-home-grid">'+''.join(posters)+'</div>'
-        '<p class="mpw-course-home-note">این بخش معرفی دوره‌هاست؛ تاریخ شروع، شهریه و '
-        'ثبت‌نام هنوز اعلام نشده‌اند. هیچ تضمین درآمدی ارائه نمی‌شود.</p></section>\n'
+        '<p class="mpw-course-home-note">Course previews only. Start dates, tuition and '
+        'enrollment are not announced yet. No income results are guaranteed.</p></section>\n'
     )
 
 def patch(current):
