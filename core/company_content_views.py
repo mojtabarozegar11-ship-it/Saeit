@@ -8,7 +8,7 @@ from .public_catalog_guard import missing_public_tables, mark_public_data_unavai
 
 
 def company_gallery(request):
-    catalog_unavailable = missing_public_tables(CompanyGalleryMedia)
+    catalog_unavailable = missing_public_tables(CompanyGalleryMedia, NewsletterStory)
     kind = request.GET.get("type", "").strip().lower()
     query = request.GET.get("q", "").strip()
     media = []
