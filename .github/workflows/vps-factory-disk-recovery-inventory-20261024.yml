@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - .github/workflows/vps-factory-disk-recovery-inventory-20261024.yml
+  pull_request:
+    paths:
+      - .github/workflows/vps-factory-disk-recovery-inventory-20261024.yml
   workflow_dispatch:
 permissions:
   contents: read
@@ -199,7 +202,7 @@ jobs:
                       result = subprocess.run(["du","-s","-B1","--"]+[str(child) for child in children],
                                               check=True,capture_output=True,text=True,timeout=40)
                       for row in result.stdout.splitlines():
-                          size_text, sep, full_path = row.partition("\\t")
+                          size_text, sep, full_path = row.partition("\t")
                           if sep:
                               sizes[full_path] = int(size_text)
                   except (OSError,ValueError,subprocess.SubprocessError):
