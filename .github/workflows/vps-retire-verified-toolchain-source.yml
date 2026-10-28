@@ -65,11 +65,20 @@ jobs:
           link_map=json.loads((candidate/'link-map.json').read_text())
           if not isinstance(link_map,dict) or not link_map:
               raise SystemExit('SOURCE_LINK_MAP_INVALID')
+          from pathlib import PurePosixPath
+          prefix=(version/'prefix').resolve()
           for name,destination in link_map.items():
-              relative=Path(name)
-              dest=Path(destination)
-              if relative.is_absolute() or '..' in relative.parts or dest.is_absolute() or '..' in dest.parts:
+              relative=PurePosixPath(name)
+              destination_relative=PurePosixPath(destination.lstrip('/'))
+              if relative.is_absolute() or '..' in relative.parts or '..' in destination_relative.parts:
                   raise SystemExit('SOURCE_LINK_MAP_ESCAPES_PRIVATE_PREFIX')
+              link=prefix.joinpath(*relative.parts)
+              dest=prefix.joinpath(*destination_relative.parts)
+              try:
+                  link.parent.resolve().relative_to(prefix)
+                  dest.resolve().relative_to(prefix)
+              except ValueError:
+                  raise SystemExit('SOURCE_LINK_MAP_RESOLVES_OUTSIDE_PRIVATE_PREFIX')
           checksums={}
           for line in (candidate/'SHA256SUMS').read_text().splitlines():
               digest, name=line.split(None,1)
