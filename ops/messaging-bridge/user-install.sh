@@ -41,7 +41,7 @@ PY
   trap 'if [[ -n "$TEMP" && -d "$TEMP" ]]; then rm -rf -- "$TEMP"; fi' EXIT
   tar --no-same-owner --no-same-permissions -xzf "$BUNDLE" -C "$TEMP"
   [[ -s "$TEMP/bin/node" && -s "$TEMP/app/telegram.py" && -s "$TEMP/app/whatsapp.mjs" ]] || exit 3
-  chmod 0700 "$TEMP/bin/node" "$TEMP/app/user-control.sh" "$TEMP/app/user-launch.sh"
+  chmod 0700 "$TEMP/bin/node" "$TEMP/app/user-control.sh" "$TEMP/app/user-launch.sh" "$TEMP/app/user-onboard.sh"
   "$TEMP/bin/node" -e "import('node:crypto').then(()=>console.log('MMSG_NODE_RUNTIME=PASS'))"
   "$TEMP/bin/node" --check "$TEMP/app/whatsapp.mjs"
   (cd "$TEMP/app"; "$TEMP/bin/node" --input-type=module -e "import('@whiskeysockets/baileys').then(()=>console.log('MMSG_BAILEYS_PACKAGE=PASS'))")
