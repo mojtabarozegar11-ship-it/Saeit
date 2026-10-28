@@ -85,16 +85,26 @@ for module in "${modules[@]}"; do
   fi
 done
 rollback_sources() {
+  local failed=0
   for module in "${modules[@]}"; do
     backup="$source_backup/$module"
     target="$app/$module"
     if [ -s "$backup" ] && [ ! -L "$backup" ] && [ ! -L "$target" ]; then
-      install -D -m 600 "$backup" "$target.rollback.tmp"
-      mv -f "$target.rollback.tmp" "$target"
+      if install -D -m 600 "$backup" "$target.rollback.tmp"; then
+        mv -f "$target.rollback.tmp" "$target" || failed=1
+      else
+        failed=1
+      fi
     elif [ -f "$backup.absent" ] && [ ! -L "$target" ]; then
-      rm -f "$target"
+      rm -f "$target" || failed=1
+    else
+      failed=1
     fi
   done
+  if [ "$failed" -ne 0 ]; then
+    echo MASTER_SOURCE_ROLLBACK_INCOMPLETE
+    return 1
+  fi
   echo MASTER_SOURCE_ROLLBACK_COMPLETED
 }
 restore_all() {
