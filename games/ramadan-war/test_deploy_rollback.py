@@ -46,6 +46,53 @@ class ScopedRollbackTests(unittest.TestCase):
             "new": {"game.js": digest(self.new), "index.html": digest(b"new asset")},
         }
 
+    def test_stage_asset_rejects_linked_intermediate_parent(self):
+        incoming = self.stage / "incoming"
+        incoming.mkdir()
+        outside = self.root / "outside-assets"
+        outside.mkdir()
+        (outside / "GLTFLoader.js").write_bytes(b"do not publish external asset")
+        (incoming / "three-addons").symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(AssertionError, "linked release file or parent"):
+            deploy.safe_release_file(incoming, "three-addons/GLTFLoader.js")
+        self.assertEqual((outside / "GLTFLoader.js").read_bytes(),
+                         b"do not publish external asset")
+
+    def test_stage_asset_rejects_linked_incoming_root(self):
+        outside = self.root / "outside-stage"
+        outside.mkdir()
+        (outside / "game.js").write_bytes(self.new)
+        (self.stage / "incoming").symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(AssertionError, "linked release directory"):
+            deploy.safe_release_file(self.stage / "incoming", "game.js")
+        self.assertEqual((outside / "game.js").read_bytes(), self.new)
+
+    def test_live_asset_rejects_linked_intermediate_parent(self):
+        outside = self.root / "outside-live"
+        outside.mkdir()
+        (outside / "GLTFLoader.js").write_bytes(self.new)
+        (self.game / "three-addons").symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(AssertionError, "linked release file or parent"):
+            deploy.safe_release_file(self.game, "three-addons/GLTFLoader.js")
+        self.assertEqual((outside / "GLTFLoader.js").read_bytes(), self.new)
+
+    def test_release_metadata_rejects_symlink_without_reading_private_file(self):
+        outside = self.root / "outside-release.json"
+        outside.write_text('{"phase":"published"}', encoding="utf-8")
+        (self.stage / "release.json").symlink_to(outside)
+        with self.assertRaisesRegex(AssertionError, "linked release file or parent"):
+            deploy.metadata(self.stage)
+        self.assertEqual(outside.read_text(encoding="utf-8"), '{"phase":"published"}')
+
+    def test_nested_regular_asset_read_remains_supported(self):
+        incoming = self.stage / "incoming"
+        nested = incoming / "three-addons" / "loaders"
+        nested.mkdir(parents=True)
+        expected = nested / "GLTFLoader.js"
+        expected.write_bytes(self.new)
+        self.assertEqual(deploy.safe_release_file(
+            incoming, "three-addons/loaders/GLTFLoader.js").read_bytes(), self.new)
+
     def test_partial_release_restores_old_and_removes_only_new_asset(self):
         (self.game / "game.js").write_bytes(self.new)
         (self.game / "index.html").write_bytes(b"new asset")
