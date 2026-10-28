@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Record baseline: personal, shop and Zomorod homepage
+      - name: Record baseline of personal shop and Zomorod homepages
         run: |
           python3 - <<'PY'
           from urllib.request import Request,urlopen
