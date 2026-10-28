@@ -1,0 +1,135 @@
+name: Zomorod English author current identity SEO safe release
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-en-author-seo-safe-release-20261028.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-english-author-seo-safe-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile guarded English profile updater
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          p=Path("scripts/zomorod_en_author_identity_refresh_20261028.py")
+          s=p.read_text()
+          compile(s,str(p),"exec")
+          assert "SINGLE_H1_REQUIREMENT_FAILED" in s
+          assert "CONCURRENT_CHANGE_BLOCKS_ROLLBACK" in s
+          print("EN_AUTHOR_SOURCE_GUARDS=passed")
+          PY
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Apply one English HTML patch and rollback on health regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          script="scripts/zomorod_en_author_identity_refresh_20261028.py"
+          remote() {
+            ssh -F "$d/config" saeit-cpanel python3 - "$1" < "$script"
+          }
+          applied=0
+          finish() {
+            status=$?
+            if test "$status" -ne 0 && test "$applied" = 1; then
+              echo "EN_AUTHOR_CANARY=failed_rollback"
+              remote rollback || echo "EN_AUTHOR_ROLLBACK_REQUIRES_ATTENTION=yes"
+            fi
+          }
+          trap finish EXIT
+          remote plan
+          for path in / /api/health/ /en/authors/mojtaba-rozegar/ /authors/mojtaba-rozegar/; do
+            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "EN_AUTHOR_BASELINE path=$path code=$code"
+            test "$code" = 200
+          done
+          remote apply
+          applied=1
+          sleep 2
+          for path in / /api/health/ /about/ /en/authors/mojtaba-rozegar/ /authors/mojtaba-rozegar/; do
+            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "EN_AUTHOR_AFTER path=$path code=$code"
+            test "$code" = 200
+          done
+          file="$RUNNER_TEMP/zomorod-en-author-verified.html"
+          status="$(curl -sS -L --max-time 23 -A 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/130 Mobile Safari/537.36' -o "$file" -w '%{http_code}' 'https://zomorodmelal.ir/en/authors/mojtaba-rozegar/?utm_source=chatgpt.com&identity=20261028' || true)"
+          test "$status" = 200
+          python3 - "$file" <<'PY'
+          import json,re,sys
+          from pathlib import Path
+          text=Path(sys.argv[1]).read_text(encoding="utf-8")
+          assert text.lower().count("<h1")==1
+          assert '<h1>Mojtaba Roozegar</h1>' in text
+          assert "Vancouver, Canada" in text
+          assert "CEO of MojPlayWin" in text
+          assert 'href="https://mojplaywin.com/mojtaba.roozegar/resume/"' in text
+          assert 'hreflang="fa-IR"' in text
+          s=re.search(r'<script type="application/ld\+json">(.*?)</script>',text,re.S)
+          assert s
+          graph=json.loads(s.group(1))
+          assert graph["mainEntity"]["homeLocation"]["name"]=="Vancouver, British Columbia, Canada"
+          assert "Chief Executive Officer of MojPlayWin" in graph["mainEntity"]["jobTitle"]
+          print("EN_AUTHOR_IDENTITY_STRUCTURED_DATA=pass")
+          PY
+          remote status
+          echo "EN_AUTHOR_SAFE_RELEASE=PASS"
+          applied=0
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
