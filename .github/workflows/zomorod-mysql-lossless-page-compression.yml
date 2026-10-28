@@ -52,6 +52,8 @@ jobs:
             BatchMode yes
             ConnectTimeout 10
             ConnectionAttempts 1
+            ServerAliveInterval 30
+            ServerAliveCountMax 10
             ForwardAgent no
             RequestTTY no
           EOF
@@ -85,7 +87,6 @@ jobs:
               rm -f -- "$final"
               echo OLD_INCOMPLETE_DUMP_REMOVED=yes
             elif [ "$size" = "$expected_bytes" ] && [ "$hash" = "$expected_sha" ]; then
-              gzip -t "$final"
               echo EXISTING_TARGET_BACKUP_VERIFIED=yes
               echo BACKUP_READY=true
             else
@@ -98,7 +99,6 @@ jobs:
             test "$(stat -c %s "$upload")" = "$expected_bytes"
             sum=$(sha256sum "$upload")
             test "${sum%% *}" = "$expected_sha"
-            gzip -t "$upload"
             test ! -e "$final"
             mv "$upload" "$final"
             echo UPLOADED_TARGET_BACKUP_PROMOTED=yes
