@@ -36,6 +36,21 @@
     .tabletop-panel .btn:disabled{opacity:.42;cursor:default}
     @media(max-width:600px){.chess-cell{font-size:clamp(1.25rem,6vw,2rem)}.tabletop-panel h3{font-size:1.25rem}.back-board{width:660px}}
   </style>
+  <style>
+    [hidden]{display:none!important}
+    .arena-discovery{padding:22px 0 4px;scroll-margin-top:100px}
+    .arena-discovery-inner{display:flex;gap:12px;align-items:center;flex-wrap:wrap;border:1px solid #5d5038;border-radius:12px;padding:17px;background:linear-gradient(120deg,#1f2936,#121b26)}
+    .arena-discovery-inner label{font-weight:750;color:#f5d89f}
+    .arena-discovery-inner input{flex:1 1 220px;min-width:0;background:#0b121b;color:#f5f4f0;border:1px solid #89724e;border-radius:8px;padding:12px 14px;font:inherit}
+    .arena-discovery-inner input:focus{outline:3px solid #f5d89f;outline-offset:2px}
+    #arena-count{font-size:.83rem;color:#c4d5cf}
+    .arena-categories{display:flex;flex-wrap:wrap;gap:10px;margin-top:13px}
+    .arena-categories a{display:inline-block;padding:9px 14px;border:1px solid #7d704f;border-radius:99px;background:#202a36;color:#f6e4be;font-size:.84rem}
+    .arena-categories a:hover,.arena-categories a:focus-visible{background:#3b3426}
+    .arena-empty{color:#f5ddac;padding:17px 6px}
+    .section[id],#sports,#rules{scroll-margin-top:94px}
+    @media(max-width:540px){.arena-discovery-inner{align-items:stretch}.arena-discovery-inner label{width:100%}.arena-discovery-inner input{flex-basis:100%}}
+  </style>
 </head>
 <body>
   <a class="skip" href="#casino-floor">Skip to games</a>
@@ -44,6 +59,19 @@
   <main>
     <section class="hero shell"><div><div class="eyebrow" data-en="A PRIVATE WORLD OF PLAY" data-fa="جهانی ویژه برای سرگرمی">A PRIVATE WORLD OF PLAY</div><h1 data-en="The thrill.<br><em>Without the wager.</em>" data-fa="هیجان بازی.<br><em>بدون شرط‌بندی مالی.</em>">The thrill.<br><em>Without the wager.</em></h1><p class="lead" data-en="A premium destination for casino-inspired entertainment, strategy and simulated sports predictions. Play the experience, never risk your money." data-fa="فضایی ممتاز برای سرگرمی‌های الهام‌گرفته از کازینو، راهبرد و پیش‌بینی ورزشی شبیه‌سازی‌شده؛ بدون به خطر انداختن پول.">A premium destination for casino-inspired entertainment, strategy and simulated sports predictions. Play the experience, never risk your money.</p><div class="buttons"><a class="btn primary" href="#casino-floor" data-en="Enter the Casino Floor ↗" data-fa="ورود به بخش کازینو ←">Enter the Casino Floor ↗</a><a class="btn outline" href="#sports" data-en="Explore Sports Picks" data-fa="پیش‌بینی ورزشی">Explore Sports Picks</a></div><div class="status-row"><span class="pill">21+ ONLY</span><span class="pill"><b>●</b> FREE PLAY</span><span class="pill">NO CASH VALUE</span></div></div><div class="showcase" aria-hidden="true"><div class="showcase-inner"><div class="showcase-icon">♠</div><strong>MOJ CASINO</strong><small>PRIVATE LOUNGE</small></div></div></section>
     <div class="shell"><div class="divider"></div></div>
+    <div class="shell arena-discovery">
+      <div class="arena-discovery-inner">
+        <label id="arena-search-label" for="arena-search">Find a game</label>
+        <input id="arena-search" type="search" autocomplete="off" spellcheck="false" placeholder="Chess, dice, roulette..." aria-describedby="arena-count">
+        <span id="arena-count" role="status" aria-live="polite">37 games available</span>
+      </div>
+      <nav class="arena-categories" aria-label="Game categories">
+        <a id="arena-cat-casino" href="#casino-floor">Casino simulations · 16</a>
+        <a id="arena-cat-classic" href="#classic-tables">Chess, Backgammon &amp; Cards · 6</a>
+        <a id="arena-cat-dice" href="#dice-festival">Dice &amp; Chance · 15</a>
+      </nav>
+      <p class="arena-empty" id="arena-empty" hidden>No matching games. Try another search.</p>
+    </div>
     <section class="section shell" id="casino-floor"><div class="section-head"><div class="eyebrow" data-en="THE CASINO FLOOR" data-fa="بخش کازینو">THE CASINO FLOOR</div><h2 data-en="Thirty-seven games in one lounge" data-fa="سی‌وهفت بازی سرگرمی در یک صفحه">Thirty-seven games in one lounge</h2><p data-en="All outcomes are simulated locally in your browser. No chips, money, virtual currency, prizes or real-world sports wagers are involved." data-fa="تمام نتیجه‌ها در مرورگر شبیه‌سازی می‌شوند. هیچ پول، اعتبار قابل خرید، ارز مجازی، جایزه یا شرط‌بندی روی مسابقه واقعی وجود ندارد.">All outcomes are simulated locally in your browser. No chips, money, virtual currency, prizes or real-world sports wagers are involved.</p></div><div class="cards" id="game-grid">
       <article class="card" aria-labelledby="roulette-title"><div class="card-title"><h3 id="roulette-title" data-en="European Roulette" data-fa="رولت اروپایی">European Roulette</h3><span class="icon">◎</span></div><p data-en="Choose red or black, then watch a simulated wheel outcome. Purely for fun—no stakes." data-fa="قرمز یا مشکی را انتخاب کنید و نتیجه چرخ شبیه‌سازی‌شده را ببینید؛ بدون مبلغ شرط.">Choose red or black, then watch a simulated wheel outcome. Purely for fun—no stakes.</p><div class="gamearea"><div class="control"><button type="button" class="btn small" data-roulette="red" data-en="Choose Red" data-fa="انتخاب قرمز">Choose Red</button><button type="button" class="btn small" data-roulette="black" data-en="Choose Black" data-fa="انتخاب مشکی">Choose Black</button></div><div class="result" id="roulette-result" role="status" aria-live="polite">Choose a colour to spin.</div></div></article>
       <article class="card" aria-labelledby="blackjack-title"><div class="card-title"><h3 id="blackjack-title" data-en="Blackjack Practice" data-fa="تمرین بلک‌جک">Blackjack Practice</h3><span class="icon">♣</span></div><p data-en="Practice hitting or standing against a virtual dealer. No wagers, currency or redeemable scores." data-fa="در برابر کارت‌پخش‌کن مجازی کارت بگیرید یا توقف کنید؛ بدون شرط مالی و امتیاز نقدشونده.">Practice hitting or standing against a virtual dealer. No wagers, currency or redeemable scores.</p><div class="gamearea"><div class="subresult" id="dealer-label">Dealer</div><div class="cardsline" id="dealer-cards">—</div><div class="subresult" id="player-label">Your hand</div><div class="cardsline" id="player-cards">—</div><div class="control" style="margin-top:14px"><button class="btn small primary" type="button" id="deal" data-en="New Hand" data-fa="دست جدید">New Hand</button><button class="btn small" type="button" id="hit" disabled data-en="Hit" data-fa="کارت بگیر">Hit</button><button class="btn small" type="button" id="stand" disabled data-en="Stand" data-fa="توقف">Stand</button></div><div class="result" id="blackjack-result" role="status" aria-live="polite">Select New Hand to begin.</div></div></article>
@@ -59,6 +87,41 @@
   <script>
   (()=>{'use strict';
     const $=s=>document.querySelector(s); let locale='en';
+    const finderCopy={
+      en:{label:'Find a game',placeholder:'Chess, dice, roulette...',count:'{n} games found',empty:'No matching games. Try another search.',casino:'Casino simulations · 16',classic:'Chess, Backgammon & Cards · 6',dice:'Dice & Chance · 15'},
+      fa:{label:'پیدا کردن بازی',placeholder:'شطرنج، تخته‌نرد، تاس، رولت...',count:'{n} بازی پیدا شد',empty:'بازی پیدا نشد؛ عبارت دیگری جست‌وجو کنید.',casino:'بازی‌های کازینویی · ۱۶',classic:'شطرنج، تخته‌نرد و ورق · ۶',dice:'تاس و شانس · ۱۵'},
+      ar:{label:'ابحث عن لعبة',placeholder:'شطرنج، نرد، روليت...',count:'تم العثور على {n} لعبة',empty:'لا توجد ألعاب مطابقة. جرّب بحثاً آخر.',casino:'محاكاة الكازينو · 16',classic:'شطرنج وطاولة وورق · 6',dice:'النرد والحظ · 15'},
+      de:{label:'Spiel finden',placeholder:'Schach, Würfel, Roulette...',count:'{n} Spiele gefunden',empty:'Keine passenden Spiele. Anderen Suchbegriff wählen.',casino:'Casino-Simulationen · 16',classic:'Schach, Backgammon & Karten · 6',dice:'Würfel & Zufall · 15'},
+      fr:{label:'Trouver un jeu',placeholder:'Échecs, dés, roulette...',count:'{n} jeux trouvés',empty:'Aucun jeu correspondant. Essayez une autre recherche.',casino:'Simulations de casino · 16',classic:'Échecs, backgammon et cartes · 6',dice:'Dés et hasard · 15'},
+      es:{label:'Buscar un juego',placeholder:'Ajedrez, dados, ruleta...',count:'{n} juegos encontrados',empty:'No hay juegos coincidentes. Prueba otra búsqueda.',casino:'Simulaciones de casino · 16',classic:'Ajedrez, backgammon y cartas · 6',dice:'Dados y azar · 15'}
+    };
+    const normalizeFind=s=>String(s).normalize('NFKC').toLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک');
+    function filterArenaGames(){
+      const query=normalizeFind($('#arena-search').value.trim());let count=0;
+      for(const id of ['game-grid','classic-game-grid','dice-game-grid']){
+        const grid=$('#'+id),cards=[...grid.querySelectorAll('article')];
+        for(const item of cards){
+          const title=item.querySelector('h3')?.textContent||'';
+          const description=item.querySelector('p')?.textContent||'';
+          const show=!query||normalizeFind(title+' '+description).includes(query);
+          item.hidden=!show;if(show)count++;
+        }
+        grid.closest('section').hidden=count===0&&query&&cards.length>0?cards.every(x=>x.hidden):false;
+      }
+      $('#arena-count').textContent=finderCopy[locale].count.replace('{n}',String(count));
+      $('#arena-empty').hidden=count!==0;
+    }
+    function translateArenaFinder(){
+      const t=finderCopy[locale];
+      $('#arena-search-label').textContent=t.label;
+      $('#arena-search').placeholder=t.placeholder;
+      $('#arena-cat-casino').textContent=t.casino;
+      $('#arena-cat-classic').textContent=t.classic;
+      $('#arena-cat-dice').textContent=t.dice;
+      $('#arena-empty').textContent=t.empty;
+      filterArenaGames();
+    }
+
     const staticTargets=[...document.querySelectorAll('[data-en][data-fa]')];
     // Complete authored translations for the 43 static UI elements, in DOM order.
     const coreI18n={
@@ -184,7 +247,7 @@
     function resetStatuses(){write('roulette-result',t('rouletteStart'));write('blackjack-result',t('blackjackStart'));write('slot-result',t('slotStart'));write('sports-result',t('sportStart'));write('dealer-label',t('dealer'));write('player-label',t('hand'))}
     const locales=['en','fa','ar','de','fr','es'];
     if(staticTargets.length!==43||Object.values(coreI18n).some(items=>items.length!==staticTargets.length))throw Error('Translation completeness check failed');
-    $('#language').addEventListener('change',e=>{locale=e.target.value;if(!locales.includes(locale))return;document.documentElement.lang=locale;document.documentElement.dir=['fa','ar'].includes(locale)?'rtl':'ltr';staticTargets.forEach((el,i)=>{el.innerHTML=locale==='en'?el.dataset.en:locale==='fa'?el.dataset.fa:coreI18n[locale][i]});translateExtraGames();translateNewGames();resetStatuses()});
+    $('#language').addEventListener('change',e=>{locale=e.target.value;if(!locales.includes(locale))return;document.documentElement.lang=locale;document.documentElement.dir=['fa','ar'].includes(locale)?'rtl':'ltr';staticTargets.forEach((el,i)=>{el.innerHTML=locale==='en'?el.dataset.en:locale==='fa'?el.dataset.fa:coreI18n[locale][i]});translateExtraGames();translateNewGames();resetStatuses();translateArenaFinder()});
     $('#age-confirm').addEventListener('click',()=>{$('#age-gate').hidden=true;$('#roulette-title').setAttribute('tabindex','-1');$('#roulette-title').focus()});
     const reds=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
     document.querySelectorAll('[data-roulette]').forEach(button=>button.addEventListener('click',()=>{const number=random(37);const colour=number===0?'green':reds.has(number)?'red':'black';write('roulette-result',t('roulette',{n:number,colour:t(colour),verdict:colour===button.dataset.roulette?t('correct'):t('wrong')}))}));
@@ -596,6 +659,8 @@
     buildDiceFestival();
     translateNewGames();
     resetStatuses();
+    $('#arena-search').addEventListener('input',filterArenaGames);
+    translateArenaFinder();
   })();
   </script>
 </body>
