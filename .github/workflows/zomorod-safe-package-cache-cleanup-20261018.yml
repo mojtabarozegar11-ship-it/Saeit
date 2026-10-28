@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths: [".github/workflows/zomorod-safe-package-cache-cleanup-20261018.yml"]
+  pull_request:
+    paths: [".github/workflows/zomorod-safe-package-cache-cleanup-20261018.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -62,12 +64,24 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_RELAY=verified"
+      - name: Verify public site before cache cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /agents/; do
+            status="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "CACHE_BEFORE_HEALTH=$path:$status"
+            test "$status" = 200
+          done
       - name: Delete disposable npm/pip/Gradle download caches only
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-baseline-inventory"
-          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          mode=preview
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then mode=apply; fi
+          echo "CACHE_CLEANUP_MODE=$mode"
+          ssh -F "$d/config" saeit-cpanel "CACHE_CLEANUP_MODE=$mode bash -se" <<'REMOTE'
           set -euo pipefail
           test "$HOME" = /home/zomorod2
           test -f "$HOME/Saeit/manage.py"
@@ -77,25 +91,33 @@ jobs:
           home=Path("/home/zomorod2")
           paths=(".npm/_cacache",".npm/_npx",".cache/pip",".gradle/caches")
           print("CLEANUP_KIND=disposable_download_caches_only")
+          proc=subprocess.run(["ps","-u","zomorod2","-o","args="],capture_output=True,text=True,timeout=12,check=True)
+          active=[row[:180] for row in proc.stdout.splitlines()
+                  if any(token in row.lower() for token in ("npm install","npm ci","npm pack","pip install","pip download","gradle build","gradle test"))]
+          if active:
+              raise RuntimeError("PACKAGE_MANAGER_ACTIVITY_IN_PROGRESS")
           total=0
+          apply=os.environ.get("CACHE_CLEANUP_MODE")=="apply"
+          print("CACHE_APPLY="+str(apply))
           for rel in paths:
               p=home/rel
               if not p.exists():
                   print("CACHE_ABSENT="+rel)
                   continue
-              assert p.is_dir() and not p.is_symlink()
-              assert p.resolve()==home/rel
-              assert all(not (home/".".join([])).is_symlink() for _ in ()) # no mutation outside allowlist
-              for ancestor in [p.parent, p]:
+              if p.is_symlink() or not p.is_dir() or p.resolve()!=home/rel:
+                  raise RuntimeError("CACHE_PATH_UNSAFE")
+              for ancestor in [p.parent,p]:
                   if ancestor.is_symlink():
                       raise RuntimeError("CACHE_COMPONENT_SYMLINK")
               before=subprocess.run(["du","-sk",str(p)],capture_output=True,text=True,timeout=40,check=True)
               kb=int(before.stdout.split()[0])
-              shutil.rmtree(p)
-              if p.exists():raise RuntimeError("CACHE_REMOVE_INCOMPLETE")
+              print("CACHE_CANDIDATE="+rel+" bytes_du="+str(kb*1024),flush=True)
               total+=kb*1024
-              print("CACHE_DELETED="+rel+" bytes_du="+str(kb*1024))
-          print("CACHE_FREED_ESTIMATE_BYTES="+str(total))
+              if apply:
+                  shutil.rmtree(p)
+                  if p.exists():raise RuntimeError("CACHE_REMOVE_INCOMPLETE")
+                  print("CACHE_DELETED="+rel+" bytes_du="+str(kb*1024),flush=True)
+          print(("CACHE_FREED_BYTES=" if apply else "CACHE_CANDIDATE_BYTES=")+str(total))
           PY
           echo 'POST_CACHE_CPANEL_QUOTA'
           if command -v uapi >/dev/null 2>&1; then
@@ -108,8 +130,10 @@ jobs:
           for path in / /agents/; do
             status="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
             echo "CACHE_POST_HEALTH=$path:$status"
+            test "$status" = 200
           done
       - name: Remove runner SSH identities
         if: always()
         shell: bash
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+# Owner-authorized disposable package cache cleanup; package-manager process guard added 2026-10-28.
