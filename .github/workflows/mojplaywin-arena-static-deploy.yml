@@ -104,15 +104,16 @@ jobs:
             ForwardAgent no
           EOF
           chmod 600 "$WORK/config"
-      - name: Confirm protected live pages and vacant Arena target before publication
+      - name: Confirm protected routes and only vacant or owner-marked Arena path
         shell: bash
         run: |
           set -euo pipefail
           for path in / /games/ /store/ /game-releases/20261020/index.html; do
             [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")" == "200" ]]
           done
-          [[ "$(curl --max-time 20 -sS -o /dev/null -w '%{http_code}' 'https://mojplaywin.com/arena/')" == '404' ]] || { echo 'Arena route collision or unexpected response'; exit 1; }
-          ssh -F "$RUNNER_TEMP/mpw-arena-ssh/config" saeit-host 'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -f /home/zomorod2/mojplaywin.com/game-releases/20261020/index.html && test ! -e /home/zomorod2/mojplaywin.com/arena && test ! -L /home/zomorod2/mojplaywin.com/arena'
+          arena_status="$(curl --max-time 20 -sS -o /dev/null -w '%{http_code}' 'https://mojplaywin.com/arena/')"
+          [[ "$arena_status" == '404' || "$arena_status" == '200' ]] || { echo 'Unexpected Arena route response'; exit 1; }
+          ssh -F "$RUNNER_TEMP/mpw-arena-ssh/config" saeit-host 'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -f /home/zomorod2/mojplaywin.com/game-releases/20261020/index.html && test ! -L /home/zomorod2/mojplaywin.com/arena && ( test ! -e /home/zomorod2/mojplaywin.com/arena || ( test -d /home/zomorod2/mojplaywin.com/arena && test -f /home/zomorod2/mojplaywin.com/arena/.mojplaywin-arena-owner.json ) )'
       - name: Package only the Arena static page and isolated installer
         shell: bash
         run: |
@@ -125,7 +126,7 @@ jobs:
           ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mpw-arena-$GITHUB_RUN_ID"
           scp -F "$WORK/config" "$RUNNER_TEMP/mpw-arena.tar" "saeit-host:/home/zomorod2/.mpw-arena-$GITHUB_RUN_ID/package.tar"
           ssh -F "$WORK/config" saeit-host "tar -xf /home/zomorod2/.mpw-arena-$GITHUB_RUN_ID/package.tar -C /home/zomorod2/.mpw-arena-$GITHUB_RUN_ID"
-      - name: Publish atomically to the vacant Arena-only namespace
+      - name: Install or upgrade only the owned Arena static namespace
         id: install
         shell: bash
         run: |
@@ -152,7 +153,7 @@ jobs:
             [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")" == "200" ]]
           done
           echo 'ARENA_LIVE_AND_SIBLINGS_UNCHANGED'
-      - name: Retain owned failed Arena offline without touching shared sites
+      - name: Restore previous owned Arena on failed public smoke
         if: failure() && steps.install.outcome == 'success' && steps.smoke.outcome == 'failure'
         shell: bash
         run: |
