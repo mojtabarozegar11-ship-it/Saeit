@@ -40,3 +40,26 @@ test('accepted gunshots persist earned points and consumed ammo without waiting 
  vm.runInNewContext('fire();',ctx);
  assert.equal(saved,1,'cooldown-rejected input must not write or spend ammo');
 });
+
+
+test('actual save() wiring leaves an existing campaign slot untouched in endless mode',()=>{
+ const start=game.indexOf('let saveWarningShown=false;function save(){');
+ const end=game.indexOf('\nfunction restore()',start);
+ assert.ok(start>0 && end>start,'save implementation must exist');
+ const source=game.slice(start,end);
+ const calls=[];
+ const context={world:{mission:6,endless:true,victory:false,gameOver:false,pickups:[]},
+  campaignSaveDisposition,saveKey:'rwNativeCampaign',
+  boundedCampaignPickups:()=>[],storageWrite:(key,val)=>{calls.push(['write',key,val]);return true},
+  storageRemove:key=>{calls.push(['remove',key]);return true},toast(){}};
+ vm.runInNewContext(source+'\nsave();',context);
+ assert.equal(calls.length,0,'survival must not touch the campaign slot');
+ context.world={mission:1,endless:false,victory:false,gameOver:false,pickups:[]};
+ vm.runInNewContext('save();',context);
+ assert.equal(calls.length,1);
+ assert.equal(calls[0][0],'write');
+ context.world.gameOver=true;
+ vm.runInNewContext('save();',context);
+ assert.equal(calls.length,2);
+ assert.equal(calls[1][0],'remove');
+});
