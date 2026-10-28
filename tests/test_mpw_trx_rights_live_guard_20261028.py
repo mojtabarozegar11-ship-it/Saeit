@@ -162,5 +162,38 @@ class GuardTests(unittest.TestCase):
                 self.assertEqual(before,{k:path.read_bytes() for k,path in paths.items()})
                 restart.assert_not_called()
 
+
+    def test_atomic_rejects_stale_source_without_overwriting(self):
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/"module.py"
+            path.write_bytes(b"newer external source")
+            with self.assertRaisesRegex(RuntimeError,"CONCURRENT_EDIT_BEFORE_REPLACE"):
+                guard.atomic(path,b"old release",expected=guard.digest(b"expected source"))
+            self.assertEqual(path.read_bytes(),b"newer external source")
+
+    def test_apply_detects_edit_between_preflight_and_replace(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            paths={k:root/(k+".py") for k in fixture()}
+            for k,path in paths.items():
+                path.write_text(fixture()[k],encoding="utf8")
+            original_atomic=guard.atomic
+            def concurrent_edit(path,raw,expected=None):
+                if path==paths["context"]:
+                    path.write_text(path.read_text("utf8")+"\\n# another agent edit\\n",encoding="utf8")
+                return original_atomic(path,raw,expected)
+            with patch.object(guard,"TARGETS",paths),\
+                 patch.object(guard,"BACKUPS",root/"private"),\
+                 patch.object(guard,"guard"),\
+                 patch.object(guard,"runtime_validate"),\
+                 patch.object(guard,"restart") as restart,\
+                 patch.object(guard,"atomic",side_effect=concurrent_edit):
+                with self.assertRaisesRegex(RuntimeError,"CONCURRENT_EDIT_BEFORE_REPLACE"):
+                    guard.operation("apply","202610280006")
+                self.assertIn("# another agent edit",paths["context"].read_text("utf8"))
+                for key in ("web","pages"):
+                    self.assertEqual(paths[key].read_text("utf8"),fixture()[key])
+                restart.assert_not_called()
+
 if __name__=="__main__":
     unittest.main()
