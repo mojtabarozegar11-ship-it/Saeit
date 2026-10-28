@@ -1,0 +1,77 @@
+name: ZM-R01 preserve original compact pilot evidence before expiry
+on:
+  push:
+    branches:
+      - research/mr-2026-001-novelty-audit
+    paths:
+      - .github/workflows/zm-r01-preserve-original-compact-pilot.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: zm-r01-compact-evidence-preservation
+  cancel-in-progress: false
+jobs:
+  preserve:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/mr-2026-001-novelty-audit
+          persist-credentials: true
+      - name: Check source artifact ID and immutable digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/"$GITHUB_REPOSITORY"/actions/artifacts/12618285422 --jq .expired)" = false
+          test "$(gh api repos/"$GITHUB_REPOSITORY"/actions/artifacts/12618285422 --jq .digest)" = 'sha256:0d2beb292eb5ffbed24e30237483513c3ac3cd1e188d2248098df0a5341f30a8'
+      - name: Retrieve five ORIGINAL compact evidence files (never download FASTQ)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zm-original"
+          gh run download 40222743342 --repo "$GITHUB_REPOSITORY" --name ZM-R01-SRR33083355-genuine-integer-gene-count-pilot --dir "$RUNNER_TEMP/zm-original"
+          test "$(find "$RUNNER_TEMP/zm-original" -maxdepth 1 -type f | wc -l)" -eq 5
+      - name: Independent original count, ENA manifest, mapping and integrity audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python research/manuscripts/ZM-R01/analysis/audit_original_pilot_artifact.py \
+            --artifact-dir "$RUNNER_TEMP/zm-original" \
+            --manifest research/manuscripts/ZM-R01/ENA_PRJNA1249400_OFFICIAL_24_RUN_PAIRED_FASTQ_MD5_2026-10-25.tsv \
+            --output "$RUNNER_TEMP/zm-original/independent_qc.json"
+          python - "$RUNNER_TEMP/zm-original/independent_qc.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          assert d["sparse_integer_table_integrity"]=="PASS"
+          assert d["unique_mapping_claim"]=="REFUTED_BY_ORIGINAL_BOWTIE2_SUMMARY"
+          assert d["scientific_release_gate"]=="BLOCKED_MULTIMAPPING_AND_ASSEMBLY"
+          assert d["publication_grade_DESeq2_matrix"] is False
+          print("Evidence preserved with FAIL-CLOSED science gate")
+          PY
+      - name: Archive and commit compact source evidence, not production output
+        shell: bash
+        run: |
+          set -euo pipefail
+          dest=research/manuscripts/ZM-R01/evidence
+          mkdir -p "$dest"
+          tar -C "$RUNNER_TEMP/zm-original" -czf "$dest/SRR33083355_original_compact_pilot_evidence.tar.gz" \
+            provenance.json alignment_summary.txt conservative_one_sample_integer_counts.tsv \
+            verified_ena_download_provenance.json wheat_cdna.fa.gz.sha256 independent_qc.json
+          cp "$RUNNER_TEMP/zm-original/independent_qc.json" "$dest/SRR33083355_independent_qc.json"
+          sha256sum "$dest/SRR33083355_original_compact_pilot_evidence.tar.gz" > "$dest/SRR33083355_original_compact_pilot_evidence.tar.gz.sha256"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$dest/SRR33083355_original_compact_pilot_evidence.tar.gz" "$dest/SRR33083355_independent_qc.json" "$dest/SRR33083355_original_compact_pilot_evidence.tar.gz.sha256"
+          if git diff --cached --quiet; then
+            echo "Identical evidence already committed"
+          else
+            git commit -m "research(ZM): preserve source-verified compact pilot and failed unique-mapping gate"
+            git push origin HEAD:refs/heads/research/mr-2026-001-novelty-audit
+          fi

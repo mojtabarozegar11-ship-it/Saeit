@@ -1,0 +1,34 @@
+name: AE C44 source-locked sharp quantile audit
+on:
+  push:
+    branches:
+      - research/mr-2026-001-novelty-audit
+    paths:
+      - .github/workflows/ae-c44-sharp-quantile-audit.yml
+      - research/manuscripts/AE-2026-001/analysis/c44_sharp_quantile_missingness_bounds.py
+      - research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-locked-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Recompute sharp full-frame quantile bounds from original SHA-locked CSV
+        run: |
+          python research/manuscripts/AE-2026-001/analysis/c44_sharp_quantile_missingness_bounds.py \
+            research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv \
+            > ae_c44_quantile_bounds.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ae-c44-sharp-quantile-source-locked
+          path: ae_c44_quantile_bounds.json
+          if-no-files-found: error
+          retention-days: 7

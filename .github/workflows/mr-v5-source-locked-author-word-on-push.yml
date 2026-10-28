@@ -1,0 +1,81 @@
+name: MR-2026-001 source-locked author-review Word (no deployment)
+on:
+  push:
+    branches:
+      - research/mr-2026-001-novelty-audit
+    paths:
+      - research/manuscripts/MR-2026-001/MR-2026-001_DIRECT_IRRIGATION_ADHERENCE_PRIOR_ART_AUTHOR_REVIEW_V5_2026-10-26.md
+      - .github/workflows/mr-v5-source-locked-author-word-on-push.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mr-v5-author-word-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-source-locked-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify research-only branch and source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "research/mr-2026-001-novelty-audit"
+          test -s research/manuscripts/MR-2026-001/MR-2026-001_DIRECT_IRRIGATION_ADHERENCE_PRIOR_ART_AUTHOR_REVIEW_V5_2026-10-26.md
+          mkdir -p /tmp/mr-review
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,re,json
+          p=Path('research/manuscripts/MR-2026-001/MR-2026-001_DIRECT_IRRIGATION_ADHERENCE_PRIOR_ART_AUTHOR_REVIEW_V5_2026-10-26.md')
+          s=p.read_text(encoding='utf-8')
+          refs=s.split('## References',1)
+          assert len(refs)==2, 'Reference section absent'
+          dois=set(re.findall(r'10\.\d{4,9}/[^\s)]+',refs[1]))
+          dois={x.rstrip('.,;') for x in dois}
+          ref_nums=[int(x) for x in re.findall(r'^(\d+)\. ',refs[1],re.M)]
+          assert len(ref_nums)>=22 and ref_nums==list(range(1,len(ref_nums)+1)), 'Reference numbering invalid'
+          assert len(dois)==len(ref_nums), f'DOI/reference mismatch: {len(dois)} unique DOIs for {len(ref_nums)} references'
+          for marker in ['ARIS LIAS','0.23','0.94','six commercial','24%','7%','C37','strictly hypothetical identifiability check','30 mm applied','not a validated','MAJOR REVISION']:
+              if marker=='MAJOR REVISION': continue
+              assert marker.lower() in s.lower(), f'Missing source revision: {marker}'
+          a=s.split('## Abstract',1)[1].split('\n## ',1)[0].strip()
+          assert 120 <= len(a.split()) <= 250
+          qa={'source_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),
+              'source_bytes':p.stat().st_size,'unique_reference_dois':len(dois),
+              'abstract_word_count':len(a.split()),
+              'status':'NOT SUBMITTED; AI MAJOR REVISION; human author review required'}
+          Path('/tmp/mr-review/source_qa.json').write_text(json.dumps(qa,indent=2)+'\n')
+          print(json.dumps(qa))
+          PY
+      - name: Produce Word without publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pandoc >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq pandoc
+          fi
+          python -m pip install --disable-pip-version-check python-docx==1.2.0
+          pandoc --from=gfm --to=docx --standalone \
+            research/manuscripts/MR-2026-001/MR-2026-001_DIRECT_IRRIGATION_ADHERENCE_PRIOR_ART_AUTHOR_REVIEW_V5_2026-10-26.md \
+            -o /tmp/mr-review/MR-2026-001_CURRENT_SOURCE_AUTHOR_REVIEW_NOT_SUBMITTED.docx
+          python - <<'PY'
+          from docx import Document
+          from pathlib import Path
+          p=Path('/tmp/mr-review/MR-2026-001_CURRENT_SOURCE_AUTHOR_REVIEW_NOT_SUBMITTED.docx')
+          d=Document(p)
+          text='\n'.join([x.text for x in d.paragraphs]+[c.text for t in d.tables for r in t.rows for c in r.cells])
+          for marker in ['ARIS LIAS','0.23','0.94','24%','7%','30 mm applied','10.1007/s11269-012-0023-3']:
+              assert marker in text, f'Word missing substantive source marker {marker}'
+          assert len(d.tables)>=1 and p.stat().st_size>10000
+          print('Word source-locked content QA PASS:',p.stat().st_size,'bytes; tables',len(d.tables))
+          PY
+      - name: Preserve author-review artifact only
+        uses: actions/upload-artifact@v4
+        with:
+          name: MR-2026-001-current-source-author-review-NOT-SUBMITTED
+          path: /tmp/mr-review/
+          retention-days: 14
+          if-no-files-found: error

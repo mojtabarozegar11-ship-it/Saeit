@@ -1,0 +1,105 @@
+{
+  "schema": "geo-candidate-manifest-v1",
+  "created_local_date": "2026-10-25",
+  "project": "ZM-R01",
+  "provenance": "NCBI GEO and BioProject indexed records; raw FASTQ and per-sample metadata not downloaded",
+  "raw_reads_downloaded": false,
+  "computational_analysis_run": false,
+  "series": [
+    {
+      "geo": "GSE157033",
+      "bioproject": "PRJNA659916",
+      "organism": "Triticum aestivum",
+      "geo_samples_reported": 15,
+      "sra_experiments_reported": 15,
+      "tissue": "flag leaf",
+      "genotypes": [
+        "TAM 111",
+        "TAM 112"
+      ],
+      "stages": [
+        "heading",
+        "grain filling"
+      ],
+      "treatments": [
+        "wet",
+        "dry"
+      ],
+      "candidate_status": "eligible after full metadata QC",
+      "design_issue": "15 samples vs 16 for an exactly balanced two-replicate 2x2x2 factorial; missing cell/replicate not yet determined",
+      "urls": [
+        "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE157033",
+        "https://www.ncbi.nlm.nih.gov/bioproject/PRJNA659916"
+      ],
+      "raw_data_hashes": null
+    },
+    {
+      "geo": "GSE226842",
+      "bioproject": "PRJNA941868",
+      "organism": "Triticum aestivum",
+      "geo_samples_reported": 12,
+      "sra_experiments_reported": 12,
+      "tissue": "second leaf",
+      "genotypes": [
+        "Atlas66; WT, BSMV control, TaZFP13D OEX and siRNA perturbations"
+      ],
+      "stages": [
+        "21 days post germination"
+      ],
+      "treatments": [
+        "well-watered",
+        "7-day drought"
+      ],
+      "candidate_status": "conditional external mechanistic comparator; not biological replicate of GSE157033",
+      "design_issue": "perturbation and control groups may have unequal biological replicates; verify sample-by-sample",
+      "urls": [
+        "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE226842",
+        "https://www.ncbi.nlm.nih.gov/bioproject/PRJNA941868"
+      ],
+      "raw_data_hashes": null
+    },
+    {
+      "geo": "GSE190755",
+      "bioproject": "PRJNA788400",
+      "organism": "Triticum aestivum",
+      "geo_samples_reported": 6,
+      "sra_experiments_reported": 6,
+      "tissue": "roots",
+      "genotypes": [
+        "six genotypes"
+      ],
+      "stages": [
+        "35 days"
+      ],
+      "treatments": [
+        "normal/well-watered only"
+      ],
+      "candidate_status": "exclude from drought-vs-control expression contrasts",
+      "design_issue": "no paired experimental drought treatment despite drought-tolerant/sensitive cultivar labels",
+      "urls": [
+        "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE190755",
+        "https://www.ncbi.nlm.nih.gov/bioproject/PRJNA788400"
+      ],
+      "raw_data_hashes": null
+    }
+  ],
+  "required_next_fields": [
+    "GSM",
+    "SRR",
+    "biosample",
+    "replicate_type",
+    "genotype",
+    "tissue",
+    "stage",
+    "drought_protocol",
+    "treatment",
+    "instrument",
+    "library_layout",
+    "fastq_md5",
+    "read_count",
+    "reference_genome",
+    "annotation_version",
+    "batch",
+    "qc_status"
+  ]
+}

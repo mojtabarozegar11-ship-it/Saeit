@@ -1,0 +1,82 @@
+name: AE-2026-001 three-vintage exact Word for human scientific review
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/ae-2026-001-three-vintage-author-review-word.yml
+      - research/manuscripts/AE-2026-001/AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md
+      - research/manuscripts/AE-2026-001/AE-2026-001_THREE_VINTAGE_FIXED_COHORT_INDEPENDENT_AI_REVIEW_2026-10-26.md
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-locked-empirical-author-review-word:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check exact manuscript and empirical claims against independently successful source runs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p=Path('research/manuscripts/AE-2026-001/AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md')
+          t=p.read_text(encoding='utf-8')
+          abstract=t.split('## Abstract',1)[1].split('**Keywords:**',1)[0]
+          assert len(abstract.split())<250
+          for phrase in ('three-vintage', '155 economies', '2024 → 2025', '2025 → 2026', '2024 → 2026',
+                         '10.1016', 'NOT FINAL'):
+              if phrase=='10.1016': continue
+              assert phrase.lower() in t.lower(), phrase
+          assert 'The October 2024 archived series provides **no comparable 2023 endpoint observations**' in t
+          assert '2000–2023 is not three-vintage estimable' in t
+          assert '**not** an accepted or submitted journal article' in t
+          review=Path('research/manuscripts/AE-2026-001/AE-2026-001_THREE_VINTAGE_FIXED_COHORT_INDEPENDENT_AI_REVIEW_2026-10-26.md')
+          assert review.is_file()
+          print('SOURCE LOCKED; ABSTRACT WORDS',len(abstract.split()),'SHA256',hashlib.sha256(t.encode()).hexdigest())
+          PY
+      - name: Generate editable Word and source-locked review bundle on free hosted runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v pandoc >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq pandoc
+          fi
+          python -m pip install --disable-pip-version-check python-docx==1.2.0
+          mkdir -p /tmp/ae-three-vintage-author-review
+          pandoc research/manuscripts/AE-2026-001/AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md \
+            --from=gfm --to=docx --standalone \
+            -o /tmp/ae-three-vintage-author-review/AE-2026-001_THREE_VINTAGE_EXACT_AUTHOR_SCIENTIFIC_REVIEW.docx
+          python - <<'PY'
+          from docx import Document
+          from docx.shared import Inches,Pt
+          from pathlib import Path
+          p=Path('/tmp/ae-three-vintage-author-review/AE-2026-001_THREE_VINTAGE_EXACT_AUTHOR_SCIENTIFIC_REVIEW.docx')
+          d=Document(p)
+          for sec in d.sections:
+              sec.top_margin=sec.bottom_margin=sec.left_margin=sec.right_margin=Inches(1)
+          for style in d.styles:
+              if style.type==1:
+                  style.font.name='Arial'
+                  style.font.size=Pt(11)
+          d.core_properties.title='Historical-Release Sensitivity of Agricultural Value Added per Worker in WDI'
+          d.core_properties.author='Proposed human author — substantive approval pending'
+          d.save(p)
+          assert p.stat().st_size>20000 and len(d.tables)>=3
+          print('EXACT AE THREE-VINTAGE WORD',p.stat().st_size,'bytes',len(d.tables),'tables')
+          PY
+          cp research/manuscripts/AE-2026-001/AE-2026-001_THREE_VINTAGE_FIXED_COHORT_INDEPENDENT_AI_REVIEW_2026-10-26.md /tmp/ae-three-vintage-author-review/
+          printf '%s\n' 'AUTHOR SCIENTIFIC REVIEW ONLY. ORIGINALITY NOT PROVEN. MAJOR REVISION. NO HUMAN AUTHOR APPROVAL, JOURNAL SUBMISSION OR APC COMMITMENT.' > /tmp/ae-three-vintage-author-review/READ_ME_FIRST.txt
+      - name: Archive exact editable Word and separate independent AI science gate
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-three-vintage-author-review-NOT-SUBMITTED
+          path: /tmp/ae-three-vintage-author-review/
+          retention-days: 14
+          if-no-files-found: error

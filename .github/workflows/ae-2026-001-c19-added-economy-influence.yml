@@ -1,0 +1,43 @@
+name: AE C19 exact added-economy influence (source-locked)
+on:
+  push:
+    branches:
+      - research/mr-2026-001-novelty-audit
+    paths:
+      - .github/workflows/ae-2026-001-c19-added-economy-influence.yml
+      - analysis/ae_2026_001_c19_added_economy_influence.py
+      - research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-locked-influence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compute exact 16-economy influence and fail closed on source mismatch
+        run: python analysis/ae_2026_001_c19_added_economy_influence.py > /tmp/ae_c19_console.json
+      - name: Verify exact attribution, sample gates and finite outputs
+        run: |
+          python - <<'PY'
+          import json, math
+          from pathlib import Path
+          p=Path("research_outputs/AE-2026-001/c19_added_economy_influence.json")
+          d=json.loads(p.read_text())
+          assert (d["base_n"],d["added_n"],d["pooled_n"])==(153,16,169)
+          assert len(d["added_economies"])==16
+          assert math.isclose(sum(x["exact_gap_contribution"] for x in d["added_economies"]),d["gap"],abs_tol=1e-11)
+          assert all(math.isfinite(x["growth_log_pp_y"]) for x in d["added_economies"])
+          assert 0.97<d["CAF_DJI_gap_share"]<0.99
+          print("PASS: 217 source, 153/16/169 cohorts, 16 exact contributions, finite output")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-C19-source-locked-influence
+          path: research_outputs/AE-2026-001/c19_added_economy_influence.json
+          if-no-files-found: error
+          retention-days: 30

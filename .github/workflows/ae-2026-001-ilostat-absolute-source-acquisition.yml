@@ -1,0 +1,67 @@
+name: AE-2026-001 bounded official ILOSTAT absolute-employment source acquisition
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/ae-2026-001-ilostat-absolute-source-acquisition.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  official-ilostat-source-readonly:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - name: Prepare R for native ILO-maintained Rilostat source format
+        uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: false
+      - name: Download bounded official ILOSTAT annual employment RDS and retain source bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ae_ilostat"
+          URL="https://rplumber.ilo.org/files/indicator/EMP_TEMP_SEX_ECO_NB_A.rds"
+          printf '%s\n' "$URL" > "$RUNNER_TEMP/ae_ilostat/source_url.txt"
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > "$RUNNER_TEMP/ae_ilostat/retrieved_utc.txt"
+          curl --fail --location --retry 2 --connect-timeout 15 --max-time 110 --max-filesize 60000000 \
+            --user-agent 'Academic research source integrity audit (public ILOSTAT; no bulk crawling)' \
+            --output "$RUNNER_TEMP/ae_ilostat/EMP_TEMP_SEX_ECO_NB_A.rds" "$URL"
+          test -s "$RUNNER_TEMP/ae_ilostat/EMP_TEMP_SEX_ECO_NB_A.rds"
+          sha256sum "$RUNNER_TEMP/ae_ilostat/EMP_TEMP_SEX_ECO_NB_A.rds" | tee "$RUNNER_TEMP/ae_ilostat/source_sha256.txt"
+          stat -c 'source_bytes=%s' "$RUNNER_TEMP/ae_ilostat/EMP_TEMP_SEX_ECO_NB_A.rds"
+      - name: Inspect source schema and preserve only 2000 and 2019 annual observations
+        shell: bash
+        run: |
+          set -euo pipefail
+          Rscript - <<'RS'
+          d <- Sys.getenv("RUNNER_TEMP")
+          dir <- file.path(d, "ae_ilostat")
+          p <- file.path(dir, "EMP_TEMP_SEX_ECO_NB_A.rds")
+          x <- readRDS(p)
+          stopifnot(is.data.frame(x), nrow(x) > 0)
+          cat("SOURCE_ROWS=", nrow(x), "\n", sep="")
+          cat("SOURCE_COLUMNS=", paste(names(x), collapse="|"), "\n", sep="")
+          writeLines(names(x), file.path(dir, "source_columns.txt"))
+          stopifnot("time" %in% names(x), "ref_area" %in% names(x), "obs_value" %in% names(x))
+          yrs <- as.character(x$time) %in% c("2000","2019")
+          z <- x[which(yrs), , drop=FALSE]
+          stopifnot(nrow(z) > 0)
+          cat("ENDPOINT_ROWS_ALL_SOURCES_AND_CLASSIFICATIONS=", nrow(z), "\n", sep="")
+          cat("ENDPOINT_COUNTRIES=", length(unique(as.character(z$ref_area))), "\n", sep="")
+          if ("sex" %in% names(z)) cat("SEX_CODES=", paste(sort(unique(as.character(z$sex))), collapse="|"), "\n", sep="")
+          if ("classif1" %in% names(z)) cat("ACTIVITY_CODES=", paste(head(sort(unique(as.character(z$classif1))),30), collapse="|"), "\n", sep="")
+          if ("classif2" %in% names(z)) cat("SECOND_CLASS_CODES=", paste(head(sort(unique(as.character(z$classif2))),30), collapse="|"), "\n", sep="")
+          if ("best_source" %in% names(z)) cat("BEST_SOURCE_CODES=", paste(unique(as.character(z$best_source)), collapse="|"), "\n", sep="")
+          write.csv(z, file.path(dir,"ILOSTAT_2000_2019_SOURCE_UNFILTERED.csv"), row.names=FALSE, na="")
+          cat("UNFILTERED_SOURCE_ENDPOINTS_EXTRACTED_NOT_EMPLOYMENT_VALIDATED\n")
+          RS
+          sha256sum "$RUNNER_TEMP/ae_ilostat/ILOSTAT_2000_2019_SOURCE_UNFILTERED.csv" \
+            > "$RUNNER_TEMP/ae_ilostat/endpoint_csv_sha256.txt"
+      - name: Preserve authentic source and endpoint records for separate comparability audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-official-ILOSTAT-absolute-employment-source-unfiltered
+          path: ${{ runner.temp }}/ae_ilostat/
+          retention-days: 14
+          if-no-files-found: error

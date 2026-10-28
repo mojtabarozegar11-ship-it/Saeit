@@ -1,0 +1,40 @@
+name: AE-2026-001 independent three-vintage rank and magnitude stability audit
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/ae-2026-001-independent-vintage-rank-stability.yml
+      - research/manuscripts/AE-2026-001/analysis/independent_three_vintage_rank_stability_audit.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit-original-three-vintage-fixed-cohort:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download source-hashed ORIGINAL real-WDI three-vintage artifact (no archive redownload)
+        uses: actions/download-artifact@v4
+        with:
+          name: AE-2026-001-2024-2025-2026-fixed-cohort-real-WDI-audit
+          run-id: 40241769129
+          github-token: ${{ github.token }}
+          repository: mojtabarozegar11-ship-it/Saeit
+          path: ${{ runner.temp }}/original-wdi-evidence
+      - name: Independently recompute country rank stability and magnitude of revision
+        run: |
+          python -m py_compile research/manuscripts/AE-2026-001/analysis/independent_three_vintage_rank_stability_audit.py
+          python research/manuscripts/AE-2026-001/analysis/independent_three_vintage_rank_stability_audit.py \
+            "${RUNNER_TEMP}/original-wdi-evidence/AE-2026-001_THREE_VINTAGE_FIXED_COHORT_AUDIT_2026-10-26.json" \
+            --output "${RUNNER_TEMP}/AE-2026-001_INDEPENDENT_RANK_STABILITY_2026-10-26.json"
+      - name: Preserve independent results (NOT scientific publication approval)
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-independent-vintage-rank-stability-NOT-SUBMITTED
+          path: ${{ runner.temp }}/AE-2026-001_INDEPENDENT_RANK_STABILITY_2026-10-26.json
+          retention-days: 14
+          if-no-files-found: error

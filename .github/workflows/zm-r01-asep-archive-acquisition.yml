@@ -1,0 +1,104 @@
+name: ZM-R01 independent institutional data archive acquisition
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths: [.github/workflows/zm-r01-asep-archive-acquisition.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-r01-asep-archive-acquisition
+  cancel-in-progress: false
+jobs:
+  acquire-and-classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install XLSX streaming reader
+        run: python -m pip install --disable-pip-version-check openpyxl==3.1.5
+      - name: Retrieve original CC-BY-4.0 ASEP archive and inspect contents without redistributing data
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib, json, pathlib, time, urllib.request, zipfile, io
+          from openpyxl import load_workbook
+          from urllib.error import HTTPError, URLError
+
+          source='https://asep.lib.cas.cz/arl-cav/en/csg/?key=90634794000&repo=crepo1'
+          dest=pathlib.Path('/tmp/zm-r01-asep.zip')
+          report_path=pathlib.Path('asep_acquisition_provenance.json')
+          report={'source':source,'archive_doi':'10.57680/asep.0640950',
+                  'archive_title':'Dataset_Milec.zip','expected_archive_size_mb':97.8,
+                  'source_license':'CC BY 4.0','status':'not_retrieved','archive_entries':[],
+                  'count_matrix_status':'unverified','notes':[
+                    'Metadata describes seven processed FPKM/statistics/gene-list workbooks.',
+                    'Only an actual unnormalized integer matrix with sample provenance qualifies as raw counts.',
+                    'Do not promote normalized FPKM/TPM or gene lists to integer raw counts.',
+                    'No source archive contents are uploaded or committed.'
+                  ]}
+          try:
+            last=None
+            for attempt in range(1,4):
+              try:
+                req=urllib.request.Request(source,headers={'User-Agent':'Mozilla/5.0 (scientific public data provenance audit)','Accept':'application/zip,application/octet-stream,*/*'})
+                with urllib.request.urlopen(req,timeout=45) as response, dest.open('wb') as out:
+                  total=0
+                  while True:
+                    block=response.read(1<<20)
+                    if not block: break
+                    total+=len(block)
+                    if total>140*1024*1024: raise ValueError('Download exceeds 140 MiB safety limit')
+                    out.write(block)
+                break
+              except (HTTPError,URLError,TimeoutError,ValueError) as exc:
+                last=exc
+                dest.unlink(missing_ok=True)
+                if attempt<3: time.sleep(5*attempt)
+            if not dest.exists(): raise RuntimeError('Archive retrieval failed: '+repr(last))
+            report['download_bytes']=dest.stat().st_size
+            report['sha256']=hashlib.sha256(dest.read_bytes()).hexdigest()
+            with zipfile.ZipFile(dest) as z:
+              infos=z.infolist()
+              if len(infos)>1000 or sum(x.file_size for x in infos)>2*1024**3:
+                raise ValueError('Archive extraction safety limit exceeded')
+              report['archive_entries']=[{'name':x.filename,'compressed_bytes':x.compress_size,
+                'uncompressed_bytes':x.file_size} for x in infos if not x.is_dir()]
+              workbook_summaries=[]
+              for x in infos:
+                if x.filename.lower().endswith('.xlsx') and x.file_size<600*1024*1024:
+                  with z.open(x) as fh:
+                    payload=fh.read()
+                  wb=load_workbook(io.BytesIO(payload),read_only=True,data_only=True)
+                  for sheet in wb:
+                    first=list(sheet.iter_rows(min_row=1,max_row=4,values_only=True))
+                    preview=[[str(v)[:60] if v is not None else None for v in row[:30]] for row in first]
+                    workbook_summaries.append({'file':x.filename,'sheet':sheet.title,
+                      'rows_reported':sheet.max_row,'cols_reported':sheet.max_column,
+                      'first_rows_preview':preview})
+                  wb.close()
+              report['workbook_summaries']=workbook_summaries
+              report['status']='archive_retrieved_and_inspected'
+              report['count_matrix_status']='requires_manual_validation_of_any_candidate'
+          except Exception as exc:
+            report['status']='retrieval_or_inspection_failed'
+            report['error']=type(exc).__name__+': '+str(exc)[:300]
+          finally:
+            report_path.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+            dest.unlink(missing_ok=True)
+          if report['status']!='archive_retrieved_and_inspected':
+            raise SystemExit('No archive inspection success; see provenance artifact for precise error')
+          PY
+      - name: Retain only provenance JSON (no dataset redistribution)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZM-R01-ASEP-public-archive-provenance
+          path: asep_acquisition_provenance.json
+          retention-days: 7
+          if-no-files-found: warn

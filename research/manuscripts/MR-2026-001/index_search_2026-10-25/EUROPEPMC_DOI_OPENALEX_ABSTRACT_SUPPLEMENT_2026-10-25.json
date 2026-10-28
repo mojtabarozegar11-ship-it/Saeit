@@ -1,0 +1,1588 @@
+{
+  "schema": "doi-metadata-enrichment-v1",
+  "utc": "2026-10-25T02:48:33.023Z",
+  "query": "DOI OR filter batches from original 95 Europe PMC records",
+  "pages": [
+    {
+      "batch": 1,
+      "requested": 15,
+      "returned": 15,
+      "index_hits": 15,
+      "url": "https://api.openalex.org/works?filter=doi%3A10.21203%2Frs.3.rs-11316023%2Fv1%7C10.1016%2Fj.jenvman.2026.130171%7C10.20944%2Fpreprints202610.1756.v1%7C10.21203%2Frs.3.rs-11292559%2Fv1%7C10.1038%2Fs41598-025-26567-z%7C10.20944%2Fpreprints202505.2029.v1%7C10.1016%2Fj.agwat.2025.109830%7C10.21203%2Frs.3.rs-7726774%2Fv1%7C10.21203%2Frs.3.rs-8808017%2Fv1%7C10.21203%2Frs.3.rs-8716571%2Fv1%7C10.20944%2Fpreprints202509.1877.v1%7C10.1038%2Fs41598-025-11908-9%7C10.1007%2Fs10661-024-13602-1%7C10.20944%2Fpreprints202503.1805.v1%7C10.21203%2Frs.3.rs-4258184%2Fv1&per_page=25&select=id,doi,title,abstract_inverted_index,publication_year,type"
+    },
+    {
+      "batch": 2,
+      "requested": 15,
+      "returned": 15,
+      "index_hits": 15,
+      "url": "https://api.openalex.org/works?filter=doi%3A10.1016%2Fj.scitotenv.2024.174705%7C10.1007%2Fs11119-024-10190-5%7C10.21203%2Frs.3.rs-2904576%2Fv1%7C10.3389%2Ffpls.2023.1094677%7C10.21203%2Frs.3.rs-5474956%2Fv1%7C10.1016%2Fj.scitotenv.2024.176368%7C10.1016%2Fj.scitotenv.2024.171240%7C10.20944%2Fpreprints202310.1009.v1%7C10.1007%2Fs11119-024-10171-8%7C10.1101%2F2024.09.03.610387%7C10.1016%2Fj.dib.2024.110225%7C10.3389%2Ffpls.2023.1149424%7C10.1515%2Fbiol-2022-0894%7C10.1038%2Fs41598-023-43286-5%7C10.3390%2Ffoods12061176&per_page=25&select=id,doi,title,abstract_inverted_index,publication_year,type"
+    },
+    {
+      "batch": 3,
+      "requested": 15,
+      "returned": 15,
+      "index_hits": 15,
+      "url": "https://api.openalex.org/works?filter=doi%3A10.1016%2Fj.agrformet.2022.108888%7C10.1038%2Fs41598-022-20896-z%7C10.1016%2Fj.fcr.2021.108149%7C10.1016%2Fj.compag.2020.105434%7C10.1007%2Fs11356-021-12524-6%7C10.3389%2Ffpls.2022.925548%7C10.1016%2Fj.compag.2019.05.053%7C10.1016%2Fj.agee.2021.107721%7C10.1016%2Fj.jenvman.2022.114722%7C10.1016%2Fj.compag.2020.105635%7C10.1016%2Fj.compag.2019.05.029%7C10.1016%2Fj.fcr.2019.107578%7C10.3390%2Fs20247129%7C10.1016%2Fj.heliyon.2020.e04989%7C10.1002%2Fcsc2.20127&per_page=25&select=id,doi,title,abstract_inverted_index,publication_year,type"
+    },
+    {
+      "batch": 4,
+      "requested": 15,
+      "returned": 15,
+      "index_hits": 15,
+      "url": "https://api.openalex.org/works?filter=doi%3A10.3390%2Fs20092526%7C10.1016%2Fj.compag.2018.07.024%7C10.1016%2Fj.agwat.2016.07.023%7C10.1016%2Fj.fcr.2019.05.013%7C10.1016%2Fj.fcr.2017.01.013%7C10.1016%2Fj.scitotenv.2020.141000%7C10.20944%2Fpreprints201910.0289.v1%7C10.3389%2Ffpls.2020.560466%7C10.1016%2Fj.compag.2015.06.008%7C10.1016%2Fj.scitotenv.2019.134718%7C10.3389%2Ffpls.2015.00319%7C10.3390%2Fijerph16132419%7C10.1007%2Fs10705-018-9959-x%7C10.1007%2Fs11119-016-9474-5%7C10.1016%2Fj.compag.2012.03.003&per_page=25&select=id,doi,title,abstract_inverted_index,publication_year,type"
+    },
+    {
+      "batch": 5,
+      "requested": 15,
+      "returned": 15,
+      "index_hits": 15,
+      "url": "https://api.openalex.org/works?filter=doi%3A10.1016%2Fj.scitotenv.2018.02.234%7C10.1016%2Fj.compag.2008.01.003%7C10.1016%2Fj.compag.2013.08.005%7C10.1016%2Fj.biosystemseng.2014.03.010%7C10.1021%2Fes301644y%7C10.1016%2Fj.jenvman.2005.09.001%7C10.1016%2Fj.compag.2014.04.007%7C10.1016%2Fj.biosystemseng.2011.04.007%7C10.1016%2Fj.fcr.2013.09.001%7C10.1016%2Fj.agee.2005.10.006%7C10.1071%2Fea02178%7C10.1007%2Fs10661-006-9359-6%7C10.1631%2Fjzus.2007.b0486%7C10.1016%2Fj.eja.2004.07.006%7C10.1016%2Fj.compag.2003.11.001&per_page=25&select=id,doi,title,abstract_inverted_index,publication_year,type"
+    },
+    {
+      "batch": 6,
+      "requested": 2,
+      "returned": 2,
+      "index_hits": 2,
+      "url": "https://api.openalex.org/works?filter=doi%3A10.1016%2Fj.agee.2003.09.025%7C10.1016%2Fj.jenvman.2005.08.009&per_page=25&select=id,doi,title,abstract_inverted_index,publication_year,type"
+    }
+  ],
+  "unique_requested_dois": 77,
+  "records_resolved": 77,
+  "abstracts_resolved": 38,
+  "source": "OpenAlex works API (indexed abstracts derived from inverted index)",
+  "limitations": "Not new independent formal full search; incomplete abstracts; no human screening or verified publisher full text",
+  "matches": [
+    {
+      "europepmc_id": "PPR:PPR1341726",
+      "title": "Artificial Intelligence in Agricultural Extension and Advisory Services: A Scoping Review of Applications, Explainability, Trust and Farmer-Centred Adoption",
+      "doi": "10.21203/rs.3.rs-11316023/v1",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:42263638",
+      "title": "Modeling soil organic carbon stocks and changes in agricultural cropping systems using a decision support tool and process-based model.",
+      "doi": "10.1016/j.jenvman.2026.130171",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "PPR:PPR1345649",
+      "title": "Quantifying and Narrowing the Yield Gap of Taro (Colocasia esculenta L., Schott) in Samoa Using a Biophysical Crop Model",
+      "doi": "10.20944/preprints202610.1756.v1",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "PPR:PPR1337574",
+      "title": "AI-Powered Agricultural Advisory System Using Retrieval-Augmented Generation",
+      "doi": "10.21203/rs.3.rs-11292559/v1",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:41309870",
+      "title": "Participatory evaluation of an irrigation decision support system for water-saving and productivity gains in Lake Urmia Basin.",
+      "doi": "10.1038/s41598-025-26567-z",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "PPR:PPR1026993",
+      "title": "Agricultural Remote Sensing with Case-Based Reasoning",
+      "doi": "10.20944/preprints202505.2029.v1",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND609302981",
+      "title": "A Spatial Decision Support System for climate-adapted agriculture designed with and for stakeholders in West Africa",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "AGR:IND609389712",
+      "title": "Integrating interactive decision making into evolutionary multiobjective agricultural optimization",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "MED:41112190",
+      "title": "Farmers agronomic management responses to extreme drought and rice yields in Bihar, India.",
+      "doi": "10.1016/j.agwat.2025.109830",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND609428231",
+      "title": "Enhancing AquaCrop-OSPy yield predictions with UAV-based remote sensing data: a case study on broccoli",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "PPR:PPR1117237",
+      "title": "Integrating Big Data and Machine Learning to Support Smart Village Decisions for Agricultural Productivity Improvement",
+      "doi": "10.21203/rs.3.rs-7726774/v1",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "PPR:PPR1154467",
+      "title": "AI-Enabled Precision Agriculture for Smallholder Farmers",
+      "doi": "10.21203/rs.3.rs-8808017/v1",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "PPR:PPR1153148",
+      "title": "Climate Resilient Crop Zoning in Tamil Nadu, India: A 25 year assessment of major food crops",
+      "doi": "10.21203/rs.3.rs-8716571/v1",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND609247309",
+      "title": "Probabilistic estimates of drought-induced yield loss in the Southeastern United States",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "PPR:PPR1089926",
+      "title": "Artificial Intelligence in Agriculture: Ethical Stewardship, Responsible Innovation, and Governance for Sustainable Food Systems",
+      "doi": "10.20944/preprints202509.1877.v1",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:40664943",
+      "title": "Modeling farmer responses to reservoir operation policies using agent based analysis of risk behavior and irrigation adoption.",
+      "doi": "10.1038/s41598-025-11908-9",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND609012555",
+      "title": "AquaCrop-IoT: A smart irrigation platform integrating real-time images and weather forecasting",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "MED:39808214",
+      "title": "Utilizing convolutional neural network (CNN) for orchard irrigation decision-making.",
+      "doi": "10.1007/s10661-024-13602-1",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "PPR:PPR994706",
+      "title": "AGRARIAN: A Hybrid AI-Driven Architecture for Smart Agriculture",
+      "doi": "10.20944/preprints202503.1805.v1",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No match returned by requested OpenAlex DOI filter"
+    },
+    {
+      "europepmc_id": "PPR:PPR837789",
+      "title": "Robust Planning of Irrigation Considering Water Consumption and Revenue",
+      "doi": "10.21203/rs.3.rs-4258184/v1",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No match returned by requested OpenAlex DOI filter"
+    },
+    {
+      "europepmc_id": "MED:39002586",
+      "title": "Tracking and managing the water-food-environment-ecosystem (WFEE) nexus in groundwater irrigation districts using system dynamics modelling.",
+      "doi": "10.1016/j.scitotenv.2024.174705",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND608819267",
+      "title": "Multiobjective optimization of daily scale irrigation schedules for rice in irrigation districts considering joint uncertainties in water supply and demand",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "AGR:IND608702849",
+      "title": "A low cost sensor to improve surface irrigation management",
+      "doi": "10.1007/s11119-024-10190-5",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND608740376",
+      "title": "Convolutional Neural Networks accurately predict soil matric potential from soil, weather, and satellite-derived data",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "PPR:PPR671761",
+      "title": "A Simple-Structured Framework for Decision Support System in Irrigation Water Management: Tool Description and Preliminary Testing",
+      "doi": "10.21203/rs.3.rs-2904576/v1",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:36968371",
+      "title": "Usefulness of cultivar-level calibration of AquaCrop for vegetables depends on the crop and data availability.",
+      "doi": "10.3389/fpls.2023.1094677",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND609239267",
+      "title": "Integration of sentinel-2 data into the SIMETAW model for assessing irrigation water requirements and evapotranspiration",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "PPR:PPR949824",
+      "title": "A Novel Decision Support System for Generating Irrigation Ecolabels Based on the Resource Overutilization Ratio",
+      "doi": "10.21203/rs.3.rs-5474956/v1",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:39307368",
+      "title": "Evaluating the impact of weather forecasts on productivity and environmental footprint of irrigated maize production systems.",
+      "doi": "10.1016/j.scitotenv.2024.176368",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:38417529",
+      "title": "Evaluating the environmental impacts of smart vineyards through the Life Cycle Assessment.",
+      "doi": "10.1016/j.scitotenv.2024.171240",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND608740372",
+      "title": "A spatial machine-learning model for predicting crop water stress index for precision irrigation of vineyards",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "AGR:IND608721131",
+      "title": "Estimating soil mineral nitrogen from data-sparse field experiments using crop model-guided deep learning approach",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "PPR:PPR743183",
+      "title": "Agricultural IOT, Cloud Computing and Mobile Based Application Integration for the Total Discharge Predication of Two Farms Smart Agricultural System to Avoid Flooding",
+      "doi": "10.20944/preprints202310.1009.v1",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND608702843",
+      "title": "A holistic simulation model of solid-set sprinkler irrigation systems for precision irrigation",
+      "doi": "10.1007/s11119-024-10171-8",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "PPR:PPR907301",
+      "title": "Estimating soil mineral nitrogen from data-sparse field experiments using crop model-guided machine learning approach",
+      "doi": "10.1101/2024.09.03.610387",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No match returned by requested OpenAlex DOI filter"
+    },
+    {
+      "europepmc_id": "MED:38435739",
+      "title": "An agro-physiological dataset on industrial tomatoes from nine years of field experiments conducted with alternative water-saving strategies in Mediterranean environments.",
+      "doi": "10.1016/j.dib.2024.110225",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:36968387",
+      "title": "Sensor feedback system enables automated deficit irrigation scheduling for cotton.",
+      "doi": "10.3389/fpls.2023.1149424",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:39022162",
+      "title": "Fertilizer application parameters for drip-irrigated peanut based on the fertilizer effect function established from a \"3414\" field trial.",
+      "doi": "10.1515/biol-2022-0894",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND607429846",
+      "title": "Demonstration of a low-cost and open-source platform for on-farm monitoring and decision support",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "AGR:IND606868738",
+      "title": "Development of a closed-loop irrigation system for sugarcane farms using the Internet of Things",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "MED:37749180",
+      "title": "Integrating GIS and remote sensing for land use/land cover mapping and groundwater potential assessment for climate-smart cocoa irrigation in Ghana.",
+      "doi": "10.1038/s41598-023-43286-5",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:36981104",
+      "title": "Assessing Future Climate Change Impacts on Potato Yields - A Case Study for Prince Edward Island, Canada.",
+      "doi": "10.3390/foods12061176",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND608036185",
+      "title": "Relay cropping for sustainable intensification of agriculture across temperate regions: Crop management challenges and future research priorities",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "AGR:IND607331719",
+      "title": "Ten years of corn yield dynamics at field scale under digital agriculture solutions: A case study from North Italy",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "AGR:IND607694196",
+      "title": "Statistical verification of 16-day rainfall forecast for a farmers advisory service in Pakistan",
+      "doi": "10.1016/j.agrformet.2022.108888",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:36229485",
+      "title": "Whole farm planning raises profit despite burgeoning climate crisis.",
+      "doi": "10.1038/s41598-022-20896-z",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND607340644",
+      "title": "Thirty years of agronomy research for development in irrigated rice-based cropping systems in the West African Sahel: Achievements and perspectives",
+      "doi": "10.1016/j.fcr.2021.108149",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND606898132",
+      "title": "Dynamic Simulation Tool of fertigation in drip irrigation subunits",
+      "doi": "10.1016/j.compag.2020.105434",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND607133630",
+      "title": "IrrigaSys: A web-based irrigation decision support system based on open source data and technology",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "MED:33486684",
+      "title": "Application of smart irrigation systems for water conservation in Italian farms.",
+      "doi": "10.1007/s11356-021-12524-6",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:36325567",
+      "title": "Impact of climate change on agricultural production; Issues, challenges, and opportunities in Asia.",
+      "doi": "10.3389/fpls.2022.925548",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND606466263",
+      "title": "A review of visualisations in agricultural decision support systems: An HCI perspective",
+      "doi": "10.1016/j.compag.2019.05.053",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND607550854",
+      "title": "Effects of deforestation and afforestation on water availability for dry bean production in Haiti",
+      "doi": "10.1016/j.agee.2021.107721",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:35217446",
+      "title": "Life Cycle Thinking for the environmental and financial assessment of rice management systems in the Senegal River Valley.",
+      "doi": "10.1016/j.jenvman.2022.114722",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND607055370",
+      "title": "A satellite-based ex post analysis of water management in a blueberry orchard",
+      "doi": "10.1016/j.compag.2020.105635",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND606441758",
+      "title": "D-Risk: A decision-support webtool for improving drought risk management in irrigated agriculture",
+      "doi": "10.1016/j.compag.2019.05.029",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:31534299",
+      "title": "Field-specific nutrient management using Rice Crop Manager decision support tool in Odisha, India.",
+      "doi": "10.1016/j.fcr.2019.107578",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND606544567",
+      "title": "Field-specific nutrient management using Rice Crop Manager decision support tool in Odisha, India",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "MED:33322717",
+      "title": "A Decision Support System for Water Optimization in Anti-Frost Techniques by Sprinklers.",
+      "doi": "10.3390/s20247129",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:33195830",
+      "title": "A decision support system for institutional support to farmers in the face of climate change challenges in Limpopo province.",
+      "doi": "10.1016/j.heliyon.2020.e04989",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND607867182",
+      "title": "Canopy temperature of high‐nitrogen water‐stressed cotton",
+      "doi": "10.1002/csc2.20127",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:32365621",
+      "title": "Automatic Irrigation Scheduling on a Hedgerow Olive Orchard Using an Algorithm of Water Balance Readjusted with Soil Moisture Sensors.",
+      "doi": "10.3390/s20092526",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND606101598",
+      "title": "USING decision models to enable better irrigation Decision Support Systems",
+      "doi": "10.1016/j.compag.2018.07.024",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:28154450",
+      "title": "Evaluation of new farming technologies in Ethiopia using the Integrated Decision Support System (IDSS).",
+      "doi": "10.1016/j.agwat.2016.07.023",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND606449891",
+      "title": "Site-specific nutrient management for rice in the Philippines: Calculation of field-specific fertilizer requirements by Rice Crop Manager",
+      "doi": "10.1016/j.fcr.2019.05.013",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND607550743",
+      "title": "Production analysis of composite fish culture in drought prone areas of Purulia: The implication of financial constraint",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "AGR:IND605641920",
+      "title": "Modeling the water and nitrogen productivity of sunflower using OILCROP-SUN model in Pakistan",
+      "doi": "10.1016/j.fcr.2017.01.013",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:32721611",
+      "title": "Coupled DSSAT-SWAT models to reduce off-site N pollution in Mediterranean irrigated watershed.",
+      "doi": "10.1016/j.scitotenv.2020.141000",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "PPR:PPR99966",
+      "title": "Perception of Environmental Spillovers across Scale in Climate Change Adaptation Planning: The Case of Small-Scale Farmers’ Irrigation Strategies, Kenya",
+      "doi": "10.20944/preprints201910.0289.v1",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No match returned by requested OpenAlex DOI filter"
+    },
+    {
+      "europepmc_id": "MED:33312182",
+      "title": "Narrowing Yield Gaps and Enhancing Nitrogen Utilization for Summer Maize (Zea mays L) by Combining the Effects of Varying Nitrogen Fertilizer Input and Planting Density in DSSAT Simulations.",
+      "doi": "10.3389/fpls.2020.560466",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND605412063",
+      "title": "On-farm testing of a nutrient management decision-support tool for rice in the Senegal River valley",
+      "doi": "10.1016/j.compag.2015.06.008",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:31734504",
+      "title": "Desiccation crisis of saline lakes: A new decision-support framework for building resilience to climate change.",
+      "doi": "10.1016/j.scitotenv.2019.134718",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:26042128",
+      "title": "A decision support system (GesCoN) for managing fertigation in open field vegetable crops. Part I-methodological approach and description of the software.",
+      "doi": "10.3389/fpls.2015.00319",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND606739199",
+      "title": "How does smallholder farming practice and environmental awareness vary across village communities in the karst terrain of southwest China?",
+      "doi": "",
+      "openalex_match": false,
+      "abstract_obtained": false,
+      "unmatched_reason": "No DOI in original Europe PMC metadata"
+    },
+    {
+      "europepmc_id": "MED:31288396",
+      "title": "Development of a Hydrologic and Water Allocation Model to Assess Water Availability in the Sabor River Basin (Portugal).",
+      "doi": "10.3390/ijerph16132419",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:32684798",
+      "title": "Web-based tool for calculating field-specific nutrient management for rice in India.",
+      "doi": "10.1007/s10705-018-9959-x",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND605742083",
+      "title": "Mobile terrestrial laser scanner applications in precision fruticulture/horticulture and tools to extract information from canopy point clouds",
+      "doi": "10.1007/s11119-016-9474-5",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND44787309",
+      "title": "Using a mobile phone Short Messaging Service (SMS) for irrigation scheduling in Australia â Farmersâ participation and utility evaluation",
+      "doi": "10.1016/j.compag.2012.03.003",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:29486443",
+      "title": "SWAT-MODSIM-PSO optimization of multi-crop planning in the Karkheh River Basin, Iran, under the impacts of climate change.",
+      "doi": "10.1016/j.scitotenv.2018.02.234",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND44037588",
+      "title": "Use of a decision support system and a simulation game to help collective decision-making in water management",
+      "doi": "10.1016/j.compag.2008.01.003",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND500695255",
+      "title": "The role of information and communication technologies in the modernisation of water user associations’ management",
+      "doi": "10.1016/j.compag.2013.08.005",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND605366891",
+      "title": "Drip vs. surface irrigation: A comparison focussing on water saving and economic returns using multicriteria analysis applied to cotton",
+      "doi": "10.1016/j.biosystemseng.2014.03.010",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:22894858",
+      "title": "Life cycle assessment based evaluation of regional impacts from agricultural production at the Peruvian coast.",
+      "doi": "10.1021/es301644y",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:16288826",
+      "title": "A decision support for an integrated multi-scale analysis of irrigation: DSIRR.",
+      "doi": "10.1016/j.jenvman.2005.09.001",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND605411811",
+      "title": "Integrating soil water monitoring technology and weather based crop modelling to provide improved decision support for sugarcane irrigation management",
+      "doi": "10.1016/j.compag.2014.04.007",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND44615167",
+      "title": "Furrow irrigation design with multicriteria analysis",
+      "doi": "10.1016/j.biosystemseng.2011.04.007",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND605334749",
+      "title": "Precision nutrient management in conservation agriculture based wheat production of Northwest India: Profitability, nutrient use efficiency and environmental footprint",
+      "doi": "10.1016/j.fcr.2013.09.001",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND43843771",
+      "title": "Environmental assessment tools for multi-scale land resources information systems. A case study of Rwanda",
+      "doi": "10.1016/j.agee.2005.10.006",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND43723155",
+      "title": "Bayesian networks for decision analyses--an application to irrigation system selection.",
+      "doi": "10.1071/ea02178",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:16957838",
+      "title": "Impact assessment and recommendation of alternative conjunctive water use strategies for salt affected agricultural lands through a field scale decision support system - a case study.",
+      "doi": "10.1007/s10661-006-9359-6",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:17610328",
+      "title": "Potential production simulation and optimal nutrient management of two hybrid rice varieties in Jinhua, Zhejiang Province, China.",
+      "doi": "10.1631/jzus.2007.b0486",
+      "openalex_match": true,
+      "abstract_obtained": true,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND43668517",
+      "title": "Adaptation of crop management to water-limited environments",
+      "doi": "10.1016/j.eja.2004.07.006",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND43691340",
+      "title": "GPFARM modeling of corn yield and residual soil nitrate-N",
+      "doi": "10.1016/j.compag.2003.11.001",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "AGR:IND43729173",
+      "title": "An integrated non-point source model-GIS system for selecting criteria of best management practices in the Po Valley, North Italy",
+      "doi": "10.1016/j.agee.2003.09.025",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    },
+    {
+      "europepmc_id": "MED:16337082",
+      "title": "Sustainability of farmers' soil fertility management practices: a case study in the North China Plain.",
+      "doi": "10.1016/j.jenvman.2005.08.009",
+      "openalex_match": true,
+      "abstract_obtained": false,
+      "unmatched_reason": ""
+    }
+  ],
+  "openalex_doi_metadata": [
+    {
+      "openalex_id": "https://openalex.org/W4409634967",
+      "doi": "10.3390/agriculture15080904",
+      "title": "AGRARIAN: A Hybrid AI-Driven Architecture for Smart Agriculture",
+      "publication_year": 2025,
+      "type": "article",
+      "abstract": "Modern agriculture is increasingly challenged by the need for scalable, sustainable, and connectivity-resilient digital solutions. While existing smart farming platforms offer valuable insights, they often rely heavily on centralized cloud infrastructure, which can be impractical in rural or remote settings. To address this gap, this paper presents AGRARIAN, a hybrid AI-driven architecture that combines IoT sensor networks, UAV-based monitoring, satellite connectivity, and edge-cloud computing to deliver real-time, adaptive agricultural intelligence. AGRARIAN supports a modular and interoperable architecture structured across four layers—Sensor, Network, Data Processing, and Application—enabling flexible deployment in diverse use cases such as precision irrigation, livestock monitoring, and pest forecasting. A key innovation lies in its localized edge processing and federated AI models, which reduce reliance on continuous cloud access while maintaining analytical performance. Pilot scenarios demonstrate the system’s ability to provide timely, context-aware decision support, enhancing both operational efficiency and digital inclusion for farmers. AGRARIAN offers a robust and scalable pathway for advancing autonomous, sustainable, and connected farming systems.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4416763963",
+      "doi": "10.1038/s41598-025-26567-z",
+      "title": "Participatory evaluation of an irrigation decision support system for water-saving and productivity gains in Lake Urmia Basin",
+      "publication_year": 2025,
+      "type": "article",
+      "abstract": "This study evaluated an irrigation decision support system (DSS) for irrigation planning based on actual farm conditions and types of irrigation systems in eight farms and four villages in the Mahabad Plain irrigation and drainage network in the Urmia Lake basin with farmer participation in irrigation planning decision. This system allows farmers to determine the actual irrigation needs of each crop based on various factors such as soil texture type, crop growth stages, climatic conditions, weather forecast, farm or garden shape, landholding status, and the type of irrigation system available in the farm or garden for precise irrigation. Data were collected through field measurements and Participatory Rural Appraisal (PRA) techniques. The results showed that optimized irrigation with DSS resulted in significant agricultural water savings, 41% for drip systems and 14% for sprinkler systems compared to control plots. In drip systems, the greater savings were due to farmers' concerns of over irrigation because of erratic water delivery. Water use, however, increased slightly in surface irrigation systems by 2.8% due to improve advancement in control mechanisms and better end irrigation timing. Furthermore, the productivity of water resources improved with the implementation of the DSS for all systems, 3.87% in drip, 7.20% in sprinkler, and 1.5% in surface irrigation systems. Proper and timely irrigation scheduling increases water productivity, as the study highlights. Regarding surface irrigation, the study recommends system optimizations, such as reducing plot lengths to enhance DSS efficiency. Collectively, the results emphasize the significant of employing innovative approaches and integrating advanced technologies like DSS for improving irrigation automation and efficiency. Active stakeholders contributed significantly to determining optimal design sustainability and performance improvements for the collaborative irrigation systems.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4412429242",
+      "doi": "10.1038/s41598-025-11908-9",
+      "title": "Modeling farmer responses to reservoir operation policies using agent based analysis of risk behavior and irrigation adoption",
+      "publication_year": 2025,
+      "type": "article",
+      "abstract": "Understanding farmers' responses to reservoir operation policies is crucial for water resources management. This study employs an Agent-Based model with established socio-hydrological rules to simulate farmers' decision-making. Operator agents utilize either the Standard Operation Policy (SOP), a hedging rule (strategies to balance water shortages over time), or a dynamic informed hedging rule for reservoir operation. Farmer agents annually decide on land cultivation and the potential adoption of modern irrigation systems based on socioeconomic characteristics and water availability. The study focuses on Iran's Borkhar Plain, modeling operator and farmer agents within MODSIM, a decision-support system used for water allocation and reservoir operations. Results indicate that high-risk-taking farmers tend to cultivate more land, particularly under SOP averaging 69.6%, while under the hedging rule, farmers' decisions became more predictable, with reduced land use averaging 63.6% and retaining profitability. The dynamic informed hedging rule scheme, however, resulted in the most synchronized farmer behavior, with land use decreasing further to 54% without a significant decrease in profitability. Adoption of modern irrigation systems was significantly influenced by education levels and risk-taking behavior. Adoption rates increased across policies, from 37.5% under SOP to 45.83% under the hedging rule, and peaked at 62.5% under the informed hedging rule scheme.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4414521479",
+      "doi": "10.1016/j.agwat.2025.109830",
+      "title": "Farmers agronomic management responses to extreme drought and rice yields in Bihar, India",
+      "publication_year": 2025,
+      "type": "article",
+      "abstract": "In 2022, the Indian state of Bihar experienced its sixth driest year in over a century. To document the consequences and farmer responses to the meteorological drought, real-time survey data was collected across 11 districts of Bihar. We then developed a causal machine learning model to quantify drought impacts on rice production and to characterize how access to affordable irrigation from electric pumps mitigated productivity losses. This model addresses the empirical challenge of conducting a counterfactual causal analysis when a factor like drought affects nearly all sampled farmers. In the 2022 event, drought led to rice acreage reduction, transplanting delays, damage to seedling nurseries, and higher use rates of supplemental irrigation. For fields that were planted, average yield losses from water stress were estimated as 0.94 t/ha (∼23 % yield loss) with these losses reduced by 0.3 t/ha in fields with access to electric tubewells. Agronomic management practices such as earlier transplanting were also identified as complementary strategies that increased the adaptation value of investments in irrigation. To reduce the impact of drought in Bihar, additional investments in electric irrigation infrastructure are needed along with focused extension efforts and decision support systems that empower farmers to make economically and sustainably rational use of available water resources to maintain yield and profitability. • Affordable irrigation is considered a panacea for recurrent droughts but not much known for extreme droughts. • In 2022, Bihar experienced a sixth driest agricultural season. • Causal machine learning framework allowed testing of drought impact on crop management and yields. • Affordable irrigation requires complementary agronomic services to deal with extreme droughts.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4406361655",
+      "doi": "10.1007/s10661-024-13602-1",
+      "title": "Utilizing convolutional neural network (CNN) for orchard irrigation decision-making",
+      "publication_year": 2025,
+      "type": "article",
+      "abstract": "Efficient agricultural management often relies on farmers' experiential knowledge and demands considerable labor, particularly in regions with challenging terrains. To reduce these burdens, the adoption of smart technologies has garnered increasing attention. This study proposes a convolutional neural network (CNN)-based model as a decision-support tool for smart irrigation in orchard systems, focusing on persimmon cultivation in mountainous regions. Soil moisture data and corresponding leaf RGB images were collected over two growing seasons to train, test, and validate the CNN model for determining optimal irrigation timing. The model achieved over 80% accuracy in identifying water stress levels in persimmon trees based on leaf images. These findings indicate the potential of the developed model as a key component of a remote irrigation system. However, the model's performance limitations and challenges in adapting to diverse field conditions underscore the need for further research to enhance its robustness and applicability.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W7128685462",
+      "doi": "10.21203/rs.3.rs-8808017/v1",
+      "title": "AI-Enabled Precision Agriculture for Smallholder Farmers",
+      "publication_year": 2026,
+      "type": "preprint",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4410768057",
+      "doi": "10.20944/preprints202505.2029.v1",
+      "title": "Agricultural Remote Sensing with Case-Based Reasoning",
+      "publication_year": 2025,
+      "type": "preprint",
+      "abstract": "The integration of Case-Based Reasoning (CBR) with Internet of Things (IoT) technologies are proposed for enhancing decision-making efficiency in agricultural practices. The proposed conceptual model (CBRIoT) leverages IoT devices such as soil moisture sensors, weather stations, and drones to collect real-time environmental data, which is then processed, stored, and integrated into a central knowledge base. The CBR system retrieves similar past cases based on new IoT data, offering personalized recommendations for agricultural interventions, such as irrigation, pest control, and disease management. A real-time feedback loop allows dynamic adaptation of recommendations, responding to changing conditions like weather shifts or pest infestations. The system’s performance is evaluated across various datasets (Agriculture-Vision, Extended Agriculture-Vision, Smart Agriculture, and others), demonstrating that the CBRIoT model outperforms traditional models in terms of decision-making efficiency, processing time, and scalability. The results show that the CBRIoT model significantly improves decision-making accuracy and processing time compared to Vegetation Index Models (VIM), Machine Learning-Based Classification (MLBC), Geostatistical Models (GM), and Rule-Based Decision Support Systems (RBDSS). The system continuously updates its knowledge base through new data and interventions, leading to a self-improving decision support system that enhances agricultural practices over time. The CBR+IoT approach provides a scalable and efficient solution for modernizing agriculture, offering actionable insights to farmers and contributing to better resource management and crop yields.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4401916355",
+      "doi": "10.56850/jnse.1478848",
+      "title": "ROBUST PLANNING OF IRRIGATION CONSIDERING WATER CONSUMPTION AND REVENUE",
+      "publication_year": 2024,
+      "type": "article",
+      "abstract": "Abstract Water scarcity is a problem for many regions which requires immediate action and solutions cannot be postponed for a long time. It is known that farming consumes a significant portion of usable water. In this study, a decision support model of bi-objective stochastic linear formulation is proposed. The model is generating annual planting plans together with water consumption projections for each farmer in the region while taking revenue of the overall harvest into account. The structure of the proposed model maintains robustness against the volatilities in precipitation, yield, and market price. The inherent trade-off between water consumption and revenue lends itself to multi-objective planning. This is a perspective especially useful for regional administrations to plan next year's crop pattern together with agricultural incomes and irrigation expenses. Furthermore, it is also shown that how the model can be used to investigate the potential of rainwater harvesting or switching to water-efficient irrigation methodologies. The decision support model is especially unique in the sense that it can generate a set of Pareto optimum solutions as opposed to a single objective counterpart. This property is helpful in terms of not only providing a broader perspective to evaluate and project the possibilities but also increasing the applicability of the results by providing flexible design framework.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4414485612",
+      "doi": "10.20944/preprints202509.1877.v1",
+      "title": "Artificial Intelligence in Agriculture: Ethical Stewardship, Responsible Innovation, and Governance for Sustainable Food Systems",
+      "publication_year": 2025,
+      "type": "preprint",
+      "abstract": "Agriculture’s “4.0” transition increasingly relies on artificial intelligence (AI), IoT sensing, robotics, and decision-support. This review synthesizes Q1/Q2 scholarship, multilateral policy, and national AI strategies to assess how AI is changing farm stewardship and what guardrails align innovation with equity and sustainability. Methods combine a systematic literature review, comparative policy analysis (FAO, OECD, India’s #AIForAll, Rwanda AI Policy), NLP-assisted meta-synthesis of agri-AI discourse, theological analysis of stewardship texts (Gen 1:26–28, Gen 2:15), and case illustrations (precision irrigation, UAV spraying, mobile advisory). Results show AI improves resource-use efficiency and foresight (e.g., precision irrigation; targeted drone spraying) while introducing risks of dependency, opacity, and data-extractive business models. We propose a multi-level governance scaffold—farmer-centric data rights, explainability thresholds, context-appropriate human oversight, and compute-energy budgeting—mapped to Responsible Innovation (AIRR) and Value-Sensitive Design. We translate stewardship into measurable design constraints (e.g., water-withdrawal and biodiversity “red lines,” local-language interfaces, offline capability). Policy implications include numbered-style impact assessments, mandatory farmer representation on regional AI councils, and adoption equity metrics. Properly governed, AI can act as a tool of care for households, communities, and creation rather than a driver of technocratic consolidation.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4416118375",
+      "doi": "10.21203/rs.3.rs-7726774/v1",
+      "title": "Integrating Big Data and Machine Learning to Support Smart Village Decisions for Agricultural Productivity Improvement",
+      "publication_year": 2025,
+      "type": "preprint",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W7128429309",
+      "doi": "10.21203/rs.3.rs-8716571/v1",
+      "title": "Climate Resilient Crop Zoning in Tamil Nadu, India: A 25 year assessment of major food crops",
+      "publication_year": 2026,
+      "type": "preprint",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W7163909862",
+      "doi": "10.1016/j.jenvman.2026.130171",
+      "title": "Modeling soil organic carbon stocks and changes in agricultural cropping systems using a decision support tool and process-based model",
+      "publication_year": 2026,
+      "type": "article",
+      "abstract": "Soil organic carbon (SOC) is a key indicator of soil health, yet changes in SOC often take decades to detect. Assessment tools, accessible to non-expert users, are needed to accurately and cost-effectively quantify SOC stocks. Soil sampling and analysis are ideal for quantification but are also resource- and time-intensive. A decision-support tool, COMET-Farm, could improve the transition to low-C agricultural supply chains; however, it was designed to estimate ΔSOC rather than SOC stocks directly, and its accuracy across diverse agricultural settings remains uncertain. We investigated whether the COMET-Farm tool could accurately estimate SOC stocks on 15 working farms in Maryland with variable management practices, including tillage, cover cropping, manure application, and irrigation. Field-measured SOC stocks (0–20 cm soil depth) of 17.1 to 73.6 Mg ha −1 were compared with model-predicted values using farmer-reported data in (i) COMET-Farm with default inputs supplied to DayCent, versus (ii) expert-applied DayCent. We found COMET-Farm predictions were lower than measured SOC stocks (R 2 = 0.101; RMSE = 18.80 Mg ha −1 ), while expert-applied DayCent predictions more closely matched field measurements (R 2 = 0.73; RMSE = 7.89 Mg ha −1 ). Poorly drained soils and long-term manure applications caused greater discrepancies between measured and predicted SOC. These findings suggest that COMET-Farm estimates could improve with better model initialization, more accurate site-specific soil data, such as measured soil texture and drainage conditions, and more regionally representative land-use histories. With these improvements and further testing, COMET-Farm could be expanded beyond its original purpose of estimating ΔSOC to directly estimate SOC stocks for non-expert users.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W7221087455",
+      "doi": "10.21203/rs.3.rs-11292559/v1",
+      "title": "AI-Powered Agricultural Advisory System Using Retrieval-Augmented Generation",
+      "publication_year": 2026,
+      "type": "preprint",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W7221570381",
+      "doi": "10.21203/rs.3.rs-11316023/v1",
+      "title": "Artificial Intelligence in Agricultural Extension and Advisory Services: A Scoping Review of Applications, Explainability, Trust and Farmer-Centred Adoption",
+      "publication_year": 2026,
+      "type": "preprint",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W7223039206",
+      "doi": "10.20944/preprints202610.1756.v1",
+      "title": "Quantifying and Narrowing the Yield Gap of Taro (Colocasia esculenta L., Schott) in Samoa Using a Biophysical Crop Model",
+      "publication_year": 2026,
+      "type": "preprint",
+      "abstract": "Taro is the world fourth most important root crop and a staple crop in Samoa contributing significantly to food and nutrition security. However, taro yield in Samoa remains below its potential, with a considerable yield gap. In this study, the Decision Support System for Agrotechnology Transfer (DSSAT) was used to (1) assess the yield gap of the widely grown ‘Samoa 2’ taro variety under both dryland and wetland conditions, (2) examine the main factors associated with the yield gap, and (3) assess management practices that could narrow yield gap. Farmers achieved 7.22 Mg fm/ha in the dryland and 10.17 Mg fm/ha in the wetland, while the simulated attainable yields were 13.75 and 12.67 Mg fm/ha, respectively. Potential yields exceeded 30 Mg fm/ha in both systems. The total yield gaps were 23.81 Mg fm/ha (77%) in the dryland and 20.33 Mg fm/ha (67%) in the wetland. Observed constraints included the incidence of pests, diseases, and weeds, while DSSAT simulations identified nitrogen leaching, high rainfall, and periodic water stress as key factors limiting nitrogen availability, leaf area index (LAI), and biomass accumulation and partitioning. Simulated management scenarios combining optimized planting time, increased plant density, supplemental irrigation, and nitrogen fertilization substantially improved yields. The best-performing combination of 2 plants/m², 70 mm irrigation, and 300 kg N/ha achieved 30.39 Mg fm/ha in the dryland and 29.52 Mg fm/ha in the wetland, corresponding to yield gap closures of 97.3% and 95.2%, respectively.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4324095517",
+      "doi": "10.3390/foods12061176",
+      "title": "Assessing Future Climate Change Impacts on Potato Yields — A Case Study for Prince Edward Island, Canada",
+      "publication_year": 2023,
+      "type": "article",
+      "abstract": "Crop yields are adversely affected by climate change; therefore, it is crucial to develop climate adaptation strategies to mitigate the impacts of increasing climate variability on the agriculture system to ensure food security. As one of the largest potato-producing provinces in Canada, Prince Edward Island (PEI) has recently experienced significant instability in potato production. PEI’s local farmers and stakeholders are extremely concerned about the prospects for the future of potato farming industries in the context of climate change. This study aims to use the Decision Support System for Agrotechnology Transfer (DSSAT) potato model to simulate future potato yields under the Coupled Model Intercomparison Project Phase 6 (CMIP6) climate scenarios (including SSP1–1.9, SSP1–2.6, SSP2–4.5, SSP3–7.0, and SSP5–8.5). The study evaluates the combined effects of changing climatic conditions at local scales (i.e., warming temperature and changing precipitation patterns) and increasing carbon dioxide (CO2) concentration in the atmosphere. The results indicate future significant declines in potato yield in PEI under the current farming practices. In particular, under the high-emission scenarios (e.g., SSP3–7.0 and SSP5–8.5), the potato yield in PEI would decline by 48% and 60% in the 2070s and by 63% and 80% by 2090s; even under the low-emission scenarios (i.e., SSP1–1.9 and SSP1–2.6), the potato yield in PEI would still decline by 6–10%. This implies that it is important to develop effective climate adaptation measures (e.g., adjusting farming practices and introducing supplemental irrigation plans) to ensure the long-term sustainability of potato production in PEI.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4387017380",
+      "doi": "10.1038/s41598-023-43286-5",
+      "title": "Integrating GIS and remote sensing for land use/land cover mapping and groundwater potential assessment for climate-smart cocoa irrigation in Ghana",
+      "publication_year": 2023,
+      "type": "article",
+      "abstract": "Abstract Although Ghana is a leading global cocoa producer, its production and yield have experienced declines in recent years due to various factors, including long-term climate change such as increasing temperatures and changing rainfall patterns, as well as drought events. With the increasing exposure of cocoa-producing regions to extreme weather events, the vulnerability of cocoa production is also expected to rise. Supplemental irrigation for cocoa farmers has emerged as a viable adaptation strategy to ensure a consistent water supply and enhance yield. However, understanding the potential for surface and groundwater irrigation in the cocoa-growing belt remains limited. Consequently, this study aims to provide decision-support maps for surface and groundwater irrigation potential to aid planning and investment in climate-smart cocoa irrigation. Utilizing state-of-the-art geospatial and remote sensing tools, data, and methods, alongside in-situ groundwater data, we assess the irrigation potential within Ghana's cocoa-growing areas. Our analysis identified a total area of 22,126 km2 for cocoa plantations and 125.2 km2 for surface water bodies within the cocoa-growing regions. The multi-criteria analysis (MCA) revealed that approximately 80% of the study area exhibits moderate to very high groundwater availability potential. Comparing the MCA output with existing borehole locations demonstrated a reasonable correlation, with about 80% of existing boreholes located in areas with moderate to very high potential. Boreholes in very high potential areas had the highest mean yield of 90.7 l/min, while those in low groundwater availability potential areas registered the lowest mean yield of 58.2 l/min. Our study offers a comprehensive evaluation of water storage components and their implications for cocoa irrigation in Ghana. While groundwater availability shows a generally positive trend, soil moisture and surface water have been declining, particularly in the last decade. These findings underline the need for climate-smart cocoa irrigation strategies that make use of abundant groundwater resources during deficit periods. A balanced conjunctive use of surface and groundwater resources could thus serve as a sustainable solution for maintaining cocoa production in the face of climate change.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4400625048",
+      "doi": "10.1016/j.scitotenv.2024.174705",
+      "title": "Tracking and managing the water-food-environment-ecosystem (WFEE) nexus in groundwater irrigation districts using system dynamics modelling",
+      "publication_year": 2024,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4402675778",
+      "doi": "10.1016/j.scitotenv.2024.176368",
+      "title": "Evaluating the impact of weather forecasts on productivity and environmental footprint of irrigated maize production systems",
+      "publication_year": 2024,
+      "type": "article",
+      "abstract": "Integrating weather forecasts into decision support systems empowers farmers to optimise irrigation schedules, thereby boosting crop yields and conserving water. However, inaccurate forecasts can jeopardise productivity and irrigation efficiency. This study combines a crop model with a stochastic pseudo-weather forecast algorithm to: (1) determine the reliability needed in a weather forecast algorithm for effective irrigation management; and (2) assess the impact of weather forecast reliability on the productivity and environmental footprint of various maize cropping systems across diverse climates. It employs the Next Generation of Agricultural Production Systems sIMulator (APSIM NextGen) to simulate maize growth at eleven locations representing diverse climates globally. Various planting schedules, soil types, irrigation systems, and nitrogen availability levels were considered to examine the effects of perfect and imperfect weather forecasts. The findings underscore the potential of integrating weather forecasts into irrigation management for enhanced productivity and sustainability. High-confidence forecasts and longer lead times increase yields (up to 11 %) and improve sustainability outcomes, particularly in wetter climates and for conditions with low nitrogen availability. Conversely, when the accuracy of forecasts is low, forecast-driven irrigation management may lead to yield reductions compared to a baseline system, especially in drier climates (up to 26 % reduction), necessitating tailored management strategies. Soil type and farmer's risk tolerance further influence the effectiveness of forecast-driven irrigation management, emphasising the need for context-specific approaches. By understanding and leveraging the interconnected impacts of weather forecasts on yield, water use efficiency, nitrogen loss, and greenhouse gas emissions, farmers can optimise productivity while minimising environmental impacts. • Simulation-based study demonstrates the importance of forecast reliability. • High-confidence forecasts improve yields by up to 11 % in wetter climates. • Low-confidence forecasts reduce yields by up to 26 % in drier climates. • Accurate forecasts enhance water use efficiency and reduce N loss and GHG emissions. • N availability, soil type and risk tolerance influence outcomes.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4392203627",
+      "doi": "10.1016/j.scitotenv.2024.171240",
+      "title": "Evaluating the environmental impacts of smart vineyards through the Life Cycle Assessment",
+      "publication_year": 2024,
+      "type": "article",
+      "abstract": "This study aimed to assess the environmental effectiveness of vineyards utilising on-site weather stations integrated with a decision support system (DSS), and to identify the critical hotspots in smart farms that have already obtained integrated or organic certification. For this purpose, Life Cycle Assessment (LCA) methodology was applied. The research comprised three smart farms employing on-site weather stations and a traditional farm without advanced technologies, which served as a benchmark. The analysis revealed variations in environmental footprints driven by differences in farm management practices and soil characteristics. The results highlighted that smart farms, in compliance with integrated or organic certifications, focus on reducing inputs such as agrochemicals or water consumption. However, these reductions could shift the environmental burden to other impacts, such as those related to machinery use, which remained the most critical aspect across all vineyards considered. In some smart farms, critical issues involve other aspects, such as irrigation and fertilisation. The lack of awareness about the potential environmental impacts of the adopted technical options could make smart farms more impactful than traditional farms. Interestingly, this study found that solely implementing advanced technologies could fall short of achieving ecological objectives. This study emphasises the significance of utilising LCA as a valuable tool to support farmers in making informed decisions while adopting technological strategies to achieve environmentally sustainable goals.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4323665738",
+      "doi": "10.3389/fpls.2023.1094677",
+      "title": "Usefulness of cultivar-level calibration of AquaCrop for vegetables depends on the crop and data availability",
+      "publication_year": 2023,
+      "type": "article",
+      "abstract": "As a result of climate change, climatic extremes are expected to increase. For high-value crops like vegetables, irrigation is a potentially economically viable adaptation measure in western Europe. To optimally schedule irrigation, decision support systems based on crop models like AquaCrop are increasingly used by farmers. High value vegetable crops like cauliflower or spinach are grown in two distinct growth cycles per year and, additionally, have a high turnover rate of new varieties. To successfully deploy the AquaCrop model in a decision support system, it requires a robust calibration. However, it is not known whether parameters can be conserved over both growth periods, nor whether a cultivar dependent model calibration is always required. Furthermore, when data are collected from farmers’ fields, there are constraints in data availability and uncertainty. We collected data from commercial cauliflower and spinach fields in Belgium in 2019, 2020 and 2021 during different growing periods and of different cultivars. With the use of a Bayesian calibration, we confirmed the need for a condition or cultivar specific calibration for cauliflower, while for spinach, splitting the data per cultivar or pooling the data together did not improve uncertainty on the model simulations. However, due to uncertainties arising from field specific soil and weather conditions, or measurement errors from calibration data, real time field specific adjustments are advised to simulations when using AquaCrop as decision support tool. Remotely sensed or in situ ground data may be invaluable information to reduce uncertainty on model simulations.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4401749591",
+      "doi": "10.1016/j.compag.2024.109355",
+      "title": "Estimating soil mineral nitrogen from data-sparse field experiments using crop model-guided deep learning approach",
+      "publication_year": 2024,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4323666738",
+      "doi": "10.3389/fpls.2023.1149424",
+      "title": "Sensor feedback system enables automated deficit irrigation scheduling for cotton",
+      "publication_year": 2023,
+      "type": "article",
+      "abstract": "Precision irrigation technologies using sensor feedback can provide dynamic decision support to help farmers implement DI strategies. However, few studies have reported on the use of these systems for DI management. This two-year study was conducted in Bushland, Texas to investigate the performance of the geographic information (GIS) based irrigation scheduling supervisory control and data acquisition (ISSCADA) system as a tool to manage deficit irrigation scheduling for cotton (Gossypim hirsutumL). Two different irrigation scheduling methods automated by the ISSCADA system — (1) a plant feedback (designated C) - based on integrated crop water stress index (iCWSI) thresholds, and (2) a hybrid (designated H) method, created to combine soil water depletion and theiCWSI thresholds, were compared with a benchmark manual irrigation scheduling (M) that used weekly neutron probe readings. Each method applied irrigation at levels designed to be equivalent to 25%, 50% and 75% replenishment of soil water depletion to near field capacity (designated I25, I50and I75) using the pre-established thresholds stored in the ISSCADA system or the designated percent replenishment of soil water depletion to field capacity in the M method. Fully irrigated and extremely deficit irrigated plots were also established. Relative to the fully irrigated plots, deficit irrigated plots at the I75level for all irrigation scheduling methods-maintained seed cotton yield, while saving water. In 2021, the irrigation savings was a minimum of 20%, while in 2022, the minimum savings was 16%. Comparing the performance of deficit irrigation scheduling between the ISSCADA system and the manual method showed that crop response for all three methods were statistically similar at each irrigation level. Because the M method requires labor intensive and expensive use of the highly regulated neutron probe, the automated decision support provided by the ISSCADA system could simplify deficit irrigation management of cotton in a semi-arid region.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4402349818",
+      "doi": "10.1007/s11119-024-10171-8",
+      "title": "A holistic simulation model of solid-set sprinkler irrigation systems for precision irrigation",
+      "publication_year": 2024,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4403365638",
+      "doi": "10.1007/s11119-024-10190-5",
+      "title": "A low cost sensor to improve surface irrigation management",
+      "publication_year": 2024,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4400685567",
+      "doi": "10.1515/biol-2022-0894",
+      "title": "Fertilizer application parameters for drip-irrigated peanut based on the fertilizer effect function established from a “3414” field trial",
+      "publication_year": 2024,
+      "type": "article",
+      "abstract": "Abstract Scientific fertilization is an important technical means of achieving high and stable peanut yields. Using soil testing and formula fertilization, the “3414” optimal regression design was used and included 14 nitrogen (N), phosphorus (P), and potassium (K) fertilization treatments. Ternary quadratic functions of the fertilizer effect were established according to three-season field experiments and the regression analysis of fertilizer–yield function was performed to explore the optimal fertilizer application mode and ratio for peanuts under mulched drip irrigation (MDI), and a suitable fertilizer application system was established. The ternary quadratic equation relating peanut yield (y) and the fertilizer application rates of N (N), P (P2O5), and K (K2O) was obtained after fitting, i.e., y = 2912.528 + 21.432N + 16.324P + 6.181K − 0.051N2 − 0.109P2 − 0.061K2 + 0.017NP + 0.023NK + 0.086PK, and significance analysis and typicality assessment were performed. The model R 2 was 0.9709, both values are extremely significant (p < 0.01), which indicates that the obtained ternary quadratic fertilizer effect function is typical and could be used for statistical purposes and fertilization recommendations. Three quadratic fertilizer effect functions were obtained. Among them, the equation for K is extremely significant, and the equations of N and P are significant. According to the assumption that the marginal yield is zero and the marginal profit is zero, the fertilizer application rate with the maximum yield, the fertilizer application rate with the best economic benefits, and the corresponding yields were obtained. The optimal fertilizer application rate predicted by the ternary quadratic fertilizer effect function was relatively high, so the three quadratic fertilizer effect functions were used for prediction. Under the test conditions, the recommended fertilizer application rates for peanuts under MDI are 256.6 kg N per ha, 164.2 kg P2O5 per ha, and 213.2 kg K2O per ha, the recommended fertilization ratio is 1:0.64:0.83, and the recommended ratio under formula fertilization is 23:15:19. The study has developed a data-based decision support system for Xinjiang drip-irrigated peanut, which assists farmers and agricultural managers in making more scientific and precise fertilization decisions based on the specific growth requirements of the crops and soil conditions. This evidence-based methodology enhances the precision of agricultural management, which is conducive to increasing crop yields while reducing resource wastage and environmental impact. However, multipoint and multiyear experiments are still needed to ensure that the findings are adaptable to the diverse soil conditions and fluctuating climate patterns that may be encountered in practice.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4379521274",
+      "doi": "10.21203/rs.3.rs-2904576/v1",
+      "title": "A Simple-Structured Framework for Decision Support System in Irrigation Water Management: Tool Description and Preliminary Testing",
+      "publication_year": 2023,
+      "type": "preprint",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4392059384",
+      "doi": "10.1016/j.dib.2024.110225",
+      "title": "An agro-physiological dataset on industrial tomatoes from nine years of field experiments conducted with alternative water-saving strategies in Mediterranean environments",
+      "publication_year": 2024,
+      "type": "data-paper",
+      "abstract": "The availability of field experimental data plays a pivotal role in advancing agricultural research, particularly in the Mediterranean, where farmers face significant challenges due to water scarcity and changing climatic conditions. We present a multi-year homogenized dataset of agro-physiological traits collected on industrial tomatoes and focused on the effect of deficit irrigation (DI). The dataset has been compiled over nine years and comprises 100 experimental plots, where 32 DI strategies have been tested. Visual observations on tomato phenology and qualitative and quantitative production data have been collected in field and laboratory surveys, complemented with detailed information on pedo-climatic conditions and irrigation scheduling (timing and volume). Researchers can find in this dataset a rich source for calibrating and evaluating agro-physiological models and a reference basis to study the relationships between DI strategies, weather variability, and the performance of tomato growing systems. Agronomists from the public and private sectors can gain domain knowledge to support local farmers with the best DI strategies to achieve high yields while optimizing water use. Moreover, this dataset serves as ground truth for digital decision support systems, which need real-world data to enhance their accuracy in guiding farmers on efficient water use. This data source is intended to become a crucial asset for researchers, agronomists, and decision-makers in the Mediterranean as it bridges the gap between research and practice in an area where farmers are already striving with water scarcity for industrial tomato cultivation.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4387696648",
+      "doi": "10.20944/preprints202310.1009.v1",
+      "title": "Agricultural IOT, Cloud Computing and Mobile Based Application Integration for the Total Discharge Predication of Two Farms Smart Agricultural System to Avoid Flooding",
+      "publication_year": 2023,
+      "type": "preprint",
+      "abstract": "The information technology has brought in a revolution in the area of digital agriculture and hydrological modeling . With the advent of IOT and AI such as machine learning is now capable of Predicating flood forecast , drought forecast and farms based water predications. In this article various machine learning algorithms , multiple sensors for environmental and agricultural has been proposed and used . The purpose is to acquire data of soil moisture , temperature , crop stages, irrigation and precipitation on a region constitute of two farms and then performed machine learning predications for total discharge predications at farms outlets so that in case of excessive rainfall or an irrigation event the water is adjusted in the second nearby farm or reroute to a reservoir for future use to avoid flooding. The focus is mostly to work on the concept and building of an andriod -ardiuno based mobile application for the endusers (agricultural system analyst, farmers) to provide an ease. The whole system of smart agricultural based on two farms and reservoir will provide an efficient ,fully automatic, proactive and decision support system to save water waste and reuse. In future the work is also in progress for developing a desktop based application .",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4404982924",
+      "doi": "10.21203/rs.3.rs-5474956/v1",
+      "title": "A Novel Decision Support System for Generating Irrigation Ecolabels Based on the Resource Overutilization Ratio",
+      "publication_year": 2024,
+      "type": "preprint",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4303969490",
+      "doi": "10.3389/fpls.2022.925548",
+      "title": "Impact of climate change on agricultural production; Issues, challenges, and opportunities in Asia",
+      "publication_year": 2022,
+      "type": "article",
+      "abstract": "Agricultural production is under threat due to climate change in food insecure regions, especially in Asian countries. Various climate-driven extremes, i.e., drought, heat waves, erratic and intense rainfall patterns, storms, floods, and emerging insect pests have adversely affected the livelihood of the farmers. Future climatic predictions showed a significant increase in temperature, and erratic rainfall with higher intensity while variability exists in climatic patterns for climate extremes prediction. For mid-century (2040-2069), it is projected that there will be a rise of 2.8°C in maximum temperature and a 2.2°C in minimum temperature in Pakistan. To respond to the adverse effects of climate change scenarios, there is a need to optimize the climate-smart and resilient agricultural practices and technology for sustainable productivity. Therefore, a case study was carried out to quantify climate change effects on rice and wheat crops and to develop adaptation strategies for the rice-wheat cropping system during the mid-century (2040-2069) as these two crops have significant contributions to food production. For the quantification of adverse impacts of climate change in farmer fields, a multidisciplinary approach consisted of five climate models (GCMs), two crop models (DSSAT and APSIM) and an economic model [Trade-off Analysis, Minimum Data Model Approach (TOAMD)] was used in this case study. DSSAT predicted that there would be a yield reduction of 15.2% in rice and 14.1% in wheat and APSIM showed that there would be a yield reduction of 17.2% in rice and 12% in wheat. Adaptation technology, by modification in crop management like sowing time and density, nitrogen, and irrigation application have the potential to enhance the overall productivity and profitability of the rice-wheat cropping system under climate change scenarios. Moreover, this paper reviews current literature regarding adverse climate change impacts on agricultural productivity, associated main issues, challenges, and opportunities for sustainable productivity of agriculture to ensure food security in Asia. Flowing opportunities such as altering sowing time and planting density of crops, crop rotation with legumes, agroforestry, mixed livestock systems, climate resilient plants, livestock and fish breeds, farming of monogastric livestock, early warning systems and decision support systems, carbon sequestration, climate, water, energy, and soil smart technologies, and promotion of biodiversity have the potential to reduce the negative effects of climate change.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2952420660",
+      "doi": "10.1016/j.compag.2019.05.053",
+      "title": "A review of visualisations in agricultural decision support systems: An HCI perspective",
+      "publication_year": 2019,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2965049659",
+      "doi": "10.1016/j.fcr.2019.107578",
+      "title": "Field-specific nutrient management using Rice Crop Manager decision support tool in Odisha, India",
+      "publication_year": 2019,
+      "type": "article",
+      "abstract": "The requirement of rice ( Oryza sativa L.) for fertilizer can depend on crop and soil management practices, which can vary among fields within a rice-growing area. A web-based decision support tool named Rice Crop Manager (RCM) was developed previously to calculate field-specific rates of fertilizer N, P, and K for rice in Odisha State in eastern India. We compared field-specific nutrient management calculated by RCM with farmers’ fertilizer practice (FFP) and a blanket fertilizer recommendation (BFR), which used a uniform 80 kg N ha –1 , 17 kg P ha –1 , and 33 kg K ha –1 . A total of 209 field trials were conducted in two seasons (kharif and rabi) for two years across ten districts in six agro-climatic zones. Grain yield was consistently higher with fertilization recommended by RCM than with FFP. Higher yield with RCM was attributed to a combination of applying more of the total fertilizer N at the critical growth stage of panicle initiation, applying more fertilizer N in kharif, and applying zinc. The RCM recommendation frequently increased yield compared to BFR as a result of improved N management, which included the adjustment of N rate for a target yield set slightly higher than historical yield reported by a farmer. Fertilization based on RCM rather than BFR reduced the risk of financial loss. The effectiveness of an RCM recommendation relative to BFR and FFP was consistent across rice varieties with different growth duration, irrigated and rainfed rice, and three categories of soil clay content. The RCM recommendation failed to increase yield relative to BFR in one of the six agro-climatic zones, where a higher rate of fertilizer P and/or K was apparently required. The nutrient management calculations used by RCM can be improved as new information and research findings become available. Experiences with RCM in Odisha can help guide the development of comparable nutrient management decision tools in other rice-growing areas.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W3152537323",
+      "doi": "10.1016/j.fcr.2021.108149",
+      "title": "Thirty years of agronomy research for development in irrigated rice-based cropping systems in the West African Sahel: Achievements and perspectives",
+      "publication_year": 2021,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W3121935720",
+      "doi": "10.1007/s11356-021-12524-6",
+      "title": "Application of smart irrigation systems for water conservation in Italian farms",
+      "publication_year": 2021,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2946508459",
+      "doi": "10.1016/j.compag.2019.05.029",
+      "title": "D-Risk: A decision-support webtool for improving drought risk management in irrigated agriculture",
+      "publication_year": 2019,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W3209301276",
+      "doi": "10.1016/j.agee.2021.107721",
+      "title": "Effects of deforestation and afforestation on water availability for dry bean production in Haiti",
+      "publication_year": 2021,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4213289375",
+      "doi": "10.1016/j.jenvman.2022.114722",
+      "title": "Life Cycle Thinking for the environmental and financial assessment of rice management systems in the Senegal River Valley",
+      "publication_year": 2022,
+      "type": "article",
+      "abstract": "Rice is a staple food in Senegal, which however imports more than 70% of the rice consumed annually to meet its domestic demand. Despite governmental efforts to increase rice self-sufficiency, both rice supply and yields remain low. Senegalese farmers face challenges related to irrigation infrastructure and fertiliser access, besides those derived from climate change. This study applies Life Cycle Assessment (LCA) combined with financial Life Cycle Costing (LCC) to evaluate alternative scenarios for rice management in the Senegal River Valley and identify sustainability hotspots and potential improvements. Specifically, rice cultivation in Ross Béthio (Saint Louis, Senegal) is assessed based on the observed agricultural practices during the dry seasons of 2016 and 2017. Two scenarios capturing conventional (CONV) and intensive (INT) practices are compared to two reference scenarios (SAED scenarios) according to the recommendations of the official agricultural advisory service. The INT scenario generates the lowest impacts per kg of paddy rice in seven out of thirteen impact categories, including climate change, freshwater and marine eutrophication, ozone depletion and water scarcity. This is due to the higher yields (7.4 t ha−1) relative to CONV (4.8 t ha−1) and the two reference SAED scenarios (6.0 t ha−1). The two latter scenarios show the lowest values in the remaining categories, although they also generate slightly lower profits than INT (138 € t−1 vs. 149 € t−1) due to increased labour costs for additional fertilisation treatments. The results from both LCA and LCC underline the importance of increasing yields to decrease environmental impacts and production costs of rice when estimated per kg of product. Well-designed fertiliser application doses and timing and increased mechanisation can deliver further environmental benefits. Additional improvements (e.g. in irrigation, crop rotations, straw management) could be considered to promote the long-term sustainability and profitability of rice production in Senegal. LCA in combination with financial LCC is identified as a decision-support tool for evaluating the sustainability of alternative crop management practices. Life Cycle Thinking can still benefit from experiential learning based on information exchange between farmers, researchers and extension agents to contribute to a sustainable agriculture and ultimately to food security in Africa.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W3113085945",
+      "doi": "10.3390/s20247129",
+      "title": "A Decision Support System for Water Optimization in Anti-Frost Techniques by Sprinklers",
+      "publication_year": 2020,
+      "type": "article",
+      "abstract": "Precision agriculture is a growing sector that improves traditional agricultural processes through the use of new technologies. In southeast Spain, farmers are continuously fighting against harsh conditions caused by the effects of climate change. Among these problems, the great variability of temperatures (up to 20 °C in the same day) stands out. This causes the stone fruit trees to flower prematurely and the low winter temperatures freeze the flower causing the loss of the crop. Farmers use anti-freeze techniques to prevent crop loss and the most widely used techniques are those that use water irrigation as they are cheaper than other techniques. However, these techniques waste too much water and it is a scarce resource, especially in this area. In this article, we propose a novel intelligent Internet of Things (IoT) monitoring system to optimize the use of water in these anti-frost techniques while minimizing crop loss. The intelligent component of the IoT system is designed using an approach based on a multivariate Long Short-Term Memory (LSTM) model, designed to predict low temperatures. We compare the proposed approach of multivariate model with the univariate counterpart version to figure out which model obtains better accuracy to predict low temperatures. An accurate prediction of low temperatures would translate into significant water savings, as anti-frost techniques would not be activated without being necessary. Our experimental results show that the proposed multivariate LSTM approach improves the univariate counterpart version, obtaining an average quadratic error no greater than 0.65 °C and a coefficient of determination R2 greater than 0.97. The proposed system has been deployed and is currently operating in a real environment obtained satisfactory performance.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4304976599",
+      "doi": "10.1038/s41598-022-20896-z",
+      "title": "Whole farm planning raises profit despite burgeoning climate crisis",
+      "publication_year": 2022,
+      "type": "article",
+      "abstract": "The climate crisis challenges farmer livelihoods as increasingly frequent extreme weather events impact the quantum and consistency of crop production. Here, we develop a novel paradigm to raise whole farm profit by optimising manifold variables that drive the profitability of irrigated grain farms. We build then invoke a new decision support tool-WaterCan Profit-to optimise crop type and areas that collectively maximise farm profit. We showcase four regions across a climate gradient in the Australian cropping zone. The principles developed can be applied to cropping regions or production systems anywhere in the world. We show that the number of profitable crop types fell from 35 to 10 under future climates, reflecting the interplay between commodity price, yield, crop water requirements and variable costs. Effects of climate change on profit were not related to long-term rainfall, with future climates depressing profit by 11-23% relative to historical climates. Impacts of future climates were closely related to crop type and maturity duration; indeed, many crop types that were traditionally profitable under historical climates were no longer profitable in future. We demonstrate that strategic whole farm planning of crop types and areas can yield significant economic benefits. We suggest that future work on drought adaptation consider genetic selection criteria more diverse than phenology and yield alone. Crop types with (1) higher value per unit grain weight, (2) lower water requirements and (3) higher water-use efficiency are more likely to ensure the sustainability and prosperity of irrigated grain production systems under future climates.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W3095692584",
+      "doi": "10.1016/j.heliyon.2020.e04989",
+      "title": "A decision support system for institutional support to farmers in the face of climate change challenges in Limpopo province",
+      "publication_year": 2020,
+      "type": "article",
+      "abstract": "Smallholder farmers in South Africa continue to be affected by the changing climate despite the existence of support to improve their adaptive capacity. This study focused on the institutional support systems and support types available to farmers in agro-ecological zones of Limpopo Province and assessed support types best suited to each area. Six hundred farmers were purposively sampled across the agro-ecological zones of Limpopo and interviewed. Support types looked at included monetary, machinery, seeds, educational support and others (irrigation scheme, animals, fertilizer, pesticides). Supporting institutions included Agro finance institutions, DAFF, Banks, and NGOs. Results showed that 70.01% of farmers received support from DAFF 25.60% from NGO's and 4.39% from Agro finance institutions. The most number of support received was two types 33.3% of the farmers. The result from the ANOVA showed that there were no significant differences in the level of difficulty experienced by farmers in accessing the various support institutions across the agro-ecological zones. In terms of the various support types received, there was a statistically significant difference in seeds (p = 0.002 < α = 0.05) and educational (p = 0.0001 < α = 0.05) support received between the different areas. Furthermore, the support needs varied across zones with farmers in arid-zone needing machinery, education, seeds and lastly monetary support while the semi-arid zone needed machinery, education, others, seeds, monetary and the humid, machinery, education, others, money and seeds. It is therefore recommended that support for farmers should be location-specific in order to enhance the adaptive capacity of an area and not be based only on the availability of certain support. There is a need for proper coordination between institutions in their aim to assist farmers to cope with climate change.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W3016390259",
+      "doi": "10.1016/j.compag.2020.105434",
+      "title": "Dynamic Simulation Tool of fertigation in drip irrigation subunits",
+      "publication_year": 2020,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W3045828558",
+      "doi": "10.1016/j.compag.2020.105635",
+      "title": "A satellite-based ex post analysis of water management in a blueberry orchard",
+      "publication_year": 2020,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W4220912775",
+      "doi": "10.1016/j.agrformet.2022.108888",
+      "title": "Statistical verification of 16-day rainfall forecast for a farmers advisory service in Pakistan",
+      "publication_year": 2022,
+      "type": "article",
+      "abstract": "Rainfall forecast is useful for farmers to avoid expensive irrigation decisions both in rain-fed and irrigated agricultural areas. In developing countries, farmers have limited knowledge of weather forecast information sources and access to technology such as the internet and smartphones to make use of these forecasts. This paper presents a case of developing Farmers Advisory Service (FAS) in Pakistan that is based on rainfall forecast data. The analysis emphasizes on statistical verification of 16-day rainfall forecast data from a global weather forecast model (Global Forecast System). In-situ data from 15 observatories maintained by Pakistan Meteorological Department in Khyber Pakhtunkhwa province has been considered for verification. Scores of various indicators are calculated for the rainfall forecast ranging from simple forecasts of dichotomous outcomes to forecasts of a continuous variable. A sensitivity analysis is also performed to understand how scores of dichotomous indicators vary by changing the threshold to define a rainfall event and forecast lead time interval. The quality of forecast varies across the stations based on the selected skill scores. The findings of verification, sensitivity analysis, and attributes of FAS provide insight into the process of developing a decision support service for the farmers based on the global weather forecast data.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W3006242323",
+      "doi": "10.1002/csc2.20127",
+      "title": "Canopy temperature of high‐nitrogen water‐stressed cotton",
+      "publication_year": 2020,
+      "type": "article",
+      "abstract": "Abstract Australian cotton (Gossypium hirsutum L.) farmers are adopting canopy temperature (Tc)‐based irrigation scheduling as a decision support tool to improve on‐farm production. High N supply, characteristic of the high‐yielding, furrow‐irrigated cotton system of Australia, might alter cotton Tc with implications for irrigation. We examined growth, physiological, and biochemical traits and changes in Tc of well‐watered and water‐stressed cotton plants supplied with high to excessive levels of N under glasshouse conditions. We also examined Tc, lint yield, and fiber quality of furrow‐irrigated cotton crop supplied with high N. In the glasshouse and under well‐watered conditions, high N supply stimulated plant growth and increased stomatal conductance and photosynthesis, resulting in cooler Tc. Under water deficit stress, high N also stimulated growth, increasing plant water demand and thus vulnerability to water stress, which manifested as warmer Tc. Water‐stressed plants supplied high N also showed reduced stomatal conductance, lower leaf water potential, and greater accumulation of leaf and xylem sap abscisic acid. Furrow‐irrigated crops supplied higher N also had higher Tc, but there was no gain in lint yield and fiber quality. The influence of high N on cotton Tc suggests that the need for accurate and reliable Tc‐based irrigation scheduling is paramount.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2529284161",
+      "doi": "10.1007/s11119-016-9474-5",
+      "title": "Mobile terrestrial laser scanner applications in precision fruticulture/horticulture and tools to extract information from canopy point clouds",
+      "publication_year": 2016,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W835572154",
+      "doi": "10.1016/j.compag.2015.06.008",
+      "title": "On-farm testing of a nutrient management decision-support tool for rice in the Senegal River valley",
+      "publication_year": 2015,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2980552817",
+      "doi": "10.1016/j.scitotenv.2019.134718",
+      "title": "Desiccation crisis of saline lakes: A new decision-support framework for building resilience to climate change",
+      "publication_year": 2019,
+      "type": "article",
+      "abstract": "River flow reductions as a result of agricultural withdrawals and climate change are rapidly desiccating endorheic lakes, increasing their salinity and affecting the bio-diversity and human wellbeing in the surrounding areas. Here we present a new framework to guide eco-hydrological restoration of saline lakes and build their resilience to climate change by optimizing agricultural land use and related water withdrawals. The framework involves four steps: 1. selection of global circulation models for the basin under study; 2. establishment of a hydrological balance over the lake’s area to estimate the amount of water required for its restoration; 3. water allocation modeling to determine the water available for restoration and allocation of the remaining water across different users in the lake’s basin; and 4. basin-scale optimization of land use and cropping patterns subject to water availability. We illustrated the general applicability of the framework through the case of the second largest (by volume) hyper-saline lake globally, Lake Urmia, which lost 96% of its volume in only 20 years, primarily as a result of upstream water withdrawals. Through the application of the framework, we estimated the amount of water needed to restore the lake, either fully or partially, and proposed a sustainable land-use strategy, while protect farmers’ income in the basin. Considering future climate change projections under two representative concentration pathways (RCP) 4.5 and 8.5, we found that an average annual surface inflow of 3,648 Mm 3 (∼70% increase in RCP 4.5) and 3,692 Mm 3 (∼73% increase in RCP 8.5) would be required to restore the lake by 2050, respectively. This would require the respective conversion of 95,600 ha and 133,687 ha of irrigated land to rain-fed cropland or grassland across the basin by 2050. The proposed framework can be used for building resilience to climate change and mitigating human-induced threats to other declining saline lakes.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2030365305",
+      "doi": "10.1016/j.compag.2012.03.003",
+      "title": "Using a mobile phone Short Messaging Service (SMS) for irrigation scheduling in Australia – Farmers’ participation and utility evaluation",
+      "publication_year": 2012,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2507994976",
+      "doi": "10.1016/j.agwat.2016.07.023",
+      "title": "Evaluation of new farming technologies in Ethiopia using the Integrated Decision Support System (IDSS)",
+      "publication_year": 2016,
+      "type": "article",
+      "abstract": "This study investigates multi-dimensional impacts of adopting new technology in agriculture at the farm/village and watershed scale in sub-Saharan Africa using the Integrated Decision Support System (IDSS). Application of IDSS as an integrated modeling tool helps solve complex issues in agricultural systems by simultaneously assessing production, environmental, economic, and nutritional consequences of adopting agricultural technologies for sustainable increases in food production and use of scarce natural resources. The IDSS approach was applied to the Amhara region of Ethiopia, where the scarcity of resources and agro-environmental consequences are critical to agricultural productivity of small farm, to analyze the impacts of alternative agricultural technology interventions. Results show significant improvements in family income and nutrition, achieved through the adoption of irrigation technologies, proper use of fertilizer, and improved seed varieties while preserving environmental indicators in terms of soil erosion and sediment loadings. These pilot studies demonstrate the usefulness of the IDSS approach as a tool that can be used to predict and evaluate the economic and environmental consequences of adopting new agricultural technologies that aim to improve the livelihoods of subsistence farmers.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2944824487",
+      "doi": "10.1016/j.fcr.2019.05.013",
+      "title": "Site-specific nutrient management for rice in the Philippines: Calculation of field-specific fertilizer requirements by Rice Crop Manager",
+      "publication_year": 2019,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2884627861",
+      "doi": "10.1016/j.compag.2018.07.024",
+      "title": "USING decision models to enable better irrigation Decision Support Systems",
+      "publication_year": 2018,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2590804528",
+      "doi": "10.1016/j.fcr.2017.01.013",
+      "title": "Modeling the water and nitrogen productivity of sunflower using OILCROP-SUN model in Pakistan",
+      "publication_year": 2017,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W1509682055",
+      "doi": "10.3389/fpls.2015.00319",
+      "title": "A decision support system (GesCoN) for managing fertigation in open field vegetable crops. Part I—methodological approach and description of the software",
+      "publication_year": 2015,
+      "type": "article",
+      "abstract": "Reduced water availability and environmental pollution caused by nitrogen (N) losses have increased the need for rational management of irrigation and N fertilization in horticultural systems. Decision support systems (DSS) could be powerful tools to assist farmers to improve irrigation and N fertilization efficiency. Currently, fertilization by drip irrigation system (fertigation) is used for many vegetable crops around the world. The paper illustrates the theoretical basis, the methodological approach and the structure of a DSS called GesCoN for fertigation management in open field vegetable crops. The DSS is based on daily water and N balance, considering the water lost by evapotranspiration (ET) and the N content in the aerial part of the crop (N uptake) as subtraction and the availability of water and N in the wet soil volume most effected by roots as the positive part. For the water balance, reference ET can be estimated using the Penman-Monteith (PM) or the Priestley-Taylor and Hargreaves models, specifically calibrated under local conditions. Both single or dual Kc approach can be used to calculate crop ET. Rain runoff and deep percolation are considered to calculate the effective rainfall. The soil volume most affected by the roots, the wet soil under emitters and their interactions are modeled. Crop growth is modeled by a non-linear logistic function on the basis of thermal time, but the model takes into account thermal and water stresses and allows an in-season calibration through a dynamic adaptation of the growth rate to the specific genetic and environmental conditions. N crop demand is related to DM accumulation by the N critical curve. N mineralization from soil organic matter is daily estimated. The DSS helps users to evaluate the daily amount of water and N fertilizer that has to be applied in order to fulfill the water and N-crop requirements to achieve the maximum potential yield, while reducing the risk of nitrate outflows.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W3022639410",
+      "doi": "10.3390/s20092526",
+      "title": "Automatic Irrigation Scheduling on a Hedgerow Olive Orchard Using an Algorithm of Water Balance Readjusted with Soil Moisture Sensors",
+      "publication_year": 2020,
+      "type": "article",
+      "abstract": "Recent technological advances have made possible automated irrigation scheduling using decision-support tools. These tools help farmers to make better decisions in the management of their irrigation system, thus increasing yields while preserving water resources. The aim of this study is to evaluate in a commercial plot an automated irrigation system combined with remote-sensing techniques and soil mapping that allows the establishment of regulated deficit irrigation (RDI) strategies. The study was carried out over 3 years (2015-2017) in a commercial hedgerow olive orchard of the variety 'Arbequina' located in Alvarado (Extremadura, Spain). An apparent electrical conductivity (ECa) map and a normalized difference vegetation index (NDVI) map were generated to characterize the spatial variability of the plot and classify the zones in homogeneous areas. Then, reference points were selected to monitor the different irrigation sectors. In 2015, the plot was irrigated according to the farmer's technical criteria throughout the plot. In 2016 and 2017, two different areas of the plot were irrigated applying an RDI strategy, one under expert supervision and the other automatically. The results show that in a heterogeneous plot the use of new technologies can be useful to establish the ideal location for an automatic irrigation system. Furthermore, automatic irrigation scheduling made it possible to establish an RDI strategy recommended by an expert, resulting in the homogenization of production throughout the plot without the need for human intervention.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2896081832",
+      "doi": "10.1007/s10705-018-9959-x",
+      "title": "Web-based tool for calculating field-specific nutrient management for rice in India",
+      "publication_year": 2018,
+      "type": "article",
+      "abstract": "Site-specific nutrient management (SSNM) can be an alternative to a recommendation for uniform fertilizer use across a rice ( Oryza sativa L.) production system within a country or region of a country. We developed a web-based decision support tool named Nutrient Manager for Rice (NMR), which used principles of SSNM to calculate fertilizer N, P, and K rates for individual fields based on a target yield set for each field. It also used expected growth duration of the rice variety, crop establishment method, and age of transplanted seedlings to calculate days after rice establishment for each of three applications of fertilizer N. NMR enabled P rates to match estimated removal of P with harvested grain and crop residue for the target yield set for each field. We compared field-specific fertilizer recommendations from NMR with uniform application of fertilizer provided by an existing blanket fertilizer recommendation for irrigated inbred rice (BFR) and farmer’s fertilizer practices (FFP) in on-farm trials conducted in 74 irrigated rice fields across three growing seasons in the Cauvery Delta, Tamil Nadu, India. Grain yield was 0.6–0.7 Mg ha −1 higher ( P ≤ 0.05) with NMR than FFP in two of the three seasons, even though total fertilizer cost was comparable or less with NMR. Yield was comparable for NMR and BFR, but NMR reduced fertilizer N and P rates and total fertilizer cost compared to BFR. Use of NMR rather than BFR also had less risk of financial loss for a farmer. The likelihood of financial loss with a switch from FFP to BFR averaged 31%. It reduced to 18% with a switch from FFP to NMR. NMR facilitated the calculation of field-specific fertilizer N, P, and K management practices, which increased fertilizer use efficiency without loss in rice yield compared to a recommended uniform fertilizer management across fields.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W3042547606",
+      "doi": "10.1016/j.scitotenv.2020.141000",
+      "title": "Coupled DSSAT-SWAT models to reduce off-site N pollution in Mediterranean irrigated watershed",
+      "publication_year": 2020,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W3098859904",
+      "doi": "10.3389/fpls.2020.560466",
+      "title": "Narrowing Yield Gaps and Enhancing Nitrogen Utilization for Summer Maize (Zea mays L) by Combining the Effects of Varying Nitrogen Fertilizer Input and Planting Density in DSSAT Simulations",
+      "publication_year": 2020,
+      "type": "article",
+      "abstract": "As a result of increased attention being paid to sustainable agricultural development, improving crop yield and nitrogen use efficiency has become a widespread concern. In the study presented in this paper, the crop growth model implemented by the Decision Support System for Agrotechnology Transfer (DSSAT) software was used to simulate three management treatments during five maize growing seasons in the HHHP of China. The three treatments were the super-high-yield cultivation pattern (SH), the optimized nutrient and density management pattern (ONM), and the local farmer's practice cultivation pattern (FP). The model parameters were calibrated using data from actual physiological measurements taken between 2012 and 2014, and the simulated performance was validated using data from measurements taken between 2015 and 2016. Subsequently, the potential yield and yield gap for different yield levels were analyzed and the practices of fertilization and density optimization under the ambient experiment conditions were evaluated. Results show that: 1) With respect to the model performance figures, the root mean square error (RMSE), normalized root mean squared errors (NRMSE) and index of agreement (d) 1,171 (kg ha-1), 12% and 0.84 for the yield. These results show that the model is viable for this experiment. 2) The average potential yield of summer maize over five years was 15.58 t ha-1, but the yield achieved with the AFP treatment amounted to only 55% of the potential yield, suggesting a large potential for yield increases. 3) Through analyzing the response of the simulated yield to varying the planting density and nitrogen fertilizer application, we found that the optimal planting density for summer maize in HHHP is 9 plants m-2, and the optimal nitrogen fertilizer application amount is 246 kg ha-1. The results also suggest that the maximum yield actually achieved by optimizing nitrogen application and planting density is less than 73% of the potential yield, which implies that other measures, such as irrigation, sowing dates and pest control, need to be considered in order to further narrow the observed yield gaps.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2953667265",
+      "doi": "10.3390/ijerph16132419",
+      "title": "Development of a Hydrologic and Water Allocation Model to Assess Water Availability in the Sabor River Basin (Portugal)",
+      "publication_year": 2019,
+      "type": "article",
+      "abstract": "The Sabor River basin is a large basin (3170 km2) located in the northeast of Portugal and used mostly for agroforestry. One problem this basin faces is a lack of water during the dry season, when there is a higher demand for water to irrigate crops. To solve this problem, the Portuguese government created a National Irrigation Program to finance new irrigation areas and improve existing ones. Consequently, it is necessary to evaluate the past and future water availability for agricultural and domestic consumption in the basin. This was done through the development of a hydrological and water allocation model. The Soil and Water Assessment Tool (SWAT) was used to model the hydrological processes that took place in the catchment between 1960 and 2008. The MIKE HYDRO Basin was used to simulate water allocation (irrigation and domestic consumption) in a historical view and under two scenarios. The historical view used the time period 1960–2008, and the two scenarios used the same time period but with an increase in the irrigated area. The first scenario simulated the irrigation of the total irrigable area that exists in the basin. The second scenario simulated a 29% increase in the olive grove area and a 24% decrease in the resident population, according to the projection for 2060. The results show that, in the historical view, the average annual water demand deficit was 31% for domestic consumption and 70% for irrigation, which represent 1372 × 103 m3 and 94 × 106 m3 of water, respectively. In the two scenarios, the water demand deficit increased to 37% for domestic consumption and 77% for irrigation. In the first scenario, the average annual water demand deficit was 183 × 106 m3 of water for irrigation. In the second scenario, the average annual water demand deficit was 385 × 103 m3 of water for domestic consumption, and 106 × 106 m3 of water for irrigating the expanded olive grove area. These results demonstrate that Portuguese farmers can use our model as a decision support tool to determine how much water needs to be stored to meet the present and future water demand.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2981803534",
+      "doi": "10.3390/cli8010003",
+      "title": "Perception of Environmental Spillovers Across Scale in Climate Change Adaptation Planning: The Case of Small-Scale Farmers’ Irrigation Strategies, Kenya",
+      "publication_year": 2019,
+      "type": "article",
+      "abstract": "The failure to acknowledge and account for environmental externalities or spillovers in climate change adaptation policy, advocacy and programming spaces exercabates the risk of ecological degradation, more so, degradation of land. In particular use of unsuitable water sources for irrigation may increase salinisation risks. However, little if any policy assessments and research effort has been directed at investigating how farmer perceptions mediate spillovers from the ubiquitous irrigation adaptation strategy. In this study cognitive failure and/or bias construct is examined and proposed as an analytical lens in research, policy and learning and the convergence of disaster risk reduction and climate change adaptation discourses. The findings from small-scale farmers, Machakos and Kakamega counties, Kenya, suggest multifaceted biases and failures about the existence and importance of externalities in adaptation planning discourses. Among other dimensions, cognitive failure which encompasses fragmented approaches among institutions for use and management of resources, inadequate policy and information support, as well as, poor integration of actors in adaptation planning accounts for adaptation failure. The failures in such Human-Environment system interactions have the potential to exercabate existing vulnerability of farmer production systems in the long run. The findings further suggest that in absence of risk message information dissemination, education level, farming experience and information accumulation, as integral elements to human capital, do not seem to have significant effect on behaviour about mitigation of environmental spillovers. Implicitly, reversing the inherent adaptation failures calls for system approaches that enhance coordinated adaptation planning, prioritises proactive mitigation of slow onset disaster risks and broadens decision support systems, such as, risk information dissemination integration into the existing adaptation policy discourses and practice.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2031302356",
+      "doi": "10.1016/j.eja.2004.07.006",
+      "title": "Adaptation of crop management to water-limited environments",
+      "publication_year": 2004,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W1965124033",
+      "doi": "10.1016/j.fcr.2013.09.001",
+      "title": "Precision nutrient management in conservation agriculture based wheat production of Northwest India: Profitability, nutrient use efficiency and environmental footprint",
+      "publication_year": 2013,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2790970440",
+      "doi": "10.1016/j.scitotenv.2018.02.234",
+      "title": "SWAT-MODSIM-PSO optimization of multi-crop planning in the Karkheh River Basin, Iran, under the impacts of climate change",
+      "publication_year": 2018,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2052058210",
+      "doi": "10.1016/j.biosystemseng.2014.03.010",
+      "title": "Drip vs. surface irrigation: A comparison focussing on water saving and economic returns using multicriteria analysis applied to cotton",
+      "publication_year": 2014,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2059225565",
+      "doi": "10.1016/j.agee.2005.10.006",
+      "title": "Environmental assessment tools for multi-scale land resources information systems",
+      "publication_year": 2005,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2330158527",
+      "doi": "10.1021/es301644y",
+      "title": "Life Cycle Assessment Based Evaluation of Regional Impacts from Agricultural Production at the Peruvian Coast",
+      "publication_year": 2012,
+      "type": "article",
+      "abstract": "Crop and technology choices in agriculture, which largely define the impact of agricultural production on the environment, should be considered in agricultural development planning. A life cycle assessment of the dominant crops produced in a Peruvian coastal valley was realized, in order to establish regionalized life cycle inventories for Peruvian products and to provide the basis for a regional evaluation of the impacts of eutrophication, acidification, human toxicity, and biodiversity loss due to water use. Five scenarios for the year 2020 characterized by different crop combinations and irrigation systems were considered as development options. The results of the regional assessment showed that a business-as-usual scenario, extrapolating current trends of crop cultivation, would lead to an increase in nitrate leaching with eutrophying effects. On the other hand, scenarios of increased application of drip irrigation and of mandarin area expansion would lead to a decrease in nitrate leaching. In all scenarios the human toxicity potential would decrease slightly, while an increase in irrigation water use would benefit the biodiversity of a nearby groundwater-fed wetland. Comparisons with results from other studies confirmed the importance of regionalized life cycle inventories. The results can be used as decision support for local farmers and authorities.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2095147991",
+      "doi": "10.1016/j.compag.2013.08.005",
+      "title": "The role of information and communication technologies in the modernisation of water user associations’ management",
+      "publication_year": 2013,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2027681256",
+      "doi": "10.1016/j.jenvman.2005.09.001",
+      "title": "A decision support for an integrated multi-scale analysis of irrigation: DSIRR",
+      "publication_year": 2005,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2143130947",
+      "doi": "10.1016/j.compag.2008.01.003",
+      "title": "Use of a decision support system and a simulation game to help collective decision-making in water management",
+      "publication_year": 2008,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2069005548",
+      "doi": "10.1071/ea02178",
+      "title": "Bayesian networks for decision analyses — an application to irrigation system selection",
+      "publication_year": 2004,
+      "type": "article",
+      "abstract": "Farmers are under continual pressure from Government and industry to change farm practices to meet productivity and environmental targets. In response to these pressures, farmers will make decisions to adopt practices that reflect their motivations and priorities. However, where the changes of practice are major, there may be considerable uncertainty associated with the decision-making process. Decision support tools are one method that may assist in reducing the uncertainty associated with decisions about changes in farm practices. Bayesian networks provide a useful tool to assist in the structuring and analysis of decision problems. A Bayesian network is a decision analysis framework, based on Bayesian probability theory, which allows the integration of scientific and experiential knowledge, and the uncertainty associated with this knowledge. The approach involves describing a system in terms of variables and linkages, or relationships between variables, at a level appropriate to the decision making. This is achieved through representing linkages as conditional probability tables and propagating probabilities through the network to give the likelihood of variable outcomes. Therefore, the approach ensures that treatment of risks and uncertainties is an intrinsic part of the decision-making processes. The Bayesian network is dynamic and interactive, and hence if a network previously developed does not fit a user's conceptual understanding of the system, it can be adapted quickly and simply to the cognitive understanding of the user. A case study Bayesian network has been developed for decisions associated with the selection of irrigation systems for irrigated dairy farms in Northern Victoria. This case study demonstrates that the most appropriate irrigation system for a dairy farm is dependent on factors including the amount of irrigation water available and soil types. Analysis of the Bayesian network indicates that the appropriate irrigation system is more sensitive to the income generated from pasture than to the price of water. The Bayesian network can demonstrate the impacts of decisions on the farmer's system and can allow the farmer to evaluate these impacts according to their own priorities and criteria. This information can then be used by the natural resource manager to assess the appropriate level of incentive or penalty required if the farmer is to adopt the preferred option that will also achieve preferable outcomes from a natural resource management perspective.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2021494347",
+      "doi": "10.1016/j.biosystemseng.2011.04.007",
+      "title": "Furrow irrigation design with multicriteria analysis",
+      "publication_year": 2011,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2028981662",
+      "doi": "10.1007/s10661-006-9359-6",
+      "title": "Impact Assessment and Recommendation of Alternative Conjunctive Water Use Strategies for Salt Affected Agricultural Lands through a Field Scale Decision Support System – A Case Study",
+      "publication_year": 2006,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2019653953",
+      "doi": "10.1016/j.compag.2014.04.007",
+      "title": "Integrating soil water monitoring technology and weather based crop modelling to provide improved decision support for sugarcane irrigation management",
+      "publication_year": 2014,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2069250952",
+      "doi": "10.1631/jzus.2007.b0486",
+      "title": "Potential production simulation and optimal nutrient management of two hybrid rice varieties in Jinhua, Zhejiang Province, China",
+      "publication_year": 2007,
+      "type": "article",
+      "abstract": "Potential growth of two widely-grown hybrid rice varieties in the Jinhua district of Zhejiang Province, Shanyou63 for mid-rice and Xieyou46 for late rice, was simulated using a crop growth model of WOFOST. Parameters of the rice growth in WOFOST were calibrated through field experiments from 1999 to 2002 in Jinhua. The potential yield simulated with WOFOST was about 12 t/ha for Shanyou63 and 10 t/ha for Xieyou46, which are in good agreement with the highest recorded yield obtained in this area. Under farmers practice, current yield is about 7.5 t/ha for Shanyou63 and 6.5 t/ha for Xieyou46. There is a gap between the actual rice yield and the potential yield for these two hybrid rice varieties grown in this area. The attainable target yields were set to 70% to 75% of their potential yields for the two varieties. A recently developed software \"Nutrient Decision Support System (NuDSS)\" for irrigated rice was used to optimize nutrient management for these two rice varieties. According to NuDSS, the optimal fertilizer N requirement for the target yields was about 150 kg/ha for Shanyou63 and about 120 kg/ha for Xieyou46, which were only about 70% of the fertilizer N application under current farmers' practice. Comparing with farmers' practice, there is great potential to increase actual rice yields and to reduce fertilizer N use rates by improving rice crop management practice in Jinhua.",
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W1979389640",
+      "doi": "10.1016/j.compag.2003.11.001",
+      "title": "GPFARM modeling of corn yield and residual soil nitrate-N",
+      "publication_year": 2004,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2009983975",
+      "doi": "10.1016/j.jenvman.2005.08.009",
+      "title": "Sustainability of farmers' soil fertility management practices: A case study in the North China Plain",
+      "publication_year": 2005,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    },
+    {
+      "openalex_id": "https://openalex.org/W2008491544",
+      "doi": "10.1016/j.agee.2003.09.025",
+      "title": "An integrated non-point source model-GIS system for selecting criteria of best management practices in the Po Valley, North Italy",
+      "publication_year": 2003,
+      "type": "article",
+      "abstract": null,
+      "retrieval": "DOI batch OpenAlex index; abstract reconstructed from inverted index; not verified against publisher",
+      "formal_screening": null
+    }
+  ]
+}

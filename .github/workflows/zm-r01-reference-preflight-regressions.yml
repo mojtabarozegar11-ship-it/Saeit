@@ -1,0 +1,26 @@
+name: ZM-R01 reference and raw-count preflight regressions (synthetic parser fixtures only)
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - research/quality_gates/zm_r01_preflight.py
+      - research/quality_gates/test_zm_r01_reference_preflight.py
+      - .github/workflows/zm-r01-reference-preflight-regressions.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-metadata-parser-only:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify syntax and run isolated negative parser tests (NO FASTQ, NO DEG)
+        run: |
+          python -m py_compile research/quality_gates/zm_r01_preflight.py research/quality_gates/test_zm_r01_reference_preflight.py
+          python -m unittest discover -s research/quality_gates -p 'test_zm_r01_reference_preflight.py' -v

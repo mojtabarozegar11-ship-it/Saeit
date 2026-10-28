@@ -1,0 +1,38 @@
+name: AE 2026 001 apply reviewed C16 scientific sections
+on:
+  push:
+    branches:
+      - research/mr-2026-001-novelty-audit
+    paths:
+      - analysis/ae_apply_c16_manuscript_sync.py
+      - .github/workflows/ae-2026-001-c16-manuscript-sync.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: ae-c16-scientific-manuscript-sync
+  cancel-in-progress: false
+jobs:
+  scientific_manuscript_sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply fail-closed C16 scientific sections
+        run: python analysis/ae_apply_c16_manuscript_sync.py
+      - name: Commit only if manuscript changed
+        run: |
+          git add research/manuscripts/AE-2026-001/AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md
+          if git diff --cached --quiet; then
+            echo "No change"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "research(ae): integrate verified C16 regional decomposition into manuscript"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

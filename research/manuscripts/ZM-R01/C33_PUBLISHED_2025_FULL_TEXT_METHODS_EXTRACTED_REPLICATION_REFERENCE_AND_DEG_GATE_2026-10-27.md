@@ -1,0 +1,35 @@
+# ZM-R01 C33 — Published Milec (2025) full-text methods: verified details and remaining biological-unit/count gates
+
+**Date:** 2026-10-27. **Evidence class:** extraction from the actual *published* CC BY article PDF through an independent structured public-document reader, **not** the 2025 Zenodo preprint. This **supersedes C32's earlier inability to read the published Methods**. However, PDF bytes were **not saved**, so no local SHA256, page-image validation, or byte-for-byte reproducibility is claimed. No new wet-lab data, gene counts, FDR values or publication decision is inferred.
+
+**Primary source:** Z. Milec et al., *Plant Stress* 18 (2025), article 101115, DOI [10.1016/j.stress.2025.101115](https://doi.org/10.1016/j.stress.2025.101115). [Published open CC BY full-text PDF, Rothamsted Research repository](https://repository.rothamsted.ac.uk/id/eprint/33667/2/1-s2.0-S2667064X25003823-main.pdf); institutional [ASEP record 0641134](https://asep.lib.cas.cz/arl-cav/cs/detail-cav_un_epca-0641134-Integrative-morphophysiological-and-transcriptomic-insights-into-wheat-responses-to-combined-drough/). **Source reader:** full PDF-to-text extraction returned ~102,712 text characters, with title, author list, Materials and methods, Results, references and data availability. Direct binary download was not available. Reported page references below refer to journal's printed page numbers in the extracted text.
+
+## 1. Newly source-verified published experimental details
+
+| Published section | Verified source statement (paraphrase) | Permitted inference | Still unknown |
+|---|---|---|---|
+| Plant materials and initial growth conditions (p.2) | Winter wheat Alana, accession **01C0106569**; early plants grown in a **FytoScope FS-SI 3400 growth chamber** before vernalization and treatment. | A named chamber was used for **initial growth**. | Number of **independently allocated treatment chambers** or randomized experimental units during multifactorial stress exposure. Do **not** infer one chamber per treatment from this sentence. |
+| Experimental setup (pp.2–3) | Eight 2×2×2 regimes: control plus D/eT/eC combinations; control 400 ppm CO2 and 90±5% SWC, eC 700 ppm, D 25±5% SWC, eT to 31°C/19°C day/night in July; treatment starts GS30. | Treatments and timepoints are documented in the final paper. | Chamber rotation, chamber ID, randomized assignment, independent growth runs, pot/block identifiers. |
+| Morphology (p.3) | **Three replicates per regime, each comprising six plants**; phenotype sampling at GS91 except flag leaf length GS61. | Morphological 'three replicates' may be **composite or clustered units**; 18 plants per regime are **not automatically 18 independent experimental units**. | Whether plants were pooled within a replicate, chambers/blocks, and correct error term. |
+| RNA extraction, sequencing and data analysis (pp.3–4) | Leaf portions from third and fourth leaves of main tiller; **three biological replicates per treatment at GS61**. RNeasy extraction with DNase; RIN > 6.0; poly-A NEBNext Ultra libraries; Illumina NovaSeq 6000 **150-bp paired-end**. | Confirms the stated **24 RNA biological-replicate libraries** for eight regimes. | True treatment-assignment unit and independence across chamber/batch; no RNA sample-specific raw-count matrix in this paper. |
+| Same RNA methods | **Trim Galore v0.4.1 → HISAT2 → “RefSeq v2.0, EnsemblPlants” → DESeq2**; Table S2 mentioned for sequence QC. | Confirms authors report an actual alignment and DESeq2 workflow; our independent reanalysis has **not** reproduced it. | **Exact FASTA/annotation accession, release, checksum, GTF/GFF, strandedness, unique/multi-map counting, counting software/flags and raw integer counts** remain absent from this text. Do **not** substitute public RefSeq v2.1 automatically. |
+| DESeq2 and enrichment (p.4) | General differential-expression threshold **FDR-adjusted p < 0.05**. Separately, genes entering GO/KEGG triad-collapsed analysis described as **adjusted p < 0.01 AND |log2FC| ≥ 1**; enrichment itself FDR < 0.05. | These are **different explicitly stated selection thresholds for different steps**; avoid conflating all DEG counts with GO input genes. | Actual raw count matrix, model design/contrasts and whether all figure-specific filters exactly match the Methods. |
+
+## 2. Corrected provenance decision
+
+- **Newly resolved:** the previously inaccessible **published-version Methods** are now readable, with independent confirmation of 3 RNA replicates per treatment, RNA collection at GS61, 150-bp paired-end NovaSeq, Trim Galore 0.4.1, HISAT2, stated RefSeq v2.0/EnsemblPlants and authors' use of DESeq2.
+- **Not resolved:** biological **independence** of stress-treatment units. The paper's initial-growth *singular chamber* does **not** demonstrate one stress-treatment chamber, and neither 3 biological replicate labels nor 6 plants/phenotypic replicate proves chamber randomization. Keep C31's chamber/pseudoreplication scenarios **conditional**, not allegations of misconduct.
+- **Not resolved:** the reference-assembly/annotation pair. “RefSeq v2.0, EnsemblPlants” is not an accession, download manifest or checksum. The publicly available NCBI/URGI **v2.1** is a distinct release; do not relabel it v2.0.
+- **Not resolved:** no true integer count matrix has been obtained. Published FPKM, 105,200×24 FPKM and 1,167 hypotheses remain **not** independently re-estimated DESeq2 results, p-values or FDR.
+- **Newly clarified:** author-published **FDR < 0.05** and narrower **padj < 0.01 + |log2FC|≥1** GO-selection rule must be represented separately. A summary that collapses them into one DEG threshold is inaccurate.
+- **Limitations of this extraction:** structured text has line wraps and interleaved figure captions; source-specific figure/table numeric transcription and printed-page visuals require independent PDF page-image check. The **PDF bytes and SHA256 remain unavailable**, unlike the verified historical metadata-only GEO/ENA records.
+
+## 3. Next scientific actions (no large download or spending)
+
+1. Request or locate authors' treatment-chamber allocation, pot/block/plant-to-library map, and independent experiment replication record; do not infer them from the current Methods.
+2. Recover original **Table S2** sequence QC and any accessible GEO sample metadata for library preparation/strandedness, without FASTQ bulk download.
+3. Obtain **exact** original v2.0 FASTA and gene annotation with version, manifest, checksum, licensing and unique/multi-map counting policy.
+4. If legally and technically feasible, request **existing integer gene-count table** from corresponding authors or official supplementary deposit before contemplating alignment of ~149.54 GB FASTQ.
+5. Pre-register independent statistical contrasts and appropriate experimental-unit model only after chamber and raw-count gates clear. Never run DESeq2 on FPKM as though it were integer counts.
+
+**Internal AI scientific decision: DATA REBUILD / NO SUBMISSION.** No claim of independent DEG/FDR, new biological discovery, author endorsement or published-paper correction.

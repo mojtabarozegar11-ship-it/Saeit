@@ -1,0 +1,98 @@
+name: ZM-R01 first real-SRR paired-read conservative gene-count pilot
+# Completed historical pilot; expensive original-FASTQ transfer must not repeat on source edits.
+# Future full 24-sample work requires an assembly-verified, separate production workflow.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-r01-single-srr-verified-source
+  cancel-in-progress: true
+jobs:
+  single-sample-proof-of-reconstruction:
+    # Standard public-repository runner: no larger paid runners, no VPS,
+    # no persistent biological files or website changes.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 330
+    env:
+      SRR: SRR33083355
+      GSM: GSM8904963
+      BIOPROJECT: PRJNA1249400
+      REFERENCE_URL: https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-61/fasta/triticum_aestivum/cdna/Triticum_aestivum.IWGSC.cdna.all.fa.gz
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify public source, independent ENA MD5 and disk budget BEFORE transfer
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f research/manuscripts/ZM-R01/ENA_PRJNA1249400_OFFICIAL_24_RUN_PAIRED_FASTQ_MD5_2026-10-25.tsv
+          grep -q '^SRR33083355' research/manuscripts/ZM-R01/ENA_PRJNA1249400_OFFICIAL_24_RUN_PAIRED_FASTQ_MD5_2026-10-25.tsv
+          df -h /
+          echo "Run only one paired real SRR; no paid GitHub runners; fail closed if disk is insufficient"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bowtie2 samtools
+          sudo rm -rf /usr/local/lib/android /opt/hostedtoolcache/CodeQL || true
+          df -h /
+      - name: Retrieve original wheat cDNA reference and ENA paired fastqs with exact MD5
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zm_counts"
+          cd "$RUNNER_TEMP/zm_counts"
+          curl -fL --retry 2 --connect-timeout 30 --max-time 600 "$REFERENCE_URL" -o wheat_cdna.fa.gz
+          gzip -t wheat_cdna.fa.gz
+          python - <<'PY'
+          import gzip,re
+          n=0
+          with gzip.open("wheat_cdna.fa.gz","rt") as f:
+              for line in f:
+                  if line.startswith(">") and "gene:" in line:
+                      n+=1
+          print("GENE-ANNOTATED TRANSCRIPT HEADERS",n,flush=True)
+          assert n >= 10000, "Incompatible transcript-to-gene annotations; abort before FASTQ"
+          PY
+          sha256sum wheat_cdna.fa.gz > wheat_cdna.fa.gz.sha256
+          zcat wheat_cdna.fa.gz > wheat_cdna.fa
+          bowtie2-build --threads 3 wheat_cdna.fa wheat_cdna_idx
+          python "$GITHUB_WORKSPACE/research/manuscripts/ZM-R01/analysis/verified_resumable_ena_pair_download.py"
+      - name: Transcriptome alignment and genuine conservative integer fragment counts
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/zm_counts"
+          # Reference index was checked and built before FASTQ download.
+          # Only primary first mates of proper pairs at MAPQ >=20 contribute
+          # once each; MAPQ is NOT proof of unique concordant mapping.
+          # This remains a non-publication transcriptome pilot, no FPKM/TPM conversions.
+          bowtie2 -x wheat_cdna_idx -1 R1.fastq.gz -2 R2.fastq.gz \
+            --very-sensitive --no-unal --no-mixed --no-discordant -p 3 \
+            2> alignment_summary.txt \
+            | samtools view -h -f 66 -F 2304 -q 20 - \
+            | python "$GITHUB_WORKSPACE/research/manuscripts/ZM-R01/analysis/unique_fragment_transcriptome_gene_counts.py" \
+                --reference-fasta-gz wheat_cdna.fa.gz \
+                --sample-gsm "$GSM" \
+                --output-tsv conservative_one_sample_integer_counts.tsv \
+                --provenance-json provenance.json
+          python - <<'PY'
+          import csv,os
+          p="conservative_one_sample_integer_counts.tsv"
+          z=list(csv.DictReader(open(p),delimiter="\t"))
+          assert len(z)>1000,"Fewer than 1000 counted genes; reject failed alignments"
+          assert all(int(r[os.environ["GSM"]])>=1 for r in z)
+          print("Genuine counts derived for",len(z),"genes; NOT a 24-library DESeq2 matrix")
+          PY
+      - name: Preserve ONLY compact derived source-attributed experiment output
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZM-R01-SRR33083355-genuine-integer-gene-count-pilot
+          path: |
+            ${{ runner.temp }}/zm_counts/conservative_one_sample_integer_counts.tsv
+            ${{ runner.temp }}/zm_counts/provenance.json
+            ${{ runner.temp }}/zm_counts/alignment_summary.txt
+            ${{ runner.temp }}/zm_counts/verified_ena_download_provenance.json
+            ${{ runner.temp }}/zm_counts/wheat_cdna.fa.gz.sha256
+          retention-days: 7
+          if-no-files-found: error

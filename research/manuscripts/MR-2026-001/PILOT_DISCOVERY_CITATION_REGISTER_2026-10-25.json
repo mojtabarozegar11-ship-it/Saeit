@@ -1,0 +1,92 @@
+{
+  "schema_version": "pilot-citation-register-v1",
+  "created_local_date": "2026-10-25",
+  "project": "MR-2026-001",
+  "scope": "public discovery only, not a database export",
+  "formal_screening_performed": false,
+  "record_counts": {
+    "indexed_database_retrieved": null,
+    "deduplicated": null,
+    "title_abstract_screened": null,
+    "fulltext_screened": null,
+    "included": null
+  },
+  "records": [
+    {
+      "local_id": "MR-PILOT-20261025-001",
+      "title": "Participatory evaluation of an irrigation decision support system for water-saving and productivity gains in Lake Urmia Basin",
+      "authors": [
+        "Abdollah Amini",
+        "Somayeh Emami",
+        "Hossein Dehghanisanij"
+      ],
+      "year": 2025,
+      "doi": "10.1038/s41598-025-26567-z",
+      "doi_verification": "official publisher",
+      "source_url": "https://www.nature.com/articles/s41598-025-26567-z",
+      "access_level": "publisher fulltext HTML, PDF gated",
+      "study_type": "primary field comparison",
+      "candidate_stratum": "A",
+      "formal_inclusion_decision": null,
+      "human_screener": null,
+      "notes": "8 farms, treatment/control plots; within-paper WP contradictions F6/F7 need table verification"
+    },
+    {
+      "local_id": "MR-PILOT-20261025-002",
+      "title": "Towards efficient irrigation management at field scale using new technologies: A systematic literature review",
+      "authors": [
+        "Afaf Bounajra",
+        "Kamal El Guemmat",
+        "Khalifa Mansouri",
+        "Fatiha Akef"
+      ],
+      "year": 2024,
+      "doi": "10.1016/j.agwat.2024.108758",
+      "doi_verification": "publisher indexed bibliographic page",
+      "source_url": "https://doi.org/10.1016/j.agwat.2024.108758",
+      "access_level": "bibliographic and abstract; publisher direct fulltext blocked",
+      "study_type": "systematic review / overlap",
+      "candidate_stratum": "background",
+      "formal_inclusion_decision": null,
+      "human_screener": null,
+      "notes": "Field-scale technology overview already exists"
+    },
+    {
+      "local_id": "MR-PILOT-20261025-003",
+      "title": "Water conservation and saving technologies for irrigation. A structured literature review of econometric studies on the determinants of adoption",
+      "authors": [
+        "Andrea Pronti",
+        "Sabrina Auci",
+        "Julio Berbel"
+      ],
+      "year": 2024,
+      "doi": "10.1016/j.agwat.2024.108838",
+      "doi_verification": "DOAJ indexed bibliographic record",
+      "source_url": "https://doaj.org/article/c97731e90d6b4034a27289bd2b558256",
+      "access_level": "indexed abstract / bibliographic only",
+      "study_type": "adoption determinants review / overlap",
+      "candidate_stratum": "background",
+      "formal_inclusion_decision": null,
+      "human_screener": null,
+      "notes": "Not direct field validation of farmer-facing DSS"
+    },
+    {
+      "local_id": "MR-PILOT-20261025-004",
+      "title": "Application of machine learning approaches in supporting irrigation decision making: A review",
+      "authors": [
+        "Lisa Umutoni",
+        "Vidya Samadi"
+      ],
+      "year": 2024,
+      "doi": null,
+      "doi_verification": "not independently verified",
+      "source_url": "https://econpapers.repec.org/article/eeeagiwat/v_3a294_3ay_3a2024_3ai_3ac_3as0378377424000453.htm",
+      "access_level": "abstract/bibliographic only",
+      "study_type": "machine learning irrigation review / overlap",
+      "candidate_stratum": "background",
+      "formal_inclusion_decision": null,
+      "human_screener": null,
+      "notes": "Do not infer DOI from publisher URL or claim fulltext extraction"
+    }
+  ]
+}

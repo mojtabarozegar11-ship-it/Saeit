@@ -1,0 +1,32 @@
+name: ZM-R01 official GEO factorial design validation (metadata only)
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - research/manuscripts/ZM-R01/analysis/official_geo_24_sample_factorial_design_gate.py
+      - .github/workflows/zm-r01-official-geo-factorial-design.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-24-sample-2x2x2-design:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check source GEO design and ENA manifest WITHOUT FASTQ download
+        run: |
+          python research/manuscripts/ZM-R01/analysis/official_geo_24_sample_factorial_design_gate.py \
+            --ena-manifest research/manuscripts/ZM-R01/ENA_PRJNA1249400_OFFICIAL_24_RUN_PAIRED_FASTQ_MD5_2026-10-25.tsv \
+            --output-prefix "$RUNNER_TEMP/zm_r01_geo_24_factorial_design"
+      - name: Preserve full rank and honest unverified mapping status
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZM-R01-GEO-24-sample-factorial-metadata-design-NOT-COUNTS
+          path: |
+            ${{ runner.temp }}/zm_r01_geo_24_factorial_design.tsv
+            ${{ runner.temp }}/zm_r01_geo_24_factorial_design.json
+          retention-days: 14
+          if-no-files-found: error

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "as_of": "2026-10-24",
+  "as_of": "2026-10-26",
   "identity": {
     "display_name": "Mojtaba Roozegar",
     "persian_name": "مجتبی روزگار",
@@ -36,12 +36,43 @@
   "research_pipeline": [
     {
       "id": "MR-2026-001",
-      "title": "Field Validation and Farmer Adoption of Irrigation Decision-Support Tools under Water Scarcity: A Scoping Review Protocol",
-      "type": "Proposed implementation-focused scoping review",
-      "status": "Protocol design; no journal submission",
-      "next_gate": "Test originality against the September 2026 systematic review DOI 10.3390/w18172174; define field-validation and adoption eligibility, then undertake documented searches and author review.",
-      "doi": null
+      "title": "What Does an Irrigation Recommendation Actually Change? An Evidence-Chain Perspective on Farmer Decisions and Water Outcomes",
+      "type": "Perspective / narrative evidence commentary (proposed)",
+      "status": "Research manuscript V5; AI-only scientific review: MAJOR REVISION; human scientific author review pending; no journal receipt",
+      "source": "research/manuscripts/MR-2026-001/MR-2026-001_DIRECT_IRRIGATION_ADHERENCE_PRIOR_ART_AUTHOR_REVIEW_V5_2026-10-26.md",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40241729197",
+      "next_gate": "Resolve bounded source evidence and author intellectual review; no general novelty or validated checklist claim.",
+      "doi": null,
+      "manuscript_id": null,
+      "published": false,
+      "publication_status": "not_submitted"
+    },
+    {
+      "id": "AE-2026-001",
+      "title": "Historical-Release Sensitivity of Agricultural Value Added per Worker in World Development Indicators: A Three-Vintage Fixed-Country Audit",
+      "type": "Descriptive data/methods research note candidate",
+      "status": "Revised research manuscript; three-vintage source-backed analysis and independent sign-margin QC; journal novelty not established; human author review pending; no journal receipt",
+      "source": "research/manuscripts/AE-2026-001/AE-2026-001_FIRST_FULL_EMPIRICAL_MANUSCRIPT_DRAFT_2026-10-25.md",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40251337787",
+      "next_gate": "Independent literature appraisal, scientific author contribution and approval, and a publisher-specific research note decision.",
+      "doi": null,
+      "manuscript_id": null,
+      "published": false,
+      "publication_status": "not_submitted"
+    },
+    {
+      "id": "ZM-R01",
+      "title": "Wheat transcriptomics reconstruction from genuine paired-end RNA-seq data",
+      "type": "Bioinformatics research in progress (not a complete paper)",
+      "status": "One sample has source-backed integer transcriptome-pilot counts; strict uniquely mapped claim refuted; 24-sample matrix and DESeq2 results unavailable; no journal receipt",
+      "source": "research/manuscripts/ZM-R01/C22_INDEPENDENT_ARTIFACT_MULTIMAPPING_CRITICAL_SCIENCE_CORRECTION_2026-10-26.md",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40222743342",
+      "next_gate": "Establish assembly/gene annotation compatibility and consistent paired-end count assignment for all 24 samples before any differential-expression inference.",
+      "doi": null,
+      "manuscript_id": null,
+      "published": false,
+      "publication_status": "not_submitted"
     }
   ],
-  "accuracy_policy": "Only publisher-confirmed submissions with manuscript IDs count as submitted. Only article DOI or publisher records count as accepted/published. Public website essays are not counted as peer-reviewed journal papers."
+  "accuracy_policy": "Only publisher-confirmed submissions with manuscript IDs count as submitted. Only article DOI or publisher records count as accepted/published. Public website essays are not counted as peer-reviewed journal papers. AI-only criticism is not human peer review; do not represent an unsubmitted manuscript as published research. These project records are staging data on a research branch, not verified live-site changes."
 }

@@ -1,0 +1,27 @@
+name: AE 2026 001 C18 reference sensitivity
+on:
+  push:
+    branches:
+      - research/mr-2026-001-novelty-audit
+    paths:
+      - analysis/ae_2026_001_c18_reference_decomposition.py
+      - .github/workflows/ae-2026-001-c18-reference-sensitivity.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sensitivity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python analysis/ae_2026_001_c18_reference_decomposition.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ae-2026-001-c18-reference-sensitivity
+          path: research_outputs/AE-2026-001/c18_reference_sensitivity.json
+          if-no-files-found: error
+          retention-days: 30

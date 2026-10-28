@@ -1,0 +1,33 @@
+name: MR Cvejić original-source rounded-denominator consistency (no deployment)
+on:
+  push:
+    branches:
+      - research/mr-2026-001-novelty-audit
+    paths:
+      - research/manuscripts/MR-2026-001/analysis/cvejic_2020_denominator_consistency_gate.py
+      - .github/workflows/mr-cvejic-rounded-denominator-gate.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  arithmetic-source-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check conditional respondent denominator without fabricating data
+        run: |
+          set -euo pipefail
+          python research/manuscripts/MR-2026-001/analysis/cvejic_2020_denominator_consistency_gate.py
+          python - <<'PY'
+          import json
+          d=json.load(open("cvejic_rounded_denominator_consistency.json"))
+          assert d["conditional_common_denominator_solution"][0]["hypothetical_n"] == 35
+          assert "NOT INDEPENDENTLY VERIFIED" in d["scientific_verdict"]
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MR-C40-Cvejic-conditional-denominator-NOT-VERIFIED
+          path: cvejic_rounded_denominator_consistency.json
+          retention-days: 14
+          if-no-files-found: error

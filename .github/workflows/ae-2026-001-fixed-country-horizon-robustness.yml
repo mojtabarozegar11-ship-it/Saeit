@@ -1,0 +1,44 @@
+name: AE-2026-001 source-locked 2026 WDI horizon robustness
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/ae-2026-001-fixed-country-horizon-robustness.yml
+      - analysis/ae_2026_fixed_balanced_horizon_sensitivity.py
+      - research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-wdi-horizon-sensitivity:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compute fixed-country paired horizon sensitivity on the original archived 2026 WDI panel
+        run: |
+          set -euo pipefail
+          python analysis/ae_2026_fixed_balanced_horizon_sensitivity.py \
+            --panel research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv \
+            --out "$RUNNER_TEMP/AE-2026-001_2026_WDI_FIXED_HORIZON_SENSITIVITY.json"
+          python - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ["RUNNER_TEMP"])/"AE-2026-001_2026_WDI_FIXED_HORIZON_SENSITIVITY.json"
+          x=json.loads(p.read_text())
+          assert x["source_panel_rows"]==217, x["source_panel_rows"]
+          assert x["balanced_2000_2019_2023_n"]==153, x["balanced_2000_2019_2023_n"]
+          assert x["paired_negative_count"]+x["paired_positive_count"]+x["paired_zero_count"]==153
+          assert x["not_historical_vintage_revision"] is True
+          assert x["independent_ilo_employment_validated"] is False
+          assert x["publication_gate"]=="MAJOR_REVISION_NO_SUBMISSION"
+          print("PASS: ORIGINAL 2026 WDI PANEL; DESCRIPTIVE HORIZON SENSITIVITY ONLY")
+          PY
+      - name: Preserve country-level source-backed results
+        uses: actions/upload-artifact@v4
+        with:
+          name: AE-2026-001-2026-WDI-horizon-sensitivity-source-locked
+          path: ${{ runner.temp }}/AE-2026-001_2026_WDI_FIXED_HORIZON_SENSITIVITY.json
+          retention-days: 14
+          if-no-files-found: error

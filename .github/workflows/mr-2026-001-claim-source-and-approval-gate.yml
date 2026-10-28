@@ -1,0 +1,35 @@
+name: MR-2026-001 conservative source and author-gate QA
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/mr-2026-001-claim-source-and-approval-gate.yml
+      - research/manuscripts/MR-2026-001/analysis/author_review_scientific_gate.py
+      - research/manuscripts/MR-2026-001/C19_CLEAN_EIGHT_CASE_CRITICAL_NARRATIVE_MANUSCRIPT_2026-10-25.md
+      - research/manuscripts/MR-2026-001/MR-2026-001_DISCOVER_AGRICULTURE_PERSPECTIVE_AUTHOR_REVIEW_CANDIDATE_2026-10-25.md
+      - research/manuscripts/MR-2026-001/C22_AI_INTERNAL_SANRA_SIX_ITEM_ADVERSARIAL_DECISION_2026-10-25.md
+      - research/manuscripts/MR-2026-001/C23_TRACEABLE_NON_SYSTEMATIC_DISCOVERY_AND_PRIOR_ART_LOG_2026-10-25.md
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-claim-qa-not-publisher-clearance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check manuscript references, uncertainty and remaining human author blockers
+        run: python research/manuscripts/MR-2026-001/analysis/author_review_scientific_gate.py
+      - name: Preserve evidence and explicit NOT SCIENTIFICALLY CLEARED decision
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: MR-2026-001-source-gate-not-author-approval
+          path: research/manuscripts/MR-2026-001/MR-2026-001_MECHANICAL_QA_NOT_SCIENTIFIC_CLEARANCE_2026-10-25.json
+          retention-days: 7
+          if-no-files-found: error

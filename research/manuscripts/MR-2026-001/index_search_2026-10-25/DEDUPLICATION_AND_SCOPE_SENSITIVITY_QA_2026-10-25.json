@@ -1,0 +1,90 @@
+{
+  "utc": "2026-10-25T02:52:53.449Z",
+  "sources": {
+    "europe_pmc_original": 95,
+    "openalex_original": 52,
+    "AGRICOLA_source_expansion": 525
+  },
+  "raw_total": 672,
+  "unique_source_linked_records": 604,
+  "candidate_duplicate_source_entries": 68,
+  "record_with_missing_title": 1,
+  "duplicates_groups": 65,
+  "duplicate_title_variation_groups": 2,
+  "variationExamples": [
+    {
+      "key": "doi:10.1016/j.compag.2012.03.003",
+      "sourceIds": [
+        "EuropePMC Original AGR:IND44787309",
+        "OpenAlex Original https://openalex.org/W2030365305",
+        "EuropePMC AGRICOLA AGR:IND44787309"
+      ],
+      "titles": [
+        "Using a mobile phone Short Messaging Service (SMS) for irrigation scheduling in Australia â Farmersâ participation and utility evaluation",
+        "Using a mobile phone Short Messaging Service (SMS) for irrigation scheduling in Australia – Farmers’ participation and utility evaluation",
+        "Using a mobile phone Short Messaging Service (SMS) for irrigation scheduling in Australia â Farmersâ participation and utility evaluation"
+      ]
+    },
+    {
+      "key": "doi:10.2134/agronj2005.0051",
+      "sourceIds": [
+        "EuropePMC AGRICOLA AGR:IND606635714",
+        "EuropePMC AGRICOLA AGR:IND43756759"
+      ],
+      "titles": [
+        "Interactions of Nitrogen, Weather, Soil, and Irrigation on Corn Yield",
+        "Interactions of nitrogen, weather, soil, and irrigation on corn yield. [Erratum: 2005 Nov-Dec, v. 97, no. 6, p. 1657.]"
+      ]
+    }
+  ],
+  "abstracts_index_available": 83,
+  "abstract_missing": 521,
+  "tiers": {
+    "HIGH": 13,
+    "MEDIUM": 159,
+    "LOW": 432
+  },
+  "seedRecall": [
+    {
+      "doi": "10.1038/s41598-025-26567-z",
+      "found": true
+    },
+    {
+      "doi": "10.1029/2023wr035810",
+      "found": false
+    },
+    {
+      "doi": "10.1016/j.compag.2020.105822",
+      "found": true
+    },
+    {
+      "doi": "10.1016/j.agwat.2018.08.025",
+      "found": true
+    },
+    {
+      "doi": "10.1016/j.agwat.2024.108758",
+      "found": false
+    }
+  ],
+  "human_decisions_populated": 0,
+  "human_screening_performed": false,
+  "prisma_included_count": null,
+  "warnings": [
+    "Tiers are keyword heuristics, not eligibility or scientific inclusion decisions",
+    "Only OpenAlex reconstructed indexed abstracts counted; must compare against publisher",
+    "AGRICOLA search was run against Europe PMC AGR-coded source, not independently through USDA",
+    "Cross-record DOI identity grouping is automated and needs human duplicate adjudication",
+    "Missing titles retained rather than silently dropped",
+    "Search strategy is not frozen and no exhaustive database coverage asserted"
+  ],
+  "enrichment_update": {
+    "utc": "2026-10-25T02:57:20.100Z",
+    "provenance": "PRIORITY_DOI_ABSTRACT_LOOKUP_2026-10-25.json",
+    "requested": 73,
+    "matched": 73,
+    "additional_reconstructed_abstracts": 15,
+    "records_with_indexed_abstract_after_update": 83,
+    "human_decisions_changed": 0,
+    "publisher_verification": "NOT PERFORMED"
+  }
+}

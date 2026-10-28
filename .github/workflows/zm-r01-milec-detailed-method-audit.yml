@@ -1,0 +1,32 @@
+name: ZM-R01 original Milec method and factorial novelty audit
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - .github/workflows/zm-r01-milec-detailed-method-audit.yml
+      - research/manuscripts/ZM-R01/analysis/audit_milec_original_factorial_design.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-original-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify script compiles
+        run: python -m py_compile research/manuscripts/ZM-R01/analysis/audit_milec_original_factorial_design.py
+      - name: Download author-deposited preprint, verify MD5 and extract exact methods context
+        run: python research/manuscripts/ZM-R01/analysis/audit_milec_original_factorial_design.py
+      - name: Retain limited method context, not copyrighted source
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZM-R01-Milec-detailed-method-context
+          path: milec_source_detailed_method_audit.json
+          retention-days: 14
+          if-no-files-found: error

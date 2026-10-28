@@ -1,0 +1,39 @@
+name: AE C45 2019-2023 baseline selection reproducibility
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - research/manuscripts/AE-2026-001/analysis/c45_2019_2023_baseline_selection_diagnostic.py
+      - research/manuscripts/AE-2026-001/AE-2026-001_OFFICIAL_WDI_OBSERVED_COUNTRY_PANEL_2026-10-25.csv
+      - .github/workflows/ae-c45-2019-2023-selection-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Recompute exact C45 selection from immutable source snapshot
+        run: |
+          python research/manuscripts/AE-2026-001/analysis/c45_2019_2023_baseline_selection_diagnostic.py > ae_c45_selection.json
+          python - <<'PY'
+          import json
+          x=json.load(open('ae_c45_selection.json'))
+          assert x['full_2019_2023']['n']==169
+          assert x['has_2000_baseline']['n']==153
+          assert x['no_2000_baseline']['n']==16
+          assert abs(x['full_minus_baseline_median_log_pp_per_year']-0.08467093168718587)<1e-9
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ae-c45-selection-source-locked
+          path: ae_c45_selection.json
+          retention-days: 30
+          if-no-files-found: error
