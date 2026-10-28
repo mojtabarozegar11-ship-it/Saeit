@@ -111,6 +111,16 @@ for(const patch of [{ctrlKey:true},{altKey:true},{metaKey:true},{isComposing:tru
   assert.equal(prevented,false,'modified/composing shortcut must remain native');
   assert.equal(game.getInput().keys,0,'modified/composing shortcut cannot latch game key');
 }
+// Regression: an already-held key must not survive a browser shortcut or IME.
+// Before this fix, Ctrl+W left the ship moving if the browser swallowed keyup.
+document.handlers.keydown({code:'KeyW',target:document.body,repeat:false,preventDefault(){}});
+assert.equal(game.getInput().keys,1);
+document.handlers.keydown({code:'ControlLeft',target:document.body,ctrlKey:true,repeat:false,preventDefault(){}});
+assert.equal(game.getInput().keys,0,'Ctrl shortcut releases previously held movement');
+document.handlers.keydown({code:'Space',target:document.body,repeat:false,preventDefault(){}});
+assert.equal(game.getInput().keys,1);
+document.handlers.compositionstart();
+assert.equal(game.getInput().keys,0,'IME start releases previously held firing');
 document.handlers.keydown({code:'ArrowLeft',target:document.body,repeat:false,preventDefault(){}});assert.equal(game.getInput().keys,1);
 document.hidden=true;document.handlers.visibilitychange();assert.equal(game.getState().state,'paused');assert.equal(game.getInput().touchActive,false,'background tab releases ship pointer');assert.equal(game.getInput().held.left,false,'background tab releases directional owner');assert.equal(game.getInput().keys,0,'hidden tab releases keyboard input');assert.equal(Object.values(game.getInput().held).some(Boolean),false);document.hidden=false;game.pause();assert.equal(game.getState().state,'playing');
 game.pause();assert.equal(game.getState().state,'paused');game.start();frame(2980);assert.ok(Math.abs(game.getState().simulationTime-.1)<1e-6,'100 ms hitch advances simulation consistently');game.spawnBoss();const beforeBossContact=game.getState().enemies;game.testBossContact();assert.equal(game.getState().enemies,beforeBossContact,'boss must survive contact');game.advanceWave();game.advanceWave();assert.equal(game.getState().state,'playing','waves must not force shop interruption');game.start();for(let i=0;i<8;i++)game.spawnEnemy();assert.doesNotThrow(()=>game.useEMP(),'EMP finishing a wave must tolerate cleared enemy arrays');assert.equal(game.getState().wave,2);
