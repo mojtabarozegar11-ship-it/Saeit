@@ -99,15 +99,57 @@ def check_gtf(p, contigs):
     if other: raise GateError(f'Annotation seqnames absent from FASTA: {sorted(other)[:8]}')
     return seen
 
+MAX_R_INTEGER = 2147483647
+
 def valid_raw_integer_count(cell):
-    """Only ASCII base-10 counts are portable to downstream R/DESeq2 readers."""
-    return isinstance(cell, str) and cell.isascii() and cell.isdecimal()
+    """Accept nonnegative ASCII integer strings representable as R 32-bit integers.
+
+    This is a parser/integrity guard, not evidence of true biological counts.
+    Avoid converting unbounded digit strings to Python ints (3.11 digit limit).
+    """
+    if not isinstance(cell, str) or not cell or not cell.isascii() or not cell.isdecimal():
+        return False
+    significant = cell.lstrip('0') or '0'
+    limit = str(MAX_R_INTEGER)
+    return len(significant) < len(limit) or (len(significant) == len(limit) and significant <= limit)
+
+
+def check_count_matrix(cpath, library_ids):
+    """Validate an existing TSV count matrix without estimating any expression values."""
+    with cpath.open(encoding='utf-8', newline='') as f:
+        reader = csv.reader(f, delimiter='\t')
+        header = next(reader, [])
+        if (not header or header[0].lower() not in ('gene_id', 'geneid')
+                or len(header) != len(library_ids) + 1
+                or len(set(header[1:])) != len(library_ids)
+                or set(header[1:]) != library_ids):
+            raise GateError('Raw matrix columns must contain each library ID exactly once')
+        genes = set()
+        n = 0
+        for row in reader:
+            if len(row) != len(library_ids) + 1:
+                raise GateError('Count-matrix row width mismatch')
+            gene = row[0]
+            if (not gene or gene != gene.strip() or any(ch.isspace() for ch in gene)
+                    or gene in genes):
+                raise GateError('Missing, malformed or duplicate gene ID')
+            genes.add(gene)
+            n += 1
+            if any(not valid_raw_integer_count(x) for x in row[1:]):
+                raise GateError('Non-integer, negative, missing or >32-bit raw counts')
+    if n == 0:
+        raise GateError('Empty count matrix')
+    return n
 
 
 def validate(manifest_file):
     root=manifest_file.parent
     m=json.loads(manifest_file.read_text(encoding='utf-8'))
+    if not isinstance(m, dict):
+        raise GateError('Manifest root must be a JSON object')
     ref=m.get('reference',{})
+    if not isinstance(ref, dict):
+        raise GateError('Reference metadata must be a JSON object')
     missing=[k for k in REQUIRED_REF if not ref.get(k)]
     if missing: raise GateError('Missing reference metadata: '+', '.join(missing))
     if not re.fullmatch(r'GC[FA]_[0-9]+\.[0-9]+',str(ref['assembly_accession'])):
@@ -116,6 +158,8 @@ def validate(manifest_file):
     gtf=file_with_digest(root,ref['gtf'],ref['gtf_sha256'],'sha256')
     check_gtf(gtf, fasta_contigs(fasta))
     libs=m.get('libraries',[])
+    if not isinstance(libs, list) or any(not isinstance(lib, dict) for lib in libs):
+        raise GateError('Libraries must be an array of metadata objects')
     if len(libs)!=24: raise GateError(f'Expected 24 documented libraries, got {len(libs)}')
     used_files=set(); ids=set(); reps=set(); conditions=Counter()
     for lib in libs:
@@ -145,21 +189,10 @@ def validate(manifest_file):
     if not m.get('multimapping_policy') or not m.get('independence_documentation'):
         raise GateError('Multimapping policy and biological provenance documentation required')
     counts=m.get('raw_integer_counts')
-    if not counts: raise GateError('No actual raw integer count matrix; cannot run DESeq2')
+    if not isinstance(counts, dict):
+        raise GateError('No valid raw integer count-matrix metadata; cannot run DESeq2')
     cpath=file_with_digest(root,counts.get('path'),counts.get('sha256'),'sha256')
-    with cpath.open(encoding='utf-8',newline='') as f:
-        reader=csv.reader(f,delimiter='\t')
-        header=next(reader,[])
-        if not header or header[0].lower() not in ('gene_id','geneid') or set(header[1:])!=ids or len(header)!=25:
-            raise GateError('Raw matrix columns must contain exactly the 24 library IDs')
-        genes=set(); n=0
-        for row in reader:
-            if len(row)!=25:raise GateError('Count-matrix row width mismatch')
-            if not row[0] or row[0] in genes: raise GateError('Missing or duplicate gene ID')
-            genes.add(row[0]); n+=1
-            if any(not valid_raw_integer_count(x) for x in row[1:]):
-                raise GateError('Non-integer, negative or missing raw counts')
-    if n==0:raise GateError('Empty count matrix')
+    n=check_count_matrix(cpath, ids)
     return {'manifest':'FILE_INTEGRITY_AND_METADATA_PASS_ONLY','libraries':24,'fastq_files':48,'genes':n,'conditions':dict(conditions),
             'scientific_gates_remaining':['independent biological provenance verification','alignment/QC reports','design specification','valid DESeq2 execution','FDR provenance']}
 
