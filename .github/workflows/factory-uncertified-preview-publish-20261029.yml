@@ -151,7 +151,7 @@ jobs:
           scp -q -F "$d/config" "$d/farm_enterprise_economics-internal-qa.zip" "saeit-cpanel:$inbox/incoming/farm_enterprise_economics/$digest.zip.partial"
           scp -q -F "$d/config" "$d/manufacturing_manifest.json" "saeit-cpanel:$inbox/incoming/farm_enterprise_economics/$digest.json.partial"
           ssh -F "$d/config" saeit-cpanel "python3 '$receiver_stage/store_receiver.py' finalize farm_enterprise_economics '$digest' --root '$inbox'"
-          ssh -F "$d/config" saeit-cpanel "python3 '$receiver_stage/publish_factory_free_tool.py' --inbox '$inbox' --webroot /home/zomorod2/mojplaywin.com --authorize-publication --uncertified-preview"
+          ssh -F "$d/config" saeit-cpanel "python3 '$receiver_stage/publish_factory_free_tool.py' --inbox '$inbox' --webroot /home/zomorod2/mojplaywin.com --authorize-publication --uncertified-preview --expected-sha256 '$digest'"
           curl -fsS --max-time 20 "https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/" -o "$d/live.html"
           grep -q "has not received QC1000" "$d/live.html"
           curl -fsS --max-time 20 "https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/Farm_Enterprise_Economics_Toolkit_Free_v1.zip" -o "$d/public.zip"
