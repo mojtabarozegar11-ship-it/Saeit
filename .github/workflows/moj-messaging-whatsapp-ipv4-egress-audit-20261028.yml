@@ -1,0 +1,60 @@
+name: Moj messaging - WhatsApp IPv4 versus IPv6 egress audit
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths: ['.github/workflows/moj-messaging-whatsapp-ipv4-egress-audit-20261028.yml']
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Inspect only TCP and TLS availability, never account or HTTP responses
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/wa-egress.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          timeout 60s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'python3 -' <<'PY'
+          import socket,ssl,os
+          hosts=['web.whatsapp.com','github.com','www.google.com']
+          for host in hosts:
+              name={'web.whatsapp.com':'WA','github.com':'GITHUB','www.google.com':'GOOGLE'}[host]
+              for family,tag in [(socket.AF_INET,'IPV4'),(socket.AF_INET6,'IPV6')]:
+                  try:
+                      infos=socket.getaddrinfo(host,443,family,socket.SOCK_STREAM)
+                  except (socket.gaierror,OSError):
+                      print('MMSG_'+name+'_'+tag+'_DNS=FAILED');continue
+                  print('MMSG_'+name+'_'+tag+'_DNS=PASS')
+                  address=infos[0][4]
+                  s=socket.socket(family,socket.SOCK_STREAM)
+                  s.settimeout(4)
+                  try:
+                      s.connect(address)
+                  except OSError as exc:
+                      print('MMSG_'+name+'_'+tag+'_TCP='+('TIMEOUT' if isinstance(exc,TimeoutError) else 'DENIED_'+str(getattr(exc,'errno','UNKNOWN'))))
+                      s.close();continue
+                  print('MMSG_'+name+'_'+tag+'_TCP=PASS')
+                  try:
+                      ss=ssl.create_default_context().wrap_socket(s,server_hostname=host)
+                      print('MMSG_'+name+'_'+tag+'_TLS=PASS')
+                      ss.close()
+                  except OSError as exc:
+                      print('MMSG_'+name+'_'+tag+'_TLS='+('TIMEOUT' if isinstance(exc,TimeoutError) else 'FAILED_'+str(getattr(exc,'errno','UNKNOWN'))))
+                      try:s.close()
+                      except:pass
+          print('MMSG_HTTP_PROXY_CONFIGURED='+('YES' if any(os.environ.get(n) for n in ('HTTPS_PROXY','https_proxy')) else 'NO'))
+          print('MMSG_NO_IP_OR_SECRETS_PRINTED=PASS')
+          PY
