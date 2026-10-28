@@ -457,3 +457,45 @@ test('public Ramadan telemetry cannot mutate the campaign or invoke QA-only cont
   assert.equal(typeof localContext.window.RamadanWarDebug.tick,'function');
   assert.equal(typeof localContext.window.RamadanWarDebug.qaMission,'function');
 });
+
+
+test('new recovery saves restore only uncollected intel sites and remain idempotent', () => {
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
+  const intel=i=>({x:sites[i][0],y:sites[i][1],type:'mission-intel',spotIndex:i,life:3600});
+  const state={...fresh(),mission:2,objective:{done:1,hold:0,bossDefeated:false,collectedSites:[0]},pickups:[intel(1)]};
+  assert.equal(validateCampaignSave(state),true);
+  assert.equal(restoreRecoveryPickups(state,sites),1);
+  assert.deepEqual(state.pickups.filter(p=>p.type==='mission-intel').map(p=>p.spotIndex).sort(),[1,2]);
+  assert.equal(restoreRecoveryPickups(state,sites),0);
+  assert.deepEqual(state.objective.collectedSites,[0]);
+  assert.equal(validateCampaignSave(state),true);
+});
+
+test('new recovery ledger rejects forged rewards, duplicate sites and pickup overlap', () => {
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
+  const intel=i=>({x:sites[i][0],y:sites[i][1],type:'mission-intel',spotIndex:i,life:3600});
+  const state={...fresh(),mission:2,objective:{done:1,hold:0,bossDefeated:false,collectedSites:[0]},pickups:[intel(1),intel(2)]};
+  assert.equal(validateCampaignSave(state),true);
+  for(const collectedSites of [[0,0],[0,3],['0'],[0,1],[],null]) {
+    assert.equal(validateCampaignSave({...state,objective:{...state.objective,collectedSites}}),false,String(collectedSites));
+  }
+  assert.equal(validateCampaignSave({...state,pickups:[intel(0),intel(1)]}),false,'collected site must never be re-awarded');
+  assert.equal(validateCampaignSave({...fresh(),objective:{...fresh().objective,collectedSites:[]}}),false,'ledger belongs only to recovery stage');
+});
+
+test('legacy recovery with missing pickups remains playable but never invents provenance', () => {
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
+  const state={...fresh(),mission:2,objective:{done:1,hold:0,bossDefeated:false},pickups:[]};
+  assert.equal(restoreRecoveryPickups(state,sites),2);
+  assert.equal(state.objective.done,1);
+  assert.equal(state.objective.collectedSites,undefined,'cannot assert which legacy site was collected');
+  assert.equal(validateCampaignSave(state),true);
+});
+
+test('campaign interaction, timed defence and intel rewards save immediately', () => {
+  const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  assert.match(client,/o\.done\+\+;world\.score\+=250;[^\n]*sync\(\);save\(\);return true;/);
+  assert.match(client,/o\.done=1;toast\('دفاع موفق • موقعیت تثبیت شد'\);save\(\)/);
+  assert.match(client,/o\.collectedSites\.push\(index\);/);
+  assert.match(client,/toast\('اطلاعات حیاتی بازیابی شد'\);sync\(\);save\(\);continue/);
+});
