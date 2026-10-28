@@ -82,6 +82,36 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "WRONG_STOREFRONT"):
             publisher.publish(self.inbox, bad, release_authorized=True)
 
+    def test_preview_selects_exact_verified_digest_with_other_receipts_present(self):
+        recipe = publisher.RECIPE
+        second_zip = self.base / "second.zip"
+        with zipfile.ZipFile(str(second_zip), "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(recipe + "/calculator.py", "print('another offline edition')")
+        second_sha = hashlib.sha256(second_zip.read_bytes()).hexdigest()
+        incoming = self.inbox / "incoming" / recipe
+        (incoming / (second_sha + ".zip.partial")).write_bytes(second_zip.read_bytes())
+        (incoming / (second_sha + ".json.partial")).write_text(json.dumps({
+            "name": "Another private edition",
+            "recipe": recipe,
+            "artifact_sha256": second_sha,
+            "qa_status": "passed",
+            "commercial_status": "private_internal_qa_pass_not_published",
+            "price": None,
+            "public_listing_enabled": False,
+            "owner_publication_approval": False,
+        }))
+        receiver.finalize(self.inbox, recipe, second_sha)
+
+        result = publisher.publish(
+            self.inbox, self.webroot, release_authorized=True,
+            uncertified_preview=True, expected_sha256=self.sha,
+        )
+
+        self.assertEqual(result["status"], "published_public_uncertified_preview")
+        self.assertEqual(result["sha256"], self.sha)
+        page = (self.webroot / "factory-releases" / publisher.PUBLIC_SLUG / "index.html").read_text()
+        self.assertIn("has not received QC1000", page)
+
 
 if __name__ == "__main__":
     unittest.main()
