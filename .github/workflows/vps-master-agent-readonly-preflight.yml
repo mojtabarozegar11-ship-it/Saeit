@@ -63,6 +63,22 @@ jobs:
               for status in ('queued','running','failed','completed'):
                   print('MASTER_SELF_IMPROVEMENT_'+status.upper()+'='+str(AgentTask.objects.filter(
                       agent=agent,capability_code='master_self_improvement',status=status).count()))
+          from django.utils import timezone
+          from core.models import Product
+          running=AgentTask.objects.filter(agent__code='economic-master-agent',status='running').order_by('updated_at')
+          for task in running[:5]:
+              age=int((timezone.now()-task.updated_at).total_seconds())
+              print(f'MASTER_RUNNING_TASK id={task.pk} action={task.action_type} capability={task.capability_code} attempts={task.attempt_count}/{task.max_attempts} age_seconds={age}')
+          for product in Product.objects.order_by('-updated_at')[:8]:
+              md=product.metadata or {}
+              artifact=md.get('artifact') or {}
+              path=artifact.get('relative_path','')
+              exists=bool(path and Path(path).is_file())
+              digest_ok=False
+              if exists:
+                  import hashlib
+                  digest_ok=hashlib.sha256(Path(path).read_bytes()).hexdigest()==artifact.get('sha256')
+              print(f'MASTER_PRODUCT id={product.pk} title={product.title[:80]!r} active={product.active} status={md.get("commercial_status","")} price={product.price} artifact={path or "none"} exists={exists} sha256_ok={digest_ok} qc={artifact.get("quality_gate","none")}')
           db=settings.DATABASES['default']
           print('MASTER_DATABASE_SQLITE='+str('sqlite3' in db['ENGINE']))
           if 'sqlite3' in db['ENGINE']:
@@ -174,6 +190,8 @@ jobs:
             fuser "$base/operations/master-agent/activation.lock" 2>/dev/null || true
           fi
           test -x "$base/operations/vps-only-loop.sh" && echo FACTORY_LOOP_SCRIPT_PRESENT
+          echo MASTER_CYCLE_LOG_TAIL
+          tail -n 80 "$base/operations/master-agent/cycle.log" 2>/dev/null || true
           REMOTE
 # Post-activation independent owner verification 2026-10-16.
 # Independent read-only master agent recheck requested 2026-10-18; no state mutation.
