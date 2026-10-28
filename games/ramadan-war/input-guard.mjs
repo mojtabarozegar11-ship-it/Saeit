@@ -103,3 +103,13 @@ export function shouldFireCanvasClick(event, screen, viewportWidth, gesture) {
 export function isFireHeld(spaceKeyDown, activeFirePointerId) {
   return spaceKeyDown === true || (Number.isInteger(activeFirePointerId) && activeFirePointerId >= 0);
 }
+
+// Opposing keyboard directions cancel instead of assigning arbitrary priority.
+// Touch and keyboard vectors combine before unit-speed normalization.
+export function resolveMovementAxes(joyForward, joySide, keys = {}) {
+  const f = (Number.isFinite(joyForward) ? joyForward : 0) +
+    (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
+  const s = (Number.isFinite(joySide) ? joySide : 0) +
+    (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  return normalizeMovementAxes(f, s);
+}
