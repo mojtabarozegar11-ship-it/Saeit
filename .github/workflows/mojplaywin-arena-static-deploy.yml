@@ -1,0 +1,167 @@
+name: Publish free-only isolated MojPlayWin Arena
+on:
+  pull_request:
+    paths:
+      - "site_releases/mojplaywin/arena/**"
+      - "scripts/deploy_mpw_arena_static.py"
+      - ".github/workflows/mojplaywin-arena-static-deploy.yml"
+  push:
+    branches: [main]
+    paths:
+      - "site_releases/mojplaywin/arena/**"
+      - "scripts/deploy_mpw_arena_static.py"
+      - ".github/workflows/mojplaywin-arena-static-deploy.yml"
+permissions:
+  contents: read
+concurrency:
+  group: isolated-mojplaywin-arena-free-release
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify guard and 37-game self-contained static payload
+        run: |
+          python -m py_compile scripts/deploy_mpw_arena_static.py
+          python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('arena_guard','scripts/deploy_mpw_arena_static.py')
+          guard=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(guard)
+          source=Path('site_releases/mojplaywin/arena')
+          assert {p.name for p in source.iterdir()} == {'index.html','README.md'}
+          print('ARENA_SOURCE_SHA256='+guard.payload_preflight(source/'index.html'))
+          PY
+      - name: Confirm only isolated free-play deployment is permitted
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'PassengerEnabled off' scripts/deploy_mpw_arena_static.py
+          grep -Fq 'Arena route already exists: refuse overwrite' scripts/deploy_mpw_arena_static.py
+          test -f site_releases/mojplaywin/arena/index.html
+  deploy:
+    if: github.event_name == 'push'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned GitHub Actions to VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${VPS_KEY:-}" && -n "${HOST_KEY:-}" ]] || { echo 'SSH credentials missing'; exit 1; }
+          VPS_KEY="${VPS_KEY//\\n/$'\n'}"
+          HOST_KEY="${HOST_KEY//\\n/$'\n'}"
+          WORK="$RUNNER_TEMP/mpw-arena-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s\n' "$VPS_KEY" > "$WORK/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null > "$WORK/vps.known"
+          test -s "$WORK/vps.known"
+          VPS_FP="$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$VPS_FP" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo 'VPS host pin mismatch'; exit 1; }
+          cat > "$WORK/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          HOST_SCAN="$(timeout 30s ssh -F "$WORK/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          [[ -n "$HOST_SCAN" ]] || { echo 'cPanel host key unavailable'; exit 1; }
+          printf '%s\n' "$HOST_SCAN" > "$WORK/host.known"
+          HOST_FP="$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$HOST_FP" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo 'cPanel host pin mismatch'; exit 1; }
+          cat >> "$WORK/config" <<EOF
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+      - name: Confirm protected live pages and vacant Arena target before publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /games/ /store/ /game-releases/20261020/index.html; do
+            [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")" == "200" ]]
+          done
+          [[ "$(curl --max-time 20 -sS -o /dev/null -w '%{http_code}' 'https://mojplaywin.com/arena/')" == '404' ]] || { echo 'Arena route collision or unexpected response'; exit 1; }
+          ssh -F "$RUNNER_TEMP/mpw-arena-ssh/config" saeit-host 'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -f /home/zomorod2/mojplaywin.com/game-releases/20261020/index.html && test ! -e /home/zomorod2/mojplaywin.com/arena && test ! -L /home/zomorod2/mojplaywin.com/arena'
+      - name: Package only the Arena static page and isolated installer
+        shell: bash
+        run: |
+          tar -cf "$RUNNER_TEMP/mpw-arena.tar" scripts/deploy_mpw_arena_static.py site_releases/mojplaywin/arena
+      - name: Transfer to temporary cPanel staging using verified relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mpw-arena-ssh"
+          ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mpw-arena-$GITHUB_RUN_ID"
+          scp -F "$WORK/config" "$RUNNER_TEMP/mpw-arena.tar" "saeit-host:/home/zomorod2/.mpw-arena-$GITHUB_RUN_ID/package.tar"
+          ssh -F "$WORK/config" saeit-host "tar -xf /home/zomorod2/.mpw-arena-$GITHUB_RUN_ID/package.tar -C /home/zomorod2/.mpw-arena-$GITHUB_RUN_ID"
+      - name: Publish atomically to the vacant Arena-only namespace
+        id: install
+        shell: bash
+        run: |
+          ssh -F "$RUNNER_TEMP/mpw-arena-ssh/config" saeit-host "python3 /home/zomorod2/.mpw-arena-$GITHUB_RUN_ID/scripts/deploy_mpw_arena_static.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Verify published Arena checksum and protected sibling routes
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in {1..6}; do
+            if curl -fsSL --max-time 20 'https://mojplaywin.com/arena/index.html' -o "$RUNNER_TEMP/arena-live.html"; then break; fi
+            sleep 2
+          done
+          python3 - "$RUNNER_TEMP/arena-live.html" <<'PY'
+          from pathlib import Path
+          import hashlib,sys
+          released=Path(sys.argv[1]).read_bytes()
+          source=Path('site_releases/mojplaywin/arena/index.html').read_bytes()
+          if hashlib.sha256(released).digest()!=hashlib.sha256(source).digest():
+              raise SystemExit('Published Arena checksum mismatch')
+          print('ARENA_37_GAMES_LIVE_SHA256_MATCH')
+          PY
+          for path in / /games/ /store/ /game-releases/20261020/index.html; do
+            [[ "$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")" == "200" ]]
+          done
+          echo 'ARENA_LIVE_AND_SIBLINGS_UNCHANGED'
+      - name: Retain owned failed Arena offline without touching shared sites
+        if: failure() && steps.install.outcome == 'success' && steps.smoke.outcome == 'failure'
+        shell: bash
+        run: |
+          ssh -F "$RUNNER_TEMP/mpw-arena-ssh/config" saeit-host "python3 /home/zomorod2/.mpw-arena-$GITHUB_RUN_ID/scripts/deploy_mpw_arena_static.py rollback $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Remove owned temporary deployment files
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/mpw-arena-ssh/config" ]]; then
+            ssh -F "$RUNNER_TEMP/mpw-arena-ssh/config" -o ConnectTimeout=10 saeit-host "rm -rf /home/zomorod2/.mpw-arena-$GITHUB_RUN_ID" || true
+          fi
+          rm -rf -- "$RUNNER_TEMP/mpw-arena-ssh" "$RUNNER_TEMP/mpw-arena.tar"
