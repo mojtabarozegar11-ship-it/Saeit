@@ -51,9 +51,11 @@ REQUIRED_PATHS = (
     "/farnaz/",
     "/saman/",
     "/taniya/",
+    "/studio.Roham/",
+    "/zahra$/",
     "/picm/",
 ) + PERSONAL_PATHS
-PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/picm/")
+PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$/", "/picm/")
 SITEMAP_URLS = (
     "/knowledge/",
     "/research/",
@@ -62,6 +64,44 @@ SITEMAP_URLS = (
     "/ventures/agriculture/",
 )
 PROTECTED_PRODUCT_IDS = (72, 225, 879)
+# Only approved public pages and the two established login endpoints may be
+# fetched through a redirect. Never follow a redirect to an unknown app,
+# a different host, or an HTTP URL during a read-only audit.
+REDIRECT_PATHS = frozenset(REQUIRED_PATHS) | frozenset({
+    "/sitemap.xml", "/picm/login/", "/accounts/login/",
+    *(f"/store/product/{pk}/checkout/" for pk in PROTECTED_PRODUCT_IDS),
+})
+
+
+class UnsafeRedirect(RuntimeError):
+    pass
+
+
+class ScopedRedirect(urllib.request.HTTPRedirectHandler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.hops = 0
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        try:
+            target = urllib.parse.urlsplit(newurl)
+            allowed = (
+                target.scheme == "https"
+                and target.hostname == "mojplaywin.com"
+                and target.port in (None, 443)
+                and target.username is None
+                and target.password is None
+                and target.path in REDIRECT_PATHS
+                and not target.fragment
+            )
+        except ValueError:
+            allowed = False
+        if not allowed:
+            raise UnsafeRedirect("Redirect outside exact public MojPlayWin scope")
+        self.hops += 1
+        if self.hops > 3:
+            raise UnsafeRedirect("Too many public route redirects")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 class BasicHtml(HTMLParser):
@@ -112,7 +152,10 @@ def get(url: str, *, max_bytes: int = 950000, attempts: int = 3) -> tuple[Check,
                 },
                 method="GET",
             )
-            with urllib.request.urlopen(request, timeout=22) as response:
+            # urllib.request.urlopen silently follows arbitrary redirects; a
+            # scoped opener prevents cross-host requests and HTTP downgrades.
+            opener = urllib.request.build_opener(ScopedRedirect())
+            with opener.open(request, timeout=22) as response:
                 data = response.read(max_bytes + 1)
                 if len(data) > max_bytes:
                     raise ValueError("Response exceeded bounded inspection size")
@@ -173,6 +216,24 @@ def check_sitemap() -> tuple[Check, int]:
     for url in urls:
         if not url or not url.startswith(ORIGIN + "/"):
             raise RuntimeError(f"Untrusted sitemap origin: {url}")
+        try:
+            parsed = urllib.parse.urlsplit(url)
+            trusted = (
+                parsed.scheme == "https"
+                and parsed.hostname == "mojplaywin.com"
+                and parsed.port in (None, 443)
+                and parsed.username is None
+                and parsed.password is None
+                and parsed.path.startswith("/")
+                and not parsed.path.startswith("//")
+                and not parsed.fragment
+                and url == url.strip()
+                and not any(char in url for char in "\\r\\n\\t")
+            )
+        except ValueError:
+            trusted = False
+        if not trusted:
+            raise RuntimeError("Malformed or unsafe sitemap URL")
     return check, len(urls)
 
 
@@ -192,7 +253,9 @@ def main() -> int:
     parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args()
     if args.selftest:
-        assert len(PROTECTED_CHILDREN) == 4
+        assert len(PROTECTED_CHILDREN) == 6
+        assert set(PROTECTED_CHILDREN).issubset(REQUIRED_PATHS)
+        assert {"/studio.Roham/", "/zahra$/"}.issubset(REQUIRED_PATHS)
         assert len(PERSONAL_PATHS) == 11
         assert PERSONAL_PATHS[0] in REQUIRED_PATHS
         assert "/picm/" in REQUIRED_PATHS
