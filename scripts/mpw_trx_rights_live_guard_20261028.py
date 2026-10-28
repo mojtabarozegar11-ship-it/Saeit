@@ -246,11 +246,14 @@ def operation(mode,run_id=None):
                 runtime_validate()
                 restart()
             except BaseException:
+                restored=0
                 for k in reversed(touched):
                     path=TARGETS[k]
                     if digest(path.read_bytes())==info["new"][k]:
                         atomic(path,old[k],expected=info["new"][k])
-                if touched: restart()
+                        restored+=1
+                # An optimistic rollback arm is not evidence of a changed file.
+                if restored: restart()
                 print("MPW_TRX_RIGHTS_RELEASE=ROLLED_BACK_AFTER_FAILURE")
                 raise
             print("MPW_TRX_RIGHTS_RELEASE=APPLIED_AND_SOURCE_VERIFIED; ORDERS=0; PAYMENTS=0")
