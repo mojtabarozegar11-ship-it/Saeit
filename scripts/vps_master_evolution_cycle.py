@@ -2,11 +2,12 @@
 """Bounded VPS master-agent strategy evolution from private, verified task states.
 
 No database writes, network calls, financial actions or self-editing source code.
-Only the private master runner's max-steps parameter may change (1..3).
+The private master runner is permanently capped at one step per cycle.
 """
 import argparse
 import json
 import os
+import stat
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
@@ -20,8 +21,15 @@ def evaluate(db_path: Path, state_path: Path):
         raise RuntimeError("MASTER_PRIVATE_DB_NOT_FOUND")
     if state_path.exists() and state_path.is_symlink():
         raise RuntimeError("MASTER_EVOLUTION_STATE_SYMLINK")
-    state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(state_path.parent, 0o700)
+    # Never chmod an existing shared directory: a failed policy check must not
+    # change permissions of unrelated private or operational files.
+    parent = state_path.parent
+    if parent.is_symlink():
+        raise RuntimeError("MASTER_EVOLUTION_STATE_PARENT_SYMLINK")
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    parent_mode = parent.stat().st_mode
+    if not stat.S_ISDIR(parent_mode) or stat.S_IMODE(parent_mode) & 0o077:
+        raise RuntimeError("MASTER_EVOLUTION_STATE_DIR_NOT_PRIVATE")
     with sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True, timeout=12) as db:
         db.execute("PRAGMA query_only=ON")
         row = db.execute("SELECT id FROM core_agent WHERE code=? AND active=1 LIMIT 1",
@@ -67,30 +75,38 @@ def evaluate(db_path: Path, state_path: Path):
     # Compare only the newly completed portion, not historical successes.
     recent_new = recent_verified_actions[:min(max(delta_completed, 0), len(recent_verified_actions))]
     diversity = len(set(recent_new))
-    if delta_failed > 0 or delta_blocked > 0:
-        steps, decision = 1, "rollback_to_conservative_after_regression"
-    elif delta_completed >= 2 and diversity < 2:
-        steps, decision = 1, "rollback_repeated_or_unverified_completions"
+    # The owner requested controlled production with no volume expansion.
+    # Keep one master task per five-minute cycle even after diverse successes.
+    steps = 1
+    if old_steps != 1:
+        decision = "rollback_to_single_step_volume_cap"
+    elif delta_failed > 0 or delta_blocked > 0:
+        decision = "hold_single_step_after_regression"
     elif delta_completed >= 2 and diversity >= 2 and counts["blocked"] == 0:
-        steps, decision = min(3, old_steps + 1), "diverse_verified_actions_expand_bounded_cycle"
+        decision = "hold_single_step_after_verified_progress"
+    elif delta_completed >= 2:
+        decision = "hold_single_step_no_verified_diversity"
     else:
-        steps, decision = old_steps, "hold_strategy_until_measurable_progress"
+        decision = "hold_single_step_until_verified_progress"
     report = {
         "schema": "saeit.master.evolution.v1",
         "evaluated_at_utc": datetime.now(timezone.utc).isoformat(),
         "agent_code": "economic-master-agent",
-        "operating_mode": "private_vps_benchmark_adaptive",
+        "operating_mode": "private_vps_single_step_controlled",
         "task_counts": counts,
         "delta": {"verified_completed_tasks": delta_completed,
                   "failed_tasks": delta_failed, "blocked_tasks": delta_blocked},
         "recent_new_verified_action_types": diversity,
         "repeat_completion_is_not_diverse_progress": True,
         "max_steps": steps,
+        "hard_max_steps_cap": 1,
+        "volume_scaling_enabled": False,
+        "parallel_master_tasks": False,
         "previous_max_steps": old_steps,
         "decision": decision,
         "revision": int(previous.get("revision", 0)) + int(steps != old_steps),
         "self_modifying_code": False,
-        "reversible_parameter_adaptation": True,
+        "capacity_policy_change": "disabled_by_owner_volume_cap",
         "commercial_publication_enabled": False,
         "financial_actions_enabled": False,
     }

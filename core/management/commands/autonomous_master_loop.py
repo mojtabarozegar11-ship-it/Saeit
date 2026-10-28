@@ -13,7 +13,11 @@ class Command(BaseCommand):
 
     def handle(self,*args,**opts):
         brain=AutonomousBrain()
-        for step in range(max(1,opts["max_steps"])):
+        requested_steps=max(1,opts["max_steps"])
+        steps=1
+        if requested_steps>steps:
+            self.stdout.write(f"AUTO_SINGLE_STEP_CAP requested={requested_steps} applied={steps}")
+        for step in range(steps):
             active=AgentTask.objects.filter(agent__code="economic-master-agent",status="queued").order_by("created_at").first()
             if not active:
                 call_command("online_income_cycle")
