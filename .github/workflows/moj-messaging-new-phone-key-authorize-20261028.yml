@@ -54,7 +54,7 @@ jobs:
           assert stat.S_IMODE(ssh.stat().st_mode)==0o700
           assert auth.is_file() and not auth.is_symlink()
           assert stat.S_IMODE(auth.stat().st_mode)==0o600
-          blob='AAAAC3NzaC1lZDI1NTE5AAAAIKrC0Ak+4WqQrorub6w4C7I6FMg3x1iSxV9opmZbseZE'
+          blob='AAAAC3NzaC1lZDI1NTE5AAAAIKrC0Ak+4wqQrorub6w4C7I6FMg3x1iSxV9opmZbseZE'
           keybytes=base64.b64decode(blob,validate=True)
           assert len(keybytes)==51 and keybytes[:4]==b'\x00\x00\x00\x0b'
           assert keybytes[4:15]==b'ssh-ed25519' and keybytes[15:19]==b'\x00\x00\x00 '
