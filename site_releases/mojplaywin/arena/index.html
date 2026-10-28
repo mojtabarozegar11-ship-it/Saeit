@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#090c12">
-  <meta name="description" content="MOJ Casino Lounge: free casino-style entertainment and simulated sports picks. No real-money gambling, deposits, payouts or prizes.">
+  <meta name="description" content="MOJ Casino Lounge: 37 free games and 12 interactive fortune and horoscope readings. No real-money gambling, deposits, payouts or prizes.">
   <title>MOJ CASINO LOUNGE | MojPlayWin</title>
   <style>
     :root{color-scheme:dark;--bg:#090c12;--panel:#111824;--panel2:#171f2e;--line:#364152;--gold:#dfbd7a;--soft:#a7b5cb;--white:#f6f4f0;--green:#62ddb5;--red:#e96c77}
@@ -49,6 +49,18 @@
     .arena-categories a:hover,.arena-categories a:focus-visible{background:#3b3426}
     .arena-empty{color:#f5ddac;padding:17px 6px}
     .section[id],#sports,#rules{scroll-margin-top:94px}
+    .oracle-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+    .oracle-panel{border:1px solid #806a45;border-radius:16px;background:linear-gradient(135deg,#252032,#111d2a 65%,#12202c);padding:24px;min-width:0}
+    .oracle-panel h3{margin:0;color:#f2dab1;font-family:Georgia,serif;font-size:1.45rem}
+    .oracle-panel p{font-size:.88rem;color:#c3d0df}
+    .oracle-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:16px 0}
+    .oracle-controls select,.oracle-controls input{background:#0c151f;border:1px solid #9f8559;border-radius:7px;color:#faf0db;padding:11px;max-width:100%;min-width:0;font:inherit}
+    .oracle-answer{border-top:1px solid #71644e;padding:16px 0 0;min-height:96px;color:#e5d9b9;font-size:.91rem;white-space:pre-line}
+    .oracle-answer strong{color:#f4d18e}.oracle-symbol{font-size:1.5rem;margin-inline-end:8px}
+    .oracle-disclaimer{color:#b3c2d0;font-size:.83rem;border-inline-start:3px solid #bc9c67;padding-inline-start:14px;margin:14px 0 26px}
+    @media(max-width:870px){.oracle-grid{grid-template-columns:1fr}}
+    @media(max-width:520px){.oracle-panel{padding:19px}.oracle-controls .btn{width:100%}.oracle-controls select,.oracle-controls input{flex:1 1 100%}}
+    [dir=rtl] .oracle-panel h3{font-family:Tahoma,'Segoe UI',sans-serif;letter-spacing:0}
     @media(max-width:540px){.arena-discovery-inner{align-items:stretch}.arena-discovery-inner label{width:100%}.arena-discovery-inner input{flex-basis:100%}}
   </style>
 </head>
@@ -69,6 +81,7 @@
         <a id="arena-cat-casino" href="#casino-floor">Casino simulations · 16</a>
         <a id="arena-cat-classic" href="#classic-tables">Chess, Backgammon &amp; Cards · 6</a>
         <a id="arena-cat-dice" href="#dice-festival">Dice &amp; Chance · 15</a>
+        <a id="arena-cat-oracles" href="#fortune-oracles">Fortune &amp; Horoscopes · 12</a>
       </nav>
       <p class="arena-empty" id="arena-empty" hidden>No matching games. Try another search.</p>
     </div>
@@ -80,6 +93,14 @@
     </div></section>
     <section class="section shell" id="classic-tables"><div class="section-head"><div class="eyebrow" id="classic-eyebrow">CLASSIC TABLES & CARDS</div><h2 id="classic-heading">Chess, Backgammon and Card Games</h2><p id="classic-lead">Local two-player table games and interactive card challenges. No stakes, financial prizes or transferable points.</p></div><div class="tabletop-grid" id="classic-game-grid"></div></section>
     <section class="section shell" id="dice-festival"><div class="section-head"><div class="eyebrow" id="dice-eyebrow">DICE & FORTUNE</div><h2 id="dice-heading">Fifteen Additional Dice & Chance Games</h2><p id="dice-lead">Play different rules and challenges, free of charge. All draws are simulated in your browser.</p></div><div class="cards" id="dice-game-grid"></div></section>
+    <section class="section shell" id="fortune-oracles" aria-labelledby="oracle-heading">
+      <div class="section-head"><div class="eyebrow" id="oracle-eyebrow">FORTUNE &amp; HOROSCOPES</div>
+        <h2 id="oracle-heading">Twelve interactive oracles</h2>
+        <p id="oracle-lead">Explore symbolic traditions, astrology-inspired reflections and playful readings in your browser. All for entertainment only.</p>
+      </div>
+      <p class="oracle-disclaimer" id="oracle-disclaimer">These are fictional, symbolic or tradition-inspired interpretations—not facts, forecasts, medical, legal or financial guidance. No names or birth dates are transmitted or saved.</p>
+      <div class="oracle-grid" id="oracle-grid"></div>
+    </section>
     <section class="notice" id="rules"><div class="shell notice-grid"><div><h3 data-en="Entertainment, not gambling" data-fa="سرگرمی، نه قمار پول واقعی">Entertainment, not gambling</h3><p data-en="This page offers only free casino-style simulations. It does not operate a sportsbook or licensed gambling service. No money deposits, paid plays, purchaseable credits, withdrawals, valuable prizes, wallet links or token rewards are available." data-fa="این صفحه فقط شبیه‌سازی‌های رایگان ارائه می‌کند؛ نه شرط‌بندی ورزشی واقعی و نه خدمات قمار دارای مجوز. هیچ واریز، بازی پولی، اعتبار قابل خرید، برداشت، جایزه دارای ارزش، اتصال کیف پول یا پاداش توکنی وجود ندارد.">This page offers only free casino-style simulations. It does not operate a sportsbook or licensed gambling service. No money deposits, paid plays, purchaseable credits, withdrawals, valuable prizes, wallet links or token rewards are available.</p></div><div><h3 data-en="Important access rules" data-fa="قوانین مهم دسترسی">Important access rules</h3><ul><li data-en="Intended for adults 21 and older; age confirmation is self-declared and not formal identity verification." data-fa="ویژه افراد ۲۱ سال به بالا؛ تأیید سن صرفاً خوداظهاری است و احراز هویت رسمی محسوب نمی‌شود.">Intended for adults 21 and older; age confirmation is self-declared and not formal identity verification.</li><li data-en="Availability and advertising remain subject to the laws of your country or state." data-fa="دسترسی و تبلیغات تابع قوانین کشور یا ایالت کاربر است.">Availability and advertising remain subject to the laws of your country or state.</li><li data-en="Real-money betting is disabled unless the operator later obtains every required authorization." data-fa="شرط‌بندی پول واقعی تا اخذ مجوزهای لازم غیرفعال خواهد ماند.">Real-money betting is disabled unless the operator later obtains every required authorization.</li></ul></div></div></section>
   </main>
   <footer><div class="shell footer-row"><div><div class="foot-brand">MOJ CASINO LOUNGE</div><div data-en="A free-play entertainment page by MojPlayWin." data-fa="صفحه سرگرمی رایگان از مجموعه مج پلی وین.">A free-play entertainment page by MojPlayWin.</div></div><div class="foot-links"><a href="https://mojplaywin.com/" data-en="MojPlayWin Home" data-fa="صفحه اصلی مج پلی وین">MojPlayWin Home</a><a href="#rules" data-en="Rules & Safety" data-fa="قوانین و ایمنی">Rules & Safety</a></div></div></footer>
@@ -88,17 +109,17 @@
   (()=>{'use strict';
     const $=s=>document.querySelector(s); let locale='en';
     const finderCopy={
-      en:{label:'Find a game',placeholder:'Chess, dice, roulette...',count:'{n} games found',empty:'No matching games. Try another search.',casino:'Casino simulations · 16',classic:'Chess, Backgammon & Cards · 6',dice:'Dice & Chance · 15'},
-      fa:{label:'پیدا کردن بازی',placeholder:'شطرنج، تخته‌نرد، تاس، رولت...',count:'{n} بازی پیدا شد',empty:'بازی پیدا نشد؛ عبارت دیگری جست‌وجو کنید.',casino:'بازی‌های کازینویی · ۱۶',classic:'شطرنج، تخته‌نرد و ورق · ۶',dice:'تاس و شانس · ۱۵'},
-      ar:{label:'ابحث عن لعبة',placeholder:'شطرنج، نرد، روليت...',count:'تم العثور على {n} لعبة',empty:'لا توجد ألعاب مطابقة. جرّب بحثاً آخر.',casino:'محاكاة الكازينو · 16',classic:'شطرنج وطاولة وورق · 6',dice:'النرد والحظ · 15'},
-      de:{label:'Spiel finden',placeholder:'Schach, Würfel, Roulette...',count:'{n} Spiele gefunden',empty:'Keine passenden Spiele. Anderen Suchbegriff wählen.',casino:'Casino-Simulationen · 16',classic:'Schach, Backgammon & Karten · 6',dice:'Würfel & Zufall · 15'},
-      fr:{label:'Trouver un jeu',placeholder:'Échecs, dés, roulette...',count:'{n} jeux trouvés',empty:'Aucun jeu correspondant. Essayez une autre recherche.',casino:'Simulations de casino · 16',classic:'Échecs, backgammon et cartes · 6',dice:'Dés et hasard · 15'},
-      es:{label:'Buscar un juego',placeholder:'Ajedrez, dados, ruleta...',count:'{n} juegos encontrados',empty:'No hay juegos coincidentes. Prueba otra búsqueda.',casino:'Simulaciones de casino · 16',classic:'Ajedrez, backgammon y cartas · 6',dice:'Dados y azar · 15'}
+      en:{label:'Find a game',placeholder:'Chess, tarot, zodiac, dice...',count:'{n} experiences found',empty:'No matching games. Try another search.',casino:'Casino simulations · 16',classic:'Chess, Backgammon & Cards · 6',dice:'Dice & Chance · 15',oracles:'Fortune & Horoscopes · 12'},
+      fa:{label:'پیدا کردن بازی',placeholder:'شطرنج، تاروت، طالع‌بینی، تاس...',count:'{n} سرگرمی پیدا شد',empty:'بازی پیدا نشد؛ عبارت دیگری جست‌وجو کنید.',casino:'بازی‌های کازینویی · ۱۶',classic:'شطرنج، تخته‌نرد و ورق · ۶',dice:'تاس و شانس · ۱۵',oracles:'فال و طالع‌بینی · ۱۲'},
+      ar:{label:'ابحث عن لعبة',placeholder:'شطرنج، نرد، روليت...',count:'تم العثور على {n} تجربة',empty:'لا توجد ألعاب مطابقة. جرّب بحثاً آخر.',casino:'محاكاة الكازينو · 16',classic:'شطرنج وطاولة وورق · 6',dice:'النرد والحظ · 15',oracles:'الفأل والأبراج · 12'},
+      de:{label:'Spiel finden',placeholder:'Schach, Würfel, Roulette...',count:'{n} Erlebnisse gefunden',empty:'Keine passenden Spiele. Anderen Suchbegriff wählen.',casino:'Casino-Simulationen · 16',classic:'Schach, Backgammon & Karten · 6',dice:'Würfel & Zufall · 15',oracles:'Orakel & Horoskope · 12'},
+      fr:{label:'Trouver un jeu',placeholder:'Échecs, dés, roulette...',count:'{n} expériences trouvées',empty:'Aucun jeu correspondant. Essayez une autre recherche.',casino:'Simulations de casino · 16',classic:'Échecs, backgammon et cartes · 6',dice:'Dés et hasard · 15',oracles:'Oracles & horoscopes · 12'},
+      es:{label:'Buscar un juego',placeholder:'Ajedrez, dados, ruleta...',count:'{n} experiencias encontradas',empty:'No hay juegos coincidentes. Prueba otra búsqueda.',casino:'Simulaciones de casino · 16',classic:'Ajedrez, backgammon y cartas · 6',dice:'Dados y azar · 15',oracles:'Oráculos y horóscopos · 12'}
     };
     const normalizeFind=s=>String(s).normalize('NFKC').toLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک');
     function filterArenaGames(){
       const query=normalizeFind($('#arena-search').value.trim());let count=0;
-      for(const id of ['game-grid','classic-game-grid','dice-game-grid']){
+      for(const id of ['game-grid','classic-game-grid','dice-game-grid','oracle-grid']){
         const grid=$('#'+id),cards=[...grid.querySelectorAll('article')];
         for(const item of cards){
           const title=item.querySelector('h3')?.textContent||'';
@@ -118,6 +139,7 @@
       $('#arena-cat-casino').textContent=t.casino;
       $('#arena-cat-classic').textContent=t.classic;
       $('#arena-cat-dice').textContent=t.dice;
+      $('#arena-cat-oracles').textContent=t.oracles;
       $('#arena-empty').textContent=t.empty;
       filterArenaGames();
     }
@@ -247,7 +269,7 @@
     function resetStatuses(){write('roulette-result',t('rouletteStart'));write('blackjack-result',t('blackjackStart'));write('slot-result',t('slotStart'));write('sports-result',t('sportStart'));write('dealer-label',t('dealer'));write('player-label',t('hand'))}
     const locales=['en','fa','ar','de','fr','es'];
     if(staticTargets.length!==43||Object.values(coreI18n).some(items=>items.length!==staticTargets.length))throw Error('Translation completeness check failed');
-    $('#language').addEventListener('change',e=>{locale=e.target.value;if(!locales.includes(locale))return;document.documentElement.lang=locale;document.documentElement.dir=['fa','ar'].includes(locale)?'rtl':'ltr';staticTargets.forEach((el,i)=>{el.innerHTML=locale==='en'?el.dataset.en:locale==='fa'?el.dataset.fa:coreI18n[locale][i]});translateExtraGames();translateNewGames();resetStatuses();translateArenaFinder()});
+    $('#language').addEventListener('change',e=>{locale=e.target.value;if(!locales.includes(locale))return;document.documentElement.lang=locale;document.documentElement.dir=['fa','ar'].includes(locale)?'rtl':'ltr';staticTargets.forEach((el,i)=>{el.innerHTML=locale==='en'?el.dataset.en:locale==='fa'?el.dataset.fa:coreI18n[locale][i]});translateExtraGames();translateNewGames();resetStatuses();translateArenaFinder();translateOracles()});
     $('#age-confirm').addEventListener('click',()=>{$('#age-gate').hidden=true;$('#roulette-title').setAttribute('tabindex','-1');$('#roulette-title').focus()});
     const reds=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
     document.querySelectorAll('[data-roulette]').forEach(button=>button.addEventListener('click',()=>{const number=random(37);const colour=number===0?'green':reds.has(number)?'red':'black';write('roulette-result',t('roulette',{n:number,colour:t(colour),verdict:colour===button.dataset.roulette?t('correct'):t('wrong')}))}));
@@ -655,8 +677,159 @@
         }else ui.status.textContent=cf('ready');
       }
     }
+
+    // Twelve fully browser-local, zero-stakes symbolic readings. No input is sent or stored.
+    const oracleText={
+      en:{eyebrow:'FORTUNE & HOROSCOPES',heading:'Twelve interactive oracles',lead:'Explore astrology-inspired reflections, symbolic cards, runes and traditional-style readings.',disclaimer:'Entertainment and personal reflection only. These readings are not factual predictions or medical, financial or legal guidance. Dates stay in this browser session and are never saved or transmitted.',action:'Reveal reading',ready:'Choose an option, then reveal a reading.',date:'Choose a birth date.',year:'Enter a birth year from 1900 to 2100.',select:'Choose a symbol',past:'Past',present:'Present',possibility:'Possibility',upright:'Upright',reversed:'Reversed',theme:'Reflection',symbol:'Symbol',lunar:'Six-line symbol (bottom line drawn first)',meaning:'Consider this',number:'Life path',animal:'Year animal',daily:'Today’s reflection',response:'Response',yes:'A tentative yes',maybe:'Wait and reconsider',no:'Not for now',choose:'Choose an option'},
+      fa:{eyebrow:'فال و طالع‌بینی',heading:'۱۲ فال تعاملی',lead:'طالع‌بینی نمادین، کارت‌ها، رون‌ها و فال‌های سنتی را به‌صورت سرگرمی امتحان کنید.',disclaimer:'صرفاً سرگرمی و تأمل شخصی؛ پیش‌بینی واقعی یا توصیه پزشکی، مالی یا حقوقی نیست. تاریخ‌ها فقط در همین صفحه استفاده می‌شوند و ذخیره یا ارسال نمی‌شوند.',action:'گرفتن فال',ready:'گزینه را انتخاب کنید و فال بگیرید.',date:'تاریخ تولد را انتخاب کنید.',year:'سال تولد بین ۱۹۰۰ تا ۲۱۰۰ وارد کنید.',select:'یک نماد انتخاب کنید',past:'گذشته',present:'حال',possibility:'احتمال پیش‌رو',upright:'مستقیم',reversed:'معکوس',theme:'برداشت نمادین',symbol:'نماد',lunar:'نشان شش‌خطی (از پایین به بالا)',meaning:'برای تأمل',number:'عدد مسیر زندگی',animal:'حیوان سال',daily:'پیام امروز',response:'پاسخ',yes:'بله، با احتیاط',maybe:'کمی صبر و بازنگری',no:'فعلاً نه',choose:'یک گزینه انتخاب کنید'},
+      ar:{eyebrow:'الفأل والأبراج',heading:'١٢ قراءة تفاعلية',lead:'تأملات رمزية مستوحاة من الأبراج والبطاقات والرون والفأل التقليدي.',disclaimer:'للترفيه والتأمل فقط، وليست تنبؤاً حقيقياً أو نصيحة طبية أو مالية أو قانونية. لا تُحفظ التواريخ أو تُرسل.',action:'اكشف القراءة',ready:'اختر ثم اكشف القراءة.',date:'اختر تاريخ الميلاد.',year:'أدخل سنة بين 1900 و2100.',select:'اختر رمزاً',past:'الماضي',present:'الحاضر',possibility:'الاحتمال',upright:'مستقيم',reversed:'مقلوب',theme:'تأمل',symbol:'رمز',lunar:'رمز الستة خطوط (من الأسفل)',meaning:'تأمل في',number:'رقم مسار الحياة',animal:'حيوان السنة',daily:'تأمل اليوم',response:'الإجابة',yes:'نعم بحذر',maybe:'انتظر وفكر',no:'ليس الآن',choose:'اختر خياراً'},
+      de:{eyebrow:'ORAKEL & HOROSKOPE',heading:'Zwölf interaktive Orakel',lead:'Astrologisch inspirierte Gedanken, Symbolkarten, Runen und traditionelle Deutungen.',disclaimer:'Nur zur Unterhaltung und Reflexion; keine echten Vorhersagen oder medizinischen, finanziellen oder rechtlichen Ratschläge. Daten werden nicht gesendet oder gespeichert.',action:'Deutung zeigen',ready:'Bitte wählen und die Deutung anzeigen.',date:'Geburtsdatum auswählen.',year:'Geburtsjahr von 1900 bis 2100 eingeben.',select:'Symbol wählen',past:'Vergangenheit',present:'Gegenwart',possibility:'Möglichkeit',upright:'Aufrecht',reversed:'Umgekehrt',theme:'Gedanke',symbol:'Symbol',lunar:'Sechs-Linien-Zeichen (von unten)',meaning:'Zum Nachdenken',number:'Lebenszahl',animal:'Jahrestier',daily:'Tagesimpuls',response:'Antwort',yes:'Vorsichtig ja',maybe:'Abwarten',no:'Derzeit nein',choose:'Option wählen'},
+      fr:{eyebrow:'ORACLES & HOROSCOPES',heading:'Douze oracles interactifs',lead:'Réflexions inspirées de l’astrologie, des cartes symboliques, des runes et des traditions.',disclaimer:'Divertissement et réflexion uniquement. Aucune prédiction réelle ni conseil médical, financier ou juridique. Les dates ne sont ni envoyées ni stockées.',action:'Révéler la lecture',ready:'Choisissez puis révélez une lecture.',date:'Choisissez une date de naissance.',year:'Année de naissance entre 1900 et 2100.',select:'Choisir un symbole',past:'Passé',present:'Présent',possibility:'Possibilité',upright:'Droit',reversed:'Inversé',theme:'Réflexion',symbol:'Symbole',lunar:'Figure à six traits (depuis le bas)',meaning:'À méditer',number:'Chemin de vie',animal:'Animal annuel',daily:'Inspiration du jour',response:'Réponse',yes:'Oui, prudemment',maybe:'Attendez et réévaluez',no:'Pas maintenant',choose:'Choisissez une option'},
+      es:{eyebrow:'ORÁCULOS Y HORÓSCOPOS',heading:'Doce oráculos interactivos',lead:'Reflexiones inspiradas en la astrología, las cartas, las runas y las tradiciones.',disclaimer:'Solo entretenimiento y reflexión; no son predicciones reales ni consejos médicos, financieros o legales. Las fechas no se guardan ni se envían.',action:'Revelar lectura',ready:'Elige una opción y revela la lectura.',date:'Elige tu fecha de nacimiento.',year:'Introduce un año entre 1900 y 2100.',select:'Elige un símbolo',past:'Pasado',present:'Presente',possibility:'Posibilidad',upright:'Derecha',reversed:'Invertida',theme:'Reflexión',symbol:'Símbolo',lunar:'Figura de seis líneas (desde abajo)',meaning:'Para pensar',number:'Camino de vida',animal:'Animal del año',daily:'Reflexión de hoy',response:'Respuesta',yes:'Sí, con cautela',maybe:'Espera y reconsidera',no:'Por ahora no',choose:'Elige una opción'}
+    };
+    const ow=k=>oracleText[locale][k];
+    const oracles=[
+      {id:'zodiac',icon:'♈',title:['Daily Zodiac','طالع روزانه برج‌ها','برجك اليومي','Tageshoroskop','Horoscope du jour','Horóscopo diario'],desc:['Select one of twelve signs for a date-based daily reflection.','یکی از دوازده برج را برای پیام نمادین امروز انتخاب کنید.','اختر برجاً من الاثني عشر لتأمل اليوم.','Wähle eines der zwölf Tierkreiszeichen.','Choisissez l’un des douze signes.', 'Elige uno de los doce signos.'],input:'sign'},
+      {id:'chinese',icon:'🐉',title:['Chinese Zodiac Year','سال حیوان چینی','الحيوان الصيني','Chinesisches Tierkreisjahr','Signe chinois','Zodiaco chino'],desc:['Discover the traditional year animal and a symbolic prompt. Lunar New Year dates may change the sign for early-year births.','حیوان سال میلادی و برداشت نمادین آن؛ تاریخ سال نو قمری در ابتدای سال ممکن است متفاوت باشد.','حيوان السنة الميلادية وتفسير رمزي؛ قد يختلف قبل رأس السنة القمرية.','Jahrestier und Symboldeutung; vor dem Mondneujahr kann es abweichen.','Animal de l’année et réflexion; avant le Nouvel An lunaire, il peut différer.','Animal del año y reflexión; puede variar antes del Año Nuevo lunar.'],input:'year'},
+      {id:'tarot',icon:'🃏',title:['One-Card Tarot','فال تاروت تک‌کارت','تاروت بطاقة','Tarot: eine Karte','Tarot à une carte','Tarot de una carta'],desc:['Draw a major arcana card with a unique orientation and reflection.','یک کارت از آرکانای بزرگ با جهت و برداشت مخصوص آن بکشید.','اسحب بطاقة من الأوراق الكبرى وتأمل معناها.','Ziehe eine Karte der Großen Arkana.', 'Tirez un arcane majeur.', 'Saca un arcano mayor.']},
+      {id:'tarot3',icon:'🔮',title:['Three-Card Tarot','تاروت سه‌کارتی','تاروت ثلاث بطاقات','Tarot: drei Karten','Tarot à trois cartes','Tarot de tres cartas'],desc:['Three distinct major arcana: past, present and an open possibility.','سه کارت متفاوت برای گذشته، حال و امکان پیش‌رو.','ثلاث بطاقات مختلفة للماضي والحاضر والاحتمال.','Drei verschiedene Karten: Vergangenheit, Gegenwart, Möglichkeit.','Trois cartes distinctes : passé, présent, possibilité.','Tres cartas diferentes: pasado, presente, posibilidad.']},
+      {id:'coffee',icon:'☕',title:['Coffee Cup Symbols','فال فنجان قهوه','رموز فنجان القهوة','Kaffeesatz-Symbole','Symboles du café','Símbolos del café'],desc:['Discover two imagined coffee-cup motifs and their meanings.','دو نقش خیالی ته فنجان و تعبیر نمادین آن‌ها را ببینید.','اكتشف رمزين متخيلين في فنجان القهوة.','Zwei erfundene Kaffeesatzmotive deuten.','Découvrez deux motifs imaginaires de café.','Descubre dos figuras imaginarias del café.']},
+      {id:'runes',icon:'ᚠ',title:['Three Rune Cast','فال سه رون','قراءة ثلاث رونيات','Drei Runen','Tirage de trois runes','Tres runas'],desc:['Reveal three different runes, each paired with a reflection.','سه رون متفاوت با برداشت نمادین آن‌ها آشکار کنید.','اكشف ثلاث رونيات مختلفة وتأملها.','Drei verschiedene Runen als Denkanstoß.','Révélez trois runes différentes.','Revela tres runas distintas.']},
+      {id:'iching',icon:'☯',title:['Six-Line Coin Oracle','فال سکه شش‌خطی','فأل العملات بستة خطوط','Sechs-Linien-Münzorakel','Oracle des six traits','Oráculo de seis líneas'],desc:['Cast eighteen virtual coins to form a six-line I Ching-inspired symbol.','۱۸ سکه مجازی برای یک نشان شش‌خطی الهام‌گرفته از یی‌چینگ بیندازید.','ألقِ ١٨ عملة افتراضية لرمز بستة خطوط مستوحى من إي تشينغ.','18 virtuelle Münzen für sechs symbolische Linien.','Lancez 18 pièces virtuelles pour une figure de six traits.','Lanza 18 monedas virtuales para formar seis líneas.']},
+      {id:'numerology',icon:'∑',title:['Life Path Numerology','فال عددشناسی تولد','علم أرقام تاريخ الميلاد','Lebenszahl','Numérologie du chemin de vie','Numerología de vida'],desc:['Calculate a symbolic life-path number from a date, without saving it.','عدد نمادین مسیر زندگی را از تاریخ تولد بدون ذخیره حساب کنید.','احسب رقم المسار الرمزي من تاريخ الميلاد دون حفظه.','Symbolische Lebenszahl aus dem Datum berechnen.','Calculez un nombre symbolique sans enregistrer la date.','Calcula un número simbólico sin guardar la fecha.'],input:'date'},
+      {id:'dream',icon:'☁',title:['Dream Symbol Library','تعبیر نمادهای خواب','رموز الأحلام','Traumsymbole','Symboles des rêves','Símbolos de sueños'],desc:['Choose a common dream symbol for a reflective, non-clinical interpretation.','یک نماد خواب انتخاب کنید تا برداشت غیرقطعی آن را ببینید.','اختر رمز حلم لتفسير تأملي غير طبي.','Ein Traumsymbol für eine freie Deutung wählen.','Choisissez un symbole de rêve à méditer.','Elige un símbolo onírico para reflexionar.'],input:'dream'},
+      {id:'poetry',icon:'✒',title:['Poetry Oracle','فال شعر الهام‌بخش','فأل الشعر','Poesie-Orakel','Oracle poétique','Oráculo poético'],desc:['Receive an original short verse written for this experience—not a quotation attributed to a poet.','یک بیتک تازه و اختصاصی دریافت کنید؛ هیچ شعر ساختگی به شاعر واقعی نسبت داده نشده است.','استمتع بنص شعري أصلي لا يُنسب إلى شاعر معروف.','Ein eigener Kurzvers, kein Zitat eines Dichters.','Un petit vers original, sans fausse attribution.','Un verso original, sin atribuirlo a ningún poeta.']},
+      {id:'yesno',icon:'◈',title:['Yes / Maybe / No','فال بله یا خیر','نعم أم ربما أم لا','Ja / Vielleicht / Nein','Oui / Peut-être / Non','Sí / Quizá / No'],desc:['Think of a lighthearted question and uncover a playful response.','یک سؤال سرگرم‌کننده در ذهن بیاورید و پاسخ نمادین بگیرید.','فكر بسؤال خفيف واكشف جواباً رمزياً.','Denke an eine harmlose Frage und ziehe eine Antwort.','Pensez à une question légère et tirez une réponse.','Piensa una pregunta ligera y descubre la respuesta.']},
+      {id:'lucky',icon:'✧',title:['Lucky Colors & Numbers','رنگ و عدد شانس','ألوان وأرقام الحظ','Glücksfarben und Zahlen','Couleurs et nombres porte-bonheur','Colores y números de suerte'],desc:['Draw a decorative color, number and reflection—never a betting tip.','یک رنگ و عدد نمادین برای سرگرمی بگیرید؛ نه پیشنهاد شرط‌بندی.','لون ورقم للترفيه فقط، لا نصائح مراهنة.','Zufällige Symbolfarbe und Zahl, kein Wetttipp.','Une couleur et un nombre décoratifs, sans conseil de pari.','Color y número simbólicos, no consejos de apuestas.']}
+    ];
+    const zodiacNames=[
+      ['Aries','حمل','الحمل','Widder','Bélier','Aries'],['Taurus','ثور','الثور','Stier','Taureau','Tauro'],
+      ['Gemini','جوزا','الجوزاء','Zwillinge','Gémeaux','Géminis'],['Cancer','سرطان','السرطان','Krebs','Cancer','Cáncer'],
+      ['Leo','اسد','الأسد','Löwe','Lion','Leo'],['Virgo','سنبله','العذراء','Jungfrau','Vierge','Virgo'],
+      ['Libra','میزان','الميزان','Waage','Balance','Libra'],['Scorpio','عقرب','العقرب','Skorpion','Scorpion','Escorpio'],
+      ['Sagittarius','قوس','القوس','Schütze','Sagittaire','Sagitario'],['Capricorn','جدی','الجدي','Steinbock','Capricorne','Capricornio'],
+      ['Aquarius','دلو','الدلو','Wassermann','Verseau','Acuario'],['Pisces','حوت','الحوت','Fische','Poissons','Piscis']
+    ];
+    const animalNames=[
+      ['Rat','موش','الجرذ','Ratte','Rat','Rata'],['Ox','گاو','الثور','Büffel','Bœuf','Buey'],['Tiger','ببر','النمر','Tiger','Tigre','Tigre'],
+      ['Rabbit','خرگوش','الأرنب','Hase','Lapin','Conejo'],['Dragon','اژدها','التنين','Drache','Dragon','Dragón'],['Snake','مار','الثعبان','Schlange','Serpent','Serpiente'],
+      ['Horse','اسب','الحصان','Pferd','Cheval','Caballo'],['Goat','بز','الماعز','Ziege','Chèvre','Cabra'],['Monkey','میمون','القرد','Affe','Singe','Mono'],
+      ['Rooster','خروس','الديك','Hahn','Coq','Gallo'],['Dog','سگ','الكلب','Hund','Chien','Perro'],['Pig','خوک','الخنزير','Schwein','Cochon','Cerdo']
+    ];
+    const tarotNames=[
+      ['The Fool','ابله','الأحمق','Der Narr','Le Mat','El Loco'],['The Magician','جادوگر','الساحر','Der Magier','Le Bateleur','El Mago'],
+      ['The High Priestess','کاهنه اعظم','الكاهنة','Die Hohepriesterin','La Papesse','La Sacerdotisa'],['The Empress','ملکه','الإمبراطورة','Die Herrscherin','L’Impératrice','La Emperatriz'],
+      ['The Emperor','امپراتور','الإمبراطور','Der Herrscher','L’Empereur','El Emperador'],['The Hierophant','پاپ','الكاهن','Der Hierophant','Le Pape','El Papa'],
+      ['The Lovers','عاشقان','العاشقان','Die Liebenden','L’Amoureux','Los Enamorados'],['The Chariot','ارابه','العربة','Der Wagen','Le Chariot','El Carro'],
+      ['Strength','قدرت','القوة','Die Kraft','La Force','La Fuerza'],['The Hermit','گوشه‌نشین','الناسك','Der Eremit','L’Hermite','El Ermitaño'],
+      ['Wheel of Fortune','چرخ اقبال','عجلة الحظ','Rad des Schicksals','La Roue de Fortune','La Rueda'],
+      ['Justice','عدالت','العدالة','Gerechtigkeit','La Justice','La Justicia'],['The Hanged Man','مرد معلق','المشنوق','Der Gehängte','Le Pendu','El Colgado'],
+      ['Death (Change)','دگرگونی','التحول','Wandel','Transformation','Transformación'],['Temperance','اعتدال','الاعتدال','Mäßigkeit','Tempérance','Templanza'],
+      ['The Devil','شیطان','الشيطان','Der Teufel','Le Diable','El Diablo'],['The Tower','برج','البرج','Der Turm','La Maison Dieu','La Torre'],
+      ['The Star','ستاره','النجمة','Der Stern','L’Étoile','La Estrella'],['The Moon','ماه','القمر','Der Mond','La Lune','La Luna'],
+      ['The Sun','خورشید','الشمس','Die Sonne','Le Soleil','El Sol'],['Judgement','داوری','الحكم','Das Gericht','Le Jugement','El Juicio'],
+      ['The World','جهان','العالم','Die Welt','Le Monde','El Mundo']
+    ];
+    const themes=[
+      ['Begin with one small, reversible step.','با یک گام کوچک و برگشت‌پذیر شروع کنید.','ابدأ بخطوة صغيرة يمكن التراجع عنها.','Beginne mit einem kleinen umkehrbaren Schritt.','Commencez par un petit pas réversible.','Empieza con un paso pequeño y reversible.'],
+      ['Listen carefully before choosing a direction.','پیش از انتخاب مسیر، با دقت گوش بدهید.','استمع بعناية قبل اختيار الاتجاه.','Höre zu, bevor du eine Richtung wählst.','Écoutez avant de choisir votre voie.','Escucha antes de elegir un rumbo.'],
+      ['An unfinished idea may deserve a fresh look.','شاید یک ایده ناتمام ارزش نگاه دوباره داشته باشد.','قد تستحق فكرة غير مكتملة نظرة جديدة.','Eine unfertige Idee verdient einen neuen Blick.','Une idée inachevée mérite peut-être un regard neuf.','Una idea pendiente merece otra mirada.'],
+      ['Make room for rest and a clearer perspective.','برای استراحت و دید روشن‌تر جا باز کنید.','خصص وقتاً للراحة ورؤية أوضح.','Gönne dir Ruhe und neue Klarheit.','Faites place au repos et à une vision plus claire.','Deja espacio para el descanso y la claridad.'],
+      ['A sincere conversation can reveal new options.','گفت‌وگویی صادقانه ممکن است راه تازه‌ای نشان دهد.','قد يكشف حوار صادق خيارات جديدة.','Ein ehrliches Gespräch eröffnet neue Wege.','Une conversation sincère peut ouvrir des pistes.','Una conversación sincera puede abrir opciones.'],
+      ['Protect your boundaries while staying curious.','در کنار کنجکاوی، مرزهای خود را نگه دارید.','احم حدودك مع البقاء فضولياً.','Wahre deine Grenzen und bleibe neugierig.','Préservez vos limites tout en restant curieux.','Cuida tus límites sin perder curiosidad.'],
+      ['Celebrate progress rather than chasing perfection.','پیشرفت را ببینید، نه فقط کمال را.','احتفل بالتقدم بدلاً من مطاردة الكمال.','Würdige Fortschritt statt Perfektion.','Célébrez le progrès, pas seulement la perfection.','Celebra el progreso y no solo la perfección.'],
+      ['A change of viewpoint can soften a difficult choice.','تغییر زاویه دید می‌تواند انتخابی دشوار را آسان‌تر کند.','قد يخفف تغيير المنظور قراراً صعباً.','Ein Perspektivwechsel erleichtert eine Wahl.','Changer de perspective peut alléger un choix.','Cambiar de perspectiva facilita una elección.'],
+      ['Balance enthusiasm with careful attention.','شور و اشتیاق را با دقت همراه کنید.','وازن الحماس بالانتباه الدقيق.','Verbinde Begeisterung mit Achtsamkeit.','Équilibrez enthousiasme et attention.','Equilibra entusiasmo y atención.'],
+      ['Notice what you can influence today.','امروز بر آنچه در اختیار دارید تمرکز کنید.','انتبه لما يمكنك التأثير فيه اليوم.','Beachte, was du heute beeinflussen kannst.','Notez ce que vous pouvez influencer aujourd’hui.','Fíjate en lo que puedes influir hoy.'],
+      ['Ask a better question before seeking an answer.','پیش از جست‌وجوی پاسخ، سؤال دقیق‌تری بسازید.','اطرح سؤالاً أفضل قبل البحث عن الجواب.','Stelle zuerst eine bessere Frage.','Posez une meilleure question avant de répondre.','Haz una mejor pregunta antes de buscar respuestas.'],
+      ['Let creativity and patience work together.','خلاقیت و صبر را کنار هم قرار دهید.','دع الإبداع والصبر يعملا معاً.','Lass Kreativität und Geduld zusammenwirken.','Alliez créativité et patience.','Une creatividad con paciencia.']
+    ];
+    const dreamSymbols=[
+      ['Water','آب','الماء','Wasser','Eau','Agua'],['Flight','پرواز','الطيران','Fliegen','Vol','Vuelo'],['Door','در','الباب','Tür','Porte','Puerta'],
+      ['Garden','باغ','الحديقة','Garten','Jardin','Jardín'],['Mountain','کوه','الجبل','Berg','Montagne','Montaña'],['Key','کلید','المفتاح','Schlüssel','Clé','Llave'],
+      ['Mirror','آینه','المرآة','Spiegel','Miroir','Espejo'],['Road','جاده','الطريق','Weg','Chemin','Camino'],['Bird','پرنده','الطائر','Vogel','Oiseau','Ave'],['Rain','باران','المطر','Regen','Pluie','Lluvia']
+    ];
+    const coffeeSymbols=[['☀',0],['✦',1],['♥',4],['⌘',6],['⚓',3],['☾',7],['♧',5],['◆',8],['➶',9],['∞',11],['♜',10],['❀',2]];
+    const runeSymbols=['ᚠ','ᚢ','ᚦ','ᚨ','ᚱ','ᚲ','ᚷ','ᚹ','ᚺ','ᚾ','ᛁ','ᛃ','ᛇ','ᛈ','ᛉ','ᛋ','ᛏ','ᛒ','ᛖ','ᛗ','ᛚ','ᛜ','ᛞ','ᛟ'];
+    const poetryLines=[
+      ['A quiet seed remembers how to bloom.','دانه خاموش، راه شکفتن را به یاد دارد.','تذكر البذرة الصامتة طريق الإزهار.','Ein stiller Samen erinnert sich ans Blühen.','La graine silencieuse se souvient de fleurir.','Una semilla callada recuerda florecer.'],
+      ['The road grows clearer with a patient step.','با قدمی صبور، راه اندک‌اندک روشن می‌شود.','يتضح الطريق بخطوة صبورة.','Mit geduldigen Schritten wird der Weg klar.','Le chemin s’éclaire d’un pas patient.','El camino se aclara con un paso paciente.'],
+      ['Even a small lantern can brighten the night.','فانوسی کوچک هم روشنی شب را بیشتر می‌کند.','حتى الفانوس الصغير ينير الليل.','Auch ein kleines Licht erhellt die Nacht.','Même une petite lanterne éclaire la nuit.','Hasta una lámpara pequeña ilumina la noche.'],
+      ['Where kindness settles, courage often follows.','آنجا که مهر می‌نشیند، دلیر بودن آسان‌تر می‌شود.','حيث تستقر الرحمة تتبعها الشجاعة.','Wo Güte wohnt, folgt oft Mut.','Là où vient la bonté, le courage suit.','Donde nace la bondad, crece el valor.'],
+      ['A new horizon may begin inside a question.','افقی تازه گاه درون یک پرسش آغاز می‌شود.','قد يبدأ أفق جديد داخل سؤال.','Ein neuer Horizont beginnt oft mit einer Frage.','Un horizon nouveau commence parfois par une question.','Un horizonte nuevo puede empezar con una pregunta.'],
+      ['Let the wind pass; the roots still hold.','بگذار باد بگذرد؛ ریشه‌ها هنوز پابرجایند.','دع الريح تمر فالجذور لا تزال ثابتة.','Lass den Wind ziehen; die Wurzeln halten.','Laissez passer le vent, les racines demeurent.','Deja pasar el viento; las raíces permanecen.']
+    ];
+    const colorWords=[
+      [['Gold','طلایی','ذهبي','Gold','Or','Dorado'],'#dfbd7a'],
+      [['Azure','لاجوردی','أزرق سماوي','Azur','Azur','Azul'],'#7cb8ed'],
+      [['Emerald','زمردی','زمردي','Smaragd','Émeraude','Esmeralda'],'#64cfb2'],
+      [['Coral','مرجانی','مرجاني','Koralle','Corail','Coral'],'#f49f89'],
+      [['Lilac','یاسی','أرجواني فاتح','Flieder','Lilas','Lila'],'#d1abed'],
+      [['Ivory','عاجی','عاجي','Elfenbein','Ivoire','Marfil'],'#fff0d0']
+    ];
+    const oraclePanels=new Map();
+    const oracleHistory=new Map();
+    const olocal=a=>a[locales.indexOf(locale)];
+    function getTheme(i){return olocal(themes[((i%themes.length)+themes.length)%themes.length])}
+    function oraclePickDifferent(n,k){const pool=Array.from({length:n},(_,i)=>i);for(let i=pool.length-1;i>0;i--){const j=random(i+1);[pool[i],pool[j]]=[pool[j],pool[i]]}return pool.slice(0,k)}
+    function dayHash(s){let h=2166136261;for(const c of s){h=Math.imul(h^c.charCodeAt(0),16777619)}return h>>>0}
+    function lifeNumber(dateString){const raw=dateString.replace(/\D/g,'').split('').reduce((sum,n)=>sum+Number(n),0);let n=raw;while(n>9&&![11,22,33].includes(n)){n=String(n).split('').reduce((sum,d)=>sum+Number(d),0)}return n}
+    function validBirthDate(s){if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;const dt=new Date(s+'T12:00:00Z');return Number.isFinite(dt.getTime())&&dt.toISOString().slice(0,10)===s&&dt.getUTCFullYear()>=1900&&dt.getUTCFullYear()<=2100}
+    function makeOracleReading(d){
+      const ui=oraclePanels.get(d.id),val=ui.select?.value||ui.input?.value||'';
+      if(d.id==='zodiac'){const idx=Number(val),today=new Date().toISOString().slice(0,10);return '♈ '+olocal(zodiacNames[idx])+' · '+today+'\n'+ow('daily')+': '+getTheme(dayHash(today+':'+idx)%12)}
+      if(d.id==='chinese'){const yr=Number(val);if(!Number.isInteger(yr)||yr<1900||yr>2100)return ow('year');const idx=((yr-2020)%12+12)%12;return '🐉 '+yr+' · '+ow('animal')+': '+olocal(animalNames[idx])+'\n'+ow('theme')+': '+getTheme(idx)}
+      if(d.id==='tarot'||d.id==='tarot3'){const picks=oraclePickDifferent(22,d.id==='tarot'?1:3);return picks.map((id,i)=>{const flipped=random(2)!==0;const title=olocal(tarotNames[id]);const name=(d.id==='tarot3'?[ow('past'),ow('present'),ow('possibility')][i]+' · ':'')+title+' ('+ow(flipped?'reversed':'upright')+')';return '🃏 '+name+'\n'+getTheme(id+(flipped?4:0))}).join('\n\n')}
+      if(d.id==='coffee'){const picks=oraclePickDifferent(coffeeSymbols.length,2);return picks.map(i=>coffeeSymbols[i][0]+' '+ow('symbol')+' '+(i+1)+': '+getTheme(coffeeSymbols[i][1])).join('\n\n')}
+      if(d.id==='runes'){const picks=oraclePickDifferent(runeSymbols.length,3);return picks.map((i,j)=>(j+1)+'. '+runeSymbols[i]+'  '+getTheme(i)).join('\n\n')}
+      if(d.id==='iching'){const lines=Array.from({length:6},()=>6+random(2)+random(2)+random(2));const pattern=lines.slice().reverse().map(n=>(n%2?'━━━━━━':'━━  ━━')+((n===6||n===9)?' ✦':''));return '☯ '+ow('lunar')+':\n'+pattern.join('\n')+'\n\n'+ow('meaning')+': '+getTheme(lines.reduce((s,n)=>s+n,0))}
+      if(d.id==='numerology'){if(!validBirthDate(val))return ow('date');const n=lifeNumber(val);return '∑ '+ow('number')+': '+n+'\n'+ow('theme')+': '+getTheme(n)}
+      if(d.id==='dream'){const i=Number(val);return '☁ '+olocal(dreamSymbols[i])+'\n'+ow('theme')+': '+getTheme(i*3)}
+      if(d.id==='poetry'){const i=random(poetryLines.length);return '✒ '+olocal(poetryLines[i])+'\n\n'+ow('theme')+': '+getTheme(i+4)}
+      if(d.id==='yesno'){const i=random(3);return '◈ '+ow('response')+': '+ow(['yes','maybe','no'][i])+'\n'+ow('meaning')+': '+getTheme(random(12))}
+      if(d.id==='lucky'){const c=colorWords[random(colorWords.length)],n=1+random(99);return '✧ '+olocal(c[0])+'  ● '+n+'\n'+ow('theme')+': '+getTheme(random(12))}
+      return ow('ready')
+    }
+    function oracleRun(id){const d=oracles.find(x=>x.id===id),ui=oraclePanels.get(id),message=makeOracleReading(d);ui.result.textContent=message;oracleHistory.set(id,message)}
+    function buildOracles(){
+      const grid=$('#oracle-grid');
+      for(const d of oracles){
+        const card=document.createElement('article');card.id='oracle-'+d.id;card.className='oracle-panel';
+        const title=document.createElement('h3'),desc=document.createElement('p'),controls=document.createElement('div'),result=document.createElement('div');
+        controls.className='oracle-controls';result.className='oracle-answer';result.setAttribute('role','status');result.setAttribute('aria-live','polite');
+        const icon=document.createElement('span');icon.className='oracle-symbol';icon.textContent=d.icon;icon.setAttribute('aria-hidden','true');title.append(icon,document.createElement('span'));
+        let select=null,input=null;
+        if(d.input==='sign'||d.input==='dream'){
+          select=document.createElement('select');select.setAttribute('aria-label',d.id==='zodiac'?'Zodiac sign':'Dream symbol');
+          const source=d.input==='sign'?zodiacNames:dreamSymbols;
+          for(let i=0;i<source.length;i++){const o=document.createElement('option');o.value=String(i);select.append(o)}
+          controls.append(select)
+        }else if(d.input==='year'||d.input==='date'){
+          input=document.createElement('input');input.type=d.input==='year'?'number':'date';input.setAttribute('aria-label',d.input==='year'?'Birth year':'Birth date');
+          if(d.input==='year'){input.min='1900';input.max='2100';input.step='1';input.placeholder='1990'}
+          else{input.min='1900-01-01';input.max='2100-12-31'}
+          controls.append(input)
+        }
+        const button=document.createElement('button');button.type='button';button.className='btn small primary';button.addEventListener('click',()=>oracleRun(d.id));controls.append(button);
+        card.append(title,desc,controls,result);grid.append(card);oraclePanels.set(d.id,{card,title:title.lastChild,desc,select,input,button,result})
+      }
+      translateOracles()
+    }
+    let lastOracleLocale='en';
+    function translateOracles(){
+      if(locale!==lastOracleLocale){oracleHistory.clear();lastOracleLocale=locale}
+      $('#oracle-eyebrow').textContent=ow('eyebrow');$('#oracle-heading').textContent=ow('heading');
+      $('#oracle-lead').textContent=ow('lead');$('#oracle-disclaimer').textContent=ow('disclaimer');
+      for(const d of oracles){const ui=oraclePanels.get(d.id);ui.title.textContent=olocal(d.title);ui.desc.textContent=olocal(d.desc);ui.button.textContent=ow('action');
+        if(ui.select){const source=d.input==='sign'?zodiacNames:dreamSymbols;[...ui.select.options].forEach((o,i)=>o.textContent=olocal(source[i]));ui.select.setAttribute('aria-label',olocal(d.title))}
+        if(ui.input)ui.input.setAttribute('aria-label',olocal(d.title));
+        ui.result.textContent=oracleHistory.get(d.id)||ow('ready')
+      }
+    }
+
     buildExtraGames();
     buildDiceFestival();
+    buildOracles();
     translateNewGames();
     resetStatuses();
     $('#arena-search').addEventListener('input',filterArenaGames);
