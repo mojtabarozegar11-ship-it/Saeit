@@ -28,6 +28,15 @@ class MasterActivationENOSPCGuardTests(unittest.TestCase):
         self.assertLess(s.index('cd "$app"'), s.index('DJANGO_SETTINGS_MODULE=config.settings SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 "$py" -'))
         self.assertLess(s.index('cd "$app"'), s.index('install -d -m 700 "$master"'))
 
+    def test_backup_rejects_symlink_before_resolve(self):
+        s = self.source
+        # Do not call Path.resolve() before testing for a linked DB source.
+        self.assertIn("MASTER_DB_SYMLINK_PATH_REJECTED", s)
+        self.assertLess(
+            s.index("assert not any(part.is_symlink() for part in (src, *src.parents))"),
+            s.index("src=src.resolve(strict=True)"),
+        )
+
     def test_disk_preflight_before_any_mutating_setup(self):
         s = self.source
         self.assertLess(s.index("MASTER_PREFLIGHT_ENOSPC_BLOCKED"),
