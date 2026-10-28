@@ -28,7 +28,8 @@ MAX_CASES_PER_HOUR = 4
 MAX_FOLLOWUPS = 8
 MAX_FILES_PER_CASE = 12
 MAX_BYTES_PER_CASE = 30 * 1024 * 1024
-CASE_TYPES = {"ebook", "game", "software", "media"}
+CASE_TYPES = {"ebook", "game", "software", "media",
+              "course", "dataset", "website", "mobileapp", "template", "audio", "video", "model3d"}
 SERVICE_TYPES = {"screening", "professional", "enterprise"}
 STATUSES = {"submitted", "in_review", "needs_information", "reviewed", "declined"}
 RUBRICS = {
@@ -48,6 +49,14 @@ RUBRICS = {
               ("rights", 20, True), ("technical", 15, False),
               ("accessibility", 10, False), ("packaging", 10, False),
               ("security", 5, True), ("utility", 10, False)),
+    "course": (("accuracy", 18, True), ("pedagogy", 17, False), ("sources", 12, False), ("rights", 13, True), ("accessibility", 12, False), ("assessment", 10, False), ("production", 10, False), ("delivery", 8, False)),
+    "dataset": (("provenance", 18, True), ("integrity", 20, True), ("documentation", 15, False), ("coverage", 12, False), ("privacy", 15, True), ("licensing", 10, True), ("interoperability", 5, False), ("reproducibility", 5, False)),
+    "website": (("functionality", 18, True), ("security", 20, True), ("privacy", 12, True), ("performance", 12, False), ("accessibility", 12, False), ("seo", 8, False), ("rights", 8, True), ("operations", 10, False)),
+    "mobileapp": (("functionality", 20, True), ("security", 18, True), ("privacy", 15, True), ("reliability", 12, False), ("accessibility", 10, False), ("compatibility", 10, False), ("rights", 8, True), ("delivery", 7, False)),
+    "template": (("usability", 18, False), ("quality", 18, False), ("accessibility", 12, False), ("licensing", 18, True), ("compatibility", 12, False), ("documentation", 8, False), ("originality", 8, False), ("packaging", 6, False)),
+    "audio": (("quality", 18, False), ("mastering", 15, False), ("composition", 15, False), ("rights", 20, True), ("metadata", 10, False), ("accessibility", 8, False), ("format", 8, False), ("provenance", 6, False)),
+    "video": (("content", 15, False), ("visuals", 15, False), ("audio", 12, False), ("rights", 20, True), ("accessibility", 12, False), ("technical", 12, False), ("metadata", 8, False), ("safety", 6, True)),
+    "model3d": (("geometry", 18, False), ("topology", 16, False), ("textures", 14, False), ("performance", 12, False), ("compatibility", 10, False), ("rights", 16, True), ("documentation", 8, False), ("packaging", 6, False)),
 }
 for _row in RUBRICS.values():
     assert len(_row) == 8 and sum(weight for _, weight, _ in _row) == 100
