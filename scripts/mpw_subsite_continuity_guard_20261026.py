@@ -52,10 +52,10 @@ REQUIRED_PATHS = (
     "/saman/",
     "/taniya/",
     "/studio.Roham/",
-    "/zahra$/",
+    "/zahra$$/",
     "/picm/",
 ) + PERSONAL_PATHS
-PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$/", "/picm/")
+PROTECTED_CHILDREN = ("/farnaz/", "/saman/", "/taniya/", "/studio.Roham/", "/zahra$$/", "/picm/")
 SITEMAP_URLS = (
     "/knowledge/",
     "/research/",
@@ -255,7 +255,7 @@ def main() -> int:
     if args.selftest:
         assert len(PROTECTED_CHILDREN) == 6
         assert set(PROTECTED_CHILDREN).issubset(REQUIRED_PATHS)
-        assert {"/studio.Roham/", "/zahra$/"}.issubset(REQUIRED_PATHS)
+        assert {"/studio.Roham/", "/zahra$$/"}.issubset(REQUIRED_PATHS)
         assert len(PERSONAL_PATHS) == 11
         assert PERSONAL_PATHS[0] in REQUIRED_PATHS
         assert "/picm/" in REQUIRED_PATHS
