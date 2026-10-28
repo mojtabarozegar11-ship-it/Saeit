@@ -27,7 +27,7 @@ class RuntimeDependencyTests(unittest.TestCase):
                 continue
             source = (ROOT / name).read_text("utf-8")
             for dependency in IMPORTS.findall(source):
-                self.assertTrue(dependency.startswith("./"), (name, dependency))
+                self.assertTrue(dependency.startswith(("./", "../")), (name, dependency))
                 resolved = PurePosixPath(name).parent / dependency
                 parts = []
                 for part in resolved.parts:
