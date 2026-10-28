@@ -277,7 +277,7 @@ jobs:
               try:
                   device = root.stat().st_dev
                   for base, dirs, files in os.walk(root, topdown=True, followlinks=False):
-                      if time.monotonic() - started > 18 or out["files_scanned"] >= 25000:
+                      if time.monotonic() - started > 18 or out["files_scanned"] >= 120000:
                           break
                       here = Path(base)
                       if here.is_symlink() or here.stat().st_dev != device:
@@ -294,7 +294,7 @@ jobs:
                       dirs[:] = safe_dirs
                       out["dirs_scanned"] += 1
                       for filename in files:
-                          if time.monotonic() - started > 18 or out["files_scanned"] >= 25000:
+                          if time.monotonic() - started > 18 or out["files_scanned"] >= 120000:
                               break
                           candidate = here / filename
                           try:
