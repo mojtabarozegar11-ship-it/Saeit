@@ -292,6 +292,19 @@ jobs:
               }
               assert.deepEqual(errors,[]);
               assert.ok((await page.locator('#wager-heading').innerText()).length>15);
+              const faContext=await browser.newContext({locale:'fa-IR'});
+              try{
+                const localized=await faContext.newPage();
+                await localized.goto(pathToFileURL(path.resolve('site_releases/mojplaywin/arena/index.html')).href);
+                assert.equal(await localized.locator('#language').inputValue(),'fa');
+                assert.equal(await localized.locator('html').getAttribute('dir'),'rtl');
+                assert.equal(await localized.locator('#casino-floor h2').innerText(),'بازی دلخواهتان را انتخاب کنید');
+                assert.equal(await localized.locator('#prediction-heading').innerText(),'مرکز پیش‌بینی مج‌پلی‌وین');
+                assert.match(await localized.locator('#live-intro').innerText(),/لالیگای اسپانیا/);
+                await localized.locator('#language').selectOption('es');
+                const stored=await localized.evaluate(()=>{try{return localStorage.getItem('moj-arena-language')==='es'}catch(_){return false}});
+                if(stored){await localized.reload();assert.equal(await localized.locator('#language').inputValue(),'es')}
+              }finally{await faContext.close()}
               console.log('ARENA_MOBILE_THREE_DAILY_COMBAT_UFC_BOXING_WWE_22_COMBAT_18_HORSE_PASS');
             }finally{await browser.close()}
           })().catch(e=>{console.error(e);process.exitCode=1});
