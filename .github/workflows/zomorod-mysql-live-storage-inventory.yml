@@ -118,7 +118,7 @@ jobs:
               result=subprocess.run(args+["--execute="+query],env=env,capture_output=True,text=True,timeout=90,check=False)
               if result.returncode: raise SystemExit("MYSQL_INVENTORY_QUERY_FAILED exit="+str(result.returncode))
               for line in result.stdout.splitlines():
-                  if line.startswith(("LIVE_MYSQL_","MYSQL_TABLE_SUMMARY=")): print(line)
+                  if line.startswith(("LIVE_MYSQL_","MYSQL_TABLE_SUMMARY=","TASK_STATUS_AGE=","EVIDENCE_STATUS_AGE=","TASK_MONTH=")): print(line)
           print("LIVE_MYSQL_STORAGE_INVENTORY=complete")
           PY
           REMOTE
