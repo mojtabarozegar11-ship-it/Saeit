@@ -1080,7 +1080,7 @@
   });
   function translate(){
     locale=lang();$$('[data-pro]').forEach(el=>el.textContent=tr(el.dataset.pro));
-    $('[data-mcd-stake]').forEach(b=>b.setAttribute('aria-label',tr('stake')+' '+b.dataset.mcdStake));
+    $$('[data-mcd-stake]').forEach(b=>b.setAttribute('aria-label',tr('stake')+' '+b.dataset.mcdStake));
     $('#arena-cat-wagers').textContent=tr('wagerCat');$('#nav-mcd').textContent=tr('navMcd');
     update();$('#arena-search').dispatchEvent(new Event('input',{bubbles:true}));
   }
