@@ -35,6 +35,8 @@ jobs:
         run: python3 -m unittest discover -s games/ramadan-war -p 'test_verify_public_release.py' -v
       - name: Assert all imported game assets are included in the production stage contract
         run: python3 -m unittest discover -s games/ramadan-war -p 'test_release_workflow_assets.py' -v
+      - name: Refuse low-space or linked cPanel release targets (offline)
+        run: python3 -m unittest discover -s games/ramadan-war -p 'test_release_storage_guard.py' -v
       - name: Verify scoped deployment rollback and concurrent-writer protection (offline)
         run: python3 -m unittest discover -s games/ramadan-war -p 'test_deploy_rollback.py' -v
       - name: Verify offline preview packaging and failure-mode regression
