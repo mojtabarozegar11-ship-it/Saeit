@@ -3,15 +3,15 @@
 No schema migrations, order/payment creation, or production database writes.
 """
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase
 from django.template.loader import render_to_string
 
-from core.academy_views import academy
+from core.academy_views import academy, education_course_detail
 from core.company_content_views import company_gallery
-from core.newsletter_views import newsletter_home
+from core.newsletter_views import newsletter_home, newsletter_detail
 from core.public_catalog_guard import missing_public_tables
 
 
@@ -113,3 +113,49 @@ class PublicCatalogTruthfulTemplateTests(SimpleTestCase):
         })
         self.assertIn('aria-label="نمونه ویدئو"', html)
         self.assertIn('src="/media/example.mp4"', html)
+
+
+class PublicCatalogDetailRouteRegressionTests(SimpleTestCase):
+    """Detail pages must not fail with NameError or query missing tables."""
+
+    def setUp(self):
+        self.requests = RequestFactory()
+
+    def test_authenticated_course_detail_has_no_undefined_lesson_lookup(self):
+        request = self.requests.get("/education/course/example/")
+        request.user = SimpleNamespace(is_authenticated=True)
+        course = MagicMock()
+        course.lessons.filter.return_value = []
+        course.resources.filter.return_value = []
+        with patch("core.academy_views.get_object_or_404", return_value=course), patch(
+            "core.academy_views.EducationEnrollment.objects.filter"
+        ) as enrollment_filter, patch(
+            "core.academy_views.EducationBookmark.objects.filter"
+        ) as bookmark_filter, patch(
+            "core.academy_views.render", return_value=HttpResponse("course")
+        ) as render_mock:
+            enrollment_filter.return_value.first.return_value = None
+            response = education_course_detail(request, "example")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(render_mock.call_args.args[1], "core/education_course_detail.html")
+        bookmark_filter.assert_not_called()
+
+    def test_newsletter_detail_missing_schema_is_truthful_retryable_503(self):
+        with patch("core.newsletter_views.missing_public_tables", return_value=True) as guard:
+            response = newsletter_detail(self.requests.get("/newsletter/example/"), "example")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertIn("/newsletter/", response.content.decode("utf-8"))
+        from core.newsletter_views import Agent
+        self.assertIn(Agent, guard.call_args.args)
+
+    def test_newsletter_detail_normal_schema_still_returns_real_404(self):
+        from django.http import Http404
+        with patch("core.newsletter_views.missing_public_tables", return_value=False), patch(
+            "core.newsletter_views.NewsletterStory.objects.select_related"
+        ) as select_related:
+            select_related.return_value.filter.return_value.first.return_value = None
+            with self.assertRaises(Http404):
+                newsletter_detail(self.requests.get("/newsletter/not-found/"), "not-found")
