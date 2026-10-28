@@ -113,6 +113,17 @@ class GuardedArenaPublicationTests(unittest.TestCase):
         self.assertNotIn("Future licensed finance: DISABLED", content)
         self.assertNotIn("browser-local toy probability models", content)
 
+    def test_public_metadata_and_rtl_skip_accessibility(self):
+        content = (SRC / "site_releases/mojplaywin/arena/index.html").read_text(encoding="utf-8")
+        self.assertIn('<link rel="canonical" href="https://mojplaywin.com/arena/">', content)
+        self.assertIn('<meta property="og:title"', content)
+        self.assertIn('<meta property="og:url" content="https://mojplaywin.com/arena/">', content)
+        self.assertIn('<script type="application/ld+json">', content)
+        self.assertIn('"isAccessibleForFree":true', content)
+        self.assertIn("clip-path:inset(50%)", content)
+        self.assertNotIn("left:-9999px", content)
+        self.assertIn('id="age-gate"', content)
+
     def test_public_data_read_is_tightly_allowlisted(self):
         content = (SRC / "site_releases/mojplaywin/arena/index.html").read_text(encoding="utf-8")
         candidate = self.home / "network-check.html"
