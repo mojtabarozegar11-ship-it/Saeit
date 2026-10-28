@@ -72,6 +72,10 @@ jobs:
           node --check games/ramadan-war/three-addons/utils/SkeletonUtils.js
           node --check games/ramadan-war/three-addons/utils/BufferGeometryUtils.js
           node --check games/ramadan-war/three-addons/libs/meshopt_decoder.module.js
+      - name: Reject unsafe rollback before any relay or production staging
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s games/ramadan-war -p 'test_deploy_rollback.py' -v
       - name: Test timed firing, special weapons and save resume before deployment
         run: |
           set -euo pipefail
