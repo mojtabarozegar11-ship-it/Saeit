@@ -69,6 +69,15 @@ def safe_json(path, max_bytes=300000):
                     or not 0 < metadata.st_size <= max_bytes):
                 reject("MISSING_OR_UNSAFE_JSON_" + path.name)
             raw = stream.read(max_bytes + 1)
+            metadata_after = os.fstat(stream.fileno())
+            # Reject in-place truncation/rewrite during the bounded read.
+            # Pinning the inode alone does not make its bytes immutable.
+            identity = lambda st: (st.st_dev, st.st_ino, st.st_size,
+                                   st.st_mtime_ns, st.st_ctime_ns)
+            if (not stat.S_ISREG(metadata_after.st_mode)
+                    or identity(metadata) != identity(metadata_after)
+                    or len(raw) != metadata.st_size):
+                reject("SOURCE_JSON_CHANGED_DURING_READ_" + path.name)
         if not 0 < len(raw) <= max_bytes:
             reject("MISSING_OR_UNSAFE_JSON_" + path.name)
         obj = json.loads(raw.decode("utf-8"))
