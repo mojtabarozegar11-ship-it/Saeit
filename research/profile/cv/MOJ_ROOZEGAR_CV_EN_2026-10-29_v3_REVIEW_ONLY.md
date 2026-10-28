@@ -1,8 +1,8 @@
 # Mojtaba Roozegar — Evidence-qualified professional and research CV (EN)
 
-**Document ID:** CV-MR-EN-20261029-v3  
+**Document ID:** CV-MR-EN-20261029-v3.1  
 **As of:** 29 October 2026  
-**Version 3 delta:** repaired research evidence links, updated the MR manuscript reference to C76 v11 and added explicitly owner-reported current location/management roles; no new independent credential, employment, publication, or authorship verification. 
+**Version 3 delta:** repaired research evidence links, updated the MR manuscript reference to C86 v12 and added explicitly owner-reported current location/management roles; no new independent credential, employment, publication, or authorship verification. 
 
 **Status:** READY_FOR_REVIEW — editorial review version on a **publicly accessible GitHub branch** (not confidential); **not authorized for public publication, institutional submission or credential verification**.  
 **Evidence standard:** repository artifacts establish the existence/status of projects, not identity, academic qualifications, legal registration, human authorship or peer-reviewed publication. Owner-supplied career statements are clearly distinguished from independently verified facts.
@@ -21,7 +21,7 @@
 ## Research work — internal projects, NOT published articles
 | Project | Scope | Verified project-state evidence | Status |
 |---|---|---|---|
-| MR-2026-001 | Critical narrative review of irrigation advisory recommendations, farmer actions and field outcomes | [C76 v11 working manuscript and source-adjudication gates](../../manuscripts/MR-2026-001/MR-2026-001_C76_CAR_INFLUENCE_CLAIM_DENOMINATOR_AUDIT_MANUSCRIPT_2026-10-28.md) | MAJOR REVISION; unsubmitted; human-author scientific contribution and final approval pending |
+| MR-2026-001 | Critical narrative review of irrigation advisory recommendations, farmer actions and field outcomes | [C86 v12 working manuscript and source-adjudication gates](../../manuscripts/MR-2026-001/MR-2026-001_C76_CAR_INFLUENCE_CLAIM_DENOMINATOR_AUDIT_MANUSCRIPT_2026-10-28.md) | MAJOR REVISION; unsubmitted; human-author scientific contribution and final approval pending |
 | AE-2026-001 | Historical-release sensitivity of agricultural value added per worker | [C49 data provenance and benchmark limitations](../../manuscripts/AE-2026-001/AE-2026-001_WDI_OFFICIAL_ARCHIVES_PROVENANCE_GATE_2026-10-28.md) | MAJOR REVISION; benchmark and author review pending; unsubmitted |
 | ZM-R01 | Wheat RNA-seq provenance and factorial count reconstruction | [C49 metadata crosswalk](../../manuscripts/ZM-R01/ZM-R01_C49_ENA_GEO_GSM_SRR_BIOSAMPLE_CROSSWALK_2026-10-28.md) | DATA REBUILD; no valid 24-sample DEG/FDR; unsubmitted |
 
