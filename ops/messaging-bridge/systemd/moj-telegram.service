@@ -1,0 +1,25 @@
+[Unit]
+Description=Moj Messaging Bridge - Telegram session keeper
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=mojmsg
+Group=mojmsg
+WorkingDirectory=/opt/moj-messaging
+EnvironmentFile=/etc/moj-messaging/bridge.env
+ExecStart=/opt/moj-messaging/.venv/bin/python /opt/moj-messaging/telegram.py daemon
+Restart=on-failure
+RestartSec=20
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/moj-messaging
+
+[Install]
+WantedBy=multi-user.target
