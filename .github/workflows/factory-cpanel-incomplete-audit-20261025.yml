@@ -79,6 +79,39 @@ jobs:
                   if p.is_file() and not p.is_symlink():
                       backup_files.append({"suffix":p.suffix.lower(),"bytes":p.stat().st_size,"days_old":round((time.time()-p.stat().st_mtime)/86400,1)})
           backup_files.sort(key=lambda x:-x["bytes"])
+          import hashlib
+          from collections import defaultdict
+          hash_roots=(h/".backups",h/"Saeit/backups",staging/"zomorod_json_admin_stage"/"backups")
+          seen=defaultdict(list)
+          scanned_files=0
+          scanned_bytes=0
+          for root in hash_roots:
+              if root.is_symlink():raise SystemExit("BACKUP_HASH_ROOT_SYMLINK")
+              if not root.is_dir():continue
+              for walk,dirs,names in os.walk(root,followlinks=False):
+                  base=Path(walk)
+                  dirs[:]=[d for d in dirs if not (base/d).is_symlink()]
+                  for name in names:
+                      p=base/name
+                      if p.is_symlink() or not p.is_file():continue
+                      size=p.stat().st_size
+                      if size<4*1024**2:continue
+                      if scanned_files>=1500 or scanned_bytes+size>6*1024**3:
+                          raise SystemExit("BACKUP_HASH_SCAN_BOUND_REACHED")
+                      digest=hashlib.sha256()
+                      with p.open("rb") as stream:
+                          for chunk in iter(lambda:stream.read(1024*1024),b""):digest.update(chunk)
+                      seen[digest.hexdigest()].append({"path":p.relative_to(h).as_posix(),"bytes":size})
+                      scanned_files+=1
+                      scanned_bytes+=size
+          duplicates=[]
+          duplicate_bytes=0
+          for digest,items in seen.items():
+              if len(items)>1:
+                  items.sort(key=lambda x:(x["path"].startswith(".backups/"),x["path"]))
+                  duplicate_bytes+=sum(item["bytes"] for item in items[1:])
+                  duplicates.append({"sha256":digest,"copies":items})
+          print("CPANEL_LARGE_BACKUP_EXACT_HASH_AUDIT="+json.dumps({"hashed_files":scanned_files,"hashed_bytes":scanned_bytes,"duplicate_groups":len(duplicates),"potential_duplicate_bytes_after_first_copy":duplicate_bytes,"groups":duplicates[:100],"deleted":0},sort_keys=True))
           from collections import Counter
           roots=[staging/"admin-smoke"]
           for family in ("moj-commerce-v10-sandbox","moj-commerce-v12-sandbox"):
