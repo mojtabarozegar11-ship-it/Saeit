@@ -1,0 +1,35 @@
+name: Moj messaging - independent edge unit verification
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths:
+      - '.github/workflows/moj-messaging-edge-unit-check-20261028.yml'
+      - 'ops/messaging-bridge/edge/cloudflare/**'
+      - 'ops/messaging-bridge/whatsapp.mjs'
+permissions:
+  contents: read
+jobs:
+  test:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check isolated code and Workers Free manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check ops/messaging-bridge/edge/cloudflare/src/index.mjs
+          node --check ops/messaging-bridge/whatsapp.mjs
+          node --test ops/messaging-bridge/edge/cloudflare/tests/worker.test.mjs
+          python3 - <<'PY'
+          import tomllib
+          with open('ops/messaging-bridge/edge/cloudflare/wrangler.toml','rb') as f:
+              conf=tomllib.load(f)
+          assert conf['main']=='src/index.mjs'
+          assert conf['workers_dev'] is True
+          print('MMSG_EDGE_MANIFEST_SYNTAX=PASS')
+          print('MMSG_NO_WORKER_DEPLOYMENT_OR_ACCOUNT_LOGIN=PASS')
+          PY
