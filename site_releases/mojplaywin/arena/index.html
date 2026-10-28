@@ -63,11 +63,45 @@
     [dir=rtl] .oracle-panel h3{font-family:Tahoma,'Segoe UI',sans-serif;letter-spacing:0}
     @media(max-width:540px){.arena-discovery-inner{align-items:stretch}.arena-discovery-inner label{width:100%}.arena-discovery-inner input{flex-basis:100%}}
   </style>
+
+<style id="moj-casino-dollar-style">
+  .moj-wager{margin-top:32px}
+  .wager-intro{max-width:810px;color:var(--soft)}
+  .wager-rail{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:22px 0;background:linear-gradient(135deg,#1d2532,#141b27);border:1px solid #6b573b;border-radius:18px;padding:18px}
+  .wager-balance{min-width:200px;flex:1}.wager-balance small{display:block;color:#b6c3d5;font-size:.78rem}.wager-balance strong{display:block;color:#ffe0a1;font-size:1.65rem;font-variant-numeric:tabular-nums}
+  .wager-stat{color:#cbd5e4;font-size:.9rem;min-width:90px}.wager-stat strong{display:block;color:white;font-size:1.12rem}
+  .wager-reset,.wager-card button,.wager-stakes button{border:1px solid #7b674a;background:#242b38;color:#f8ebd4;border-radius:10px;padding:9px 12px;min-height:48px;font-weight:700}
+  .wager-card button:hover,.wager-stakes button:hover,.wager-reset:hover{background:#3a3640}
+  .wager-card button:disabled{opacity:.35;cursor:not-allowed}
+  .wager-card button:focus-visible,.wager-stakes button:focus-visible,.wager-reset:focus-visible,.wager-card select:focus-visible,.wager-card input:focus-visible{outline:3px solid #e4c279;outline-offset:2px}
+  .wager-stakes{border:1px solid #49566c;border-radius:14px;margin:0 0 20px;padding:12px 16px;display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+  .wager-stakes legend{font-weight:700;color:#ecd39e;padding:0 6px}
+  .wager-stakes button[aria-pressed=true]{background:#d4b574;color:#181b22;border-color:#fce4aa}
+  .wager-status{padding:11px 14px;border-left:4px solid #e3c17e;background:#1b2534;border-radius:8px;color:#f0ead9;margin-bottom:18px}
+  .wager-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+  .wager-card{border:1px solid #46536a;border-radius:18px;background:linear-gradient(140deg,#182333,#101722);padding:20px;min-width:0}
+  .wager-card h3{color:#f1d29c;font-size:1.23rem;margin:0 0 6px}.wager-card p{color:#bac8dc;font-size:.88rem;margin:0 0 13px}
+  .wager-controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+  .wager-card select,.wager-card input{background:#111827;color:#f9f3e5;border:1px solid #8291a8;border-radius:9px;padding:9px;min-height:48px;font-size:1rem;max-width:100%}
+  .wager-result{min-height:49px;color:#f2e6ce;background:#111827;padding:10px 12px;border-radius:9px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.91rem}
+  .wager-payout{font-size:.75rem;color:#bac8dc;margin-top:9px}
+  .wager-history{margin-top:20px;border:1px solid #384356;border-radius:14px;padding:16px;background:#121a27}
+  .wager-history h3{margin:0 0 9px}.wager-history ol{padding-inline-start:24px;margin:0;max-height:230px;overflow:auto;font-size:.85rem;color:#c4d1e4}
+  .wager-history li{padding:5px 0;border-bottom:1px solid #293448}
+  .wager-lock{margin-top:18px;border:1px solid #a17e3d;border-radius:14px;padding:16px;background:#2a231b}
+  .wager-lock strong{color:#f6d58e}.wager-lock p{margin:5px 0;color:#e5d6c0;font-size:.9rem}
+  .wager-card .poker-cards{display:flex;flex-wrap:wrap;gap:7px}
+  .wager-card .poker-cards button{min-width:56px;background:#f5f1e8;color:#1b2530}
+  .wager-card .poker-cards button[aria-pressed=true]{border:3px solid #eab952;background:#ecdfa9}
+  .wager-card .poker-cards button span{display:block;font-size:.65rem}
+  @media(max-width:750px){.wager-grid{grid-template-columns:minmax(0,1fr)}.wager-rail{padding:14px}.wager-card{padding:16px}}
+  @media(prefers-reduced-motion:reduce){.wager-card button,.wager-stakes button{transition:none}}
+</style>
 </head>
 <body>
   <a class="skip" href="#casino-floor">Skip to games</a>
   <div class="topbar" data-en="FREE-PLAY ENTERTAINMENT ONLY · NO REAL-MONEY BETTING · NO DEPOSITS OR PAYOUTS" data-fa="فقط سرگرمی رایگان · بدون شرط‌بندی پول واقعی · بدون واریز و برداشت">FREE-PLAY ENTERTAINMENT ONLY · NO REAL-MONEY BETTING · NO DEPOSITS OR PAYOUTS</div>
-  <header><div class="shell header"><a class="mark" href="https://mojplaywin.com/" aria-label="MojPlayWin home"><span class="seal">◆</span><span>MOJ CASINO <small>LOUNGE BY MOJPLAYWIN</small></span></a><div class="header-right"><nav><a href="#casino-floor" data-en="Casino Floor" data-fa="بخش کازینو">Casino Floor</a><a href="#sports" data-en="Sports Picks" data-fa="پیش‌بینی ورزشی">Sports Picks</a><a href="#rules" data-en="Rules & Safety" data-fa="قوانین و ایمنی">Rules & Safety</a></nav><label class="skip" for="language">Language</label><select class="lang" id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option></select></div></div></header>
+  <header><div class="shell header"><a class="mark" href="https://mojplaywin.com/" aria-label="MojPlayWin home"><span class="seal">◆</span><span>MOJ CASINO <small>LOUNGE BY MOJPLAYWIN</small></span></a><div class="header-right"><nav><a href="#casino-floor" data-en="Casino Floor" data-fa="بخش کازینو">Casino Floor</a><a href="#sports" data-en="Sports Picks" data-fa="پیش‌بینی ورزشی">Sports Picks</a><a id="nav-mcd" href="#wager-lounge">Casino Dollar Tables</a><a href="#rules" data-en="Rules & Safety" data-fa="قوانین و ایمنی">Rules & Safety</a></nav><label class="skip" for="language">Language</label><select class="lang" id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option></select></div></div></header>
   <main>
     <section class="hero shell"><div><div class="eyebrow" data-en="A PRIVATE WORLD OF PLAY" data-fa="جهانی ویژه برای سرگرمی">A PRIVATE WORLD OF PLAY</div><h1 data-en="The thrill.<br><em>Without the wager.</em>" data-fa="هیجان بازی.<br><em>بدون شرط‌بندی مالی.</em>">The thrill.<br><em>Without the wager.</em></h1><p class="lead" data-en="A premium destination for casino-inspired entertainment, strategy and simulated sports predictions. Play the experience, never risk your money." data-fa="فضایی ممتاز برای سرگرمی‌های الهام‌گرفته از کازینو، راهبرد و پیش‌بینی ورزشی شبیه‌سازی‌شده؛ بدون به خطر انداختن پول.">A premium destination for casino-inspired entertainment, strategy and simulated sports predictions. Play the experience, never risk your money.</p><div class="buttons"><a class="btn primary" href="#casino-floor" data-en="Enter the Casino Floor ↗" data-fa="ورود به بخش کازینو ←">Enter the Casino Floor ↗</a><a class="btn outline" href="#sports" data-en="Explore Sports Picks" data-fa="پیش‌بینی ورزشی">Explore Sports Picks</a></div><div class="status-row"><span class="pill">21+ ONLY</span><span class="pill"><b>●</b> FREE PLAY</span><span class="pill">NO CASH VALUE</span></div></div><div class="showcase" aria-hidden="true"><div class="showcase-inner"><div class="showcase-icon">♠</div><strong>MOJ CASINO</strong><small>PRIVATE LOUNGE</small></div></div></section>
     <div class="shell"><div class="divider"></div></div>
@@ -82,6 +116,7 @@
         <a id="arena-cat-classic" href="#classic-tables">Chess, Backgammon &amp; Cards · 6</a>
         <a id="arena-cat-dice" href="#dice-festival">Dice &amp; Chance · 15</a>
         <a id="arena-cat-oracles" href="#fortune-oracles">Fortune &amp; Horoscopes · 12</a>
+        <a id="arena-cat-wagers" href="#wager-lounge">Casino Dollar Practice · 7</a>
       </nav>
       <p class="arena-empty" id="arena-empty" hidden>No matching games. Try another search.</p>
     </div>
@@ -101,6 +136,59 @@
       <p class="oracle-disclaimer" id="oracle-disclaimer">These are fictional, symbolic or tradition-inspired interpretations—not facts, forecasts, medical, legal or financial guidance. No names or birth dates are transmitted or saved.</p>
       <div class="oracle-grid" id="oracle-grid"></div>
     </section>
+    
+<section class="section shell moj-wager" id="wager-lounge" aria-labelledby="wager-heading">
+  <div class="section-head">
+    <div class="eyebrow" data-pro="eyebrow">SIMULATED BETTING TABLES · NO CASH VALUE</div>
+    <h2 id="wager-heading" data-pro="heading">MOJ Casino Dollar — Practice Tables</h2>
+    <p class="wager-intro" data-pro="intro">Play full betting rounds with free, non-purchasable MCD demo credits. Odds, rules, cards, stakes and results are local simulations. MCD is not MOJ1 and cannot be purchased, transferred, redeemed or withdrawn.</p>
+  </div>
+  <div class="wager-rail">
+    <div class="wager-balance"><small data-pro="balance">FREE DEMO BALANCE</small><strong id="mcd-balance">1,000.00 MCD</strong></div>
+    <div class="wager-stat"><span data-pro="rounds">Rounds</span><strong id="mcd-rounds">0</strong></div>
+    <div class="wager-stat"><span data-pro="wins">Wins</span><strong id="mcd-wins">0</strong></div>
+    <button id="mcd-reset" class="wager-reset" type="button" data-pro="refill">Refill free credits</button>
+  </div>
+  <fieldset class="wager-stakes" id="mcd-stake-field"><legend data-pro="stake">Practice stake (MCD)</legend>
+    <button type="button" data-mcd-stake="5" aria-pressed="false">5</button>
+    <button type="button" data-mcd-stake="10" aria-pressed="false">10</button>
+    <button type="button" data-mcd-stake="25" aria-pressed="true">25</button>
+    <button type="button" data-mcd-stake="50" aria-pressed="false">50</button>
+    <button type="button" data-mcd-stake="100" aria-pressed="false">100</button>
+  </fieldset>
+  <p class="wager-status" id="mcd-status" role="status" aria-live="polite">Select a stake, choose a game and play. All credits are fictional.</p>
+  <div class="wager-grid" id="wager-grid">
+    <article class="wager-card" id="pro-roulette"><h3 data-pro="roulette">European Roulette · Full bets</h3><p data-pro="rouletteDesc">37 equally likely numbers. Even-money, dozen and single-number bets with published multipliers.</p>
+      <div class="wager-controls"><label for="mcd-roulette-kind" data-pro="betType">Bet type</label>
+      <select id="mcd-roulette-kind"><option value="red">Red · 2×</option><option value="black">Black · 2×</option><option value="odd">Odd · 2×</option><option value="even">Even · 2×</option><option value="low">1–18 · 2×</option><option value="high">19–36 · 2×</option><option value="dozen1">1–12 · 3×</option><option value="dozen2">13–24 · 3×</option><option value="dozen3">25–36 · 3×</option><option value="straight">Exact number · 36×</option></select>
+      <label for="mcd-roulette-number" id="mcd-roulette-number-label" data-pro="number" hidden>Number</label><input id="mcd-roulette-number" type="number" min="0" max="36" inputmode="numeric" step="1" value="17" hidden>
+      <button id="mcd-roulette-spin" type="button" data-pro="spin">Spin wheel</button></div>
+      <div class="wager-result" id="mcd-roulette-result" aria-live="polite">Ready for a free round.</div></article>
+    <article class="wager-card" id="pro-blackjack"><h3 data-pro="blackjack">Blackjack · Dealer table</h3><p data-pro="blackjackDesc">One shuffled deck; dealer stands on 17, naturals pay 3:2, double-down supported. No split or insurance in this practice table.</p>
+      <div class="wager-controls"><button id="mcd-bj-deal" type="button" data-pro="deal">Deal hand</button><button id="mcd-bj-hit" type="button" data-pro="hit" disabled>Hit</button><button id="mcd-bj-stand" type="button" data-pro="stand" disabled>Stand</button><button id="mcd-bj-double" type="button" data-pro="double" disabled>Double down</button></div>
+      <div class="wager-result" id="mcd-bj-result" aria-live="polite">Ready for a free round.</div></article>
+    <article class="wager-card" id="pro-baccarat"><h3 data-pro="baccarat">Baccarat · Punto Banco</h3><p data-pro="baccaratDesc">Standard third-card drawing tableau. Player 2×, Banker 1.95× after commission, Tie 9×; Player/Banker ties push.</p>
+      <div class="wager-controls"><button type="button" data-mcd-baccarat="player" data-pro="player">Player</button><button type="button" data-mcd-baccarat="banker" data-pro="banker">Banker</button><button type="button" data-mcd-baccarat="tie" data-pro="tie">Tie</button></div>
+      <div class="wager-result" id="mcd-baccarat-result" aria-live="polite">Ready for a free round.</div></article>
+    <article class="wager-card" id="pro-slots"><h3 data-pro="slots">Symbol Slots · Paytable</h3><p data-pro="slotsDesc">Three equally weighted reels. Any exact pair pays 1.5×; any three match pays 10×; triple sevens pays 30×.</p>
+      <div class="wager-controls"><button type="button" id="mcd-slots-spin" data-pro="spin">Spin reels</button></div>
+      <div class="wager-result" id="mcd-slots-result" aria-live="polite">◆ 7 ★</div></article>
+    <article class="wager-card" id="pro-poker"><h3 data-pro="poker">Video Poker · Jacks or Better</h3><p data-pro="pokerDesc">Five unique cards; hold any cards and draw once. Jacks-or-better pays 1× up to royal flush 250×.</p>
+      <div class="poker-cards" id="mcd-poker-cards" aria-label="Poker cards and hold controls"></div>
+      <div class="wager-controls"><button id="mcd-poker-deal" type="button" data-pro="deal">Deal cards</button><button id="mcd-poker-draw" type="button" data-pro="draw" disabled>Draw / settle</button></div>
+      <div class="wager-result" id="mcd-poker-result" aria-live="polite">Ready for a free round.</div></article>
+    <article class="wager-card" id="pro-craps"><h3 data-pro="craps">Craps · Pass Line</h3><p data-pro="crapsDesc">Come-out 7 or 11 wins; 2, 3 or 12 loses; otherwise hit the point before seven. Even-money payout.</p>
+      <div class="wager-controls"><button id="mcd-craps-roll" type="button" data-pro="roll">Roll dice</button></div>
+      <div class="wager-result" id="mcd-craps-result" aria-live="polite">Place a practice stake on the pass line.</div></article>
+    <article class="wager-card" id="pro-sports"><h3 data-pro="sports">Virtual Sports · 1X2</h3><p data-pro="sportsDesc">Three fictional matches with fixed displayed decimal odds. Synthetic results, never real sports events or financial tips.</p>
+      <div class="wager-controls"><label for="mcd-match" data-pro="fixture">Fictional match</label><select id="mcd-match"><option value="0">North City vs South United</option><option value="1">Azure Hawks vs Red Foxes</option><option value="2">Coastal Waves vs Mountain Kings</option></select>
+      <label for="mcd-sport-pick" data-pro="pick">Your pick</label><select id="mcd-sport-pick"><option value="0">Home</option><option value="1">Draw</option><option value="2">Away</option></select>
+      <button type="button" id="mcd-sports-play" data-pro="predict">Simulate fixture</button></div>
+      <div class="wager-result" id="mcd-sports-result" aria-live="polite">Odds: 2.00 / 3.45 / 3.00</div></article>
+  </div>
+  <aside class="wager-history"><h3 data-pro="history">Recent practice rounds</h3><ol id="mcd-history"><li>No rounds yet.</li></ol></aside>
+  <aside class="wager-lock"><strong data-pro="locked">MOJ1 ⇄ MOJ Casino Dollar conversion — LOCKED</strong><p data-pro="lockDesc">This page has no wallet connection, token exchange, deposits, transfers or withdrawals. The real-money path requires licensing, age/identity verification, AML controls, independent game/security audits and legally approved reserves.</p></aside>
+</section>
     <section class="notice" id="rules"><div class="shell notice-grid"><div><h3 data-en="Entertainment, not gambling" data-fa="سرگرمی، نه قمار پول واقعی">Entertainment, not gambling</h3><p data-en="This page offers only free casino-style simulations. It does not operate a sportsbook or licensed gambling service. No money deposits, paid plays, purchaseable credits, withdrawals, valuable prizes, wallet links or token rewards are available." data-fa="این صفحه فقط شبیه‌سازی‌های رایگان ارائه می‌کند؛ نه شرط‌بندی ورزشی واقعی و نه خدمات قمار دارای مجوز. هیچ واریز، بازی پولی، اعتبار قابل خرید، برداشت، جایزه دارای ارزش، اتصال کیف پول یا پاداش توکنی وجود ندارد.">This page offers only free casino-style simulations. It does not operate a sportsbook or licensed gambling service. No money deposits, paid plays, purchaseable credits, withdrawals, valuable prizes, wallet links or token rewards are available.</p></div><div><h3 data-en="Important access rules" data-fa="قوانین مهم دسترسی">Important access rules</h3><ul><li data-en="Intended for adults 21 and older; age confirmation is self-declared and not formal identity verification." data-fa="ویژه افراد ۲۱ سال به بالا؛ تأیید سن صرفاً خوداظهاری است و احراز هویت رسمی محسوب نمی‌شود.">Intended for adults 21 and older; age confirmation is self-declared and not formal identity verification.</li><li data-en="Availability and advertising remain subject to the laws of your country or state." data-fa="دسترسی و تبلیغات تابع قوانین کشور یا ایالت کاربر است.">Availability and advertising remain subject to the laws of your country or state.</li><li data-en="Real-money betting is disabled unless the operator later obtains every required authorization." data-fa="شرط‌بندی پول واقعی تا اخذ مجوزهای لازم غیرفعال خواهد ماند.">Real-money betting is disabled unless the operator later obtains every required authorization.</li></ul></div></div></section>
   </main>
   <footer><div class="shell footer-row"><div><div class="foot-brand">MOJ CASINO LOUNGE</div><div data-en="A free-play entertainment page by MojPlayWin." data-fa="صفحه سرگرمی رایگان از مجموعه مج پلی وین.">A free-play entertainment page by MojPlayWin.</div></div><div class="foot-links"><a href="https://mojplaywin.com/" data-en="MojPlayWin Home" data-fa="صفحه اصلی مج پلی وین">MojPlayWin Home</a><a href="#rules" data-en="Rules & Safety" data-fa="قوانین و ایمنی">Rules & Safety</a></div></div></footer>
@@ -119,7 +207,7 @@
     const normalizeFind=s=>String(s).normalize('NFKC').toLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک');
     function filterArenaGames(){
       const query=normalizeFind($('#arena-search').value.trim());let count=0;
-      for(const id of ['game-grid','classic-game-grid','dice-game-grid','oracle-grid']){
+      for(const id of ['game-grid','classic-game-grid','dice-game-grid','oracle-grid','wager-grid']){
         const grid=$('#'+id),cards=[...grid.querySelectorAll('article')];
         for(const item of cards){
           const title=item.querySelector('h3')?.textContent||'';
@@ -835,6 +923,181 @@
     $('#arena-search').addEventListener('input',filterArenaGames);
     translateArenaFinder();
   })();
+
+(()=>{'use strict';
+  const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+  const locales=['en','fa','ar','de','fr','es'];
+  const i18n={
+    en:{wagerCat:"Casino Dollar Practice · 7",navMcd:"Casino Dollar Tables",eyebrow:'SIMULATED BETTING TABLES · NO CASH VALUE',heading:'MOJ Casino Dollar — Practice Tables',intro:'Play full betting rounds with free, non-purchasable MCD demo credits. Odds, rules, cards, stakes and results are local simulations. MCD is not MOJ1 and cannot be purchased, transferred, redeemed or withdrawn.',balance:'FREE DEMO BALANCE',rounds:'Rounds',wins:'Wins',refill:'Refill free credits',stake:'Practice stake (MCD)',betType:'Bet type',number:'Number',spin:'Spin',deal:'Deal',hit:'Hit',stand:'Stand',double:'Double down',player:'Player',banker:'Banker',tie:'Tie',draw:'Draw / settle',roll:'Roll dice',fixture:'Fictional match',pick:'Your pick',predict:'Simulate fixture',history:'Recent practice rounds',locked:'MOJ1 ⇄ MOJ Casino Dollar conversion — LOCKED',lockDesc:'No wallet connection, token exchange, deposits, transfers or withdrawals. Real-money operation requires licensing, verified identity and age, AML safeguards, reserves, and independent security/fairness audits.',roulette:'European Roulette · Full bets',rouletteDesc:'37 equally likely numbers. Even-money, dozen and single-number bets with published multipliers.',blackjack:'Blackjack · Dealer table',blackjackDesc:'Shuffled deck, dealer stands on 17, natural pays 3:2, double-down. No split/insurance in this practice table.',baccarat:'Baccarat · Punto Banco',baccaratDesc:'Standard third-card tableau. Player 2×, Banker 1.95×, Tie 9×; Player/Banker ties push.',slots:'Symbol Slots · Paytable',slotsDesc:'Three fair reels. Any exact pair pays 1.5×; three alike pays 10×; triple sevens 30×.',poker:'Video Poker · Jacks or Better',pokerDesc:'Five unique cards: hold any and draw once. Jacks or better through royal flush.',craps:'Craps · Pass Line',crapsDesc:'Come-out 7/11 wins; 2/3/12 loses; otherwise make the point before seven. 2× return.',sports:'Virtual Sports · 1X2',sportsDesc:'Three fictional matches with fixed decimal odds. Synthetic results, never real sports.',choose:'Choose a practice stake and play. All credits are fictional.',ready:'Ready for a free round.',noFunds:'Not enough free credits; select a smaller stake or refill.',active:'Finish the current hand before starting a new one.',win:'Practice win',lose:'Practice loss',push:'Practice push',none:'No rounds yet.',hold:'HOLD',keep:'Tap cards to hold',resetDone:'Free demo credits refilled.',result:'Result',odds:'Odds'},
+    fa:{wagerCat:"تمرین دلار کازینو · ۷",navMcd:"میزهای دلار کازینو",eyebrow:'میزهای شرط‌بندی شبیه‌سازی‌شده · بدون ارزش نقدی',heading:'دلار کازینوی مج — میزهای تمرینی',intro:'با اعتبار رایگان و غیرقابل‌خرید MCD بازی کنید. ضرایب، کارت‌ها و نتایج فقط شبیه‌سازی محلی‌اند. MCD توکن MOJ1 نیست و خرید، انتقال، تبدیل یا برداشت ندارد.',balance:'موجودی نمایشی رایگان',rounds:'دورهای بازی',wins:'بردها',refill:'شارژ رایگان دوباره',stake:'مبلغ تمرینی (MCD)',betType:'نوع انتخاب',number:'شماره',spin:'چرخش',deal:'توزیع کارت',hit:'کارت دیگر',stand:'توقف',double:'دوبرابر',player:'بازیکن',banker:'بانکدار',tie:'مساوی',draw:'تعویض و تسویه',roll:'پرتاب تاس',fixture:'مسابقه خیالی',pick:'انتخاب شما',predict:'شبیه‌سازی مسابقه',history:'دورهای تمرینی اخیر',locked:'تبدیل MOJ1 و دلار کازینوی مج — قفل',lockDesc:'هیچ اتصال کیف پول، مبادله توکن، واریز، انتقال یا برداشتی وجود ندارد. فعالیت پولی منوط به مجوز، احراز هویت و سن، کنترل پولشویی، ذخایر و ممیزی مستقل است.',roulette:'رولت اروپایی · انتخاب کامل',rouletteDesc:'۳۷ شماره هم‌شانس؛ انتخاب رنگ، زوج/فرد، دوجین و شماره با ضریب مشخص.',blackjack:'بلک‌جک · میز دیلر',blackjackDesc:'دسته کارت مخلوط، دیلر روی ۱۷ توقف می‌کند، بلک‌جک طبیعی ۳:۲ و امکان دوبرابر؛ بدون تقسیم دست و بیمه.',baccarat:'باکارات · پونتو بانکو',baccaratDesc:'قانون کارت سوم؛ بازیکن ۲×، بانکدار ۱٫۹۵×، مساوی ۹×.',slots:'اسلات نمادها · جدول پرداخت',slotsDesc:'سه ریل تصادفی؛ یک جفت ۱٫۵×، سه نماد یکسان ۱۰× و سه هفت ۳۰×.',poker:'پوکر ویدیویی · سرباز یا بهتر',pokerDesc:'پنج کارت یکتا؛ کارت‌های دلخواه را نگه دارید و یک‌بار تعویض کنید.',craps:'کرپس · خط پاس',crapsDesc:'۷ یا ۱۱ در شروع برنده؛ ۲، ۳ یا ۱۲ بازنده؛ سپس تکرار امتیاز پیش از ۷.',sports:'ورزش مجازی · ۱X۲',sportsDesc:'سه مسابقه خیالی با ضریب ثابت. نتیجه‌ها واقعی نیستند.',choose:'مبلغ نمایشی را انتخاب و بازی کنید. اعتبار هیچ ارزش نقدی ندارد.',ready:'برای دور رایگان آماده است.',noFunds:'اعتبار کافی نیست؛ مبلغ کمتر یا شارژ رایگان انتخاب کنید.',active:'ابتدا دست فعلی را تمام کنید.',win:'برد نمایشی',lose:'باخت نمایشی',push:'مساوی تمرینی',none:'هنوز دوری ثبت نشده است.',hold:'نگه‌دار',keep:'برای نگه‌داشتن کارت لمس کنید',resetDone:'اعتبار نمایشی دوباره شارژ شد.',result:'نتیجه',odds:'ضریب'},
+    ar:{wagerCat:"تدريب دولار الكازينو · ٧",navMcd:"طاولات دولار الكازينو",eyebrow:'طاولات رهان تجريبية · بلا قيمة نقدية',heading:'دولار كازينو MOJ — طاولات التدريب',intro:'العب برصيد MCD مجاني غير قابل للشراء. كل الاحتمالات والنتائج محاكاة محلية؛ ليس MCD رمز MOJ1 ولا يمكن تداوله أو سحبه.',balance:'رصيد تجريبي مجاني',rounds:'الجولات',wins:'الفوز',refill:'إعادة تعبئة مجانية',stake:'رهان تدريبي (MCD)',betType:'نوع الرهان',number:'رقم',spin:'تدوير',deal:'توزيع',hit:'اسحب',stand:'توقف',double:'ضاعف',player:'اللاعب',banker:'المصرفي',tie:'تعادل',draw:'اسحب واحسب',roll:'ارم النرد',fixture:'مباراة خيالية',pick:'اختيارك',predict:'حاكِ المباراة',history:'آخر الجولات التجريبية',locked:'تحويل MOJ1 ⇄ دولار الكازينو — مغلق',lockDesc:'لا ربط لمحافظ أو إيداعات أو تحويلات أو سحب. اللعب المالي يتطلب تراخيص والتحقق من السن والهوية وضوابط مكافحة غسل الأموال والتدقيق المستقل.',roulette:'الروليت الأوروبية · رهانات كاملة',rouletteDesc:'٣٧ رقماً متساوية الحظ؛ لون وفردي/زوجي ودزينة ورقم محدد.',blackjack:'بلاك جاك · الموزع',blackjackDesc:'أوراق مخلوطة، يقف الموزع على ١٧، الطبيعي ٣:٢، المضاعفة متاحة.',baccarat:'باكارات · بونتو بانكو',baccaratDesc:'قواعد الورقة الثالثة؛ اللاعب ٢× والمصرفي ١٫٩٥× والتعادل ٩×.',slots:'بكرات الرموز · جدول العائد',slotsDesc:'ثلاث بكرات عادلة؛ زوج ١٫٥× وثلاثة متطابقة ١٠× وثلاث سبعات ٣٠×.',poker:'بوكر فيديو · جاك أو أفضل',pokerDesc:'خمس أوراق فريدة؛ احتفظ بما تريد ثم اسحب مرة واحدة.',craps:'كرابس · خط المرور',crapsDesc:'٧ أو ١١ يفوز، ٢ أو ٣ أو ١٢ يخسر؛ ثم كرر النقطة قبل ٧.',sports:'رياضة افتراضية · ١X٢',sportsDesc:'ثلاث مباريات خيالية باحتمالات ثابتة؛ ليست أحداثاً حقيقية.',choose:'اختر رهاناً تجريبياً. الرصيد بلا قيمة نقدية.',ready:'جاهز لجولة مجانية.',noFunds:'الرصيد غير كافٍ؛ اختر أقل أو أعد التعبئة.',active:'أنهِ الجولة الحالية أولاً.',win:'فوز تجريبي',lose:'خسارة تجريبية',push:'تعادل',none:'لا جولات بعد.',hold:'احتفظ',keep:'اضغط للاحتفاظ',resetDone:'تمت إعادة تعبئة الرصيد.',result:'النتيجة',odds:'الاحتمالات'},
+    de:{wagerCat:"Casino-Dollar-Training · 7",navMcd:"Casino-Dollar-Tische",eyebrow:'SIMULIERTE WETTTISCHE · KEIN GELDWERT',heading:'MOJ Casino Dollar — Übungstische',intro:'Spielen Sie mit kostenlosen, nicht kaufbaren MCD-Demopunkten. Alle Quoten und Ergebnisse sind lokale Simulationen; kein Tausch, Transfer oder Auszahlung.',balance:'KOSTENLOSES DEMOGUTHABEN',rounds:'Runden',wins:'Siege',refill:'Kostenlos auffüllen',stake:'Übungseinsatz (MCD)',betType:'Wettart',number:'Nummer',spin:'Drehen',deal:'Geben',hit:'Karte',stand:'Halten',double:'Verdoppeln',player:'Spieler',banker:'Bank',tie:'Gleichstand',draw:'Tauschen / werten',roll:'Würfeln',fixture:'Fiktives Spiel',pick:'Ihre Wahl',predict:'Spiel simulieren',history:'Letzte Übungsrunden',locked:'MOJ1 ⇄ Casino Dollar — GESPERRT',lockDesc:'Keine Wallets, Tokenwechsel, Einzahlungen oder Auszahlungen. Echtgeldbetrieb erfordert Lizenzen, Alters- und Identitätsprüfung, Geldwäschekontrollen und unabhängige Prüfungen.',roulette:'Europäisches Roulette · Wettarten',rouletteDesc:'37 gleich wahrscheinliche Zahlen; Farben, Dutzende und Einzelzahl.',blackjack:'Blackjack · Dealer-Tisch',blackjackDesc:'Gemischtes Deck, Dealer hält bei 17, natürliches Blackjack 3:2, Verdoppeln möglich.',baccarat:'Baccarat · Punto Banco',baccaratDesc:'Regeln für dritte Karte; Spieler 2×, Bank 1,95×, Gleichstand 9×.',slots:'Symbol-Slots · Auszahlungstabelle',slotsDesc:'Drei faire Walzen; Paar 1,5×, Drilling 10×, dreimal Sieben 30×.',poker:'Videopoker · Bube oder besser',pokerDesc:'Fünf einzigartige Karten; halten und einmal tauschen.',craps:'Craps · Pass Line',crapsDesc:'7/11 gewinnt, 2/3/12 verliert, danach Punkt vor der Sieben treffen.',sports:'Virtueller Sport · 1X2',sportsDesc:'Drei fiktive Spiele mit festen Quoten und simulierten Ergebnissen.',choose:'Einsatz wählen und kostenlos üben. Kein Geldwert.',ready:'Bereit für eine Gratisrunde.',noFunds:'Nicht genug Demoguthaben; kleiner wählen oder auffüllen.',active:'Aktuelle Hand zuerst beenden.',win:'Übungssieg',lose:'Übungsverlust',push:'Unentschieden',none:'Noch keine Runden.',hold:'HALTEN',keep:'Karten zum Halten wählen',resetDone:'Demoguthaben aufgefüllt.',result:'Ergebnis',odds:'Quoten'},
+    fr:{wagerCat:"Pratique Casino Dollar · 7",navMcd:"Tables Casino Dollar",eyebrow:'TABLES DE PARI SIMULÉ · SANS VALEUR',heading:'MOJ Casino Dollar — Tables d’entraînement',intro:'Jouez avec des crédits MCD gratuits non achetables. Cotes et résultats sont simulés localement; aucun échange, transfert ni retrait.',balance:'SOLDE DÉMO GRATUIT',rounds:'Manches',wins:'Victoires',refill:'Recharger gratuitement',stake:'Mise fictive (MCD)',betType:'Type de mise',number:'Numéro',spin:'Tourner',deal:'Distribuer',hit:'Carte',stand:'Rester',double:'Doubler',player:'Joueur',banker:'Banque',tie:'Égalité',draw:'Échanger / régler',roll:'Lancer',fixture:'Match fictif',pick:'Votre choix',predict:'Simuler le match',history:'Dernières manches fictives',locked:'Conversion MOJ1 ⇄ Casino Dollar — BLOQUÉE',lockDesc:'Aucun portefeuille, échange de jetons, dépôt ou retrait. Le jeu d’argent exige licences, vérifications et audits indépendants.',roulette:'Roulette européenne · Mises complètes',rouletteDesc:'37 numéros équiprobables; couleurs, douzaines et numéro plein.',blackjack:'Blackjack · Croupier',blackjackDesc:'Jeu mélangé, arrêt à 17, blackjack naturel 3:2, double autorisé.',baccarat:'Baccarat · Punto Banco',baccaratDesc:'Règle de troisième carte; Joueur 2×, Banque 1,95×, Égalité 9×.',slots:'Machine à symboles · Gains',slotsDesc:'Trois rouleaux équitables; paire 1,5×, triple 10×, trois sept 30×.',poker:'Vidéo poker · Valet ou mieux',pokerDesc:'Cinq cartes distinctes; conserver puis changer une fois.',craps:'Craps · Pass Line',crapsDesc:'7/11 gagne, 2/3/12 perd, puis refaire le point avant 7.',sports:'Sports virtuels · 1X2',sportsDesc:'Trois matchs fictifs, cotes affichées, résultats simulés.',choose:'Choisissez une mise fictive. Aucun argent réel.',ready:'Prêt pour une manche gratuite.',noFunds:'Crédits insuffisants; réduire ou recharger.',active:'Terminez la main en cours.',win:'Gain fictif',lose:'Perte fictive',push:'Égalité',none:'Aucune manche.',hold:'GARDER',keep:'Choisir les cartes à garder',resetDone:'Crédits rechargés.',result:'Résultat',odds:'Cotes'},
+    es:{wagerCat:"Práctica Casino Dollar · 7",navMcd:"Mesas Casino Dollar",eyebrow:'MESAS DE APUESTAS SIMULADAS · SIN VALOR',heading:'MOJ Casino Dollar — Mesas de práctica',intro:'Juega con créditos MCD gratuitos que no se compran. Cuotas y resultados son simulaciones locales; sin canje, transferencias ni retiros.',balance:'SALDO DEMO GRATIS',rounds:'Rondas',wins:'Victorias',refill:'Recargar gratis',stake:'Apuesta ficticia (MCD)',betType:'Tipo de apuesta',number:'Número',spin:'Girar',deal:'Repartir',hit:'Pedir',stand:'Plantarse',double:'Doblar',player:'Jugador',banker:'Banca',tie:'Empate',draw:'Cambiar / cobrar',roll:'Lanzar dados',fixture:'Partido ficticio',pick:'Tu elección',predict:'Simular partido',history:'Rondas recientes',locked:'Cambio MOJ1 ⇄ Casino Dollar — BLOQUEADO',lockDesc:'Sin monederos, cambio de tokens, depósitos ni retiros. El dinero real exige licencias, identidad/edad y auditorías independientes.',roulette:'Ruleta europea · Apuestas completas',rouletteDesc:'37 números equiprobables; color, docenas y número único.',blackjack:'Blackjack · Crupier',blackjackDesc:'Baraja mezclada, crupier se planta en 17, natural 3:2, doblar permitido.',baccarat:'Bacará · Punto Banco',baccaratDesc:'Regla de tercera carta; Jugador 2×, Banca 1,95×, Empate 9×.',slots:'Rodillos de símbolos · Premios',slotsDesc:'Tres rodillos justos; pareja 1,5×, trío 10×, tres sietes 30×.',poker:'Video póker · Jotas o mejor',pokerDesc:'Cinco cartas únicas; conservar y cambiar una vez.',craps:'Craps · Línea de pase',crapsDesc:'7/11 gana, 2/3/12 pierde; luego repetir punto antes del 7.',sports:'Deporte virtual · 1X2',sportsDesc:'Tres partidos ficticios con cuotas fijas y resultados simulados.',choose:'Elige apuesta ficticia. Sin valor monetario.',ready:'Listo para una ronda gratis.',noFunds:'Créditos insuficientes; reduce o recarga.',active:'Termina la mano actual.',win:'Victoria ficticia',lose:'Pérdida ficticia',push:'Empate',none:'Sin rondas.',hold:'GUARDAR',keep:'Pulsa para conservar',resetDone:'Créditos recargados.',result:'Resultado',odds:'Cuotas'}
+  };
+  let locale='en';
+  const lang=()=>{const v=$('#language').value;return locales.includes(v)?v:'en'};
+  const tr=k=>(i18n[locale]&&i18n[locale][k])||i18n.en[k]||k;
+  const format=n=>(n/100).toLocaleString(locale,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const redNums=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+  const rng=n=>{if(!Number.isInteger(n)||n<=0)throw Error('Invalid range');const u=new Uint32Array(1),limit=4294967296-(4294967296%n);let x;do{crypto.getRandomValues(u);x=u[0]}while(x>=limit);return x%n};
+  const shuffle=a=>{for(let i=a.length-1;i>0;i--){let j=rng(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
+  const fresh=()=>({balance:100000,rounds:0,wins:0,history:[]});
+  let bank=fresh(),stake=25,bj=null,poker=null,craps=null;
+  try{const obj=JSON.parse(localStorage.getItem('moj-mcd-demo-v1')||'null');if(obj&&Number.isSafeInteger(obj.balance)&&obj.balance>=0&&obj.balance<=1000000000&&Number.isInteger(obj.rounds)&&obj.rounds>=0&&obj.rounds<1000000&&Number.isInteger(obj.wins)&&obj.wins>=0&&obj.wins<=obj.rounds&&Array.isArray(obj.history)){bank={balance:obj.balance,rounds:obj.rounds,wins:obj.wins,history:obj.history.slice(0,10).filter(x=>typeof x==='string'&&x.length<300)}}}catch(_){}
+  function persist(){try{localStorage.setItem('moj-mcd-demo-v1',JSON.stringify(bank))}catch(_){}}
+  function output(id,msg){$(id).textContent=msg}
+  function update(){
+    output('#mcd-balance',format(bank.balance)+' MCD');output('#mcd-rounds',String(bank.rounds));output('#mcd-wins',String(bank.wins));
+    $('#mcd-reset').disabled=!!bj||!!poker||!!craps;
+    const ol=$('#mcd-history');ol.replaceChildren();
+    if(!bank.history.length){const li=document.createElement('li');li.textContent=tr('none');ol.append(li)}
+    else for(const row of bank.history){const li=document.createElement('li');li.textContent=row;ol.append(li)}
+  }
+  function notice(msg){output('#mcd-status',msg)}
+  function reserve(){
+    const amount=stake*100;
+    if(bank.balance<amount){notice(tr('noFunds'));return null}
+    bank.balance-=amount;update();return amount
+  }
+  function settle(game,detail,amount,multiplier){
+    const gross=Math.round(amount*multiplier);bank.balance+=gross;bank.rounds++;
+    if(gross>amount)bank.wins++;
+    const verdict=gross>amount?tr('win'):gross===amount?tr('push'):tr('lose');
+    const row=game+' · '+verdict+' · '+detail+' · '+format(gross-amount)+' MCD';
+    bank.history.unshift(row);bank.history=bank.history.slice(0,10);persist();update();notice(row);
+    return verdict+' · '+detail+' · '+(gross-amount>=0?'+':'')+format(gross-amount)+' MCD';
+  }
+  function cards(){const a=[];for(const suit of ['♠','♥','♦','♣'])for(const rank of ['A','2','3','4','5','6','7','8','9','10','J','Q','K'])a.push({rank,suit});return shuffle(a)}
+  const cardText=c=>c.rank+c.suit;
+  const value=hand=>{let sum=0,aces=0;for(const c of hand){if(c.rank==='A'){sum+=11;aces++}else sum+=['J','Q','K'].includes(c.rank)?10:Number(c.rank)}while(sum>21&&aces){sum-=10;aces--}return sum};
+  $('#mcd-stake-field').addEventListener('click',e=>{const b=e.target.closest('[data-mcd-stake]');if(!b)return;stake=Number(b.dataset.mcdStake);$$('[data-mcd-stake]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));notice(tr('choose'))});
+  $('#mcd-reset').addEventListener('click',()=>{if(bj||poker||craps){notice(tr('active'));return}bank=fresh();persist();update();notice(tr('resetDone'))});
+  $('#mcd-roulette-kind').addEventListener('change',()=>{$('#mcd-roulette-number').hidden=$('#mcd-roulette-kind').value!=='straight';$('#mcd-roulette-number-label').hidden=$('#mcd-roulette-kind').value!=='straight'});
+  $('#mcd-roulette-spin').addEventListener('click',()=>{
+    const kind=$('#mcd-roulette-kind').value,input=$('#mcd-roulette-number'),num=Number(input.value);
+    if(kind==='straight'&&(!Number.isInteger(num)||num<0||num>36)){output('#mcd-roulette-result','Choose a whole number between 0 and 36.');return}
+    const amount=reserve();if(amount===null)return;const result=rng(37);
+    const red=redNums.has(result),win=kind==='red'?red:kind==='black'?result!==0&&!red:kind==='odd'?result!==0&&result%2===1:kind==='even'?result!==0&&result%2===0:kind==='low'?result>=1&&result<=18:kind==='high'?result>=19:kind==='dozen1'?result>=1&&result<=12:kind==='dozen2'?result>=13&&result<=24:kind==='dozen3'?result>=25&&result<=36:result===num;
+    const mult=kind==='straight'?36:kind.startsWith('dozen')?3:2;
+    output('#mcd-roulette-result',settle('Roulette',result+' '+(result===0?'GREEN':red?'RED':'BLACK'),amount,win?mult:0));
+  });
+  function bjRender(){
+    $('#mcd-bj-deal').disabled=!!bj;$('#mcd-bj-hit').disabled=!bj;$('#mcd-bj-stand').disabled=!bj;$('#mcd-bj-double').disabled=!bj||bj.actions!==0||bank.balance<bj.amount;
+    update();
+    if(bj)output('#mcd-bj-result','Player: '+bj.hand.map(cardText).join(' ')+' ('+value(bj.hand)+')\nDealer: '+cardText(bj.dealer[0])+' ?\nBet: '+format(bj.amount)+' MCD');
+  }
+  function bjFinish(){
+    while(value(bj.dealer)<17)bj.dealer.push(bj.deck.pop());
+    const p=value(bj.hand),d=value(bj.dealer),amount=bj.amount,dealerText=bj.dealer.map(cardText).join(' ');
+    const mult=p>21?0:d>21||p>d?2:p===d?1:0;
+    bj=null;const result=settle('Blackjack','Player '+p+' / Dealer '+d,amount,mult);
+    bjRender();output('#mcd-bj-result','Dealer: '+dealerText+'\n'+result);
+  }
+  $('#mcd-bj-deal').addEventListener('click',()=>{
+    if(bj)return;const amount=reserve();if(amount===null)return;
+    const deck=cards(),hand=[deck.pop(),deck.pop()],dealer=[deck.pop(),deck.pop()];bj={deck,hand,dealer,amount,actions:0};
+    const pn=value(hand)===21,dn=value(dealer)===21;
+    if(pn||dn){bj=null;const result=settle('Blackjack','Natural '+value(hand)+' / '+value(dealer),amount,pn&&!dn?2.5:pn&&dn?1:0);bjRender();output('#mcd-bj-result',result);return}
+    bjRender();
+  });
+  $('#mcd-bj-hit').addEventListener('click',()=>{if(!bj)return;bj.hand.push(bj.deck.pop());bj.actions++;if(value(bj.hand)>=21){if(value(bj.hand)>21){const amount=bj.amount,p=value(bj.hand);bj=null;output('#mcd-bj-result',settle('Blackjack','Bust '+p,amount,0));bjRender()}else bjFinish()}else bjRender()});
+  $('#mcd-bj-stand').addEventListener('click',()=>{if(bj)bjFinish()});
+  $('#mcd-bj-double').addEventListener('click',()=>{if(!bj||bj.actions||bank.balance<bj.amount)return;bank.balance-=bj.amount;bj.amount*=2;bj.hand.push(bj.deck.pop());bj.actions++;bjFinish()});
+  function bdeck(){const a=[];for(let k=0;k<8;k++)for(const r of [1,2,3,4,5,6,7,8,9,0,0,0,0])for(let suit=0;suit<4;suit++)a.push(r);return shuffle(a)}
+  const btotal=a=>a.reduce((x,y)=>x+y,0)%10;
+  $$('[data-mcd-baccarat]').forEach(btn=>btn.addEventListener('click',()=>{
+    const choice=btn.dataset.mcdBaccarat,amount=reserve();if(amount===null)return;
+    const deck=bdeck(),p=[deck.pop(),deck.pop()],b=[deck.pop(),deck.pop()];let pthird=null;
+    if(btotal(p)<8&&btotal(b)<8){
+      if(btotal(p)<=5){pthird=deck.pop();p.push(pthird)}
+      const bt=btotal(b);
+      const draw=pthird===null?bt<=5:bt<=2||(bt===3&&pthird!==8)||(bt===4&&pthird>=2&&pthird<=7)||(bt===5&&pthird>=4&&pthird<=7)||(bt===6&&pthird>=6&&pthird<=7);
+      if(draw)b.push(deck.pop());
+    }
+    const ps=btotal(p),bs=btotal(b),outcome=ps===bs?'tie':ps>bs?'player':'banker';
+    const mult=choice===outcome?(choice==='tie'?9:choice==='banker'?1.95:2):outcome==='tie'?1:0;
+    output('#mcd-baccarat-result',settle('Baccarat','P '+ps+' · B '+bs+' · '+outcome,amount,mult));
+  }));
+  $('#mcd-slots-spin').addEventListener('click',()=>{
+    const amount=reserve();if(amount===null)return;
+    const symbols=['7','◆','★','♥','♣','♠','✦'],reels=[0,1,2].map(()=>symbols[rng(symbols.length)]);
+    const distinct=new Set(reels).size,mult=distinct===1?(reels[0]==='7'?30:10):distinct===2?1.5:0;
+    output('#mcd-slots-result',reels.join('  ')+'\n'+settle('Slots',reels.join(''),amount,mult));
+  });
+  function pokerPayout(hand){
+    const nums=hand.map(c=>c.rank==='A'?14:['J','Q','K'].includes(c.rank)?{J:11,Q:12,K:13}[c.rank]:Number(c.rank)).sort((a,b)=>a-b);
+    const freq={};nums.forEach(n=>freq[n]=(freq[n]||0)+1);const count=Object.values(freq).sort((a,b)=>b-a);
+    const flush=hand.every(c=>c.suit===hand[0].suit),straight=new Set(nums).size===5&&(nums[4]-nums[0]===4||nums.join(',')==='2,3,4,5,14');
+    if(straight&&flush&&nums.join(',')==='10,11,12,13,14')return ['Royal flush',250];
+    if(straight&&flush)return ['Straight flush',50];
+    if(count[0]===4)return ['Four of a kind',25];
+    if(count[0]===3&&count[1]===2)return ['Full house',9];
+    if(flush)return ['Flush',6];if(straight)return ['Straight',4];
+    if(count[0]===3)return ['Three of a kind',3];
+    if(count[0]===2&&count[1]===2)return ['Two pairs',2];
+    if(count[0]===2&&Object.keys(freq).some(n=>freq[n]===2&&Number(n)>=11))return ['Jacks or better',1];
+    return ['No paying hand',0];
+  }
+  function pokerRender(){
+    const box=$('#mcd-poker-cards');box.replaceChildren();
+    if(poker)for(let i=0;i<5;i++){
+      const b=document.createElement('button');b.type='button';b.setAttribute('aria-pressed',String(poker.holds.has(i)));b.setAttribute('aria-label',cardText(poker.hand[i])+' '+(poker.holds.has(i)?tr('hold'):''));
+      b.append(document.createTextNode(cardText(poker.hand[i])));const span=document.createElement('span');span.textContent=poker.holds.has(i)?tr('hold'):' ';b.append(span);
+      b.addEventListener('click',()=>{if(poker.holds.has(i))poker.holds.delete(i);else poker.holds.add(i);pokerRender()});box.append(b)
+    }
+    $('#mcd-poker-deal').disabled=!!poker;$('#mcd-poker-draw').disabled=!poker;update();
+  }
+  $('#mcd-poker-deal').addEventListener('click',()=>{
+    if(poker)return;const amount=reserve();if(amount===null)return;const deck=cards(),hand=Array.from({length:5},()=>deck.pop());poker={amount,deck,hand,holds:new Set()};pokerRender();output('#mcd-poker-result',tr('keep'));
+  });
+  $('#mcd-poker-draw').addEventListener('click',()=>{
+    if(!poker)return;for(let i=0;i<5;i++)if(!poker.holds.has(i))poker.hand[i]=poker.deck.pop();
+    const [name,mult]=pokerPayout(poker.hand),hand=poker.hand.map(cardText).join(' '),amount=poker.amount;poker=null;
+    const result=settle('Video Poker',name,amount,mult>0?mult+1:0);pokerRender();output('#mcd-poker-result',hand+'\n'+result);
+  });
+  const roll2=()=>rng(6)+1+rng(6)+1;
+  $('#mcd-craps-roll').addEventListener('click',()=>{
+    if(!craps){const amount=reserve();if(amount===null)return;craps={amount,point:null}}
+    const n=roll2(),amount=craps.amount;
+    if(craps.point===null){
+      if(n===7||n===11){craps=null;output('#mcd-craps-result',settle('Craps','Come-out '+n,amount,2))}
+      else if([2,3,12].includes(n)){craps=null;output('#mcd-craps-result',settle('Craps','Crap-out '+n,amount,0))}
+      else{craps.point=n;output('#mcd-craps-result','Point '+n+'. Roll again; repeat '+n+' before 7.');update()}
+    }else if(n===craps.point||n===7){const point=craps.point;craps=null;output('#mcd-craps-result',settle('Craps','Point '+point+' / roll '+n,amount,n===point?2:0))}
+    else output('#mcd-craps-result','Rolled '+n+'. Point remains '+craps.point+'.');update();
+  });
+  const matches=[
+    {name:'North City vs South United',prob:[4600,2700,2700],odds:[2.00,3.45,3.15]},
+    {name:'Azure Hawks vs Red Foxes',prob:[3700,2500,3800],odds:[2.50,3.60,2.35]},
+    {name:'Coastal Waves vs Mountain Kings',prob:[4100,2900,3000],odds:[2.20,3.15,2.95]}
+  ];
+  function odds(){const m=matches[Number($('#mcd-match').value)];output('#mcd-sports-result',tr('odds')+': '+m.odds.map(n=>n.toFixed(2)).join(' / '))}
+  $('#mcd-match').addEventListener('change',odds);$('#mcd-sports-play').addEventListener('click',()=>{
+    const m=matches[Number($('#mcd-match').value)],pick=Number($('#mcd-sport-pick').value),amount=reserve();if(amount===null)return;
+    const x=rng(10000),winner=x<m.prob[0]?0:x<m.prob[0]+m.prob[1]?1:2;
+    output('#mcd-sports-result',m.name+'\n'+settle('Virtual 1X2',['Home','Draw','Away'][winner]+' @'+m.odds[pick].toFixed(2),amount,pick===winner?m.odds[pick]:0));
+  });
+  function translate(){
+    locale=lang();$$('[data-pro]').forEach(el=>el.textContent=tr(el.dataset.pro));
+    $('[data-mcd-stake]').forEach(b=>b.setAttribute('aria-label',tr('stake')+' '+b.dataset.mcdStake));
+    $('#arena-cat-wagers').textContent=tr('wagerCat');$('#nav-mcd').textContent=tr('navMcd');
+    update();$('#arena-search').dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  $('#language').addEventListener('change',translate);
+  // Keep the age dialog genuinely modal for keyboard and screen-reader navigation.
+  const gate=$('#age-gate'),confirm=$('#age-confirm'),leave=gate.querySelector('a[href]');
+  const outside=[...document.body.children].filter(el=>el!==gate&&el.tagName!=='SCRIPT');
+  if(!gate.hidden){outside.forEach(el=>el.inert=true);confirm.focus()}
+  gate.addEventListener('keydown',e=>{
+    if(e.key!=='Tab')return;
+    if(e.shiftKey&&document.activeElement===confirm){e.preventDefault();leave.focus()}
+    else if(!e.shiftKey&&document.activeElement===leave){e.preventDefault();confirm.focus()}
+  });
+  confirm.addEventListener('click',()=>{outside.forEach(el=>el.inert=false);$('#wager-heading').setAttribute('tabindex','-1');$('#wager-heading').focus()});
+  translate();notice(tr('choose'));odds();bjRender();pokerRender();
+})();
+
   </script>
 </body>
 </html>
