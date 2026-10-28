@@ -66,6 +66,50 @@ class ContinuityGuardSecurityTests(unittest.TestCase):
                 )
                 self.assertEqual(result.full_url, url)
 
+    def test_redirect_query_cannot_change_login_return_or_child_route(self):
+        rejected = (
+            guard.ORIGIN + "/accounts/login/",
+            guard.ORIGIN + "/accounts/login/?next=https%3A%2F%2Fevil.example%2F",
+            guard.ORIGIN + "/accounts/login/?next=%2Fstore%2Fproduct%2F999%2Fcheckout%2F",
+            guard.ORIGIN + "/accounts/login/?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F&next=%2Fadmin%2F",
+            guard.ORIGIN + "/saman/?next=%2Fadmin%2F",
+        )
+        for url in rejected:
+            with self.subTest(url=url):
+                with self.assertRaises(guard.UnsafeRedirect):
+                    guard.ScopedRedirect().redirect_request(
+                        self.request, None, 302, "redirect", {}, url
+                    )
+
+    def test_direct_get_cannot_leave_public_scope(self):
+        for url in (
+            "https://evil.example/saman/",
+            "http://mojplaywin.com/saman/",
+            guard.ORIGIN + "/admin/",
+            guard.ORIGIN + "/saman/?unexpected=1",
+        ):
+            with self.subTest(url=url):
+                with patch.object(guard.urllib.request, "build_opener") as opener:
+                    with self.assertRaises(guard.UnsafeRedirect):
+                        guard.get(url, attempts=1)
+                    opener.assert_not_called()
+
+    def test_checkout_login_return_path_is_exact_and_product_specific(self):
+        for pk in guard.PROTECTED_PRODUCT_IDS:
+            expected = f"/store/product/{pk}/checkout/"
+            correct = guard.Check(guard.ORIGIN + expected,
+                guard.ORIGIN + "/accounts/login/?next=" +
+                guard.urllib.parse.quote(expected, safe=""), 200, 0.01)
+            with patch.object(guard, "get", return_value=(correct, b"")):
+                self.assertEqual(guard.check_authentication_gate(pk), correct)
+            for wrong_query in ("", "?next=%2Fstore%2Fproduct%2F999%2Fcheckout%2F",
+                                "?next=https%3A%2F%2Fevil.example%2F"):
+                wrong = guard.Check(guard.ORIGIN + expected,
+                    guard.ORIGIN + "/accounts/login/" + wrong_query, 200, 0.01)
+                with patch.object(guard, "get", return_value=(wrong, b"")):
+                    with self.assertRaisesRegex(RuntimeError, "return path"):
+                        guard.check_authentication_gate(pk)
+
     def test_redirect_hops_are_bounded(self):
         handler = guard.ScopedRedirect()
         for _ in range(3):
