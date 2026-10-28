@@ -148,7 +148,9 @@ jobs:
               if n.endswith((".sqlite3-shm", ".db-shm")):
                   return "sqlite_shared_memory"
               return "other"
-          for line in raw.splitlines()[:3000]:
+          recent_lines = raw.splitlines()
+          recent["truncated_at_3000"] = len(recent_lines) > 3000
+          for line in recent_lines[:3000]:
               length, sep, filename = line.partition("\t")
               if not sep or not length.isdigit():
                   continue
@@ -180,8 +182,13 @@ jobs:
                       file_class = django_file_class(candidate.name)
                       django_types[file_class] = django_types.get(file_class, 0) + allocated
                       django_type_counts[file_class] = django_type_counts.get(file_class, 0) + 1
-                      if file_class == "database_main" and len(sqlite_candidates) < 3:
-                          sqlite_candidates.append(candidate)
+                      if file_class == "database_main":
+                          # Prioritize the three largest allocated files, not
+                          # arbitrary find traversal order; no paths are emitted.
+                          heapq.heappush(sqlite_candidates,
+                                         (allocated, recent["scanned_large"], candidate))
+                          if len(sqlite_candidates) > 3:
+                              heapq.heappop(sqlite_candidates)
                   largest_recent.append((allocated, category))
                   recent["scanned_large"] += 1
                   recent["allocated_bytes"] += allocated
@@ -190,14 +197,15 @@ jobs:
           recent["by_category_allocated_bytes"] = dict(sorted(buckets.items()))
           recent["factory_django_by_file_class_bytes"] = dict(sorted(django_types.items()))
           recent["factory_django_by_file_class_counts"] = dict(sorted(django_type_counts.items()))
-          recent["factory_django_classification_complete"] = recent["complete"] and recent["scanned_large"] <= 3000
+          recent["factory_django_classification_complete"] = (
+              recent["complete"] and not recent["truncated_at_3000"])
           recent["top_ten_anonymous"] = [
               {"allocated_bytes": size, "category": cat}
               for size, cat in sorted(largest_recent, reverse=True)[:10]]
           # Constant-time, immutable read-only SQLite header/PRAGMA inspection.
           # No SQL rows or table names read; no WAL/shm creation, no DB changes.
           sqlite_health = []
-          for candidate in sqlite_candidates:
+          for _, _, candidate in sorted(sqlite_candidates, reverse=True):
               entry = {"readable": False, "file_bytes": None,
                        "page_count": None, "page_size": None,
                        "freelist_pages": None, "freelist_bytes": None,
@@ -501,6 +509,13 @@ jobs:
           assert not (inv["complete"] and inv["scan_truncated"])
           assert inv["older_archive_log_bytes"] <= inv["allocated_bytes_scanned"]
           assert inv["database_header_probe_is_consistency_check"] is False
+          recent = data["recent_large_files"]
+          assert recent["factory_django_classification_complete"] == (
+              recent["complete"] and not recent["truncated_at_3000"])
+          assert len(data["factory_sqlite_readonly_header"]) <= 3
+          sizes = [e["file_bytes"] for e in data["factory_sqlite_readonly_header"]
+                   if e["file_bytes"] is not None]
+          assert sizes == sorted(sizes, reverse=True)
           assert sum(x["allocated_bytes"] for x in inv["largest_database_files_anonymous"]) <= inv["class_allocated_bytes"].get("database", 0)
           assert sum(inv["largest_other_files_anonymous"]) <= inv["class_allocated_bytes"].get("other", 0)
           assert all(sum(x["by_class_bytes"].values()) == x["allocated_bytes"] == sum(x["by_age_bytes"].values())
