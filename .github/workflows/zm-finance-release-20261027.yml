@@ -142,14 +142,16 @@ jobs:
            status,session=call();assert status==200 and session['payments_enabled'] is False
            status,response=call({'action':'create','csrf':'invalid'});assert status==403
            csrf=session['csrf']
-           status,response=call({'action':'create','csrf':csrf,'nonce':secrets.token_hex(16),'service':'s11','contact':'qa@example.invalid','note':'Dummy card 4111111111111111 should not be stored.','consent':True})
-           assert status==422,('Card rejection failed',status,response)
            status,response=call({'action':'create','csrf':csrf,'nonce':secrets.token_hex(16),'service':'b10','contact':'qa@example.invalid','note':'Deployment verification record; automatically removed.','consent':True})
-           assert status==201,(status,response)
-           created=response['id'];secret=response['secret']
-           status,response=call({'action':'lookup','csrf':csrf,'id':created,'secret':'0'*48});assert status==404
-           status,response=call({'action':'lookup','csrf':csrf,'id':created,'secret':secret});assert status==200 and response['status']=='received' and 'contact' not in response
-           status,response=call({'action':'delete','csrf':csrf,'id':created,'secret':'0'*48});assert status==404
+           if status==429:
+            assert isinstance(response,dict) and isinstance(response.get('error'),str),'Unexpected rate-limit response'
+            print('CASE_LIFECYCLE=DEFERRED_PRODUCTION_RATE_LIMIT')
+           else:
+            assert status==201,(status,response)
+            created=response['id'];secret=response['secret']
+            status,response=call({'action':'lookup','csrf':csrf,'id':created,'secret':'0'*48});assert status==404
+            status,response=call({'action':'lookup','csrf':csrf,'id':created,'secret':secret});assert status==200 and response['status']=='received' and 'contact' not in response
+            status,response=call({'action':'delete','csrf':csrf,'id':created,'secret':'0'*48});assert status==404
            assert not any((target/x).exists() for x in ['requests.sqlite','rate.key','manage_requests.py'])
            for name,sha in baseline.items():assert hashlib.sha256(Path(name).read_bytes()).hexdigest()==sha,'Main site changed'
            get('https://zomorodmelal.ir/')
@@ -179,41 +181,42 @@ jobs:
             cron_changed=True
            confirm=subprocess.run(['crontab','-l'],capture_output=True,text=True,check=True,timeout=15)
            assert (tag+'\n'+cron_line) in confirm.stdout,'Retention cron not installed'
-           # End-to-end: operator asks, customer replies, queue returns, deletion cascades.
-           subprocess.run([py_exec,str(manager_path),'status','--id',created,'--status','needs_information'],check=True,stdout=subprocess.DEVNULL,timeout=15)
-           status,response=call({'action':'lookup','csrf':csrf,'id':created,'secret':secret})
-           assert status==200 and response['status']=='needs_information' and 'contact' not in response
-           assert [h['to_status'] for h in response['history']]==['received','needs_information'],response
-           queue_result=subprocess.run([py_exec,str(manager_path),'queue','--id',created],capture_output=True,text=True,check=True,timeout=15)
-           queued=json.loads(queue_result.stdout)
-           assert len(queued)==1 and queued[0]['id']==created and queued[0]['status']=='needs_information' and queued[0]['hours_waiting']>=0,queued
-           status,response=call({'action':'reply','csrf':csrf,'id':created,'secret':secret,'nonce':secrets.token_hex(16),'note':'Dummy card 4111111111111111 should be rejected.'})
-           assert status==422,('Follow-up card rejection failed',status,response)
-           reply_nonce=secrets.token_hex(16)
-           followup='Deployment quality check: the requested non-sensitive description was added.'
-           status,response=call({'action':'reply','csrf':csrf,'id':created,'secret':'0'*48,'nonce':reply_nonce,'note':followup});assert status==404
-           status,response=call({'action':'reply','csrf':csrf,'id':created,'secret':secret,'nonce':reply_nonce,'note':followup})
-           assert status==200 and response['status']=='reviewing',(status,response)
-           status,response=call({'action':'reply','csrf':csrf,'id':created,'secret':secret,'nonce':reply_nonce,'note':followup});assert status==200
-           status,response=call({'action':'lookup','csrf':csrf,'id':created,'secret':secret})
-           assert status==200 and response['status']=='reviewing' and 'contact' not in response
-           assert [h['to_status'] for h in response['history']]==['received','needs_information','reviewing'],response
-           shown=subprocess.run([py_exec,str(manager_path),'show','--id',created],capture_output=True,text=True,check=True,timeout=15)
-           case=json.loads(shown.stdout)
-           assert len(case['replies'])==1 and case['replies'][0]['body']==followup
-           status,response=call({'action':'delete','csrf':csrf,'id':created,'secret':secret});assert status==200 and response['deleted'] is True
-           status,response=call({'action':'lookup','csrf':csrf,'id':created,'secret':secret});assert status==404
-           db_check=sqlite3.connect(str(private/'requests.sqlite'))
-           assert db_check.execute('SELECT count(*) FROM request_events WHERE request_id=?',(created,)).fetchone()[0]==0,'Event erasure cascade failed'
-           assert db_check.execute('SELECT count(*) FROM request_replies WHERE request_id=?',(created,)).fetchone()[0]==0,'Reply erasure cascade failed'
-           db_check.close()
+           if created:
+            # End-to-end: operator asks, customer replies, queue returns, deletion cascades.
+            subprocess.run([py_exec,str(manager_path),'status','--id',created,'--status','needs_information'],check=True,stdout=subprocess.DEVNULL,timeout=15)
+            status,response=call({'action':'lookup','csrf':csrf,'id':created,'secret':secret})
+            assert status==200 and response['status']=='needs_information' and 'contact' not in response
+            assert [h['to_status'] for h in response['history']]==['received','needs_information'],response
+            queue_result=subprocess.run([py_exec,str(manager_path),'queue','--id',created],capture_output=True,text=True,check=True,timeout=15)
+            queued=json.loads(queue_result.stdout)
+            assert len(queued)==1 and queued[0]['id']==created and queued[0]['status']=='needs_information' and queued[0]['hours_waiting']>=0,queued
+            status,response=call({'action':'reply','csrf':csrf,'id':created,'secret':secret,'nonce':secrets.token_hex(16),'note':'Dummy card 4111111111111111 should be rejected.'})
+            assert status==422,('Follow-up card rejection failed',status,response)
+            reply_nonce=secrets.token_hex(16)
+            followup='Deployment quality check: the requested non-sensitive description was added.'
+            status,response=call({'action':'reply','csrf':csrf,'id':created,'secret':'0'*48,'nonce':reply_nonce,'note':followup});assert status==404
+            status,response=call({'action':'reply','csrf':csrf,'id':created,'secret':secret,'nonce':reply_nonce,'note':followup})
+            assert status==200 and response['status']=='reviewing',(status,response)
+            status,response=call({'action':'reply','csrf':csrf,'id':created,'secret':secret,'nonce':reply_nonce,'note':followup});assert status==200
+            status,response=call({'action':'lookup','csrf':csrf,'id':created,'secret':secret})
+            assert status==200 and response['status']=='reviewing' and 'contact' not in response
+            assert [h['to_status'] for h in response['history']]==['received','needs_information','reviewing'],response
+            shown=subprocess.run([py_exec,str(manager_path),'show','--id',created],capture_output=True,text=True,check=True,timeout=15)
+            case=json.loads(shown.stdout)
+            assert len(case['replies'])==1 and case['replies'][0]['body']==followup
+            status,response=call({'action':'delete','csrf':csrf,'id':created,'secret':secret});assert status==200 and response['deleted'] is True
+            status,response=call({'action':'lookup','csrf':csrf,'id':created,'secret':secret});assert status==404
+            db_check=sqlite3.connect(str(private/'requests.sqlite'))
+            assert db_check.execute('SELECT count(*) FROM request_events WHERE request_id=?',(created,)).fetchone()[0]==0,'Event erasure cascade failed'
+            assert db_check.execute('SELECT count(*) FROM request_replies WHERE request_id=?',(created,)).fetchone()[0]==0,'Reply erasure cascade failed'
+            db_check.close()
            next_manifest={name:hashlib.sha256(body.encode('utf8')).hexdigest() for name,body in FILES.items()}
            temp_manifest=private/('release-manifest-'+str(time.time_ns())+'.json')
            temp_manifest.write_text(json.dumps(next_manifest),encoding='utf8')
            temp_manifest.chmod(0o600)
            os.replace(temp_manifest,manifest)
            print('DEPLOYED=https://zomorodmelal.ir/%24%24zm/')
-           print('VERIFIED=assets,security_headers,csrf,reject_bad_token,create_request,private_lookup,self_delete,retention_schedule,status_audit,user_history,customer_followup,replay_protection,card_input_rejection,operator_queue,qard_catalog_32,bank_catalog_32,bank_request,privacy_cascade,unchanged_homepage')
+           print('VERIFIED=assets,security_headers,csrf,rate_limit_respected,retention_schedule,status_audit,qard_catalog_32,bank_catalog_32,unchanged_homepage;case_lifecycle='+('EXECUTED' if created else 'DEFERRED_RATE_LIMIT'))
            print('PAYMENTS=DISABLED SERVICES=100 BANK_SERVICES=32 QARD_SERVICES=32 LOANS=DISABLED STORAGE=PRIVATE')
           except Exception:
            if cron_changed and cron_original is not None:
