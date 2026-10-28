@@ -3,8 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://api.openligadb.de; form-action 'self'; base-uri 'none'; object-src 'none'">
   <meta name="theme-color" content="#090c12">
-  <meta name="description" content="MOJ Casino Lounge: 62 free-play experiences including casino tables, sports prediction markets, games and oracles. No real-money gambling, deposits, payouts or prizes.">
+  <meta name="description" content="MOJ Casino Lounge: 62 free-play experiences plus OpenLigaDB real Bundesliga fixtures, free non-wager predictions and sports results. No real-money gambling, deposits, payouts or prizes.">
   <title>MOJ CASINO LOUNGE | MojPlayWin</title>
   <style>
     :root{color-scheme:dark;--bg:#090c12;--panel:#111824;--panel2:#171f2e;--line:#364152;--gold:#dfbd7a;--soft:#a7b5cb;--white:#f6f4f0;--green:#62ddb5;--red:#e96c77}
@@ -133,11 +135,52 @@
   @media(max-width:1000px){.prediction-layout{grid-template-columns:1fr}.prediction-slip{position:static}}
   @media(max-width:680px){.prediction-grid{grid-template-columns:1fr}.prediction-card{padding:15px}.prediction-layout{gap:14px}}
 </style>
+
+<style id="moj-live-data-style">
+  #live-prediction{scroll-margin-top:100px;margin-top:42px}
+  .live-data-header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:18px}
+  .live-data-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0}
+  .live-data-toolbar label{font-weight:750;color:#efd5a0}
+  .live-data-toolbar select,.live-data-toolbar button{min-height:48px;border-radius:10px;padding:9px 13px;font:inherit}
+  .live-data-toolbar select{background:#111a28;color:#f5eee3;border:1px solid #8d9cb2}
+  .live-data-toolbar button,.live-pick-card button,.live-history button{background:#35392e;color:#ffebbf;border:1px solid #b79966;font-weight:800;cursor:pointer}
+  .live-data-toolbar button:hover,.live-pick-card button:hover{background:#514630}
+  .live-data-toolbar button:disabled,.live-pick-card button:disabled{opacity:.48;cursor:not-allowed}
+  .live-data-toolbar button:focus-visible,.live-pick-card :focus-visible,.live-history :focus-visible{outline:3px solid #e5c47e;outline-offset:3px}
+  .live-state{margin:10px 0 16px;border-inline-start:4px solid #e2bb78;background:#172232;border-radius:9px;padding:11px 15px;color:#e2eaf2;font-size:.88rem}
+  .live-pred-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(285px,340px);gap:18px;align-items:start}
+  .live-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+  .live-pick-card{background:linear-gradient(135deg,#192638,#111a26);border:1px solid #576a80;border-radius:15px;padding:17px;min-width:0}
+  .live-pick-card h3{font-size:1rem;color:#f4dda9;margin:5px 0}
+  .live-pick-card p{font-size:.82rem;color:#c8d5e5;margin:7px 0;overflow-wrap:anywhere}
+  .live-pill{font-size:.72rem;font-weight:900;color:#9bffe2;background:#213c3d;padding:3px 8px;border-radius:8px}
+  .live-pill.final{color:#f2d8a4;background:#3e3629}.live-pill.waiting{color:#b8cfff;background:#26334a}
+  .live-pick-card form{display:grid;gap:9px;margin-top:12px}
+  .live-pick-card form label{font-size:.86rem;font-weight:700}
+  .live-pick-card select{background:#101827;color:#f8efdf;border:1px solid #8b9bb0;border-radius:8px;min-height:48px;padding:10px;font:inherit;max-width:100%;font-size:1rem}
+  .live-pick-options{border:0;padding:0;margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;min-width:0}
+  .live-pick-options legend{font-size:.83rem;color:#bfcfe1;margin-bottom:7px}
+  .live-pick-options label{display:flex;align-items:center;gap:7px;border:1px solid #60738b;border-radius:9px;background:#202d3e;padding:9px;min-height:48px}
+  .live-pick-options input{accent-color:#caa263;min-width:18px;min-height:18px}
+  .live-pick-options label:has(input:checked){background:#39382d;border-color:#e1bc7d}
+  .live-pick-card button{min-height:48px;border-radius:9px;padding:10px;font:inherit;font-weight:850}
+  .live-history{border:1px solid #8f754f;background:#1b2430;border-radius:16px;padding:18px;position:sticky;top:102px}
+  .live-history h3{color:#f4d7a1;margin:0 0 7px}.live-history ol{padding-inline-start:24px;margin:0}
+  .live-history li{padding:9px 0;border-bottom:1px solid #3d4858;font-size:.86rem;overflow-wrap:anywhere}
+  .live-history li strong{display:block;color:#f8e5b3}.live-history li span{color:#d0e4f1}
+  .live-history button{margin-top:6px;min-height:36px;padding:4px 9px;border-radius:7px}
+  .live-source{font-size:.82rem;color:#b7c6d7;margin:16px 0;line-height:1.7}
+  .live-source a{text-decoration:underline;color:#f6d99d}
+  .live-finance-lock{border:1px solid #b78a4d;background:#2a251e;border-radius:12px;padding:15px;margin:18px 0;color:#f0dcae;font-size:.87rem}
+  .live-finance-lock strong{display:block;color:#ffe2a3}
+  @media(max-width:1000px){.live-pred-layout{grid-template-columns:1fr}.live-history{position:static}}
+  @media(max-width:700px){.live-grid{grid-template-columns:1fr}.live-pick-card{padding:15px}.live-data-toolbar select{flex:1}}
+</style>
 </head>
 <body>
   <a class="skip" href="#casino-floor">Skip to games</a>
   <div class="topbar" data-en="FREE-PLAY ENTERTAINMENT ONLY · NO REAL-MONEY BETTING · NO DEPOSITS OR PAYOUTS" data-fa="فقط سرگرمی رایگان · بدون شرط‌بندی پول واقعی · بدون واریز و برداشت">FREE-PLAY ENTERTAINMENT ONLY · NO REAL-MONEY BETTING · NO DEPOSITS OR PAYOUTS</div>
-  <header><div class="shell header"><a class="mark" href="https://mojplaywin.com/" aria-label="MojPlayWin home"><span class="seal">◆</span><span>MOJ CASINO <small>LOUNGE BY MOJPLAYWIN</small></span></a><div class="header-right"><nav><a href="#casino-floor" data-en="Casino Floor" data-fa="بخش کازینو">Casino Floor</a><a href="#sports" data-en="Sports Picks" data-fa="پیش‌بینی ورزشی">Sports Picks</a><a id="nav-mcd" href="#wager-lounge">Casino Dollar Tables</a><a id="nav-predictions" href="#prediction-center">Predictions</a><a href="#rules" data-en="Rules & Safety" data-fa="قوانین و ایمنی">Rules & Safety</a></nav><label class="skip" for="language">Language</label><select class="lang" id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option></select></div></div></header>
+  <header><div class="shell header"><a class="mark" href="https://mojplaywin.com/" aria-label="MojPlayWin home"><span class="seal">◆</span><span>MOJ CASINO <small>LOUNGE BY MOJPLAYWIN</small></span></a><div class="header-right"><nav><a href="#casino-floor" data-en="Casino Floor" data-fa="بخش کازینو">Casino Floor</a><a href="#sports" data-en="Sports Picks" data-fa="پیش‌بینی ورزشی">Sports Picks</a><a id="nav-mcd" href="#wager-lounge">Casino Dollar Tables</a><a id="nav-predictions" href="#live-prediction">Live Picks</a><a href="#rules" data-en="Rules & Safety" data-fa="قوانین و ایمنی">Rules & Safety</a></nav><label class="skip" for="language">Language</label><select class="lang" id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option></select></div></div></header>
   <main>
     <section class="hero shell"><div><div class="eyebrow" data-en="A PRIVATE WORLD OF PLAY" data-fa="جهانی ویژه برای سرگرمی">A PRIVATE WORLD OF PLAY</div><h1 data-en="The thrill.<br><em>Without the wager.</em>" data-fa="هیجان بازی.<br><em>بدون شرط‌بندی مالی.</em>">The thrill.<br><em>Without the wager.</em></h1><p class="lead" data-en="A premium destination for casino-inspired entertainment, strategy and simulated sports predictions. Play the experience, never risk your money." data-fa="فضایی ممتاز برای سرگرمی‌های الهام‌گرفته از کازینو، راهبرد و پیش‌بینی ورزشی شبیه‌سازی‌شده؛ بدون به خطر انداختن پول.">A premium destination for casino-inspired entertainment, strategy and simulated sports predictions. Play the experience, never risk your money.</p><div class="buttons"><a class="btn primary" href="#casino-floor" data-en="Enter the Casino Floor ↗" data-fa="ورود به بخش کازینو ←">Enter the Casino Floor ↗</a><a class="btn outline" href="#sports" data-en="Explore Sports Picks" data-fa="پیش‌بینی ورزشی">Explore Sports Picks</a></div><div class="status-row"><span class="pill">21+ ONLY</span><span class="pill"><b>●</b> FREE PLAY</span><span class="pill">NO CASH VALUE</span></div></div><div class="showcase" aria-hidden="true"><div class="showcase-inner"><div class="showcase-icon">♠</div><strong>MOJ CASINO</strong><small>PRIVATE LOUNGE</small></div></div></section>
     <div class="shell"><div class="divider"></div></div>
@@ -227,6 +270,32 @@
   <aside class="wager-lock"><strong data-pro="locked">MOJ1 ⇄ MOJ Casino Dollar conversion — LOCKED</strong><p data-pro="lockDesc">This page has no wallet connection, token exchange, deposits, transfers or withdrawals. The real-money path requires licensing, age/identity verification, AML controls, independent game/security audits and legally approved reserves.</p></aside>
 </section>
 
+
+<section class="section shell" id="live-prediction" aria-labelledby="live-heading">
+  <div class="section-head live-data-header">
+    <div>
+      <div class="eyebrow" id="live-eyebrow">REAL SPORTS DATA · NO MONEY WAGERS</div>
+      <h2 id="live-heading">Live Bundesliga Fixtures &amp; Free Predictions</h2>
+      <p class="wager-intro" id="live-intro">Real first- and second-division German league fixtures and results, supplied by the OpenLigaDB community. Pick match outcomes for free and compare them to the published final result. No odds, wagers, MCD debit, prizes or financial rewards.</p>
+    </div>
+  </div>
+  <div class="live-data-toolbar">
+    <label id="live-league-label" for="live-league">League</label>
+    <select id="live-league" name="live-league"><option value="bl1">Bundesliga 1</option><option value="bl2">Bundesliga 2</option></select>
+    <button id="live-refresh" type="button">Refresh match data</button>
+  </div>
+  <div id="live-status" class="live-state" role="status" aria-live="polite">Real data loads after age confirmation. Last update and any delays will be shown here.</div>
+  <div class="live-pred-layout">
+    <div id="live-match-grid" class="live-grid"></div>
+    <aside class="live-history" aria-labelledby="live-history-heading">
+      <h3 id="live-history-heading">My free predictions</h3>
+      <p id="live-history-info">Selections stay only on this device. Predictions close when the match starts; final results settle them without money or credits.</p>
+      <ol id="live-history-list"><li>No predictions yet.</li></ol>
+    </aside>
+  </div>
+  <p class="live-source" id="live-source-note">Community-entered scores may be delayed or corrected. Time shown in your device time zone. Match data: <a href="https://www.openligadb.de/" target="_blank" rel="noopener noreferrer">OpenLigaDB contributors</a>, under the <a href="https://www.openligadb.de/lizenz" target="_blank" rel="noopener noreferrer">Open Database License (ODbL)</a>. The original data source remains available from the provider.</p>
+  <div class="live-finance-lock"><strong id="live-finance-title">Future licensed finance: DISABLED</strong><span id="live-finance-desc">No real-money account, wallet, funds, stakes, withdrawals, transfer or live event odds. Licensing, jurisdictional access, verified identity/age, AML, accredited feeds, secure backend ledger and independent audits must pass before any separate activation.</span></div>
+</section>
 <section class="section shell" id="prediction-center" aria-labelledby="prediction-heading">
   <div class="section-head">
     <div class="prediction-eyebrow" id="prediction-eyebrow">FICTIONAL PREDICTIONS · DEMO ONLY</div>
@@ -1137,6 +1206,215 @@
     output('#mcd-sports-result',m.name+'\n'+settle('Virtual 1X2',['Home','Draw','Away'][winner]+' @'+m.odds[pick].toFixed(2),amount,pick===winner?m.odds[pick]:0));
   });
 
+
+  const liveCopy={
+    en:{nav:'Live Picks',eyebrow:'REAL SPORTS DATA · NO MONEY WAGERS',heading:'Live Bundesliga Fixtures & Free Predictions',
+      intro:'Actual first- and second-division German fixtures and scores from OpenLigaDB. Make free predictions and compare them with published full-time results. No odds, MCD stakes or prizes.',
+      league:'League',refresh:'Refresh match data',wait:'Real match data loads after age confirmation.',loading:'Connecting to the community data feed…',
+      ready:'Real fixtures loaded',cached:'Cached results',stale:'Data delayed/unavailable; predictions disabled until refresh.',error:'Live data unavailable. Existing virtual games are unaffected.',none:'No upcoming fixtures available for this league.',time:'Kickoff (local time)',upcoming:'Upcoming',started:'Started · result pending',final:'Final',matchday:'Matchday',
+      market:'Prediction type',choice:'Choose outcome',save:'Save free prediction',locked:'Predictions closed after kickoff',home:'Home',draw:'Draw',away:'Away',result:'Match result (1X2)',goals:'Total goals 2.5',btts:'Both teams score',score:'Exact score',over:'Over',under:'Under',yes:'Yes',no:'No',other:'Other score',
+      history:'My free predictions',historyInfo:'Saved on this device only. Picks lock at kickoff; published final scores determine their outcome.',historyEmpty:'No predictions yet.',pending:'Awaiting final score',won:'Correct',lost:'Incorrect',remove:'Remove before kickoff',recorded:'Prediction saved locally. No credits were used.',replaced:'Existing free prediction updated.',closed:'This fixture has started or data is stale; new picks are closed.',limit:'Your local archive is full (50 picks).',source:'Community-entered scores may be delayed or corrected. Times use your device time zone. Match data:',licence:'under the Open Database License (ODbL).',financeTitle:'Future licensed finance: DISABLED',financeDesc:'No real-money account, wallet, deposits, wagers, withdrawals, transfer or bookmaker odds. A licensed jurisdiction, verified age/identity, AML, approved data and odds provider, secure backend ledger and independent audits are mandatory before activation.',last:'Checked',fresh:'Data age',minutes:'min',pick:'Pick',fixture:'Match'},
+    fa:{nav:'پیش‌بینی زنده',eyebrow:'داده واقعی مسابقات · بدون شرط پولی',heading:'برنامه و نتایج واقعی بوندس‌لیگا',
+      intro:'مسابقات و نتایج واقعی دو سطح اول لیگ آلمان از OpenLigaDB؛ پیش‌بینی رایگان و مقایسه با نتیجه نهایی رسمی ثبت‌شده در منبع. بدون ضریب مالی، کسر MCD یا جایزه.',
+      league:'لیگ',refresh:'تازه‌سازی نتایج',wait:'پس از تأیید سن، داده واقعی مسابقات بارگذاری می‌شود.',loading:'در حال اتصال به منبع جامعه‌محور…',
+      ready:'مسابقات واقعی بارگذاری شد',cached:'نتایج ذخیره‌شده',stale:'داده به‌روز نیست؛ ثبت پیش‌بینی تا تازه‌سازی غیرفعال است.',error:'داده زنده در دسترس نیست؛ بازی‌های مجازی فعال می‌مانند.',none:'در این لیگ فعلاً مسابقه آینده ثبت نشده است.',time:'شروع به وقت دستگاه شما',upcoming:'پیش رو',started:'شروع شده · نتیجه نهایی در انتظار',final:'نهایی',matchday:'هفته',
+      market:'نوع پیش‌بینی',choice:'انتخاب نتیجه',save:'ثبت رایگان پیش‌بینی',locked:'پس از شروع مسابقه ثبت بسته است',home:'میزبان',draw:'مساوی',away:'میهمان',result:'نتیجه (۱X۲)',goals:'مجموع گل ۲٫۵',btts:'گل‌زنی دو تیم',score:'نتیجه دقیق',over:'بیشتر',under:'کمتر',yes:'بله',no:'خیر',other:'سایر نتایج',
+      history:'پیش‌بینی‌های رایگان من',historyInfo:'فقط روی دستگاه شما ذخیره می‌شوند. با شروع بازی بسته و با نتیجه نهایی ارزیابی می‌شوند.',historyEmpty:'هنوز پیش‌بینی ندارید.',pending:'در انتظار نتیجه',won:'درست',lost:'نادرست',remove:'حذف پیش از شروع',recorded:'پیش‌بینی فقط روی دستگاه ذخیره شد؛ اعتباری کسر نشد.',replaced:'پیش‌بینی قبلی به‌روزرسانی شد.',closed:'بازی شروع شده یا داده قدیمی است؛ ثبت بسته است.',limit:'آرشیو محلی به سقف ۵۰ پیش‌بینی رسیده است.',source:'نتایج را کاربران ثبت می‌کنند و ممکن است دیر یا اصلاح شوند. ساعت به وقت دستگاه شماست. منبع داده:',licence:'تحت مجوز پایگاه داده باز (ODbL).',financeTitle:'بخش مالی آینده: غیرفعال',financeDesc:'حساب مالی، کیف پول، واریز، شرط پولی، برداشت، انتقال یا ضرایب واقعی وجود ندارد. مجوز معتبر، احراز سن و هویت، AML، تأمین‌کننده مجاز داده و ضریب، دفترکل امن سروری و ممیزی مستقل شرط فعال‌سازی است.',last:'بررسی',fresh:'عمر داده',minutes:'دقیقه',pick:'انتخاب',fixture:'مسابقه'},
+    ar:{nav:'توقعات مباشرة',eyebrow:'بيانات مباريات حقيقية · دون رهانات مالية',heading:'مباريات البوندسليغا الحقيقية وتوقعاتها',
+      intro:'مواعيد ونتائج حقيقية لدوري الدرجة الأولى والثانية الألماني من OpenLigaDB. توقعات مجانية بلا أودز مالية أو خصم أرصدة أو جوائز.',
+      league:'الدوري',refresh:'تحديث النتائج',wait:'تُحمّل البيانات بعد تأكيد العمر.',loading:'جار الاتصال بالبيانات…',ready:'تم تحميل المباريات',cached:'بيانات مخزنة',stale:'البيانات قديمة؛ التوقعات الجديدة معطلة.',error:'البيانات غير متاحة؛ الألعاب الافتراضية تعمل.',none:'لا توجد مباريات قادمة.',time:'الموعد بتوقيت جهازك',upcoming:'قادمة',started:'بدأت · ننتظر النتيجة',final:'نهائية',matchday:'الجولة',
+      market:'نوع التوقع',choice:'اختر نتيجة',save:'حفظ التوقع المجاني',locked:'أغلق التوقع بعد البداية',home:'المضيف',draw:'تعادل',away:'الضيف',result:'نتيجة 1X2',goals:'مجموع الأهداف ٢٫٥',btts:'يسجل الفريقان',score:'النتيجة الدقيقة',over:'أعلى',under:'أقل',yes:'نعم',no:'لا',other:'نتيجة أخرى',
+      history:'توقعاتي المجانية',historyInfo:'تُحفظ على هذا الجهاز فقط، وتُقيّم عند إعلان النتيجة.',historyEmpty:'لا توقعات.',pending:'بانتظار النتيجة',won:'صحيح',lost:'غير صحيح',remove:'حذف قبل البداية',recorded:'تم الحفظ محلياً؛ لم يُخصم رصيد.',replaced:'تم تحديث التوقع.',closed:'بدأت المباراة أو انتهت صلاحية البيانات.',limit:'الحد ٥٠ توقعاً محلياً.',source:'النتائج المجتمعية قد تتأخر أو تُصحح. الوقت محلي. البيانات:',licence:'بترخيص ODbL.',financeTitle:'التمويل المرخّص مستقبلاً: مغلق',financeDesc:'لا محافظ أو إيداعات أو مراهنات أو سحب. يلزم ترخيص وهوية وعمر وAML ومزوّد معتمد وسجل خادم مدقق.',last:'فحص',fresh:'عمر البيانات',minutes:'دقيقة',pick:'اختيار',fixture:'مباراة'},
+    de:{nav:'Live-Tipps',eyebrow:'ECHTE SPIELDATEN · KEINE GELDWETTEN',heading:'Bundesliga live: Spielplan & Gratis-Tipps',
+      intro:'Echte Spielpläne und Ergebnisse der ersten und zweiten Bundesliga von OpenLigaDB. Kostenlose Tipps ohne Quoten, MCD-Einsatz oder Preise.',
+      league:'Liga',refresh:'Ergebnisse aktualisieren',wait:'Daten laden nach Altersbestätigung.',loading:'Verbindung zur Datenquelle…',ready:'Spiele geladen',cached:'Zwischengespeicherte Daten',stale:'Veraltete Daten; neue Tipps gesperrt.',error:'Live-Daten nicht verfügbar; virtuelle Spiele laufen weiter.',none:'Keine kommenden Spiele vorhanden.',time:'Anstoß (Ortszeit)',upcoming:'Bevorstehend',started:'Gestartet · Ergebnis ausstehend',final:'Endstand',matchday:'Spieltag',
+      market:'Tippprognose',choice:'Ergebnis wählen',save:'Gratis-Tipp speichern',locked:'Tipps nach Anpfiff gesperrt',home:'Heim',draw:'Unentschieden',away:'Gast',result:'Ergebnis 1X2',goals:'Tore über/unter 2,5',btts:'Beide treffen',score:'Exaktes Ergebnis',over:'Über',under:'Unter',yes:'Ja',no:'Nein',other:'Andere',
+      history:'Meine Gratis-Tipps',historyInfo:'Nur auf diesem Gerät gespeichert; Abrechnung nach Endstand ohne Geld.',historyEmpty:'Noch keine Tipps.',pending:'Endstand ausstehend',won:'Richtig',lost:'Falsch',remove:'Vor Anpfiff entfernen',recorded:'Lokal gespeichert; keine Punkte abgezogen.',replaced:'Tipp aktualisiert.',closed:'Spiel begonnen oder Daten veraltet.',limit:'Maximal 50 lokale Tipps.',source:'Community-Ergebnisse können verspätet oder korrigiert sein. Uhrzeit lokal. Quelle:',licence:'unter der Open Database License (ODbL).',financeTitle:'Zukünftige Echtgeldfunktionen: GESPERRT',financeDesc:'Kein Konto, Wallet, Einzahlen, Wetten, Auszahlen oder echte Quoten. Vor Freigabe: Lizenz, Alters-/Identitätsprüfung, AML, autorisierte Daten und Quoten, sicherer Server-Ledger und externe Audits.',last:'Abruf',fresh:'Datenalter',minutes:'Minuten',pick:'Tipp',fixture:'Spiel'},
+    fr:{nav:'Pronostics réels',eyebrow:'VRAIS MATCHS · AUCUNE MISE EN ARGENT',heading:'Bundesliga : calendrier réel & pronostics gratuits',
+      intro:'Calendrier et scores réels des deux premières divisions allemandes par OpenLigaDB. Pronostics gratuits, sans cotes, MCD misés ni prix.',
+      league:'Ligue',refresh:'Actualiser les résultats',wait:'Données chargées après confirmation de l’âge.',loading:'Connexion aux données…',ready:'Matchs chargés',cached:'Données en cache',stale:'Données périmées ; nouveaux pronostics bloqués.',error:'Données indisponibles ; jeux virtuels préservés.',none:'Aucun match futur.',time:'Coup d’envoi (heure locale)',upcoming:'À venir',started:'Commencé · résultat attendu',final:'Terminé',matchday:'Journée',
+      market:'Type de pronostic',choice:'Choisir un résultat',save:'Enregistrer sans mise',locked:'Pronostics fermés après le début',home:'Domicile',draw:'Nul',away:'Extérieur',result:'Résultat 1X2',goals:'Buts plus/moins 2,5',btts:'Les deux marquent',score:'Score exact',over:'Plus de',under:'Moins de',yes:'Oui',no:'Non',other:'Autre',
+      history:'Mes pronostics gratuits',historyInfo:'Conservés uniquement sur cet appareil ; évalués au score final.',historyEmpty:'Aucun pronostic.',pending:'Score final attendu',won:'Correct',lost:'Incorrect',remove:'Supprimer avant le match',recorded:'Sauvegardé localement ; aucun crédit débité.',replaced:'Pronostic mis à jour.',closed:'Match commencé ou données périmées.',limit:'Limite de 50 pronostics locaux.',source:'Scores communautaires susceptibles de corrections. Heure locale. Source :',licence:'sous licence ODbL.',financeTitle:'Argent réel futur : DÉSACTIVÉ',financeDesc:'Aucun dépôt, retrait, portefeuille, mise ou cote réelle. Licence, KYC/âge, AML, flux agréés, grand livre serveur sécurisé et audits requis.',last:'Vérifié',fresh:'Âge des données',minutes:'min',pick:'Choix',fixture:'Match'},
+    es:{nav:'Pronósticos reales',eyebrow:'PARTIDOS REALES · SIN APUESTAS DINERARIAS',heading:'Bundesliga real: partidos y pronósticos gratis',
+      intro:'Calendario y resultados reales de primera y segunda Bundesliga desde OpenLigaDB. Pronósticos gratuitos sin cuotas, MCD apostados ni premios.',
+      league:'Liga',refresh:'Actualizar resultados',wait:'Datos cargados tras confirmar la edad.',loading:'Conectando con el proveedor…',ready:'Partidos cargados',cached:'Datos en caché',stale:'Datos atrasados; nuevos pronósticos desactivados.',error:'Datos no disponibles; juegos virtuales operativos.',none:'No hay partidos próximos.',time:'Inicio (hora local)',upcoming:'Próximo',started:'Iniciado · resultado pendiente',final:'Final',matchday:'Jornada',
+      market:'Tipo de pronóstico',choice:'Elige resultado',save:'Guardar gratis',locked:'Pronósticos cerrados tras empezar',home:'Local',draw:'Empate',away:'Visitante',result:'Resultado 1X2',goals:'Goles más/menos 2,5',btts:'Marcan ambos',score:'Marcador exacto',over:'Más de',under:'Menos de',yes:'Sí',no:'No',other:'Otro',
+      history:'Mis pronósticos gratuitos',historyInfo:'Solo en este dispositivo; evaluados tras el resultado final.',historyEmpty:'Sin pronósticos.',pending:'Pendiente de final',won:'Correcto',lost:'Incorrecto',remove:'Borrar antes de inicio',recorded:'Guardado localmente; ningún crédito descontado.',replaced:'Pronóstico actualizado.',closed:'Partido iniciado o datos caducados.',limit:'Máximo 50 pronósticos locales.',source:'Los resultados comunitarios pueden retrasarse o corregirse. Hora local. Fuente:',licence:'con licencia ODbL.',financeTitle:'Dinero real futuro: DESACTIVADO',financeDesc:'Sin monederos, depósitos, apuestas, retiros ni cuotas reales. Requiere licencia, identidad y edad, AML, proveedor autorizado, libro mayor seguro y auditorías.',last:'Consulta',fresh:'Antigüedad',minutes:'min',pick:'Elección',fixture:'Partido'}
+  };
+  const lt=k=>liveCopy[locale]?.[k]||liveCopy.en[k]||k;
+
+
+  // Live real-world feed is DATA-ONLY. All user picks stay local; no prices or MCD touch this module.
+  const LIVE_FEED_ORIGIN='https://api.openligadb.de/getmatchdata/';
+  const liveSeason=(()=>{const d=new Date();return d.getUTCFullYear()-(d.getUTCMonth()<6?1:0)})();
+  const liveCachePrefix='moj-openligadb-live-v1-';
+  const livePickStorage='moj-openligadb-free-picks-v1';
+  const liveMarketOptions={
+    result:['h','d','a'],goals:['over','under'],btts:['yes','no'],
+    score:['0-0','1-0','0-1','1-1','2-1','1-2','2-2','other']
+  };
+  let liveRows=[],liveFetchedAt=0,liveHasError=false,liveAttemptedAt=0,liveSequence=0;
+  let livePicks=[];
+  try{
+    const raw=JSON.parse(localStorage.getItem(livePickStorage)||'[]');
+    if(Array.isArray(raw))livePicks=raw.filter(x=>x&&Number.isSafeInteger(x.id)&&x.id>0&&['bl1','bl2'].includes(x.league)&&Number.isInteger(x.season)&&x.season>=2020&&x.season<=2100&&Object.hasOwn(liveMarketOptions,x.market)&&liveMarketOptions[x.market].includes(x.choice)&&typeof x.home==='string'&&typeof x.away==='string'&&x.home.length<=90&&x.away.length<=90&&typeof x.utc==='string'&&Number.isFinite(Date.parse(x.utc))&&Number.isFinite(x.created)).slice(0,50);
+  }catch(_){}
+  function liveSavePicks(){try{localStorage.setItem(livePickStorage,JSON.stringify(livePicks.slice(0,50)))}catch(_){}}
+  function liveNormalize(row,league){
+    if(!row||!Number.isSafeInteger(row.matchID)||row.matchID<=0||row.leagueShortcut!==league)return null;
+    const h=String(row.team1?.teamName||'').trim().slice(0,90),a=String(row.team2?.teamName||'').trim().slice(0,90),utc=String(row.matchDateTimeUTC||'');
+    if(!h||!a||!/^\d{4}-\d\d-\d\dT/.test(utc)||!Number.isFinite(Date.parse(utc)))return null;
+    const r=Array.isArray(row.matchResults)?row.matchResults.find(x=>x.resultTypeKind==='After90Minutes'||x.resultTypeID===2):null;
+    const finished=row.matchIsFinished===true&&r&&Number.isInteger(r.pointsTeam1)&&Number.isInteger(r.pointsTeam2)&&r.pointsTeam1>=0&&r.pointsTeam2>=0;
+    return {id:row.matchID,league,season:liveSeason,home:h,away:a,utc,round:Number.isInteger(row.group?.groupOrderID)?row.group.groupOrderID:null,final:!!finished,h:finished?r.pointsTeam1:null,a:finished?r.pointsTeam2:null};
+  }
+  function liveCache(league){
+    try{
+      const s=localStorage.getItem(liveCachePrefix+league+'-'+liveSeason);
+      if(!s)return null;
+      const x=JSON.parse(s);
+      if(!x||!Number.isFinite(x.checkedAt)||x.checkedAt>Date.now()+60000||x.checkedAt<Date.now()-86400000||!Array.isArray(x.rows)||x.rows.length>650)return null;
+      const rows=x.rows.filter(m=>m&&Number.isSafeInteger(m.id)&&m.league===league&&m.season===liveSeason&&typeof m.home==='string'&&m.home.length<=90&&typeof m.away==='string'&&m.away.length<=90&&Number.isFinite(Date.parse(m.utc))&&typeof m.final==='boolean');
+      return {checkedAt:x.checkedAt,rows};
+    }catch(_){return null}
+  }
+  const liveFresh=()=>!liveHasError&&liveFetchedAt>0&&Date.now()-liveFetchedAt<1800000;
+  const liveClock=utc=>new Date(utc).toLocaleString(locale,{dateStyle:'medium',timeStyle:'short'});
+  const liveKey=(id,league,market)=>league+':'+id+':'+market;
+  function liveWon(market,choice,h,a){
+    if(market==='result')return choice===(h>a?'h':h<a?'a':'d');
+    if(market==='goals')return (h+a>2.5)===(choice==='over');
+    if(market==='btts')return (h>0&&a>0)===(choice==='yes');
+    if(market==='score')return choice==='other'?!liveMarketOptions.score.slice(0,-1).includes(h+'-'+a):choice===h+'-'+a;
+    return false;
+  }
+  function liveReconcile(){
+    const map=new Map(liveRows.map(m=>[m.id,m]));let changed=false;
+    for(const pick of livePicks){
+      if(pick.league!==$('#live-league').value||pick.season!==liveSeason)continue;
+      const match=map.get(pick.id);if(!match||!match.final)continue;
+      const state=liveWon(pick.market,pick.choice,match.h,match.a)?'won':'lost',score=match.h+'-'+match.a;
+      if(pick.state!==state||pick.score!==score){pick.state=state;pick.score=score;changed=true}
+    }
+    if(changed)liveSavePicks();
+  }
+  function liveDisplayHistory(){
+    const ol=$('#live-history-list');ol.replaceChildren();
+    if(!livePicks.length){const li=document.createElement('li');li.textContent=lt('historyEmpty');ol.append(li);return}
+    for(const p of livePicks.slice(0,30)){
+      const li=document.createElement('li'),name=document.createElement('strong'),details=document.createElement('span');
+      name.textContent=p.home+' vs '+p.away;
+      const outcome=p.state==='won'?lt('won'):p.state==='lost'?lt('lost'):lt('pending');
+      details.textContent=(p.league==='bl1'?'Bundesliga 1':'Bundesliga 2')+' · '+lt(p.market)+' · '+(liveCopy.en[p.choice]?lt(p.choice):p.choice)+' · '+outcome+(p.score?' ('+p.score+')':'');
+      li.append(name,details);
+      if(!p.state&&Date.now()<Date.parse(p.utc)){
+        const remove=document.createElement('button');remove.type='button';remove.textContent=lt('remove');
+        remove.addEventListener('click',()=>{livePicks=livePicks.filter(x=>liveKey(x.id,x.league,x.market)!==liveKey(p.id,p.league,p.market));liveSavePicks();liveDisplayHistory()});
+        li.append(remove);
+      }
+      ol.append(li);
+    }
+  }
+  function liveState(){
+    const status=$('#live-status');
+    if(!liveFetchedAt){status.textContent=lt(liveHasError?'error':'wait');return}
+    const elapsed=Math.max(0,Math.floor((Date.now()-liveFetchedAt)/60000));
+    status.textContent=(liveHasError?lt('stale'):liveFresh()?lt('ready'):lt('cached'))+' · '+lt('last')+': '+new Date(liveFetchedAt).toLocaleString(locale,{dateStyle:'medium',timeStyle:'short'})+' · '+lt('fresh')+': '+elapsed+' '+lt('minutes');
+  }
+  function liveBuildCard(m){
+    const card=document.createElement('article');card.className='live-pick-card';card.id='real-match-'+m.id;
+    const meta=document.createElement('span'),title=document.createElement('h3'),detail=document.createElement('p');
+    const now=Date.now(),future=Date.parse(m.utc)>now,canPick=future&&!m.final&&liveFresh();
+    meta.className='live-pill '+(m.final?'final':future?'waiting':'');
+    meta.textContent=lt(m.final?'final':future?'upcoming':'started');
+    title.textContent=m.home+' vs '+m.away;
+    detail.textContent=lt('time')+': '+liveClock(m.utc)+(m.round?' · '+lt('matchday')+' '+m.round:'')+(m.final?' · '+m.h+' : '+m.a:'');
+    card.append(meta,title,detail);
+    if(canPick){
+      const form=document.createElement('form');form.action='#live-prediction';form.method='get';
+      const marketLabel=document.createElement('label');marketLabel.textContent=lt('market');marketLabel.htmlFor='live-market-'+m.id;
+      const select=document.createElement('select');select.id=marketLabel.htmlFor;select.name='market';
+      for(const k of Object.keys(liveMarketOptions)){const o=document.createElement('option');o.value=k;o.textContent=lt(k);select.append(o)}
+      const field=document.createElement('fieldset');field.className='live-pick-options';
+      const legend=document.createElement('legend');legend.textContent=lt('choice');field.append(legend);
+      function options(){
+        while(field.children.length>1)field.lastElementChild.remove();
+        for(const k of liveMarketOptions[select.value]){
+          const label=document.createElement('label'),radio=document.createElement('input'),name=document.createElement('span');
+          radio.type='radio';radio.name='live-choice-'+m.id;radio.value=k;radio.required=true;
+          radio.checked=k===liveMarketOptions[select.value][0];
+          name.textContent=liveCopy.en[k]?lt(k):k;label.append(radio,name);field.append(label);
+        }
+      }
+      select.addEventListener('change',options);options();
+      const button=document.createElement('button');button.type='submit';button.textContent=lt('save');
+      form.append(marketLabel,select,field,button);
+      form.addEventListener('submit',e=>{
+        e.preventDefault();
+        if(Date.now()>=Date.parse(m.utc)||!liveFresh()){output('#live-status',lt('closed'));return}
+        const choice=field.querySelector('input:checked')?.value,market=select.value;
+        if(!choice||!Object.hasOwn(liveMarketOptions,market)||!liveMarketOptions[market].includes(choice))return;
+        const key=liveKey(m.id,m.league,market),idx=livePicks.findIndex(p=>liveKey(p.id,p.league,p.market)===key);
+        if(idx<0&&livePicks.length>=50){output('#live-status',lt('limit'));return}
+        const pick={id:m.id,league:m.league,season:m.season,home:m.home,away:m.away,utc:m.utc,market,choice,created:Date.now()};
+        if(idx>=0){if(livePicks[idx].state){output('#live-status',lt('locked'));return}livePicks.splice(idx,1)}
+        livePicks.unshift(pick);liveSavePicks();liveDisplayHistory();output('#live-status',lt(idx>=0?'replaced':'recorded'));
+      });
+      card.append(form);
+    }
+    return card;
+  }
+  function liveRender(){
+    const grid=$('#live-match-grid');grid.replaceChildren();
+    liveState();liveDisplayHistory();
+    if(!liveRows.length){const p=document.createElement('p');p.textContent=lt(liveHasError?'error':'none');grid.append(p);return}
+    const now=Date.now(),sortTime=(a,b)=>Date.parse(a.utc)-Date.parse(b.utc);
+    const upcoming=liveRows.filter(m=>!m.final&&Date.parse(m.utc)>now).sort(sortTime).slice(0,8);
+    const started=liveRows.filter(m=>!m.final&&Date.parse(m.utc)<=now&&Date.parse(m.utc)>now-172800000).sort((a,b)=>-sortTime(a,b)).slice(0,3);
+    const finished=liveRows.filter(m=>m.final).sort((a,b)=>-sortTime(a,b)).slice(0,4);
+    const display=[...started,...upcoming,...finished].slice(0,15);
+    if(!display.length){const p=document.createElement('p');p.textContent=lt('none');grid.append(p)}
+    else for(const match of display)grid.append(liveBuildCard(match));
+  }
+  async function liveLoad(force){
+    if(!$('#age-gate').hidden)return;
+    const league=$('#live-league').value,seq=++liveSequence;
+    liveAttemptedAt=Date.now();liveHasError=false;
+    const cache=liveCache(league);
+    if(cache){liveRows=cache.rows;liveFetchedAt=cache.checkedAt;liveReconcile();liveRender()}
+    else{liveRows=[];liveFetchedAt=0;liveRender()}
+    if(!force&&cache&&Date.now()-cache.checkedAt<900000)return;
+    output('#live-status',lt('loading'));
+    const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),12000);
+    try{
+      const url=LIVE_FEED_ORIGIN+league+'/'+liveSeason;
+      const response=await fetch(url,{mode:'cors',credentials:'omit',cache:'no-store',signal:ctrl.signal,priority:force?'auto':'low'});
+      if(!response.ok)throw Error('Provider HTTP '+response.status);
+      const json=await response.json();
+      if(!Array.isArray(json)||json.length<1||json.length>650)throw Error('Invalid feed shape');
+      const rows=json.map(x=>liveNormalize(x,league)).filter(Boolean);
+      if(rows.length<1)throw Error('No valid fixtures');
+      if(seq!==liveSequence||$('#live-league').value!==league)return;
+      liveRows=rows;liveFetchedAt=Date.now();liveHasError=false;
+      try{localStorage.setItem(liveCachePrefix+league+'-'+liveSeason,JSON.stringify({checkedAt:liveFetchedAt,rows}))}catch(_){}
+      liveReconcile();liveRender();
+    }catch(_){
+      if(seq===liveSequence){liveHasError=true;liveRender()}
+    }finally{clearTimeout(timeout)}
+  }
+  function translateLive(){
+    const ids={eyebrow:'live-eyebrow',heading:'live-heading',intro:'live-intro',league:'live-league-label',refresh:'live-refresh',history:'live-history-heading',historyInfo:'live-history-info',financeTitle:'live-finance-title',financeDesc:'live-finance-desc'};
+    for(const [k,id] of Object.entries(ids))output('#'+id,lt(k));
+    $('#nav-predictions').textContent=lt('nav');
+    const note=$('#live-source-note');note.replaceChildren(document.createTextNode(lt('source')+' '));
+    const a=document.createElement('a');a.href='https://www.openligadb.de/';a.target='_blank';a.rel='noopener noreferrer';a.textContent='OpenLigaDB contributors';
+    const lic=document.createElement('a');lic.href='https://www.openligadb.de/lizenz';lic.target='_blank';lic.rel='noopener noreferrer';lic.textContent='ODbL';
+    note.append(a,document.createTextNode(' · '+lt('licence')+' '),lic);
+    liveRender();
+  }
+  $('#live-league').addEventListener('change',()=>liveLoad(false));
+  $('#live-refresh').addEventListener('click',()=>liveLoad(true));
+
   // Fictional prediction markets share the existing non-redeemable browser-only MCD ledger.
   // Model probabilities, displayed odds and settlement derive from the same finite outcome sets.
   const predictionText={
@@ -1338,7 +1616,7 @@
     locale=lang();$$('[data-pro]').forEach(el=>el.textContent=tr(el.dataset.pro));
     $$('[data-mcd-stake]').forEach(b=>b.setAttribute('aria-label',tr('stake')+' '+b.dataset.mcdStake));
     $('#arena-cat-wagers').textContent=tr('wagerCat');$('#nav-mcd').textContent=tr('navMcd');
-    update();translatePredictions();$('#arena-search').dispatchEvent(new Event('input',{bubbles:true}));
+    update();translatePredictions();translateLive();$('#arena-search').dispatchEvent(new Event('input',{bubbles:true}));
   }
   $('#language').addEventListener('change',translate);
   // Keep the age dialog genuinely modal for keyboard and screen-reader navigation.
@@ -1351,6 +1629,8 @@
     else if(!e.shiftKey&&document.activeElement===leave){e.preventDefault();confirm.focus()}
   });
   confirm.addEventListener('click',()=>{outside.forEach(el=>el.inert=false);$('#wager-heading').setAttribute('tabindex','-1');$('#wager-heading').focus()});
+  confirm.addEventListener('click',()=>{void liveLoad(false)});
+  setInterval(()=>{if(gate.hidden&&!document.hidden&&Date.now()-liveAttemptedAt>900000)void liveLoad(false)},60000);
   translate();notice(tr('choose'));odds();bjRender();pokerRender();
 })();
 
