@@ -86,7 +86,7 @@ jobs:
           digest=hashlib.sha256(archive.read_bytes()).hexdigest()
           if doc.get("artifact_sha256")!=digest:
               raise SystemExit("PREVIEW_SOURCE_HASH_MISMATCH")
-          ledger=root.parent/"qa-rework"/"farm_enterprise_economics"/"ledger.json"
+          ledger=root.parent.parent/"qa-rework"/"farm_enterprise_economics"/"ledger.json"
           if ledger.is_symlink():
               raise SystemExit("PREVIEW_REWORK_LEDGER_UNSAFE")
           if ledger.is_file():
