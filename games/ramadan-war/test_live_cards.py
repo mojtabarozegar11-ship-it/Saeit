@@ -1,7 +1,13 @@
 import json
 import unittest
 from urllib.error import URLError
-from check_live_cards import check_live_cards, verify_cards
+import importlib.util
+from pathlib import Path
+_SPEC = importlib.util.spec_from_file_location(
+    "ramadan_live_card_guard", Path(__file__).with_name("check_live_cards.py"))
+_MODULE = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MODULE)
+check_live_cards, verify_cards = _MODULE.check_live_cards, _MODULE.verify_cards
 
 
 def html(cards=None):
