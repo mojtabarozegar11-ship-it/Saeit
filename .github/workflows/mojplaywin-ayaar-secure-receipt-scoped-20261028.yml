@@ -1,0 +1,177 @@
+name: AYAR one-time private receipt protection - scoped release
+on:
+  push:
+    branches: [release/ayaar-secure-receipt-20261028]
+    paths:
+      - ".github/workflows/mojplaywin-ayaar-secure-receipt-scoped-20261028.yml"
+      - "scripts/deploy_ayaar_secure_receipt_scoped_20261028.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-ayaar-one-authorized-shared-django-restart
+  cancel-in-progress: false
+jobs:
+  exact-ayaar-upgrade:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/release/ayaar-secure-receipt-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify private one-time key protections and unaffected backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest -q tests/test_ayaar_case_service.py
+          node --check site_releases/mojplaywin/ayaar-20261027/platform.js
+          python3 - <<'PY'
+          import ast,subprocess
+          from pathlib import Path
+          baseline='fe2ea1a7afe53fb2b4bc4322d2a5ae3f5c7014c0'
+          root=Path('site_releases/mojplaywin/ayaar-20261027')
+          files=('submit.html','platform.js')
+          for name in files:
+              source=root/name
+              assert source.is_file() and not source.is_symlink()
+              prior=subprocess.check_output(['git','show',baseline+':'+str(source)])
+              assert prior and source.read_bytes()!=prior
+          ast.parse(Path('scripts/deploy_ayaar_secure_receipt_scoped_20261028.py').read_text('utf-8'))
+          html=(root/'submit.html').read_text('utf-8')
+          script=(root/'platform.js').read_text('utf-8')
+          assert '<html lang="en" dir="ltr">' in html
+          assert 'platform.js?v=platform-9' in html and 'platform.css?v=platform-3' in html
+          assert 'id="downloadReceipt"' in html and 'id="copyReceipt"' in html
+          assert 'receiptSaved=false' in script and 'beforeunload' in script
+          assert 'receiptCopyFallback' in script and 'private-receipt.txt' in script
+          assert 'URL.createObjectURL(blob)' in script and 'navigator.clipboard?.writeText' in script
+          assert 'Keep this receipt private.' in script
+          assert 'function reviewPacketData' in script and 'function printAssessment' in script
+          print('AYAR_SECURE_RECEIPT_QA=PASS')
+          PY
+      - name: Verify live AYAR and protected MojPlayWin baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in / /store/ /saman/ /taniya/ /mojtaba.roozegar/ /ayaar/ /ayaar/track.html /ayaar/submit.html; do
+            status="$(curl --connect-timeout 9 --max-time 26 -L -sS -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route")"
+            echo "BASELINE_ROUTE=$route:$status"
+            test "$status" = 200
+          done
+      - name: Prepare strictly pinned private SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/ayaar-receipt-pinned-relay"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            path="$d/${item}.key"
+            printf '%s' "${!item}" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$path"
+            chmod 600 "$path"
+            ssh-keygen -y -P '' -f "$path" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 13
+          EOF
+          chmod 600 "$d/config"
+      - name: Atomically replace only two AYAR-owned presentation files
+        shell: bash
+        run: |
+          set -euo pipefail
+          conf="$RUNNER_TEMP/ayaar-receipt-pinned-relay/config"
+          rid="$GITHUB_RUN_ID"_"$GITHUB_RUN_ATTEMPT"
+          sha="$GITHUB_SHA"
+          timeout 60s ssh -T -F "$conf" saeit-cpanel "python3 - preflight '$rid' '$sha'" < scripts/deploy_ayaar_secure_receipt_scoped_20261028.py
+          payload="$RUNNER_TEMP/ayaar-receipt-payload"
+          install -d -m 700 "$payload"
+          for name in submit.html platform.js; do
+            cp -- "site_releases/mojplaywin/ayaar-20261027/$name" "$payload/$name"
+          done
+          AYAAR_PAYLOAD="$payload" AYAAR_RUN="$rid" AYAAR_SHA="$sha" python3 - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          stage=Path(os.environ['AYAAR_PAYLOAD'])
+          names=('submit.html','platform.js')
+          baseline='fe2ea1a7afe53fb2b4bc4322d2a5ae3f5c7014c0'
+          prefix='site_releases/mojplaywin/ayaar-20261027/'
+          old={name:hashlib.sha256(subprocess.check_output(['git','show',baseline+':'+prefix+name])).hexdigest() for name in names}
+          current={name:hashlib.sha256((stage/name).read_bytes()).hexdigest() for name in names}
+          (stage/'release.json').write_text(json.dumps({'identity':'MPW_AYAAR_SECURE_RECEIPT_V5',
+            'run':os.environ['AYAAR_RUN'],'sha':os.environ['AYAAR_SHA'],
+            'before':old,'after':current},sort_keys=True),encoding='utf-8')
+          PY
+          timeout 55s ssh -T -F "$conf" saeit-cpanel "mkdir -m 700 '/home/zomorod2/.mpw-ayaar-receipt-stage-$rid'"
+          tar -C "$payload" -cf - . | timeout 75s ssh -T -F "$conf" saeit-cpanel "tar -C '/home/zomorod2/.mpw-ayaar-receipt-stage-$rid' -xf -"
+          timeout 110s ssh -T -F "$conf" saeit-cpanel "python3 - deploy '$rid' '$sha'" < scripts/deploy_ayaar_secure_receipt_scoped_20261028.py
+      - name: Check public API, cache-busted forms and protected routes with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          conf="$RUNNER_TEMP/ayaar-receipt-pinned-relay/config"
+          rid="${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          sha="$GITHUB_SHA"
+          healthy=true
+          for attempt in 1 2 3 4 5; do
+            config="$(curl --connect-timeout 9 --max-time 25 -sS "https://mojplaywin.com/ayaar/api?op=config&v=$rid" || true)"
+            if printf '%s' "$config" | python3 -c 'import json,sys;d=json.load(sys.stdin);assert d["ok"] and d["case_tracking"] and d["applicant_followups"] and d["report_export"] and d["public_report_integrity"] and d["manual_ai_review"] and not d["model_api_enabled"] and not d["payment_enabled"]'; then
+              break
+            fi
+            if test "$attempt" = 5; then healthy=false; else sleep 4; fi
+          done
+          public_check="$(curl --connect-timeout 9 --max-time 25 -sS 'https://mojplaywin.com/ayaar/api?op=verify&case_id=AYR-26-000000000000&proof=0000000000000000000000000000000000000000000000000000000000000000' || true)"
+          if ! printf '%s' "$public_check" | python3 -c 'import json,sys;d=json.load(sys.stdin);assert d["ok"] and d["verified"] is False and "product_name" not in d'; then healthy=false; fi
+          for route in /ayaar/services.html /ayaar/track.html /ayaar/reviewer.html /ayaar/registry.html /ayaar/privacy.html; do
+            page="$RUNNER_TEMP/ayaar-check-$(basename "$route")"
+            code="$(curl --connect-timeout 9 --max-time 28 -sS -o "$page" -w '%{http_code}' "https://mojplaywin.com$route?v=$rid" || true)"
+            echo "AYAR_UPGRADE_PAGE=$route:$code"
+            if test "$code" != 200 || ! grep -q 'platform.js?v=platform-8' "$page" || ! grep -q 'platform.css?v=platform-3' "$page"; then healthy=false; fi
+          done
+          receipt="$RUNNER_TEMP/ayaar-receipt-submit.html"
+          receipt_code="$(curl --connect-timeout 9 --max-time 28 -sS -o "$receipt" -w '%{http_code}' "https://mojplaywin.com/ayaar/submit.html?v=$rid" || true)"
+          echo "AYAR_SECURE_RECEIPT_PAGE=$receipt_code"
+          if test "$receipt_code" != 200 || ! grep -q 'platform.js?v=platform-9' "$receipt" || ! grep -q 'id="downloadReceipt"' "$receipt"; then healthy=false; fi
+          script="$RUNNER_TEMP/ayaar-receipt-platform.js"
+          script_code="$(curl --connect-timeout 9 --max-time 28 -sS -o "$script" -w '%{http_code}' "https://mojplaywin.com/ayaar/platform.js?v=$rid" || true)"
+          echo "AYAR_SECURE_RECEIPT_JS=$script_code"
+          if test "$script_code" != 200 || ! grep -q 'private-receipt.txt' "$script" || ! grep -q 'receiptCopyFallback' "$script"; then healthy=false; fi
+          for route in /ayaar/index.html /ayaar/methodology.html /ayaar/platform.js /ayaar/platform.css /ayaar/ / /store/ /saman/ /taniya/ /mojtaba.roozegar/; do
+            code="$(curl --connect-timeout 9 --max-time 28 -L -sS -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route?v=$rid" || true)"
+            echo "PRESERVED_ROUTE=$route:$code"
+            if test "$code" != 200; then healthy=false; fi
+          done
+          if test "$healthy" != true; then
+            echo 'AYAR_RECEIPT_HEALTH_FAILED_ROLLING_BACK_EXACT_FILES'
+            timeout 110s ssh -T -F "$conf" saeit-cpanel "python3 - rollback '$rid' '$sha'" < scripts/deploy_ayaar_secure_receipt_scoped_20261028.py
+            exit 1
+          fi
+          echo 'AYAR_SECURE_RECEIPT_LIVE=TRUE'
+          echo 'AYAR_OTHER_MOJPLAYWIN_ROUTES_UNCHANGED=TRUE'
