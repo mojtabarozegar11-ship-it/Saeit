@@ -198,3 +198,4 @@ jobs:
 # Read-only follow-up after runtime module alignment deployment 2026-10-28.
 # Read-only progress check for the active master-agent snapshot 2026-10-28.
 # Read-only follow-up for active activation runtime 2026-10-28.
+# Read-only after VPS storage retention 2026-10-28.
