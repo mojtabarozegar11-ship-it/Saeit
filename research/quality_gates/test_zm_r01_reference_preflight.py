@@ -7,7 +7,7 @@ import pathlib
 import tempfile
 import unittest
 
-from zm_r01_preflight import GateError, check_gtf, fasta_contigs, valid_raw_integer_count, check_count_matrix, validate_refseq_accession
+from zm_r01_preflight import GateError, check_gtf, fasta_contigs, valid_raw_integer_count, check_count_matrix, validate_refseq_accession, validate_reference_identity
 
 
 class ReferenceIntegrityTests(unittest.TestCase):
@@ -28,6 +28,29 @@ class ReferenceIntegrityTests(unittest.TestCase):
         for accession in ('GCA_000001234.2', 'GCF_000001234', 'GCF_fake.2'):
             with self.subTest(accession=accession), self.assertRaisesRegex(GateError, 'RefSeq'):
                 validate_refseq_accession(accession)
+
+    def test_known_v21_refseq_cannot_masquerade_as_v20(self):
+        with self.assertRaisesRegex(GateError, 'v2.1, not v2.0'):
+            validate_reference_identity({
+                'assembly_accession': 'GCF_018294505.1',
+                'assembly_version': 'IWGSC RefSeq v2.0',
+            })
+
+    def test_known_v21_identity_is_syntactically_accepted(self):
+        self.assertEqual(
+            validate_reference_identity({
+                'assembly_accession': 'GCF_018294505.1',
+                'assembly_version': 'IWGSC RefSeq v2.1',
+            }),
+            'GCF_018294505.1',
+        )
+
+    def test_reference_version_rejects_non_string(self):
+        with self.assertRaisesRegex(GateError, 'assembly version'):
+            validate_reference_identity({
+                'assembly_accession': 'GCF_018294505.1',
+                'assembly_version': 2.1,
+            })
 
     def test_fasta_contig_lengths(self):
         p = self.file('ref.fa', '>chr1 description\nACGTRYSWKMBDHVN\n>chr2\nacgt\n')
