@@ -38,7 +38,7 @@ jobs:
           chmod 0700 "$RUNNER_TEMP/mmsg-bundle/bin/node"
           (cd "$RUNNER_TEMP/mmsg-bundle/app" && npm install --omit=dev --ignore-scripts --no-audit --no-fund)
           (cd "$RUNNER_TEMP/mmsg-bundle/app" && "$RUNNER_TEMP/mmsg-bundle/bin/node" --input-type=module -e "import('@whiskeysockets/baileys').then(()=>console.log('MMSG_NODE_MODULES_BUILD=PASS'))")
-          python3 -m pip download --disable-pip-version-check --only-binary=:all: --dest "$RUNNER_TEMP/mmsg-bundle/wheels" -r "$src/requirements.txt"
+          python3 -m pip wheel --disable-pip-version-check --no-cache-dir --wheel-dir "$RUNNER_TEMP/mmsg-bundle/wheels" -r "$src/requirements.txt"
           test -n "$(find "$RUNNER_TEMP/mmsg-bundle/wheels" -maxdepth 1 -name '*.whl' -print -quit)"
           tar --format=posix -C "$RUNNER_TEMP/mmsg-bundle" -czf "$RUNNER_TEMP/mmsg-bundle.tar.gz" app bin wheels
           python3 - "$RUNNER_TEMP/mmsg-bundle.tar.gz" <<'PY'
