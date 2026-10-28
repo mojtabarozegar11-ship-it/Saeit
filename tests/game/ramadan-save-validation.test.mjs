@@ -358,7 +358,7 @@ test('valid player position is not moved and an unavailable fallback fails close
 
 test('campaign restore repairs obstructed player location before engine build', () => {
   const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
-  assert.match(client,/restorePlayerPosition\(world,\(x,y\)=>tile\(x,y\)!==0\);hero=world\.hero/);
+  assert.ok(client.includes('restorePlayerPosition(world,(x,y)=>tile(x,y)!==0);if(restoreEnemyPositions(world,(x,y)=>tile(x,y,world.mission)!==0)<0)return false;hero=world.hero;'));
 });
 
 test('restored time stop expires normally and forged permanent freezes fail closed', () => {
