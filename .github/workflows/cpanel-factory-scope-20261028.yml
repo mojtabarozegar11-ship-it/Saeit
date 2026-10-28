@@ -127,6 +127,88 @@ jobs:
           backup=h/'.backups'
           print('BACKUP_READINESS='+json.dumps({'free_bytes':free,'backup_dir_exists':backup.is_dir() and not backup.is_symlink(),'tar_available':bool(shutil.which('tar')),'sha256sum_available':bool(shutil.which('sha256sum')),'writes':0,'deleted':0},sort_keys=True))
           PY
+      - name: Create and restore-test private cPanel factory-code and cron backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-cpanel-scope"
+          timeout 190s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import os,io,json,time,tarfile,hashlib,subprocess,tempfile
+          from pathlib import Path
+          home=Path('/home/zomorod2')
+          assert Path.home()==home and not home.is_symlink()
+          bases=(
+              'Saeit-staging/var/factory/operations',
+              'Saeit-staging/var/factory/research',
+              'Saeit-staging/var/factory/discovery',
+              'Saeit-staging/var/factory/Saeit-Astra-Luna',
+              'Saeit-staging/factory-workspace',
+              '.saeit-factory-inbox/bin',
+          )
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=12,check=True).stdout
+          expected={
+              '571df48dab391329f131630eca394704cf6896f6b8b34605416da203e4271e92',
+              '265504abe1f68f14d103c6d30fe6cf6037dcf1d9487f6c605563cf82d586d001',
+              '64740596493a32eb972a60a2bc32f8c698b10a74800b80f9ff2c0fbd097bd012',
+          }
+          actual={hashlib.sha256(l.encode()).hexdigest() for l in cron.splitlines()}
+          if not expected.issubset(actual):raise SystemExit('FACTORY_CRON_CHANGED_ABORT')
+          manifest=[]
+          for base in bases:
+              p=home/base
+              if not p.is_dir() or p.is_symlink():raise SystemExit('SOURCE_ROOT_MISSING_OR_SYMLINK')
+              for x in sorted(p.rglob('*')):
+                  if x.is_symlink():raise SystemExit('SOURCE_SYMLINK_FOUND')
+                  if x.is_file():
+                      rel=x.relative_to(home).as_posix()
+                      content=x.read_bytes()
+                      manifest.append({'path':rel,'bytes':len(content),'sha256':hashlib.sha256(content).hexdigest()})
+          if len(manifest)>10000 or sum(x['bytes'] for x in manifest)>32*1024*1024:raise SystemExit('BACKUP_LIMIT_EXCEEDED')
+          base=home/'.backups'
+          if base.is_symlink() or not base.is_dir():raise SystemExit('BACKUP_PARENT_UNSAFE')
+          dest=base/'cpanel-factory-decommission-20261028'
+          if dest.is_symlink():raise SystemExit('BACKUP_DEST_SYMLINK')
+          dest.mkdir(mode=0o700,exist_ok=True)
+          os.chmod(dest,0o700)
+          salt=hashlib.sha256(cron.encode()).hexdigest()[:12]
+          stamp=time.strftime('%Y%m%dT%H%M%SZ',time.gmtime())
+          archive=dest/('code-cron-'+stamp+'-'+salt+'.tar.gz')
+          if archive.exists():raise SystemExit('BACKUP_COLLISION')
+          fd,tmp=tempfile.mkstemp(prefix='.pending-',suffix='.tar.gz',dir=dest)
+          os.fchmod(fd,0o600)
+          os.close(fd)
+          def add_bytes(tf,name,data):
+              t=tarfile.TarInfo(name)
+              t.size=len(data);t.mode=0o600
+              tf.addfile(t,io.BytesIO(data))
+          try:
+              with tarfile.open(tmp,'w:gz') as tf:
+                  for item in manifest:
+                      tf.add(home/item['path'],arcname=item['path'],recursive=False)
+                  add_bytes(tf,'__meta__/crontab.txt',cron.encode())
+                  add_bytes(tf,'__meta__/manifest.json',json.dumps(manifest,sort_keys=True).encode())
+              with tempfile.TemporaryDirectory(prefix='.restore-smoke-',dir=dest) as test:
+                  with tarfile.open(tmp,'r:gz') as tf:
+                      names=set(tf.getnames())
+                      if len(names)!=len(manifest)+2:raise SystemExit('TAR_MEMBER_MISMATCH')
+                      for m in tf.getmembers():
+                          if not m.isfile() or m.name.startswith('/') or '..' in Path(m.name).parts:
+                              raise SystemExit('TAR_UNSAFE_MEMBER')
+                      tf.extractall(test,filter='data')
+                  for item in manifest:
+                      restored=(Path(test)/item['path']).read_bytes()
+                      if hashlib.sha256(restored).hexdigest()!=item['sha256']:
+                          raise SystemExit('RESTORE_HASH_MISMATCH')
+                  if (Path(test)/'__meta__/crontab.txt').read_text()!=cron:
+                      raise SystemExit('CRON_RESTORE_MISMATCH')
+              os.replace(tmp,archive)
+              manifest_out=dest/(archive.name+'.json')
+              manifest_out.write_text(json.dumps({'archive':archive.name,'archive_sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'cron_sha256':hashlib.sha256(cron.encode()).hexdigest(),'file_count':len(manifest),'file_bytes':sum(x['bytes'] for x in manifest),'restore_test':'pass'},sort_keys=True))
+              os.chmod(manifest_out,0o600)
+              print('CPANEL_FACTORY_BACKUP_VERIFIED='+json.dumps({'archive':archive.name,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest(),'files':len(manifest),'bytes':sum(x['bytes'] for x in manifest),'restore_test':True,'deleted':0},sort_keys=True))
+          finally:
+              if os.path.exists(tmp):os.unlink(tmp)
+          PY
       - name: Erase temporary SSH keys from GitHub runner
         if: always()
         shell: bash
