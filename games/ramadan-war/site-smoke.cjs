@@ -197,9 +197,31 @@ const assert=require('node:assert/strict');
     await page.evaluate(()=>{window.RamadanWarDebug.spawnTestPickup('ammo');window.RamadanWarDebug.tick(.04)});
     state=await page.evaluate(()=>window.RamadanWarDebug.getState());
     assert.equal(state.shots,1);assert.equal(state.rockets,11);assert.equal(state.drones,2);assert.equal(state.ammo,8,'ammo pickup restores the magazine');
+    // A non-mission collectible must be durable immediately, not only after
+    // the five-second periodic checkpoint or a manual pause.
+    const collectibleCheckpoint=await page.evaluate(()=>{
+      const g=window.RamadanWarDebug;
+      g.spawnTestPickup('intel');g.tick(.04);
+      const live=g.getState(),saved=JSON.parse(localStorage.getItem('rwNativeCampaign'));
+      return {livePoints:live.points,savedPoints:saved.points,liveScore:live.score,savedScore:saved.score};
+    });
+    assert.equal(collectibleCheckpoint.savedPoints,collectibleCheckpoint.livePoints,
+      'earned pickup points must survive an immediate reload');
+    assert.equal(collectibleCheckpoint.savedScore,collectibleCheckpoint.liveScore,
+      'earned pickup score must survive an immediate reload');
+    console.log('RAMADAN_COLLECTIBLE_IMMEDIATE_SAVE_PASS',v.name);
    }
    const savedBeforeReload=await page.evaluate(()=>window.RamadanWarDebug.getState());
-   await page.locator('#pause').click();await page.locator('#pausePanel:not(.hidden)').waitFor();await page.reload({waitUntil:'domcontentloaded'});
+   // Pausing is a durable checkpoint even when no five-second timer has fired.
+   const pausePosition=await page.evaluate(()=>{
+     const g=window.RamadanWarDebug;
+     if(!g.qaMove(3.5,7.5))throw new Error('known passable pause checkpoint missing');
+     return g.qaPosition();
+   });
+   await page.locator('#pause').click();
+   assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('rwNativeCampaign')).x),
+     pausePosition.x,'pause must immediately persist the latest player position');
+   console.log('RAMADAN_PAUSE_IMMEDIATE_SAVE_PASS',v.name);await page.locator('#pausePanel:not(.hidden)').waitFor();await page.reload({waitUntil:'domcontentloaded'});
    assert.match(await page.locator('#start').innerText(),/ادامه/);
    await page.locator('#start').click();
    state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,savedBeforeReload.rockets);assert.equal(state.drones,savedBeforeReload.drones);assert.equal(state.mode,'game');
@@ -269,6 +291,19 @@ const assert=require('node:assert/strict');
       return a;
     });
     assert(checked.every(Boolean),'campaign objective interaction regression '+JSON.stringify(checked));
+    // A completed reload must persist restored ammunition without waiting
+    // for the next periodic autosave.
+    const reloadCheckpoint=await page.evaluate(()=>{
+      const g=window.RamadanWarDebug;g.start();g.fire();
+      if(!g.reload())throw new Error('manual reload did not start');
+      for(let i=0;i<30;i++)g.tick(.04);
+      const live=g.getState(),saved=JSON.parse(localStorage.getItem('rwNativeCampaign'));
+      return {liveAmmo:live.ammo,savedAmmo:saved.ammo,magazine:saved.magazine,reloading:saved.reloading};
+    });
+    assert.equal(reloadCheckpoint.savedAmmo,reloadCheckpoint.liveAmmo);
+    assert.equal(reloadCheckpoint.savedAmmo,reloadCheckpoint.magazine);
+    assert.equal(reloadCheckpoint.reloading,false);
+    console.log('RAMADAN_RELOAD_COMPLETION_SAVE_PASS',v.name);
     assert.equal(await page.locator('#missionObjective').isVisible(),true);
     console.log('CAMPAIGN_OBJECTIVES_PASS activation=2 intel=3 defend=timer extract=check boss=spawn');
    }
