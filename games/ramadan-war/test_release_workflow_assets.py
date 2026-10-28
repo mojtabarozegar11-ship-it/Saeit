@@ -58,5 +58,17 @@ class ReleaseTransferContract(unittest.TestCase):
         self.assertIn('cancel-in-progress: false', workflow)
 
 
+    def test_disk_gate_precedes_any_cpanel_release_staging(self):
+        workflow = WORKFLOW.read_text(encoding='utf-8')
+        guard = 'Refuse insufficient cPanel capacity before creating any release stage'
+        stage = 'Transfer the replacement web client and scoped updater to private staging'
+        self.assertIn(guard, workflow)
+        self.assertIn('games/ramadan-war/release_storage_guard.py', workflow)
+        self.assertLess(workflow.index(guard), workflow.index(stage),
+                        'release must fail closed before any stage mkdir or scp')
+        qa = (ROOT / '.github/workflows/zomorod-ramadan-war-model-qa.yml').read_text('utf-8')
+        self.assertIn('test_release_storage_guard.py', qa)
+
+
 if __name__ == '__main__':
     unittest.main()
