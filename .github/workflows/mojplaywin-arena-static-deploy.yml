@@ -282,6 +282,11 @@ jobs:
               assert.equal(await page.locator('#nav-predictions').innerText(),'پیش‌بینی زنده');
               assert.equal(await page.locator('#combat-heading').innerText(),'بوکس، کشتی و هنرهای رزمی جهان');
               assert.equal(await page.locator('#combat-day-heading').innerText(),'برنامه روزانه مسابقات رزمی');
+              assert.equal(await page.locator('.header-right nav a').count(),5);
+              assert.equal(await page.locator('.header-right nav').isVisible(),true,'mobile menu must remain visible');
+              const mobileNav=await page.locator('.header-right nav').evaluate(el=>({overflow:getComputedStyle(el).overflowX,width:el.getBoundingClientRect().width,viewport:innerWidth}));
+              assert.equal(mobileNav.overflow,'auto');
+              assert.ok(mobileNav.width<=mobileNav.viewport,'mobile menu must fit inside viewport');
               assert.equal(await page.locator('link[rel="canonical"]').getAttribute('href'),'https://mojplaywin.com/arena/');
               const webSchema=JSON.parse(await page.locator('script[type="application/ld+json"]').textContent());
               assert.equal(webSchema['@type'],'WebPage');
