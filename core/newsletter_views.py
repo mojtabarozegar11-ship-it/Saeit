@@ -2,7 +2,7 @@ import json
 from django.http import Http404
 from django.shortcuts import render
 
-from .models import NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory
+from .models import Agent, NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory
 from .public_catalog_guard import missing_public_tables, mark_public_data_unavailable
 
 
@@ -12,7 +12,7 @@ EDITORIAL_START = "۱۳۹۸/۰۸/۲۵"
 def newsletter_home(request):
     from django.utils import timezone
     catalog_unavailable = missing_public_tables(
-        NewsletterStory, NewsletterSource, NewsletterPublication, NewsletterSchedule
+        NewsletterStory, NewsletterSource, NewsletterPublication, NewsletterSchedule, Agent
     )
     if catalog_unavailable:
         stories, sources, publications, schedule = [], [], [], None
