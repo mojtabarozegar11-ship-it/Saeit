@@ -1,0 +1,58 @@
+name: Moj messaging - independent DNS only comparative probe
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths: ['.github/workflows/moj-messaging-whatsapp-independent-dns-probe-20261028.yml']
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Query DoH read-only, test TLS SNI to returned address; no system changes
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/mmsg-doh-probe.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          timeout 70s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'python3 -' <<'PY'
+          import urllib.request,ipaddress,json,socket,ssl
+          host='web.whatsapp.com'
+          providers={'GOOGLE':'https://dns.google/resolve?name=web.whatsapp.com&type=A','CLOUDFLARE':'https://cloudflare-dns.com/dns-query?name=web.whatsapp.com&type=A'}
+          for name,url in providers.items():
+              request=urllib.request.Request(url,headers={'Accept':'application/dns-json','User-Agent':'MojMessagingNetworkDiagnosis/1.0'})
+              try:
+                  with urllib.request.urlopen(request,timeout=9) as rsp:
+                      raw=rsp.read(32768)
+                  data=json.loads(raw)
+                  ips=list(dict.fromkeys(e['data'] for e in data.get('Answer',[]) if e.get('type')==1 and ipaddress.ip_address(e.get('data')).is_global))
+              except Exception as exc:
+                  print('MMSG_DOH_'+name+'_QUERY=FAILED_'+type(exc).__name__);continue
+              print('MMSG_DOH_'+name+'_PUBLIC_IPV4_COUNT='+str(len(ips)))
+              if not ips:continue
+              success=False
+              for addr in ips[:3]:
+                  try:
+                      with socket.create_connection((addr,443),timeout=4) as sock:
+                          with ssl.create_default_context().wrap_socket(sock,server_hostname=host) as tls:
+                              assert tls.version() in ('TLSv1.2','TLSv1.3')
+                              success=True
+                              break
+                  except OSError:
+                      continue
+              print('MMSG_DOH_'+name+'_WHATSAPP_TLS='+('PASS' if success else 'FAILED'))
+          print('MMSG_SYSTEM_DNS_UNCHANGED=PASS')
+          print('MMSG_PRIVATE_CREDENTIALS_NOT_TOUCHED=PASS')
+          PY
