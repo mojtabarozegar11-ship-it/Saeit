@@ -320,6 +320,51 @@ jobs:
           echo "ARCHIVE_CANDIDATES_OVER_50MB_OLDER_THAN_90D_BYTES"
           find "$HOME" -xdev -regextype posix-extended -type f -size +50M -mtime +90 -regex '.*\.(zip|tar|tgz|gz|sql|bak|dump)$' -printf '%s\t%TY-%Tm-%Td\t%p\n' 2>/dev/null | sort -nr | head -100 || true
           REMOTE
+      - name: Read-only MySQL retention audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          python3 - <<'PY'
+          import json,os,re,shutil,subprocess,urllib.parse
+          from pathlib import Path
+          app=Path.home()/"Saeit-staging"; matches=[]
+          for path in (app/".env",app/".env.production",app/".env.local"):
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size>65536: continue
+                  for line in path.read_text(encoding="utf-8",errors="replace").splitlines():
+                      m=re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$",line)
+                      if m: matches.append(urllib.parse.urlsplit(m.group(1).strip().strip('"').strip("'")))
+              except OSError: pass
+          if len(matches)!=1: raise SystemExit("STAGING_DATABASE_URL_NOT_UNIQUE")
+          u=matches[0]; db=urllib.parse.unquote(u.path.lstrip("/"))
+          if db!="zomorod2_sites_main": raise SystemExit("STAGING_DATABASE_SCOPE_MISMATCH")
+          client=shutil.which("mariadb") or shutil.which("mysql")
+          args=[client,"--no-defaults","--batch","--skip-column-names","--host="+(u.hostname or "localhost"),"--user="+urllib.parse.unquote(u.username or ""),"--database="+db,"--connect-timeout=8"]
+          if u.port: args.append("--port="+str(u.port))
+          env=dict(os.environ,MYSQL_PWD=urllib.parse.unquote(u.password or ""))
+          def query(sql,timeout=180):
+              p=subprocess.run(args+["--execute="+sql],env=env,capture_output=True,text=True,timeout=timeout)
+              if p.returncode: raise SystemExit("MYSQL_AUDIT_QUERY_FAILED")
+              return [x.split("\t") for x in p.stdout.strip().splitlines() if x]
+          for table in ("core_agenttask","core_factoryevidence"):
+              cols=query("SELECT COLUMN_NAME,DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='"+db+"' AND TABLE_NAME='"+table+"' ORDER BY ORDINAL_POSITION")
+              print("MYSQL_TABLE_COLUMNS="+json.dumps({"table":table,"columns":cols},ensure_ascii=False))
+              dates=[name for name,typ in cols if typ.lower() in {"date","datetime","timestamp"}]
+              for name in dates:
+                  ident="\`"+name.replace("\`","\`\`")+"\`"
+                  row=query("SELECT MIN("+ident+"),MAX("+ident+"),COUNT(*),SUM("+ident+" < DATE_SUB(NOW(),INTERVAL 180 DAY)) FROM \`"+table+"\` WHERE "+ident+" IS NOT NULL")[0]
+                  print("MYSQL_DATE_COVERAGE="+json.dumps({"table":table,"column":name,"min":row[0],"max":row[1],"non_null_rows":row[2],"older_than_180d":row[3]},ensure_ascii=False))
+              for name,typ in cols:
+                  if name.lower() in {"status","state"}:
+                      ident="\`"+name.replace("\`","\`\`")+"\`"
+                      rows=query("SELECT COALESCE(CAST("+ident+" AS CHAR),'[NULL]'),COUNT(*) FROM \`"+table+"\` GROUP BY "+ident+" ORDER BY COUNT(*) DESC LIMIT 20")
+                      print("MYSQL_STATUS_DISTRIBUTION="+json.dumps({"table":table,"column":name,"counts":rows},ensure_ascii=False))
+          PY
+          REMOTE
       - name: Remove temporary SSH identities
         if: always()
         shell: bash
