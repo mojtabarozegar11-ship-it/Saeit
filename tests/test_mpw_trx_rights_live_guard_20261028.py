@@ -1,5 +1,7 @@
 """No-payment, no-database regression for the guarded live TRX rights gate."""
 import importlib.util
+import json
+from types import SimpleNamespace
 from pathlib import Path
 import tempfile
 import unittest
@@ -162,6 +164,41 @@ class GuardTests(unittest.TestCase):
                 self.assertEqual(before,{k:path.read_bytes() for k,path in paths.items()})
                 restart.assert_not_called()
 
+
+    def test_runtime_receipt_rejects_missing_required_sku(self):
+        def receipt(missing=None):
+            products={str(sku):{"exists":sku!=missing,"explicit_rights":False}
+                      for sku in (72,225,879)}
+            return "MPW_TRX_RIGHTS_RUNTIME="+json.dumps({"products":products})+"\\n"
+        for missing in (72,225,879):
+            with self.subTest(missing=missing), patch.object(
+                guard.subprocess,"run",
+                return_value=SimpleNamespace(returncode=0,stdout=receipt(missing),
+                                             stderr="")):
+                with self.assertRaisesRegex(RuntimeError,"RIGHTS_REQUIRED_PRODUCT_MISSING"):
+                    guard.runtime_validate()
+        with patch.object(guard.subprocess,"run",
+                          return_value=SimpleNamespace(returncode=0,stdout=receipt(),
+                                                       stderr="")):
+            guard.runtime_validate()
+
+    def test_directory_durability_failure_aborts_before_source_edits(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            paths={k:root/(k+".py") for k in fixture()}
+            for k,path in paths.items():
+                path.write_text(fixture()[k],encoding="utf8")
+            original={k:p.read_bytes() for k,p in paths.items()}
+            with patch.object(guard,"TARGETS",paths),\\
+                 patch.object(guard,"BACKUPS",root/"private"),\\
+                 patch.object(guard,"guard"),\\
+                 patch.object(guard,"runtime_validate"),\\
+                 patch.object(guard,"restart") as restart,\\
+                 patch.object(guard.os,"open",side_effect=OSError("directory sync denied")):
+                with self.assertRaisesRegex(OSError,"directory sync denied"):
+                    guard.operation("apply","202610280011")
+            self.assertEqual(original,{k:p.read_bytes() for k,p in paths.items()})
+            restart.assert_not_called()
 
     def test_atomic_rejects_stale_source_without_overwriting(self):
         with tempfile.TemporaryDirectory() as d:
