@@ -145,28 +145,19 @@ export function restoreRecoveryPickups(state, sites) {
         Math.abs(p.y-sites[p.spotIndex]?.[1])>=0.001)) return 0;
   let collected=state.objective.collectedSites;
   if (!Array.isArray(collected)) {
-    // Legacy saves did not record collected site IDs. Only infer the missing
-    // IDs if all uncollected pickups are still present; otherwise guessing
-    // could re-award an already collected site. New saves carry exact IDs.
-    if (state.objective.done>0 && existing.length+state.objective.done!==3) {
-      // Backward-compatible best-effort repair for old saves with missing
-      // pickups. Never assert unprovable collected IDs as a trusted ledger.
-      let needed=Math.max(0,3-state.objective.done-existing.length),restored=0;
-      for (let i=0;i<sites.length && needed>0;i++) {
-        if (present.has(i)) continue;
-        const site=sites[i];
-        if (!Array.isArray(site)||site.length!==2||
-            !site.every(n=>typeof n==='number'&&Number.isFinite(n)&&n>=0&&n<=16)) continue;
-        state.pickups.push({x:site[0],y:site[1],type:'mission-intel',spotIndex:i,life:3600});
-        needed--;restored++;
-      }
-      return restored;
-    }
+    // A legacy save with partially missing pickups cannot identify which
+    // sites were already rewarded. Guessing re-mints earned points and may
+    // make an old save appear to progress while silently duplicating rewards.
+    // Leave it untouched; never overwrite a missing provenance ledger.
+    if (state.objective.done>0 && existing.length+state.objective.done!==3) return 0;
     collected=state.objective.done===0?[]:[0,1,2].filter(i=>!present.has(i));
-    state.objective.collectedSites=collected;
   }
   if (collected.length!==state.objective.done || new Set(collected).size!==collected.length ||
       collected.some(i=>!Number.isInteger(i)||i<0||i>2||present.has(i))) return 0;
+  // Only commit the inferred legacy ledger after all invariants pass.
+  if (!Array.isArray(state.objective.collectedSites)) {
+    state.objective.collectedSites=[...collected];
+  }
   let restored=0;
   for (let i=0;i<sites.length;i++) {
     if (present.has(i)||collected.includes(i)) continue;
@@ -205,6 +196,14 @@ export function restorePlayerPosition(state, isBlocked) {
   state.x = 2.5;
   state.y = 7.5;
   return true;
+}
+
+// Reject oversized or malformed browser saves before JSON.parse. A locally
+// modified multi-megabyte value must not freeze the game on the start screen.
+// A normal 30-enemy campaign snapshot is orders of magnitude smaller.
+export function parseCampaignSave(raw, maxChars = 512 * 1024) {
+  if (typeof raw !== 'string' || raw.length === 0 || raw.length > maxChars) return null;
+  try { return JSON.parse(raw); } catch { return null; }
 }
 
 // A cleared mission must resume at its results panel, not in a non-interactive arena.
