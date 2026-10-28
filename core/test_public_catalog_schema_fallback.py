@@ -153,6 +153,48 @@ class PublicCatalogDetailRouteRegressionTests(SimpleTestCase):
         self.assertEqual(render_mock.call_args.args[1], "core/education_course_detail.html")
         bookmark_filter.assert_not_called()
 
+    def test_completed_enrollment_retains_course_and_lesson_read_access(self):
+        request = self.requests.get("/education/course/example/lesson/1/")
+        request.user = SimpleNamespace(is_authenticated=True)
+        course = MagicMock()
+        course.slug = "example"
+        lesson = SimpleNamespace(id=1, is_free_preview=False)
+        course.lessons.filter.return_value = [lesson]
+        course.resources.filter.return_value = []
+        enrollment = SimpleNamespace(status="completed")
+        with patch("core.academy_views.missing_public_tables", return_value=False), patch(
+            "core.academy_views.get_object_or_404", side_effect=[course, lesson]
+        ), patch(
+            "core.academy_views.EducationBookmark.objects.filter"
+        ) as bookmark_filter, patch(
+            "core.academy_views.EducationEnrollment.objects.filter"
+        ) as enrollment_filter, patch(
+            "core.academy_views.EducationProgress.objects.filter"
+        ) as progress_filter, patch(
+            "core.academy_views.render", return_value=HttpResponse("lesson")
+        ):
+            bookmark_filter.return_value.exists.return_value = False
+            enrollment_filter.return_value.first.return_value = enrollment
+            progress_filter.return_value.first.return_value = None
+            response = education_lesson(request, "example", 1)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(enrollment_filter.call_args.kwargs["status__in"], ("active", "completed"))
+
+    def test_completed_enrollment_hides_invalid_completion_form(self):
+        course = SimpleNamespace(slug="example", title="دوره", track=SimpleNamespace(title="آموزش"))
+        lesson = SimpleNamespace(id=1, title="درس", summary="", content="متن", duration_minutes=15)
+        context = {
+            "course": course, "lesson": lesson, "enrollment": SimpleNamespace(status="completed"),
+            "lesson_position": 1, "lesson_total": 1, "progress": None,
+            "previous_lesson": None, "next_lesson": None, "bookmarked": False,
+        }
+        html = render_to_string("core/education_lesson.html", context)
+        self.assertNotIn("تکمیل این درس", html)
+        self.assertIn("ذخیره نشانک", html)
+        context["enrollment"] = SimpleNamespace(status="active")
+        active_html = render_to_string("core/education_lesson.html", context)
+        self.assertIn("تکمیل این درس", active_html)
+
     def test_course_detail_missing_schema_is_truthful_retryable_503(self):
         with patch("core.academy_views.missing_public_tables", return_value=True) as guard:
             response = education_course_detail(self.requests.get("/education/course/example/"), "example")
