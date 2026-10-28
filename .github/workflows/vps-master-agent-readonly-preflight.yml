@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths: [.github/workflows/vps-master-agent-readonly-preflight.yml]
+  pull_request:
+    paths: [.github/workflows/vps-master-agent-readonly-preflight.yml]
   workflow_dispatch:
 permissions:
   contents: read
@@ -199,3 +201,5 @@ jobs:
 # Read-only progress check for the active master-agent snapshot 2026-10-28.
 # Read-only follow-up for active activation runtime 2026-10-28.
 # Read-only after VPS storage retention 2026-10-28.
+
+# Read-only database storage and task-lineage inventory for generation audit 2026-10-28.

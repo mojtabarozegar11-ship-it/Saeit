@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths: ['.github/workflows/factory-toolchain-status.yml']
+  pull_request:
+    paths: ['.github/workflows/factory-toolchain-status.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,6 +37,68 @@ jobs:
           for stage in sorted(root.glob('toolchain-source-*')):
               print('STAGE='+stage.name)
               print(json.dumps({p.name:p.stat().st_size for p in stage.iterdir() if p.is_file()},sort_keys=True))
+          # Compare the retired transfer bundle against bounded installed model/toolchain candidates.
+          import hashlib, os
+          stage=root/'toolchain-source-39232784800-1'
+          if stage.is_dir():
+              for name in ('install.sh','prove.py','metadata.json','SHA256SUMS'):
+                  p=stage/name
+                  if p.is_file():
+                      print('STAGED_METADATA_'+name+'='+json.dumps(p.read_text(errors='replace')[:3000]))
+          local_roots=[root/'build-toolchain',Path.home()/'.cache/huggingface',Path.home()/'models',Path.home()/'comfyui-isolated']
+          found=[]
+          visited=0
+          for base in local_roots:
+              if not base.is_dir() or base.is_symlink(): continue
+              for walk,dirs,names in os.walk(base,followlinks=False):
+                  dirs[:]=[d for d in dirs if not (Path(walk)/d).is_symlink()]
+                  for name in names:
+                      visited+=1
+                      p=Path(walk)/name
+                      if p.suffix.lower()=='.gguf' or name=='runtime.tar.xz':
+                          try:
+                              size=p.stat().st_size
+                              if size>0:
+                                  h=hashlib.sha256()
+                                  with p.open('rb') as stream:
+                                      for chunk in iter(lambda:stream.read(1024*1024),b''): h.update(chunk)
+                                  found.append({'path':str(p),'bytes':size,'sha256':h.hexdigest()})
+                          except OSError: pass
+                      if visited>=5000: break
+                  if visited>=5000: break
+              if visited>=5000: break
+          print('INSTALLED_MODEL_RUNTIME_CANDIDATES='+json.dumps(found,sort_keys=True))
+          print('MODEL_SCAN_VISITED_FILES='+str(visited))
+          versions=root/'build-toolchain/versions'
+          asset_dirs=[]
+          for version in versions.iterdir() if versions.is_dir() else []:
+              if not version.is_dir() or version.is_symlink(): continue
+              for rel in ('models','bin','work'):
+                  folder=version/rel
+                  if folder.is_dir() and not folder.is_symlink():
+                      entries=[]
+                      for item in list(folder.iterdir())[:80]:
+                          try: entries.append({'name':item.name,'kind':'dir' if item.is_dir() else 'file','bytes':item.stat().st_size if item.is_file() else None})
+                          except OSError: pass
+                      asset_dirs.append({'version':version.name,'dir':rel,'entries':entries})
+          print('INSTALLED_TOOLCHAIN_ASSET_DIRS='+json.dumps(asset_dirs,sort_keys=True))
+          installed_model=versions/'f7b1913a9c01411393cf28316cd7bb34f8a7165f/models/coder.gguf'
+          source_model=stage/'qwen2.5-coder-0.5b-instruct-q4_k_m.gguf'
+          def digest_file(path):
+              if not path.is_file() or path.is_symlink(): return None
+              digest=hashlib.sha256()
+              with path.open('rb') as stream:
+                  for chunk in iter(lambda:stream.read(1024*1024),b''): digest.update(chunk)
+              return {'bytes':path.stat().st_size,'sha256':digest.hexdigest()}
+          print('SOURCE_INSTALLED_MODEL_HASH_COMPARE='+json.dumps({'source':digest_file(source_model),'installed':digest_file(installed_model)},sort_keys=True))
+
+          if stage.is_dir():
+              for name in ('install.sh','prove.py'):
+                  p=stage/name
+                  if p.is_file():
+                      selected=[line for line in p.read_text(errors='replace').splitlines() if any(word in line.lower() for word in ('model','gguf','llama'))]
+                      print('MODEL_REFERENCE_LINES_'+name+'='+json.dumps(selected[:100]))
+
           versions=root/'build-toolchain/versions'
           if versions.is_dir():
               for version in sorted(versions.iterdir()):

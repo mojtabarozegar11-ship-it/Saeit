@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - .github/workflows/vps-factory-disk-recovery-inventory-20261024.yml
+  pull_request:
+    paths:
+      - .github/workflows/vps-factory-disk-recovery-inventory-20261024.yml
   workflow_dispatch:
 permissions:
   contents: read
@@ -42,6 +45,7 @@ jobs:
 
           root = Path.home() / "factory-runtime"
           ops = root / "operations"
+          app = root / "django-app"
           private = root / "private" / "autonomous-product-cycle"
           if root.is_symlink() or not root.is_dir() or ops.is_symlink() or not ops.is_dir():
               raise SystemExit("FACTORY_STORAGE_ROOT_UNSAFE")
@@ -176,6 +180,112 @@ jobs:
               "filesystem_type":fs_kind,
               "samples_read_only":True,
           }
+          # Generation map: bounded, read-only names/sizes and active references.
+          crontab_text = subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8).stdout
+          process_text = subprocess.run(["ps","-u","githubops","-o","args="],capture_output=True,text=True,timeout=8).stdout
+          generation_roots = (
+              ("operations_root", ops),
+              ("operations_backups", backup_root),
+              ("master_agent_operations", ops / "master-agent"),
+              ("django_application", app),
+              ("autonomous_factory", private),
+              ("autonomous_product_cycle", private / "autonomous-product-cycle"),
+          )
+          generation_map = {}
+          for label, path in generation_roots:
+              if path.is_symlink() or not path.is_dir():
+                  generation_map[label] = {"present":False,"entries":[]}
+                  continue
+              children = [child for child in path.iterdir()
+                          if not child.is_symlink() and (child.is_dir() or child.is_file())]
+              children = children[:100]
+              sizes = {}
+              if children:
+                  try:
+                      result = subprocess.run(["du","-s","-B1","--"]+[str(child) for child in children],
+                                              check=True,capture_output=True,text=True,timeout=40)
+                      for row in result.stdout.splitlines():
+                          size_text, sep, full_path = row.partition("\t")
+                          if sep:
+                              sizes[full_path] = int(size_text)
+                  except (OSError,ValueError,subprocess.SubprocessError):
+                      pass
+              rows = []
+              for child in children:
+                  try:
+                      row = {"name":child.name[:120],"bytes":sizes.get(str(child),
+                              child.stat().st_size if child.is_file() else None),
+                             "age_days":round((time.time()-child.stat().st_mtime)/86400,1),
+                             "kind":"dir" if child.is_dir() else "file",
+                             "cron_reference":str(child) in crontab_text or child.name in crontab_text,
+                             "process_reference":str(child) in process_text or child.name in process_text}
+                      rows.append(row)
+                  except OSError:
+                      continue
+              rows.sort(key=lambda row:-(row["bytes"] or 0))
+              generation_map[label] = {"present":True,"entry_count":len(children),
+                                       "entries":rows[:60]}
+          # Deep read-only inventory of the largest retired-looking source generation.
+          candidate = ops / "toolchain-source-39232784800-1"
+          candidate_info = {"present":False,"deleted":0}
+          if candidate.exists():
+              if candidate.is_symlink() or not candidate.is_dir():
+                  raise SystemExit("TOOLCHAIN_SOURCE_CANDIDATE_UNSAFE")
+              all_files=[]
+              suffix_counts=collections.Counter()
+              total_files=0
+              total_bytes=0
+              truncated=False
+              for walk,dirs,names in os.walk(candidate,followlinks=False):
+                  base=Path(walk)
+                  dirs[:]=[name for name in dirs if not (base/name).is_symlink()]
+                  for name in names:
+                      path=base/name
+                      if path.is_symlink() or not path.is_file():
+                          continue
+                      try:
+                          info=path.stat()
+                      except OSError:
+                          continue
+                      total_files+=1
+                      total_bytes+=info.st_size
+                      suffix_counts[path.suffix.lower() or "(none)"]+=1
+                      if info.st_size>=8*1024*1024:
+                          all_files.append({"path":path.relative_to(candidate).as_posix()[:180],
+                                            "bytes":info.st_size})
+                      if total_files>=50000:
+                          truncated=True
+                          break
+                  if truncated:
+                      break
+              sibling_dirs=sorted(p.name for p in ops.glob("toolchain-source-*")
+                                  if p.is_dir() and not p.is_symlink())
+              source_extensions={".py",".sh",".yml",".yaml",".json",".toml",".ini",".conf",".service",".txt"}
+              reference_files=[]
+              for scanroot in (ops,app):
+                  for walk,dirs,names in os.walk(scanroot,followlinks=False):
+                      base=Path(walk)
+                      dirs[:]=[name for name in dirs if not (base/name).is_symlink()
+                               and not name.endswith((".git",".venv"))]
+                      for name in names:
+                          path=base/name
+                          if path.suffix.lower() not in source_extensions or path.is_symlink():
+                              continue
+                          try:
+                              if path.stat().st_size>2*1024*1024:
+                                  continue
+                              if candidate.name in path.read_text(errors="ignore"):
+                                  reference_files.append(path.relative_to(root).as_posix()[:200])
+                          except OSError:
+                              continue
+              candidate_info={"present":True,"age_days":round((time.time()-candidate.stat().st_mtime)/86400,1),
+                              "bytes":usage(candidate),"files":total_files,"file_bytes":total_bytes,
+                              "file_inventory_truncated":truncated,"types":suffix_counts.most_common(25),
+                              "largest_files":sorted(all_files,key=lambda row:-row["bytes"])[:30],
+                              "siblings":sibling_dirs,"cron_reference":str(candidate) in crontab_text or candidate.name in crontab_text,
+                              "process_reference":str(candidate) in process_text or candidate.name in process_text,
+                              "source_code_reference_files":sorted(set(reference_files))[:100],"deleted":0}
+          print("FACTORY_OLD_SOURCE_GENERATION_READ_ONLY="+json.dumps(candidate_info,sort_keys=True))
           status = {
               "schema": "saeit.factory.disk-pressure-inventory.v1",
               "observed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -184,6 +294,7 @@ jobs:
               "mount_used_bytes": disk.used,
               "reserve_2048_mib_met": disk.free >= 2048*1024*1024,
               "fixed_groups_bytes": groups,
+              "generation_map": generation_map,
               "backup_composition": backup_breakdown,
               "known_transient_staging": transient,
               "operation_logs": logs,
