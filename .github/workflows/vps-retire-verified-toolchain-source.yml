@@ -121,15 +121,17 @@ jobs:
           marker=candidate.name
           if marker in cron or str(candidate) in cron or marker in processes or str(candidate) in processes:
               raise SystemExit('SOURCE_CANDIDATE_REFERENCED_BY_CRON_OR_PROCESS')
-          suffixes={'.sh','.py','.yml','.yaml','.json','.service','.conf','.md'}
+          suffixes={'.py','.sh','.yml','.yaml','.json','.toml','.ini','.conf','.service','.txt'}
           scanned=0
           references=[]
-          for root in (ops,factory/'private/autonomous-product-cycle'):
+          for root in (ops,factory/'django-app'):
               if not root.is_dir() or root.is_symlink():
                   continue
               for walk,dirs,names in os.walk(root,followlinks=False):
                   base=Path(walk)
-                  dirs[:]=[name for name in dirs if not (base/name).is_symlink() and (base/name).resolve()!=candidate.resolve()]
+                  dirs[:]=[name for name in dirs if not (base/name).is_symlink()
+                           and not name.endswith(('.git','.venv'))
+                           and (base/name).resolve()!=candidate.resolve()]
                   for name in names:
                       p=base/name
                       if p.is_symlink() or p.suffix.lower() not in suffixes:
@@ -143,8 +145,6 @@ jobs:
                       scanned+=1
                       if marker in data or str(candidate) in data:
                           references.append(str(p))
-                      if scanned>25000:
-                          raise SystemExit('REFERENCE_SCAN_BOUND_REACHED')
           if references:
               raise SystemExit('SOURCE_CANDIDATE_TEXT_REFERENCES='+json.dumps(references[:20]))
           total=sum(p.stat().st_size for p in entries)
