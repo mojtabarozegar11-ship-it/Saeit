@@ -101,5 +101,44 @@ class SafeJsonBoundedTests(unittest.TestCase):
                 author.safe_json(path, max_bytes=6)
 
 
+    def test_symlinked_ancestor_directory_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "source.json").write_text('{"secret": true}', encoding="utf-8")
+            (root / "linked").symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, "MISSING_OR_UNSAFE_JSON"):
+                author.safe_json(root / "linked" / "source.json")
+
+    def test_ancestor_swap_after_dirfd_open_reads_pinned_original_only(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            parent = root / "parent"
+            moved = root / "parent-original"
+            outside = root / "outside"
+            parent.mkdir()
+            outside.mkdir()
+            (parent / "source.json").write_text('{"safe": true}', encoding="utf-8")
+            (outside / "source.json").write_text('{"secret": true}', encoding="utf-8")
+            actual_open = os.open
+            swapped = False
+
+            def swap_after_parent_open(candidate, flags, *args, **kwargs):
+                nonlocal swapped
+                if candidate == "source.json" and not swapped:
+                    swapped = True
+                    parent.rename(moved)
+                    parent.symlink_to(outside, target_is_directory=True)
+                return actual_open(candidate, flags, *args, **kwargs)
+
+            with mock.patch.object(os, "open", swap_after_parent_open):
+                result = author.safe_json(parent / "source.json")
+            self.assertTrue(swapped)
+            self.assertEqual(result, {"safe": True})
+            self.assertEqual((outside / "source.json").read_text(encoding="utf-8"),
+                             '{"secret": true}')
+
+
 if __name__ == "__main__":
     unittest.main()
