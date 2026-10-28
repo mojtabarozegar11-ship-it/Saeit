@@ -7,6 +7,7 @@ The private master runner is permanently capped at one step per cycle.
 import argparse
 import json
 import os
+import stat
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
@@ -20,8 +21,15 @@ def evaluate(db_path: Path, state_path: Path):
         raise RuntimeError("MASTER_PRIVATE_DB_NOT_FOUND")
     if state_path.exists() and state_path.is_symlink():
         raise RuntimeError("MASTER_EVOLUTION_STATE_SYMLINK")
-    state_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(state_path.parent, 0o700)
+    # Never chmod an existing shared directory: a failed policy check must not
+    # change permissions of unrelated private or operational files.
+    parent = state_path.parent
+    if parent.is_symlink():
+        raise RuntimeError("MASTER_EVOLUTION_STATE_PARENT_SYMLINK")
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    parent_mode = parent.stat().st_mode
+    if not stat.S_ISDIR(parent_mode) or stat.S_IMODE(parent_mode) & 0o077:
+        raise RuntimeError("MASTER_EVOLUTION_STATE_DIR_NOT_PRIVATE")
     with sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True, timeout=12) as db:
         db.execute("PRAGMA query_only=ON")
         row = db.execute("SELECT id FROM core_agent WHERE code=? AND active=1 LIMIT 1",
