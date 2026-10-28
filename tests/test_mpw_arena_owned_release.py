@@ -121,6 +121,9 @@ class GuardedArenaPublicationTests(unittest.TestCase):
         self.assertIn('<script type="application/ld+json">', content)
         self.assertIn('"isAccessibleForFree":true', content)
         self.assertIn("clip-path:inset(50%)", content)
+        self.assertIn(".header-right nav{display:flex;order:2", content)
+        self.assertIn("scroll-margin-top:120px", content)
+        self.assertNotIn(".header-right nav{display:none}", content)
         self.assertNotIn("left:-9999px", content)
         self.assertIn('id="age-gate"', content)
 
