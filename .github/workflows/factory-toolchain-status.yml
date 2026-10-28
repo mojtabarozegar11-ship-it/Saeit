@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths: ['.github/workflows/factory-toolchain-status.yml']
+  pull_request:
+    paths: ['.github/workflows/factory-toolchain-status.yml']
   workflow_dispatch:
 permissions:
   contents: read
