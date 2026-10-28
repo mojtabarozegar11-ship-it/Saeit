@@ -44,7 +44,7 @@ assert receipt.stat().st_mode & 0o777 == 0o600
 credentials=receipt.read_text()
 username=re.search(r'^Username: (.+)$',credentials,re.M).group(1)
 previous=re.search(r'^Initial password: (.+)$',credentials,re.M).group(1)
-assert username=='ZomorodOwner' and len(previous)>=40
+assert username=='09175814408' and len(previous)>=40
 assert previous not in initial
 csrf=re.search(r'name="csrf" value="([0-9a-f]{64})"',initial)
 assert csrf
