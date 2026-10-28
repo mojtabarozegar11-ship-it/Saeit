@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
       - name: Bounded read-only VPS mount attribution without private filenames
         shell: bash
         env:
@@ -233,3 +234,6 @@ jobs:
           }
           print("VPS_MOUNT_ATTRIBUTION=" + json.dumps(result, sort_keys=True))
           PY
+          # Independent existing read-only leech capacity and manuscript count probe.
+          # Does not launch a model, write a manuscript, or alter cron/single-writer lock.
+          timeout 25s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' < scripts/factory_leech_vps_capacity_probe_20261025.py
