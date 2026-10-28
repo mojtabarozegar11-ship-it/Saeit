@@ -179,7 +179,7 @@ jobs:
           if endpoint!="/mojtaba.roozegar/social-command/courses/":
               raise RuntimeError("Course gallery not publicly mounted")
           page=c.get(endpoint,secure=True)
-          if page.status_code!=200 or page.content.count(b'mpw-course-card')!=5:
+          if page.status_code!=200 or page.content.count(b'<article class="mpw-course-card"')!=4:
               # class selector is present in style once, plus four cards.
               raise RuntimeError("Expected four distinct public course cards missing")
           if "ثبت‌نام و پرداخت در این صفحه فعال نیست".encode() not in page.content:
@@ -195,9 +195,9 @@ jobs:
               except Exception as err: raise RuntimeError("Course artwork invalid XML") from err
               print("PERSONAL_COURSE_POSTER_DJANGO=PASS",course["slug"],flush=True)
           home=c.get("/mojtaba.roozegar/",secure=True)
-          if home.status_code!=200 or home.content.count(ID.encode())!=1:
+          if home.status_code!=200 or home.content.count(('<section id="'+ID+'"').encode())!=1:
               raise RuntimeError("Four poster home section missing")
-          if home.content.count(b'mpw-course-home-card')!=5:
+          if home.content.count(b'<article class="mpw-course-home-card"')!=4:
               raise RuntimeError("Four poster homepage cards missing")
           social=c.get("/mojtaba.roozegar/social-command/",secure=True)
           if social.status_code not in (302,403):
@@ -228,7 +228,7 @@ jobs:
                           if r.status!=200:raise RuntimeError("Non-200")
                       if kind=="home" and b'mpw-four-course-posters-20261028' not in blob:
                           raise RuntimeError("Personal home posters missing")
-                      if kind=="courses" and blob.count(b'mpw-course-card')<4:
+                      if kind=="courses" and blob.count(b'<article class="mpw-course-card"')!=4:
                           raise RuntimeError("Four course list cards missing")
                       if kind=="svg":ET.fromstring(blob)
                   except Exception as exc:
