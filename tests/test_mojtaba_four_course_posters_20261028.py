@@ -1,4 +1,4 @@
-"""Public Persian education SVGs and isolated homepage additive injection, offline regression."""
+"""English-only education SVGs, home section translation and isolated homepage injection, offline regression."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -53,6 +53,9 @@ class OriginalPostersTests(unittest.TestCase):
                 self.assertEqual(result.status_code,200)
                 self.assertTrue(result["Content-Type"].startswith("image/svg+xml"))
                 self.assertIn("sandbox",result["Content-Security-Policy"])
+                self.assertIsNone(__import__("re").search(r"[\u0600-\u06ff]",xml))
+                self.assertIn('direction="ltr"',xml)
+                self.assertIn("MOJTABA ROOZEGAR",xml)
         self.assertEqual(poster(RequestFactory().get("/nope"),"fake").status_code,404)
 
     @unittest.skipUnless(DJANGO_AVAILABLE,"Django not installed in offline test runner")
@@ -60,12 +63,13 @@ class OriginalPostersTests(unittest.TestCase):
         resp=gallery(RequestFactory().get("/courses/"))
         html=resp.content.decode("utf-8")
         self.assertEqual(resp.status_code,200)
-        self.assertIn('lang="fa" dir="rtl"',html)
+        self.assertIn('lang="en" dir="ltr"',html)
         self.assertIn("width=device-width",html)
-        self.assertIn("ثبت‌نام و پرداخت در این صفحه فعال نیست",html)
-        self.assertIn("هیچ تضمین درآمدی",html)
+        self.assertIn("Enrollment and payments are not open",html)
+        self.assertIn("No earnings or financial results are guaranteed",html)
         self.assertNotIn("dr.mojtaba.rozegar",html)
-        self.assertNotIn("پرداخت آنلاین",html)
+        self.assertNotIn("Buy now",html)
+        self.assertIsNone(__import__("re").search(r"[\u0600-\u06ff]",html))
         self.assertEqual(html.count('<article class="mpw-course-card"'),4)
         for c in COURSES:
             self.assertIn(c["title"],html)
@@ -132,6 +136,39 @@ class HomepageInstallationTests(unittest.TestCase):
         HOME.install(self.app,self.bak,"123456799")
         self.target.write_text(self.target.read_text()+"\n<!-- legitimate later edit -->")
         with self.assertRaises(RuntimeError):HOME.rollback(self.app,self.bak,"123456799")
+
+    def test_upgrade_existing_four_course_section_to_english_and_restore_exactly(self):
+        old_markup=HOME.section_html().replace('dir="ltr" lang="en"','dir="rtl" lang="fa"')
+        old_markup=old_markup.replace("Four Courses to Build Practical Skills","OLD LANGUAGE SECTION")
+        prior=(self.original.replace("{% endblock %}",old_markup+"\n{% endblock %}"))
+        self.target.write_text(prior,encoding="utf-8")
+        info=HOME.check_english(self.app)
+        self.assertEqual(info["status"],"ready_english")
+        done=HOME.upgrade_english(self.app,self.bak,"123456889")
+        self.assertEqual(done["status"],"english_installed")
+        rendered=self.target.read_text(encoding="utf-8")
+        self.assertEqual(rendered.count(HOME.MARKER),1)
+        self.assertIn('dir="ltr" lang="en"',rendered)
+        self.assertIn("Four Courses to Build Practical Skills",rendered)
+        self.assertNotIn("OLD LANGUAGE SECTION",rendered)
+        self.assertIn("existing-biography",rendered)
+        self.assertIn("existing-research",rendered)
+        self.assertEqual(HOME.check_english(self.app)["status"],"already_english")
+        self.assertIsNone(__import__("re").search(r"[\u0600-\u06ff]",HOME.section_html()))
+        self.assertEqual(HOME.rollback_english(self.app,self.bak,"123456889")["status"],"original_home_restored")
+        self.assertEqual(self.target.read_text(encoding="utf-8"),prior)
+
+    def test_upgrade_refuses_changed_card_count_and_post_upgrade_rollback_tamper(self):
+        old=HOME.section_html()
+        invalid=old.replace('<article class="mpw-course-home-card">','',1)
+        self.target.write_text(self.original.replace("{% endblock %}",invalid+"{% endblock %}"))
+        with self.assertRaises(RuntimeError):
+            HOME.check_english(self.app)
+        self.target.write_text(self.original.replace("{% endblock %}",old.replace('lang="en"','lang="fa"')+"{% endblock %}"))
+        HOME.upgrade_english(self.app,self.bak,"123456890")
+        self.target.write_text(self.target.read_text()+"\n<!--later legitimate change-->")
+        with self.assertRaises(RuntimeError):
+            HOME.rollback_english(self.app,self.bak,"123456890")
 
     def test_nonapproved_root_rejected_outside_test_mode(self):
         os.environ.pop("MPW_COURSE_POSTERS_TEST",None)
