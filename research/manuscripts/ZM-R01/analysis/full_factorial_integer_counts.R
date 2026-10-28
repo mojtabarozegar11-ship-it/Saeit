@@ -1,19 +1,20 @@
 #!/usr/bin/env Rscript
 # GSE294406: prespecified 2x2x2 integer-count interaction analysis.
 # INPUTS MUST BE RAW UNNORMALIZED INTEGER GENE COUNTS, NOT FPKM/TPM.
-# Usage: Rscript full_factorial_integer_counts.R counts.tsv manifest.csv independent_units.csv provenance.json output_dir refseq_v2.fasta matching_annotation.gtf
+# Usage: Rscript full_factorial_integer_counts.R counts.tsv manifest.csv independent_units.csv provenance.json output_dir refseq_v2.fasta matching_annotation.gtf 48_fastq_manifest.tsv
 # FAIL-CLOSED: this unblocked DESeq2 design is forbidden without source-verified
 # raw-count provenance and 24 independently assigned chambers. Shared-chamber
 # designs require a different prespecified, cluster-aware analysis.
 suppressPackageStartupMessages(library(DESeq2))
 args <- commandArgs(trailingOnly=TRUE)
-if (length(args) != 7L)
-  stop("Usage: Rscript full_factorial_integer_counts.R counts.tsv manifest.csv independent_units.csv provenance.json output_dir refseq_v2.fasta matching_annotation.gtf")
+if (length(args) != 8L)
+  stop("Usage: Rscript full_factorial_integer_counts.R counts.tsv manifest.csv independent_units.csv provenance.json output_dir refseq_v2.fasta matching_annotation.gtf 48_fastq_manifest.tsv")
 counts_file <- args[[1L]]; manifest_file <- args[[2L]]
 units_file <- args[[3L]]; provenance_file <- args[[4L]]; outdir <- args[[5L]]
 reference_file <- args[[6L]]; annotation_file <- args[[7L]]
+fastq_manifest_file <- args[[8L]]
 if (!all(file.exists(c(counts_file, manifest_file, units_file, provenance_file,
-                       reference_file, annotation_file))))
+                       reference_file, annotation_file, fastq_manifest_file))))
   stop("Missing counts, manifest, unit evidence, provenance, reference FASTA or matching annotation GTF; NO DESeq2")
 if (!requireNamespace("digest", quietly=TRUE) || !requireNamespace("jsonlite", quietly=TRUE))
   stop("digest and jsonlite required for source integrity checks")
@@ -48,7 +49,7 @@ needed_true <- c("raw_unnormalized_gene_counts", "all_24_fastq_md5_recomputed_fr
 if (any(!vapply(needed_true, function(k) identical(prov[[k]], TRUE), logical(1))))
   stop("Missing positive primary-data/reference/multimapping provenance; NO DESeq2")
 for (k in c("counts_sha256", "unit_evidence_sha256", "reference_fasta_sha256",
-            "annotation_gtf_sha256")) {
+            "annotation_gtf_sha256", "fastq_manifest_sha256")) {
   if (!is.character(prov[[k]]) || length(prov[[k]]) != 1L ||
       !grepl("^[0-9a-f]{64}$", prov[[k]]))
     stop(paste("Missing/invalid source digest", k))
@@ -65,6 +66,42 @@ if (!identical(digest::digest(reference_file, algo="sha256", file=TRUE, serializ
     !identical(digest::digest(annotation_file, algo="sha256", file=TRUE, serialize=FALSE),
                prov$annotation_gtf_sha256))
   stop("Reference FASTA or annotation GTF SHA256 mismatch; NO DESeq2")
+# Do not accept a self-declared all-FASTQ-MD5 flag as proof of real byte verification.
+# The 48 FASTQ files must already be locally available under an independently
+# authorized acquisition; this script NEVER downloads them or uses a VPS.
+# This expensive check runs only after the cheap provenance/reference gates.
+if (!identical(digest::digest(fastq_manifest_file, algo="sha256", file=TRUE, serialize=FALSE),
+               prov$fastq_manifest_sha256))
+  stop("FASTQ manifest SHA256 mismatch; NO DESeq2")
+fq <- read.delim(fastq_manifest_file, check.names=FALSE, stringsAsFactors=FALSE)
+fq_required <- c("SRR", "read", "fastq_path", "ena_md5")
+if (!all(fq_required %in% names(fq)) || nrow(fq) != 48L ||
+    anyNA(fq[, fq_required, drop=FALSE]))
+  stop("Expected 48 nonmissing SRR/read/path/ENA-MD5 records; NO DESeq2")
+fq$SRR <- trimws(as.character(fq$SRR))
+fq$read <- trimws(as.character(fq$read))
+fq$fastq_path <- trimws(as.character(fq$fastq_path))
+fq$ena_md5 <- tolower(trimws(as.character(fq$ena_md5)))
+if (any(!nzchar(fq$SRR)) || any(!nzchar(fq$fastq_path)) ||
+    !setequal(unique(fq$SRR), manifest$SRR) ||
+    any(!fq$read %in% c("R1", "R2")) ||
+    anyDuplicated(paste(fq$SRR, fq$read, sep=":")) ||
+    any(table(factor(fq$SRR, levels=manifest$SRR)) != 2L) ||
+    anyDuplicated(fq$fastq_path) ||
+    any(!grepl("^[0-9a-f]{32}$", fq$ena_md5)) ||
+    !all(file.exists(fq$fastq_path)))
+  stop("FASTQ run/read pairing, paths, ENA MD5 or local bytes invalid; NO DESeq2")
+for (run in manifest$SRR) {
+  if (!setequal(fq$read[fq$SRR == run], c("R1", "R2")))
+    stop("Each SRR must have exactly R1 and R2; NO DESeq2")
+}
+observed_fastq_md5 <- unname(tools::md5sum(fq$fastq_path))
+if (anyNA(observed_fastq_md5) ||
+    !identical(tolower(observed_fastq_md5), fq$ena_md5))
+  stop("One or more FASTQ byte-level MD5 values differ from ENA manifest; NO DESeq2")
+# A match authenticates local bytes against supplied MD5s, not the independent
+# authenticity or release provenance of the supplied ENA metadata.
+
 # Matching file digests do not themselves prove that FASTA/GTF versions are compatible.
 # Source release identifiers, licensing, gene ID namespace and counting policy
 # require independent scientific verification beyond these mechanical checks.
