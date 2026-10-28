@@ -1,4 +1,4 @@
-"""Master capacity changes require diversified, verified executions."""
+"""Master production stays capped at one step despite verified progress."""
 import importlib.util
 import json
 from pathlib import Path
@@ -40,16 +40,27 @@ class EvolutionTests(unittest.TestCase):
             out = json.loads(state.read_text())
             self.assertEqual(out["max_steps"],1)
             self.assertEqual(out["recent_new_verified_action_types"],1)
-            self.assertEqual(out["decision"],"rollback_repeated_or_unverified_completions")
+            self.assertEqual(out["decision"],"hold_single_step_no_verified_diversity")
 
-    def test_diverse_verified_actions_allow_bounded_advance(self):
+    def test_diverse_verified_actions_do_not_expand_production_volume(self):
         with tempfile.TemporaryDirectory() as temp:
             db, state = self.fixture(temp, ["income_market_research","income_opportunity_score"])
             mod.evaluate(db,state)
             out = json.loads(state.read_text())
-            self.assertEqual(out["max_steps"],3)
+            self.assertEqual(out["max_steps"],1)
+            self.assertEqual(out["hard_max_steps_cap"],1)
+            self.assertFalse(out["volume_scaling_enabled"])
             self.assertEqual(out["recent_new_verified_action_types"],2)
-            self.assertEqual(out["decision"],"diverse_verified_actions_expand_bounded_cycle")
+            self.assertEqual(out["decision"],"hold_single_step_after_verified_progress")
+
+    def test_legacy_expanded_state_is_reduced_to_one_step(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, ["income_market_research", "income_opportunity_score"],
+                                     previous_steps=3)
+            mod.evaluate(db, state)
+            out = json.loads(state.read_text())
+            self.assertEqual(out["max_steps"], 1)
+            self.assertEqual(out["decision"], "rollback_to_single_step_volume_cap")
 
     def test_failed_task_rolls_back_even_after_diverse_completions(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -58,7 +69,7 @@ class EvolutionTests(unittest.TestCase):
             mod.evaluate(db,state)
             out = json.loads(state.read_text())
             self.assertEqual(out["max_steps"],1)
-            self.assertEqual(out["decision"],"rollback_to_conservative_after_regression")
+            self.assertEqual(out["decision"],"hold_single_step_after_regression")
 
 
 if __name__ == "__main__":
