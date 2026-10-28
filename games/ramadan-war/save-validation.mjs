@@ -91,6 +91,13 @@ export function validateCampaignSave(s) {
       !integer(s.objective.done, 0, 3) || !finite(s.objective.hold, 0, 100) ||
       typeof s.objective.bossDefeated !== 'boolean')) return false;
   if (s.objective != null) {
+    // New recovery saves explicitly record which unique sites paid out. A
+    // locally edited save must not duplicate collected intel or rewards.
+    const collected=s.objective.collectedSites;
+    if (collected !== undefined && (s.mission!==2 || !Array.isArray(collected) ||
+        collected.length!==s.objective.done || collected.length>3 ||
+        collected.some(i=>!integer(i,0,2)) || new Set(collected).size!==collected.length ||
+        (Array.isArray(s.pickups) && s.pickups.some(p=>p.type==='mission-intel' && collected.includes(p.spotIndex))))) return false;
     // Prevent a locally edited in-progress save from exceeding the current
     // operation's actual site count or marking timed defence complete early.
     const maxDone = [2, 1, 3, 2, 1, 0];
@@ -120,18 +127,40 @@ export function restoreRecoveryPickups(state, sites) {
       state.objective.done>3 || !Array.isArray(state.pickups) ||
       !Array.isArray(sites) || sites.length!==3) return 0;
   const existing=state.pickups.filter(p=>p?.type==='mission-intel');
-  const remaining=3-state.objective.done;
-  let needed=Math.max(0,remaining-existing.length);
-  if (!needed) return 0;
-  const occupied=new Set(existing.map(p=>p.spotIndex));
+  const present=new Set(existing.map(p=>p.spotIndex));
+  if (present.size!==existing.length || [...present].some(i=>!Number.isInteger(i)||i<0||i>2)) return 0;
+  let collected=state.objective.collectedSites;
+  if (!Array.isArray(collected)) {
+    // Legacy saves did not record collected site IDs. Only infer the missing
+    // IDs if all uncollected pickups are still present; otherwise guessing
+    // could re-award an already collected site. New saves carry exact IDs.
+    if (state.objective.done>0 && existing.length+state.objective.done!==3) {
+      // Backward-compatible best-effort repair for old saves with missing
+      // pickups. Never assert unprovable collected IDs as a trusted ledger.
+      let needed=Math.max(0,3-state.objective.done-existing.length),restored=0;
+      for (let i=0;i<sites.length && needed>0;i++) {
+        if (present.has(i)) continue;
+        const site=sites[i];
+        if (!Array.isArray(site)||site.length!==2||
+            !site.every(n=>typeof n==='number'&&Number.isFinite(n)&&n>=0&&n<=16)) continue;
+        state.pickups.push({x:site[0],y:site[1],type:'mission-intel',spotIndex:i,life:3600});
+        needed--;restored++;
+      }
+      return restored;
+    }
+    collected=state.objective.done===0?[]:[0,1,2].filter(i=>!present.has(i));
+    state.objective.collectedSites=collected;
+  }
+  if (collected.length!==state.objective.done || new Set(collected).size!==collected.length ||
+      collected.some(i=>!Number.isInteger(i)||i<0||i>2||present.has(i))) return 0;
   let restored=0;
-  for (let i=0;i<sites.length && needed>0;i++) {
-    if (occupied.has(i)) continue;
+  for (let i=0;i<sites.length;i++) {
+    if (present.has(i)||collected.includes(i)) continue;
     const site=sites[i];
     if (!Array.isArray(site) || site.length!==2 ||
         !site.every(n=>typeof n==='number' && Number.isFinite(n) && n>=0 && n<=16)) continue;
     state.pickups.push({x:site[0],y:site[1],type:'mission-intel',spotIndex:i,life:3600});
-    needed--;restored++;
+    restored++;
   }
   return restored;
 }
