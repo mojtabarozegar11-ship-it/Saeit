@@ -14,6 +14,7 @@ const mode = process.argv[2];
 const index = process.argv.indexOf('--account');
 const account = index >= 0 ? process.argv[index + 1] : 'primary';
 const byPairingCode = process.argv.includes('--pairing-code');
+let phoneNumber = null;
 if (!['login', 'daemon', 'status'].includes(mode) || !['primary', 'secondary'].includes(account) || (byPairingCode && mode !== 'login')) {
   console.error('Usage: node whatsapp.mjs login|daemon|status --account primary|secondary');
   process.exit(2);
@@ -53,7 +54,6 @@ let running = true;
 let sock;
 let attempts = 0;
 let beat;
-let phoneNumber = null;
 const pause = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 process.on('SIGTERM', ()=> {running=false; clearInterval(beat); sock?.end(undefined);});
 process.on('SIGINT', ()=> {running=false; clearInterval(beat); sock?.end(undefined);});
