@@ -54,7 +54,7 @@ jobs:
               raise SystemExit('SOURCE_CANDIDATE_PARENT_MISMATCH')
           if (time.time()-candidate.stat().st_mtime)<7*86400:
               raise SystemExit('SOURCE_CANDIDATE_TOO_NEW')
-          expected_files={'qwen2.5-coder-0.5b-instruct-q4_k_m.gguf','runtime.tar.xz','SHA256SUMS','install.sh','prove.py','metadata.json'}
+          expected_files={'qwen2.5-coder-0.5b-instruct-q4_k_m.gguf','runtime.tar.xz','SHA256SUMS','install.sh','prove.py','link-map.json'}
           entries=list(candidate.iterdir())
           entry_report=[]
           for p in entries:
@@ -62,6 +62,14 @@ jobs:
               except OSError: entry_report.append({'name':p.name,'kind':'unreadable'})
           if any(p.is_symlink() or not p.is_file() for p in entries) or {p.name for p in entries}!=expected_files:
               raise SystemExit('SOURCE_CANDIDATE_CONTENTS_CHANGED='+json.dumps(entry_report,sort_keys=True))
+          link_map=json.loads((candidate/'link-map.json').read_text())
+          if not isinstance(link_map,dict) or not link_map:
+              raise SystemExit('SOURCE_LINK_MAP_INVALID')
+          for name,destination in link_map.items():
+              relative=Path(name)
+              dest=Path(destination)
+              if relative.is_absolute() or '..' in relative.parts or dest.is_absolute() or '..' in dest.parts:
+                  raise SystemExit('SOURCE_LINK_MAP_ESCAPES_PRIVATE_PREFIX')
           checksums={}
           for line in (candidate/'SHA256SUMS').read_text().splitlines():
               digest, name=line.split(None,1)
