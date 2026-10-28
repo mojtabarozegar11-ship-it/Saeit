@@ -1,0 +1,100 @@
+name: One-time public DNS and cPanel hosting diagnosis (read only)
+on:
+  push:
+    branches:
+      - ops/cpanel-factory-scope-20261028
+    paths:
+      - .github/workflows/cpanel-sites-outage-diagnosis-20261028.yml
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Public DNS and HTTPS tests from independent runner
+        shell: bash
+        run: |
+          set -u
+          for domain in zomorodmelal.ir mojplaywin.com; do
+            for resolver in 1.1.1.1 8.8.8.8; do
+              echo "PUBLIC_DNS_START=$domain resolver=$resolver"
+              timeout 8s dig @"$resolver" "$domain" A +time=3 +tries=1 +noall +comments +answer 2>&1 | tail -n 8 || true
+            done
+            echo "PUBLIC_HTTP_START=$domain"
+            curl --connect-timeout 5 --max-time 12 -I -L -sS -o /dev/null -w "PUBLIC_HTTPS=$domain status=%{http_code} ip=%{remote_ip} ssl=%{ssl_verify_result}\n" "https://$domain/" || true
+            echo "ORIGIN_HTTP_START=$domain"
+            curl -k --connect-timeout 5 --max-time 12 -I -sS -o /dev/null -w "ORIGIN_HTTPS=$domain status=%{http_code} ip=%{remote_ip}\n" --resolve "$domain:443:178.239.147.125" "https://$domain/" || true
+          done
+          for ip in 91.99.125.113 178.239.147.71; do
+            echo "AUTHORITATIVE_TEST=$ip"
+            timeout 7s dig @"$ip" zomorodmelal.ir SOA +time=3 +tries=1 +noall +comments +answer 2>&1 | tail -n 8 || true
+          done
+      - name: SSH relay with pinned host fingerprints
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/factory-cpanel-scope"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"" ).replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf 'Host saeit-vps\n  HostName 178.239.147.150\n  User githubops\n  Port 22\n  IdentityFile %s/vps.key\n  UserKnownHostsFile %s/vps.known\nHost saeit-cpanel\n  HostName zohal.pws-dns.net\n  User zomorod2\n  Port 1396\n  IdentityFile %s/host.key\n  UserKnownHostsFile %s/host.known\n  ProxyJump saeit-vps\nHost *\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n  BatchMode yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ForwardAgent no\n  RequestTTY no\n' "$d" "$d" "$d" "$d" > "$d/config"
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Read current cPanel account quota and domains only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-cpanel-scope"
+          timeout 100s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import subprocess,json,re,os,socket
+          def uapi(*args):
+              p=subprocess.run(['uapi','--output=json']+list(args),capture_output=True,text=True,timeout=28)
+              if p.returncode:
+                  return {'cmd':' '.join(args),'exit':p.returncode,'error':'nonzero'}
+              try:return json.loads(p.stdout)
+              except Exception:return {'cmd':' '.join(args),'error':'json_parse'}
+          q=uapi('Quota','get_local_quota_info')
+          result=q.get('result',{})
+          data=result.get('data',{})
+          def compact(x,depth=0):
+              if depth>5:return None
+              if isinstance(x,dict):
+                  return {k:compact(v,depth+1) for k,v in x.items() if re.search(r'quota|limit|used|free|disk|mb|bytes|usage|percent|total|available|space',k,re.I)}
+              if isinstance(x,list):return [compact(v,depth+1) for v in x[:15]]
+              if isinstance(x,(int,float)):return x
+              if isinstance(x,str) and re.fullmatch(r'[0-9., %MGKiB]+',x):return x
+              return None
+          print('CPANEL_QUOTA='+json.dumps({'status':result.get('status'),'data':compact(data),'errors':result.get('errors')},sort_keys=True))
+          d=uapi('DomainInfo','list_domains')
+          r=d.get('result',{})
+          raw=r.get('data',{})
+          values=[]
+          def find(x,path=''):
+              if isinstance(x,dict):
+                  for k,v in x.items():find(v,k)
+              elif isinstance(x,list):
+                  for v in x:find(v,path)
+              elif isinstance(x,str) and x in ('zomorodmelal.ir','mojplaywin.com'):
+                  values.append(x)
+          find(raw)
+          print('CPANEL_DOMAINS='+json.dumps({'status':r.get('status'),'domains_present':sorted(set(values)),'hostname':socket.gethostname()},sort_keys=True))
+          PY
+      - name: Clear ephemeral SSH keys
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/factory-cpanel-scope"
+          if [ -d "$d" ]; then rm -f -- "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"; rmdir "$d" || true; fi
