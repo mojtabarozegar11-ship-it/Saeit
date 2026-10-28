@@ -283,7 +283,7 @@ jobs:
                      "older_archive_log_bytes": 0, "older_archive_log_is_safe_to_delete": False,
                      "largest_groups_anonymous": [], "scan_seconds": None,
                      "hardlink_duplicates_skipped": 0, "scan_errors": 0,
-                     "accounting_consistent": False}
+                     "accounting_consistent": False, "scan_truncated": False}
               if root.is_symlink() or not root.is_dir():
                   return out
               started = time.monotonic()
@@ -300,6 +300,7 @@ jobs:
                   for base, dirs, files in os.walk(root, topdown=True, followlinks=False,
                                                   onerror=on_walk_error):
                       if time.monotonic() - started > 18 or out["files_scanned"] >= 120000:
+                          out["scan_truncated"] = True
                           break
                       here = Path(base)
                       if here.is_symlink() or here.stat().st_dev != device:
@@ -317,6 +318,7 @@ jobs:
                       out["dirs_scanned"] += 1
                       for filename in files:
                           if time.monotonic() - started > 18 or out["files_scanned"] >= 120000:
+                              out["scan_truncated"] = True
                               break
                           candidate = here / filename
                           try:
@@ -366,8 +368,10 @@ jobs:
                           except (OSError, ValueError):
                               out["scan_errors"] += 1
                               continue
+                      if out["scan_truncated"]:
+                          break
                   else:
-                      out["complete"] = out["scan_errors"] == 0
+                      out["complete"] = out["scan_errors"] == 0 and not out["scan_truncated"]
               except (OSError, ValueError):
                   out["scan_errors"] += 1
               out["accounting_consistent"] = (
@@ -425,7 +429,12 @@ jobs:
 
           # Screening is deliberately not a deletion plan. No backup/rollback
           # provenance is proven by this read-only workflow.
-          reserve_gap_bytes = max(0, 5 * 1024**3 - disk.free)
+          # Use the lowest of the start/end free-space observations: an active
+          # factory can grow while this bounded scan runs. Never authorize
+          # recovery or worker restart from a stale optimistic measurement.
+          disk_end = shutil.disk_usage(home)
+          conservative_free = min(disk.free, disk_end.free)
+          reserve_gap_bytes = max(0, 5 * 1024**3 - conservative_free)
           aged_screening_bytes = operations_inventory["older_archive_log_bytes"]
           recovery_screening_insufficient = aged_screening_bytes < reserve_gap_bytes
           result = {
@@ -438,10 +447,12 @@ jobs:
               "worker_restart_authorized": False,
               "observed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
               "mount_total_bytes": disk.total,
-              "mount_used_bytes": disk.used,
-              "mount_free_bytes": disk.free,
-              "reserve_2048_mib_met": disk.free >= 2048 * 1024 * 1024,
-              "reserve_5_gib_met": disk.free >= 5 * 1024**3,
+              "mount_used_bytes": disk_end.used,
+              "mount_free_bytes": disk_end.free,
+              "mount_free_bytes_at_start": disk.free,
+              "mount_free_bytes_min_observed": conservative_free,
+              "reserve_2048_mib_met": conservative_free >= 2048 * 1024 * 1024,
+              "reserve_5_gib_met": conservative_free >= 5 * 1024**3,
               "root_du_bytes": root_sizes,
               "inode_state": inode_state,
               "bounded_hot_roots": hot_sizes,
@@ -487,6 +498,7 @@ jobs:
           assert data["mutations"] == data["deleted"] == data["backups_touched"] == 0
           inv = data["factory_operations_age_inventory"]
           assert inv["accounting_consistent"] and not inv["older_archive_log_is_safe_to_delete"]
+          assert not (inv["complete"] and inv["scan_truncated"])
           assert inv["older_archive_log_bytes"] <= inv["allocated_bytes_scanned"]
           assert inv["database_header_probe_is_consistency_check"] is False
           assert sum(x["allocated_bytes"] for x in inv["largest_database_files_anonymous"]) <= inv["class_allocated_bytes"].get("database", 0)
@@ -494,7 +506,11 @@ jobs:
           assert all(sum(x["by_class_bytes"].values()) == x["allocated_bytes"] == sum(x["by_age_bytes"].values())
                      for x in inv["largest_groups_anonymous_class_age"])
           assert len(inv["largest_database_files_anonymous"]) <= 8
-          assert data["reserve_5_gib_gap_bytes"] == max(0, 5 * 1024**3 - data["mount_free_bytes"])
+          assert data["mount_free_bytes_min_observed"] == min(
+              data["mount_free_bytes_at_start"], data["mount_free_bytes"])
+          assert data["reserve_5_gib_gap_bytes"] == max(
+              0, 5 * 1024**3 - data["mount_free_bytes_min_observed"])
+          assert data["reserve_5_gib_met"] == (data["mount_free_bytes_min_observed"] >= 5 * 1024**3)
           assert data["aged_archive_log_screening_bytes"] == inv["older_archive_log_bytes"]
           assert data["aged_archive_log_screening_insufficient"] == (inv["older_archive_log_bytes"] < data["reserve_5_gib_gap_bytes"])
           assert data["reversible_cleanup_proven"] is False
