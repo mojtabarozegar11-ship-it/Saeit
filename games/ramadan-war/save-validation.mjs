@@ -1,4 +1,5 @@
 // Fail-closed integrity guard for locally stored Ramadan War campaign state.
+const RECOVERY_SITES = Object.freeze([[4.5, 2.5], [12.5, 4.5], [8.5, 12.5]]);
 // Invalid saves are rejected without altering the original browser storage entry.
 export function validateCampaignSave(s) {
   const finite = (n, min, max) => typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max;
@@ -28,6 +29,11 @@ export function validateCampaignSave(s) {
     (e.boss === undefined || typeof e.boss === 'boolean') &&
     (e.route == null || (Array.isArray(e.route) && e.route.length === 2 && e.route.every(n => finite(n, 0, 16))))
   )) return false;
+  // A forged or duplicated boss can trigger false stage rewards or corrupt the
+  // encounter. Only the final operation spawns a single flagged boss.
+  const bosses = s.enemies.filter(e => e.boss === true);
+  if (bosses.length > 1 || (bosses.length === 1 &&
+      (s.mission !== 5 || bosses[0].type !== 3 || s.objective?.bossDefeated === true))) return false;
   // Untrusted runtime effects/counters are consumed by tick() and the WebGL renderer.
   // A malformed impacts object crashes Array.filter(), and NaN combo/shot counts
   // poison score or HUD state. Preserve legacy saves with absent optional fields.
@@ -66,13 +72,16 @@ export function validateCampaignSave(s) {
       finite(e.vx, -50, 50) && finite(e.vy, -50, 50) &&
       (e.targetId === undefined || integer(e.targetId, -1, 29)))) return false;
   if (!group(s.pickups, 60, e => point(e, 0, 16) && finite(e.life, -10, 4000) &&
-    ['ammo', 'health', 'intel', 'mission-intel'].includes(e.type))) return false;
+    ['ammo', 'health', 'intel', 'mission-intel'].includes(e.type) &&
+    (e.type !== 'mission-intel' || (integer(e.spotIndex, 0, 2) &&
+      Math.abs(e.x - RECOVERY_SITES[e.spotIndex][0]) < 0.001 &&
+      Math.abs(e.y - RECOVERY_SITES[e.spotIndex][1]) < 0.001)))) return false;
   // Recovery pickups must be unique, stage-local and bounded by unfinished objectives.
   // Without this, a modified save can duplicate mission rewards or corrupt stage progress.
   if (Array.isArray(s.pickups)) {
     const intel=s.pickups.filter(p=>p.type==='mission-intel');
     const done=s.objective?.done ?? 0;
-    if (intel.length && (s.mission!==2 || !integer(done,0,3) ||
+    if (intel.length && (s.mission!==2 || !s.objective || !integer(done,0,3) ||
         intel.some(p=>!integer(p.spotIndex,0,2)) ||
         new Set(intel.map(p=>p.spotIndex)).size!==intel.length ||
         intel.length>3-done)) return false;
@@ -125,10 +134,15 @@ export function restoreRecoveryPickups(state, sites) {
   if (!state || state.mission!==2 || !state.objective ||
       !Number.isInteger(state.objective.done) || state.objective.done<0 ||
       state.objective.done>3 || !Array.isArray(state.pickups) ||
-      !Array.isArray(sites) || sites.length!==3) return 0;
+      !Array.isArray(sites) || sites.length!==3 ||
+      !sites.every(site=>Array.isArray(site)&&site.length===2&&
+        site.every(n=>Number.isFinite(n)&&n>=0&&n<=16))) return 0;
   const existing=state.pickups.filter(p=>p?.type==='mission-intel');
   const present=new Set(existing.map(p=>p.spotIndex));
-  if (present.size!==existing.length || [...present].some(i=>!Number.isInteger(i)||i<0||i>2)) return 0;
+  if (present.size!==existing.length || [...present].some(i=>!Number.isInteger(i)||i<0||i>2) ||
+      existing.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||
+        Math.abs(p.x-sites[p.spotIndex]?.[0])>=0.001 ||
+        Math.abs(p.y-sites[p.spotIndex]?.[1])>=0.001)) return 0;
   let collected=state.objective.collectedSites;
   if (!Array.isArray(collected)) {
     // Legacy saves did not record collected site IDs. Only infer the missing
