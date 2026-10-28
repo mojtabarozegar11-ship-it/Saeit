@@ -92,6 +92,7 @@ def _api(request):
                 "applicant_followups": True, "report_export": True,
                 "public_report_integrity": True,
                 "manual_ai_review": True, "model_api_enabled": False,
+                "idempotent_intake": True,
                 "independent_certification_enabled": False,
                 "staff": bool(request.user.is_authenticated and request.user.is_staff),
             })
