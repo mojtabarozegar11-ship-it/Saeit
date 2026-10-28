@@ -253,7 +253,7 @@
     document.body.append(anchor);anchor.click();anchor.remove();
     setTimeout(()=>URL.revokeObjectURL(url),3000);
   }
-  function downloadReviewPacket(details) {
+  function reviewPacketData(details) {
     if(!details.ai_processing_consent)throw Error("Applicant AI consent is required");
     const criteria=Object.fromEntries(rubric[details.category].map(([key])=>[key,{score:null,evidence:""}]));
     const packet={
@@ -261,7 +261,7 @@
       case_id:details.case_id,
       evidence_fingerprint:details.evidence_fingerprint,
       category:details.category,product_name:details.product_name,
-      product_version:details.product_version,product_url:details.product_url,
+      product_version:details.product_version,product_url:"",
       scope:details.scope,evidence_summary:details.evidence_summary,
       files:details.files.map(f=>({name:f.original_name,size:f.size,sha256:f.sha256})),
       ai_processing_consent:true,
@@ -270,7 +270,7 @@
         "Ask for additional evidence instead of inventing observations or test results.",
         "Use all eight applicable criteria with integer scores 0-5 and evidence-specific notes.",
         "Clearly disclose AYAR/MojPlayWin affiliation and limits; never claim independent human certification.",
-        "Exclude contact details, personal access keys and unrelated customer records."
+        "Exclude contact details, personal access keys, potentially sensitive URLs and unrelated customer records."
       ],
       expected_review:{
         case_id:details.case_id,review_mode:"ai_assisted",
@@ -280,10 +280,32 @@
         criteria,evidence_examined:false,no_material_conflict:false,publish_report:false
       }
     };
+    return packet;
+  }
+  function downloadReviewPacket(details) {
+    const packet=reviewPacketData(details);
     const blob=new Blob([JSON.stringify(packet,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob),a=document.createElement("a");
     a.href=url;a.download="AYAR-"+details.case_id+"-AI-review-packet.json";
     document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
+  }
+
+  async function copyReviewPacket(details, panel) {
+    const content=JSON.stringify(reviewPacketData(details),null,2);
+    try {
+      if(!navigator.clipboard?.writeText)throw Error("Clipboard is unavailable");
+      await navigator.clipboard.writeText(content);
+      message("Review brief copied locally. Inspect it before sharing in a private authorized analysis session; uploaded file contents are not included.","success");
+    }catch(error){
+      document.getElementById("ayaarCopyFallback")?.remove();
+      const area=h("div","","a-paper");area.id="ayaarCopyFallback";
+      const label=h("label","Clipboard access is unavailable. Select and copy this sanitized packet manually.");
+      const field=h("textarea");field.readOnly=true;field.value=content;field.rows=12;
+      field.style.width="100%";field.style.minHeight="210px";
+      area.append(label,field);
+      panel.append(area);field.focus();field.select();
+      message("Automatic copying was not permitted. The text is selected for manual copying.","");
+    }
   }
   function addApplicantFollowup(target,details) {
     if(target.id!=="casePanel" || details.status!=="needs_information")return;
@@ -347,7 +369,9 @@
       packet.type="button";packet.addEventListener("click",()=>{
         try{downloadReviewPacket(details);}catch(error){message(error.message,"error");}
       });
-      target.append(packet,h("p","The packet contains case evidence descriptions and hashes, not private uploaded files or your access key. Share source files separately only when authorized.","a-small"));
+      const copy=h("button","Copy review brief to clipboard","a-button a-button-secondary");
+      copy.type="button";copy.addEventListener("click",()=>copyReviewPacket(details,target).catch(error=>message(error.message,"error")));
+      target.append(packet,copy,h("p","The copyable packet excludes contact details, private access keys and product URLs; inspect filenames and other text before sharing. Send actual evidence only with authorization.","a-small"));
     }
     if(details.review){
       renderReport(target,details.review);
@@ -513,7 +537,9 @@
       pack.type="button";pack.addEventListener("click",()=>{
         try{downloadReviewPacket(details);}catch(error){message(error.message,"error");}
       });
-      panel.append(pack,h("p","The packet excludes the applicant email and access key; source evidence must be examined separately with the applicant's consent.","a-small"));
+      const copy=h("button","Copy AI review brief to clipboard","a-button a-button-secondary");
+      copy.type="button";copy.addEventListener("click",()=>copyReviewPacket(details,panel).catch(error=>message(error.message,"error")));
+      panel.append(pack,copy,h("p","The packet excludes email, access keys and product URLs. Inspect titles, filenames and scope for sensitive information before sharing; source evidence must be examined separately with consent.","a-small"));
     }else{
       panel.append(h("p","AI review is blocked until the applicant explicitly authorizes processing in private case tracking.","a-small"));
     }
