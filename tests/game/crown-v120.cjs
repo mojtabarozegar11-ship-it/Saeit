@@ -74,8 +74,29 @@ const document={getElementById(id){assert.ok(elements[id],'real element '+id);re
 const sandbox={document,HTMLElement:Element,console,Math,Date,Set,JSON,Number,Object,String,Array,Promise,AbortController,setTimeout,clearTimeout,URL,
  localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},navigator:{hardwareConcurrency:4,getGamepads:()=>[]},matchMedia:()=>({matches:false}),requestAnimationFrame:f=>frame=f,location:{href:''},fetch:async()=>{if(fetchMode==='offline')throw Error('offline');if(fetchMode==='checkout')return {ok:true,headers:{get:()=> 'application/json'},json:async()=>({game:'crown-defender',version:1,authenticated:true,owned:[],items:[{sku:'cd-spectre',currency:'USD',price:'4.00',available:true,checkout:'/store/crown/999/checkout/'}]})};return {ok:true,headers:{get:()=> 'application/json'},json:async()=>({game:'crown-defender',version:1,authenticated:true,owned:['cd-spectre'],items:[{sku:'cd-spectre',currency:'USD',price:'4.00',available:true,checkout:'/store/product/999/checkout/'}]})}}};sandbox.window=sandbox;sandbox.addEventListener=()=>{};vm.createContext(sandbox);vm.runInContext(code,sandbox);const game=sandbox.__mpwCrownDefenderTest;
 
+// Menu keys are native page input, never latent gameplay movement/fire.
+let menuPrevented=false;
+document.handlers.keydown({code:'KeyW',target:document.body,repeat:false,preventDefault(){menuPrevented=true}});
+document.handlers.keydown({code:'Space',target:document.body,repeat:false,preventDefault(){menuPrevented=true}});
+assert.equal(game.getInput().keys,0,'menu key presses must not latch gameplay input');
+assert.equal(menuPrevented,false,'menu Space must retain native browser behavior');
 elements.leaders.handlers.click();assert.match(elements.overlayText.textContent,/Achievements: 2\/15/,'only two valid unique achievements count');const records=elements.leaderList.children[0].children;assert.equal(records.length,2,'malformed score, mode and wave records must be discarded');assert.match(records[0].textContent,/42.*campaign.*wave 2/);assert.match(records[1].textContent,/100.*endless.*wave 3/);
 assert.equal(game.getState().version,121);assert.equal(game.getState().activeJet,'falcon','local forged premium ignored');game.start();assert.equal(game.getState().bank,0,'nonfinite credits must not become maximum credits');assert.equal(game.getState().best,0,'nonfinite best must not become maximum score');assert.equal(game.getState().sector,1,'nonfinite unlocked sector must not skip campaign');assert.equal(game.getState().upgrades.armor,0,'nonfinite saved armor must not boost player');assert.equal(game.getState().hp,100);
+// Keyboard focus on a button, textarea or editable region must not
+// trigger combat or preserve movement held before focus changed.
+document.handlers.keydown({code:'KeyW',target:document.body,repeat:false,preventDefault(){}});
+assert.equal(game.getInput().keys,1);
+let focusedPrevented=false;
+document.handlers.keydown({code:'Space',target:elements.fire,repeat:false,
+  preventDefault(){focusedPrevented=true}});
+assert.equal(game.getInput().keys,0,'focused fire button releases held movement');
+assert.equal(focusedPrevented,false,'native button Space activation is preserved');
+const textEditor=new Element('TEXTAREA');
+document.handlers.keydown({code:'KeyE',target:textEditor,repeat:false,preventDefault(){}});
+assert.equal(game.getInput().keys,0,'typing in textarea must not trigger combat');
+const editable=new Element('DIV');editable.isContentEditable=true;
+document.handlers.keydown({code:'KeyQ',target:editable,repeat:false,preventDefault(){}});
+assert.equal(game.getInput().keys,0,'contenteditable input must not trigger abilities');
 // Actual registered pointer handlers: secondary touches must not steal or
 // release an active drag or fire control. Pointer-capture failure is harmless.
 const pointerEvent=id=>({pointerId:id,clientX:270,clientY:480,preventDefault(){}});
@@ -111,6 +132,16 @@ for(const patch of [{ctrlKey:true},{altKey:true},{metaKey:true},{isComposing:tru
   assert.equal(prevented,false,'modified/composing shortcut must remain native');
   assert.equal(game.getInput().keys,0,'modified/composing shortcut cannot latch game key');
 }
+// Regression: an already-held key must not survive a browser shortcut or IME.
+// Before this fix, Ctrl+W left the ship moving if the browser swallowed keyup.
+document.handlers.keydown({code:'KeyW',target:document.body,repeat:false,preventDefault(){}});
+assert.equal(game.getInput().keys,1);
+document.handlers.keydown({code:'ControlLeft',target:document.body,ctrlKey:true,repeat:false,preventDefault(){}});
+assert.equal(game.getInput().keys,0,'Ctrl shortcut releases previously held movement');
+document.handlers.keydown({code:'Space',target:document.body,repeat:false,preventDefault(){}});
+assert.equal(game.getInput().keys,1);
+document.handlers.compositionstart();
+assert.equal(game.getInput().keys,0,'IME start releases previously held firing');
 document.handlers.keydown({code:'ArrowLeft',target:document.body,repeat:false,preventDefault(){}});assert.equal(game.getInput().keys,1);
 document.hidden=true;document.handlers.visibilitychange();assert.equal(game.getState().state,'paused');assert.equal(game.getInput().touchActive,false,'background tab releases ship pointer');assert.equal(game.getInput().held.left,false,'background tab releases directional owner');assert.equal(game.getInput().keys,0,'hidden tab releases keyboard input');assert.equal(Object.values(game.getInput().held).some(Boolean),false);document.hidden=false;game.pause();assert.equal(game.getState().state,'playing');
 game.pause();assert.equal(game.getState().state,'paused');game.start();frame(2980);assert.ok(Math.abs(game.getState().simulationTime-.1)<1e-6,'100 ms hitch advances simulation consistently');game.spawnBoss();const beforeBossContact=game.getState().enemies;game.testBossContact();assert.equal(game.getState().enemies,beforeBossContact,'boss must survive contact');game.advanceWave();game.advanceWave();assert.equal(game.getState().state,'playing','waves must not force shop interruption');game.start();for(let i=0;i<8;i++)game.spawnEnemy();assert.doesNotThrow(()=>game.useEMP(),'EMP finishing a wave must tolerate cleared enemy arrays');assert.equal(game.getState().wave,2);
