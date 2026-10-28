@@ -27,6 +27,7 @@ jobs:
           cd ops/messaging-bridge
           python3 -B -m unittest discover -s tests -v
           node --check whatsapp.mjs
+          node tests/test_whatsapp_flow.mjs
           bash -n install.sh control.sh
           cd ../..
           git ls-files -s ops/messaging-bridge | awk '$1 != "100644" && $1 != "100755" {bad=1} END {exit bad}'
