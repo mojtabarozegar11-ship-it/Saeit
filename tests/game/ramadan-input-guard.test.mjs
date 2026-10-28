@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, shouldReleaseHeldKeysOnFocus, normalizeMovementAxes, recordPointerGestureMovement, shouldFireCanvasClick} from '../../games/ramadan-war/input-guard.mjs';
+import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, shouldReleaseHeldKeysOnFocus, isFireHeld, normalizeMovementAxes, recordPointerGestureMovement, shouldFireCanvasClick} from '../../games/ramadan-war/input-guard.mjs';
 
 const arena = {closest: () => null};
 const menuButton = {closest: selector => selector.includes('button') ? {} : null};
@@ -37,7 +37,7 @@ test('HUD focus releases held keyboard movement and fire without cancelling touc
   assert.equal(shouldReleaseHeldKeysOnFocus('home',menuButton),false);
   assert.equal(shouldReleaseHeldKeysOnFocus('pausePanel',menuButton),false);
   const game=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
-  assert.ok(game.includes("document.addEventListener('focusin',e=>{if(shouldReleaseHeldKeysOnFocus(screen,e.target)){keys={};if(fireId===null)fireHeld=false}})"),
+  assert.ok(game.includes("document.addEventListener('focusin',e=>{if(shouldReleaseHeldKeysOnFocus(screen,e.target)){keys={};updateHeldFire()}})"),
     'focus transition must release keys and keyboard fire, preserving active touch fire');
 });
 
@@ -103,7 +103,7 @@ test('lost pointer capture releases mobile movement and continuous fire', () => 
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
   assert.ok(game.includes("stick.onlostpointercapture=endStick"), 'joystick stops after pointer capture loss');
   assert.ok(game.includes("$('#fire').onlostpointercapture=endFire"), 'fire release must handle capture loss');
-  assert.match(game, /function endFire\(e\)\{if\(!isOwnedGameplayPointer\(fireId,e\.pointerId\)\)return;fireId=null;fireHeld=false\}/, 'only owning pointer releases continuous fire');
+  assert.match(game, /function endFire\(e\)\{if\(!isOwnedGameplayPointer\(fireId,e\.pointerId\)\)return;fireId=null;updateHeldFire\(\)\}/, 'only owning pointer releases continuous fire');
 });
 
 test('browser modifiers and IME composition never activate game shortcuts', () => {
@@ -115,12 +115,12 @@ test('browser modifiers and IME composition never activate game shortcuts', () =
   assert.equal(isModifiedOrComposingKey({...unmodified, keyCode:229}), true, 'IME process key');
   assert.equal(isModifiedOrComposingKey(null), false);
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  const shortcutGuard='if(isModifiedOrComposingKey(e)){keys={};fireHeld=false;return;}';
+  const shortcutGuard='if(isModifiedOrComposingKey(e)){keys={};updateHeldFire();return;}';
   assert.ok(game.includes(shortcutGuard), 'modified key guard must release held movement/fire');
   assert.ok(game.indexOf(shortcutGuard) <
     game.indexOf('const action=keyboardAction(e.code,screen,e.target,e.repeat);'),
     'modified/composing keys must release held input before gameplay actions and preventDefault');
-  assert.ok(game.includes("addEventListener('compositionstart',()=>{keys={};fireHeld=false});"),
+  assert.ok(game.includes("addEventListener('compositionstart',()=>{keys={};updateHeldFire()});"),
     'IME start must release previously held keyboard movement/fire');
 });
 
@@ -197,4 +197,17 @@ test('pointerup displacement blocks unintended shots even when pointermove was c
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
   assert.ok(game.includes("canvas.addEventListener('pointerup',e=>{if(e.pointerId!==aimId)return;recordPointerGestureMovement(aimGesture,e);"), 'release must record final displacement');
   assert.ok(game.slice(game.indexOf("canvas.addEventListener('pointermove'"),game.indexOf("canvas.addEventListener('pointerup'")).includes('recordPointerGestureMovement(aimGesture,e);'), 'move must record displacement');
+});
+
+test('touch and keyboard firing remain independent across release, IME and focus', () => {
+  assert.equal(isFireHeld(false, null), false);
+  assert.equal(isFireHeld(true, null), true);
+  assert.equal(isFireHeld(false, 7), true);
+  assert.equal(isFireHeld(true, 7), true);
+  assert.equal(isFireHeld(false, -1), false);
+  assert.equal(isFireHeld(false, '7'), false);
+  const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
+  assert.ok(game.includes('function updateHeldFire(){fireHeld=isFireHeld(keys.Space,fireId)}'));
+  assert.ok(game.includes("addEventListener('keyup',e=>{keys[e.code]=false;if(e.code==='Space')updateHeldFire()});"));
+  assert.ok(game.includes("function endFire(e){if(!isOwnedGameplayPointer(fireId,e.pointerId))return;fireId=null;updateHeldFire()}"));
 });
