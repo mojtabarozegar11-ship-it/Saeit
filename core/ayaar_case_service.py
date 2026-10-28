@@ -120,6 +120,13 @@ def database():
               original_name TEXT NOT NULL, stored_name TEXT NOT NULL,
               size INTEGER NOT NULL, sha256 TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS intake_requests(
+              request_hash TEXT PRIMARY KEY,
+              case_code TEXT NOT NULL REFERENCES cases(code) ON DELETE CASCADE,
+              request_fingerprint TEXT NOT NULL,
+              created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_intake_case ON intake_requests(case_code);
             CREATE TABLE IF NOT EXISTS intake_limiter(
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               identity_hash TEXT NOT NULL, occurred_at TEXT NOT NULL
@@ -197,6 +204,45 @@ def event(db, code, actor, action, detail):
     )
 
 
+def intake_identity(token, secret_key):
+    """Separate keyed identities for a retry token and its recoverable private key.
+
+    Only HMAC digests and an authenticated case mapping are stored.  Browser
+    tokens must contain 256 bits of cryptographic randomness.
+    """
+    raw = bytes.fromhex(token)
+    key = secret_key.encode("utf-8")
+    identity = hmac.new(key, b"AYAR-intake-id-v1:" + raw, hashlib.sha256).hexdigest()
+    receipt = hmac.new(key, b"AYAR-private-key-v1:" + raw, hashlib.sha256).hexdigest()
+    return identity, receipt
+
+
+def intake_fingerprint(fields, uploads, checks, secret_key):
+    """Hash normalized dossier facts AND exact upload bytes; leave streams reusable."""
+    attachments = []
+    for upload, (filename, size, suffix) in zip(uploads, checks):
+        digest = hashlib.sha256()
+        count = 0
+        try:
+            upload.seek(0)
+            for block in upload.chunks(chunk_size=65536):
+                count += len(block)
+                if count > MAX_FILE:
+                    raise CaseError("Oversized upload")
+                digest.update(block)
+        finally:
+            upload.seek(0)
+        if count != size:
+            raise CaseError("Upload length mismatch")
+        attachments.append({"name": filename, "size": size, "suffix": suffix,
+                            "sha256": digest.hexdigest()})
+    facts = {"case": fields, "files": attachments}
+    raw = json.dumps(facts, sort_keys=True, ensure_ascii=False,
+                     separators=(",", ":")).encode("utf-8")
+    return hmac.new(secret_key.encode("utf-8"),
+                    b"AYAR-dossier-v1:" + raw, hashlib.sha256).hexdigest()
+
+
 def create_case(payload, uploads, remote_addr, secret_key):
     if not isinstance(payload, dict):
         raise CaseError("Invalid application")
@@ -221,9 +267,26 @@ def create_case(payload, uploads, remote_addr, secret_key):
     checks = [classify_file(item) for item in uploads]
     if sum(size for _, size, _ in checks) > MAX_REQUEST:
         raise CaseError("Total upload limit exceeded")
+    token = payload.get("client_request_id", "")
+    if token not in ("", None) and (not isinstance(token, str) or
+            re.fullmatch(r"[0-9a-f]{64}", token) is None):
+        raise CaseError("Invalid secure retry identifier")
+    token = token or ""
+    fields = {"category": category, "service": service, "product_name": name,
+              "product_version": version, "product_url": product_url,
+              "email": email, "scope": scope, "evidence_summary": evidence,
+              "rights_declared": True, "privacy_consent": True,
+              "ai_processing_consent": True,
+              "publication_consent": payload.get("publication_consent") is True}
+    request_hash = ""
+    request_fingerprint = ""
+    if token:
+        request_hash, access_key = intake_identity(token, secret_key)
+        request_fingerprint = intake_fingerprint(fields, uploads, checks, secret_key)
     record_time = now()
     code = "AYR-" + dt.datetime.now(dt.timezone.utc).strftime("%y") + "-" + secrets.token_hex(6).upper()
-    access_key = secrets.token_urlsafe(32)
+    if not token:
+        access_key = secrets.token_urlsafe(32)
     secret_hash = hmac.new(secret_key.encode(), access_key.encode(), hashlib.sha256).hexdigest()
     files_dir = root() / "evidence"
     if files_dir.is_symlink():
@@ -233,6 +296,27 @@ def create_case(payload, uploads, remote_addr, secret_key):
     saved = []
     try:
         with database() as db, db:
+            if token:
+                db.execute("BEGIN IMMEDIATE")
+                old = db.execute("SELECT case_code,request_fingerprint "
+                                 "FROM intake_requests WHERE request_hash=?",
+                                 (request_hash,)).fetchone()
+                if old:
+                    if not hmac.compare_digest(old["request_fingerprint"],
+                                               request_fingerprint):
+                        raise CaseError("Submission data changed after an uncertain "
+                                        "response. Restore the original details to "
+                                        "recover your first receipt.", 409)
+                    row = db.execute("SELECT secret_hash,status,created_at "
+                                     "FROM cases WHERE code=?",
+                                     (old["case_code"],)).fetchone()
+                    if not row or not hmac.compare_digest(
+                            row["secret_hash"], secret_hash):
+                        raise CaseError("Original receipt is no longer recoverable", 409)
+                    return {"case_id": old["case_code"], "access_key": access_key,
+                            "status": row["status"], "created_at": row["created_at"],
+                            "recovered": True,
+                            "message": "Existing dossier safely recovered; not duplicated"}
             fingerprint = source_identity(remote_addr, secret_key)
             since = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)).isoformat(timespec="seconds")
             db.execute("DELETE FROM intake_limiter WHERE occurred_at < ?", (since,))
@@ -274,6 +358,10 @@ def create_case(payload, uploads, remote_addr, secret_key):
                     "INSERT INTO files(id,code,original_name,stored_name,size,sha256) VALUES(?,?,?,?,?,?)",
                     (file_id, code, filename, stored, size, digest.hexdigest())
                 )
+            if token:
+                db.execute("INSERT INTO intake_requests(request_hash,case_code,"
+                           "request_fingerprint,created_at) VALUES(?,?,?,?)",
+                           (request_hash, code, request_fingerprint, record_time))
             db.execute("INSERT INTO intake_limiter(identity_hash,occurred_at) VALUES(?,?)", (fingerprint, record_time))
             event(db, code, "customer", "submitted", "Evidence dossier received; assessment not yet performed")
             event(db, code, "customer", "ai_processing_consent",
