@@ -5,6 +5,10 @@ on:
     paths:
       - '.github/workflows/moj-messaging-rootless-vps-install-20261028.yml'
       - 'ops/messaging-bridge/user-install.sh'
+      - 'ops/messaging-bridge/user-control.sh'
+      - 'ops/messaging-bridge/user-onboard.sh'
+      - 'ops/messaging-bridge/whatsapp.mjs'
+      - 'ops/messaging-bridge/tests/test_whatsapp_flow.mjs'
 permissions:
   contents: read
   statuses: write
@@ -29,12 +33,12 @@ jobs:
           set -euo pipefail
           umask 077
           src="$GITHUB_WORKSPACE/ops/messaging-bridge"
-          bash -n "$src/user-install.sh" "$src/user-control.sh" "$src/user-launch.sh"
+          bash -n "$src/user-install.sh" "$src/user-control.sh" "$src/user-launch.sh" "$src/user-onboard.sh"
           python3 -B -m unittest discover -s "$src/tests" -p 'test_telegram_state.py' -v
           node --check "$src/whatsapp.mjs"
           node "$src/tests/test_whatsapp_flow.mjs"
           mkdir -p "$RUNNER_TEMP/mmsg-bundle/app" "$RUNNER_TEMP/mmsg-bundle/bin" "$RUNNER_TEMP/mmsg-bundle/wheels"
-          cp "$src"/telegram.py "$src"/whatsapp.mjs "$src"/requirements.txt "$src"/package.json "$src"/user-control.sh "$src"/user-launch.sh "$src"/user-install.sh "$RUNNER_TEMP/mmsg-bundle/app/"
+          cp "$src"/telegram.py "$src"/whatsapp.mjs "$src"/requirements.txt "$src"/package.json "$src"/user-control.sh "$src"/user-launch.sh "$src"/user-onboard.sh "$src"/user-install.sh "$RUNNER_TEMP/mmsg-bundle/app/"
           cp -L "$(command -v node)" "$RUNNER_TEMP/mmsg-bundle/bin/node"
           chmod 0700 "$RUNNER_TEMP/mmsg-bundle/bin/node"
           (cd "$RUNNER_TEMP/mmsg-bundle/app" && npm install --omit=dev --ignore-scripts --no-audit --no-fund)
