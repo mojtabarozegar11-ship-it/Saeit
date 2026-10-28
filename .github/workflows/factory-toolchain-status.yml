@@ -82,6 +82,16 @@ jobs:
                           except OSError: pass
                       asset_dirs.append({'version':version.name,'dir':rel,'entries':entries})
           print('INSTALLED_TOOLCHAIN_ASSET_DIRS='+json.dumps(asset_dirs,sort_keys=True))
+          installed_model=versions/'f7b1913a9c01411393cf28316cd7bb34f8a7165f/models/coder.gguf'
+          source_model=stage/'qwen2.5-coder-0.5b-instruct-q4_k_m.gguf'
+          def digest_file(path):
+              if not path.is_file() or path.is_symlink(): return None
+              digest=hashlib.sha256()
+              with path.open('rb') as stream:
+                  for chunk in iter(lambda:stream.read(1024*1024),b''): digest.update(chunk)
+              return {'bytes':path.stat().st_size,'sha256':digest.hexdigest()}
+          print('SOURCE_INSTALLED_MODEL_HASH_COMPARE='+json.dumps({'source':digest_file(source_model),'installed':digest_file(installed_model)},sort_keys=True))
+
           if stage.is_dir():
               for name in ('install.sh','prove.py'):
                   p=stage/name
