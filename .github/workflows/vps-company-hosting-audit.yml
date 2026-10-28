@@ -141,3 +141,5 @@ jobs:
       - name: Clean temporary SSH keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
+
+# Read-only storage and preservation recheck authorized 2026-10-28.
