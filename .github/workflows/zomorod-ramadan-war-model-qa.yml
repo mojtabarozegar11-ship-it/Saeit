@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'games/ramadan-war/**'
+      - 'tests/game/ramadan-*.test.mjs'
       - '.github/workflows/zomorod-ramadan-war-web-card.yml'
       - '.github/workflows/zomorod-ramadan-war-model-qa.yml'
   workflow_dispatch:
