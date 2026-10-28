@@ -1,0 +1,153 @@
+name: Zomorod retention archive and dependency proof 20261028
+on:
+  push:
+    branches: [ops/zomorod-retention-proof-20261028]
+    paths: [".github/workflows/zomorod-retention-proof-20261028.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-retention-proof-20261028
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 2
+            ServerAliveInterval 30
+            ServerAliveCountMax 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Independently test existing VPS archive checksum and GZIP integrity (no extract or write)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          ssh -F "$d/config" saeit-vps bash -se <<'REMOTE'
+          set -euo pipefail
+          f=/home/githubops/.db-backups/zomorod2_sites_main-pre-page-compression-20261028.sql.gz
+          test -f "$f" && test ! -L "$f"
+          test "$(stat -c %s "$f")" = 2981105692
+          test "$(sha256sum "$f" | cut -d ' ' -f1)" = 9f15e25b0b7ce21dfc4588fcf15712c43add276889f44343f3c46b257f6debf3
+          echo BACKUP_SHA256_SIZE_REVERIFIED=yes
+          timeout 900s gzip -t "$f"
+          echo BACKUP_FULL_GZIP_STREAM_CRC_VERIFIED=yes
+          echo BACKUP_CONTENT_RESTORE_TEST=not_performed
+          REMOTE
+      - name: Measure staging retention candidate bytes and live foreign-key dependencies (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import json,os,re,shutil,subprocess,urllib.parse
+          from pathlib import Path
+          app=Path.home()/"Saeit-staging"
+          matches=[]
+          for path in (app/".env",app/".env.production",app/".env.local"):
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size>65536:continue
+                  for line in path.read_text(encoding="utf-8",errors="replace").splitlines():
+                      m=re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$",line)
+                      if m: matches.append(urllib.parse.urlsplit(m.group(1).strip().strip('"').strip("'")))
+              except OSError: pass
+          if len(matches)!=1:raise SystemExit("STAGING_DATABASE_URL_NOT_UNIQUE")
+          u=matches[0]
+          db=urllib.parse.unquote(u.path.lstrip("/"))
+          if db!="zomorod2_sites_main":raise SystemExit("DATABASE_SCOPE_REFUSED")
+          client=shutil.which("mariadb") or shutil.which("mysql")
+          if not client:raise SystemExit("MYSQL_CLIENT_MISSING")
+          args=[client,"--no-defaults","--batch","--skip-column-names","--host="+(u.hostname or "localhost"),"--user="+urllib.parse.unquote(u.username or ""),"--database="+db,"--connect-timeout=8"]
+          if u.port:args.append("--port="+str(u.port))
+          env=dict(os.environ,MYSQL_PWD=urllib.parse.unquote(u.password or ""))
+          def rows(sql,seconds=120):
+              p=subprocess.run(args+["--execute="+sql],env=env,capture_output=True,text=True,timeout=seconds)
+              if p.returncode:raise SystemExit("READ_ONLY_QUERY_FAILED")
+              return [l.split("\t") for l in p.stdout.strip().splitlines() if l]
+          if rows("SELECT DATABASE()")[0][0]!=db:raise SystemExit("DATABASE_IDENTITY_CHANGED")
+          size=rows("SELECT COALESCE(SUM(DATA_LENGTH+INDEX_LENGTH),0) FROM information_schema.TABLES WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_TYPE='BASE TABLE'")[0][0]
+          print("MY_SQL_LOGICAL_BYTES="+size)
+          deps=rows("SELECT TABLE_NAME,COLUMN_NAME,REFERENCED_TABLE_NAME,REFERENCED_COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA='zomorod2_sites_main' AND (TABLE_NAME IN ('core_agenttask','core_factoryevidence') OR REFERENCED_TABLE_NAME IN ('core_agenttask','core_factoryevidence')) ORDER BY TABLE_NAME,COLUMN_NAME")
+          print("FOREIGN_KEY_DEPENDENCIES="+json.dumps(deps))
+          rules=rows("SELECT TABLE_NAME,REFERENCED_TABLE_NAME,DELETE_RULE,UPDATE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA='zomorod2_sites_main' AND (TABLE_NAME IN ('core_agenttask','core_factoryevidence') OR REFERENCED_TABLE_NAME IN ('core_agenttask','core_factoryevidence')) ORDER BY TABLE_NAME")
+          print("FOREIGN_KEY_DELETE_RULES="+json.dumps(rules))
+          counts=rows("SELECT status,COUNT(*) FROM core_agenttask GROUP BY status ORDER BY status",90)
+          evid=rows("SELECT status,COUNT(*) FROM core_factoryevidence GROUP BY status ORDER BY status",90)
+          print("AGENT_TASK_STATUS_COUNTS="+json.dumps(counts))
+          print("FACTORY_EVIDENCE_STATUS_COUNTS="+json.dumps(evid))
+          links=rows("SELECT COUNT(*),COALESCE(SUM(task_id IS NOT NULL),0),COALESCE(SUM(product_id IS NOT NULL),0),COALESCE(SUM(run_id IS NOT NULL),0) FROM core_factoryevidence WHERE status='stale'",120)
+          print("STALE_EVIDENCE_LINKS_TOTAL_TASK_PRODUCT_RUN="+json.dumps(links))
+          for name,sql in (
+              ("TASK_RECENT_JSON_SAMPLE","SELECT COUNT(*),COALESCE(SUM(OCTET_LENGTH(input_data)+OCTET_LENGTH(output_data)),0),COALESCE(SUM(IF(JSON_VALID(input_data) AND JSON_VALID(output_data),OCTET_LENGTH(JSON_COMPACT(input_data))+OCTET_LENGTH(JSON_COMPACT(output_data)),0)),0) FROM (SELECT input_data,output_data FROM core_agenttask WHERE status='completed' ORDER BY id DESC LIMIT 50) t"),
+              ("STALE_RECENT_JSON_SAMPLE","SELECT COUNT(*),COALESCE(SUM(OCTET_LENGTH(details)),0),COALESCE(SUM(IF(JSON_VALID(details),OCTET_LENGTH(JSON_COMPACT(details)),0)),0) FROM (SELECT details FROM core_factoryevidence WHERE status='stale' ORDER BY id DESC LIMIT 50) t")):
+              try:
+                  print(name+"_ROWS_RAW_BYTES_COMPACT_BYTES="+json.dumps(rows(sql,150)))
+              except (subprocess.TimeoutExpired,ValueError):
+                  print(name+"=unavailable")
+          print("READ_ONLY_DEPENDENCY_PROOF=complete")
+          PY
+          uapi --output=json Quota get_quota_info | python3 -c 'import sys,json;d=json.load(sys.stdin).get("result",{}).get("data",{});print("FINAL_QUOTA="+json.dumps({k:d.get(k) for k in ("megabytes_used","megabyte_limit")}))'
+          REMOTE
+      - name: Verify unchanged production routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /agents/ /admin/login/; do
+            c="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "PRODUCTION_AFTER=$path:$c"
+            test "$c" = 200
+          done
+      - name: Remove ephemeral runner SSH material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-page-compression"
+# Isolated branch; no SQL mutation, no cPanel file mutation, no site deploy.
