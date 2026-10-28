@@ -301,6 +301,27 @@ jobs:
             echo "PUBLIC_AFTER=$path:$status"
             test "$status" = "200"
           done
+      - name: Read-only cPanel storage audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -u
+          test "$HOME" = /home/zomorod2
+          echo "HOST_HOME_FILESYSTEM"
+          df -h "$HOME" || true
+          echo "CPANEL_QUOTA"
+          uapi --output=json Quota get_quota_info | python3 -c 'import json,sys;d=json.load(sys.stdin).get("result",{}).get("data",{}); print(json.dumps({k:d.get(k) for k in ("megabytes_used","megabyte_limit","megabytes_remain","under_quota_overall")},ensure_ascii=False))' || true
+          echo "HOME_TOP_DIRECTORIES_BYTES"
+          du -x -B1 --max-depth=2 "$HOME" 2>/dev/null | sort -nr | head -40 || true
+          echo "LARGE_FILES_OVER_100MB_BYTES"
+          find "$HOME" -xdev -type f -size +100M -printf '%s\t%p\n' 2>/dev/null | sort -nr | head -60 || true
+          echo "ARCHIVE_CANDIDATES_OVER_50MB_OLDER_THAN_90D_BYTES"
+          find "$HOME" -xdev -type f -size +50M -mtime +90 \\
+            \\( -iname '*.zip' -o -iname '*.tar' -o -iname '*.tgz' -o -iname '*.gz' -o -iname '*.sql' -o -iname '*.sql.gz' -o -iname '*.bak' -o -iname '*.dump' \\) \\
+            -printf '%s\t%TY-%Tm-%Td\t%p\n' 2>/dev/null | sort -nr | head -100 || true
+          REMOTE
       - name: Remove temporary SSH identities
         if: always()
         shell: bash
