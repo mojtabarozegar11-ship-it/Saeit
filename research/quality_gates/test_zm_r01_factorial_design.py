@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """Metadata-only regression checks; no biological reads, fabricated DEGs or model output."""
+import sys
 import unittest
 from collections import Counter
+from pathlib import Path
+
+# Keep this test runnable through both unittest discovery and pytest, regardless
+# of whether the repository root or this directory is placed on sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from zm_r01_preflight import GateError, validate_factorial_design
 
 
