@@ -53,6 +53,10 @@ jobs:
         run: |
           python3 -c 'from google.oauth2 import id_token; from google.auth.transport import requests; assert callable(id_token.verify_oauth2_token)'
           python3 -m unittest discover -s banknew -p 'test_google_identity.py' -v
+      - name: Install isolated Django for identity bridge tests
+        run: python3 -m pip install --disable-pip-version-check 'Django>=5.2,<6.0'
+      - name: Verify Google-sub binding, one-use nonce, CSRF and no payment grants
+        run: python3 -m django test banknew.test_identity_views --settings=banknew.identity_test_settings -v 2
       - name: Refuse production payment activation in this release
         run: |
           node -e "const fs=require('fs'); const s=fs.readFileSync('banknew/app.js','utf8'); if (/\b(?:sendTransaction|signTransaction|signMessage|writeContract)\s*\(/.test(s)) process.exit(1); console.log('No payment, key handling or signing methods introduced');"
