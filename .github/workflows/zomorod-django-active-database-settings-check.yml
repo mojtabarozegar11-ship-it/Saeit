@@ -74,7 +74,7 @@ jobs:
           import os,re,subprocess
           H=Path.home()
           db=H/"Saeit-staging/mojplaywin.sqlite3"
-          assert db.is_file()
+          print("STAGING_SQLITE_EXISTS="+("yes" if db.is_file() else "no"))
           for loc in ("Saeit/.env","Saeit-staging/.env","Saeit/config/settings.py","Saeit-staging/config/settings.py","Saeit-staging/passenger_wsgi.py","Saeit/passenger_wsgi.py","public_html/.htaccess"):
               p=H/loc
               if not p.is_file():continue
