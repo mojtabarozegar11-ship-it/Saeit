@@ -1,6 +1,8 @@
 """Master production stays capped at one step despite verified progress."""
 import importlib.util
 import json
+import os
+import stat
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -61,6 +63,27 @@ class EvolutionTests(unittest.TestCase):
             out = json.loads(state.read_text())
             self.assertEqual(out["max_steps"], 1)
             self.assertEqual(out["decision"], "rollback_to_single_step_volume_cap")
+
+    def test_existing_nonprivate_directory_fails_without_chmod_side_effect(self):
+        with tempfile.TemporaryDirectory() as temp:
+            db, state = self.fixture(temp, [])
+            os.chmod(temp, 0o755)
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_STATE_DIR_NOT_PRIVATE"):
+                mod.evaluate(db, state)
+            self.assertEqual(stat.S_IMODE(Path(temp).stat().st_mode), 0o755)
+            self.assertEqual(json.loads(state.read_text())["revision"], 1)
+
+    def test_symlinked_state_parent_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            private = root / "private"
+            private.mkdir(mode=0o700)
+            db, _ = self.fixture(str(private), [])
+            alias = root / "alias"
+            alias.symlink_to(private, target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, "MASTER_EVOLUTION_STATE_PARENT_SYMLINK"):
+                mod.evaluate(db, alias / "evolution.json")
+            self.assertEqual(json.loads((private / "evolution.json").read_text())["revision"], 1)
 
     def test_failed_task_rolls_back_even_after_diverse_completions(self):
         with tempfile.TemporaryDirectory() as temp:
