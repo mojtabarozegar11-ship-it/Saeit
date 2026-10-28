@@ -189,11 +189,20 @@ jobs:
           print("MPW_TRX_HANDOFF_POSTDEPLOY_PROTECTED_ROUTES=OK")
           PY
       - name: Roll back only our module on a failed install or smoke
-        if: failure() && steps.install.outcome == 'success' && steps.install.outputs.changed == 'true'
+        # SSH can fail after a completed remote atomic rename but before stdout arrives.
+        if: failure() && (steps.install.outcome == 'failure' || (steps.install.outcome == 'success' && steps.install.outputs.changed == 'true'))
         run: |
+          set -euo pipefail
           remote="/home/zomorod2/.mpw-trx-handoff-20261029-$GITHUB_RUN_ID"
-          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-trx-handoff-ssh/config" saeit-cpanel "python3 '$remote/installer.py' rollback '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'"
-          timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-trx-handoff-ssh/config" saeit-cpanel "python3 '$remote/installer.py' refresh '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'"
+          config="$RUNNER_TEMP/mpw-trx-handoff-ssh/config"
+          result="$(timeout 50s ssh -T -F "$config" saeit-cpanel "python3 '$remote/installer.py' rollback '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'")"
+          printf '%s\n' "$result"
+          if [[ "$result" == *MPW_TRX_HANDOFF_ROLLBACK_OK* ]]; then
+            timeout 40s ssh -T -F "$config" saeit-cpanel "python3 '$remote/installer.py' refresh '$GITHUB_RUN_ID' '$MPW_OLD_SHA' '$MPW_NEW_SHA'"
+          else
+            [[ "$result" == *MPW_TRX_HANDOFF_NOT_INSTALLED_BY_THIS_RUN* ]] || { echo '::error::UNKNOWN_ROLLBACK_RESULT'; exit 1; }
+            echo 'MPW_TRX_HANDOFF_ROLLBACK_NOOP_NO_RESTART=true'
+          fi
       - name: Remove ephemeral transport keys
         if: always()
         run: |
