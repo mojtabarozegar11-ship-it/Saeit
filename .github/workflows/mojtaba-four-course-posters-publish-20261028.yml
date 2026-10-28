@@ -142,7 +142,7 @@ jobs:
             trap - EXIT
             if test "$verified" = "0"; then
               if test "$home_done" = "1"; then
-                "$py" "$script" rollback --run-id "$run" && echo 'COURSE_HOME_AUTO_ROLLBACK=PASS' || echo 'COURSE_HOME_MANUAL_RECOVERY_REQUIRED'
+                "$py" "$script" rollback-english --run-id "$run" && echo 'COURSE_HOME_AUTO_ROLLBACK=PASS' || echo 'COURSE_HOME_MANUAL_RECOVERY_REQUIRED'
               fi
               if test "$pkg_done" = "1"; then
                 "$py" "$upgrader" rollback --run-id "$run" && echo 'COURSE_SOCIAL_PACKAGE_AUTO_ROLLBACK=PASS' || echo 'COURSE_PACKAGE_MANUAL_RECOVERY_REQUIRED'
@@ -158,10 +158,10 @@ jobs:
           tar -xzf "$stage/mojtaba-courses-social-hub.tgz" -C "$stage" --no-same-owner --no-same-permissions
           test -f "$stage/social_hub/course_showcase.py"
           "$py" "$upgrader" check --source "$stage/social_hub"
-          "$py" "$script" check
+          "$py" "$script" check-english
           "$py" "$upgrader" upgrade --source "$stage/social_hub" --run-id "$run"
           pkg_done=1
-          "$py" "$script" install --run-id "$run"
+          "$py" "$script" upgrade-english --run-id "$run"
           home_done=1
           cd "$app"
           "$py" manage.py check
@@ -173,6 +173,7 @@ jobs:
           from django.test import Client
           from django.urls import reverse
           from xml.etree import ElementTree as ET
+          import re
           from social_hub.course_showcase import COURSES,ID
           c=Client(HTTP_HOST="mojplaywin.com")
           endpoint=reverse("mojtaba_public_courses")
@@ -182,8 +183,16 @@ jobs:
           if page.status_code!=200 or page.content.count(b'<article class="mpw-course-card"')!=4:
               # class selector is present in style once, plus four cards.
               raise RuntimeError("Expected four distinct public course cards missing")
-          if "ثبت‌نام و پرداخت در این صفحه فعال نیست".encode() not in page.content:
+          if b"Enrollment and payments are not open" not in page.content:
               raise RuntimeError("Course registration is misleading")
+          if b'<html lang="en" dir="ltr">' not in page.content:
+              raise RuntimeError("Course gallery HTML is not English LTR")
+          if re.search(rb"[\xd8-\xdb][\x80-\xbf]",page.content):
+              raise RuntimeError("Non-English Arabic glyphs still present in course gallery")
+          for phrase in (b"Business Development Course",b"Increasing Agricultural Income",
+                         b"How to Earn Money Online",b"Advanced ChatGPT Training"):
+              if phrase not in page.content:
+                  raise RuntimeError("English course heading absent")
           for course in COURSES:
               u=reverse("mojtaba_course_poster",kwargs={"slug":course["slug"]})
               if u!="/mojtaba.roozegar/social-command/posters/"+course["slug"]+".svg":
@@ -193,6 +202,9 @@ jobs:
                   raise RuntimeError("Course poster route missing: "+course["slug"])
               try: ET.fromstring(response.content)
               except Exception as err: raise RuntimeError("Course artwork invalid XML") from err
+              if (re.search(rb"[\xd8-\xdb][\x80-\xbf]",response.content)
+                  or b'direction="rtl"' in response.content):
+                  raise RuntimeError("Poster SVG contains non-English or RTL text")
               print("PERSONAL_COURSE_POSTER_DJANGO=PASS",course["slug"],flush=True)
           home=c.get("/mojtaba.roozegar/",secure=True)
           from django.template.loader import get_template
@@ -214,6 +226,12 @@ jobs:
               raise RuntimeError("Four poster home section missing")
           if home.content.count(b'<article class="mpw-course-home-card"')!=4:
               raise RuntimeError("Four poster homepage cards missing")
+          section=re.search(rb'<section id="mpw-four-course-posters-20261028".*?</section>',home.content,re.S)
+          if (not section or b'lang="en"' not in section.group(0)
+              or b'dir="ltr"' not in section.group(0)
+              or b"Four Courses to Build Practical Skills" not in section.group(0)
+              or re.search(rb"[\xd8-\xdb][\x80-\xbf]",section.group(0))):
+              raise RuntimeError("Homepage course section not completely English")
           social=c.get("/mojtaba.roozegar/social-command/",secure=True)
           if social.status_code not in (302,403):
               raise RuntimeError("Existing social manager became unprotected")
@@ -224,6 +242,7 @@ jobs:
           "$py" - <<'PY'
           import time,urllib.error,urllib.request
           from xml.etree import ElementTree as ET
+          import re
           urls={
             "https://mojplaywin.com/mojtaba.roozegar/":"home",
             "https://mojplaywin.com/mojtaba.roozegar/social-command/courses/":"courses",
@@ -245,6 +264,14 @@ jobs:
                           raise RuntimeError("Personal home posters missing")
                       if kind=="courses" and blob.count(b'<article class="mpw-course-card"')!=4:
                           raise RuntimeError("Four course list cards missing")
+                      if kind in ("courses","svg") and re.search(rb"[\xd8-\xdb][\x80-\xbf]",blob):
+                          raise RuntimeError("Non-English glyph in public course content")
+                      if kind=="home":
+                          matched=re.search(rb'<section id="mpw-four-course-posters-20261028".*?</section>',blob,re.S)
+                          if (not matched or b'lang="en"' not in matched.group(0)
+                              or b'dir="ltr"' not in matched.group(0)
+                              or re.search(rb"[\xd8-\xdb][\x80-\xbf]",matched.group(0))):
+                              raise RuntimeError("Home course section not English")
                       if kind=="svg":ET.fromstring(blob)
                   except Exception as exc:
                       broken.append((u,type(exc).__name__))
@@ -256,6 +283,7 @@ jobs:
               time.sleep(3)
           PY
           verified=1
+          echo 'FOUR_PERSONAL_COURSE_POSTERS_ENGLISH_ONLY=PASS'
           echo 'FOUR_PERSONAL_COURSE_POSTERS_RELEASE=SUCCESS'
           echo 'OTHER_SITES_UNCHANGED_NO_PAYMENTS_NO_AUTO_PUBLISH=PASS'
           REMOTE
