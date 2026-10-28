@@ -31,7 +31,7 @@ jobs:
           ssh-keygen -y -P '' -f "$d/key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          timeout 210s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          timeout 210s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY' | awk '/^VPS_MOUNT_ATTRIBUTION=/{print;fflush()}' | tee "$RUNNER_TEMP/vps-mount-attribution-receipt.txt"
           import datetime
           import json
           import os
@@ -391,3 +391,28 @@ jobs:
           # Independent existing read-only leech capacity and manuscript count probe.
           # Does not launch a model, write a manuscript, or alter cron/single-writer lock.
           timeout 25s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' < scripts/factory_leech_vps_capacity_probe_20261025.py
+      - name: Validate and archive anonymized read-only receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          f="$RUNNER_TEMP/vps-mount-attribution-receipt.txt"
+          test -s "$f"
+          python3 - "$f" <<'PY'
+          import json
+          import pathlib
+          import sys
+          rows = pathlib.Path(sys.argv[1]).read_text().splitlines()
+          assert len(rows) == 1 and rows[0].startswith("VPS_MOUNT_ATTRIBUTION=")
+          data = json.loads(rows[0].split("=", 1)[1])
+          assert data["mutations"] == data["deleted"] == data["backups_touched"] == 0
+          inv = data["factory_operations_age_inventory"]
+          assert inv["accounting_consistent"] and not inv["older_archive_log_is_safe_to_delete"]
+          assert inv["older_archive_log_bytes"] <= inv["allocated_bytes_scanned"]
+          print("ANONYMIZED_RECEIPT_VALIDATED=1")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vps-mount-readonly-receipt-${{ github.run_id }}
+          path: ${{ runner.temp }}/vps-mount-attribution-receipt.txt
+          if-no-files-found: error
+          retention-days: 3
