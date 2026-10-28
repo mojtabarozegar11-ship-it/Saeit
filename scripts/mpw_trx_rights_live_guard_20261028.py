@@ -242,7 +242,7 @@ def operation(mode,run_id=None):
             backup=folder/(k+".original.py")
             if backup.is_symlink() or not backup.is_file() or digest(backup.read_bytes())!=info["old"][k]:
                 raise RuntimeError("BACKUP_HASH_MISMATCH")
-            if digest(path.read_bytes())!=info["new"][k]:
+            if mode!="recover" and digest(path.read_bytes())!=info["new"][k]:
                 raise RuntimeError("NEWER_SOURCE_EDIT_OR_WRONG_RELEASE")
         if mode=="recover":
             # The remote apply process can be terminated between atomic file writes.
