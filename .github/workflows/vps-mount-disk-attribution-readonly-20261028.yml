@@ -75,10 +75,13 @@ jobs:
 
           # Bounded immediate-home inventory; non-factory entries are anonymized.
           try:
-              entries = [p for p in home.iterdir()
-                         if not p.is_symlink() and p.is_dir()][:70]
+              entries_all = [p for p in home.iterdir()
+                             if not p.is_symlink() and p.is_dir()]
+              entries_truncated = len(entries_all) > 70
+              entries = entries_all[:70]
           except OSError:
               entries = []
+              entries_truncated = True
           home_du = {}
           if entries:
               try:
@@ -89,7 +92,7 @@ jobs:
                       size, sep, path = line.partition("\t")
                       if sep and size.isdigit():
                           home_du[path] = int(size)
-                  home_complete = p.returncode == 0
+                  home_complete = p.returncode == 0 and not entries_truncated
               except (OSError, subprocess.TimeoutExpired):
                   home_complete = False
           else:
@@ -220,6 +223,8 @@ jobs:
           # Deleted-but-open regular files visible to this user; no file names.
           deleted_count = 0
           deleted_allocated = 0
+          deleted_duplicate_fds = 0
+          deleted_seen_inodes = set()
           fd_scanned = 0
           proc_scanned = 0
           proc_truncated = False
@@ -239,8 +244,13 @@ jobs:
                               if os.readlink(fd).endswith(" (deleted)"):
                                   s = os.stat(fd)
                                   if stat.S_ISREG(s.st_mode):
-                                      deleted_count += 1
-                                      deleted_allocated += s.st_blocks * 512
+                                      inode_key = (s.st_dev, s.st_ino)
+                                      if inode_key in deleted_seen_inodes:
+                                          deleted_duplicate_fds += 1
+                                      else:
+                                          deleted_seen_inodes.add(inode_key)
+                                          deleted_count += 1
+                                          deleted_allocated += s.st_blocks * 512
                           except OSError:
                               continue
                   except OSError:
@@ -356,8 +366,19 @@ jobs:
           operations_inventory = factory_operations_age_inventory(
               home / "factory-runtime" / "operations")
 
+          # Screening is deliberately not a deletion plan. No backup/rollback
+          # provenance is proven by this read-only workflow.
+          reserve_gap_bytes = max(0, 5 * 1024**3 - disk.free)
+          aged_screening_bytes = operations_inventory["older_archive_log_bytes"]
+          recovery_screening_insufficient = aged_screening_bytes < reserve_gap_bytes
           result = {
               "schema": "saeit.vps.mount-disk-attribution.readonly.v1",
+              "reserve_5_gib_gap_bytes": reserve_gap_bytes,
+              "aged_archive_log_screening_bytes": aged_screening_bytes,
+              "aged_archive_log_screening_insufficient": recovery_screening_insufficient,
+              "reversible_cleanup_proven": False,
+              "off_host_backup_verified": False,
+              "worker_restart_authorized": False,
               "observed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
               "mount_total_bytes": disk.total,
               "mount_used_bytes": disk.used,
@@ -373,10 +394,12 @@ jobs:
               "home_other_largest_bytes": others[:12],
               "home_other_total_observed_bytes": sum(others),
               "home_inventory_complete": home_complete,
+              "home_entries_truncated": entries_truncated,
               "home_entries_scanned": len(entries),
               "recent_large_files": recent,
               "factory_sqlite_readonly_header": sqlite_health,
               "open_deleted_visible_fd_count": deleted_count,
+              "open_deleted_duplicate_fds_skipped": deleted_duplicate_fds,
               "open_deleted_visible_allocated_bytes": deleted_allocated,
               "open_deleted_proc_scanned": proc_scanned,
               "open_deleted_fd_scanned": fd_scanned,
@@ -408,6 +431,13 @@ jobs:
           inv = data["factory_operations_age_inventory"]
           assert inv["accounting_consistent"] and not inv["older_archive_log_is_safe_to_delete"]
           assert inv["older_archive_log_bytes"] <= inv["allocated_bytes_scanned"]
+          assert data["reserve_5_gib_gap_bytes"] == max(0, 5 * 1024**3 - data["mount_free_bytes"])
+          assert data["aged_archive_log_screening_bytes"] == inv["older_archive_log_bytes"]
+          assert data["aged_archive_log_screening_insufficient"] == (inv["older_archive_log_bytes"] < data["reserve_5_gib_gap_bytes"])
+          assert data["reversible_cleanup_proven"] is False
+          assert data["off_host_backup_verified"] is False
+          assert data["worker_restart_authorized"] is False
+          assert data["open_deleted_duplicate_fds_skipped"] >= 0
           print("ANONYMIZED_RECEIPT_VALIDATED=1")
           PY
       - uses: actions/upload-artifact@v4
