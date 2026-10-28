@@ -237,6 +237,24 @@ class VPSWarehouseCourierTests(unittest.TestCase):
         for candidate in ("public_html","products","store","checkout"):
             self.assertFalse((self.site/candidate).exists())
 
+    def test_private_paging_and_rescue_spool_is_erased_on_every_run(self):
+        """No QA fingerprints or private return/order bytes survive runner cleanup."""
+        workflow=(Path(__file__).resolve().parents[1]/
+                  ".github/workflows/mpw-vps-warehouse-courier.yml").read_text()
+        cleanup=workflow.split(
+            "      - name: Erase SSH credentials and all transferred product bytes", 1)
+        self.assertEqual(len(cleanup), 2)
+        self.assertIn("if: always()", cleanup[1])
+        self.assertIn("rm -rf --", cleanup[1])
+        for private_name in (
+            "mpw-factory-stock.tgz", "mpw-qa-feedback.json",
+            "mpw-qa-feedback-final.json", "mpw-qa-feedback.snapshot",
+            "mpw-factory-stage1-triage.jsonl", "mpw-three-product-orders.json",
+            "mpw-three-product-orders-rescue.json", "mpw-original-admission.jsonl",
+            "mpw-rescue-admission.jsonl", "mpw-real-source-order-triage.jsonl",
+        ):
+            self.assertIn('"$RUNNER_TEMP/'+private_name+'"', cleanup[1])
+
     def test_zip_bomb_or_path_traversal_rejected(self):
         x=io.BytesIO()
         with zipfile.ZipFile(x,"w") as z:
