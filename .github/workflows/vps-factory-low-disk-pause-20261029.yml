@@ -1,5 +1,8 @@
 name: Pause VPS factory schedulers below safe disk reserve
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/vps-factory-low-disk-pause-20261029.yml"
   push:
     branches: [main]
     paths:
@@ -12,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   pause-if-low:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
