@@ -124,7 +124,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-page-compression"
-          ssh -F "$d/config" saeit-vps 'set -eu; f=/home/githubops/.db-backups/zomorod2_sites_main-pre-page-compression-20261028.sql.gz; if [ -e "$f" ]; then test "$(stat -c %s "$f")" = 2398711809; test "$(sha256sum "$f" | awk "{print \\\$1}")" = fea4dd09eaed889b05731fabbe85fecd539ec6aa27b0f00e1e593ac9f4560d76; rm -f -- "$f"; echo VERIFIED_INCOMPLETE_DUMP_REMOVED=yes; else echo VERIFIED_INCOMPLETE_DUMP_PRESENT=no; fi; df -Pk "$HOME" | awk "NR==2 { if (\\$4 < 4500000) exit 1; print \\\"VPS_BACKUP_FREE_KB=\\\"\\$4 }"'
+          ssh -F "$d/config" saeit-vps 'set -eu; f=/home/githubops/.db-backups/zomorod2_sites_main-pre-page-compression-20261028.sql.gz; if [ -e "$f" ]; then test "$(stat -c %s "$f")" = 2398711809; sum=$(sha256sum "$f"); test "${sum%% *}" = fea4dd09eaed889b05731fabbe85fecd539ec6aa27b0f00e1e593ac9f4560d76; rm -f -- "$f"; echo VERIFIED_INCOMPLETE_DUMP_REMOVED=yes; else echo VERIFIED_INCOMPLETE_DUMP_PRESENT=no; fi; set -- $(df -Pk "$HOME" | tail -1); test "$4" -ge 4500000; echo VPS_BACKUP_FREE_KB="$4"'
       - name: Create and verify a complete staging database backup
         shell: bash
         run: |
@@ -161,7 +161,7 @@ jobs:
           backup_bytes="$(stat -c %s "$backup_local")"
           test "$backup_bytes" -gt 100000000
           test "$backup_bytes" -lt 3145728000
-          backup_sha="$(sha256sum "$backup_local" | awk '{print $1}')"
+          backup_sha="$(sha256sum "$backup_local" | cut -d ' ' -f1)"
           echo "COMPLETE_BACKUP_BYTES=$backup_bytes"
           echo "COMPLETE_BACKUP_SHA256=$backup_sha"
           d_remote=/home/githubops/.db-backups
@@ -171,7 +171,18 @@ jobs:
             ssh -F "$d/config" saeit-vps "rm -f -- '$tmp_remote'" || true
             exit 1
           fi
-          ssh -F "$d/config" saeit-vps "set -eu; test ! -e '$f_remote'; test -f '$tmp_remote'; test \\$(stat -c %s '$tmp_remote') = '$backup_bytes'; test \\$(sha256sum '$tmp_remote' | awk '{print \\\$1}') = '$backup_sha'; gzip -t '$tmp_remote'; mv '$tmp_remote' '$f_remote'; echo BACKUP_PATH='$f_remote'; echo BACKUP_VERIFIED=complete"
+          ssh -F "$d/config" "EXPECTED_BYTES=$backup_bytes EXPECTED_SHA=$backup_sha F_REMOTE=$f_remote TMP_REMOTE=$tmp_remote bash -s" <<'REMOTE'
+          set -euo pipefail
+          test ! -e "$F_REMOTE"
+          test -f "$TMP_REMOTE"
+          test "$(stat -c %s "$TMP_REMOTE")" = "$EXPECTED_BYTES"
+          sum=$(sha256sum "$TMP_REMOTE")
+          test "${sum%% *}" = "$EXPECTED_SHA"
+          gzip -t "$TMP_REMOTE"
+          mv "$TMP_REMOTE" "$F_REMOTE"
+          echo "BACKUP_PATH=$F_REMOTE"
+          echo "BACKUP_VERIFIED=complete"
+          REMOTE
       - name: Apply online lossless page compression and verify rows
         shell: bash
         run: |
