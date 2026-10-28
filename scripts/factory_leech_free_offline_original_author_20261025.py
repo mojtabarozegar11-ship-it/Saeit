@@ -37,12 +37,33 @@ def digest(doc):
     return hashlib.sha256(json.dumps(doc, sort_keys=True, ensure_ascii=False,
         separators=(",", ":")).encode("utf-8")).hexdigest()
 
+def _open_json_no_symlink_parents(path, flags):
+    """Pin every parent directory fd; reject symlinks at every path component."""
+    path = Path(path)
+    if not path.name or ".." in path.parts:
+        reject("UNSAFE_JSON_PATH")
+    directory_flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                       | getattr(os, "O_NOFOLLOW", 0)
+                       | getattr(os, "O_CLOEXEC", 0))
+    directory = os.open("/" if path.is_absolute() else ".", directory_flags)
+    components = path.parts[1:] if path.is_absolute() else path.parts
+    try:
+        for component in components[:-1]:
+            child = os.open(component, directory_flags, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        return os.open(components[-1], flags, dir_fd=directory)
+    finally:
+        os.close(directory)
+
+
 def safe_json(path, max_bytes=300000):
-    """Read a bounded regular JSON file from one opened inode, never a symlink."""
+    """Bounded inode-bound read with symlink-safe pinned ancestor directories."""
+    path = Path(path)
     flags = (os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
              | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0))
     try:
-        with os.fdopen(os.open(path, flags), "rb") as stream:
+        with os.fdopen(_open_json_no_symlink_parents(path, flags), "rb") as stream:
             metadata = os.fstat(stream.fileno())
             if (not stat.S_ISREG(metadata.st_mode)
                     or not 0 < metadata.st_size <= max_bytes):
