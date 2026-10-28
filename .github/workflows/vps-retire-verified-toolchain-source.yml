@@ -1,0 +1,150 @@
+name: Retire verified old toolchain transfer bundle
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/vps-retire-verified-toolchain-source.yml']
+  pull_request:
+    paths: ['.github/workflows/vps-retire-verified-toolchain-source.yml']
+permissions:
+  contents: read
+jobs:
+  retire-one-verified-staging-generation:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Retire only the verified unused transfer bundle
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/retire-toolchain-ssh"
+          mkdir -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs
+          options=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          remote=(ssh "${options[@]}" githubops@178.239.147.150)
+          "${remote[@]}" 'python3 -' <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import shutil
+          import subprocess
+          import time
+
+          home=Path.home()
+          factory=home/'factory-runtime'
+          ops=factory/'operations'
+          candidate=ops/'toolchain-source-39232784800-1'
+          version=ops/'build-toolchain/versions/f7b1913a9c01411393cf28316cd7bb34f8a7165f'
+          manifest=ops/'build-toolchain/toolchain-manifest.json'
+
+          if os.geteuid()==0 or os.environ.get('USER') not in (None,'githubops'):
+              raise SystemExit('UNEXPECTED_REMOTE_USER')
+          if not ops.is_dir() or ops.is_symlink() or not candidate.is_dir() or candidate.is_symlink():
+              raise SystemExit('SOURCE_CANDIDATE_MISSING_OR_UNSAFE')
+          if candidate.resolve().parent!=ops.resolve():
+              raise SystemExit('SOURCE_CANDIDATE_PARENT_MISMATCH')
+          if (time.time()-candidate.stat().st_mtime)<7*86400:
+              raise SystemExit('SOURCE_CANDIDATE_TOO_NEW')
+          expected_files={'qwen2.5-coder-0.5b-instruct-q4_k_m.gguf','runtime.tar.xz','SHA256SUMS','install.sh','prove.py','metadata.json'}
+          entries=list(candidate.iterdir())
+          if any(p.is_symlink() or not p.is_file() for p in entries) or {p.name for p in entries}!=expected_files:
+              raise SystemExit('SOURCE_CANDIDATE_CONTENTS_CHANGED')
+          checksums={}
+          for line in (candidate/'SHA256SUMS').read_text().splitlines():
+              digest, name=line.split(None,1)
+              checksums[name.strip().lstrip('*')]=digest
+          expected_model='1d9614638d18024d0fbb36575a15f1302a3adf044df10345688ec4f6e1c4ff32'
+          expected_runtime='cdccb576bfefba2a3e4f60e90d4f4136814091ff49051cf02462e4c7b2b629f8'
+          if checksums.get('qwen2.5-coder-0.5b-instruct-q4_k_m.gguf')!=expected_model or checksums.get('runtime.tar.xz')!=expected_runtime:
+              raise SystemExit('SOURCE_CHECKSUM_MANIFEST_MISMATCH')
+          def sha256(path):
+              h=hashlib.sha256()
+              with path.open('rb') as stream:
+                  for chunk in iter(lambda:stream.read(1024*1024),b''):
+                      h.update(chunk)
+              return h.hexdigest()
+          if sha256(candidate/'qwen2.5-coder-0.5b-instruct-q4_k_m.gguf')!=expected_model:
+              raise SystemExit('SOURCE_MODEL_HASH_MISMATCH')
+          if sha256(candidate/'runtime.tar.xz')!=expected_runtime:
+              raise SystemExit('SOURCE_RUNTIME_HASH_MISMATCH')
+          if not version.is_dir() or version.is_symlink():
+              raise SystemExit('VERIFIED_TOOLCHAIN_VERSION_MISSING')
+          installed_model=version/'models/coder.gguf'
+          llama=version/'llama/bin/llama-server'
+          if not installed_model.is_file() or installed_model.is_symlink() or installed_model.stat().st_size!=491400064 or sha256(installed_model)!=expected_model:
+              raise SystemExit('INSTALLED_MODEL_NOT_IDENTICAL')
+          if not llama.is_file() or not os.access(llama,os.X_OK):
+              raise SystemExit('INSTALLED_LOCAL_MODEL_RUNTIME_MISSING')
+          proof_path=version/'proof.json'
+          if not proof_path.is_file():
+              raise SystemExit('INSTALLED_VERSION_PROOF_MISSING')
+          proof=json.loads(proof_path.read_text())
+          if len(proof.get('checks',{}))!=6 or not all(x.get('passed') is True for x in proof['checks'].values()):
+              raise SystemExit('INSTALLED_VERSION_PROOF_FAILED')
+          if not manifest.is_file():
+              raise SystemExit('CURRENT_TOOLCHAIN_MANIFEST_MISSING')
+          current=json.loads(manifest.read_text())
+          if len(current.get('checks',{}))!=6 or not all(x.get('passed') is True for x in current['checks'].values()):
+              raise SystemExit('CURRENT_TOOLCHAIN_MANIFEST_FAILED')
+          cron=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=8).stdout
+          processes=subprocess.run(['ps','-u','githubops','-o','args='],capture_output=True,text=True,timeout=8).stdout
+          marker=candidate.name
+          if marker in cron or str(candidate) in cron or marker in processes or str(candidate) in processes:
+              raise SystemExit('SOURCE_CANDIDATE_REFERENCED_BY_CRON_OR_PROCESS')
+          suffixes={'.sh','.py','.yml','.yaml','.json','.service','.conf','.md'}
+          scanned=0
+          references=[]
+          for root in (ops,factory/'private/autonomous-product-cycle'):
+              if not root.is_dir() or root.is_symlink():
+                  continue
+              for walk,dirs,names in os.walk(root,followlinks=False):
+                  base=Path(walk)
+                  dirs[:]=[name for name in dirs if not (base/name).is_symlink() and (base/name).resolve()!=candidate.resolve()]
+                  for name in names:
+                      p=base/name
+                      if p.is_symlink() or p.suffix.lower() not in suffixes:
+                          continue
+                      try:
+                          if p.stat().st_size>2*1024*1024:
+                              continue
+                          data=p.read_text(errors='ignore')
+                      except OSError:
+                          continue
+                      scanned+=1
+                      if marker in data or str(candidate) in data:
+                          references.append(str(p))
+                      if scanned>25000:
+                          raise SystemExit('REFERENCE_SCAN_BOUND_REACHED')
+          if references:
+              raise SystemExit('SOURCE_CANDIDATE_TEXT_REFERENCES='+json.dumps(references[:20]))
+          total=sum(p.stat().st_size for p in entries)
+          if not 700*1024**2<=total<=1024**3:
+              raise SystemExit('SOURCE_CANDIDATE_SIZE_OUT_OF_RANGE')
+          free_before=shutil.disk_usage(home).free
+          shutil.rmtree(candidate)
+          if candidate.exists() or candidate.is_symlink():
+              raise SystemExit('SOURCE_CANDIDATE_REMAINS_AFTER_RETIREMENT')
+          free_after=shutil.disk_usage(home).free
+          print('RETIRED_VERIFIED_TOOLCHAIN_TRANSFER='+json.dumps({
+              'path':str(candidate),
+              'freed_file_bytes':total,
+              'disk_free_delta_bytes':free_after-free_before,
+              'model_sha256':expected_model,
+              'runtime_sha256':expected_runtime,
+              'installed_version':version.name,
+              'installed_proof_checks':len(proof['checks']),
+              'files_removed':len(entries),
+              'scripts_scanned':scanned,
+              'deleted_anything_else':False,
+              'active_factory_or_agent_restarted':False
+          },sort_keys=True))
+          PY
