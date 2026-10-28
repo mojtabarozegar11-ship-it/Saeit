@@ -240,7 +240,8 @@ test('game contains no direct localStorage access outside guarded helpers', () =
 
 test('persisted pickup snapshots retain recovery objectives without mutating live drops', () => {
   const transient=Array.from({length:80},(_,i)=>({x:2.5,y:7.5,type:'ammo',life:20,serial:i}));
-  const intel=[0,1,2].map(spotIndex=>({x:4.5+spotIndex,y:2.5,type:'mission-intel',spotIndex,life:3600}));
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
+  const intel=[0,1,2].map(spotIndex=>({x:sites[spotIndex][0],y:sites[spotIndex][1],type:'mission-intel',spotIndex,life:3600}));
   const live=[...intel,...transient];
   const snapshot=boundedCampaignPickups(live);
   assert.equal(live.length,83,'live gameplay pickups are never removed');
@@ -259,7 +260,8 @@ test('runtime persists bounded pickup snapshots without truncating live mission 
 });
 
 test('recovery intel remains stage-local, unique and cannot be duplicated in a save', () => {
-  const intel=(spotIndex)=>({x:4.5+spotIndex,y:2.5,type:'mission-intel',spotIndex,life:3600});
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
+  const intel=(spotIndex)=>({x:sites[spotIndex][0],y:sites[spotIndex][1],type:'mission-intel',spotIndex,life:3600});
   const state={...fresh(),mission:2,pickups:[intel(0),intel(1)]};
   assert.equal(validateCampaignSave(state),true);
   for(const pickups of [[intel(0),intel(0)],[intel(3)],[{...intel(1),spotIndex:'1'}]]) {
@@ -369,8 +371,9 @@ test('restored time stop expires normally and forged permanent freezes fail clos
 
 test('crowded recovery saves retain unique mission intel when the runtime restores 30 pickups', () => {
   const ammo = Array.from({length:57}, (_,i) => ({x:2,y:3,life:20,type:'ammo',serial:i}));
+  const sites=[[4.5,2.5],[12.5,4.5],[8.5,12.5]];
   const intel = Array.from({length:3}, (_,i) => ({
-    x:4+i,y:5+i,life:3600,type:'mission-intel',spotIndex:i
+    x:sites[i][0],y:sites[i][1],life:3600,type:'mission-intel',spotIndex:i
   }));
   const saved={...fresh(),mission:2,pickups:[...ammo,...intel]};
   assert.equal(validateCampaignSave(saved),true,'crowded saved recovery stage is valid');
