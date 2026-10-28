@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths: [".github/workflows/zomorod-robot-lab-retention-audit.yml"]
+  pull_request:
+    paths: [".github/workflows/zomorod-robot-lab-retention-audit.yml"]
   workflow_dispatch:
 permissions:
   contents: read
