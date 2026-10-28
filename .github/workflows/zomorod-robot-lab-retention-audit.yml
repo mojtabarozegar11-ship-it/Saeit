@@ -84,3 +84,5 @@ jobs:
         if: always()
         shell: bash
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+
+# Generation retention audit refresh: inspect current V91 lab and backup sizes before any retirement.
