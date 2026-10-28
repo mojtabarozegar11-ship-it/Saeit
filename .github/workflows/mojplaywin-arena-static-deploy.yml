@@ -47,7 +47,7 @@ jobs:
           node-version: "22"
       - name: Install Chromium driver
         run: npm install --no-save --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/arena-browser-test" playwright-core@1.62.1
-      - name: Exercise 49 free activities, 7 MCD tables, 6 demo prediction markets and real match feeds in six languages
+      - name: Exercise 62 free experiences, Spain/UEFA, multisport schedules and world horse calendars in six languages
         shell: bash
         env:
           NODE_PATH: ${{ runner.temp }}/arena-browser-test/node_modules
@@ -75,13 +75,26 @@ jobs:
               });
               let liveMock={
                 bl1:[fixture(900001,'bl1',future),fixture(900002,'bl1',past,true,1,1)],
-                bl2:[fixture(910001,'bl2',future)]
-              },feedBroken=false,feedCalls=0;
+                bl2:[fixture(910001,'bl2',future)],
+                la1:[fixture(920001,'la1',future),fixture(920002,'la1',past,true,2,1)],
+                ucl:[fixture(930001,'ucl',future)],
+                uel2026:[fixture(940001,'uel2026',future)],
+                uecl2026:[fixture(950001,'uecl2026',future)],
+                pl:[fixture(960001,'pl',future)],
+                del:[fixture(970001,'del',future)]
+              },feedBroken=false,feedCalls=0,sportCalls=0;
               await page.route('https://api.openligadb.de/**',async route=>{
                 feedCalls++;
                 if(feedBroken){await route.fulfill({status:503,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:'{}'});return}
-                const league=route.request().url().includes('/bl2/')?'bl2':'bl1';
+                const league=new URL(route.request().url()).pathname.split('/')[2];
                 await route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify(liveMock[league])});
+              });
+              await page.route('https://www.thesportsdb.com/**',async route=>{
+                sportCalls++;
+                const id=new URL(route.request().url()).searchParams.get('id');
+                const events=id==='4387'?[{idEvent:'123456',strEvent:'Sample NBA — Indiana vs Philadelphia',dateEvent:'2026-11-05',strTime:'20:00:00'}]:
+                  id==='4370'?[{idEvent:'234567',strEvent:'Sample Mexico F1 GP',dateEvent:'2026-11-07',strTime:'13:00:00'}]:null;
+                await route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({events})});
               });
               await page.goto(pathToFileURL(path.resolve('site_releases/mojplaywin/arena/index.html')).href);
               assert.equal(await page.evaluate(()=>document.activeElement.id),'age-confirm');
@@ -90,8 +103,34 @@ jobs:
               await page.keyboard.press('Shift+Tab');
               assert.equal(await page.evaluate(()=>document.activeElement.id),'age-confirm');
 
-              assert.equal(feedCalls,0,'No public feed call before age self-declaration');
+              assert.equal(feedCalls,0,'No football feed call before age self-declaration');
+              assert.equal(sportCalls,0,'No secondary feed call before age self-declaration');
               await page.locator('#age-confirm').click();
+              await page.locator('#real-match-920001').waitFor({state:'visible'});
+              assert.equal(await page.locator('#live-league').inputValue(),'la1','Spain is the default');
+              assert.equal(await page.locator('#real-match-920001 form').count(),1,'Spain has free picks');
+              await page.locator('#spotlight-card h3').waitFor({state:'visible'});
+              assert.match(await page.locator('#spotlight-card h3').innerText(),/Indiana vs Philadelphia/);
+              await page.locator('#spotlight-select').selectOption('4370');
+              await page.waitForFunction(()=>document.querySelector('#spotlight-card h3')?.textContent.includes('Mexico F1 GP'));
+              await page.locator('#spotlight-select').selectOption('4464');
+              await page.waitForFunction(()=>document.querySelector('#spotlight-status')?.textContent.includes('no next event'));
+              assert.equal(await page.locator('#horse-grid .horse-card').count(),17);
+              await page.locator('#horse-country').selectOption('Spain');
+              assert.equal(await page.locator('#horse-grid .horse-card').count(),2);
+              await page.locator('#horse-kind').selectOption('equestrian');
+              assert.equal(await page.locator('#horse-grid .horse-card').count(),1);
+              assert.match(await page.locator('#horse-grid .horse-card').innerText(),/SICAB/);
+              await page.locator('#horse-country').selectOption('all');
+              await page.locator('#horse-kind').selectOption('all');
+              await page.locator('#live-league').selectOption('ucl');
+              await page.locator('#real-match-930001').waitFor({state:'visible'});
+              await page.locator('#live-league').selectOption('uel2026');
+              await page.locator('#real-match-940001').waitFor({state:'visible'});
+              await page.locator('#live-league').selectOption('del');
+              await page.locator('#real-match-970001').waitFor({state:'visible'});
+              assert.equal(await page.locator('#real-match-970001 form').count(),0,'Hockey does not use soccer picks');
+              await page.locator('#live-league').selectOption('bl1');
               await page.locator('#real-match-900001').waitFor({state:'visible'});
               assert.equal(await page.locator('#real-match-900002 .live-pill').innerText(),'Final');
               assert.ok(feedCalls>=1,'Public feed was requested after age confirmation');
@@ -209,7 +248,7 @@ jobs:
               }
               assert.deepEqual(errors,[]);
               assert.ok((await page.locator('#wager-heading').innerText()).length>15);
-              console.log('ARENA_MOBILE_62_ACTIVITIES_REAL_OPENLIGADB_FEED_NO_MONEY_PASS');
+              console.log('ARENA_MOBILE_62_ACTIVITIES_SPAIN_UEFA_MULTISPORT_HORSE_OFFICIAL_CALENDARS_NO_MONEY_PASS');
             }finally{await browser.close()}
           })().catch(e=>{console.error(e);process.exitCode=1});
           JS
