@@ -85,6 +85,34 @@ jobs:
           factory=[x for x in active if re.search(r'factory|publisher|research|work.?order|autonomous',x,re.I)]
           paths=sorted({m.group(0) for line in factory for m in re.finditer(r'/home/zomorod2/[A-Za-z0-9_./-]+',line)})
           print('FACTORY_CRON='+json.dumps({'active_total':len(active),'factory_candidate_count':len(factory),'paths':paths[:45]},sort_keys=True))
+          for n,line in enumerate(active):
+              if not re.search(r'factory|publisher|research|work.?order|autonomous',line,re.I):continue
+              ps=sorted(set(m.group(0) for m in re.finditer(r'/home/zomorod2/[A-Za-z0-9_./-]+',line)))
+              print('FACTORY_CRON_LINE='+json.dumps({'position':n,'sha256':hashlib.sha256(line.encode()).hexdigest(),'schedule':line.split()[:5],'paths':ps[:20]},sort_keys=True))
+          for path in (
+            h/'Saeit-staging/var/factory',
+            h/'Saeit-staging/var/factory/operations',
+            h/'Saeit-staging/factory-workspace',
+            h/'.saeit-factory-inbox/private',
+            h/'mojplaywin.com/factory-products',
+            h/'mojplaywin.com/factory-releases',
+            h/'mojplaywin.com/factory-previews'):
+              if path.is_symlink():raise SystemExit('SYMLINK_FACTORY_PATH')
+              items=[info(x) for x in path.iterdir()] if path.is_dir() else []
+              if len(items)>180:items=items[:180]
+              print('FACTORY_DEEP='+json.dumps({'path':str(path),'exists':path.is_dir(),'children':items},sort_keys=True))
+          owner=os.geteuid()
+          roots=[str(h/'Saeit-staging/var/factory'),str(h/'.saeit-factory-inbox/bin')]
+          proc_count={k:0 for k in roots}
+          for p in Path('/proc').iterdir():
+              if not p.name.isdigit():continue
+              try:
+                  if p.stat().st_uid!=owner:continue
+                  cwd=os.readlink(p/'cwd')
+                  for k in roots:
+                      if cwd==k or cwd.startswith(k+'/'):proc_count[k]+=1
+              except OSError:continue
+          print('FACTORY_PROCESS_CWD='+json.dumps(proc_count,sort_keys=True))
           passenger=run(['uapi','--output=json','PassengerApps','list_applications'],25)
           apps=[]
           try:
