@@ -218,12 +218,15 @@ def education_lesson(request, slug, lesson_id):
     previous_lesson = lessons[position - 1] if position > 0 else None
     next_lesson = lessons[position + 1] if position + 1 < len(lessons) else None
     bookmarked = request.user.is_authenticated and EducationBookmark.objects.filter(user=request.user, lesson=lesson).exists()
-    enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status="active").first()
+    enrollment = None
+    if request.user.is_authenticated:
+        enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status="active").first()
     if not enrollment:
         if not (course.is_free and lesson.is_free_preview):
             return JsonResponse({"ok": False, "error": "enrollment_required"}, status=403)
         return render(request, "core/education_lesson.html", {"course": course, "lesson": lesson, "enrollment": None, "progress": None, "previous_lesson": previous_lesson, "next_lesson": next_lesson, "lesson_position": position + 1, "lesson_total": len(lessons), "bookmarked": bookmarked})
-    progress, _ = EducationProgress.objects.get_or_create(enrollment=enrollment, lesson=lesson)
+    # GET must not create a progress row; completion POST owns that mutation.
+    progress = EducationProgress.objects.filter(enrollment=enrollment, lesson=lesson).first()
     return render(request, "core/education_lesson.html", {"course": course, "lesson": lesson, "enrollment": enrollment, "progress": progress, "previous_lesson": previous_lesson, "next_lesson": next_lesson, "lesson_position": position + 1, "lesson_total": len(lessons), "bookmarked": bookmarked})
 
 
