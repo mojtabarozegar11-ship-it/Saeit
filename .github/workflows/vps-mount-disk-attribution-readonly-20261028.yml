@@ -269,11 +269,12 @@ jobs:
               out = {"complete": False, "files_scanned": 0, "dirs_scanned": 0,
                      "allocated_bytes_scanned": 0, "age_allocated_bytes": {},
                      "class_allocated_bytes": {}, "largest_groups_anonymous": [],
-                     "scan_seconds": None}
+                     "scan_seconds": None, "hardlink_duplicates_skipped": 0}
               if root.is_symlink() or not root.is_dir():
                   return out
               started = time.monotonic()
               groups = {}
+              seen_inodes = set()
               try:
                   device = root.stat().st_dev
                   for base, dirs, files in os.walk(root, topdown=True, followlinks=False):
@@ -301,6 +302,11 @@ jobs:
                               st = candidate.lstat()
                               if not stat.S_ISREG(st.st_mode) or st.st_dev != device:
                                   continue
+                              inode_key = (st.st_dev, st.st_ino)
+                              if inode_key in seen_inodes:
+                                  out["hardlink_duplicates_skipped"] += 1
+                                  continue
+                              seen_inodes.add(inode_key)
                               age_days = max(0, (time.time() - st.st_mtime) / 86400)
                               age = "lt_1d" if age_days < 1 else ("1_to_7d" if age_days < 7
                                     else ("7_to_30d" if age_days < 30 else "ge_30d"))
