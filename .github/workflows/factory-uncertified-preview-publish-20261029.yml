@@ -35,7 +35,7 @@ jobs:
           test -n "$VPS_KEY" && test -n "$HOST_KEY"
           d="$RUNNER_TEMP/uncertified-preview"
           install -d -m 700 "$d"
-          trap 'rm -rf -- "$d"' EXIT
+          trap 'if [[ -f "$d/config" ]]; then ssh -F "$d/config" saeit-cpanel "rm -rf -- /tmp/saeit-preview-$GITHUB_RUN_ID" >/dev/null 2>&1 || true; fi; rm -rf -- "$d"' EXIT
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
           chmod 600 "$d/"*.key
@@ -70,7 +70,7 @@ jobs:
           EOF
           chmod 600 "$d/config"
           source_root=/home/githubops/factory-runtime/private/autonomous-product-cycle/digital-products/farm_enterprise_economics
-          ssh -F "$d/config" saeit-vps "test -s '$source_root/manufacturing_manifest.json' && test -s '$source_root/farm_enterprise_economics-internal-qa.zip' && test ! -L '$source_root/manufacturing_manifest.json' && test ! -L '$source_root/farm_enterprise_economics-internal-qa.zip'"
+          ssh -F "$d/config" saeit-vps "test -d '$source_root' && test ! -L '$source_root' && test -s '$source_root/manufacturing_manifest.json' && test -s '$source_root/farm_enterprise_economics-internal-qa.zip' && test ! -L '$source_root/manufacturing_manifest.json' && test ! -L '$source_root/farm_enterprise_economics-internal-qa.zip'"
           ssh -F "$d/config" saeit-vps bash -s -- "$source_root" <<'REMOTE'
           set -euo pipefail
           python3 - "$1" <<'PY'
