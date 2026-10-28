@@ -122,7 +122,8 @@ jobs:
                           result['type_counts']=dict(collections.Counter(x.get('type','unknown') for x in rows if isinstance(x,dict)))
                       else:result['data_type']=type(rows).__name__
                   except Exception as e:result['parse_error']=type(e).__name__
-                  if p.returncode:result['stderr_type']='nonzero'
+                  if p.returncode:result['stderr_note']=p.stderr.strip()[:240].replace(chr(10),' ')
+                  result['executable']=exe
                   return result
               except Exception as e:return {'function':func,'error_type':type(e).__name__}
           info=[audit('fetchzones'),audit('fetch_cpanel_generated_domains'),audit('fetchzone',['domain=zomorodmelal.ir']),audit('fetchzone',['domain=mojplaywin.com'])]
