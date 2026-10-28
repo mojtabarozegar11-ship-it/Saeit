@@ -7,7 +7,12 @@ import unittest
 from pathlib import Path
 from zipfile import ZipFile
 
-from build_preview import build_preview
+import importlib.util
+_SPEC = importlib.util.spec_from_file_location(
+    "ramadan_preview_builder", Path(__file__).with_name("build_preview.py"))
+_MODULE = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MODULE)
+build_preview = _MODULE.build_preview
 
 
 class PreviewArchiveTests(unittest.TestCase):
