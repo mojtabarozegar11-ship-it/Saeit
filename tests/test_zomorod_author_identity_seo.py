@@ -13,6 +13,7 @@ from scripts.zomorod_author_profile_route_release_20261023 import (
     OLD_SITEMAP_ITEM, NEW_SITEMAP_ITEM, SEO_VIEW_MARKER,
     with_django_author_route, with_django_author_view_and_sitemap,
     with_persian_sitemap_entry, without_exact_redirect,
+    verified_author_redirect_state,
 )
 
 
@@ -92,8 +93,13 @@ class PersianAuthorSeoTests(unittest.TestCase):
             "دکتر مجتبی روزگار", "Dr.mojtaba.rozegar",
         }.issubset(set(person["alternateName"])))
         self.assertEqual(
-            person["worksFor"]["url"], "https://zomorodmelal.ir/"
+            {org["url"] for org in person["worksFor"]},
+            {"https://zomorodmelal.ir/", "https://mojplaywin.com/"},
         )
+        self.assertEqual(person["homeLocation"]["name"], "Vancouver, British Columbia, Canada")
+        self.assertIn("مدیرعامل مج‌پلی‌وین", " ".join(person["jobTitle"]))
+        self.assertIn("ونکوور", self.source)
+        self.assertIn("پژوهش و تحقیقات علمی", self.source)
         self.assertIn(
             "https://mojplaywin.com/mojtaba.roozegar/",
             person["sameAs"],
@@ -113,6 +119,13 @@ class PersianAuthorSeoTests(unittest.TestCase):
             without_exact_redirect(REDIRECT + b"\n" + REDIRECT + b"\n" + other)
         with self.assertRaises(ValueError):
             without_exact_redirect(other + REDIRECT + b"\n")
+
+    def test_idempotent_live_author_redirect_state_is_scoped(self):
+        self.assertEqual(verified_author_redirect_state(REDIRECT + b"\n"), b"")
+        clean = b'PassengerAppRoot "/home/zomorod2/Saeit"\n'
+        self.assertEqual(verified_author_redirect_state(clean), clean)
+        with self.assertRaises(ValueError):
+            verified_author_redirect_state(b"Redirect 301 /authors/mojtaba-rozegar /unexpected\n")
 
     def test_only_one_canonical_persian_url_is_added_to_sitemap(self):
         original = (

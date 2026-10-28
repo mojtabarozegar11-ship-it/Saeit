@@ -36,6 +36,9 @@ REDIRECT = (
 OLD_SOURCE_SHA256 = (
     "6fc1f571f9bb27bf314b3d6804d39f029fcaca228f724e40652e13e705fbbd10"
 )
+CURRENT_SOURCE_SHA256 = (
+    "4af0dde1a62dc24b52b899b44d1858d7ca04bced49286008492c35b365f49c19"
+)
 PASSENGER_ANCHOR = b'PassengerAppRoot "/home/zomorod2/Saeit"'
 PROFILE_MARKER = b'id="profile-name"'
 PERSIAN_URL = "https://zomorodmelal.ir/authors/mojtaba-rozegar/"
@@ -108,6 +111,15 @@ def without_exact_redirect(blob: bytes) -> bytes:
     if matches[0] != 0:
         raise ValueError("AUTHOR_REDIRECT_MOVED_FROM_ORIGINAL_POSITION")
     return b"".join(lines[:matches[0]] + lines[matches[0] + 1:])
+
+
+def verified_author_redirect_state(blob: bytes) -> bytes:
+    """Remove the obsolete exact redirect once, or preserve an already-live route."""
+    if REDIRECT in blob:
+        return without_exact_redirect(blob)
+    if b"/authors/mojtaba-rozegar" in blob:
+        raise ValueError("UNKNOWN_AUTHOR_REDIRECT_OR_REWRITE")
+    return blob
 
 
 def with_persian_sitemap_entry(blob: bytes) -> bytes:
@@ -200,7 +212,7 @@ def install(run: str, want: str) -> None:
     original_seo = SEO.read_bytes()
     if PASSENGER_ANCHOR not in original_ht:
         raise ValueError("HOST_APP_MAPPING_DRIFT")
-    new_ht = without_exact_redirect(original_ht)
+    new_ht = verified_author_redirect_state(original_ht)
     new_sitemap = with_persian_sitemap_entry(original_sitemap)
     new_urls = with_django_author_route(original_urls)
     new_seo = with_django_author_view_and_sitemap(original_seo)
@@ -208,11 +220,11 @@ def install(run: str, want: str) -> None:
     existing_app_page = APP_TARGET.read_bytes() if APP_TARGET.is_file() else None
     if TARGET.exists() and existing_page is None:
         raise ValueError("AUTHOR_DEST_NOT_A_REGULAR_FILE")
-    if existing_page is not None and digest(existing_page) not in (want, OLD_SOURCE_SHA256):
+    if existing_page is not None and digest(existing_page) not in (want, OLD_SOURCE_SHA256, CURRENT_SOURCE_SHA256):
         raise ValueError("AUTHOR_DEST_UNKNOWN_CONTENT")
     if APP_TARGET.exists() and existing_app_page is None:
         raise ValueError("DJANGO_AUTHOR_DEST_NOT_A_REGULAR_FILE")
-    if existing_app_page is not None and digest(existing_app_page) not in (want, OLD_SOURCE_SHA256):
+    if existing_app_page is not None and digest(existing_app_page) not in (want, OLD_SOURCE_SHA256, CURRENT_SOURCE_SHA256):
         raise ValueError("DJANGO_AUTHOR_DEST_UNKNOWN_CONTENT")
     if digest(HTACCESS.read_bytes()) != digest(original_ht):
         raise ValueError("CONCURRENT_HTACCESS_CHANGE")
