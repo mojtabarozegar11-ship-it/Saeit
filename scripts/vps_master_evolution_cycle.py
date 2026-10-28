@@ -84,7 +84,7 @@ def evaluate(db_path: Path, state_path: Path):
         "schema": "saeit.master.evolution.v1",
         "evaluated_at_utc": datetime.now(timezone.utc).isoformat(),
         "agent_code": "economic-master-agent",
-        "operating_mode": "private_vps_benchmark_adaptive",
+        "operating_mode": "private_vps_single_step_controlled",
         "task_counts": counts,
         "delta": {"verified_completed_tasks": delta_completed,
                   "failed_tasks": delta_failed, "blocked_tasks": delta_blocked},
@@ -98,7 +98,7 @@ def evaluate(db_path: Path, state_path: Path):
         "decision": decision,
         "revision": int(previous.get("revision", 0)) + int(steps != old_steps),
         "self_modifying_code": False,
-        "reversible_parameter_adaptation": True,
+        "capacity_policy_change": "disabled_by_owner_volume_cap",
         "commercial_publication_enabled": False,
         "financial_actions_enabled": False,
     }
