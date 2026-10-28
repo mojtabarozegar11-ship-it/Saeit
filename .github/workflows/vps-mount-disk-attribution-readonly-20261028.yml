@@ -262,6 +262,75 @@ jobs:
           hot_sizes = {label: bounded_du(Path(path), 5)
                        for label, path in hot_roots.items()}
 
+          # Bounded, read-only operations inventory to prioritize *reversible*
+          # recovery. All directory names are suppressed; no delete candidates
+          # are declared safe from age or size alone.
+          def factory_operations_age_inventory(root):
+              out = {"complete": False, "files_scanned": 0, "dirs_scanned": 0,
+                     "allocated_bytes_scanned": 0, "age_allocated_bytes": {},
+                     "class_allocated_bytes": {}, "largest_groups_anonymous": [],
+                     "scan_seconds": None}
+              if root.is_symlink() or not root.is_dir():
+                  return out
+              started = time.monotonic()
+              groups = {}
+              try:
+                  device = root.stat().st_dev
+                  for base, dirs, files in os.walk(root, topdown=True, followlinks=False):
+                      if time.monotonic() - started > 18 or out["files_scanned"] >= 25000:
+                          break
+                      here = Path(base)
+                      if here.is_symlink() or here.stat().st_dev != device:
+                          dirs[:] = []
+                          continue
+                      safe_dirs = []
+                      for dirname in dirs:
+                          subdir = here / dirname
+                          try:
+                              if not subdir.is_symlink() and subdir.stat().st_dev == device:
+                                  safe_dirs.append(dirname)
+                          except OSError:
+                              pass
+                      dirs[:] = safe_dirs
+                      out["dirs_scanned"] += 1
+                      for filename in files:
+                          if time.monotonic() - started > 18 or out["files_scanned"] >= 25000:
+                              break
+                          candidate = here / filename
+                          try:
+                              st = candidate.lstat()
+                              if not stat.S_ISREG(st.st_mode) or st.st_dev != device:
+                                  continue
+                              age_days = max(0, (time.time() - st.st_mtime) / 86400)
+                              age = "lt_1d" if age_days < 1 else ("1_to_7d" if age_days < 7
+                                    else ("7_to_30d" if age_days < 30 else "ge_30d"))
+                              name = filename.lower()
+                              kind = ("database" if name.endswith((".db", ".sqlite", ".sqlite3"))
+                                      else "db_journal" if name.endswith(("-wal", "-shm", "-journal"))
+                                      else "archive" if name.endswith((".zip", ".tar", ".gz", ".zst"))
+                                      else "log" if name.endswith((".log", ".jsonl", ".ndjson"))
+                                      else "other")
+                              allocated = st.st_blocks * 512
+                              out["files_scanned"] += 1
+                              out["allocated_bytes_scanned"] += allocated
+                              out["age_allocated_bytes"][age] = out["age_allocated_bytes"].get(age, 0) + allocated
+                              out["class_allocated_bytes"][kind] = out["class_allocated_bytes"].get(kind, 0) + allocated
+                              relative = candidate.relative_to(root).parts
+                              group = "root" if len(relative) == 1 else relative[0]
+                              groups[group] = groups.get(group, 0) + allocated
+                          except (OSError, ValueError):
+                              continue
+                  else:
+                      out["complete"] = True
+              except (OSError, ValueError):
+                  pass
+              out["largest_groups_anonymous"] = sorted(groups.values(), reverse=True)[:12]
+              out["scan_seconds"] = round(time.monotonic() - started, 1)
+              return out
+
+          operations_inventory = factory_operations_age_inventory(
+              home / "factory-runtime" / "operations")
+
           result = {
               "schema": "saeit.vps.mount-disk-attribution.readonly.v1",
               "observed_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -273,6 +342,7 @@ jobs:
               "root_du_bytes": root_sizes,
               "inode_state": inode_state,
               "bounded_hot_roots": hot_sizes,
+              "factory_operations_age_inventory": operations_inventory,
               "root_same_device_as_factory": devices,
               "home_known_bytes": known,
               "home_other_largest_bytes": others[:12],
