@@ -1,4 +1,4 @@
-"""Four original Persian course posters on independent personal website, no paid checkout.
+"""Four original English course posters on independent personal website, no paid checkout.
 
 All artwork is deterministic hand-built SVG. Do not present generated human
 portraits as an actual teacher, use any private owner photos, or claim that
@@ -19,47 +19,47 @@ GALLERY=BASE+"courses/"
 COURSES=(
     {
         "slug":"business",
-        "title":"دوره کسب‌وکار",
-        "lines":("دوره جامع","کسب‌وکار"),
-        "summary":"از ایده تا برنامه‌ریزی، فروش و مدیریت پایدار",
-        "subtitle":"راه‌اندازی، مدیریت و توسعه کسب‌وکار",
-        "features":("طراحی مدل کسب‌وکار","برنامه‌ریزی مالی و فروش","بازاریابی و سنجش عملکرد"),
+        "title":"Business Development Course",
+        "lines":("BUILD A BUSINESS","THAT CAN GROW"),
+        "summary":"A practical introduction to launching, managing and growing a business.",
+        "subtitle":"Business strategy | Sales | Operations",
+        "features":("Build a clear business model","Plan cash flow and sustainable sales","Measure marketing and performance"),
         "palette":("#07182c","#173c65","#f6c76a","#f8e5bc","#8fc1ff"),
         "index":"01",
-        "alt":"پوستر دوره کسب‌وکار؛ نمودار رشد و ساختمان‌های تجاری در طیف سرمه‌ای و طلایی",
+        "alt":"English business course poster with rising charts, city skyline and navy-gold palette.",
     },
     {
         "slug":"agriculture",
-        "title":"دوره افزایش درآمد کشاورزی",
-        "lines":("افزایش درآمد","کشاورزی"),
-        "summary":"بهره‌وری بیشتر، مدیریت هزینه و بازار محصول",
-        "subtitle":"مدیریت علمی مزرعه و ارزش‌آفرینی",
-        "features":("تحلیل هزینه و بهره‌وری","بازاررسانی و ارزش افزوده","مدیریت آب و منابع"),
+        "title":"Increasing Agricultural Income",
+        "lines":("GROW FARM INCOME","WITH SMARTER DECISIONS"),
+        "summary":"Learn practical ways to improve farm profitability through evidence-based management.",
+        "subtitle":"Efficiency | Farm economics | Marketing",
+        "features":("Evaluate costs and farm productivity","Explore value-added crop marketing","Manage water, inputs and resources"),
         "palette":("#072b24","#145941","#d6bf6b","#f3efc8","#8de8ba"),
         "index":"02",
-        "alt":"پوستر افزایش درآمد کشاورزی با نماد مزرعه، خوشه گندم و خورشید به رنگ سبز و طلایی",
+        "alt":"English agricultural income poster with crops, farmland and a green-gold palette.",
     },
     {
         "slug":"online-income",
-        "title":"دوره آموزش کسب درآمد از اینترنت",
-        "lines":("کسب درآمد","از اینترنت"),
-        "summary":"مهارت‌های دیجیتال، خدمات آنلاین و تجارت اینترنتی",
-        "subtitle":"از مهارت واقعی تا مدل درآمدی آنلاین",
-        "features":("خدمات و محصولات دیجیتال","بازاریابی و فروش آنلاین","مدیریت ریسک و هزینه"),
+        "title":"How to Earn Money Online",
+        "lines":("BUILD DIGITAL SKILLS","EARN ONLINE"),
+        "summary":"Explore legitimate digital services, products and online business models.",
+        "subtitle":"Digital products | Freelancing | E-commerce",
+        "features":("Develop marketable digital skills","Explore freelancing and e-commerce","Plan marketing, costs and risk"),
         "palette":("#071f3f","#145586","#f4c874","#e0f7ff","#6ceadf"),
         "index":"03",
-        "alt":"پوستر درآمد اینترنتی با نماد لپ‌تاپ، فروشگاه دیجیتال و اتصال‌های شبکه در زمینه آبی",
+        "alt":"English online income poster with laptop, global connections and an upward digital chart.",
     },
     {
         "slug":"chatgpt",
-        "title":"دوره تخصصی آموزش چت‌جی‌پی‌تی",
-        "lines":("آموزش تخصصی","چت‌جی‌پی‌تی"),
-        "summary":"کاربرد حرفه‌ای ChatGPT در تحقیق و کسب‌وکار",
-        "subtitle":"پرامپت‌نویسی، تحلیل و اتوماسیون مسئولانه",
-        "features":("اصول پرامپت‌نویسی","تحلیل و تولید محتوای حرفه‌ای","کنترل صحت و امنیت اطلاعات"),
+        "title":"Advanced ChatGPT Training",
+        "lines":("MASTER CHATGPT","FOR REAL WORK"),
+        "summary":"Use ChatGPT effectively in research, content, operations and business tasks.",
+        "subtitle":"Prompting | Research | Automation",
+        "features":("Write better prompts and workflows","Apply AI to research and content","Verify outputs and protect sensitive data"),
         "palette":("#1c113f","#46308e","#f4c5ff","#f1e7ff","#77f4dc"),
         "index":"04",
-        "alt":"پوستر آموزش تخصصی چت‌جی‌پی‌تی با نماد شبکه عصبی انتزاعی و مدارهای هوش مصنوعی بنفش",
+        "alt":"English advanced ChatGPT poster with abstract neural-network illustration in violet.",
     },
 )
 BY_SLUG={c["slug"]:c for c in COURSES}
@@ -134,8 +134,8 @@ def svg_for(slug):
     dark,mid,accent,ivory,secondary=course["palette"]
     l1,l2=course["lines"]
     def text(y,content,size,color,weight="700"):
-        return ('<text x="450" y="%d" font-family="Noto Sans Arabic,Tahoma,Arial,sans-serif" '
-                'font-size="%d" font-weight="%s" text-anchor="middle" direction="rtl" '
+        return ('<text x="450" y="%d" font-family="Arial,Helvetica,sans-serif" '
+                'font-size="%d" font-weight="%s" text-anchor="middle" direction="ltr" '
                 'fill="%s">%s</text>'%(y,size,weight,color,escape(content)))
     artwork=_art(slug,accent,secondary)
     stars="".join('<circle cx="%d" cy="%d" r="%d" fill="%s" opacity=".6"/>'%
@@ -162,14 +162,14 @@ def svg_for(slug):
        'fill="%s" fill-opacity=".12" stroke="%s" stroke-opacity=".65"/>'%(accent,accent)+
        text(98,"MOJTABA ROOZEGAR  •  EDUCATION",22,ivory,"500")+
        '<path d="M180 145 H720" stroke="%s" stroke-opacity=".3" stroke-width="2"/>'%accent+
-       text(258,l1,65,ivory)+text(370,l2,77,accent)+
+       text(258,l1,56 if len(l1)>16 else 69,ivory)+text(370,l2,50 if len(l2)>17 else 73,accent)+
        text(441,course["subtitle"],29,ivory,"500")+
        artwork+
        '<rect x="54" y="1006" width="792" height="150" rx="23" '
        'fill="#020c17" fill-opacity=".48" stroke="%s" stroke-opacity=".6"/>'%accent+
-       text(1062,"آشنایی با سرفصل‌ها و برنامه دوره",29,ivory)+
+       text(1062,"EXPLORE THE COURSE",35,ivory)+
        '<path d="M280 1086 H620" stroke="%s" stroke-width="2" stroke-opacity=".6"/>'%accent+
-       text(1130,"وب شخصی مجتبی روزگار  |  معرفی دوره",23,secondary,"500")+
+       text(1130,"MOJTABA ROOZEGAR | COURSE PREVIEW",23,secondary,"500")+
        '</svg>'
     )
     if len(svg.encode("utf-8"))>40_000:
@@ -181,15 +181,15 @@ def _html(course):
     slug=course["slug"]
     url=POSTER_BASE+slug+".svg"
     return ('<article class="mpw-course-card" id="'+slug+'">'
-            '<a class="mpw-course-image" href="'+url+'" target="_blank" rel="noopener noreferrer" '
-            'aria-label="مشاهده پوستر '+escape(course["title"])+'">'
-            '<img loading="lazy" decoding="async" width="900" height="1200" src="'+url+'" alt="'+
+            '<a class="mpw-course-image" href="'+url+'?v=en-20261028"' target="_blank" rel="noopener noreferrer" '
+            'aria-label="View poster: '+escape(course["title"])+'">'
+            '<img loading="lazy" decoding="async" width="900" height="1200" src="'+url+'?v=en-20261028" alt="'+
             escape(course["alt"],quote=True)+'"></a>'
             '<div class="mpw-course-copy"><h2>'+escape(course["title"])+'</h2><p>'+
-            escape(course["summary"])+'</p><h3>محورهای پیشنهادی آموزش</h3><ul>'+features+
-            '</ul><p class="mpw-course-status">معرفی دوره | ثبت‌نام و پرداخت در این صفحه فعال نیست</p>'
-            '<div class="mpw-course-actions"><a href="'+url+'" target="_blank" rel="noopener noreferrer">'
-            'مشاهده پوستر</a><a href="'+SITE+'contact/">پرسش درباره برنامه دوره</a></div></div></article>')
+            escape(course["summary"])+'</p><h3>What you will explore</h3><ul>'+features+
+            '</ul><p class="mpw-course-status">Course preview | Enrollment and payments are not open</p>'
+            '<div class="mpw-course-actions"><a href="'+url+'?v=en-20261028"' target="_blank" rel="noopener noreferrer">'
+            'View poster</a><a href="'+SITE+'contact/">Ask about this course</a></div></div></article>')
 
 @require_GET
 def poster(request,slug):
@@ -198,20 +198,20 @@ def poster(request,slug):
         return HttpResponseNotFound("Poster not found")
     out=HttpResponse(svg_for(slug),content_type="image/svg+xml; charset=utf-8")
     out["X-Content-Type-Options"]="nosniff"
-    out["Cache-Control"]="public, max-age=3600"
+    out["Cache-Control"]="public, max-age=120, must-revalidate"
     out["Content-Security-Policy"]="default-src 'none'; style-src 'unsafe-inline'; sandbox"
     return out
 
 @require_GET
 def gallery(request):
     cards="".join(_html(c) for c in COURSES)
-    page='''<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8">
+    page='''<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="index,follow">
-<title>چهار دوره آموزشی | وب مجتبی روزگار</title>
-<meta name="description" content="معرفی چهار دوره در زمینه کسب‌وکار، افزایش درآمد کشاورزی، درآمد اینترنتی و استفاده تخصصی از ChatGPT؛ همراه با پوستر و سرفصل‌های پیشنهادی.">
+<title>Four Professional Courses | Mojtaba Roozegar</title>
+<meta name="description" content="Explore four learning paths in business development, agricultural income, online work and advanced ChatGPT training by Mojtaba Roozegar.">
 <link rel="canonical" href="https://mojplaywin.com/mojtaba.roozegar/social-command/courses/">
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0e1516;color:#f1e9d9;font:15px/1.85 system-ui,"Noto Sans Arabic",Tahoma,sans-serif}
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0e1516;color:#f1e9d9;font:15px/1.85 system-ui,Arial,Helvetica,sans-serif}
 header,main,footer{max-width:1210px;margin:auto;padding:clamp(14px,4vw,38px)}a{color:#e6c57e}
 h1{font-size:clamp(29px,5vw,49px);margin:10px 0;color:#f3d295}h2{font-size:clamp(20px,2.5vw,28px);color:#f4d69e}
 .mpw-kicker{color:#e8c881;letter-spacing:.16em;font-size:12px}
@@ -222,7 +222,7 @@ nav a{margin-left:15px}.mpw-course-grid{display:grid;grid-template-columns:repea
 .mpw-course-image img{display:block;width:100%;height:100%;object-fit:cover;aspect-ratio:3/4}
 .mpw-course-copy{padding:clamp(12px,2.5vw,25px);min-width:0}.mpw-course-copy h2{margin:0 0 8px}
 .mpw-course-copy p{margin:8px 0}.mpw-course-copy h3{font-size:15px;margin:13px 0 4px;color:#dfc7a0}
-.mpw-course-copy ul{margin:0;padding-right:20px}.mpw-course-copy li{margin:4px 0}
+.mpw-course-copy ul{margin:0;padding-left:20px}.mpw-course-copy li{margin:4px 0}
 .mpw-course-status{font-size:12px;color:#e0d3ad;background:#24332a;padding:7px 10px;border-radius:8px}
 .mpw-course-actions{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0 0}
 .mpw-course-actions a{border:1px solid #a18a58;padding:8px 11px;border-radius:8px;text-decoration:none}
@@ -233,12 +233,12 @@ footer{color:#d2c8b6}footer p{max-width:850px}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important}}
 </style></head><body>
 <header><div class="mpw-kicker">MOJTABA ROOZEGAR / EDUCATION</div>
-<h1>چهار مسیر یادگیری و توسعه مهارت</h1>
-<p>آشنایی با دوره‌های کسب‌وکار، مدیریت اقتصادی کشاورزی، کسب درآمد از اینترنت و کار حرفه‌ای با چت‌جی‌پی‌تی. پوسترهای این صفحه اصل و بدون تصویر ساختگی مدرس هستند.</p>
-<nav><a href="/mojtaba.roozegar/">بازگشت به وب شخصی</a><a href="/mojtaba.roozegar/contact/">تماس و پرسش</a></nav>
-</header><main><section class="mpw-course-grid" aria-label="چهار پوستر و معرفی دوره‌ها">'''+cards+'''</section></main>
-<footer><p>وضعیت انتشار: معرفی اولیه سرفصل‌ها. مدت، برنامه جلسات، شهریه، مدرک و زمان ثبت‌نام فقط پس از اعلام رسمی تعیین می‌شوند. هیچ تضمین درآمدی ارائه نمی‌شود.</p>
-<p>© Mojtaba Roozegar · وب شخصی مجتبی روزگار</p></footer></body></html>'''
+<h1>Four Courses. Practical Skills.</h1>
+<p>Explore business development, improving farm income, online earning skills and advanced ChatGPT training. Every poster uses original vector artwork, with no fabricated instructor portrait.</p>
+<nav><a href="/mojtaba.roozegar/">Back to personal website</a><a href="/mojtaba.roozegar/contact/">Contact and inquiries</a></nav>
+</header><main><section class="mpw-course-grid" aria-label="Four courses and promotional posters">'''+cards+'''</section></main>
+<footer><p>This is an early course preview. Dates, tuition, certificates and enrollment will be announced only when confirmed. No earnings or financial results are guaranteed.</p>
+<p>© Mojtaba Roozegar · Official Personal Website</p></footer></body></html>'''
     out=HttpResponse(page,content_type="text/html; charset=utf-8")
     out["X-Content-Type-Options"]="nosniff"
     out["Cache-Control"]="public, max-age=300"
