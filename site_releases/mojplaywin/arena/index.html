@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://api.openligadb.de; form-action 'self'; base-uri 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src https://api.openligadb.de https://www.thesportsdb.com; form-action 'self'; base-uri 'none'; object-src 'none'">
   <meta name="theme-color" content="#090c12">
-  <meta name="description" content="MOJ Casino Lounge: 62 free-play experiences plus OpenLigaDB real Bundesliga fixtures, free non-wager predictions and sports results. No real-money gambling, deposits, payouts or prizes.">
+  <meta name="description" content="MOJ Casino Lounge: 62 free-play experiences, Spain and European football results, other sports event spotlights, global horse racing and equestrian official calendars. No real-money gambling, deposits, payouts or prizes.">
   <title>MOJ CASINO LOUNGE | MojPlayWin</title>
   <style>
     :root{color-scheme:dark;--bg:#090c12;--panel:#111824;--panel2:#171f2e;--line:#364152;--gold:#dfbd7a;--soft:#a7b5cb;--white:#f6f4f0;--green:#62ddb5;--red:#e96c77}
@@ -25,6 +25,17 @@
     [dir=rtl] body{font-family:Tahoma,'Segoe UI',sans-serif}[dir=rtl] .hero h1,[dir=rtl] .section-head h2,[dir=rtl] .card h3,[dir=rtl] .notice h3,[dir=rtl] .gatebox h2{font-family:Tahoma,'Segoe UI',sans-serif;letter-spacing:0}[dir=rtl] .notice ul{padding-right:20px;padding-left:0}[dir=rtl] .hero{direction:rtl}
     @keyframes revolve{to{transform:rotate(360deg)}}@media(max-width:890px){.hero{grid-template-columns:1fr;padding:65px 0}.showcase{min-height:275px}.header-right nav{display:none}.cards{grid-template-columns:1fr}.notice-grid{grid-template-columns:1fr;gap:15px}}@media(max-width:520px){.shell{width:min(100% - 28px,1180px)}.hero h1{font-size:3.4rem}.hero{gap:27px}.card{padding:20px}.showcase{min-height:220px}.showcase-inner strong{font-size:1.6rem}.topbar{font-size:.64rem}.mark{font-size:.76rem}.gatebox{padding:24px}}
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.showcase:before{animation:none}.btn{transition:none}}
+  
+    .world-panel{border:1px solid #45546a;background:linear-gradient(130deg,#192332,#101925);padding:22px 25px;border-radius:14px;min-height:100px}
+    .world-panel h3{font-size:1.3rem;margin:4px 0 9px;color:var(--gold)}.world-panel p{margin:5px 0;color:var(--soft)}
+    .horse-filters{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0}.horse-filters label{color:var(--gold);font-size:.9rem;font-weight:650}
+    .horse-filters select,.live-data-toolbar select{max-width:100%;min-height:46px;padding:10px 12px;background:#1a2635;border:1px solid #798ba0;border-radius:8px;color:#fff;font:inherit}
+    .horse-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}
+    .horse-card{padding:19px;border:1px solid #3b4b60;border-radius:12px;background:#141e2d;display:flex;flex-direction:column;gap:6px}
+    .horse-card h3{font-size:1.06rem;margin:0;color:#f8e2b0}.horse-card p{margin:0;color:var(--soft);font-size:.83rem}
+    .horse-card a{margin-top:auto;align-self:flex-start;color:var(--gold);padding:9px 0;text-decoration:underline;text-underline-offset:3px}
+    .horse-label{font-size:.74rem;color:#7fe4c6;font-weight:750;letter-spacing:.03em}
+    @media(max-width:890px){.horse-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.horse-grid{grid-template-columns:1fr}}
   </style>
   <style>
     .wide-card{grid-column:1/-1}.tabletop-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.tabletop-panel{min-width:0;border:1px solid #394454;border-radius:15px;background:linear-gradient(145deg,#172132,#0c141f);padding:24px}.tabletop-panel h3{font-family:Georgia,serif;color:#f4ddac;font-size:1.45rem;margin:0 0 8px}.tabletop-panel p{font-size:.85rem;color:var(--soft)}.board-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:15px 0}.board-status{border-top:1px solid #394454;margin-top:14px;padding-top:12px;color:#e5d9b9;min-height:45px;font-size:.86rem}.chess-board{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));width:min(100%,520px);border:5px solid #c5a365;border-radius:5px;overflow:hidden}.chess-cell{width:100%;aspect-ratio:1;border:0;border-radius:0;color:#171b20;display:grid;place-items:center;background:#e6d4a9;font-size:clamp(1.1rem,3.8vw,2.25rem);cursor:pointer}.chess-cell:nth-child(16n + 2),.chess-cell:nth-child(16n + 4),.chess-cell:nth-child(16n + 6),.chess-cell:nth-child(16n + 8),.chess-cell:nth-child(16n + 9),.chess-cell:nth-child(16n + 11),.chess-cell:nth-child(16n + 13),.chess-cell:nth-child(16n + 15){background:#76918b}.chess-cell.selected{box-shadow:inset 0 0 0 4px #fdc751}.chess-cell.legal{box-shadow:inset 0 0 0 4px #45d6a7}.chess-cell:focus-visible,.back-point:focus-visible,.memory-tile:focus-visible{outline:3px solid #ffee8c;outline-offset:-3px;z-index:1}.chess-cell:disabled{cursor:default;opacity:1}.back-board-scroll{max-width:100%;overflow-x:auto}.back-board{display:grid;grid-template-columns:repeat(12,minmax(47px,1fr));width:max(100%,660px);border:4px solid #c3a369;border-radius:5px;gap:2px;background:#413224;padding:3px}.back-point{min-height:125px;border:0;border-radius:3px;background:#b08059;color:#fff1dc;font-size:.8rem;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;padding:5px 1px}.back-point:nth-child(2n){background:#5d4434}.back-point.selected{box-shadow:inset 0 0 0 3px #f0d279}.back-point.target{box-shadow:inset 0 0 0 3px #65dfb1}.checker-chip{display:grid;place-items:center;min-width:25px;height:25px;border-radius:50%;border:2px solid #655334;font-weight:900;font-size:.85rem;color:#1b2025;background:#f1e8d9}.checker-chip.dark{background:#1e2938;color:#f3e5c9;border-color:#d6b777}.memory-board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;max-width:400px}.memory-tile{aspect-ratio:1;border:1px solid #ab956a;border-radius:6px;background:#283750;color:#ebd8ab;font-size:1.45rem;cursor:pointer}.memory-tile.found{background:#305749}.wheel-container{display:flex;align-items:center;gap:24px;flex-wrap:wrap}.luck-wheel{width:150px;height:150px;border:6px solid #dfbd7a;border-radius:50%;display:grid;place-items:center;background:conic-gradient(#db765c 0 60deg,#e1c075 60deg 120deg,#6892b5 120deg 180deg,#8c78ab 180deg 240deg,#69b494 240deg 300deg,#bf7f99 300deg 360deg);box-shadow:0 0 0 5px #202530,inset 0 0 15px #0008;transition:transform 1.35s cubic-bezier(.18,.7,.2,1);position:relative}.luck-wheel:before{content:'▲';position:absolute;top:-20px;color:#eec47d;font-size:1.1rem}.luck-wheel:after{content:'✦';color:#fff;font-size:2.5rem;text-shadow:0 0 10px #000}.mini-dice{display:inline-flex;background:#f0e2bd;color:#141b27;border-radius:5px;padding:7px;min-width:36px;min-height:36px;align-items:center;justify-content:center;font-size:1.4rem;font-weight:800;margin:3px}.game-kicker{font-size:.75rem;letter-spacing:.13em;color:var(--gold);text-transform:uppercase}.arena-spacer{margin-top:24px}@media(max-width:900px){.tabletop-grid{grid-template-columns:1fr}.tabletop-panel{padding:18px}}@media(prefers-reduced-motion:reduce){.luck-wheel{transition:none}}
@@ -275,13 +286,13 @@
   <div class="section-head live-data-header">
     <div>
       <div class="eyebrow" id="live-eyebrow">REAL SPORTS DATA · NO MONEY WAGERS</div>
-      <h2 id="live-heading">Live Bundesliga Fixtures &amp; Free Predictions</h2>
-      <p class="wager-intro" id="live-intro">Real first- and second-division German league fixtures and results, supplied by the OpenLigaDB community. Pick match outcomes for free and compare them to the published final result. No odds, wagers, MCD debit, prizes or financial rewards.</p>
+      <h2 id="live-heading">Spain, Europe &amp; World Sport · Real Fixtures</h2>
+      <p class="wager-intro" id="live-intro">Real Spanish LaLiga, UEFA Champions/Europa/Conference, English Premier League, German football and DEL ice hockey fixtures. Football predictions are free and device-only; hockey offers score viewing. Community data may be incomplete. No stakes, odds, prizes, MCD debit or financial rewards.</p>
     </div>
   </div>
   <div class="live-data-toolbar">
     <label id="live-league-label" for="live-league">League</label>
-    <select id="live-league" name="live-league"><option value="bl1">Bundesliga 1</option><option value="bl2">Bundesliga 2</option></select>
+    <select id="live-league" name="live-league"><option value="la1">🇪🇸 Spain · LaLiga</option><option value="ucl">🇪🇺 UEFA · Champions League</option><option value="uel2026">🇪🇺 UEFA · Europa League</option><option value="uecl2026">🇪🇺 UEFA · Conference League</option><option value="pl">🏴 England · Premier League</option><option value="bl1">🇩🇪 Germany · Bundesliga 1</option><option value="bl2">🇩🇪 Germany · Bundesliga 2</option><option value="dfb">🇩🇪 Germany · DFB-Pokal</option><option value="del">🏒 Germany · DEL Ice Hockey</option></select>
     <button id="live-refresh" type="button">Refresh match data</button>
   </div>
   <div id="live-status" class="live-state" role="status" aria-live="polite">Real data loads after age confirmation. Last update and any delays will be shown here.</div>
@@ -295,6 +306,25 @@
   </div>
   <p class="live-source" id="live-source-note">Community-entered scores may be delayed or corrected. Time shown in your device time zone. Match data: <a href="https://www.openligadb.de/" target="_blank" rel="noopener noreferrer">OpenLigaDB contributors</a>, under the <a href="https://www.openligadb.de/lizenz" target="_blank" rel="noopener noreferrer">Open Database License (ODbL)</a>. The original data source remains available from the provider.</p>
   <div class="live-finance-lock"><strong id="live-finance-title">Future licensed finance: DISABLED</strong><span id="live-finance-desc">No real-money account, wallet, funds, stakes, withdrawals, transfer or live event odds. Licensing, jurisdictional access, verified identity/age, AML, accredited feeds, secure backend ledger and independent audits must pass before any separate activation.</span></div>
+</section>
+
+<section class="section shell" id="sport-spotlight" aria-labelledby="spotlight-heading">
+  <div class="section-head"><div class="eyebrow" id="spotlight-eyebrow">OTHER SPORTS · REAL SCHEDULES · LIMITED COVERAGE</div><h2 id="spotlight-heading">World Sports Event Spotlight</h2><p class="wager-intro" id="spotlight-intro">Basketball, Formula 1, tennis, cricket and more European leagues. The free third-party feed offers a limited next-event glimpse per competition, not complete fixtures or reliable live scores. No bets, money, prizes or odds.</p></div>
+  <div class="live-data-toolbar"><label id="spotlight-select-label" for="spotlight-select">Competition</label>
+    <select id="spotlight-select" name="spotlight-select">
+      <optgroup label="International · other sports"><option value="4387">🏀 NBA · Basketball</option><option value="4370">🏎️ Formula 1 · Motorsport</option><option value="4464">🎾 ATP Tour · Tennis</option><option value="4517">🎾 WTA Tour · Tennis</option><option value="4461">🏏 Big Bash · Cricket</option></optgroup>
+      <optgroup label="European football · next event preview"><option value="4332">🇮🇹 Italy · Serie A</option><option value="4334">🇫🇷 France · Ligue 1</option><option value="4337">🇳🇱 Netherlands · Eredivisie</option><option value="4338">🇧🇪 Belgium · Pro League</option><option value="4329">🏴 England · Championship</option><option value="4330">🏴 Scotland · Premiership</option><option value="4336">🇬🇷 Greece · Super League</option></optgroup>
+    </select><button type="button" id="spotlight-refresh">Refresh event</button></div>
+  <p class="live-state" id="spotlight-status" role="status" aria-live="polite">Loads only after age confirmation. Select a competition for its provider's next listed event.</p>
+  <div id="spotlight-card" class="world-panel" aria-live="polite"></div>
+  <p class="live-source" id="spotlight-source">Next-event preview supplied by <a href="https://www.thesportsdb.com/" target="_blank" rel="noopener noreferrer">TheSportsDB</a> (free API; one event per league, sometimes none). Schedules can be delayed, missing or changed; check each organizer. No real-time scoring, race results, bookmaker odds or official data licence is claimed.</p>
+</section>
+<section class="section shell" id="horse-world" aria-labelledby="horse-heading">
+  <div class="section-head"><div class="eyebrow" id="horse-eyebrow">WORLD HORSE RACING &amp; EQUESTRIAN · OFFICIAL CALENDARS</div><h2 id="horse-heading">Global Horse Racing &amp; Equestrian Events</h2><p class="wager-intro" id="horse-intro">From Spain to Ascot, Dubai, Japan, America and Australia. Horse racing is distinct from jumping, dressage and eventing. This is an editorial directory of organizers' official calendars—not a live race data feed, racecard, odds board or betting service.</p></div>
+  <div class="horse-filters"><label for="horse-country" id="horse-country-label">Country</label><select id="horse-country"><option value="all">All countries</option></select><label for="horse-kind" id="horse-kind-label">Discipline</label><select id="horse-kind"><option value="all">All disciplines</option><option value="racing">Horse racing</option><option value="equestrian">Equestrian / show sport</option></select></div>
+  <p class="live-state" id="horse-status" role="status" aria-live="polite"></p>
+  <div id="horse-grid" class="horse-grid"></div>
+  <p class="live-source" id="horse-source">Official organizer links are for verifying dates, entries and results directly. Listings are not automatically updated, and access/coverage depend on organizers. No real-time racing data or wagering is provided.</p>
 </section>
 <section class="section shell" id="prediction-center" aria-labelledby="prediction-heading">
   <div class="section-head">
@@ -1208,34 +1238,34 @@
 
 
   const liveCopy={
-    en:{nav:'Live Picks',eyebrow:'REAL SPORTS DATA · NO MONEY WAGERS',heading:'Live Bundesliga Fixtures & Free Predictions',
+    en:{nav:'Live Picks',eyebrow:'REAL SPORTS DATA · NO MONEY WAGERS',heading:'Spain, Europe & World Sport · Real Fixtures',
       intro:'Actual first- and second-division German fixtures and scores from OpenLigaDB. Make free predictions and compare them with published full-time results. No odds, MCD stakes or prizes.',
       league:'League',refresh:'Refresh match data',wait:'Real match data loads after age confirmation.',loading:'Connecting to the community data feed…',
       ready:'Real fixtures loaded',cached:'Cached results',stale:'Data delayed/unavailable; predictions disabled until refresh.',error:'Live data unavailable. Existing virtual games are unaffected.',none:'No upcoming fixtures available for this league.',time:'Kickoff (local time)',upcoming:'Upcoming',started:'Started · result pending',final:'Final',matchday:'Matchday',
       market:'Prediction type',choice:'Choose outcome',save:'Save free prediction',locked:'Predictions closed after kickoff',home:'Home',draw:'Draw',away:'Away',result:'Match result (1X2)',goals:'Total goals 2.5',btts:'Both teams score',score:'Exact score',over:'Over',under:'Under',yes:'Yes',no:'No',other:'Other score',
       history:'My free predictions',historyInfo:'Saved on this device only. Picks lock at kickoff; published final scores determine their outcome.',historyEmpty:'No predictions yet.',pending:'Awaiting final score',won:'Correct',lost:'Incorrect',remove:'Remove before kickoff',recorded:'Prediction saved locally. No credits were used.',replaced:'Existing free prediction updated.',closed:'This fixture has started or data is stale; new picks are closed.',limit:'Your local archive is full (50 picks).',source:'Community-entered scores may be delayed or corrected. Times use your device time zone. Match data:',licence:'under the Open Database License (ODbL).',financeTitle:'Future licensed finance: DISABLED',financeDesc:'No real-money account, wallet, deposits, wagers, withdrawals, transfer or bookmaker odds. A licensed jurisdiction, verified age/identity, AML, approved data and odds provider, secure backend ledger and independent audits are mandatory before activation.',last:'Checked',fresh:'Data age',minutes:'min',pick:'Pick',fixture:'Match'},
-    fa:{nav:'پیش‌بینی زنده',eyebrow:'داده واقعی مسابقات · بدون شرط پولی',heading:'برنامه و نتایج واقعی بوندس‌لیگا',
+    fa:{nav:'پیش‌بینی زنده',eyebrow:'داده واقعی مسابقات · بدون شرط پولی',heading:'اسپانیا، لیگ‌های اروپا و نتایج واقعی',
       intro:'مسابقات و نتایج واقعی دو سطح اول لیگ آلمان از OpenLigaDB؛ پیش‌بینی رایگان و مقایسه با نتیجه نهایی رسمی ثبت‌شده در منبع. بدون ضریب مالی، کسر MCD یا جایزه.',
       league:'لیگ',refresh:'تازه‌سازی نتایج',wait:'پس از تأیید سن، داده واقعی مسابقات بارگذاری می‌شود.',loading:'در حال اتصال به منبع جامعه‌محور…',
       ready:'مسابقات واقعی بارگذاری شد',cached:'نتایج ذخیره‌شده',stale:'داده به‌روز نیست؛ ثبت پیش‌بینی تا تازه‌سازی غیرفعال است.',error:'داده زنده در دسترس نیست؛ بازی‌های مجازی فعال می‌مانند.',none:'در این لیگ فعلاً مسابقه آینده ثبت نشده است.',time:'شروع به وقت دستگاه شما',upcoming:'پیش رو',started:'شروع شده · نتیجه نهایی در انتظار',final:'نهایی',matchday:'هفته',
       market:'نوع پیش‌بینی',choice:'انتخاب نتیجه',save:'ثبت رایگان پیش‌بینی',locked:'پس از شروع مسابقه ثبت بسته است',home:'میزبان',draw:'مساوی',away:'میهمان',result:'نتیجه (۱X۲)',goals:'مجموع گل ۲٫۵',btts:'گل‌زنی دو تیم',score:'نتیجه دقیق',over:'بیشتر',under:'کمتر',yes:'بله',no:'خیر',other:'سایر نتایج',
       history:'پیش‌بینی‌های رایگان من',historyInfo:'فقط روی دستگاه شما ذخیره می‌شوند. با شروع بازی بسته و با نتیجه نهایی ارزیابی می‌شوند.',historyEmpty:'هنوز پیش‌بینی ندارید.',pending:'در انتظار نتیجه',won:'درست',lost:'نادرست',remove:'حذف پیش از شروع',recorded:'پیش‌بینی فقط روی دستگاه ذخیره شد؛ اعتباری کسر نشد.',replaced:'پیش‌بینی قبلی به‌روزرسانی شد.',closed:'بازی شروع شده یا داده قدیمی است؛ ثبت بسته است.',limit:'آرشیو محلی به سقف ۵۰ پیش‌بینی رسیده است.',source:'نتایج را کاربران ثبت می‌کنند و ممکن است دیر یا اصلاح شوند. ساعت به وقت دستگاه شماست. منبع داده:',licence:'تحت مجوز پایگاه داده باز (ODbL).',financeTitle:'بخش مالی آینده: غیرفعال',financeDesc:'حساب مالی، کیف پول، واریز، شرط پولی، برداشت، انتقال یا ضرایب واقعی وجود ندارد. مجوز معتبر، احراز سن و هویت، AML، تأمین‌کننده مجاز داده و ضریب، دفترکل امن سروری و ممیزی مستقل شرط فعال‌سازی است.',last:'بررسی',fresh:'عمر داده',minutes:'دقیقه',pick:'انتخاب',fixture:'مسابقه'},
-    ar:{nav:'توقعات مباشرة',eyebrow:'بيانات مباريات حقيقية · دون رهانات مالية',heading:'مباريات البوندسليغا الحقيقية وتوقعاتها',
+    ar:{nav:'توقعات مباشرة',eyebrow:'بيانات مباريات حقيقية · دون رهانات مالية',heading:'إسبانيا وأوروبا · مباريات ونتائج حقيقية',
       intro:'مواعيد ونتائج حقيقية لدوري الدرجة الأولى والثانية الألماني من OpenLigaDB. توقعات مجانية بلا أودز مالية أو خصم أرصدة أو جوائز.',
       league:'الدوري',refresh:'تحديث النتائج',wait:'تُحمّل البيانات بعد تأكيد العمر.',loading:'جار الاتصال بالبيانات…',ready:'تم تحميل المباريات',cached:'بيانات مخزنة',stale:'البيانات قديمة؛ التوقعات الجديدة معطلة.',error:'البيانات غير متاحة؛ الألعاب الافتراضية تعمل.',none:'لا توجد مباريات قادمة.',time:'الموعد بتوقيت جهازك',upcoming:'قادمة',started:'بدأت · ننتظر النتيجة',final:'نهائية',matchday:'الجولة',
       market:'نوع التوقع',choice:'اختر نتيجة',save:'حفظ التوقع المجاني',locked:'أغلق التوقع بعد البداية',home:'المضيف',draw:'تعادل',away:'الضيف',result:'نتيجة 1X2',goals:'مجموع الأهداف ٢٫٥',btts:'يسجل الفريقان',score:'النتيجة الدقيقة',over:'أعلى',under:'أقل',yes:'نعم',no:'لا',other:'نتيجة أخرى',
       history:'توقعاتي المجانية',historyInfo:'تُحفظ على هذا الجهاز فقط، وتُقيّم عند إعلان النتيجة.',historyEmpty:'لا توقعات.',pending:'بانتظار النتيجة',won:'صحيح',lost:'غير صحيح',remove:'حذف قبل البداية',recorded:'تم الحفظ محلياً؛ لم يُخصم رصيد.',replaced:'تم تحديث التوقع.',closed:'بدأت المباراة أو انتهت صلاحية البيانات.',limit:'الحد ٥٠ توقعاً محلياً.',source:'النتائج المجتمعية قد تتأخر أو تُصحح. الوقت محلي. البيانات:',licence:'بترخيص ODbL.',financeTitle:'التمويل المرخّص مستقبلاً: مغلق',financeDesc:'لا محافظ أو إيداعات أو مراهنات أو سحب. يلزم ترخيص وهوية وعمر وAML ومزوّد معتمد وسجل خادم مدقق.',last:'فحص',fresh:'عمر البيانات',minutes:'دقيقة',pick:'اختيار',fixture:'مباراة'},
-    de:{nav:'Live-Tipps',eyebrow:'ECHTE SPIELDATEN · KEINE GELDWETTEN',heading:'Bundesliga live: Spielplan & Gratis-Tipps',
+    de:{nav:'Live-Tipps',eyebrow:'ECHTE SPIELDATEN · KEINE GELDWETTEN',heading:'Spanien, Europa & echte Sportergebnisse',
       intro:'Echte Spielpläne und Ergebnisse der ersten und zweiten Bundesliga von OpenLigaDB. Kostenlose Tipps ohne Quoten, MCD-Einsatz oder Preise.',
       league:'Liga',refresh:'Ergebnisse aktualisieren',wait:'Daten laden nach Altersbestätigung.',loading:'Verbindung zur Datenquelle…',ready:'Spiele geladen',cached:'Zwischengespeicherte Daten',stale:'Veraltete Daten; neue Tipps gesperrt.',error:'Live-Daten nicht verfügbar; virtuelle Spiele laufen weiter.',none:'Keine kommenden Spiele vorhanden.',time:'Anstoß (Ortszeit)',upcoming:'Bevorstehend',started:'Gestartet · Ergebnis ausstehend',final:'Endstand',matchday:'Spieltag',
       market:'Tippprognose',choice:'Ergebnis wählen',save:'Gratis-Tipp speichern',locked:'Tipps nach Anpfiff gesperrt',home:'Heim',draw:'Unentschieden',away:'Gast',result:'Ergebnis 1X2',goals:'Tore über/unter 2,5',btts:'Beide treffen',score:'Exaktes Ergebnis',over:'Über',under:'Unter',yes:'Ja',no:'Nein',other:'Andere',
       history:'Meine Gratis-Tipps',historyInfo:'Nur auf diesem Gerät gespeichert; Abrechnung nach Endstand ohne Geld.',historyEmpty:'Noch keine Tipps.',pending:'Endstand ausstehend',won:'Richtig',lost:'Falsch',remove:'Vor Anpfiff entfernen',recorded:'Lokal gespeichert; keine Punkte abgezogen.',replaced:'Tipp aktualisiert.',closed:'Spiel begonnen oder Daten veraltet.',limit:'Maximal 50 lokale Tipps.',source:'Community-Ergebnisse können verspätet oder korrigiert sein. Uhrzeit lokal. Quelle:',licence:'unter der Open Database License (ODbL).',financeTitle:'Zukünftige Echtgeldfunktionen: GESPERRT',financeDesc:'Kein Konto, Wallet, Einzahlen, Wetten, Auszahlen oder echte Quoten. Vor Freigabe: Lizenz, Alters-/Identitätsprüfung, AML, autorisierte Daten und Quoten, sicherer Server-Ledger und externe Audits.',last:'Abruf',fresh:'Datenalter',minutes:'Minuten',pick:'Tipp',fixture:'Spiel'},
-    fr:{nav:'Pronostics réels',eyebrow:'VRAIS MATCHS · AUCUNE MISE EN ARGENT',heading:'Bundesliga : calendrier réel & pronostics gratuits',
+    fr:{nav:'Pronostics réels',eyebrow:'VRAIS MATCHS · AUCUNE MISE EN ARGENT',heading:'Espagne, Europe & résultats sportifs réels',
       intro:'Calendrier et scores réels des deux premières divisions allemandes par OpenLigaDB. Pronostics gratuits, sans cotes, MCD misés ni prix.',
       league:'Ligue',refresh:'Actualiser les résultats',wait:'Données chargées après confirmation de l’âge.',loading:'Connexion aux données…',ready:'Matchs chargés',cached:'Données en cache',stale:'Données périmées ; nouveaux pronostics bloqués.',error:'Données indisponibles ; jeux virtuels préservés.',none:'Aucun match futur.',time:'Coup d’envoi (heure locale)',upcoming:'À venir',started:'Commencé · résultat attendu',final:'Terminé',matchday:'Journée',
       market:'Type de pronostic',choice:'Choisir un résultat',save:'Enregistrer sans mise',locked:'Pronostics fermés après le début',home:'Domicile',draw:'Nul',away:'Extérieur',result:'Résultat 1X2',goals:'Buts plus/moins 2,5',btts:'Les deux marquent',score:'Score exact',over:'Plus de',under:'Moins de',yes:'Oui',no:'Non',other:'Autre',
       history:'Mes pronostics gratuits',historyInfo:'Conservés uniquement sur cet appareil ; évalués au score final.',historyEmpty:'Aucun pronostic.',pending:'Score final attendu',won:'Correct',lost:'Incorrect',remove:'Supprimer avant le match',recorded:'Sauvegardé localement ; aucun crédit débité.',replaced:'Pronostic mis à jour.',closed:'Match commencé ou données périmées.',limit:'Limite de 50 pronostics locaux.',source:'Scores communautaires susceptibles de corrections. Heure locale. Source :',licence:'sous licence ODbL.',financeTitle:'Argent réel futur : DÉSACTIVÉ',financeDesc:'Aucun dépôt, retrait, portefeuille, mise ou cote réelle. Licence, KYC/âge, AML, flux agréés, grand livre serveur sécurisé et audits requis.',last:'Vérifié',fresh:'Âge des données',minutes:'min',pick:'Choix',fixture:'Match'},
-    es:{nav:'Pronósticos reales',eyebrow:'PARTIDOS REALES · SIN APUESTAS DINERARIAS',heading:'Bundesliga real: partidos y pronósticos gratis',
+    es:{nav:'Pronósticos reales',eyebrow:'PARTIDOS REALES · SIN APUESTAS DINERARIAS',heading:'España, Europa y resultados reales',
       intro:'Calendario y resultados reales de primera y segunda Bundesliga desde OpenLigaDB. Pronósticos gratuitos sin cuotas, MCD apostados ni premios.',
       league:'Liga',refresh:'Actualizar resultados',wait:'Datos cargados tras confirmar la edad.',loading:'Conectando con el proveedor…',ready:'Partidos cargados',cached:'Datos en caché',stale:'Datos atrasados; nuevos pronósticos desactivados.',error:'Datos no disponibles; juegos virtuales operativos.',none:'No hay partidos próximos.',time:'Inicio (hora local)',upcoming:'Próximo',started:'Iniciado · resultado pendiente',final:'Final',matchday:'Jornada',
       market:'Tipo de pronóstico',choice:'Elige resultado',save:'Guardar gratis',locked:'Pronósticos cerrados tras empezar',home:'Local',draw:'Empate',away:'Visitante',result:'Resultado 1X2',goals:'Goles más/menos 2,5',btts:'Marcan ambos',score:'Marcador exacto',over:'Más de',under:'Menos de',yes:'Sí',no:'No',other:'Otro',
@@ -1246,6 +1276,8 @@
 
   // Live real-world feed is DATA-ONLY. All user picks stay local; no prices or MCD touch this module.
   const LIVE_FEED_ORIGIN='https://api.openligadb.de/getmatchdata/';
+  const LIVE_LEAGUE_NAMES={"la1":"🇪🇸 Spain · LaLiga","ucl":"🇪🇺 UEFA · Champions League","uel2026":"🇪🇺 UEFA · Europa League","uecl2026":"🇪🇺 UEFA · Conference League","pl":"🏴 England · Premier League","bl1":"🇩🇪 Germany · Bundesliga 1","bl2":"🇩🇪 Germany · Bundesliga 2","dfb":"🇩🇪 Germany · DFB-Pokal","del":"🏒 Germany · DEL Ice Hockey"};
+  const LIVE_FOOTBALL_LEAGUES=new Set(['la1','ucl','uel2026','uecl2026','pl','bl1','bl2','dfb']);
   const liveSeason=(()=>{const d=new Date();return d.getUTCFullYear()-(d.getUTCMonth()<6?1:0)})();
   const liveCachePrefix='moj-openligadb-live-v1-';
   const livePickStorage='moj-openligadb-free-picks-v1';
@@ -1257,11 +1289,11 @@
   let livePicks=[];
   try{
     const raw=JSON.parse(localStorage.getItem(livePickStorage)||'[]');
-    if(Array.isArray(raw))livePicks=raw.filter(x=>x&&Number.isSafeInteger(x.id)&&x.id>0&&['bl1','bl2'].includes(x.league)&&Number.isInteger(x.season)&&x.season>=2020&&x.season<=2100&&Object.hasOwn(liveMarketOptions,x.market)&&liveMarketOptions[x.market].includes(x.choice)&&typeof x.home==='string'&&typeof x.away==='string'&&x.home.length<=90&&x.away.length<=90&&typeof x.utc==='string'&&Number.isFinite(Date.parse(x.utc))&&Number.isFinite(x.created)).slice(0,50);
+    if(Array.isArray(raw))livePicks=raw.filter(x=>x&&Number.isSafeInteger(x.id)&&x.id>0&&LIVE_FOOTBALL_LEAGUES.has(x.league)&&Number.isInteger(x.season)&&x.season>=2020&&x.season<=2100&&Object.hasOwn(liveMarketOptions,x.market)&&liveMarketOptions[x.market].includes(x.choice)&&typeof x.home==='string'&&typeof x.away==='string'&&x.home.length<=90&&x.away.length<=90&&typeof x.utc==='string'&&Number.isFinite(Date.parse(x.utc))&&Number.isFinite(x.created)).slice(0,50);
   }catch(_){}
   function liveSavePicks(){try{localStorage.setItem(livePickStorage,JSON.stringify(livePicks.slice(0,50)))}catch(_){}}
   function liveNormalize(row,league){
-    if(!row||!Number.isSafeInteger(row.matchID)||row.matchID<=0||row.leagueShortcut!==league)return null;
+    if(!LIVE_LEAGUE_NAMES[league]||!row||!Number.isSafeInteger(row.matchID)||row.matchID<=0||row.leagueShortcut!==league)return null;
     const h=String(row.team1?.teamName||'').trim().slice(0,90),a=String(row.team2?.teamName||'').trim().slice(0,90),utc=String(row.matchDateTimeUTC||'');
     if(!h||!a||!/^\d{4}-\d\d-\d\dT/.test(utc)||!Number.isFinite(Date.parse(utc)))return null;
     const r=Array.isArray(row.matchResults)?row.matchResults.find(x=>x.resultTypeKind==='After90Minutes'||x.resultTypeID===2):null;
@@ -1305,7 +1337,7 @@
       const li=document.createElement('li'),name=document.createElement('strong'),details=document.createElement('span');
       name.textContent=p.home+' vs '+p.away;
       const outcome=p.state==='won'?lt('won'):p.state==='lost'?lt('lost'):lt('pending');
-      details.textContent=(p.league==='bl1'?'Bundesliga 1':'Bundesliga 2')+' · '+lt(p.market)+' · '+(liveCopy.en[p.choice]?lt(p.choice):p.choice)+' · '+outcome+(p.score?' ('+p.score+')':'');
+      details.textContent=(LIVE_LEAGUE_NAMES[p.league]||p.league)+' · '+lt(p.market)+' · '+(liveCopy.en[p.choice]?lt(p.choice):p.choice)+' · '+outcome+(p.score?' ('+p.score+')':'');
       li.append(name,details);
       if(!p.state&&Date.now()<Date.parse(p.utc)){
         const remove=document.createElement('button');remove.type='button';remove.textContent=lt('remove');
@@ -1324,7 +1356,7 @@
   function liveBuildCard(m){
     const card=document.createElement('article');card.className='live-pick-card';card.id='real-match-'+m.id;
     const meta=document.createElement('span'),title=document.createElement('h3'),detail=document.createElement('p');
-    const now=Date.now(),future=Date.parse(m.utc)>now,canPick=future&&!m.final&&liveFresh();
+    const now=Date.now(),future=Date.parse(m.utc)>now,canPick=LIVE_FOOTBALL_LEAGUES.has(m.league)&&future&&!m.final&&liveFresh();
     meta.className='live-pill '+(m.final?'final':future?'waiting':'');
     meta.textContent=lt(m.final?'final':future?'upcoming':'started');
     title.textContent=m.home+' vs '+m.away;
@@ -1351,7 +1383,7 @@
       form.append(marketLabel,select,field,button);
       form.addEventListener('submit',e=>{
         e.preventDefault();
-        if(Date.now()>=Date.parse(m.utc)||!liveFresh()){output('#live-status',lt('closed'));return}
+        if(!LIVE_FOOTBALL_LEAGUES.has(m.league)||Date.now()>=Date.parse(m.utc)||!liveFresh()){output('#live-status',lt('closed'));return}
         const choice=field.querySelector('input:checked')?.value,market=select.value;
         if(!choice||!Object.hasOwn(liveMarketOptions,market)||!liveMarketOptions[market].includes(choice))return;
         const key=liveKey(m.id,m.league,market),idx=livePicks.findIndex(p=>liveKey(p.id,p.league,p.market)===key);
@@ -1379,6 +1411,7 @@
   async function liveLoad(force){
     if(!$('#age-gate').hidden)return;
     const league=$('#live-league').value,seq=++liveSequence;
+    if(!Object.hasOwn(LIVE_LEAGUE_NAMES,league))return;
     liveAttemptedAt=Date.now();liveHasError=false;
     const cache=liveCache(league);
     if(cache){liveRows=cache.rows;liveFetchedAt=cache.checkedAt;liveReconcile();liveRender()}
@@ -1414,6 +1447,118 @@
   }
   $('#live-league').addEventListener('change',()=>liveLoad(false));
   $('#live-refresh').addEventListener('click',()=>liveLoad(true));
+
+
+  // Secondary read-only public schedule feed. One next event on the free tier; never a bookmaker or live-score source.
+  const SPOTLIGHT_ORIGIN='https://www.thesportsdb.com/api/v1/json/123/eventsnextleague.php?id=';
+  const SPOTLIGHT_NAMES=Object.freeze({
+    '4387':'NBA · Basketball','4370':'Formula 1 · Motorsport','4464':'ATP Tour · Tennis',
+    '4517':'WTA Tour · Tennis','4461':'Big Bash · Cricket','4332':'Italy · Serie A',
+    '4334':'France · Ligue 1','4337':'Netherlands · Eredivisie','4338':'Belgium · Pro League',
+    '4329':'England · Championship','4330':'Scotland · Premiership','4336':'Greece · Super League'
+  });
+  const horseEvents=[
+    {name:'Madrid · Hipódromo de la Zarzuela',country:'Spain',kind:'racing',note:'Spanish racing calendar and official results',url:'https://www.hipodromodelazarzuela.es/carreras'},
+    {name:'SICAB · Seville',country:'Spain',kind:'equestrian',note:'Spanish Purebred Horse international championship',url:'https://www.sicab.org/'},
+    {name:'Qatar Prix de l’Arc de Triomphe',country:'France',kind:'racing',note:'ParisLongchamp · France Galop',url:'https://billetterie.france-galop.com/evenement/qatar-prix-de-larc-de-triomphe/'},
+    {name:'Royal Ascot',country:'United Kingdom',kind:'racing',note:'Flat-racing meeting · Ascot',url:'https://www.ascot.com/royal-ascot'},
+    {name:'Randox Grand National',country:'United Kingdom',kind:'racing',note:'Aintree · Jockey Club',url:'https://www.thejockeyclub.co.uk/the-grand-national/'},
+    {name:'Cheltenham Festival',country:'United Kingdom',kind:'racing',note:'National Hunt racing · Jockey Club',url:'https://www.thejockeyclub.co.uk/cheltenham-festival/'},
+    {name:'Kentucky Derby',country:'United States',kind:'racing',note:'Churchill Downs · official race event',url:'https://www.kentuckyderby.com/'},
+    {name:'Breeders’ Cup World Championships',country:'United States',kind:'racing',note:'International thoroughbred championship races',url:'https://www.breederscup.com/'},
+    {name:'Dubai World Cup',country:'United Arab Emirates',kind:'racing',note:'Meydan · Dubai Racing Club calendar',url:'https://dubairacingclub.com/race-calendar/'},
+    {name:'Japan Cup · JRA',country:'Japan',kind:'racing',note:'Tokyo · Japanese Racing Association',url:'https://www.jra.go.jp/'},
+    {name:'Hong Kong International Races',country:'Hong Kong',kind:'racing',note:'Sha Tin · Hong Kong Jockey Club',url:'https://racing.hkjc.com/en-us/international-racing/index'},
+    {name:'Melbourne Cup Carnival',country:'Australia',kind:'racing',note:'Flemington · Victoria Racing Club',url:'https://www.vrc.com.au/'},
+    {name:'CHIO Aachen',country:'Germany',kind:'equestrian',note:'Jumping, dressage and other FEI disciplines',url:'https://www.chioaachen.de/en/'},
+    {name:'Longines Global Champions Tour',country:'International',kind:'equestrian',note:'International show-jumping circuit and rounds',url:'https://www.gcglobalchampions.com/schedule'},
+    {name:'FEI Jumping Calendar',country:'International',kind:'equestrian',note:'Official jumping competitions by country',url:'https://www.fei.org/jumping/events'},
+    {name:'FEI Dressage Calendar',country:'International',kind:'equestrian',note:'Official dressage competitions by country',url:'https://www.fei.org/dressage/events'},
+    {name:'FEI Eventing Calendar',country:'International',kind:'equestrian',note:'Official eventing competitions by country',url:'https://www.fei.org/eventing/events'}
+  ];
+  const worldCopy={
+    en:{sh:'World Sports Event Spotlight',si:'Basketball, Formula 1, tennis, cricket and European football previews. The public free feed offers at most one next event per competition, not complete schedules or live scores. No wagers or odds.',ss:'Competition',sr:'Refresh event',sw:'Choose a league to load its next listed event.',sl:'Loading next-event data…',se:'Event feed unavailable; retry later.',sn:'Provider lists no next event for this league; this is not proof that none are scheduled.',sa:'Provider listing; verify with organizer',sv:'Next listed event',sp:'Provider does not supply a verified date for this record.',hh:'Global Horse Racing & Equestrian Events',hi:'Official calendars from Spain and around the world: racing, show jumping, dressage and eventing. Directory only—not a live racing feed, horse entry list or betting board.',hc:'Country',hk:'Discipline',ha:'All countries',hd:'All disciplines',hr:'Horse racing',he:'Equestrian / show sport',hn:'official calendar links',ho:'Official schedule ↗',hf:'No matching events.'},
+    fa:{sh:'رویدادهای ورزش‌های جهان',si:'بسکتبال، فرمول یک، تنیس، کریکت و لیگ‌های دیگر اروپا. منبع رایگان فقط یک رویداد بعدی را برای هر لیگ نشان می‌دهد؛ بدون شرط و ضریب مالی.',ss:'مسابقات',sr:'تازه‌سازی رویداد',sw:'برای دیدن رویداد بعدی یک مسابقه را انتخاب کنید.',sl:'دریافت برنامه واقعی…',se:'منبع رویداد در دسترس نیست.',sn:'منبع فعلاً رویداد بعدی ثبت نکرده است؛ به معنای برگزار نشدن مسابقه نیست.',sa:'اطلاعات منبع؛ نزد برگزارکننده بررسی شود',sv:'رویداد بعدی ثبت‌شده',sp:'زمان قابل تأیید در منبع وجود ندارد.',hh:'اسب‌دوانی و سوارکاری مهم جهان',hi:'تقویم‌های رسمی اسپانیا و جهان؛ تفکیک اسب‌دوانی از پرش، درساژ و سه‌روزه. این بخش خوراک زنده نتایج یا شرط‌بندی نیست.',hc:'کشور',hk:'رشته',ha:'همه کشورها',hd:'همه رشته‌ها',hr:'اسب‌دوانی',he:'سوارکاری و ورزش نمایشی',hn:'پیوند تقویم رسمی',ho:'برنامه رسمی ←',hf:'رویدادی با این فیلتر پیدا نشد.'},
+    ar:{sh:'أحداث الرياضات العالمية',si:'كرة السلة والفورمولا 1 والتنس والكريكيت ودوريات أوروبا. حدث قادم واحد فقط لكل دوري في الواجهة المجانية، دون رهانات.',ss:'المسابقة',sr:'تحديث الحدث',sw:'اختر مسابقة لعرض الحدث التالي.',sl:'جار تحميل الأحداث…',se:'البيانات غير متاحة.',sn:'لا يوجد حدث تالٍ مدرج في المصدر.',sa:'تحقق من المنظم',sv:'الحدث التالي',sp:'التاريخ غير مؤكد.',hh:'سباقات الخيل والفروسية العالمية',hi:'روابط الجداول الرسمية؛ ليست نتائج مباشرة أو منصة مراهنات.',hc:'البلد',hk:'الاختصاص',ha:'جميع البلدان',hd:'جميع الاختصاصات',hr:'سباق الخيل',he:'الفروسية',hn:'روابط رسمية',ho:'الجدول الرسمي',hf:'لا توجد أحداث مطابقة.'},
+    de:{sh:'Internationale Sportereignisse',si:'Basketball, Formel 1, Tennis, Cricket und europäische Ligen. Kostenlose Quelle mit höchstens einem nächsten Ereignis pro Liga; keine Wetten.',ss:'Wettbewerb',sr:'Ereignis aktualisieren',sw:'Wettbewerb auswählen.',sl:'Lade…',se:'Quelle nicht verfügbar.',sn:'Kein nächstes Ereignis eingetragen.',sa:'Beim Veranstalter prüfen',sv:'Nächstes Ereignis',sp:'Datum nicht bestätigt.',hh:'Pferderennen und Reitsport weltweit',hi:'Offizielle Kalender statt Live-Renndaten oder Wetten.',hc:'Land',hk:'Disziplin',ha:'Alle Länder',hd:'Alle Disziplinen',hr:'Pferderennen',he:'Reitsport',hn:'offizielle Links',ho:'Offizieller Kalender',hf:'Keine passenden Ereignisse.'},
+    fr:{sh:'Événements sportifs internationaux',si:'Basket, Formule 1, tennis, cricket et ligues européennes. Un seul prochain événement par ligue dans l’offre gratuite; aucun pari.',ss:'Compétition',sr:'Actualiser',sw:'Choisissez une compétition.',sl:'Chargement…',se:'Source indisponible.',sn:'Aucun prochain événement indiqué.',sa:'À confirmer auprès de l’organisateur',sv:'Prochain événement',sp:'Date non confirmée.',hh:'Courses hippiques et sports équestres',hi:'Calendriers officiels, sans flux de courses en direct ni paris.',hc:'Pays',hk:'Discipline',ha:'Tous les pays',hd:'Toutes disciplines',hr:'Courses hippiques',he:'Sports équestres',hn:'liens officiels',ho:'Calendrier officiel',hf:'Aucun événement correspondant.'},
+    es:{sh:'Eventos deportivos internacionales',si:'Baloncesto, Fórmula 1, tenis, críquet y ligas europeas. La fuente gratuita muestra como máximo un próximo evento por liga; sin apuestas.',ss:'Competición',sr:'Actualizar evento',sw:'Elige una competición.',sl:'Cargando…',se:'Fuente no disponible.',sn:'No figura ningún próximo evento.',sa:'Verificar con el organizador',sv:'Próximo evento',sp:'Fecha sin confirmar.',hh:'Hípica y carreras de caballos del mundo',hi:'Calendarios oficiales, con prioridad a España. No son resultados de carreras en directo ni apuestas.',hc:'País',hk:'Disciplina',ha:'Todos los países',hd:'Todas las disciplinas',hr:'Carreras de caballos',he:'Deportes ecuestres',hn:'calendarios oficiales',ho:'Calendario oficial',hf:'No se encontraron eventos.'}
+  };
+  const wt=k=>(worldCopy[locale]||worldCopy.en)[k]||worldCopy.en[k]||k;
+  const horseCountry=$('#horse-country'),horseKind=$('#horse-kind');
+  for(const country of [...new Set(horseEvents.map(e=>e.country))].sort((a,b)=>a.localeCompare(b))){
+    const option=document.createElement('option');option.value=country;option.textContent=country;horseCountry.append(option);
+  }
+  function horseRender(){
+    const grid=$('#horse-grid');grid.replaceChildren();
+    const matches=horseEvents.filter(e=>(horseCountry.value==='all'||horseCountry.value===e.country)&&(horseKind.value==='all'||horseKind.value===e.kind));
+    for(const event of matches){
+      const card=document.createElement('article'),label=document.createElement('span'),title=document.createElement('h3'),note=document.createElement('p'),link=document.createElement('a');
+      card.className='horse-card';label.className='horse-label';label.textContent=event.country+' · '+wt(event.kind==='racing'?'hr':'he');
+      title.textContent=event.name;note.textContent=event.note;
+      link.href=event.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent=wt('ho');
+      card.append(label,title,note,link);grid.append(card);
+    }
+    $('#horse-status').textContent=matches.length+' '+wt('hn')+(matches.length?'':' · '+wt('hf'));
+  }
+  horseCountry.addEventListener('change',horseRender);horseKind.addEventListener('change',horseRender);
+  let spotlightItem=null,spotlightError=false,spotlightSequence=0,spotlightId='',spotlightDate=0;
+  function spotlightRender(){
+    const card=$('#spotlight-card');card.replaceChildren();
+    const status=$('#spotlight-status');
+    if(spotlightError){status.textContent=wt('se');return}
+    if(!spotlightDate){status.textContent=wt('sw');return}
+    if(!spotlightItem){status.textContent=wt('sn');return}
+    status.textContent=wt('sa')+' · '+new Date(spotlightDate).toLocaleString(locale,{dateStyle:'medium',timeStyle:'short'});
+    const title=document.createElement('h3'),meta=document.createElement('p'),info=document.createElement('p');
+    title.textContent=spotlightItem.title;
+    meta.textContent=SPOTLIGHT_NAMES[spotlightId]+' · '+wt('sv');
+    info.textContent=spotlightItem.date?new Date(spotlightItem.date).toLocaleString(locale,{dateStyle:'medium',timeStyle:'short'}):wt('sp');
+    card.append(meta,title,info);
+  }
+  async function spotlightLoad(force){
+    if(!$('#age-gate').hidden)return;
+    const id=$('#spotlight-select').value;
+    if(!Object.hasOwn(SPOTLIGHT_NAMES,id))return;
+    const seq=++spotlightSequence;
+    spotlightError=false;spotlightId=id;spotlightItem=null;spotlightDate=0;
+    const key='moj-next-sports-v1-'+id;
+    if(!force){
+      try{
+        const cached=JSON.parse(localStorage.getItem(key)||'null');
+        if(cached&&Date.now()-cached.at<7200000&&cached.at<=Date.now()+60000&&cached.at>0&&(!cached.item||typeof cached.item.title==='string'&&cached.item.title.length<=140)){
+          spotlightItem=cached.item;spotlightDate=cached.at;spotlightRender();return;
+        }
+      }catch(_){}
+    }
+    const card=$('#spotlight-card');card.replaceChildren();$('#spotlight-status').textContent=wt('sl');
+    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),12000);
+    try{
+      const url=SPOTLIGHT_ORIGIN+encodeURIComponent(id);
+      const response=await fetch(url,{mode:'cors',credentials:'omit',cache:'no-store',signal:ctrl.signal});
+      if(!response.ok)throw Error('Events provider unavailable');
+      const json=await response.json();
+      if(!json||!Object.hasOwn(json,'events')||json.events!==null&&!Array.isArray(json.events))throw Error('Invalid event feed');
+      const event=Array.isArray(json.events)?json.events[0]:null;
+      if(event&&(!Number.isSafeInteger(Number(event.idEvent))||String(event.strEvent||'').trim().length<3))throw Error('Invalid event');
+      const date=event&&/^\d{4}-\d\d-\d\d$/.test(event.dateEvent||'')?Date.parse(event.dateEvent+'T'+(/^\d\d:\d\d:\d\d$/.test(event.strTime||'')?event.strTime:'00:00:00')+'Z'):NaN;
+      const item=event?{title:String(event.strEvent).trim().slice(0,140),date:Number.isFinite(date)?date:null}:null;
+      if(seq!==spotlightSequence||$('#spotlight-select').value!==id)return;
+      spotlightItem=item;spotlightDate=Date.now();spotlightError=false;
+      try{localStorage.setItem(key,JSON.stringify({at:spotlightDate,item}))}catch(_){}
+      spotlightRender();
+    }catch(_){if(seq===spotlightSequence){spotlightError=true;spotlightRender()}}
+    finally{clearTimeout(timer)}
+  }
+  $('#spotlight-select').addEventListener('change',()=>void spotlightLoad(false));
+  $('#spotlight-refresh').addEventListener('click',()=>void spotlightLoad(true));
+  function translateWorld(){
+    const ids={sh:'spotlight-heading',si:'spotlight-intro',ss:'spotlight-select-label',sr:'spotlight-refresh',hh:'horse-heading',hi:'horse-intro',hc:'horse-country-label',hk:'horse-kind-label'};
+    for(const [k,id] of Object.entries(ids))$('#'+id).textContent=wt(k);
+    horseCountry.options[0].textContent=wt('ha');
+    const hs=horseKind.options;hs[0].textContent=wt('hd');hs[1].textContent=wt('hr');hs[2].textContent=wt('he');
+    horseRender();spotlightRender();
+  }
 
   // Fictional prediction markets share the existing non-redeemable browser-only MCD ledger.
   // Model probabilities, displayed odds and settlement derive from the same finite outcome sets.
@@ -1616,7 +1761,7 @@
     locale=lang();$$('[data-pro]').forEach(el=>el.textContent=tr(el.dataset.pro));
     $$('[data-mcd-stake]').forEach(b=>b.setAttribute('aria-label',tr('stake')+' '+b.dataset.mcdStake));
     $('#arena-cat-wagers').textContent=tr('wagerCat');$('#nav-mcd').textContent=tr('navMcd');
-    update();translatePredictions();translateLive();$('#arena-search').dispatchEvent(new Event('input',{bubbles:true}));
+    update();translatePredictions();translateLive();translateWorld();$('#arena-search').dispatchEvent(new Event('input',{bubbles:true}));
   }
   $('#language').addEventListener('change',translate);
   // Keep the age dialog genuinely modal for keyboard and screen-reader navigation.
@@ -1629,7 +1774,7 @@
     else if(!e.shiftKey&&document.activeElement===leave){e.preventDefault();confirm.focus()}
   });
   confirm.addEventListener('click',()=>{outside.forEach(el=>el.inert=false);$('#wager-heading').setAttribute('tabindex','-1');$('#wager-heading').focus()});
-  confirm.addEventListener('click',()=>{void liveLoad(false)});
+  confirm.addEventListener('click',()=>{void liveLoad(false);void spotlightLoad(false)});
   setInterval(()=>{if(gate.hidden&&!document.hidden&&Date.now()-liveAttemptedAt>900000)void liveLoad(false)},60000);
   translate();notice(tr('choose'));odds();bjRender();pokerRender();
 })();
