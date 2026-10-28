@@ -125,13 +125,15 @@ def inspect():
     check_structure({k:v.decode("utf8") for k,v in new.items()})
     return old,new,statuses[0]
 
-def atomic(path,raw):
+def atomic(path,raw,expected=None):
     fd,tmp=tempfile.mkstemp(dir=path.parent,prefix=".mpw-rights-")
     try:
         os.fchmod(fd,stat.S_IMODE(path.stat().st_mode))
         with os.fdopen(fd,"wb") as f:
             f.write(raw);f.flush();os.fsync(f.fileno())
         if path.is_symlink(): raise RuntimeError("TARGET_CHANGED_TO_SYMLINK")
+        if expected is not None and digest(path.read_bytes())!=expected:
+            raise RuntimeError("CONCURRENT_EDIT_BEFORE_REPLACE")
         os.replace(tmp,path)
     finally:
         if os.path.exists(tmp): os.unlink(tmp)
@@ -219,7 +221,7 @@ def operation(mode,run_id=None):
                 for k,path in TARGETS.items():
                     if digest(path.read_bytes())!=info["old"][k]:
                         raise RuntimeError("CONCURRENT_EDIT:"+k)
-                    atomic(path,new[k]);touched.append(k)
+                    atomic(path,new[k],expected=info["old"][k]);touched.append(k)
                 current,_,needed=inspect()
                 if needed or any(digest(current[k])!=info["new"][k] for k in TARGETS):
                     raise RuntimeError("POST_WRITE_MISMATCH")
@@ -229,7 +231,7 @@ def operation(mode,run_id=None):
                 for k in reversed(touched):
                     path=TARGETS[k]
                     if digest(path.read_bytes())==info["new"][k]:
-                        atomic(path,old[k])
+                        atomic(path,old[k],expected=info["new"][k])
                 if touched: restart()
                 print("MPW_TRX_RIGHTS_RELEASE=ROLLED_BACK_AFTER_FAILURE")
                 raise
@@ -253,7 +255,7 @@ def operation(mode,run_id=None):
             restored=0
             for k,path in TARGETS.items():
                 if current[k]==info["new"][k]:
-                    atomic(path,(folder/(k+".original.py")).read_bytes())
+                    atomic(path,(folder/(k+".original.py")).read_bytes(),expected=info["new"][k])
                     restored+=1
             if restored:
                 restart()
@@ -268,7 +270,7 @@ def operation(mode,run_id=None):
                 print("MPW_TRX_RIGHTS_RELEASE=VERIFIED")
             else:
                 for k,path in TARGETS.items():
-                    atomic(path,(folder/(k+".original.py")).read_bytes())
+                    atomic(path,(folder/(k+".original.py")).read_bytes(),expected=info["new"][k])
                 restart()
                 print("MPW_TRX_RIGHTS_RELEASE=ROLLED_BACK_EXACT_RELEASE")
 
