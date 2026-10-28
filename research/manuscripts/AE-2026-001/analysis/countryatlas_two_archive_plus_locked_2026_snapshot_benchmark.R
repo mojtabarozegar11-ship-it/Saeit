@@ -1,5 +1,5 @@
 # AE-2026-001: historical countryatlas API releases versus exact local 2026 WDI snapshot.
-# Prepared 2026-10-27. NOT EXECUTED. Not a claim of byte-identical archive equivalence.
+# Prepared 2026-10-27; source-identity gate strengthened C49 2026-10-28. NOT EXECUTED. Not a claim of byte-identical archive equivalence.
 # This removes the unjustified requirement that a 2026-10 API vintage must exist.
 #
 # Usage:
@@ -22,6 +22,14 @@ if(length(v)!=2L || anyDuplicated(v) || any(!grepl("^20[0-9]{2}-[0-9]{2}$",v)))
   stop("Exactly two distinct pinned historical API vintages required")
 cohort_file <- Sys.getenv("AE_COHORT_FILE","")
 if(!file.exists(cohort_file)) stop("Missing independently verified 155-country cohort CSV")
+# C49 source-identity hardening: cohort input must be frozen by an independently
+# reviewed SHA256; this checksum alone does NOT establish scientific validity.
+cohort_expected_sha <- tolower(Sys.getenv("AE_COHORT_SHA256", ""))
+if(!grepl("^[0-9a-f]{64}$", cohort_expected_sha))
+  stop("AE_COHORT_SHA256 must pin independently reviewed 155-country cohort; NO BENCHMARK")
+if(!identical(digest::digest(cohort_file, algo="sha256", file=TRUE, serialize=FALSE),
+              cohort_expected_sha))
+  stop("Cohort SHA256 mismatch; NO BENCHMARK")
 cohort <- utils::read.csv(cohort_file,stringsAsFactors=FALSE)
 if(!"iso3c" %in% names(cohort) || anyNA(cohort$iso3c))
   stop("Cohort CSV must contain nonmissing iso3c")
@@ -55,8 +63,18 @@ if(!all(c("vintage","id","label") %in% names(available)))
   stop("Unexpected archive metadata; do not infer release identity")
 if(!all(v %in% available$vintage))
   stop(paste("Historical API release absent:",paste(setdiff(v,available$vintage),collapse=",")))
+# A human-readable month is not by itself the API source-57 release identity.
+# Verify the World Bank archive's exact YYYYMM IDs before comparing levels.
+selected <- available[match(v, available$vintage), , drop=FALSE]
+if(!identical(as.character(selected$id), gsub("-", "", v, fixed=TRUE)))
+  stop("Historical WDI archive release ID mismatch; NO BENCHMARK")
 fetch_one <- function(y) {
-  z <- countryatlas::compare_vintages("NV.AGR.EMPL.KD",vintages=v,year=y,countries=ids)
+  # Fail closed on API warnings (including countryatlas_unit_mismatch,
+  # missing release/indicator coverage or partial observations).
+  z <- withCallingHandlers(
+    countryatlas::compare_vintages("NV.AGR.EMPL.KD",vintages=v,year=y,countries=ids),
+    warning=function(w) stop(paste("Archive/API warning; NO BENCHMARK:",
+                                   conditionMessage(w))))
   need <- c("iso3c","vintage","value")
   if(!all(need %in% names(z))) stop("Unexpected compare_vintages columns")
   z <- as.data.frame(z[,need,drop=FALSE])
