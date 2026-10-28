@@ -26,7 +26,7 @@ class MasterWorkflowReleaseGateTests(unittest.TestCase):
         gate = s.index("MASTER_REMOTE_PREFLIGHT_ENOSPC_BLOCKED")
         remote_install = s.index("ssh \"\u0024{opts[@]}\" githubops@178.239.147.150 'install -d")
         scp = s.index("scp \"\u0024{opts[@]}\"")
-        extract = s.index("target.write_bytes(")
+        extract = s.index("fd=os.open(temporary,")
         self.assertLess(gate, remote_install)
         self.assertLess(gate, scp)
         self.assertLess(gate, extract)
