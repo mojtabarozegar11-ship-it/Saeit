@@ -7,6 +7,7 @@ import csv
 import hashlib
 import json
 import pathlib
+import re
 import sys
 from collections import Counter
 
@@ -49,26 +50,51 @@ def file_with_digest(root, raw_path, expected, digest):
         raise GateError(f'{digest} mismatch for {p}: {actual}')
     return p
 
+IUPAC_DNA = frozenset('ACGTRYSWKMBDHVN')
+
 def fasta_contigs(p):
-    contigs=set()
+    """Check reference syntax and return actual contig lengths, not just header names."""
+    lengths={}
+    current=None
     with p.open(encoding='utf-8') as f:
-        for ln in f:
+        for line_no, ln in enumerate(f, 1):
             if ln.startswith('>'):
-                name=ln[1:].strip().split()[0]
-                if not name or name in contigs: raise GateError('Empty or duplicate FASTA sequence identifier')
-                contigs.add(name)
-    if not contigs: raise GateError('FASTA has no sequences')
-    return contigs
+                tokens=ln[1:].strip().split()
+                if not tokens or tokens[0] in lengths:
+                    raise GateError(f'Empty or duplicate FASTA sequence identifier at line {line_no}')
+                current=tokens[0]
+                lengths[current]=0
+            elif ln.strip():
+                if current is None:
+                    raise GateError(f'FASTA sequence before header at line {line_no}')
+                sequence=ln.strip().upper()
+                if any(base not in IUPAC_DNA for base in sequence):
+                    raise GateError(f'Invalid DNA alphabet in FASTA at line {line_no}')
+                lengths[current]+=len(sequence)
+    if not lengths or any(n==0 for n in lengths.values()):
+        raise GateError('FASTA has no sequences or contains empty contigs')
+    return lengths
 
 def check_gtf(p, contigs):
+    """Fail on invalid 1-based coordinates and annotation/FASTA contig mismatch."""
     seen=0; other=set()
     with p.open(encoding='utf-8') as f:
-        for ln in f:
+        for line_no, ln in enumerate(f, 1):
             if not ln.strip() or ln.startswith('#'):continue
             parts=ln.rstrip('\n').split('\t')
-            if len(parts)<9: raise GateError('GTF/GFF has fewer than nine columns')
+            if len(parts)!=9: raise GateError(f'GTF/GFF must have nine columns at line {line_no}')
             seen += 1
-            if parts[0] not in contigs: other.add(parts[0])
+            if parts[0] not in contigs:
+                other.add(parts[0]); continue
+            if not parts[3].isascii() or not parts[3].isdecimal() or not parts[4].isascii() or not parts[4].isdecimal():
+                raise GateError(f'Non-integer annotation coordinate at line {line_no}')
+            start,end=int(parts[3]),int(parts[4])
+            if start<1 or end<start or end>contigs[parts[0]]:
+                raise GateError(f'Annotation interval outside FASTA contig at line {line_no}')
+            if parts[6] not in ('+','-','.') or parts[7] not in ('.','0','1','2'):
+                raise GateError(f'Invalid annotation strand/frame at line {line_no}')
+            if not parts[2].strip() or not parts[8].strip() or parts[8].strip()=='.':
+                raise GateError(f'Empty annotation feature/attributes at line {line_no}')
     if seen==0: raise GateError('No annotation records')
     if other: raise GateError(f'Annotation seqnames absent from FASTA: {sorted(other)[:8]}')
     return seen
@@ -84,8 +110,8 @@ def validate(manifest_file):
     ref=m.get('reference',{})
     missing=[k for k in REQUIRED_REF if not ref.get(k)]
     if missing: raise GateError('Missing reference metadata: '+', '.join(missing))
-    if not str(ref['assembly_accession']).startswith(('GCF_','GCA_')):
-        raise GateError('RefSeq/GenBank assembly accession required, not invented')
+    if not re.fullmatch(r'GC[FA]_[0-9]+\.[0-9]+',str(ref['assembly_accession'])):
+        raise GateError('Versioned RefSeq/GenBank assembly accession required')
     fasta=file_with_digest(root,ref['fasta'],ref['fasta_sha256'],'sha256')
     gtf=file_with_digest(root,ref['gtf'],ref['gtf_sha256'],'sha256')
     check_gtf(gtf, fasta_contigs(fasta))
@@ -96,11 +122,19 @@ def validate(manifest_file):
         missing=[k for k in REQUIRED_LIB if not lib.get(k)]
         if missing: raise GateError(f'Incomplete library metadata: {missing}')
         lid=lib['library_id']
+        if not isinstance(lid,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}',lid):
+            raise GateError('Library ID contains invalid characters or exceeds 128 characters')
         if lid in ids: raise GateError(f'Duplicate library ID: {lid}')
         ids.add(lid)
-        key=(lib['condition'],lib['biological_replicate_id'])
-        if key in reps: raise GateError(f'Potentially repeated biological replicate identity: {key}')
-        reps.add(key);conditions[lib['condition']]+=1
+        condition=lib['condition']
+        if condition not in EXPECTED_CONDITIONS:
+            raise GateError(f'Invalid 2x2x2 factorial condition: {condition}')
+        rep=lib['biological_replicate_id']
+        if not isinstance(rep,str) or not rep.strip():
+            raise GateError('Biological replicate identity must be a nonempty string')
+        if rep in reps:
+            raise GateError(f'Reused biological replicate identity across libraries: {rep}; repeated-measures designs require a separately reviewed protocol')
+        reps.add(rep);conditions[condition]+=1
         if lib['strandedness'] not in ('forward','reverse','unstranded'):
             raise GateError('Strandedness needs forward/reverse/unstranded and QC evidence')
         for fn,expected in ((lib['fastq_r1'],lib['md5_r1']),(lib['fastq_r2'],lib['md5_r2'])):
