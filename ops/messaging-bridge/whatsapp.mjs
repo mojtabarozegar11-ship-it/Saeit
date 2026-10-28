@@ -92,8 +92,8 @@ async function start() {
             await finish('CREDENTIAL_SAVE_FAILED');
           } else {
             console.log('AUTHORIZED: WhatsApp credentials saved in the private state folder.');
-            socket.end(undefined);
             await finish('AUTHORIZED');
+            socket.end(undefined);
           }
         } else {
           clearInterval(beat);
