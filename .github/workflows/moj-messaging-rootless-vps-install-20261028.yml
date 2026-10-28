@@ -1,0 +1,120 @@
+name: Moj messaging private rootless VPS dependency install
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths:
+      - '.github/workflows/moj-messaging-rootless-vps-install-20261028.yml'
+permissions:
+  contents: read
+  statuses: write
+concurrency:
+  group: moj-messaging-rootless-install-20261028
+  cancel-in-progress: false
+jobs:
+  install-private-runtime:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Build checked unprivileged runtime bundle (no credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          src="$GITHUB_WORKSPACE/ops/messaging-bridge"
+          bash -n "$src/user-install.sh" "$src/user-control.sh" "$src/user-launch.sh"
+          python3 -B -m unittest discover -s "$src/tests" -p 'test_telegram_state.py' -v
+          node --check "$src/whatsapp.mjs"
+          node "$src/tests/test_whatsapp_flow.mjs"
+          mkdir -p "$RUNNER_TEMP/mmsg-bundle/app" "$RUNNER_TEMP/mmsg-bundle/bin" "$RUNNER_TEMP/mmsg-bundle/wheels"
+          cp "$src"/telegram.py "$src"/whatsapp.mjs "$src"/requirements.txt "$src"/package.json "$src"/user-control.sh "$src"/user-launch.sh "$src"/user-install.sh "$RUNNER_TEMP/mmsg-bundle/app/"
+          cp -L "$(command -v node)" "$RUNNER_TEMP/mmsg-bundle/bin/node"
+          chmod 0700 "$RUNNER_TEMP/mmsg-bundle/bin/node"
+          (cd "$RUNNER_TEMP/mmsg-bundle/app" && npm install --omit=dev --ignore-scripts --no-audit --no-fund)
+          (cd "$RUNNER_TEMP/mmsg-bundle/app" && "$RUNNER_TEMP/mmsg-bundle/bin/node" --input-type=module -e "import('@whiskeysockets/baileys').then(()=>console.log('MMSG_NODE_MODULES_BUILD=PASS'))")
+          python3 -m pip download --disable-pip-version-check --only-binary=:all: --dest "$RUNNER_TEMP/mmsg-bundle/wheels" -r "$src/requirements.txt"
+          test -n "$(find "$RUNNER_TEMP/mmsg-bundle/wheels" -maxdepth 1 -name '*.whl' -print -quit)"
+          tar --format=posix -C "$RUNNER_TEMP/mmsg-bundle" -czf "$RUNNER_TEMP/mmsg-bundle.tar.gz" app bin wheels
+          python3 - "$RUNNER_TEMP/mmsg-bundle.tar.gz" <<'PY'
+          import pathlib, posixpath, sys, tarfile
+          allowed = {'app','bin','wheels'}
+          with tarfile.open(sys.argv[1],'r:gz') as archive:
+              for member in archive:
+                  p=pathlib.PurePosixPath(member.name)
+                  assert p.parts and not p.is_absolute() and '..' not in p.parts and p.parts[0] in allowed
+                  assert not (member.isdev() or member.isfifo())
+                  if member.issym() or member.islnk():
+                      v=posixpath.normpath(posixpath.join(posixpath.dirname(member.name),member.linkname))
+                      assert not member.linkname.startswith('/') and v != '..' and not v.startswith('../')
+          PY
+          echo 'MMSG_OFFLINE_BUNDLE_QA=PASS'
+          echo "MMSG_BUNDLE_SIZE_MIB=$(du -m "$RUNNER_TEMP/mmsg-bundle.tar.gz" | cut -f1)"
+      - name: Install only in githubops private home with pinned SSH
+        id: install
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ -n "$VPS_KEY" ]] || { echo MMSG_NO_SSH_KEY; exit 1; }
+          d="$(mktemp -d "$RUNNER_TEMP/mmsg-private-ssh.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 0600 "$d/known"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10)
+          rev="$(git rev-parse --short=12 HEAD)"
+          [[ "$rev" =~ ^[0-9a-f]{12}$ ]] || exit 2
+          archive="$RUNNER_TEMP/mmsg-bundle.tar.gz"
+          sha="$(sha256sum "$archive" | awk '{print $1}')"
+          timeout 45s ssh "${opts[@]}" githubops@178.239.147.150 'bash -s' "$rev" <<'REMOTE'
+          set -eu
+          test "$(id -un)" = githubops
+          test "$(uname -m)" = x86_64
+          test -d /home/githubops/factory-runtime
+          free_kib="$(df -Pk "$HOME" | awk 'NR==2{print $4}')"
+          test "$free_kib" -ge 1572864 || { echo 'MMSG_DISK_CAPACITY_NO_GO'; exit 3; }
+          test ! -L "$HOME/private-messaging-bridge"
+          umask 077
+          mkdir -p -m 0700 "$HOME/private-messaging-bridge/releases/$1"
+          echo MMSG_VPS_RUNTIME_GATE=PASS
+          REMOTE
+          timeout 240s ssh "${opts[@]}" githubops@178.239.147.150 "umask 077; cat > \"\$HOME/private-messaging-bridge/releases/$rev/deps-bundle.tar.gz\"" < "$archive"
+          timeout 200s ssh "${opts[@]}" githubops@178.239.147.150 'bash -s' "$rev" "$sha" <<'REMOTE'
+          set -eu
+          rev="$1"; expected="$2"
+          dir="$HOME/private-messaging-bridge/releases/$rev"
+          cd "$dir"
+          actual="$(sha256sum deps-bundle.tar.gz | awk '{print $1}')"
+          test "$actual" = "$expected" || { echo 'MMSG_ARCHIVE_SHA_MISMATCH'; exit 4; }
+          mkdir -p -m 0700 src
+          tar --no-same-owner --no-same-permissions -xzf deps-bundle.tar.gz -C src app/user-install.sh
+          bash src/app/user-install.sh "$dir/deps-bundle.tar.gz" "$rev"
+          REMOTE
+      - name: Record installation gate on exact commit
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if test "${{ steps.install.outcome }}" = success; then
+            state=success
+            message='Private githubops runtime installed; account pairing remains private'
+          else
+            state=failure
+            message='Private runtime install failed safely; inspect no-secret Actions job'
+          fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state="$state" -f context=moj-messaging-private-runtime-install \
+            -f description="$message"
