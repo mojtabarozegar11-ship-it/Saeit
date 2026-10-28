@@ -99,6 +99,9 @@
     if(["screening","professional","enterprise"].includes(s))field(form,"service").value=s;
     form.addEventListener("submit",async event=>{
       event.preventDefault();
+      if($("receipt")?.classList.contains("show") && !receiptSaved){
+        message("Save the previous one-time private access key before registering another dossier.","error");return;
+      }
       const submit=$("submitCase");
       const files=Array.from(field(form,"files").files||[]);
       const total=files.reduce((sum,f)=>sum+f.size,0);
@@ -110,6 +113,9 @@
         const result=await request("submit",{case:collectCase(form)},files);
         $("receiptCase").textContent=result.case_id;
         $("receiptKey").textContent=result.access_key;
+        receiptSaved=false;
+        $("copyReceipt").textContent="Copy case details";
+        document.getElementById("receiptCopyFallback")?.remove();
         $("receipt").classList.add("show");
         $("receipt").scrollIntoView({behavior:"smooth",block:"center"});
         form.reset();
@@ -117,10 +123,53 @@
       } catch(error){message(error.message,"error");}
       finally {submit.disabled=false;submit.textContent="Submit dossier securely ↗";}
     });
+    const receiptText=()=>[
+      "AYAR PRIVATE CASE RECEIPT — CONFIDENTIAL",
+      "Case reference: "+$("receiptCase").textContent,
+      "One-time private access key: "+$("receiptKey").textContent,
+      "Tracking: https://mojplaywin.com/ayaar/track.html",
+      "",
+      "Keep this receipt private. Never paste the access key into a public chat, URL, or support ticket."
+    ].join("\n");
+    let receiptSaved=false;
+    window.addEventListener("beforeunload",event=>{
+      if($("receipt")?.classList.contains("show") && !receiptSaved){
+        event.preventDefault();
+        event.returnValue="";
+      }
+    });
     $("copyReceipt")?.addEventListener("click",async()=>{
-      const text=`AYAR case: ${$("receiptCase").textContent}\nPrivate access key: ${$("receiptKey").textContent}\nTrack at: https://mojplaywin.com/ayaar/track.html`;
-      try { await navigator.clipboard.writeText(text);$("copyReceipt").textContent="Copied securely ✓"; }
-      catch { message("Copy was blocked by the browser. Please save the case number and access key.","error"); }
+      const value=receiptText();
+      try {
+        if(!navigator.clipboard?.writeText)throw Error("Clipboard unavailable");
+        await navigator.clipboard.writeText(value);
+        receiptSaved=true;
+        document.getElementById("receiptCopyFallback")?.remove();
+        $("copyReceipt").textContent="Copied securely ✓";
+        message("The private receipt is on your clipboard. Store it securely before closing this page.","success");
+      } catch {
+        document.getElementById("receiptCopyFallback")?.remove();
+        const box=h("div","","a-paper");box.id="receiptCopyFallback";
+        const label=h("label","Clipboard access was blocked. Copy the selected private receipt, or use Download private receipt.");
+        const field=h("textarea");field.readOnly=true;field.rows=6;field.value=value;
+        field.style.width="100%";
+        box.append(label,field);$("receipt").append(box);
+        field.focus();field.select();
+        message("Copy was blocked. Receipt text is selected; the download option is also available.","");
+      }
+    });
+    $("downloadReceipt")?.addEventListener("click",()=>{
+      const id=$("receiptCase").textContent;
+      if(!/^AYR-[A-Za-z0-9-]{6,40}$/.test(id) || !$("receiptKey").textContent){
+        message("A valid registered case is required before downloading its receipt.","error");return;
+      }
+      const blob=new Blob([receiptText()],{type:"text/plain;charset=utf-8"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");a.href=url;a.download=id+"-private-receipt.txt";
+      document.body.append(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),3000);
+      receiptSaved=true;
+      message("Private receipt download requested. Verify it was saved safely; it contains your one-time access key.","success");
     });
   }
   function addFact(parent,label,value) {
