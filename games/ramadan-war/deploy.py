@@ -98,6 +98,11 @@ def validate_release_manifest(m):
     assert isinstance(old,dict) and isinstance(new,dict) and isinstance(protected,dict)
     allowed=set(ASSETS)
     assert set(new)==allowed and set(old).issubset(allowed)
+    # These seven pre-existing assets are the minimum recoverable baseline.
+    # A forged journal must never reclassify them as new-only deletable files.
+    required={'index.html','game.js','game.css','engine3d.js',
+              'three.module.js','three.core.min.js','THREE-LICENSE.txt'}
+    assert required.issubset(old),'original release baseline missing'
     assert set(protected).issubset({'.htaccess','agriculture/index.html',
                                     'research/index.html','store/index.html'})
     assert len(protected)>=2
@@ -174,7 +179,7 @@ def prepare(stage):
     assert len(new['three-addons/libs/meshopt_decoder.module.js'])>20000
     assert b'weapon-overlay.webp' in new['index.html'] and b'soldier-enemy.webp' in new['engine3d.js'] and b'missionBackdrop' in new['index.html'] and b'scene-sniper-desert-v2.webp' in new['game.js'] and b'alpha:true' in new['engine3d.js']
     assert b'GLTFLoader' in new['engine3d.js'] and b'soldier-rigged-ccby.glb' in new['engine3d.js'] and b'm24-sniper-ccby.glb' in new['engine3d.js'] and b'MeshoptDecoder' in new['engine3d.js']
-    assert (GAME/'.htaccess').is_file() and (GAME/'.htaccess').read_bytes()==inputs['.htaccess'].read_bytes()
+    assert safe_release_file(GAME,'.htaccess').read_bytes()==inputs['.htaccess'].read_bytes()
     old={name:safe_release_file(GAME,name).read_bytes() for name in ASSETS if (GAME/name).is_file()}
     assert all(name in old for name in ['index.html','game.js','game.css','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt'])
     for name in set(new)-set(old):
