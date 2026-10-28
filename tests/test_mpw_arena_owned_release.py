@@ -127,6 +127,17 @@ class GuardedArenaPublicationTests(unittest.TestCase):
         self.assertNotIn("left:-9999px", content)
         self.assertIn('id="age-gate"', content)
 
+    def test_practice_credits_are_not_labelled_real_dollars(self):
+        content = (SRC / "site_releases/mojplaywin/arena/index.html").read_text(encoding="utf-8")
+        for misleading in ("Casino Dollar Tables", "میزهای دلار کازینو", "طاولات دولار الكازينو", "Free MCD Practice · 7 · 7"):
+            with self.subTest(misleading=misleading):
+                self.assertNotIn(misleading, content)
+        self.assertIn('navMcd:"میزهای مجازی MCD"', content)
+        self.assertIn('heading:"MojPlayWin MCD Practice Tables"', content)
+        self.assertIn("liveLeagueLabel(p.league)", content)
+        self.assertIn("horseCountryLabel(event.country)", content)
+        self.assertIn("if(json.length&&rows.length<1)throw Error('No valid fixtures');", content)
+
     def test_public_data_read_is_tightly_allowlisted(self):
         content = (SRC / "site_releases/mojplaywin/arena/index.html").read_text(encoding="utf-8")
         candidate = self.home / "network-check.html"
