@@ -4,17 +4,28 @@ from django.utils import timezone
 from .company_content_models import CompanyContentLink, CompanyGalleryMedia
 from .newsletter_models import NewsletterStory
 from .company_inquiry_models import CompanyInquiry
+from .public_catalog_guard import missing_public_tables, mark_public_data_unavailable
 
 
 def company_gallery(request):
-    media = CompanyGalleryMedia.objects.filter(published=True, published_at__lte=timezone.now()).select_related("newsletter_story")
+    catalog_unavailable = missing_public_tables(CompanyGalleryMedia)
     kind = request.GET.get("type", "").strip().lower()
-    if kind in {"image", "video"}:
-        media = media.filter(media_type=kind)
     query = request.GET.get("q", "").strip()
-    if query:
-        media = media.filter(title__icontains=query)
-    return render(request, "core/company_gallery.html", {"media": media[:100], "query": query, "kind": kind})
+    media = []
+    if not catalog_unavailable:
+        media = CompanyGalleryMedia.objects.filter(
+            published=True, published_at__lte=timezone.now()
+        ).select_related("newsletter_story")
+        if kind in {"image", "video"}:
+            media = media.filter(media_type=kind)
+        if query:
+            media = media.filter(title__icontains=query)
+        media = media[:100]
+    response = render(request, "core/company_gallery.html", {
+        "media": media, "query": query, "kind": kind,
+        "catalog_temporarily_unavailable": catalog_unavailable,
+    })
+    return mark_public_data_unavailable(response) if catalog_unavailable else response
 
 
 def company_content_feed(request, slug):
