@@ -130,3 +130,4 @@ if __name__=="__main__":
         print("CPANEL_SCOPED_PURGE_ERROR="+type(err).__name__+":"+str(err)[:170],
               file=sys.stderr,flush=True)
         raise SystemExit(1)
+# User-authorized staging generation cleanup; preview must pass exact live-reference checks first.
