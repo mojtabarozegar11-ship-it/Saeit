@@ -1,0 +1,82 @@
+name: Moj messaging private account-state audit (no secrets)
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths:
+      - '.github/workflows/moj-messaging-account-state-audit-20261028.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify private session presence and watchdog only (no secrets or account login)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo MMSG_NO_SSH_KEY; exit 1; }
+          d="$(mktemp -d "$RUNNER_TEMP/mmsg-private-ssh.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 0600 "$d/known"
+          timeout 45s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -eu
+          umask 077
+          test "$(id -un)" = githubops
+          base="$HOME/private-messaging-bridge"
+          test -d "$base/runtime/current/app"
+          test -x "$base/runtime/current/app/user-onboard.sh"
+          test -x "$base/runtime/current/app/user-control.sh"
+          test -x "$base/runtime/current/app/user-launch.sh"
+          echo MMSG_RUNTIME=INSTALLED
+          if test "$(stat -c '%a' "$base/state")" = 700; then echo MMSG_STATE_PERMS=PASS; else echo MMSG_STATE_PERMS=NO_GO; exit 3; fi
+          count="$(crontab -l 2>/dev/null | grep -Fc 'MMSG_BRIDGE_ROOTLESS_20261028' || true)"
+          echo "MMSG_CRON_KEEPERS=$count"
+          test "$count" = 3
+          python3 - "$base" <<'PY'
+          import json, os, pathlib, sys, time
+          root=pathlib.Path(sys.argv[1])
+          state=root/'state'
+          names={
+              'TELEGRAM': ('telegram/account.session','telegram-status.json'),
+              'WHATSAPP_PRIMARY': ('whatsapp/primary/creds.json','whatsapp-primary-status.json'),
+              'WHATSAPP_SECONDARY': ('whatsapp/secondary/creds.json','whatsapp-secondary-status.json'),
+          }
+          for name,(credential,marker) in names.items():
+              c=state/credential
+              is_present = c.is_file() and not c.is_symlink() and c.stat().st_size > 0
+              print(f'MMSG_{name}_SESSION='+('PRESENT' if is_present else 'ABSENT'))
+              m=state/marker
+              if not m.is_file() or m.is_symlink():
+                  print(f'MMSG_{name}_LIVE_STATE=NOT_STARTED')
+                  continue
+              try:
+                  status=json.loads(m.read_text())
+                  label=status.get('status')
+                  age=time.time()-int(status.get('timestamp',0))
+                  assert label in {'CONNECTED','AUTHORIZED','LOGIN_REQUIRED','DISCONNECTED','DEGRADED','CONNECTING','SESSION_CONFLICT','CREDENTIAL_SAVE_FAILED','PAIRING_RESTART','PAIRING_RETRIES_EXCEEDED','PAIRING_CODE_FAILED'}
+                  fresh=0<=age<=120
+                  if label=='CONNECTED' and fresh and is_present:
+                      health='CONNECTED_RECENT'
+                  elif fresh and label=='AUTHORIZED' and is_present:
+                      health='AUTHORIZED_NOT_LIVE_VERIFIED'
+                  else:
+                      health=label+('_RECENT' if fresh else '_STALE')
+              except Exception:
+                  health='UNKNOWN'
+              print(f'MMSG_{name}_LIVE_STATE={health}')
+          env=root/'secrets/telegram.env'
+          api=env.is_file() and not env.is_symlink() and env.stat().st_size>0
+          print('MMSG_TELEGRAM_API_CONFIG='+('PRESENT_PRIVATE' if api else 'ABSENT'))
+          PY
+          echo MMSG_ACCOUNT_STATE_PROBE=PASS_NO_PRIVATE_DATA_READ
+          REMOTE
