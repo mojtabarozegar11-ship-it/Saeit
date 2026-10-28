@@ -19,8 +19,6 @@ if (!['login', 'daemon', 'status'].includes(mode) || !['primary', 'secondary'].i
 const root = process.env.MOJMSG_STATE_DIR || '/var/lib/moj-messaging';
 const authDir = path.join(root, 'whatsapp', account);
 const statusPath = path.join(root, `whatsapp-${account}-status.json`);
-await fs.mkdir(authDir, {recursive:true, mode:0o700});
-await fs.chmod(authDir, 0o700);
 async function status(value) {
   const temp = `${statusPath}.${process.pid}.tmp`;
   await fs.writeFile(temp, JSON.stringify({service:'whatsapp', account, status:value, timestamp:Math.floor(Date.now()/1000)})+'\n', {mode:0o600});
@@ -31,6 +29,9 @@ if (mode === 'status') {
   catch { console.log('NOT_STARTED'); }
   process.exit(0);
 }
+// Status probes must not create or alter private authentication directories.
+await fs.mkdir(authDir, {recursive:true, mode:0o700});
+await fs.chmod(authDir, 0o700);
 if (mode === 'login' && !process.stdout.isTTY) {
   console.error('For security, QR is displayed only in an interactive terminal.');
   process.exit(2);
