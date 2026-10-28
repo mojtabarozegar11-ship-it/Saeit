@@ -61,12 +61,32 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/factory-cpanel-scope"
           timeout 60s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
-          import subprocess,json,socket
-          p=subprocess.run(['uapi','--output=json','Quota','get_local_quota_info'],capture_output=True,text=True,timeout=28,check=True)
-          j=json.loads(p.stdout)
-          r=j.get('result',{})
-          x=r.get('data',{})
-          print('HOSTING_CAPACITY='+json.dumps({'status':r.get('status'),'byte_limit':x.get('byte_limit'),'bytes_used':x.get('bytes_used'),'inodes_used':x.get('inodes_used'),'inode_limit':x.get('inode_limit'),'hostname':socket.gethostname()},sort_keys=True))
+          import subprocess,json,socket,re,time
+          snapshots=[]
+          for endpoint in ('get_local_quota_info','get_quota_info'):
+              for attempt in range(2):
+                  try:
+                      p=subprocess.run(['uapi','--output=json','Quota',endpoint],capture_output=True,text=True,timeout=25)
+                      data=p.stdout
+                      out={'endpoint':endpoint,'attempt':attempt+1,'exit':p.returncode,'stdout_bytes':len(data)}
+                      try:
+                          j=json.loads(data)
+                          result=j.get('result',{})
+                          info=result.get('data',{})
+                          out['status']=result.get('status')
+                          if isinstance(info,dict):
+                              out.update({k:v for k,v in info.items() if k in ('byte_limit','bytes_used','quota','used','diskquota','diskused','disk_usage','disk_limit','megabytes_used','megabyte_limit','disk_quota') and isinstance(v,(int,float,str))})
+                          else:out['data_type']=type(info).__name__
+                      except Exception as e:
+                          out['parse_error']=type(e).__name__
+                          out['numeric_fields']={k:v for k,v in re.findall(r'"(byte_limit|bytes_used|diskquota|diskused|quota|used)"\\s*:\\s*"?([0-9.]+)',data)}
+                          out['raw_prefix_hex']=data[:100].encode().hex()
+                      snapshots.append(out)
+                  except Exception as e:
+                      snapshots.append({'endpoint':endpoint,'attempt':attempt+1,'error':type(e).__name__})
+                  if snapshots[-1].get('status')==1:break
+                  time.sleep(2)
+          print('HOSTING_QUOTA_PROBES='+json.dumps({'hostname':socket.gethostname(),'probes':snapshots},sort_keys=True))
           PY
       - name: Public DNS and origin checks
         shell: bash
