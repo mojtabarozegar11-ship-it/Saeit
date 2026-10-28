@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 from services.mpw_trx_walletless_core import InvoiceIntent,PaymentHold
 from services.mpw_walletless_commercial_intent import _commercial_db
+from services.mpw_trx_commercial_web import _nocache
+from services.mpw_trx_public_pages import _checkout_csrf_referrer
 from services.mpw_trx_commercial_chain import read_only_independent_pair,PINNED
 from services.mpw_tron_independent_solidified_rpc import hex_to_tron_address
 from tests.test_mpw_tron_independent_solidified_rpc import (
@@ -15,6 +17,35 @@ from tests.test_mpw_tron_independent_solidified_rpc import (
 )
 
 class ProductionCheckoutReleaseTests(unittest.TestCase):
+    def test_checkout_replaces_no_referrer_meta_and_keeps_same_origin_header(self):
+        from django.http import HttpResponse
+        response=HttpResponse('<meta name="referrer" content="no-referrer">')
+        response=_checkout_csrf_referrer(response)
+        self.assertIn(b'<meta name="referrer" content="same-origin">',response.content)
+        self.assertNotIn(b'content="no-referrer"',response.content)
+        self.assertEqual(response["Referrer-Policy"],"same-origin")
+
+    def test_private_checkout_allows_same_origin_csrf_referer_without_leaking_cross_origin(self):
+        from django.http import HttpResponse
+        response=_nocache(HttpResponse("form"))
+        self.assertEqual(response["Referrer-Policy"],"same-origin")
+        self.assertEqual(response["Cache-Control"],"private, no-store, max-age=0")
+
+    def test_explicit_public_launch_does_not_claim_a_merchant_test_payment(self):
+        config=SimpleNamespace(DEBUG=False, MPW_COMMERCE_RELEASE_READY=True,
+            MPW_COMMERCE_DOWNLOADS_ENABLED=True, MPW_WALLETLESS_TRX_PUBLIC_ENABLED=True,
+            MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED=False,
+            MPW_WALLETLESS_TRX_PUBLIC_RELEASE_AUTHORIZED=True)
+        db=SimpleNamespace(vendor="mysql",alias="default")
+        _commercial_db(config,db)
+        self.assertFalse(config.MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED)
+        for field in ('MPW_COMMERCE_DOWNLOADS_ENABLED','MPW_COMMERCE_RELEASE_READY',
+                      'MPW_WALLETLESS_TRX_PUBLIC_ENABLED','MPW_WALLETLESS_TRX_PUBLIC_RELEASE_AUTHORIZED'):
+            setattr(config,field,False)
+            with self.subTest(field=field),self.assertRaises(PaymentHold):
+                _commercial_db(config,db)
+            setattr(config,field,True)
+
     def setUp(self):
         self.settings=SimpleNamespace(
             DEBUG=False,

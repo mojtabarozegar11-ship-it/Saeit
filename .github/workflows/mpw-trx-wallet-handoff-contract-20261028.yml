@@ -1,0 +1,36 @@
+name: MojPlayWin mobile TRX wallet-handoff contract (source only)
+on:
+  pull_request:
+    branches: ["release/mpw-public-trx-20261023"]
+    paths:
+      - services/mpw_trx_walletless_one_tap_ui.py
+      - tests/test_mpw_trx_walletless_one_tap_ui.py
+      - .github/workflows/mpw-trx-wallet-handoff-contract-20261028.yml
+permissions:
+  contents: read
+jobs:
+  wallet-handoff:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test invoice HTML, exact Trust Wallet URI, CSP and fail-closed wallet controls
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_trx_walletless_one_tap_ui.py' -v
+          python3 -m py_compile services/mpw_trx_walletless_one_tap_ui.py
+      - name: Parse embedded wallet JavaScript in Node without wallet or network
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,re
+          src=Path("services/mpw_trx_walletless_one_tap_ui.py").read_text()
+          match=re.search(r'WALLET_ACTION_JS = r"""([\s\S]*?)"""',src)
+          assert match is not None and "payButton.hidden=false" in match.group(1)
+          Path(os.environ["RUNNER_TEMP"],"mpw-wallet-contract.js").write_text(match.group(1))
+          PY
+          node --check "$RUNNER_TEMP/mpw-wallet-contract.js"

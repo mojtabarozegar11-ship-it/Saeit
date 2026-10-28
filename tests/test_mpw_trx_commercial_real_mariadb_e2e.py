@@ -37,6 +37,18 @@ from services.mpw_trx_commercial_web import (
 )
 
 class CommercialMariaDBTest(unittest.TestCase):
+    def test_authorized_public_purchase_needs_no_registered_sender_or_canary(self):
+        with patch.object(settings,"MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED",False), patch.object(settings,"MPW_WALLETLESS_TRX_PUBLIC_RELEASE_AUTHORIZED",True,create=True):
+            pk,invoice,created=self.reserve()
+            self.assertTrue(created)
+            with self.assertRaises(PaymentHold):
+                open_commercial_paid_file(pk,42)
+            self.assertEqual(settle_commercial_intent(pk,fixture.TX_HASH,self.pair()),"paid")
+            self.assertTrue(commercial_buyer_status(pk,42)["can_download"])
+            self.assertFalse(settings.MPW_WALLETLESS_TRX_MERCHANT_CANARY_PASSED)
+            with self.assertRaises(PaymentHold):
+                open_commercial_paid_file(pk,43)
+
     @classmethod
     def setUpClass(cls):
         Base.setUpClass()
@@ -198,7 +210,26 @@ class CommercialMariaDBTest(unittest.TestCase):
             pk,42,server_lookup=lookup,pair=self.pair()),"unchanged")
         self.assertEqual(len(seen),1)
         self.assertTrue(commercial_buyer_status(pk,42)["can_download"])
+    def test_customer_post_denies_unverified_product_without_order_or_invoice(self):
+        # Production denies missing rights even if product is active and has a file.
+        from django.test import RequestFactory
+        from services.mpw_trx_commercial_web import _start_order
+        req=RequestFactory().post("/commerce/trx-easy/start/779/",
+                 secure=True,HTTP_HOST="mojplaywin.com")
+        req.user=SimpleNamespace(pk=42,is_authenticated=True,is_active=True)
+        before_orders=fixture.Order.objects.count()
+        with patch("django.contrib.auth.get_user_model",return_value=fixture.User):
+            with self.assertRaises(Http404):
+                _start_order(req,779)
+        self.assertEqual(fixture.Order.objects.count(),before_orders)
+        self.assertFalse(PaymentIntent.objects.exists())
+        self.assertFalse(ExistingLedgerEntry.objects.exists())
+
     def test_customer_post_button_creates_real_order_once_with_unique_invoice(self):
+        # Synthetic TEST SKU 779 only: model a documented explicit rights approval.
+        product=fixture.Product.objects.get(pk=779)
+        product.metadata={"rights_cleared":True}
+        product.save(update_fields=["metadata"])
         from django.test import RequestFactory
         from services.mpw_trx_commercial_web import _start_order,start_order
         factory=RequestFactory()

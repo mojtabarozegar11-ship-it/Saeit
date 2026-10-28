@@ -60,6 +60,8 @@ class Product(models.Model):
     active=models.BooleanField(default=True)
     currency=models.CharField(max_length=10,default='USD')
     price=models.DecimalField(max_digits=14,decimal_places=2)
+    # Synthetic rights evidence: absent by default; explicitly approved only in a test.
+    metadata=models.JSONField(default=dict)
     class Meta:app_label="test_core";db_table="test_mpw_core_product"
 
 class Order(models.Model):
