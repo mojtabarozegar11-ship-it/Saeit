@@ -47,7 +47,7 @@ jobs:
           node-version: "22"
       - name: Install Chromium driver
         run: npm install --no-save --ignore-scripts --no-audit --no-fund --prefix "$RUNNER_TEMP/arena-browser-test" playwright-core@1.62.1
-      - name: Exercise Spain/UEFA, UFC/boxing/WWE, 22 combat calendars, 18 horse calendars and free games
+      - name: Exercise daily 3-event combat schedule, UFC/boxing/WWE, 22 combat and 18 horse calendars
         shell: bash
         env:
           NODE_PATH: ${{ runner.temp }}/arena-browser-test/node_modules
@@ -82,7 +82,7 @@ jobs:
                 uecl2026:[fixture(950001,'uecl2026',future)],
                 pl:[fixture(960001,'pl',future)],
                 del:[fixture(970001,'del',future)]
-              },feedBroken=false,feedCalls=0,sportCalls=0;
+              },feedBroken=false,feedCalls=0,sportCalls=0,dayCalls=0,dayBroken=false;
               await page.route('https://api.openligadb.de/**',async route=>{
                 feedCalls++;
                 if(feedBroken){await route.fulfill({status:503,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:'{}'});return}
@@ -91,7 +91,17 @@ jobs:
               });
               await page.route('https://www.thesportsdb.com/**',async route=>{
                 sportCalls++;
-                const id=new URL(route.request().url()).searchParams.get('id');
+                const providerURL=new URL(route.request().url());
+                if(providerURL.pathname.endsWith('/eventsday.php')){
+                  dayCalls++;
+                  if(dayBroken){await route.fulfill({status:503,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:'{}'});return}
+                  const day=providerURL.searchParams.get('d');
+                  const events=['Sample UFC Combat Agenda','Sample Boxing Combat Agenda','Sample Pro Wrestling Agenda'].map((name,i)=>({
+                    idEvent:String(660001+i),strEvent:name,strLeague:['UFC','Boxing','WWE'][i],strSport:'Fighting',dateEvent:day,strTime:'00:00:00'
+                  }));
+                  await route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({events})});return;
+                }
+                const id=providerURL.searchParams.get('id');
                 const events=id==='4387'?[{idEvent:'123456',strEvent:'Sample NBA — Indiana vs Philadelphia',dateEvent:'2026-11-05',strTime:'20:00:00'}]:
                   id==='4370'?[{idEvent:'234567',strEvent:'Sample Mexico F1 GP',dateEvent:'2026-11-07',strTime:'13:00:00'}]:
                   id==='4443'?[{idEvent:'345678',strEvent:'Sample UFC Madrid MMA',dateEvent:'2026-11-21',strTime:'20:00:00'}]:
@@ -108,6 +118,7 @@ jobs:
 
               assert.equal(feedCalls,0,'No football feed call before age self-declaration');
               assert.equal(sportCalls,0,'No secondary feed call before age self-declaration');
+              assert.equal(dayCalls,0,'No daily combat API before age self-declaration');
               await page.locator('#age-confirm').click();
               await page.locator('#real-match-920001').waitFor({state:'visible'});
               assert.equal(await page.locator('#live-league').inputValue(),'la1','Spain is the default');
@@ -124,6 +135,18 @@ jobs:
               await page.waitForFunction(()=>document.querySelector('#spotlight-card h3')?.textContent.includes('Boxing World Title'));
               await page.locator('#spotlight-select').selectOption('4464');
               await page.waitForFunction(()=>document.querySelector('#spotlight-status')?.textContent.includes('no next event'));
+              await page.locator('#combat-day-list li').first().waitFor({state:'visible'});
+              assert.equal(await page.locator('#combat-day-list li').count(),3,'Daily public feed is capped to three');
+              assert.match(await page.locator('#combat-day-list').innerText(),/Sample UFC Combat Agenda/);
+              assert.ok(dayCalls>=1,'Daily data requested after adult confirmation');
+              assert.equal(await page.locator('#mcd-balance').innerText(),'1,000.00 MCD');
+              dayBroken=true;
+              await page.locator('#combat-day-refresh').click();
+              await page.waitForFunction(()=>document.querySelector('#combat-day-status')?.textContent.includes('unavailable'));
+              assert.equal(await page.locator('#combat-day-list li').count(),0,'Daily failures never display stale matches');
+              dayBroken=false;
+              await page.locator('#combat-day-refresh').click();
+              await page.locator('#combat-day-list li').first().waitFor({state:'visible'});
               assert.equal(await page.locator('#combat-grid .horse-card').count(),22);
               await page.locator('#combat-country').selectOption('Spain');
               assert.equal(await page.locator('#combat-grid .horse-card').count(),4);
@@ -258,6 +281,7 @@ jobs:
               await page.locator('#language').selectOption('fa');
               assert.equal(await page.locator('#nav-predictions').innerText(),'پیش‌بینی زنده');
               assert.equal(await page.locator('#combat-heading').innerText(),'بوکس، کشتی و هنرهای رزمی جهان');
+              assert.equal(await page.locator('#combat-day-heading').innerText(),'برنامه روزانه واقعی مبارزات');
               await page.locator('#arena-search').fill('شطرنج');
               assert.equal(await page.locator('#classic-game-grid article:not([hidden])').count(),1);
               await page.locator('#arena-search').fill('فال');
@@ -268,7 +292,7 @@ jobs:
               }
               assert.deepEqual(errors,[]);
               assert.ok((await page.locator('#wager-heading').innerText()).length>15);
-              console.log('ARENA_MOBILE_SPAIN_UEFA_UFC_BOXING_WWE_22_COMBAT_18_HORSE_FREE_ONLY_PASS');
+              console.log('ARENA_MOBILE_THREE_DAILY_COMBAT_UFC_BOXING_WWE_22_COMBAT_18_HORSE_PASS');
             }finally{await browser.close()}
           })().catch(e=>{console.error(e);process.exitCode=1});
           JS
