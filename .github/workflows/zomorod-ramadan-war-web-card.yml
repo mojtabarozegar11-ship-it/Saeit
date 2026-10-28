@@ -124,6 +124,15 @@ jobs:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Refuse insufficient cPanel capacity before creating any release stage
+        run: |
+          set -euo pipefail
+          payload_bytes="$(du -sb games/ramadan-war | cut -f1)"
+          [[ "$payload_bytes" =~ ^[0-9]+$ ]]
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          # The Python script is streamed over SSH stdin; no file is written
+          # to either the relay VPS or cPanel by this preflight.
+          timeout 65s ssh -T -F "$d/config" host "python3 - '$payload_bytes'" < games/ramadan-war/release_storage_guard.py
       - name: Transfer the replacement web client and scoped updater to private staging
         id: stage
         run: |
