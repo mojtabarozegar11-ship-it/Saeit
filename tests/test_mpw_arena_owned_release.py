@@ -90,6 +90,13 @@ class GuardedArenaPublicationTests(unittest.TestCase):
         self.assert_protected_intact()
 
 
+    def test_payload_upper_size_limit_is_bounded(self):
+        content = (SRC / "site_releases/mojplaywin/arena/index.html").read_text(encoding="utf-8")
+        candidate = self.home / "oversize.html"
+        candidate.write_text(content + ("x" * 65000), encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "payload size"):
+            guard.payload_preflight(candidate)
+
     def test_public_data_read_is_tightly_allowlisted(self):
         content = (SRC / "site_releases/mojplaywin/arena/index.html").read_text(encoding="utf-8")
         candidate = self.home / "network-check.html"
@@ -98,6 +105,8 @@ class GuardedArenaPublicationTests(unittest.TestCase):
         forbidden = (
             content.replace("https://api.openligadb.de/getmatchdata/", "https://unapproved.example/getmatchdata/"),
             content.replace("https://www.thesportsdb.com/api/v1/json/123/eventsnextleague.php?id=", "https://evil.example/events?id="),
+            content.replace("https://www.thesportsdb.com/api/v1/json/123/eventsday.php?d=", "https://evil.example/eventsday?d="),
+            content.replace("if(!dailyDateAllowed(date))return;", "if(date)return;"),
             content.replace("await fetch(url,{mode:'cors'", "await fetch(url,{mode:'no-cors'"),
             content.replace("connect-src https://api.openligadb.de https://www.thesportsdb.com;", "connect-src *;"),
             content.replace("await fetch(url,{", "await fetch('https://unapproved.example',{"),
