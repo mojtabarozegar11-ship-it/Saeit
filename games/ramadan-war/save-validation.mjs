@@ -1,4 +1,13 @@
 // Fail-closed integrity guard for locally stored Ramadan War campaign state.
+// Endless survival is an independent mode. Its autosave, pause and pagehide
+// must never erase or overwrite an unfinished campaign in the same browser.
+// Terminal campaign states still clear the old resume slot as before.
+export function campaignSaveDisposition(state) {
+  if (!state || state.endless === true) return 'keep';
+  if (state.victory === true || state.gameOver === true || state.mission >= 6) return 'remove';
+  return 'write';
+}
+
 const RECOVERY_SITES = Object.freeze([[4.5, 2.5], [12.5, 4.5], [8.5, 12.5]]);
 // Invalid saves are rejected without altering the original browser storage entry.
 export function validateCampaignSave(s) {
