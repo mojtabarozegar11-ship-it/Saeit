@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, normalizeMovementAxes} from '../../games/ramadan-war/input-guard.mjs';
+import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, normalizeMovementAxes, shouldFireCanvasClick} from '../../games/ramadan-war/input-guard.mjs';
 
 const arena = {closest: () => null};
 const menuButton = {closest: selector => selector.includes('button') ? {} : null};
@@ -127,4 +127,31 @@ test('combined keyboard directions cannot exceed single-axis movement speed', ()
   assert.equal(Math.hypot(...Object.values(normalizeMovementAxes(-20, 30))) <= 1, true);
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
   assert.ok(game.includes('const movement=normalizeMovementAxes(forward,side);forward=movement.forward;side=movement.side;move('), 'normalization is wired into engine movement');
+});
+
+
+test('tablet aiming and mouse drag cannot fire, while primary desktop click still works', () => {
+  const mouse = {pointerType:'mouse',finished:true,cancelled:false,moved:0};
+  const click = {button:0,detail:1,pointerType:'mouse'};
+  const cases = [
+    [click,'game',1365,mouse,true,'desktop click'],
+    [click,'game',1024,mouse,true,'landscape desktop click'],
+    [click,'game',699,mouse,false,'phone-width click'],
+    [click,'home',1365,mouse,false,'menu click'],
+    [{...click,pointerType:'touch'},'game',1024,mouse,false,'touch-synthesized click'],
+    [click,'game',1024,{...mouse,pointerType:'touch'},false,'tablet touch'],
+    [click,'game',1024,{...mouse,pointerType:'pen'},false,'pen aim'],
+    [click,'game',1365,{...mouse,moved:60},false,'mouse drag'],
+    [click,'game',1365,{...mouse,cancelled:true},false,'cancelled pointer'],
+    [click,'game',1365,{...mouse,finished:false},false,'unfinished pointer'],
+    [{...click,button:2},'game',1365,mouse,false,'right click'],
+    [{...click,detail:0},'game',1365,mouse,false,'synthetic click'],
+    [{button:0,detail:1},'game',1365,mouse,true,'legacy MouseEvent']
+  ];
+  for (const [event,screen,width,gesture,expected,label] of cases)
+    assert.equal(shouldFireCanvasClick(event,screen,width,gesture),expected,label);
+  const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
+  assert.match(game,/canvas\.addEventListener\('click',e=>\{const eligible=shouldFireCanvasClick\(e,screen,innerWidth,aimGesture\)/);
+  assert.match(game,/aimGesture\.moved=Math\.max\(aimGesture\.moved,Math\.hypot/);
+  assert.match(game,/function releaseGameInputs\(\).*aimGesture=null/);
 });
