@@ -93,7 +93,7 @@ jobs:
         run: |
           set -euo pipefail
           grep -Fq 'PassengerEnabled off' scripts/deploy_mpw_arena_static.py
-          grep -Fq 'Arena route already exists: refuse overwrite' scripts/deploy_mpw_arena_static.py
+          grep -Fq 'Arena target contains unowned additions' scripts/deploy_mpw_arena_static.py
           test -f site_releases/mojplaywin/arena/index.html
   deploy:
     if: github.event_name == 'push'
