@@ -274,6 +274,28 @@ class ScopedRollbackTests(unittest.TestCase):
                 deploy.write_backup(self.stage, "index.html", self.new)
         self.assertFalse(path.exists())
 
+    def test_protected_route_verification_accepts_exact_regular_files(self):
+        home = self.root / ".htaccess"
+        home.write_bytes(b"site policy")
+        store = self.root / "store"
+        store.mkdir()
+        (store / "index.html").write_bytes(b"existing store")
+        deploy.verify_protected_pages({
+            ".htaccess": digest(b"site policy"),
+            "store/index.html": digest(b"existing store"),
+        })
+
+    def test_protected_route_verification_rejects_linked_directory(self):
+        outside = self.root / "outside-store"
+        outside.mkdir()
+        (outside / "index.html").write_bytes(b"private data")
+        (self.root / "store").symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(AssertionError, "linked protected route"):
+            deploy.verify_protected_pages({
+                "store/index.html": digest(b"private data"),
+            })
+        self.assertEqual((outside / "index.html").read_bytes(), b"private data")
+
     def test_corrupt_backup_never_replaces_known_good_file(self):
         (self.game / "game.js").write_bytes(self.new)
         (self.stage / "old-game.js").write_bytes(b"corrupt backup")
