@@ -1,0 +1,40 @@
+name: Audit public DNS authority for Zomorod finance availability
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zm-finance-dns-authority-audit-20261028.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  authoritative-dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check registry delegation, authoritative DNS and resolver reachability (read-only)
+        shell: bash
+        run: |
+          set -uo pipefail
+          domain=zomorodmelal.ir
+          echo 'REGISTRY_DELEGATION_FROM_IR_PARENT:'
+          timeout 12s dig @193.189.123.2 "${domain}" NS +norecurse +time=3 +tries=1 +noall +comments +authority +additional || true
+          echo 'PUBLIC_RESOLVER_A:'
+          timeout 12s dig @1.1.1.1 "${domain}" A +time=3 +tries=1 +noall +comments +answer || true
+          echo 'AUTHORITATIVE_SERVERS_UDP:'
+          failures=0
+          for server in 91.99.125.113 178.239.147.71; do
+            echo "SERVER=${server} UDP SOA:"
+            result=$(timeout 12s dig @"${server}" "${domain}" SOA +norecurse +time=3 +tries=1 +noall +comments +answer 2>&1) || result='TIMEOUT_OR_NETWORK_FAILURE'
+            printf '%s\n' "${result}"
+            if [[ "${result}" != *"status: NOERROR"* || "${result}" != *"flags: qr aa"* ]]; then
+              failures=$((failures+1))
+            fi
+            echo "SERVER=${server} TCP SOA:"
+            timeout 12s dig +tcp @"${server}" "${domain}" SOA +norecurse +time=3 +tries=1 +noall +comments +answer || true
+          done
+          echo "FAILED_AUTHORITIES=${failures}/2"
+          if [[ "${failures}" -gt 0 ]]; then
+            echo '::error::Public authoritative nameserver is not answering authoritatively; this can break the whole domain (including finance portal and email). No records were changed.'
+            exit 1
+          fi
+          echo 'AUTHORITATIVE_DNS_HEALTH=PASS'
