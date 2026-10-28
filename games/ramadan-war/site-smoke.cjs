@@ -155,16 +155,22 @@ const assert=require('node:assert/strict');
        const shortcutDistance=stopCheck(()=>key('keydown','ControlLeft',{ctrlKey:true}));
        key('keyup','ControlLeft');
        const imeDistance=stopCheck(()=>window.dispatchEvent(new Event('compositionstart')));
+       const focusDistance=stopCheck(()=>{
+         const scope=document.querySelector('#scope');
+         scope.blur();
+         scope.focus();
+       });
        const shotsBefore=g.getState().shots;
        key('keydown','Space');
        key('keydown','MetaLeft',{metaKey:true});
        g.tick(.04);
        key('keyup','Space');
        key('keyup','MetaLeft');
-       return {shortcutDistance,imeDistance,shotsBefore,shotsAfter:g.getState().shots};
+       return {shortcutDistance,imeDistance,focusDistance,shotsBefore,shotsAfter:g.getState().shots};
      });
      assert(heldInput.shortcutDistance<1e-8,'Ctrl shortcut must release held W: '+JSON.stringify(heldInput));
      assert(heldInput.imeDistance<1e-8,'IME composition must release held W: '+JSON.stringify(heldInput));
+     assert(heldInput.focusDistance<1e-8,'HUD keyboard focus must release held W: '+JSON.stringify(heldInput));
      assert.equal(heldInput.shotsAfter,heldInput.shotsBefore,'Meta shortcut must release held Space before firing');
      console.log('RAMADAN_HELD_KEY_SHORTCUT_IME_PASS',v.name);
    }
