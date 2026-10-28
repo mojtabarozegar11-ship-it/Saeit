@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#090c12">
-  <meta name="description" content="MOJ Casino Lounge: 37 free games and 12 interactive fortune and horoscope readings. No real-money gambling, deposits, payouts or prizes.">
+  <meta name="description" content="MOJ Casino Lounge: 62 free-play experiences including casino tables, sports prediction markets, games and oracles. No real-money gambling, deposits, payouts or prizes.">
   <title>MOJ CASINO LOUNGE | MojPlayWin</title>
   <style>
     :root{color-scheme:dark;--bg:#090c12;--panel:#111824;--panel2:#171f2e;--line:#364152;--gold:#dfbd7a;--soft:#a7b5cb;--white:#f6f4f0;--green:#62ddb5;--red:#e96c77}
@@ -97,11 +97,47 @@
   @media(max-width:750px){.wager-grid{grid-template-columns:minmax(0,1fr)}.wager-rail{padding:14px}.wager-card{padding:16px}}
   @media(prefers-reduced-motion:reduce){.wager-card button,.wager-stakes button{transition:none}}
 </style>
+
+<style id="moj-predictions-style">
+  #prediction-center{scroll-margin-top:100px;margin-top:42px}
+  .prediction-eyebrow{color:#e7c888;font-size:.78rem;letter-spacing:.13em;font-weight:900}
+  .prediction-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,340px);gap:18px;align-items:start}
+  .prediction-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .prediction-card{border:1px solid #57627a;border-radius:16px;background:linear-gradient(140deg,#1c2635,#121a26);padding:17px;min-width:0}
+  .prediction-card h3{color:#f4d397;font-size:1.05rem;margin:0 0 5px}
+  .prediction-card p{font-size:.8rem;color:#b8cadb;margin:0 0 12px}
+  .prediction-form{display:grid;gap:11px}
+  .prediction-form label{display:block;font-weight:700;font-size:.86rem}
+  .prediction-form select{width:100%;min-height:48px;background:#0b131f;color:#f6e7cf;border:1px solid #8b92a9;border-radius:9px;padding:10px;font:inherit;font-size:1rem}
+  .prediction-options{border:0;padding:0;margin:0;min-width:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .prediction-options legend{font-size:.83rem;color:#d9e1ee;margin-bottom:8px}
+  .prediction-option{display:flex!important;align-items:center;justify-content:space-between;gap:5px;background:#222e3c;border:1px solid #64738b;padding:10px;border-radius:10px;min-height:48px;cursor:pointer}
+  .prediction-option:has(input:checked){border-color:#e8c47e;background:#35352f}
+  .prediction-option input{accent-color:#d7b367;min-width:18px;min-height:18px}
+  .prediction-option span{flex:1;font-size:.8rem}
+  .prediction-option strong{color:#ffe1aa;font-size:.86rem;font-variant-numeric:tabular-nums}
+  .prediction-card button,.prediction-slip button{min-height:48px;border-radius:10px;padding:10px 14px;border:1px solid #b99660;background:#3c352b;color:#fff0d5;font-weight:800}
+  .prediction-card button:focus-visible,.prediction-slip button:focus-visible,.prediction-form select:focus-visible,.prediction-options input:focus-visible{outline:3px solid #e8c47e;outline-offset:3px}
+  .prediction-card button:hover,.prediction-slip button:hover{background:#51402c}
+  .prediction-slip{position:sticky;top:105px;border:1px solid #ac8653;border-radius:18px;background:#1b2330;padding:18px}
+  .prediction-slip h3{margin:0 0 9px;color:#f4d397}
+  .prediction-slip ol{padding-inline-start:22px;margin:0 0 14px}
+  .prediction-slip li{padding:7px 0;border-bottom:1px solid #384658;font-size:.88rem;overflow-wrap:anywhere}
+  .prediction-slip li button{min-height:36px;padding:5px 9px;margin-inline-start:8px;font-size:.78rem}
+  .prediction-summary{display:flex;justify-content:space-between;gap:10px;margin:11px 0;color:#d5e1ec}
+  .prediction-summary strong{color:#ffe0a0;font-variant-numeric:tabular-nums}
+  .prediction-slip button#prediction-submit{display:block;width:100%;background:#a77938;color:#131822}
+  .prediction-slip button:disabled{opacity:.43;cursor:not-allowed}
+  .prediction-message{font-size:.86rem;padding:11px 12px;margin-top:14px;border-radius:10px;background:#101a27;color:#e6d7b9;white-space:pre-wrap;overflow-wrap:anywhere}
+  .prediction-disclaimer{font-size:.82rem;color:#c9d2df;border-inline-start:3px solid #d5b570;padding-inline-start:12px;margin:10px 0 22px}
+  @media(max-width:1000px){.prediction-layout{grid-template-columns:1fr}.prediction-slip{position:static}}
+  @media(max-width:680px){.prediction-grid{grid-template-columns:1fr}.prediction-card{padding:15px}.prediction-layout{gap:14px}}
+</style>
 </head>
 <body>
   <a class="skip" href="#casino-floor">Skip to games</a>
   <div class="topbar" data-en="FREE-PLAY ENTERTAINMENT ONLY · NO REAL-MONEY BETTING · NO DEPOSITS OR PAYOUTS" data-fa="فقط سرگرمی رایگان · بدون شرط‌بندی پول واقعی · بدون واریز و برداشت">FREE-PLAY ENTERTAINMENT ONLY · NO REAL-MONEY BETTING · NO DEPOSITS OR PAYOUTS</div>
-  <header><div class="shell header"><a class="mark" href="https://mojplaywin.com/" aria-label="MojPlayWin home"><span class="seal">◆</span><span>MOJ CASINO <small>LOUNGE BY MOJPLAYWIN</small></span></a><div class="header-right"><nav><a href="#casino-floor" data-en="Casino Floor" data-fa="بخش کازینو">Casino Floor</a><a href="#sports" data-en="Sports Picks" data-fa="پیش‌بینی ورزشی">Sports Picks</a><a id="nav-mcd" href="#wager-lounge">Casino Dollar Tables</a><a href="#rules" data-en="Rules & Safety" data-fa="قوانین و ایمنی">Rules & Safety</a></nav><label class="skip" for="language">Language</label><select class="lang" id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option></select></div></div></header>
+  <header><div class="shell header"><a class="mark" href="https://mojplaywin.com/" aria-label="MojPlayWin home"><span class="seal">◆</span><span>MOJ CASINO <small>LOUNGE BY MOJPLAYWIN</small></span></a><div class="header-right"><nav><a href="#casino-floor" data-en="Casino Floor" data-fa="بخش کازینو">Casino Floor</a><a href="#sports" data-en="Sports Picks" data-fa="پیش‌بینی ورزشی">Sports Picks</a><a id="nav-mcd" href="#wager-lounge">Casino Dollar Tables</a><a id="nav-predictions" href="#prediction-center">Predictions</a><a href="#rules" data-en="Rules & Safety" data-fa="قوانین و ایمنی">Rules & Safety</a></nav><label class="skip" for="language">Language</label><select class="lang" id="language" aria-label="Language"><option value="en">English</option><option value="fa">فارسی</option><option value="ar">العربية</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option></select></div></div></header>
   <main>
     <section class="hero shell"><div><div class="eyebrow" data-en="A PRIVATE WORLD OF PLAY" data-fa="جهانی ویژه برای سرگرمی">A PRIVATE WORLD OF PLAY</div><h1 data-en="The thrill.<br><em>Without the wager.</em>" data-fa="هیجان بازی.<br><em>بدون شرط‌بندی مالی.</em>">The thrill.<br><em>Without the wager.</em></h1><p class="lead" data-en="A premium destination for casino-inspired entertainment, strategy and simulated sports predictions. Play the experience, never risk your money." data-fa="فضایی ممتاز برای سرگرمی‌های الهام‌گرفته از کازینو، راهبرد و پیش‌بینی ورزشی شبیه‌سازی‌شده؛ بدون به خطر انداختن پول.">A premium destination for casino-inspired entertainment, strategy and simulated sports predictions. Play the experience, never risk your money.</p><div class="buttons"><a class="btn primary" href="#casino-floor" data-en="Enter the Casino Floor ↗" data-fa="ورود به بخش کازینو ←">Enter the Casino Floor ↗</a><a class="btn outline" href="#sports" data-en="Explore Sports Picks" data-fa="پیش‌بینی ورزشی">Explore Sports Picks</a></div><div class="status-row"><span class="pill">21+ ONLY</span><span class="pill"><b>●</b> FREE PLAY</span><span class="pill">NO CASH VALUE</span></div></div><div class="showcase" aria-hidden="true"><div class="showcase-inner"><div class="showcase-icon">♠</div><strong>MOJ CASINO</strong><small>PRIVATE LOUNGE</small></div></div></section>
     <div class="shell"><div class="divider"></div></div>
@@ -117,6 +153,7 @@
         <a id="arena-cat-dice" href="#dice-festival">Dice &amp; Chance · 15</a>
         <a id="arena-cat-oracles" href="#fortune-oracles">Fortune &amp; Horoscopes · 12</a>
         <a id="arena-cat-wagers" href="#wager-lounge">Casino Dollar Practice · 7</a>
+        <a id="arena-cat-predictions" href="#prediction-center">Predictions · 6</a>
       </nav>
       <p class="arena-empty" id="arena-empty" hidden>No matching games. Try another search.</p>
     </div>
@@ -189,6 +226,27 @@
   <aside class="wager-history"><h3 data-pro="history">Recent practice rounds</h3><ol id="mcd-history"><li>No rounds yet.</li></ol></aside>
   <aside class="wager-lock"><strong data-pro="locked">MOJ1 ⇄ MOJ Casino Dollar conversion — LOCKED</strong><p data-pro="lockDesc">This page has no wallet connection, token exchange, deposits, transfers or withdrawals. The real-money path requires licensing, age/identity verification, AML controls, independent game/security audits and legally approved reserves.</p></aside>
 </section>
+
+<section class="section shell" id="prediction-center" aria-labelledby="prediction-heading">
+  <div class="section-head">
+    <div class="prediction-eyebrow" id="prediction-eyebrow">FICTIONAL PREDICTIONS · DEMO ONLY</div>
+    <h2 id="prediction-heading">MOJ Prediction Center</h2>
+    <p class="wager-intro" id="prediction-intro">Explore six fictional fixtures across football, basketball, tennis and esports. Choose among multiple markets, compare displayed decimal odds and build a practice accumulator using the same free MCD balance.</p>
+  </div>
+  <p class="prediction-disclaimer" id="prediction-disclaimer">These are not live events, forecasts or real sportsbook odds. Outcomes use published browser-local toy probability models and cryptographic random draws. A 6% demo margin applies; maximum combined payout is 10,000 MCD. No cash value or withdrawal.</p>
+  <div class="prediction-layout">
+    <div class="prediction-grid" id="prediction-grid"></div>
+    <aside class="prediction-slip" aria-labelledby="prediction-slip-heading">
+      <h3 id="prediction-slip-heading">Practice prediction slip</h3>
+      <p id="prediction-slip-hint">Select up to three different fictional fixtures.</p>
+      <ol id="prediction-slip-legs"><li>Nothing selected yet.</li></ol>
+      <div class="prediction-summary"><span id="prediction-odds-label">Combined odds</span><strong id="prediction-slip-odds">—</strong></div>
+      <div class="prediction-summary"><span id="prediction-return-label">Maximum return (MCD)</span><strong id="prediction-slip-return">—</strong></div>
+      <button type="button" id="prediction-submit" disabled>Simulate and settle prediction</button>
+      <div id="prediction-message" class="prediction-message" role="status" aria-live="polite">Add a selection to begin. Results will be synthetic.</div>
+    </aside>
+  </div>
+</section>
     <section class="notice" id="rules"><div class="shell notice-grid"><div><h3 data-en="Entertainment, not gambling" data-fa="سرگرمی، نه قمار پول واقعی">Entertainment, not gambling</h3><p data-en="This page offers only free casino-style simulations. It does not operate a sportsbook or licensed gambling service. No money deposits, paid plays, purchaseable credits, withdrawals, valuable prizes, wallet links or token rewards are available." data-fa="این صفحه فقط شبیه‌سازی‌های رایگان ارائه می‌کند؛ نه شرط‌بندی ورزشی واقعی و نه خدمات قمار دارای مجوز. هیچ واریز، بازی پولی، اعتبار قابل خرید، برداشت، جایزه دارای ارزش، اتصال کیف پول یا پاداش توکنی وجود ندارد.">This page offers only free casino-style simulations. It does not operate a sportsbook or licensed gambling service. No money deposits, paid plays, purchaseable credits, withdrawals, valuable prizes, wallet links or token rewards are available.</p></div><div><h3 data-en="Important access rules" data-fa="قوانین مهم دسترسی">Important access rules</h3><ul><li data-en="Intended for adults 21 and older; age confirmation is self-declared and not formal identity verification." data-fa="ویژه افراد ۲۱ سال به بالا؛ تأیید سن صرفاً خوداظهاری است و احراز هویت رسمی محسوب نمی‌شود.">Intended for adults 21 and older; age confirmation is self-declared and not formal identity verification.</li><li data-en="Availability and advertising remain subject to the laws of your country or state." data-fa="دسترسی و تبلیغات تابع قوانین کشور یا ایالت کاربر است.">Availability and advertising remain subject to the laws of your country or state.</li><li data-en="Real-money betting is disabled unless the operator later obtains every required authorization." data-fa="شرط‌بندی پول واقعی تا اخذ مجوزهای لازم غیرفعال خواهد ماند.">Real-money betting is disabled unless the operator later obtains every required authorization.</li></ul></div></div></section>
   </main>
   <footer><div class="shell footer-row"><div><div class="foot-brand">MOJ CASINO LOUNGE</div><div data-en="A free-play entertainment page by MojPlayWin." data-fa="صفحه سرگرمی رایگان از مجموعه مج پلی وین.">A free-play entertainment page by MojPlayWin.</div></div><div class="foot-links"><a href="https://mojplaywin.com/" data-en="MojPlayWin Home" data-fa="صفحه اصلی مج پلی وین">MojPlayWin Home</a><a href="#rules" data-en="Rules & Safety" data-fa="قوانین و ایمنی">Rules & Safety</a></div></div></footer>
@@ -207,7 +265,7 @@
     const normalizeFind=s=>String(s).normalize('NFKC').toLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک');
     function filterArenaGames(){
       const query=normalizeFind($('#arena-search').value.trim());let count=0;
-      for(const id of ['game-grid','classic-game-grid','dice-game-grid','oracle-grid','wager-grid']){
+      for(const id of ['game-grid','classic-game-grid','dice-game-grid','oracle-grid','wager-grid','prediction-grid']){
         const grid=$('#'+id),cards=[...grid.querySelectorAll('article')];
         for(const item of cards){
           const title=item.querySelector('h3')?.textContent||'';
@@ -971,7 +1029,7 @@
   function cards(){const a=[];for(const suit of ['♠','♥','♦','♣'])for(const rank of ['A','2','3','4','5','6','7','8','9','10','J','Q','K'])a.push({rank,suit});return shuffle(a)}
   const cardText=c=>c.rank+c.suit;
   const value=hand=>{let sum=0,aces=0;for(const c of hand){if(c.rank==='A'){sum+=11;aces++}else sum+=['J','Q','K'].includes(c.rank)?10:Number(c.rank)}while(sum>21&&aces){sum-=10;aces--}return sum};
-  $('#mcd-stake-field').addEventListener('click',e=>{const b=e.target.closest('[data-mcd-stake]');if(!b)return;stake=Number(b.dataset.mcdStake);$$('[data-mcd-stake]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));notice(tr('choose'))});
+  $('#mcd-stake-field').addEventListener('click',e=>{const b=e.target.closest('[data-mcd-stake]');if(!b)return;stake=Number(b.dataset.mcdStake);pSlipRender();$('[data-mcd-stake]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));notice(tr('choose'))});
   $('#mcd-reset').addEventListener('click',()=>{if(bj||poker||craps){notice(tr('active'));return}bank=fresh();persist();update();notice(tr('resetDone'))});
   $('#mcd-roulette-kind').addEventListener('change',()=>{$('#mcd-roulette-number').hidden=$('#mcd-roulette-kind').value!=='straight';$('#mcd-roulette-number-label').hidden=$('#mcd-roulette-kind').value!=='straight'});
   $('#mcd-roulette-spin').addEventListener('click',()=>{
@@ -1078,11 +1136,209 @@
     const x=rng(10000),winner=x<m.prob[0]?0:x<m.prob[0]+m.prob[1]?1:2;
     output('#mcd-sports-result',m.name+'\n'+settle('Virtual 1X2',['Home','Draw','Away'][winner]+' @'+m.odds[pick].toFixed(2),amount,pick===winner?m.odds[pick]:0));
   });
+
+  // Fictional prediction markets share the existing non-redeemable browser-only MCD ledger.
+  // Model probabilities, displayed odds and settlement derive from the same finite outcome sets.
+  const predictionText={
+    en:{nav:'Predictions',cat:'Predictions · 6',eyebrow:'FICTIONAL PREDICTIONS · DEMO ONLY',heading:'MOJ Prediction Center',
+      intro:'Six imaginary fixtures: football, basketball, tennis and esports. Explore several markets, compare odds, and practise a multi-event slip with free MCD.',
+      disclaimer:'No live events, genuine forecasts or bookmaker odds. Browser-only mathematical simulations with cryptographic draws, 6% illustrative margin and a 10,000 MCD maximum combined return. No money value.',
+      slip:'Practice prediction slip',hint:'Select up to three different imaginary fixtures.',empty:'No selections yet.',odds:'Combined odds',returns:'Maximum return (MCD)',submit:'Simulate and settle',start:'Choose a market, then add a selection.',market:'Prediction market',choice:'Choose an outcome',add:'Add to slip',remove:'Remove',fictional:'Fictional simulated event · not a real fixture',football:'Football',basket:'Basketball',tennis:'Tennis',esports:'Esports',
+      result:'Match result (1X2)',double:'Double chance',goals:'Total goals 2.5',btts:'Both teams to score',score:'Correct score',winner:'Match winner',points:'Total points 209.5',handicap:'Home -5.5 handicap',series:'Exact series score',sets:'Total sets/maps 2.5',
+      home:'Home',draw:'Draw',away:'Away',homeDraw:'Home or draw',homeAway:'Home or away',drawAway:'Draw or away',over:'Over',under:'Under',yes:'Yes',no:'No',other:'Other score',homeCover:'Home wins by 6+',awayCover:'Away +5.5',
+      duplicate:'Selection updated for that fixture.',added:'Added to your free prediction slip.',limit:'Maximum three different fixtures per slip.',need:'Add a selection before simulating.',insufficient:'Insufficient free credits; choose a smaller stake or refill.',win:'All selections matched!',lose:'At least one selection did not match.',outcome:'Virtual result',sample:'Synthetic result',maxReturn:'Maximum displayed return cap: 10,000 MCD.'},
+    fa:{nav:'پیش‌بینی‌ها',cat:'پیش‌بینی‌ها · ۶',eyebrow:'پیش‌بینی خیالی · فقط آزمایشی',heading:'مرکز پیش‌بینی مج',
+      intro:'۶ رقابت خیالی فوتبال، بسکتبال، تنیس و ورزش الکترونیک؛ چند نوع پیش‌بینی، ضرایب مشخص و برگه ترکیبی با اعتبار رایگان MCD.',
+      disclaimer:'بدون مسابقه زنده، پیش‌بینی واقعی یا ضریب شرکت شرط‌بندی. مدل‌های ریاضی محلی با انتخاب تصادفی امن، حاشیه نمایشی ۶٪ و سقف بازگشت ۱۰٬۰۰۰ MCD. فاقد ارزش پولی.',
+      slip:'برگه پیش‌بینی تمرینی',hint:'حداکثر سه رقابت خیالی متفاوت انتخاب کنید.',empty:'هنوز انتخابی ندارید.',odds:'ضریب ترکیبی',returns:'حداکثر بازگشت (MCD)',submit:'شبیه‌سازی و تسویه',start:'بازار را انتخاب کنید و نتیجه دلخواه را بیفزایید.',market:'نوع پیش‌بینی',choice:'انتخاب نتیجه',add:'افزودن به برگه',remove:'حذف',fictional:'رقابت شبیه‌سازی‌شده خیالی؛ نه مسابقه واقعی',football:'فوتبال',basket:'بسکتبال',tennis:'تنیس',esports:'ورزش الکترونیک',
+      result:'نتیجه بازی (۱X۲)',double:'شانس دوگانه',goals:'مجموع گل ۲٫۵',btts:'گل‌زنی هر دو تیم',score:'نتیجه دقیق',winner:'برنده مسابقه',points:'مجموع امتیاز ۲۰۹٫۵',handicap:'هندیکپ میزبان ۵٫۵-',series:'نتیجه دقیق ست/نقشه',sets:'مجموع ست/نقشه ۲٫۵',
+      home:'میزبان',draw:'مساوی',away:'میهمان',homeDraw:'میزبان یا مساوی',homeAway:'میزبان یا میهمان',drawAway:'مساوی یا میهمان',over:'بیشتر',under:'کمتر',yes:'بله',no:'خیر',other:'سایر نتایج',homeCover:'برد میزبان با اختلاف ۶+',awayCover:'میهمان ۵٫۵+',duplicate:'انتخاب این رقابت به‌روزرسانی شد.',added:'به برگه آزمایشی افزوده شد.',limit:'حداکثر سه رقابت متفاوت مجاز است.',need:'ابتدا یک انتخاب اضافه کنید.',insufficient:'اعتبار رایگان کافی نیست؛ مبلغ کمتری انتخاب کنید یا شارژ کنید.',win:'همه انتخاب‌ها درست بودند!',lose:'حداقل یک انتخاب درست نبود.',outcome:'نتیجه مجازی',sample:'نتیجه ساختگی',maxReturn:'سقف بازگشت نمایشی: ۱۰٬۰۰۰ MCD.'},
+    ar:{nav:'التوقعات',cat:'توقعات · ٦',eyebrow:'توقعات خيالية · للتجربة فقط',heading:'مركز توقعات MOJ',
+      intro:'ست مواجهات خيالية في كرة القدم والسلة والتنس والألعاب الإلكترونية، بأسواق متعددة وقسيمة تجريبية بأرصدة MCD مجانية.',
+      disclaimer:'لا أحداث مباشرة ولا توقعات حقيقية ولا أسعار مراهنات. محاكاة محلية بهامش توضيحي ٦٪ وحد عائد ١٠٬٠٠٠ MCD، بلا قيمة مالية.',
+      slip:'قسيمة توقعات تجريبية',hint:'اختر حتى ثلاث مواجهات خيالية مختلفة.',empty:'لا اختيارات بعد.',odds:'الأودز المجمعة',returns:'أقصى عائد (MCD)',submit:'محاكاة وتسوية',start:'اختر السوق والنتيجة ثم أضفها.',market:'سوق التوقع',choice:'اختر النتيجة',add:'إضافة للقسيمة',remove:'إزالة',fictional:'حدث خيالي محاكى، ليس مباراة حقيقية',football:'كرة قدم',basket:'كرة سلة',tennis:'تنس',esports:'رياضات إلكترونية',
+      result:'نتيجة المباراة 1X2',double:'فرصة مزدوجة',goals:'مجموع الأهداف ٢٫٥',btts:'يسجل الفريقان',score:'النتيجة الدقيقة',winner:'الفائز',points:'مجموع النقاط ٢٠٩٫٥',handicap:'أفضلية المضيف -٥٫٥',series:'نتيجة الأشواط الدقيقة',sets:'مجموع الأشواط ٢٫٥',
+      home:'المضيف',draw:'تعادل',away:'الضيف',homeDraw:'المضيف أو التعادل',homeAway:'أحد الفريقين',drawAway:'التعادل أو الضيف',over:'أعلى',under:'أقل',yes:'نعم',no:'لا',other:'نتيجة أخرى',homeCover:'المضيف بفارق ٦+',awayCover:'الضيف +٥٫٥',duplicate:'تم تحديث اختيار المواجهة.',added:'أضيفت للقسيمة المجانية.',limit:'الحد ثلاثة أحداث مختلفة.',need:'أضف اختياراً أولاً.',insufficient:'الرصيد التجريبي غير كافٍ.',win:'صحت جميع الاختيارات!',lose:'لم تصح بعض الاختيارات.',outcome:'النتيجة الافتراضية',sample:'نتيجة محاكاة',maxReturn:'أقصى عائد معروض ١٠٬٠٠٠ MCD.'},
+    de:{nav:'Prognosen',cat:'Prognosen · 6',eyebrow:'FIKTIVE PROGNOSEN · NUR DEMO',heading:'MOJ Prognosezentrum',
+      intro:'Sechs fiktive Begegnungen in Fußball, Basketball, Tennis und E-Sport. Mehrere Märkte, Quoten und ein kostenloser MCD-Kombischein.',
+      disclaimer:'Keine Live-Ereignisse oder echten Prognosen und Wettquoten. Lokale Modelle mit 6 % Demomarge und 10.000 MCD maximaler Rückgabe. Kein Geldwert.',
+      slip:'Übungsschein',hint:'Bis zu drei verschiedene fiktive Spiele wählen.',empty:'Noch keine Tipps.',odds:'Gesamtquote',returns:'Höchstrückgabe (MCD)',submit:'Simulieren und abrechnen',start:'Markt und Ergebnis auswählen, dann hinzufügen.',market:'Prognosemarkt',choice:'Ergebnis wählen',add:'Zum Schein hinzufügen',remove:'Entfernen',fictional:'Fiktives simuliertes Ereignis',football:'Fußball',basket:'Basketball',tennis:'Tennis',esports:'E-Sport',
+      result:'Spielergebnis (1X2)',double:'Doppelte Chance',goals:'Tore über/unter 2,5',btts:'Beide treffen',score:'Genaues Ergebnis',winner:'Spielsieger',points:'Punkte über/unter 209,5',handicap:'Heim-Handicap -5,5',series:'Genaues Satzergebnis',sets:'Sätze/Karten über/unter 2,5',
+      home:'Heim',draw:'Remis',away:'Gast',homeDraw:'Heim oder Remis',homeAway:'Heim oder Gast',drawAway:'Remis oder Gast',over:'Über',under:'Unter',yes:'Ja',no:'Nein',other:'Andere Ergebnisse',homeCover:'Heim mit 6+',awayCover:'Gast +5,5',duplicate:'Tipp aktualisiert.',added:'Zum Übungsschein hinzugefügt.',limit:'Höchstens drei verschiedene Spiele.',need:'Zuerst einen Tipp hinzufügen.',insufficient:'Nicht genug Demoguthaben.',win:'Alle Tipps korrekt!',lose:'Mindestens ein Tipp falsch.',outcome:'Virtuelles Ergebnis',sample:'Simuliertes Ergebnis',maxReturn:'Rückgabelimit 10.000 MCD.'},
+    fr:{nav:'Pronostics',cat:'Pronostics · 6',eyebrow:'PRONOSTICS FICTIFS · DÉMO',heading:'Centre de pronostics MOJ',
+      intro:'Six matchs fictifs de football, basket, tennis et esport. Plusieurs marchés, cotes et ticket combiné gratuit en MCD.',
+      disclaimer:'Aucun événement réel, pronostic authentique ni cote commerciale. Modèles locaux, marge de démonstration 6 %, retour maximal 10 000 MCD. Sans valeur.',
+      slip:'Ticket de pronostics fictifs',hint:'Choisissez jusqu’à trois événements différents.',empty:'Aucune sélection.',odds:'Cote combinée',returns:'Retour maximal (MCD)',submit:'Simuler et régler',start:'Choisissez marché et résultat, puis ajoutez.',market:'Marché de pronostic',choice:'Choisir un résultat',add:'Ajouter au ticket',remove:'Retirer',fictional:'Événement fictif simulé',football:'Football',basket:'Basket',tennis:'Tennis',esports:'Esport',
+      result:'Résultat (1X2)',double:'Double chance',goals:'Buts plus/moins 2,5',btts:'Les deux marquent',score:'Score exact',winner:'Vainqueur',points:'Points plus/moins 209,5',handicap:'Handicap domicile -5,5',series:'Score exact des sets',sets:'Sets/manches plus/moins 2,5',
+      home:'Domicile',draw:'Nul',away:'Extérieur',homeDraw:'Domicile ou nul',homeAway:'Domicile ou extérieur',drawAway:'Nul ou extérieur',over:'Plus de',under:'Moins de',yes:'Oui',no:'Non',other:'Autre score',homeCover:'Domicile +6',awayCover:'Extérieur +5,5',duplicate:'Choix mis à jour.',added:'Ajouté au ticket fictif.',limit:'Maximum trois événements différents.',need:'Ajoutez une sélection.',insufficient:'Crédits démo insuffisants.',win:'Toutes les sélections correctes !',lose:'Au moins une sélection incorrecte.',outcome:'Résultat virtuel',sample:'Résultat simulé',maxReturn:'Plafond de retour : 10 000 MCD.'},
+    es:{nav:'Predicciones',cat:'Predicciones · 6',eyebrow:'PRONÓSTICOS FICTICIOS · DEMO',heading:'Centro de predicciones MOJ',
+      intro:'Seis eventos ficticios de fútbol, baloncesto, tenis y esports. Varios mercados y boleto combinado con créditos MCD gratuitos.',
+      disclaimer:'Sin eventos reales, pronósticos reales ni cuotas comerciales. Modelos locales con margen demostrativo del 6 % y retorno máximo de 10.000 MCD. Sin valor monetario.',
+      slip:'Boleto de predicciones',hint:'Elige hasta tres eventos ficticios distintos.',empty:'Sin selecciones.',odds:'Cuota combinada',returns:'Retorno máximo (MCD)',submit:'Simular y liquidar',start:'Elige mercado y resultado; después añade.',market:'Mercado de predicción',choice:'Elige resultado',add:'Añadir al boleto',remove:'Quitar',fictional:'Evento ficticio simulado',football:'Fútbol',basket:'Baloncesto',tennis:'Tenis',esports:'Esports',
+      result:'Resultado 1X2',double:'Doble oportunidad',goals:'Goles más/menos 2,5',btts:'Ambos marcan',score:'Marcador exacto',winner:'Ganador',points:'Puntos más/menos 209,5',handicap:'Hándicap local -5,5',series:'Resultado de sets',sets:'Total de sets/mapas 2,5',
+      home:'Local',draw:'Empate',away:'Visitante',homeDraw:'Local o empate',homeAway:'Local o visitante',drawAway:'Empate o visitante',over:'Más de',under:'Menos de',yes:'Sí',no:'No',other:'Otro marcador',homeCover:'Local por 6+',awayCover:'Visitante +5,5',duplicate:'Selección actualizada.',added:'Añadido al boleto gratuito.',limit:'Máximo tres eventos distintos.',need:'Añade una selección primero.',insufficient:'Créditos demo insuficientes.',win:'¡Todas acertadas!',lose:'Al menos una no acertó.',outcome:'Resultado virtual',sample:'Resultado simulado',maxReturn:'Retorno máximo de 10.000 MCD.'}
+  };
+  const pt=k=>predictionText[locale]?.[k]||predictionText.en[k]||k;
+  const predictionEvents=[
+    {id:'ft1',kind:'football',name:'North City vs South United',home:1.75,away:1.16},
+    {id:'ft2',kind:'football',name:'Azure Hawks vs Red Foxes',home:1.33,away:1.54},
+    {id:'ft3',kind:'football',name:'Coastal Waves vs Mountain Kings',home:1.62,away:1.31},
+    {id:'bb1',kind:'basket',name:'Golden Comets vs Indigo Bears',home:111,away:104},
+    {id:'tn1',kind:'tennis',name:'Aster Vale vs Cedar Lane',p:0.59},
+    {id:'es1',kind:'esports',name:'Pixel Knights vs Neon Owls',p:0.55}
+  ];
+  const pScores=['0-0','1-0','0-1','1-1','2-1','1-2','2-2'];
+  const pMenus={
+    football:[['result',['h','d','a']],['double',['hd','ha','da']],['goals',['over','under']],['btts',['yes','no']],['score',[...pScores,'other']]],
+    basket:[['winner',['h','a']],['points',['over','under']],['handicap',['homeCover','awayCover']]],
+    tennis:[['winner',['h','a']],['series',['2-0','2-1','1-2','0-2']],['sets',['over','under']]],
+    esports:[['winner',['h','a']],['series',['2-0','2-1','1-2','0-2']],['sets',['over','under']]]
+  };
+  function pPoisson(lambda){
+    const bins=[Math.exp(-lambda)];
+    for(let i=1;i<=7;i++)bins.push(bins[i-1]*lambda/i);
+    bins.push(Math.max(0,1-bins.reduce((a,b)=>a+b,0)));
+    return bins;
+  }
+  function pModel(event){
+    const results=[];
+    if(event.kind==='football'){
+      const h=pPoisson(event.home),a=pPoisson(event.away);
+      for(let i=0;i<h.length;i++)for(let j=0;j<a.length;j++)results.push({h:i,a:j,p:h[i]*a[j]});
+    }else if(event.kind==='basket'){
+      const scores=Array.from({length:61},(_,i)=>80+i);
+      const weights=mean=>{const a=scores.map(n=>Math.exp(-0.5*((n-mean)/12)**2));const sum=a.reduce((x,y)=>x+y,0);return a.map(x=>x/sum)};
+      const h=weights(event.home),a=weights(event.away);
+      for(let i=0;i<scores.length;i++)for(let j=0;j<scores.length;j++){
+        const chance=h[i]*a[j];
+        if(i===j){results.push({h:scores[i]+1,a:scores[j],p:chance/2});results.push({h:scores[i],a:scores[j]+1,p:chance/2})}
+        else results.push({h:scores[i],a:scores[j],p:chance});
+      }
+    }else{
+      for(const s of ['HH','AA','HAH','AHH','HAA','AHA']){
+        const p=[...s].reduce((a,c)=>a*(c==='H'?event.p:1-event.p),1);
+        const h=[...s].filter(c=>c==='H').length,a=s.length-h;
+        results.push({h,a,p,sets:s.length});
+      }
+    }
+    return results;
+  }
+  const pModels=new Map(predictionEvents.map(e=>[e.id,pModel(e)]));
+  function pWon(event,market,choice,result){
+    const h=result.h,a=result.a;
+    if(market==='result')return choice===(h>a?'h':h<a?'a':'d');
+    if(market==='double')return choice==='hd'?h>=a:choice==='ha'?h!==a:h<=a;
+    if(market==='goals')return (h+a>2.5)===(choice==='over');
+    if(market==='btts')return (h>0&&a>0)===(choice==='yes');
+    if(market==='score')return choice==='other'?!pScores.includes(h+'-'+a):choice===h+'-'+a;
+    if(market==='winner')return choice===(h>a?'h':'a');
+    if(market==='points')return (h+a>209.5)===(choice==='over');
+    if(market==='handicap')return (h-a>5.5)===(choice==='homeCover');
+    if(market==='series')return choice===h+'-'+a;
+    if(market==='sets')return (result.sets>2.5)===(choice==='over');
+    return false;
+  }
+  function pPrice(event,market,choice){
+    const prob=pModels.get(event.id).reduce((sum,o)=>sum+(pWon(event,market,choice,o)?o.p:0),0);
+    return prob>0?Math.max(1.01,Math.min(250,Math.floor(100/(1.06*prob))/100)):0;
+  }
+  function pSample(event){
+    const model=pModels.get(event.id),x=rng(1000000000)/1000000000;
+    let total=0;
+    for(const o of model){total+=o.p;if(x<total)return o}
+    return model[model.length-1];
+  }
+  const pDraft=new Map(),pTicket=[];
+  const pEvent=id=>predictionEvents.find(e=>e.id===id);
+  const pMenu=(event,id)=>pMenus[event.kind].find(m=>m[0]===id);
+  const pChoiceLabel=k=>predictionText.en[k]?pt(k):k;
+  const pCombined=()=>Math.min(100,pTicket.reduce((acc,leg)=>acc*leg.price,1));
+  function pMessage(s){output('#prediction-message',s)}
+  function pBuild(){
+    const grid=$('#prediction-grid');grid.replaceChildren();
+    for(const event of predictionEvents){
+      const card=document.createElement('article');card.className='prediction-card';card.id='prediction-'+event.id;
+      const title=document.createElement('h3');title.textContent=event.name;
+      const desc=document.createElement('p');desc.textContent=pt(event.kind)+' · '+pt('fictional');
+      const form=document.createElement('form');form.className='prediction-form';form.action='#prediction-center';form.method='get';
+      const marketLabel=document.createElement('label');marketLabel.textContent=pt('market');marketLabel.htmlFor='prediction-market-'+event.id;
+      const select=document.createElement('select');select.name='market';select.id=marketLabel.htmlFor;
+      const draft=pDraft.get(event.id)||{market:pMenus[event.kind][0][0],pick:''};pDraft.set(event.id,draft);
+      for(const [id] of pMenus[event.kind]){const option=document.createElement('option');option.value=id;option.textContent=pt(id);select.append(option)}
+      select.value=draft.market;
+      const field=document.createElement('fieldset');field.className='prediction-options';
+      const legend=document.createElement('legend');legend.textContent=pt('choice');field.append(legend);
+      function choices(){
+        while(field.children.length>1)field.lastElementChild.remove();
+        const menu=pMenu(event,select.value);if(!menu)return;
+        if(!menu[1].includes(draft.pick))draft.pick=menu[1][0];
+        for(const choice of menu[1]){
+          const label=document.createElement('label');label.className='prediction-option';
+          const radio=document.createElement('input');radio.type='radio';radio.name='prediction-choice-'+event.id;radio.value=choice;radio.checked=choice===draft.pick;radio.required=true;
+          radio.addEventListener('change',()=>draft.pick=choice);
+          const name=document.createElement('span');name.textContent=pChoiceLabel(choice);
+          const odd=document.createElement('strong');odd.textContent=pPrice(event,select.value,choice).toFixed(2)+'×';
+          label.append(radio,name,odd);field.append(label);
+        }
+      }
+      select.addEventListener('change',()=>{draft.market=select.value;draft.pick='';choices()});
+      choices();
+      const submit=document.createElement('button');submit.type='submit';submit.textContent=pt('add');
+      form.append(marketLabel,select,field,submit);
+      form.addEventListener('submit',ev=>{
+        ev.preventDefault();
+        const checked=field.querySelector('input:checked');if(!checked)return;
+        const leg={id:event.id,market:select.value,choice:checked.value,price:pPrice(event,select.value,checked.value)};
+        const index=pTicket.findIndex(x=>x.id===event.id);
+        if(index>=0){pTicket[index]=leg;pMessage(pt('duplicate'))}
+        else if(pTicket.length>=3){pMessage(pt('limit'));return}
+        else{pTicket.push(leg);pMessage(pt('added'))}
+        pSlipRender();
+      });
+      card.append(title,desc,form);grid.append(card);
+    }
+  }
+  function pSlipRender(){
+    const box=$('#prediction-slip-legs');box.replaceChildren();
+    if(!pTicket.length){const li=document.createElement('li');li.textContent=pt('empty');box.append(li)}
+    else for(const leg of pTicket){
+      const event=pEvent(leg.id),li=document.createElement('li');
+      li.append(document.createTextNode(event.name+' · '+pt(leg.market)+' · '+pChoiceLabel(leg.choice)+' @'+leg.price.toFixed(2)));
+      const remove=document.createElement('button');remove.type='button';remove.textContent=pt('remove');remove.setAttribute('aria-label',pt('remove')+' '+event.name);
+      remove.addEventListener('click',()=>{const i=pTicket.findIndex(l=>l.id===leg.id);if(i>=0)pTicket.splice(i,1);pSlipRender()});
+      li.append(remove);box.append(li);
+    }
+    output('#prediction-slip-odds',pTicket.length?pCombined().toFixed(2)+'×':'—');
+    output('#prediction-slip-return',pTicket.length?format(Math.min(1000000,Math.round(stake*100*pCombined())))+' MCD':'—');
+    $('#prediction-submit').disabled=!pTicket.length;
+  }
+  $('#prediction-submit').addEventListener('click',()=>{
+    if(!pTicket.length){pMessage(pt('need'));return}
+    if(bank.balance<stake*100){pMessage(pt('insufficient'));return}
+    const amount=reserve();if(amount===null)return;
+    const results=pTicket.map(leg=>{
+      const event=pEvent(leg.id),o=pSample(event),won=pWon(event,leg.market,leg.choice,o);
+      return {leg,event,o,won,label:event.name+' '+o.h+'-'+o.a};
+    });
+    const all=results.every(r=>r.won),combined=pCombined();
+    const gross=all?Math.min(1000000,Math.round(amount*combined)):0;
+    const verdict=settle('Prediction Slip',results.map(r=>r.leg.id+(r.won?' ✓':' ✕')).join(' / '),amount,gross/amount);
+    pTicket.splice(0);
+    pSlipRender();
+    pMessage(pt(all?'win':'lose')+'\n'+results.map(r=>pt('outcome')+': '+r.label+(r.won?' ✓':' ✕')).join('\n')+'\n'+verdict);
+  });
+  function translatePredictions(){
+    const ids={eyebrow:'prediction-eyebrow',heading:'prediction-heading',intro:'prediction-intro',disclaimer:'prediction-disclaimer',slip:'prediction-slip-heading',hint:'prediction-slip-hint',odds:'prediction-odds-label',returns:'prediction-return-label',submit:'prediction-submit'};
+    for(const [k,id] of Object.entries(ids))output('#'+id,pt(k));
+    output('#arena-cat-predictions',pt('cat'));output('#nav-predictions',pt('nav'));
+    pBuild();pSlipRender();pMessage(pt('start'));
+  }
+
   function translate(){
     locale=lang();$$('[data-pro]').forEach(el=>el.textContent=tr(el.dataset.pro));
     $$('[data-mcd-stake]').forEach(b=>b.setAttribute('aria-label',tr('stake')+' '+b.dataset.mcdStake));
     $('#arena-cat-wagers').textContent=tr('wagerCat');$('#nav-mcd').textContent=tr('navMcd');
-    update();$('#arena-search').dispatchEvent(new Event('input',{bubbles:true}));
+    update();translatePredictions();$('#arena-search').dispatchEvent(new Event('input',{bubbles:true}));
   }
   $('#language').addEventListener('change',translate);
   // Keep the age dialog genuinely modal for keyboard and screen-reader navigation.
