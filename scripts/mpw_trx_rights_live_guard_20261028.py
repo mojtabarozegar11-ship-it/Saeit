@@ -135,6 +135,10 @@ def atomic(path,raw,expected=None):
         if expected is not None and digest(path.read_bytes())!=expected:
             raise RuntimeError("CONCURRENT_EDIT_BEFORE_REPLACE")
         os.replace(tmp,path)
+        # Persist the rename itself, not only the temporary file contents.
+        dirfd=os.open(path.parent,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
+        try: os.fsync(dirfd)
+        finally: os.close(dirfd)
     finally:
         if os.path.exists(tmp): os.unlink(tmp)
 
@@ -233,7 +237,9 @@ def operation(mode,run_id=None):
                 for k,path in TARGETS.items():
                     if digest(path.read_bytes())!=info["old"][k]:
                         raise RuntimeError("CONCURRENT_EDIT:"+k)
-                    atomic(path,new[k],expected=info["old"][k]);touched.append(k)
+                    # Arm rollback before atomic(): post-rename durability can fail.
+                    touched.append(k)
+                    atomic(path,new[k],expected=info["old"][k])
                 current,_,needed=inspect()
                 if needed or any(digest(current[k])!=info["new"][k] for k in TARGETS):
                     raise RuntimeError("POST_WRITE_MISMATCH")
