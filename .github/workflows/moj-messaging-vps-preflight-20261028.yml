@@ -62,7 +62,8 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           chmod 600 "$d/known"
-          timeout 40s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set +e
+          timeout 40s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'bash -s' > "$RUNNER_TEMP/mmsg-runtime-probe.txt" <<'REMOTE'
           set -eu
           test "$(id -un)" = githubops
           test -d /home/githubops/factory-runtime
@@ -92,6 +93,12 @@ jobs:
           test "$admit" = PASS
           echo 'MMSG_VPS_READONLY_PREFLIGHT_FINISHED_NO_INSTALL_NO_ACCOUNT_LOGIN'
           REMOTE
+          result=$?
+          set -e
+          if test -f "$RUNNER_TEMP/mmsg-runtime-probe.txt"; then
+            grep -E '^MMSG_' "$RUNNER_TEMP/mmsg-runtime-probe.txt" || true
+          fi
+          test "$result" -eq 0
 
       - name: Publish runtime admission result to commit (PASS)
         if: success()
@@ -110,6 +117,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          blockers="$(grep -E '^MMSG_(DISK_GATE|MEMORY_GATE|NODE_GATE|NPM_GATE|PYTHON_VENV_GATE|SYSTEMD_TOOL|NONINTERACTIVE_SUDO)=(NO_GO|NO|UNCONFIRMED)
+ "$RUNNER_TEMP/mmsg-runtime-probe.txt" 2>/dev/null | sed -E 's/^MMSG_//;s/=.*$//' | paste -sd ',' - || true)"
+          test -n "$blockers" || blockers=SSH_OR_AUTH_OR_CHECK
+          description="Blocked: $blockers; no installation"
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state=failure -f context=moj-messaging-vps-runtime-admission \
-            -f description='Runtime gate blocked; no installation or account login'
+            -f description="$description"
