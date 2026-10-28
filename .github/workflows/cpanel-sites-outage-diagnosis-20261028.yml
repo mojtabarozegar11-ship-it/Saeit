@@ -129,6 +129,41 @@ jobs:
           info=[audit('fetchzones'),audit('fetch_cpanel_generated_domains'),audit('fetchzone',['domain=zomorodmelal.ir']),audit('fetchzone',['domain=mojplaywin.com'])]
           print('CPANEL_DNS_ZONE_AUDIT='+json.dumps(info,sort_keys=True))
           PY
+      - name: Inspect UAPI DNS parse_zone and list_zones (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-cpanel-scope"
+          timeout 100s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import subprocess,json
+          def call(fn,args):
+              try:
+                  p=subprocess.run(['uapi','--output=json','DNS',fn]+args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=28)
+                  j=json.loads(p.stdout)
+                  r=j.get('result',{})
+                  out={'function':fn,'exit':p.returncode,'status':r.get('status'),'errors':[str(x)[:240] for x in (r.get('errors') or [])[:3]]}
+                  def sanitized(obj,depth=0):
+                      if depth>3:return '<nested>'
+                      if isinstance(obj,list):
+                          return {'count':len(obj),'sample':[sanitized(x,depth+1) for x in obj[:3]]}
+                      if isinstance(obj,dict):
+                          result={}
+                          for k,v in obj.items():
+                              if k.lower() in ('type','name','domain','zone','address','cname','nsdname','exchange','hostname','serial','line','class','record_type','status'):
+                                  if isinstance(v,(str,int,float)):result[k]=v
+                              elif isinstance(v,(list,dict)):result[k]=sanitized(v,depth+1)
+                              else:result[k]='<redacted>'
+                          return result
+                      return '<redacted>'
+                  out['data_structure']=sanitized(r.get('data'))
+                  return out
+              except Exception as e:return {'function':fn,'error_type':type(e).__name__}
+          print('UAPI_DNS_AUDIT='+json.dumps([
+              call('parse_zone',['zone=zomorodmelal.ir']),
+              call('list_zones',[]),
+              call('parse_zone',['zone=mojplaywin.com'])
+          ],sort_keys=True))
+          PY
       - name: Clear ephemeral SSH keys
         if: always()
         shell: bash
