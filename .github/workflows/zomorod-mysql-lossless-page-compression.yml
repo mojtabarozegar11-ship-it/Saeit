@@ -318,9 +318,7 @@ jobs:
           echo "LARGE_FILES_OVER_100MB_BYTES"
           find "$HOME" -xdev -type f -size +100M -printf '%s\t%p\n' 2>/dev/null | sort -nr | head -60 || true
           echo "ARCHIVE_CANDIDATES_OVER_50MB_OLDER_THAN_90D_BYTES"
-          find "$HOME" -xdev -type f -size +50M -mtime +90 \\
-            \\( -iname '*.zip' -o -iname '*.tar' -o -iname '*.tgz' -o -iname '*.gz' -o -iname '*.sql' -o -iname '*.sql.gz' -o -iname '*.bak' -o -iname '*.dump' \\) \\
-            -printf '%s\t%TY-%Tm-%Td\t%p\n' 2>/dev/null | sort -nr | head -100 || true
+          find "$HOME" -xdev -regextype posix-extended -type f -size +50M -mtime +90 -regex '.*\.(zip|tar|tgz|gz|sql|bak|dump)$' -printf '%s\t%TY-%Tm-%Td\t%p\n' 2>/dev/null | sort -nr | head -100 || true
           REMOTE
       - name: Remove temporary SSH identities
         if: always()
