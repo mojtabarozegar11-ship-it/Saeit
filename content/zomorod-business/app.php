@@ -96,26 +96,43 @@ try {
     if(empty($_SESSION['csrf']))doCsrf();
     $count=(int)one($db,'SELECT COUNT(*) FROM users');
     if($count===0){
-        $setupFile=$private.'/setup.token';
-        if(!is_file($setupFile)){
-            $fp=@fopen($setupFile,'x');
-            if($fp!==false){fwrite($fp,bin2hex(random_bytes(32))."\n");fclose($fp);@chmod($setupFile,0600);}
+        // First-owner credentials are provisioned privately; public visitors cannot claim the admin role.
+        $receipt=$private.'/owner-first-login.txt';
+        $createdReceipt=false;
+        $setupTransaction=false;
+        try {
+            $db->exec('BEGIN IMMEDIATE');
+            $setupTransaction=true;
+            if((int)one($db,'SELECT COUNT(*) FROM users')===0){
+                if(file_exists($receipt))throw new RuntimeException('Private owner receipt already exists; manual recovery required.');
+                $username='ZomorodOwner';
+                $password=rtrim(strtr(base64_encode(random_bytes(36)),'+/','-_'),'=');
+                $hash=password_hash($password,PASSWORD_DEFAULT);
+                if(!is_string($hash)||!password_verify($password,$hash))throw new RuntimeException('Password generation failed.');
+                $previousUmask=umask(0077);
+                $handle=@fopen($receipt,'x');
+                umask($previousUmask);
+                if($handle===false)throw new RuntimeException('Could not create private owner receipt.');
+                $createdReceipt=true;
+                if(!@chmod($receipt,0600)){fclose($handle);throw new RuntimeException('Could not protect private owner receipt.');}
+                $body="ZOMOROD MELL PRIVATE OWNER LOGIN\nPortal: https://zomorodmelal.ir/business/\nUsername: ".$username."\nInitial password: ".$password."\nChange this password immediately under /business/?page=security.\nDelete this receipt after saving the changed credentials securely.\n";
+                if(fwrite($handle,$body)!==strlen($body)){fclose($handle);throw new RuntimeException('Incomplete private owner receipt.');}
+                fflush($handle);
+                if(function_exists('fsync'))@fsync($handle);
+                fclose($handle);
+                $db->prepare("INSERT INTO users(username,password_hash,role,active) VALUES(?,?,'admin',1)")->execute([$username,$hash]);
+                $db->prepare("INSERT INTO audit_events(user_id,verb,subject) VALUES(?,?,?)")->execute([(int)$db->lastInsertId(),'setup','first-owner-private']);
+                unset($password,$hash,$body);
+            }
+            $db->exec('COMMIT');
+            $setupTransaction=false;
+            // Retire legacy one-time setup material only once an admin account exists.
+            @unlink($private.'/setup.token');
+        } catch(Throwable $setupError) {
+            if($setupTransaction){try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}}
+            if($createdReceipt)@unlink($receipt);
+            throw $setupError;
         }
-        if($_SERVER['REQUEST_METHOD']==='POST'){
-            verifyCsrf();
-            $key=$private.'/setup.token';
-            $secret=is_file($key)?trim((string)file_get_contents($key)):'';
-            $username=req('username');$password=req('password');
-            if($secret===''||!hash_equals($secret,req('setup_token')))bail('توکن فعال‌سازی معتبر نیست.',403);
-            if(!preg_match('/^[A-Za-z0-9_]{5,40}$/',$username)||strlen($password)<14||strlen($password)>200)bail('نام کاربری ۵ تا ۴۰ حرف و گذرواژه دست‌کم ۱۴ نویسه لازم است.');
-            $db->beginTransaction();
-            $db->prepare("INSERT INTO users(username,password_hash,role) VALUES(?,?,'admin')")->execute([$username,password_hash($password,PASSWORD_DEFAULT)]);
-            $db->commit();@unlink($key);audit($db,'setup','first-admin');
-            $_SESSION['uid']=(int)one($db,'SELECT id FROM users WHERE username=?',[$username]);$_SESSION['role']='admin';session_regenerate_id(true);
-            header('Location: ?page=dashboard',true,303);exit;
-        }
-        layoutStart('setup');echo '<section class="sign"><h1>راه‌اندازی امن میز مدیریت</h1><p>برای نخستین ورود، توکن یک‌بارمصرف نگهداری‌شده در <code>~/.private/zomorod-business/setup.token</code> را از فایل‌منیجر cPanel یا SSH بخوانید. این رمز در کد یا گزارش GitHub منتشر نمی‌شود.</p>';
-        formBegin('setup');echo '<label>توکن فعال‌سازی</label><input name="setup_token" type="password" required autocomplete="off"><label>نام کاربری مدیر</label><input name="username" required minlength="5" maxlength="40"><label>گذرواژه جدید</label><input name="password" type="password" required minlength="14" autocomplete="new-password"><button>ایجاد مدیر و فعال‌سازی</button></form></section>';layoutEnd();exit;
     }
     if(($_GET['page']??'')==='logout'){$_SESSION=[];session_destroy();header('Location: /business/',true,303);exit;}
     $uid=actor();$user=$uid?q($db,'SELECT id,username,role,active FROM users WHERE id=?',[$uid])[0]??null:null;
