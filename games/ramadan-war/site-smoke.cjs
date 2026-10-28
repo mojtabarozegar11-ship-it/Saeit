@@ -307,6 +307,31 @@ const assert=require('node:assert/strict');
     assert.equal(await page.locator('#missionObjective').isVisible(),true);
     console.log('CAMPAIGN_OBJECTIVES_PASS activation=2 intel=3 defend=timer extract=check boss=spawn');
    }
+   // The unlocked survival mode is separate from the unfinished campaign.
+   // Starting it, pausing it and pagehide must preserve the campaign slot.
+   if(localCandidate){
+    const survivalSave=await page.evaluate(()=>{
+      const g=window.RamadanWarDebug;
+      g.start();
+      const original=localStorage.getItem('rwNativeCampaign');
+      if(!original)throw new Error('campaign save missing before survival');
+      localStorage.setItem('rwWin','1');
+      document.querySelector('#pause').click();
+      document.querySelector('#goHome').click();
+      if(document.querySelector('#survival').classList.contains('hidden'))
+        throw new Error('unlocked survival control not visible');
+      document.querySelector('#survival').click();
+      const survival=g.getState().objectiveKind==='survival';
+      window.dispatchEvent(new Event('pagehide'));
+      document.querySelector('#pause').click();
+      document.querySelector('#goHome').click();
+      return {survival,unchanged:localStorage.getItem('rwNativeCampaign')===original,
+        continueVisible:document.querySelector('#start').textContent.includes('ادامه')};
+    });
+    assert(survivalSave.survival && survivalSave.unchanged && survivalSave.continueVisible,
+      'endless mode must preserve existing campaign progress: '+JSON.stringify(survivalSave));
+    console.log('RAMADAN_SURVIVAL_CAMPAIGN_SAVE_PRESERVED_PASS',v.name);
+   }
    assert.equal(errors.length,0,errors.join('\n'));
    await context.close();console.log('RAMADAN_WEB_'+v.name.toUpperCase()+'_PASS native_campaign=6 heroes=30 lives=100 weapons=rocket+drone save=resume pickups=collectible-ammo');
   }
