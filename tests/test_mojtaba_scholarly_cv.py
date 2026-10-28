@@ -50,6 +50,30 @@ class ScientificCVTests(unittest.TestCase):
         self.assertIn("MR-2026-001", after)
         self.assertIn("PhD in Agricultural Economics", after)
 
+    def test_exec_resume_is_owner_reported_and_cross_linked(self):
+        after = cv.patch(existing_resume(), self.data)
+        self.assertIn('id="mr-professional-resume-20261028"', after)
+        for marker in ("Vancouver, British Columbia, Canada", "MojPlayWin",
+                       "Zomorod Melal Agro-Industry Company",
+                       "Smart agriculture and AI-assisted decision support",
+                       "Teaching, workshops and knowledge sharing"):
+            self.assertIn(marker, after)
+        self.assertIn("https://zomorodmelal.ir/authors/mojtaba-rozegar/", after)
+        self.assertIn("https://mojplaywin.com/mojtaba.roozegar/resume/#webpage", after)
+        self.assertIn("Owner-reported", after) if "Owner-reported" in after else self.assertIn("owner-reported", after)
+
+    def test_resume_specific_seo_meta_is_idempotent(self):
+        before = existing_resume().replace(
+            "{% block content %}",
+            "{% block title %}Experience & Career | Mojtaba Roozegar{% endblock %}\n"
+            "{% block description %}Previous career summary{% endblock %}\n"
+            "{% block content %}",
+            1)
+        after = cv.patch(before, self.data)
+        self.assertIn(self.data["seo"]["title"], after)
+        self.assertIn(self.data["seo"]["description"], after)
+        self.assertEqual(after, cv.patch(after, self.data))
+
     def test_manual_attempt_to_fabricate_an_outcome_is_rejected(self):
         malicious = copy.deepcopy(self.data)
         malicious["research_pipeline"][0]["status"] = "Accepted by Nature"
