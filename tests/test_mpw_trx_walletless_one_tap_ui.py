@@ -42,6 +42,11 @@ class NativeTRXOneTapTests(unittest.TestCase):
         self.assertIn('id="mpw-easy-pay"',s)
         self.assertIn('id="mpw-open-wallet"',s)
         self.assertIn('id="mpw-open-trustwallet"',s)
+        self.assertIn('id="mpw-easy-pay" type="button" hidden',s)
+        self.assertIn('id="mpw-open-wallet" class="buy" rel="noopener noreferrer" href="#" role="button" hidden',s)
+        self.assertIn("Never pay an expired invoice.",s)
+        self.assertIn("Open installed Trust Wallet (TRX)",s)
+        self.assertIn("appButton.hidden=true;note.textContent",WALLET_ACTION_JS)
         self.assertIn('data-sun="1234567"',s)
         self.assertIn('QR contains the address only',s)
         self.assertIn('<svg',s)
@@ -61,7 +66,7 @@ class NativeTRXOneTapTests(unittest.TestCase):
         item=next(x for x in p.links if x.get("id")=="mpw-open-trustwallet")
         target=urlparse(item["href"])
         self.assertEqual((target.scheme,target.netloc,target.path),
-            ("https","link.trustwallet.com","/send"))
+            ("trust","","send"))
         self.assertEqual(parse_qs(target.query),{
             "asset":["c195"],"address":[INV.recipient],"amount":["1.234567"],
         })
