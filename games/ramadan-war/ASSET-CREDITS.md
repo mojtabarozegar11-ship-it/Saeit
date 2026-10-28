@@ -5,7 +5,7 @@
 - سرباز متحرک: “FREE [Military Soldier] RIGGED” از BAMEN. منبع: https://sketchfab.com/3d-models/free-military-soldier-rigged-e9c56308a67d4a3db62e914fafa4d198
 - تفنگ M24: “M24 Bounty Hunter Sniper Rifle” از Naudaff3D. منبع: https://sketchfab.com/3d-models/m24-bounty-hunter-sniper-rifle-d40e74e2259549f5b025807163f1028c
 - دستکش‌ها و بازوهای نمای اول‌شخص: “Fps arms” از bumstrum (DJMaesen). منبع: https://sketchfab.com/3d-models/fps-arms-9452ce4cddde4110a4fd73e555a8e412
-- مجوز این دو مدل: https://creativecommons.org/licenses/by/4.0/
+- مجوز هر سه منبع مدل و بافتِ بالا: https://creativecommons.org/licenses/by/4.0/
 - GLTFLoader و ابزارهای Three.js با مجوز MIT؛ متن مجوز در `THREE-LICENSE.txt`.
 - رمزگشای Meshopt از پروژهٔ meshoptimizer با مجوز MIT: https://github.com/zeux/meshoptimizer
 
