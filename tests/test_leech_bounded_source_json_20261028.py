@@ -47,7 +47,7 @@ class SafeJsonBoundedTests(unittest.TestCase):
             actual_open = os.open
 
             def swap_open(candidate, flags, *args, **kwargs):
-                if Path(candidate) == path:
+                if candidate == "source.json" and kwargs.get("dir_fd") is not None:
                     path.unlink()
                     path.symlink_to(outside)
                 return actual_open(candidate, flags, *args, **kwargs)
