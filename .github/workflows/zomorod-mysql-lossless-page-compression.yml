@@ -360,7 +360,7 @@ jobs:
                   print("MYSQL_DATE_COVERAGE="+json.dumps({"table":table,"column":name,"min":row[0],"max":row[1],"non_null_rows":row[2],"older_than_180d":row[3]},ensure_ascii=False))
               for name,typ in cols:
                   if name.lower() in {"status","state"}:
-                  ident=name
+                      ident=name
                       rows=query(f"SELECT COALESCE(CAST({ident} AS CHAR),CHAR(91,78,85,76,76,93)),COUNT(*) FROM {table} GROUP BY {ident} ORDER BY COUNT(*) DESC LIMIT 20")
                       print("MYSQL_STATUS_DISTRIBUTION="+json.dumps({"table":table,"column":name,"counts":rows},ensure_ascii=False))
           PY
