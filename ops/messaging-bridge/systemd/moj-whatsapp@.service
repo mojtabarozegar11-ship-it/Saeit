@@ -13,6 +13,7 @@ WorkingDirectory=/opt/moj-messaging
 Environment=MOJMSG_STATE_DIR=/var/lib/moj-messaging
 ExecStart=/usr/bin/env node /opt/moj-messaging/whatsapp.mjs daemon --account %i
 Restart=on-failure
+RestartPreventExitStatus=3
 RestartSec=20
 UMask=0077
 NoNewPrivileges=true
