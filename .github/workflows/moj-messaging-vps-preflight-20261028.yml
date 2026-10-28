@@ -31,6 +31,7 @@ jobs:
           python3 -B -m unittest discover -s tests -v
           python3 -B -m py_compile telegram.py
           node --check whatsapp.mjs
+          node tests/test_whatsapp_flow.mjs
           bash -n install.sh control.sh
           if find . -type f \( -name '*.session' -o -name '*.session-journal' -o -name 'creds.json' -o -name 'bridge.env' -o -name '.env' \) | grep -q .; then
             echo 'PRIVATE_CREDENTIALS_FOUND_IN_CHECKOUT'; exit 1
