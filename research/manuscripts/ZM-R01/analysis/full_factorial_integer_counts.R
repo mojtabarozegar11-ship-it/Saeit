@@ -141,7 +141,9 @@ geo_blob <- digest::digest(c(charToRaw(paste0("blob ", length(geo_raw))),
                            algo="sha1", serialize=FALSE)
 if (!identical(geo_blob, "988be37b2b8ae02f3c3c3546fb5e6f49865b2099"))
   stop("Pinned GEO crosswalk Git blob SHA1 mismatch; NO DESeq2")
-geo <- read.delim(geo_sheet_file, check.names=FALSE, stringsAsFactors=FALSE)
+# Preserve leading zeros in nominal factorial cell labels (000, 001, ...).
+geo <- read.delim(geo_sheet_file, check.names=FALSE, stringsAsFactors=FALSE,
+                  colClasses="character")
 geo_fields <- c("gsm", "biosample", "srr", "D", "H", "C", "cell")
 if (!all(geo_fields %in% names(geo)) || nrow(geo) != 24L ||
     anyNA(geo[, geo_fields, drop=FALSE]) ||
@@ -158,8 +160,8 @@ if (anyNA(ena_by_srr$sample_accession) ||
     !identical(as.character(geo_by_gsm$biosample),
                as.character(ena_by_srr$sample_accession)))
   stop("Pinned GEO/ENA BioSample crosswalk mismatch; NO DESeq2")
-if (any(!geo$D %in% 0:1) || any(!geo$H %in% 0:1) ||
-    any(!geo$C %in% 0:1) ||
+if (any(!geo$D %in% c("0","1")) || any(!geo$H %in% c("0","1")) ||
+    any(!geo$C %in% c("0","1")) ||
     !identical(as.character(geo$cell), paste0(geo$D, geo$H, geo$C)) ||
     any(table(factor(geo$cell, levels=c("000","001","010","011",
                                        "100","101","110","111"))) != 3L))
