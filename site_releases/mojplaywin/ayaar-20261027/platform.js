@@ -105,6 +105,8 @@
     const params=new URLSearchParams(location.search);
     const s=params.get("service");
     if(["screening","professional","enterprise"].includes(s))field(form,"service").value=s;
+    // Only live in this tab; never saved in browser storage or a tracking URL.
+    let activeSubmissionId=null;
     form.addEventListener("submit",async event=>{
       event.preventDefault();
       if($("receipt")?.classList.contains("show") && !receiptSaved){
@@ -118,17 +120,39 @@
       }
       submit.disabled=true;submit.textContent="Submitting securely…";
       try {
-        const result=await request("submit",{case:collectCase(form)},files);
+        if(!activeSubmissionId){
+          if(!globalThis.crypto?.getRandomValues)throw Error("A secure browser is required for dossier submission.");
+          const bytes=new Uint8Array(32);
+          crypto.getRandomValues(bytes);
+          activeSubmissionId=Array.from(bytes,byte=>byte.toString(16).padStart(2,"0")).join("");
+        }
+        const result=await request("submit",{
+          case:{...collectCase(form),client_request_id:activeSubmissionId}
+        },files);
+        activeSubmissionId=null;
+        const receiptHeading=$("receipt")?.querySelector("h3");
+        if(receiptHeading)receiptHeading.textContent=result.recovered
+          ? "Original dossier recovered — no duplicate created"
+          : "Case successfully registered";
         $("receiptCase").textContent=result.case_id;
         $("receiptKey").textContent=result.access_key;
         receiptSaved=false;
         $("copyReceipt").textContent="Copy case details";
+        if($("confirmReceipt")){
+          $("confirmReceipt").disabled=false;
+          $("confirmReceipt").textContent="I have securely saved my private key ✓";
+        }
         document.getElementById("receiptCopyFallback")?.remove();
         $("receipt").classList.add("show");
         $("receipt").scrollIntoView({behavior:"smooth",block:"center"});
         form.reset();
         $("feedback").hidden=true;
-      } catch(error){message(error.message,"error");}
+      } catch(error){
+        const extra=activeSubmissionId && !/Submission data changed/.test(error.message)
+          ? " If your connection dropped, retry on this page with the same details and files to recover the original case."
+          : "";
+        message(error.message+extra,"error");
+      }
       finally {submit.disabled=false;submit.textContent="Submit dossier securely ↗";}
     });
     const receiptText=()=>[
@@ -151,7 +175,6 @@
       try {
         if(!navigator.clipboard?.writeText)throw Error("Clipboard unavailable");
         await navigator.clipboard.writeText(value);
-        receiptSaved=true;
         document.getElementById("receiptCopyFallback")?.remove();
         $("copyReceipt").textContent="Copied securely ✓";
         message("The private receipt is on your clipboard. Store it securely before closing this page.","success");
@@ -166,6 +189,15 @@
         message("Copy was blocked. Receipt text is selected; the download option is also available.","");
       }
     });
+    $("confirmReceipt")?.addEventListener("click",()=>{
+      if(!$("receiptCase")?.textContent || !$("receiptKey")?.textContent){
+        message("No private receipt to confirm.","error");return;
+      }
+      receiptSaved=true;
+      $("confirmReceipt").disabled=true;
+      $("confirmReceipt").textContent="Receipt safely stored ✓";
+      message("Safe storage confirmed. Protect your key: it cannot be recovered by email.","success");
+    });
     $("downloadReceipt")?.addEventListener("click",()=>{
       const id=$("receiptCase").textContent;
       if(!/^AYR-[A-Za-z0-9-]{6,40}$/.test(id) || !$("receiptKey").textContent){
@@ -176,8 +208,7 @@
       const a=document.createElement("a");a.href=url;a.download=id+"-private-receipt.txt";
       document.body.append(a);a.click();a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),3000);
-      receiptSaved=true;
-      message("Private receipt download requested. Verify it was saved safely; it contains your one-time access key.","success");
+      message("Download requested. Open the saved file, check both values, then explicitly confirm safe storage below.","success");
     });
   }
   function addFact(parent,label,value) {
