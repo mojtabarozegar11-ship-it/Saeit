@@ -69,31 +69,15 @@ jobs:
           d="$RUNNER_TEMP/zomorod-baseline-inventory"
           ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
           set -euo pipefail
-          cd "$HOME/Saeit-staging"
-          /home/zomorod2/Saeit/.venv/bin/python -B - <<'PY'
-          import os,django,json
-          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
-          django.setup()
-          from django.db import connection
-          assert connection.settings_dict["NAME"]=="zomorod2_sites_main"
-          with connection.cursor() as c:
-              c.execute("""SELECT TABLE_NAME, ENGINE, COALESCE(TABLE_ROWS,0),
-                         COALESCE(DATA_LENGTH,0), COALESCE(INDEX_LENGTH,0),
-                         COALESCE(DATA_FREE,0)
-                         FROM information_schema.TABLES
-                         WHERE TABLE_SCHEMA=%s AND TABLE_TYPE='BASE TABLE'
-                         ORDER BY DATA_LENGTH+INDEX_LENGTH DESC""",[connection.settings_dict["NAME"]])
-              rows=c.fetchall()
-          print("LIVE_MYSQL_TABLE_COUNT="+str(len(rows)))
-          data=sum(r[3] for r in rows)
-          idx=sum(r[4] for r in rows)
-          free=sum(r[5] for r in rows)
-          print("LIVE_MYSQL_DATA_BYTES="+str(data))
-          print("LIVE_MYSQL_INDEX_BYTES="+str(idx))
-          print("LIVE_MYSQL_REPORTED_FREE_BYTES="+str(free))
-          for name,engine,est_count,data,index,free in rows[:55]:
-              print("MYSQL_TABLE_SUMMARY="+json.dumps({"name":name,"engine":engine,"estimated_rows":est_count,"data_bytes":data,"index_bytes":index,"free_bytes":free}))
-          print("LIVE_MYSQL_STORAGE_INVENTORY=complete")
+          client="$(command -v mysql || command -v mariadb || true)"
+          if test -z "$client"; then echo MYSQL_CLIENT_UNAVAILABLE; exit 0; fi
+          if test ! -r "$HOME/.my.cnf"; then echo MYSQL_CLIENT_CREDENTIAL_FILE_UNAVAILABLE; exit 0; fi
+          db="zomorod2_sites_main"
+          "$client" --defaults-extra-file="$HOME/.my.cnf" --batch --skip-column-names --database="$db" \
+            -e "SELECT CONCAT('LIVE_MYSQL_TABLE_COUNT=',COUNT(*)),CONCAT('LIVE_MYSQL_DATA_BYTES=',COALESCE(SUM(DATA_LENGTH),0)),CONCAT('LIVE_MYSQL_INDEX_BYTES=',COALESCE(SUM(INDEX_LENGTH),0)),CONCAT('LIVE_MYSQL_REPORTED_FREE_BYTES=',COALESCE(SUM(DATA_FREE),0)) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$db' AND TABLE_TYPE='BASE TABLE';"
+          "$client" --defaults-extra-file="$HOME/.my.cnf" --batch --skip-column-names --database="$db" \
+            -e "SELECT CONCAT('MYSQL_TABLE_SUMMARY=',JSON_OBJECT('name',TABLE_NAME,'engine',ENGINE,'estimated_rows',COALESCE(TABLE_ROWS,0),'data_bytes',COALESCE(DATA_LENGTH,0),'index_bytes',COALESCE(INDEX_LENGTH,0),'free_bytes',COALESCE(DATA_FREE,0))) FROM information_schema.TABLES WHERE TABLE_SCHEMA='$db' AND TABLE_TYPE='BASE TABLE' ORDER BY DATA_LENGTH+INDEX_LENGTH DESC LIMIT 55;"
+          echo LIVE_MYSQL_STORAGE_INVENTORY=complete
           PY
           REMOTE
       - name: Clear connection material
