@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, normalizeMovementAxes, recordPointerGestureMovement, shouldFireCanvasClick} from '../../games/ramadan-war/input-guard.mjs';
+import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isModifiedOrComposingKey, shouldReleaseHeldKeysOnFocus, normalizeMovementAxes, recordPointerGestureMovement, shouldFireCanvasClick} from '../../games/ramadan-war/input-guard.mjs';
 
 const arena = {closest: () => null};
 const menuButton = {closest: selector => selector.includes('button') ? {} : null};
@@ -28,6 +28,17 @@ test('menu focus preserves native keyboard and assistive controls', () => {
     assert.equal(keyboardAction(key, 'game', menuButton), null);
     assert.equal(keyboardAction(key, 'game', textEntry), null);
   }
+});
+
+test('HUD focus releases held keyboard movement and fire without cancelling touch ownership', () => {
+  assert.equal(shouldReleaseHeldKeysOnFocus('game',menuButton),true);
+  assert.equal(shouldReleaseHeldKeysOnFocus('game',textEntry),true);
+  assert.equal(shouldReleaseHeldKeysOnFocus('game',arena),false);
+  assert.equal(shouldReleaseHeldKeysOnFocus('home',menuButton),false);
+  assert.equal(shouldReleaseHeldKeysOnFocus('pausePanel',menuButton),false);
+  const game=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
+  assert.ok(game.includes("document.addEventListener('focusin',e=>{if(shouldReleaseHeldKeysOnFocus(screen,e.target)){keys={};if(fireId===null)fireHeld=false}})"),
+    'focus transition must release keys and keyboard fire, preserving active touch fire');
 });
 
 test('held keys do not repeatedly consume finite rockets, drones or abilities', () => {
