@@ -6,6 +6,23 @@
 **Languages:** English, Persian (فارسی), Arabic (العربية), German (Deutsch), French (Français), Spanish (Español). English default; Persian and Arabic RTL.  
 **Scope:** Exactly one public-facing HTML document: `index.html` with inline CSS and JavaScript. No additional Arena storefront, revenue catalogue, internal subpages or duplicate MojPlayWin products.
 
+
+## Real-world sports data connection (free, non-financial)
+
+- **Now connected:** OpenLigaDB's public CORS JSON feed for the current-season German first and second Bundesliga (`bl1`, `bl2`). The client reads the current full-season fixtures/results only **after** the page's 21+ self-declaration; no API account, key, third-party scripts or additional server is created.
+- The real fixture screen shows up to eight nearest upcoming matches, three recently started matches awaiting a final score, and four recent completed matches. All times are rendered in the device time zone. Data and competition rights remain with contributors, attributed to OpenLigaDB with a direct ODbL licence link. The community feed can lag or be corrected; it is not an official federation or regulated odds feed.
+- **Real match predictions are completely free:** 1X2, goals over/under 2.5, both-teams-to-score, and exact score/other. Browser-local selections close at kickoff, are stored only in localStorage on that device (at most 50), and are reconciled against the provider's `After90Minutes` score when `matchIsFinished` is true. They never debit or credit MCD, generate payouts/prizes, or send picks to OpenLigaDB.
+- The browser fetches a league no more than once every 15 minutes from local cache, unless the user manually refreshes; visible sessions poll gently. On provider outage or stale data, **new real-match predictions fail closed** while fictional casino games remain playable. Only the public provider host is permitted by the page's Content Security Policy and installer network preflight. No user accounts, real event odds, paid predictions, telemetry or personal selection uploads.
+- Real matches are additional dynamic data rows and deliberately excluded from the fixed 62-activity searchable catalog. Original virtual sports and MCD fictional prediction markets remain unmodified and clearly distinguishable.
+
+## Future regulated finance boundary (documentation and UI locks only)
+
+Status: **OFF / NO FINANCIAL ENDPOINTS OR PAYMENT CONNECTIONS**. This work does not activate real stakes or create an unlicensed sportsbook.
+
+Activation must be a separately approved, audited backend project with verified jurisdiction-specific gambling licence and approved data/odds rights; jurisdiction and sanctions geofencing; age and identity verification; AML/CTF and suspicious activity monitoring; responsible-gambling limits, self-exclusion and customer dispute processes; treasury and regulatory reserves; double-entry server-owned accounting and idempotent payment/webhook handling; independent risk/RNG/security assessments; rigorous logging, reconciliation, monitoring, rollback and operator separation of duties. Never trust client-local MCD balance, picks, predicted outcomes or browser time for a financial transaction. A public launch requires a new release gate and an explicit owner decision on legal commitments and spending.
+
+The published static site contains no live-money toggles, wallets, purchase paths, deposits, withdrawals, custody or transfer interfaces.
+
 ## Actual page features
 
 - Responsive, dark-and-gold, English-first free casino-simulation lounge.
