@@ -62,6 +62,12 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_RELAY=verified"
+      - name: Remove only the verified incomplete dump from the timed-out attempt
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          ssh -F "$d/config" saeit-vps 'set -eu; f=/home/githubops/.db-backups/zomorod2_sites_main-pre-page-compression-20261028.sql.gz; if [ -e "$f" ]; then test "$(stat -c %s "$f")" = 2398711809; sum=$(sha256sum "$f"); test "${sum%% *}" = fea4dd09eaed889b05731fabbe85fecd539ec6aa27b0f00e1e593ac9f4560d76; rm -f -- "$f"; echo VERIFIED_INCOMPLETE_DUMP_REMOVED=yes; else echo VERIFIED_INCOMPLETE_DUMP_PRESENT=no; fi; set -- $(df -Pk "$HOME" | tail -1); test "$4" -ge 4500000; echo VPS_BACKUP_FREE_KB="$4"'
       - name: Verify staging identity, storage support, quota, and live site
         shell: bash
         run: |
@@ -119,12 +125,6 @@ jobs:
             test "$status" = "200"
           done
           ssh -F "$d/config" saeit-vps 'set -eu; df -Pk "$HOME" | awk "NR==2 { if (\$4 < 4500000) exit 1; print \"VPS_BACKUP_FREE_KB=\"\$4 }"'
-      - name: Remove only the verified incomplete dump from the timed-out attempt
-        shell: bash
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/zomorod-page-compression"
-          ssh -F "$d/config" saeit-vps 'set -eu; f=/home/githubops/.db-backups/zomorod2_sites_main-pre-page-compression-20261028.sql.gz; if [ -e "$f" ]; then test "$(stat -c %s "$f")" = 2398711809; sum=$(sha256sum "$f"); test "${sum%% *}" = fea4dd09eaed889b05731fabbe85fecd539ec6aa27b0f00e1e593ac9f4560d76; rm -f -- "$f"; echo VERIFIED_INCOMPLETE_DUMP_REMOVED=yes; else echo VERIFIED_INCOMPLETE_DUMP_PRESENT=no; fi; set -- $(df -Pk "$HOME" | tail -1); test "$4" -ge 4500000; echo VPS_BACKUP_FREE_KB="$4"'
       - name: Create and verify a complete staging database backup
         shell: bash
         run: |
