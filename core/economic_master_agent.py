@@ -93,6 +93,7 @@ class EconomicMasterAgent:
             "controlled_production": {
                 "max_master_steps_per_five_minute_cycle": 1,
                 "max_concurrent_master_tasks": 1,
+                "max_new_products_per_cycle": 1,
                 "automatic_volume_expansion": False,
                 "parallel_product_builds": False,
                 "public_release_enabled": False,
