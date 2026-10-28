@@ -1,18 +1,20 @@
 #!/usr/bin/env Rscript
 # GSE294406: prespecified 2x2x2 integer-count interaction analysis.
 # INPUTS MUST BE RAW UNNORMALIZED INTEGER GENE COUNTS, NOT FPKM/TPM.
-# Usage: Rscript full_factorial_integer_counts.R counts.tsv manifest.csv independent_units.csv provenance.json output_dir
+# Usage: Rscript full_factorial_integer_counts.R counts.tsv manifest.csv independent_units.csv provenance.json output_dir refseq_v2.fasta matching_annotation.gtf
 # FAIL-CLOSED: this unblocked DESeq2 design is forbidden without source-verified
 # raw-count provenance and 24 independently assigned chambers. Shared-chamber
 # designs require a different prespecified, cluster-aware analysis.
 suppressPackageStartupMessages(library(DESeq2))
 args <- commandArgs(trailingOnly=TRUE)
-if (length(args) != 5L)
-  stop("Usage: Rscript full_factorial_integer_counts.R counts.tsv manifest.csv independent_units.csv provenance.json output_dir")
+if (length(args) != 7L)
+  stop("Usage: Rscript full_factorial_integer_counts.R counts.tsv manifest.csv independent_units.csv provenance.json output_dir refseq_v2.fasta matching_annotation.gtf")
 counts_file <- args[[1L]]; manifest_file <- args[[2L]]
 units_file <- args[[3L]]; provenance_file <- args[[4L]]; outdir <- args[[5L]]
-if (!all(file.exists(c(counts_file, manifest_file, units_file, provenance_file))))
-  stop("Missing counts, manifest, independently documented units, or count provenance; NO DESeq2")
+reference_file <- args[[6L]]; annotation_file <- args[[7L]]
+if (!all(file.exists(c(counts_file, manifest_file, units_file, provenance_file,
+                       reference_file, annotation_file))))
+  stop("Missing counts, manifest, unit evidence, provenance, reference FASTA or matching annotation GTF; NO DESeq2")
 if (!requireNamespace("digest", quietly=TRUE) || !requireNamespace("jsonlite", quietly=TRUE))
   stop("digest and jsonlite required for source integrity checks")
 manifest <- read.csv(manifest_file, check.names=FALSE, stringsAsFactors=FALSE)
@@ -56,6 +58,16 @@ if (!identical(digest::digest(counts_file, algo="sha256", file=TRUE, serialize=F
     !identical(digest::digest(units_file, algo="sha256", file=TRUE, serialize=FALSE),
                prov$unit_evidence_sha256))
   stop("Count or unit evidence SHA256 mismatch; NO DESeq2")
+# A JSON declaration is not byte-level verification of the reference/annotation.
+# Require actual local reference files and independently hash both before fitting.
+if (!identical(digest::digest(reference_file, algo="sha256", file=TRUE, serialize=FALSE),
+               prov$reference_fasta_sha256) ||
+    !identical(digest::digest(annotation_file, algo="sha256", file=TRUE, serialize=FALSE),
+               prov$annotation_gtf_sha256))
+  stop("Reference FASTA or annotation GTF SHA256 mismatch; NO DESeq2")
+# Matching file digests do not themselves prove that FASTA/GTF versions are compatible.
+# Source release identifiers, licensing, gene ID namespace and counting policy
+# require independent scientific verification beyond these mechanical checks.
 # Refuse to mix a new analysis with stale files from a previous attempt.
 # Do not create an output directory until every input gate and DESeq2 fit succeeds.
 if (dir.exists(outdir) && length(list.files(outdir, all.files=TRUE, no..=TRUE)) > 0L)
@@ -121,8 +133,8 @@ writeLines(c(paste("Input:",normalizePath(counts_file)),
              paste("FDR<0.05:",sum(!is.na(res$padj)&res$padj<0.05)),
              paste("Unit-evidence SHA256:", prov$unit_evidence_sha256),
              paste("Counts SHA256:", prov$counts_sha256),
-             paste("Reference FASTA SHA256 (declared):", prov$reference_fasta_sha256),
-             paste("Annotation GTF SHA256 (declared):", prov$annotation_gtf_sha256),
+             paste("Reference FASTA SHA256 (local bytes verified):", prov$reference_fasta_sha256),
+             paste("Annotation GTF SHA256 (local bytes verified):", prov$annotation_gtf_sha256),
              paste("Caveat: machine checks verify metadata structure and selected hashes, NOT truth of chamber assignment, reference identity or author approval."),
              paste("Caveat: human scientific review and publication authorization remain mandatory.")),
            file.path(outdir, "analysis_provenance.txt"))
