@@ -34,7 +34,8 @@ export function validateCampaignSave(s) {
     if (!integer(s[name], 0, max)) return false;
   }
   if (!Array.isArray(s.enemies) || s.enemies.length > 30 || !s.enemies.every(e =>
-    point(e, 0, 16) && integer(e.type, 0, 3) && finite(e.hp, -10000, 10000) &&
+    point(e, 0, 16) && integer(e.type, 0, 3) && finite(e.hp, -10000, 500) &&
+    (e.max === undefined || (finite(e.max, 1, 500) && e.hp <= e.max)) &&
     (e.boss === undefined || typeof e.boss === 'boolean') &&
     (e.route == null || (Array.isArray(e.route) && e.route.length === 2 && e.route.every(n => finite(n, 0, 16))))
   )) return false;
@@ -49,7 +50,7 @@ export function validateCampaignSave(s) {
   for (const [field, max] of [['shots', 1e9], ['combo', 1e7], ['best', 1e7], ['rocketHits', 1e7]]) {
     if (s[field] !== undefined && !integer(s[field], 0, max)) return false;
   }
-  if (s.recoil !== undefined && !finite(s.recoil, 0, 10)) return false;
+  if (s.recoil !== undefined && !finite(s.recoil, 0, 1)) return false;
   for (const field of ['reloading', 'hit', 'skillFired']) {
     if (s[field] !== undefined && typeof s[field] !== 'boolean') return false;
   }
@@ -76,7 +77,7 @@ export function validateCampaignSave(s) {
   }
   // Projectiles are integrated each frame; missing velocities poison the world with NaN.
   if (!group(s.hostile, 150, e => point(e) && finite(e.life, -10, 100) &&
-      finite(e.vx, -50, 50) && finite(e.vy, -50, 50) && finite(e.hp, 0, 500))) return false;
+      finite(e.vx, -50, 50) && finite(e.vy, -50, 50) && finite(e.hp, 0, 20))) return false;
   if (!group(s.missiles, 80, e => point(e) && finite(e.life, -10, 100) &&
       finite(e.vx, -50, 50) && finite(e.vy, -50, 50) &&
       (e.targetId === undefined || integer(e.targetId, -1, 29)))) return false;
@@ -95,11 +96,19 @@ export function validateCampaignSave(s) {
         new Set(intel.map(p=>p.spotIndex)).size!==intel.length ||
         intel.length>3-done)) return false;
   }
-  // Preserve old saves without optional timers; fail closed on nonfinite saved clocks.
-  for (const field of ['time', 'enemyTimer', 'shotTimer', 'reloadTimer', 'comboTimer',
-    'rocketTimer', 'droneTimer', 'skillTimer', 'shield', 'strikeTimer', 'hitFlash',
-    'explosionTimer', 'muzzle']) {
-    if (s[field] !== undefined && !finite(s[field], -1e8, 1e8)) return false;
+  // Timers must fit the actual ability/cooldown design envelope. The old
+  // +/-1e8 check let a forged shield or hitFlash grant years of invulnerability,
+  // and a forged positive enemyTimer could prevent enemies spawning at all.
+  // enemyTimer alone may legitimately run negative while the enemy cap is full.
+  const timerBounds = {
+    time: [0, 1e8], enemyTimer: [-1e8, 2], shotTimer: [0, 1],
+    reloadTimer: [0, 2], comboTimer: [0, 5], rocketTimer: [0, 2],
+    droneTimer: [0, 8], skillTimer: [0, 17], shield: [0, 13],
+    strikeTimer: [-0.05, 2], hitFlash: [0, 1], explosionTimer: [0, 1],
+    muzzle: [0, 1]
+  };
+  for (const [field, [min, max]] of Object.entries(timerBounds)) {
+    if (s[field] !== undefined && !finite(s[field], min, max)) return false;
   }
   // Time stop is a bounded five-second ability, not a user-editable permanent freeze.
   if (s.freeze !== undefined && !finite(s.freeze, 0, 5)) return false;
@@ -216,6 +225,33 @@ export function restorePlayerPosition(state, isBlocked) {
   state.x = 2.5;
   state.y = 7.5;
   return true;
+}
+
+// An old or edited save may put a live enemy inside a solid wall. Such an
+// enemy cannot be targeted, and a quota mission can become impossible to finish.
+// Reposition only blocked enemies to verified passable arena spawn points;
+// commit corrections atomically so a failed recovery never half-mutates state.
+export function restoreEnemyPositions(state, isBlocked) {
+  if (!state || !Array.isArray(state.enemies) || typeof isBlocked !== 'function') return -1;
+  const spawns = [[8.5, 7.5], [5.5, 2.5], [10.5, 10.5],
+    [3.5, 12.5], [12.5, 5.5], [9.5, 6.5]];
+  const reserved = state.enemies.filter(e => e && Number.isFinite(e.x) &&
+    Number.isFinite(e.y) && !isBlocked(Math.floor(e.x), Math.floor(e.y)))
+    .map(e => [e.x, e.y]);
+  const pending = [];
+  for (let i = 0; i < state.enemies.length; i++) {
+    const e = state.enemies[i];
+    if (!e || !Number.isFinite(e.x) || !Number.isFinite(e.y)) return -1;
+    if (!isBlocked(Math.floor(e.x), Math.floor(e.y))) continue;
+    const site = spawns.find(([x, y]) => !isBlocked(Math.floor(x), Math.floor(y)) &&
+      Math.hypot(x - state.x, y - state.y) >= 1.5 &&
+      reserved.every(([rx, ry]) => Math.hypot(x - rx, y - ry) >= 0.7));
+    if (!site) return -1;
+    reserved.push(site);
+    pending.push([e, site]);
+  }
+  for (const [enemy, [x, y]] of pending) { enemy.x = x; enemy.y = y; }
+  return pending.length;
 }
 
 // Reject oversized or malformed browser saves before JSON.parse. A locally
