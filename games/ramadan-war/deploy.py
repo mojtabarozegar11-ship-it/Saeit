@@ -26,17 +26,57 @@ def atomic(path,data,run):
         fd=os.open(tmp,flags,0o644)
     except FileExistsError as exc:
         raise AssertionError(f'temporary path exists: {tmp}') from exc
-    with os.fdopen(fd,'wb') as output:
-        os.fchmod(output.fileno(),0o644)
-        output.write(data)
-        output.flush()
-        os.fsync(output.fileno())
-    assert not tmp.is_symlink(),f'temporary path linked: {tmp}'
-    assert digest(tmp.read_bytes())==digest(data)
-    os.replace(tmp,path)
+    identity=(os.fstat(fd).st_dev,os.fstat(fd).st_ino)
+    try:
+        with os.fdopen(fd,'wb') as output:
+            os.fchmod(output.fileno(),0o644)
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        assert not tmp.is_symlink(),f'temporary path linked: {tmp}'
+        assert digest(tmp.read_bytes())==digest(data)
+        os.replace(tmp,path)
+    except BaseException:
+        # A failed write must not strand a partial payload on a full disk.
+        # Never delete an unrelated writer's pre-existing/replaced temp file.
+        try:
+            if not tmp.is_symlink():
+                current=tmp.stat()
+                if (current.st_dev,current.st_ino)==identity:
+                    tmp.unlink()
+        except FileNotFoundError:
+            pass
+        raise
 def metadata(stage): return json.loads((stage/'release.json').read_text('utf-8'))
 def store(stage,value):
-    p=stage/'release.json.tmp';p.write_text(json.dumps(value,sort_keys=True),encoding='utf-8');os.replace(p,stage/'release.json')
+    # Release metadata is security-critical: refuse a planted temporary link
+    # rather than following it with Path.write_text on the cPanel host.
+    assert stage.is_dir() and not stage.is_symlink()
+    p=stage/'release.json.tmp'
+    target=stage/'release.json'
+    assert not target.is_symlink(),'linked release state refused'
+    payload=json.dumps(value,sort_keys=True).encode('utf-8')
+    flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0)
+    try:
+        fd=os.open(p,flags,0o600)
+    except FileExistsError as exc:
+        raise RuntimeError('release state temporary file already exists') from exc
+    identity=(os.fstat(fd).st_dev,os.fstat(fd).st_ino)
+    try:
+        with os.fdopen(fd,'wb') as output:
+            output.write(payload)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(p,target)
+    except BaseException:
+        try:
+            if not p.is_symlink():
+                current=p.stat()
+                if (current.st_dev,current.st_ino)==identity:
+                    p.unlink()
+        except FileNotFoundError:
+            pass
+        raise
 def live_card_check():
     home=ROOT/'index.html';assert home.is_file() and not home.is_symlink()
     text=home.read_text('utf-8');m=re.search(r'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',text,re.S)
