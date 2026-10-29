@@ -1,0 +1,35 @@
+name: Zomorod direct cPanel 30GB pinned read-only connectivity probe
+on:
+  push:
+    branches: [feature/zomorod-payroll-offline-controls-20261029]
+    paths: [.github/workflows/zomorod-cpanel-direct-pinned-probe.yml]
+permissions:
+  contents: read
+jobs:
+  connectivity-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Probe pinned known-host SSH and authenticated read-only identity
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zomorod-direct-probe"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          test -n "$HOST_KEY" || { echo "DIRECT_PROBE=KEY_NOT_CONFIGURED";exit 20; }
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null 2>&1 || { echo "DIRECT_PROBE=INVALID_KEY";exit 21; }
+          timeout 18 ssh-keyscan -T 12 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/host.known" 2>/dev/null || { echo "DIRECT_PROBE=NO_NETWORK";exit 22; }
+          test -s "$d/host.known" || { echo "DIRECT_PROBE=NO_HOST_KEY";exit 23; }
+          found="$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$found" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" || { echo "DIRECT_PROBE=UNEXPECTED_HOST_KEY";exit 24; }
+          echo "DIRECT_PINNED_HOST=VERIFIED"
+          timeout 20 ssh -i "$d/key" -p 1396 -o UserKnownHostsFile="$d/host.known" -o StrictHostKeyChecking=yes -o BatchMode=yes -o IdentitiesOnly=yes -o ForwardAgent=no -o ConnectTimeout=12 -o ConnectionAttempts=1 zomorod2@zohal.pws-dns.net 'test "$(id -un)" = "zomorod2" && test -d "$HOME/.private/zomorod-business" && echo PRIVATE_IDENTITY_OK' || { echo "DIRECT_PROBE=LOGIN_OR_NETWORK_FAILED";exit 25; }
+          echo "DIRECT_PINNED_SSH=PASS"
+          echo "PRODUCTION_FILES=UNTOUCHED"
+          echo "FINANCIAL_WRITES=NONE"
