@@ -151,7 +151,7 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
         request = self.requests.post("/education/course/example/lesson/1/bookmark/")
         request.user = SimpleNamespace(is_authenticated=True)
         with patch("core.academy_views.missing_public_tables", return_value=False), patch(
-            "core.academy_views.get_object_or_404", return_value=SimpleNamespace(id=1)
+            "core.academy_views.get_object_or_404", return_value=SimpleNamespace(id=1, is_free_preview=True)
         ), patch(
             "core.academy_views.EducationBookmark.objects.filter"
         ) as lookup, patch(
@@ -473,7 +473,7 @@ class PublicCatalogHealthyPathTests(SimpleTestCase):
         course_qs.order_by.assert_called_once_with("track__sort_order", "title")
 
     def test_gallery_complete_schema_keeps_published_media_and_filtering(self):
-        media = SimpleNamespace(title="Orchard photo")
+        media = SimpleNamespace(title="Orchard photo", target_path="/company/")
         media_qs = MagicMock()
         media_qs.select_related.return_value = media_qs
         media_qs.filter.return_value = media_qs
