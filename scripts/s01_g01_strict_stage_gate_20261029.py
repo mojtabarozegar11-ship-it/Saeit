@@ -12,7 +12,7 @@ import zipfile
 PREFIX = "ramadan-war/"
 REQUIRED = {
     "index.html", "game.js", "game.css", "engine3d.js",
-    "save-validation.mjs", "campaign-backup.mjs",
+    "save-validation.mjs", "campaign-backup.mjs", "objective-navigation.mjs",
     "moj1-commerce-policy.mjs", "m24-sniper-ccby.glb",
     "soldier-rigged-ccby.glb",
 }
