@@ -107,14 +107,14 @@ jobs:
           # A single successful, pinned two-hop identity test proves both hops
           # and keeps the authenticated cPanel control session for subsequent steps.
           session_ready=0
-          for attempt in 1 2 3 4 5; do
+          for attempt in 1 2; do
             if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
               session_ready=1
               echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
               break
             fi
             echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
-            if test "$attempt" -lt 5; then sleep 12; fi
+            if test "$attempt" -lt 2; then sleep 12; fi
           done
           if test "$session_ready" = 1; then
             command_host=saeit-cpanel
@@ -195,18 +195,44 @@ jobs:
                               base["account_limit_source"] = "CPANEL_UAPI_STATS"
           except (OSError,ValueError,TypeError,subprocess.TimeoutExpired):
               base["statsbar_status"] = "ERROR_OR_TIMEOUT"
-          # Secondary quota command, read-only, no path traversal or file scan.
+          # Deprecated cPanel API 2 fallback: bounded read-only StatsBar::stat.
+          base["api2_status"] = "UNAVAILABLE"
+          try:
+              p = subprocess.run(["/usr/local/cpanel/bin/cpapi2","--user=zomorod2",
+                                  "StatsBar","stat","display=diskusage",
+                                  "warnings=0","warninglevel=90","warnout=0",
+                                  "infinityimg=/home/zomorod2/.cpanel/infinity.png",
+                                  "infinitylang=infinity","rowcounter=even"],
+                                  stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+                                  timeout=15,check=False,text=True)
+              base["api2_status"] = "CLI_OK" if p.returncode == 0 else "CLI_NONZERO"
+              if p.returncode == 0 and len(p.stdout) < 150000:
+                  d = json.loads(p.stdout)
+                  result = d.get("cpanelresult",{})
+                  if isinstance(result,dict) and isinstance(result.get("data"),list):
+                      for row in result["data"][:20]:
+                          if not isinstance(row,dict) or str(row.get("id","")).lower() != "diskusage":continue
+                          unit = str(row.get("units","")).strip()
+                          used = str(row.get("count",row.get("_count",""))).strip()
+                          limit = str(row.get("max",row.get("_max",""))).strip()
+                          numeric = r"[0-9]+(?:[.][0-9]+)?"
+                          if re.fullmatch(numeric,used) and re.fullmatch(r"B|KB|MB|GB|TB",unit,re.I):
+                              base["account_used"] = used+" "+unit
+                          if re.fullmatch(numeric,limit) and re.fullmatch(r"B|KB|MB|GB|TB",unit,re.I):
+                              base["account_quota"] = limit+" "+unit
+                              base["account_limit_source"] = "CPANEL_API2_STATS"
+          except (OSError,ValueError,TypeError,subprocess.TimeoutExpired):
+              base["api2_status"] = "ERROR_OR_TIMEOUT"
+          # Shell quota is a secondary signal only; not a substitute for account quotas.
+          base["quota_cli_available"] = False
           try:
               q = subprocess.run(["quota","-u","-s","zomorod2"],
-                                 stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
-                                 check=False,timeout=5,text=True)
+                                 stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                                 check=False,timeout=3,text=True)
               base["quota_cli_available"] = True
               base["quota_cli_success"] = q.returncode == 0
-              # quota output depends on filesystem and does not necessarily
-              # include the entire cPanel hosting-account usage; never infer
-              # a safe free quota from it without authoritative confirmation.
           except (OSError,subprocess.TimeoutExpired):
-              base["quota_cli_available"] = False
+              pass
           print("CPANEL_CAPACITY_EVIDENCE="+json.dumps(base,sort_keys=True))
           PY
       - name: Remove ephemeral private relay credentials
