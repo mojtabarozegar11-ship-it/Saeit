@@ -44,3 +44,19 @@ test('invalid or noninteger status cannot pass', () => {
     assert.equal(classifyNavigation('/store/',status,'/store/',null).observedSafe,false);
   }
 });
+
+test('login next query must return to the same SKU checkout', () => {
+  const path='/store/product/72/checkout/';
+  const good=classifyNavigation(path,200,'/accounts/login/',null,'?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F');
+  assert.equal(good.observedSafe,true);
+  const wrong=classifyNavigation(path,200,'/accounts/login/',null,'?next=%2Fstore%2Fproduct%2F225%2Fcheckout%2F');
+  assert.equal(wrong.authRequired,true);
+  assert.equal(wrong.unexpectedRedirect,true);
+  assert.equal(wrong.observedSafe,false);
+});
+test('external and duplicate login return targets fail closed', () => {
+  const path='/store/product/72/checkout/';
+  for(const search of ['?next=https%3A%2F%2Fevil.example%2F','?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F&next=%2Fstore%2F']) {
+    assert.equal(classifyNavigation(path,200,'/accounts/login/',null,search).observedSafe,false);
+  }
+});
