@@ -6,6 +6,7 @@ import {removeEnemyAndRetargetMissiles,missilePathBlocked,missileMotionValid} fr
 import {canEnemyAct,restoreEnemyRuntime,advanceHostileProjectile,shouldCleanupEnemy,activateTimeStop,advanceTimeStop} from './enemy-action-policy.mjs';
 import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, restoreEnemyPositions, parseCampaignSave, resumeCampaignScreen, readHeroChoice, campaignSaveDisposition, storageRead, storageWrite, storageRemove} from './save-validation.mjs';
 import {makeCampaignBackup,readCampaignBackup,MAX_CAMPAIGN_BACKUP_BYTES} from './campaign-backup.mjs';
+import {objectiveWaypoint,canInteractAt} from './objective-navigation.mjs';
 (()=>{'use strict';
 const NAMES=['سید علی خامنه‌ای','حاج قاسم — قاسم سلیمانی','عباس بابایی','علی صیاد شیرازی','مصطفی چمران','محمدابراهیم همت','مهدی باکری','حمید باکری','حسین خرازی','حسن باقری','احمد کاظمی','محمد جهان‌آرا','محمود کاوه','مهدی زین‌الدین','عباس دوران','حسین لشکری','مسعود منفرد نیاکی','ولی‌الله فلاحی','یوسف کلاهدوز','جواد فکوری','موسی نامجو','محمد بروجردی','احمد متوسلیان','عبدالحسین برونسی','ناصر کاظمی','علی هاشمی','منصور ستاری','ایرج رستمی','مصطفی اردستانی','حسین خلعتبری'];
 const SKILLS=['سپر انرژی','موج الکترومغناطیس','ترمیم زره','طوفان پالس','توقف زمان','پشتیبانی مداری'];
@@ -55,7 +56,7 @@ function objectiveInfo(){if(world.endless)return['بقا • پاکسازی مو
 function interactObjective(){if(screen!=='game'||!world||world.endless||world.missionPassed)return false;
  const p=plan(),o=world.objective,target=objectiveTarget();
  if(!target||!['activate','extract'].includes(p.kind)||o.done>=p.sites.length)return false;
- if(Math.hypot(world.x-target[0],world.y-target[1])>1.35){toast('برای تعامل به علامت نورانی نزدیک شو');return false}
+ if(!canInteractAt(world.x,world.y,target[0],target[1])){toast('برای تعامل به علامت نورانی نزدیک شو');return false}
  if(p.kind==='extract'&&world.missionKills<p.quota){toast('ابتدا محدوده را امن کن');return false}
  o.done++;world.score+=250;world.points++;toast(p.kind==='extract'?'استخراج موفق':'سامانه فعال شد • +۲۵۰');playTone(740,.13);sync();save();return true;
 }
@@ -64,8 +65,8 @@ function updateObjective(dt){if(!world||world.endless)return;const p=plan(),o=wo
    o.hold=Math.min(p.seconds,o.hold+dt);if(o.hold>=p.seconds&&!o.done){o.done=1;toast('دفاع موفق • موقعیت تثبیت شد');save()}
  }
  const site=objectiveTarget();world.marker=site?{x:site[0],y:site[1],kind:p.kind}:null;
- if(site){const bearing=Math.atan2(site[1]-world.y,site[0]-world.x)-world.angle;$('#objectiveArrow').style.transform='rotate('+(-bearing*180/Math.PI+90)+'deg)';$('#objectiveRange').textContent=fa(Math.hypot(site[0]-world.x,site[1]-world.y).toFixed(0))+' متر';}else{$('#objectiveRange').textContent='هدف انجام شد';}
- const hint=$('#interact');if(hint){const near=site&&Math.hypot(world.x-site[0],world.y-site[1])<1.55;
+ if(site){const waypoint=objectiveWaypoint(world.x,world.y,site[0],site[1],(x,y)=>tile(x,y,world.mission)===0);const aim=waypoint||{x:site[0],y:site[1]};const bearing=Math.atan2(aim.y-world.y,aim.x-world.x)-world.angle;$('#objectiveArrow').style.transform='rotate('+(-bearing*180/Math.PI+90)+'deg)';$('#objectiveRange').textContent=waypoint?fa(Math.hypot(site[0]-world.x,site[1]-world.y).toFixed(0))+' متر'+(waypoint.steps>0?' · مسیر':''):'مسیر بسته است';}else{$('#objectiveRange').textContent='هدف انجام شد';}
+ const hint=$('#interact');if(hint){const near=site&&canInteractAt(world.x,world.y,site[0],site[1]);
  hint.classList.toggle('hidden',!near||!['activate','extract'].includes(p.kind)||p.kind==='extract'&&world.missionKills<p.quota)}
 }
 function missionObjectiveComplete(){if(world.endless)return world.missionKills>=required();const p=plan(),o=world.objective;
