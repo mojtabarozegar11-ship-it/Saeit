@@ -37,6 +37,35 @@ class SnapshotTests(unittest.TestCase):
             p.write_bytes(b"SQLite format 3\0" + b"x" * 40)
             self.assertTrue(mod.sqlite(p)["sqlite_header_valid"])
             self.assertEqual(mod.sqlite(p)["integrity_check"], "NOT_RUN")
+    def test_sqlite_linked_parent_is_never_followed(self):
+        with tempfile.TemporaryDirectory() as d:
+            private = Path(d) / "private"
+            private.mkdir()
+            (private / "db").write_bytes(b"SQLite format 3\0" + b"x" * 40)
+            alias = Path(d) / "alias"
+            alias.symlink_to(private, target_is_directory=True)
+            result = mod.sqlite(alias / "db")
+            self.assertEqual(result["state"], "UNAVAILABLE")
+            self.assertNotIn("sqlite_header_valid", result)
+
+    def test_sqlite_fifo_is_rejected_without_blocking(self):
+        import os
+        with tempfile.TemporaryDirectory() as d:
+            fifo = Path(d) / "pipe"
+            os.mkfifo(fifo)
+            result = mod.sqlite(fifo)
+            self.assertEqual(result["state"], "UNAVAILABLE")
+
+    def test_sqlite_uses_open_descriptor_not_prior_stat_path(self):
+        with tempfile.TemporaryDirectory() as d:
+            db = Path(d) / "db"
+            db.write_bytes(b"SQLite format 3\0" + b"x" * 40)
+            with mock.patch.object(mod, "stat_path", side_effect=AssertionError("unsafe pre-open stat")):
+                result = mod.sqlite(db)
+            self.assertEqual(result["state"], "PRESENT")
+            self.assertTrue(result["sqlite_header_valid"])
+            self.assertEqual(result["bytes"], 56)
+
     def test_no_deployment_claim(self):
         with tempfile.TemporaryDirectory() as d:
             a = argparse.Namespace(mount=[d], queue=[d], lock=[], sqlite=[], backup=[])
@@ -74,7 +103,7 @@ class SnapshotTests(unittest.TestCase):
     def test_sqlite_leaf_symlink_swap_fails_closed(self):
         with tempfile.TemporaryDirectory() as d:
             real = Path(d) / "private"
-            real.write_bytes(b"SQLite format 3\\0" + b"data")
+            real.write_bytes(b"SQLite format 3\0" + b"data")
             link = Path(d) / "db"
             link.symlink_to(real)
             # Simulate a symlink swap after metadata validation.
