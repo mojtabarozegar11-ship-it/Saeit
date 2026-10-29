@@ -31,6 +31,21 @@ class ReleaseGateTests(unittest.TestCase):
         s['filesystem']['target_1']['available_bytes'] = 0
         self.assertIn('ROOT_DISK_RESERVE_UNVERIFIED_OR_LOW', mod.evaluate(s, NOW)['blockers'])
 
+    def test_ext4_reserved_blocks_do_not_count_as_nonroot_capacity(self):
+        s = snapshot()
+        s['filesystem']['target_1'].update({'available_bytes': 0, 'free_bytes': 2159091712})
+        result = mod.evaluate(s, NOW)
+        self.assertIn('ROOT_RESERVED_BLOCKS_NOT_WORKER_WRITABLE', result['blockers'])
+        self.assertFalse(result['production_deployment_authorized'])
+
+    def test_correlated_cron_pressure_is_not_claimed_as_root_cause(self):
+        s = snapshot()
+        s['cron'] = {'factory_per_minute_entries': 3}
+        s['worker'] = {'factory_name_matches': 299}
+        result = mod.evaluate(s, NOW)
+        self.assertIn('CRON_PROCESS_OVERLAP_RISK_UNPROVEN_CAUSE', result['blockers'])
+        self.assertFalse(result['production_deployment_authorized'])
+
     def test_stale_snapshot_is_no_go(self):
         s = snapshot()
         s['observed_utc'] = (NOW - dt.timedelta(hours=1)).isoformat()
