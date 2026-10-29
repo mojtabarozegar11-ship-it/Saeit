@@ -47,9 +47,9 @@ jobs:
               ["git", "diff-tree", "--no-commit-id", "--name-status", "-r", sys.argv[3]],
               check=True, capture_output=True, text=True
           ).stdout.splitlines()
-          if len(diff) != 1 or "\\t" not in diff[0]:
+          if len(diff) != 1 or "\t" not in diff[0]:
               raise SystemExit("COMMAND_FILE_CHANGE_REJECTED")
-          status, path = diff[0].split("\\t", 1)
+          status, path = diff[0].split("\t", 1)
           if status not in ("A", "M"):
               raise SystemExit("COMMAND_FILE_CHANGE_REJECTED")
           if not re.fullmatch(r"\.company_commands/inbox/[0-9a-f]{32}\.json", path):
