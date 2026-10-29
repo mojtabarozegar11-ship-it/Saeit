@@ -1,4 +1,4 @@
-# Farm Enterprise Economics v1 — QC1000 Acceptance Scorecard
+# Farm Enterprise Economics v1.1 Demonstration Build — QC1000 Acceptance Scorecard
 
 Status: **Unscored / not certified.** This is the 100-criterion acceptance instrument for the exact workbook version under review. Do not infer a 1000 score from 24 internal checks passing.
 
@@ -12,11 +12,13 @@ Status: **Unscored / not certified.** This is the 100-criterion acceptance instr
 
 ## Current evidence snapshot
 
-- Product reviewed: `MojPlayWin_Dairy_Enterprise_Economics_v1.xlsx` (Library file ID `libfile_7709d45892b88191b7cf7fcc2b308b9c`; 8 sheets; 23,880 bytes at review).
-- Existing internal checks: 24/24 passed. This is useful functional evidence but is not the QC1000 score.
-- Existing workbook documentation calls this a demonstration build and says its assumptions are synthetic. No independent dairy-specialist review is evidenced.
-- Therefore the product is **not eligible for a 1000/1000 claim or certified release**. Scorecard rows remain unscored until evidence is assembled and an independent review is recorded.
+- Candidate reviewed: `MojPlayWin_Dairy_Enterprise_Economics_v1.1_DEMONSTRATION.xlsx` (Library file ID `libfile_ff3603ded7848191bb65428a1e01902e`; 8 sheets; 24,052 bytes).
+- Candidate SHA-256: `ce8a299d7287fd49fc2f8a4a5674b69f25c9d3d73d5d7db3f7f7445d5fa512a7`.
+- Artifact Tool recalculation and reopened-file review found 24/24 existing automated consistency checks pass and no formula errors. An in-memory zero-production case displays `N/A` for break-even price and contribution margin. This is functional evidence only, not the QC1000 score.
+- The candidate labels itself a demonstration build. All farm and market assumptions remain synthetic; no independent dairy-economics/accounting review is evidenced. The 100 criterion rows below therefore remain unscored.
+- Current score: **unscored / 1,000; not certified**. Do not claim QC1000 or customer-ready status.
 - Known scope limits include tax/VAT, debt, full cash flow, and working capital. These must either be modeled or explicitly accepted as out-of-scope for the educational planner.
+- Previous v1.0 source file remains preserved separately; this card applies only to the exact v1.1 candidate hash above.
 
 ## Criterion ledger
 
