@@ -60,8 +60,10 @@ jobs:
             StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
-            ConnectTimeout 10
-            ConnectionAttempts 1
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
             ForwardAgent no
             RequestTTY no
           EOF
@@ -70,13 +72,15 @@ jobs:
           printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" || { echo 'S01_CPANEL_HOST_PIN=BLOCKED'; exit 1; }
           session_ready=0
-          for attempt in 1 2 3 4 5; do
-            if timeout 65s ssh -T -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>&1; then
+          # Use the previously successful pinned two-hop banner timing from
+          # the existing owner command relay; do not relax host-key checks.
+          for attempt in 1 2 3; do
+            if timeout 55s ssh -T -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>&1; then
               session_ready=1
               break
             fi
             echo "S01_PINNED_IDENTITY_RETRY=$attempt"
-            if [ "$attempt" -lt 5 ]; then sleep 6; fi
+            if [ "$attempt" -lt 3 ]; then sleep 12; fi
           done
           test "$session_ready" = 1 || { echo 'S01_PINNED_SESSION=BLOCKED'; exit 1; }
           echo 'S01_PINNED_SESSION=VERIFIED'
