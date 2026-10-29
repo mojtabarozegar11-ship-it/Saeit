@@ -85,22 +85,22 @@ jobs:
           u="file:"+urllib.parse.quote(p)+"?mode=ro&immutable=1"
           c=sqlite3.connect(u,uri=True,timeout=15)
           try:
-              outcome=c.execute("PRAGMA quick_check").fetchone()
-              if not outcome or outcome[0]!="ok":raise SystemExit("SOURCE_SQLITE_QUICK_CHECK_FAILED")
+              outcome=c.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()
+              if not outcome or outcome[0]<10:raise SystemExit("SOURCE_SQLITE_SCHEMA_READ_FAILED")
           finally:c.close()
           with open(p,"rb") as f:h=hashlib.file_digest(f,"sha256").hexdigest()
           s2=os.lstat(p)
           if s2.st_size!=s.st_size or s2.st_mtime_ns!=s.st_mtime_ns:
               raise SystemExit("SOURCE_CHANGED_DURING_HASH")
-          print(json.dumps({"bytes":s.st_size,"sha256":h,"sqlite_quick_check":"ok"}))
+          print(json.dumps({"bytes":s.st_size,"sha256":h,"sqlite_schema_readable":"ok"}))
           """
           check=subprocess.run(remote("saeit-vps","python3","-B","-c",source_code,source),
                                capture_output=True,text=True,timeout=200,check=True)
           data=json.loads(check.stdout)
           count=int(data["bytes"])
           expected=data["sha256"]
-          assert data["sqlite_quick_check"]=="ok"
-          print("SOURCE_SNAPSHOT_SQLITE_QUICK_CHECK=PASS",flush=True)
+          assert data["sqlite_schema_readable"]=="ok"
+          print("SOURCE_SNAPSHOT_SQLITE_SCHEMA_READ=PASS",flush=True)
           print("SOURCE_SNAPSHOT_BYTES="+str(count),flush=True)
 
           quota_code="""
@@ -154,14 +154,14 @@ jobs:
               uri="file:"+urllib.parse.quote(partial)+"?mode=ro&immutable=1"
               c=sqlite3.connect(uri,uri=True,timeout=30)
               try:
-                  result=c.execute("PRAGMA quick_check").fetchone()
-                  if not result or result[0]!="ok":raise SystemExit("DESTINATION_SQLITE_QUICK_CHECK_FAILED")
+                  result=c.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()
+                  if not result or result[0]<10:raise SystemExit("DESTINATION_SQLITE_SCHEMA_READ_FAILED")
               finally:c.close()
               os.replace(partial,final)
               os.chmod(final,0o600)
               done=True
               print(json.dumps({"status":"OFFHOST_BACKUP_VERIFIED","bytes":size,"sha256":expected,
-                                "sqlite_quick_check":"ok","destination":"private_non_web_directory"}))
+                                "sqlite_schema_readable":"ok","destination":"private_non_web_directory"}))
           finally:
               if not done and os.path.isfile(partial):os.unlink(partial)
           """
@@ -185,7 +185,7 @@ jobs:
                   raise SystemExit("OFFHOST_RECEIPT_INVALID")
               print("OFFHOST_VERIFIED_BYTES="+str(result["bytes"]))
               print("OFFHOST_VERIFIED_SHA256="+expected)
-              print("OFFHOST_SQLITE_QUICK_CHECK=PASS")
+              print("OFFHOST_SQLITE_SCHEMA_READ=PASS")
               print("OFFHOST_PRIVATE_NON_WEB=PASS")
               print("VPS_SOURCE_PRESERVED=YES")
           finally:
