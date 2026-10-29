@@ -69,6 +69,8 @@ jobs:
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_PIN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+          HOST_KNOWN_PIN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           umask 077
@@ -81,12 +83,23 @@ jobs:
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
           vps_scan=""
+          if test -n "${VPS_KNOWN_PIN:-}"; then
+            vps_scan="$(printf '%s\n' "$VPS_KNOWN_PIN" | awk '$2 == "ssh-rsa" && $3 ~ /^[A-Za-z0-9+\/=]+$/ {print "178.239.147.150", $2, $3}')"
+            cached_vps_fp="$(printf '%s\n' "$vps_scan" | ssh-keygen -lf - -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+            if test "$cached_vps_fp" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'; then
+              echo 'VPS_PIN_SOURCE=VERIFIED_SECRET'
+            else
+              vps_scan=""
+            fi
+          fi
+          if test -z "$vps_scan"; then
           for attempt in 1 2 3 4 5 6; do
             vps_scan="$(timeout 12s ssh-keyscan -T 9 -t rsa 178.239.147.150 2>/dev/null || true)"
             if test -n "$vps_scan"; then break; fi
             echo "VPS_KEYSCAN_TRANSIENT_EMPTY_ATTEMPT=$attempt"
             if test "$attempt" -lt 6; then sleep 5; fi
           done
+          fi
           if test -z "$vps_scan"; then
             echo "VPS_KEYSCAN=EMPTY"
             exit 1
@@ -131,12 +144,23 @@ jobs:
           EOF
           chmod 600 "$d/config"
           scan=""
+          if test -n "${HOST_KNOWN_PIN:-}"; then
+            scan="$(printf '%s\n' "$HOST_KNOWN_PIN" | awk '$2 == "ssh-ed25519" && $3 ~ /^[A-Za-z0-9+\/=]+$/ {print "[178.239.147.125]:1396", $2, $3}')"
+            cached_host_fp="$(printf '%s\n' "$scan" | ssh-keygen -lf - -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+            if test "$cached_host_fp" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'; then
+              echo 'CPANEL_PIN_SOURCE=VERIFIED_SECRET'
+            else
+              scan=""
+            fi
+          fi
+          if test -z "$scan"; then
           for attempt in 1 2 3 4 5; do
             scan="$(timeout 45s ssh -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-vps 'timeout 12s ssh-keyscan -T 8 -p 1396 -t ed25519 178.239.147.125' 2>/dev/null | awk '$2 == "ssh-ed25519" && $3 ~ /^[A-Za-z0-9+\/=]+$/ {print $1, $2, $3}' || true)"
             if test -n "$scan"; then break; fi
             echo "CPANEL_VIA_VPS_KEYSCAN_TRANSIENT_EMPTY_ATTEMPT=$attempt"
             if test "$attempt" -lt 5; then sleep 5; fi
           done
+          fi
           if test -z "$scan"; then
             echo "CPANEL_KEYSCAN=EMPTY"
             exit 1
