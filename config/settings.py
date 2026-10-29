@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "command_center",
     "enterprise_portal.apps.EnterprisePortalConfig",
     "company_messaging.apps.CompanyMessagingConfig",
+    "company_marketing.apps.CompanyMarketingConfig",
     "ecosystem_hub.apps.EcosystemHubConfig",
 ]
 
@@ -148,3 +149,12 @@ COMPANY_MESSAGING_EMAIL_ENABLED = env.bool("COMPANY_MESSAGING_EMAIL_ENABLED", de
 COMPANY_MESSAGING_SMS_ENABLED = env.bool("COMPANY_MESSAGING_SMS_ENABLED", default=False)
 COMPANY_MESSAGING_TELEGRAM_ENABLED = env.bool("COMPANY_MESSAGING_TELEGRAM_ENABLED", default=False)
 COMPANY_MESSAGING_WHATSAPP_ENABLED = env.bool("COMPANY_MESSAGING_WHATSAPP_ENABLED", default=False)
+
+# Domestic official bot connections. Off unless each account has been paired and verified.
+COMPANY_MESSAGING_BALE_ENABLED = env.bool("COMPANY_MESSAGING_BALE_ENABLED", default=False)
+COMPANY_MESSAGING_EITAA_ENABLED = env.bool("COMPANY_MESSAGING_EITAA_ENABLED", default=False)
+COMPANY_MESSAGING_RUBIKA_ENABLED = env.bool("COMPANY_MESSAGING_RUBIKA_ENABLED", default=False)
+COMPANY_BALE_BOT_TOKEN = env("COMPANY_BALE_BOT_TOKEN", default="")
+COMPANY_EITAA_APP_TOKEN = env("COMPANY_EITAA_APP_TOKEN", default="")
+COMPANY_RUBIKA_BOT_TOKEN = env("COMPANY_RUBIKA_BOT_TOKEN", default="")
+COMPANY_MARKETING_PUBLISH_ENABLED = env.bool("COMPANY_MARKETING_PUBLISH_ENABLED", default=False)

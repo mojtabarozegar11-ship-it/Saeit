@@ -12,10 +12,16 @@ class Contact(models.Model):
     email = models.EmailField(blank=True)
     phone_e164 = models.CharField(max_length=20, blank=True)
     telegram_chat_id = models.CharField(max_length=80, blank=True)
+    bale_chat_id = models.CharField(max_length=80, blank=True)
+    eitaa_chat_id = models.CharField(max_length=80, blank=True)
+    rubika_chat_id = models.CharField(max_length=80, blank=True)
     active = models.BooleanField(default=True)
     email_consent_at = models.DateTimeField(null=True, blank=True)
     sms_consent_at = models.DateTimeField(null=True, blank=True)
     telegram_consent_at = models.DateTimeField(null=True, blank=True)
+    bale_consent_at = models.DateTimeField(null=True, blank=True)
+    eitaa_consent_at = models.DateTimeField(null=True, blank=True)
+    rubika_consent_at = models.DateTimeField(null=True, blank=True)
     whatsapp_consent_at = models.DateTimeField(null=True, blank=True)
     consent_evidence = models.CharField(max_length=255, blank=True)
     suppressed = models.BooleanField(default=False)
@@ -35,14 +41,16 @@ class Contact(models.Model):
         ):
             raise ValidationError({"phone_e164": "شماره باید با کد کشور و قالب E.164 باشد."})
         if any((self.email_consent_at, self.sms_consent_at,
-                self.telegram_consent_at, self.whatsapp_consent_at)) and not self.consent_evidence.strip():
+                self.telegram_consent_at, self.bale_consent_at,
+                self.eitaa_consent_at, self.rubika_consent_at, self.whatsapp_consent_at)) and not self.consent_evidence.strip():
             raise ValidationError({"consent_evidence": "مرجع قابل پیگیری رضایت ضروری است."})
 
 
 class Message(models.Model):
     CHANNELS = (
         ("internal", "داخلی"), ("email", "ایمیل"), ("sms", "پیامک"),
-        ("telegram", "تلگرام"), ("whatsapp", "واتساپ"),
+        ("telegram", "تلگرام"), ("bale", "بله"),
+        ("eitaa", "ایتا"), ("rubika", "روبیکا"), ("whatsapp", "واتساپ"),
     )
     STATUSES = (
         ("queued", "در صف"), ("internal", "دریافت داخلی"),
@@ -103,7 +111,9 @@ class Message(models.Model):
             consent = getattr(contact, self.channel + "_consent_at", None)
             address = {
                 "email": contact.email, "sms": contact.phone_e164,
-                "telegram": contact.telegram_chat_id, "whatsapp": contact.phone_e164,
+                "telegram": contact.telegram_chat_id, "bale": contact.bale_chat_id,
+                "eitaa": contact.eitaa_chat_id, "rubika": contact.rubika_chat_id,
+                "whatsapp": contact.phone_e164,
             }.get(self.channel)
             if not consent or not contact.consent_evidence or not address:
                 raise ValidationError("نشانی و رضایت مستند این کانال لازم است.")

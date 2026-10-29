@@ -71,6 +71,10 @@ def _deliver(msg):
         if not result.get("ok"):
             raise RuntimeError("telegram_rejected")
         return str(result.get("result", {}).get("message_id", ""))[:128]
+    if msg.channel in ("bale", "eitaa", "rubika"):
+        from .domestic_providers import send_bot_message
+        destination = getattr(contact, msg.channel + "_chat_id")
+        return send_bot_message(msg.channel, destination, msg.body)
     if msg.channel == "whatsapp":
         token = getattr(settings, "COMPANY_WHATSAPP_ACCESS_TOKEN", "")
         phone_id = getattr(settings, "COMPANY_WHATSAPP_PHONE_ID", "")
