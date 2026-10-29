@@ -32,7 +32,7 @@ jobs:
           (d/'mysqlclient-2.3.0.tar.gz').write_bytes(payload)
           print('MYSQLCLIENT_OFFICIAL_PYPI_SHA256_MATCH=YES')
           PY
-          python3 -m pip download --disable-pip-version-check --only-binary=:all: --dest wheels 'setuptools>=69,<83' 'wheel>=0.42,<1'
+          python3 -m pip download --disable-pip-version-check --only-binary=:all: --dest wheels 'setuptools==82.0.1' 'wheel==0.48.0'
           python3 - <<'PY'
           from pathlib import Path
           import hashlib
@@ -140,7 +140,8 @@ jobs:
           assert not build.exists() and not build.is_symlink()
           subprocess.run((runner,'-m','venv',str(build)),check=True,timeout=60,stdout=subprocess.DEVNULL)
           buildpy=build/'bin'/'python'
-          subprocess.run((str(buildpy),'-m','pip','install','--disable-pip-version-check','--no-index','--no-cache-dir','--find-links='+str(d),'setuptools','wheel'),check=True,timeout=75,stdout=subprocess.DEVNULL)
+          subprocess.run((str(buildpy),'-m','pip','install','--upgrade','--disable-pip-version-check','--no-index','--no-cache-dir','--find-links='+str(d),'setuptools==82.0.1','wheel==0.48.0'),check=True,timeout=75,stdout=subprocess.DEVNULL)
+          subprocess.run((str(buildpy),'-c','import importlib.metadata as m;assert m.version("setuptools")=="82.0.1"'),check=True,timeout=20,stdout=subprocess.DEVNULL)
           subprocess.run((str(buildpy),'-m','pip','wheel','--no-index','--no-build-isolation','--no-deps','--wheel-dir',str(d),str(source[0])),check=True,timeout=120,stdout=subprocess.DEVNULL)
           compiled=list(d.glob('mysqlclient-*.whl'))
           assert len(compiled)==1
