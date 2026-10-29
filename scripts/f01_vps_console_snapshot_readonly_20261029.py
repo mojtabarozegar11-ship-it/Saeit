@@ -143,7 +143,7 @@ def dominant_parent_origin(pid):
             with open("/proc/" + str(pid) + "/stat", encoding="utf-8") as handle:
                 meta = parse_proc_stat(handle.read(4096))
             with open("/proc/" + str(pid) + "/cmdline", "rb") as handle:
-                cmd = handle.read(4096).replace(b"\\0", b" ")
+                cmd = handle.read(4096).replace(b"\0", b" ")
             try:
                 exe = os.path.basename(os.readlink("/proc/" + str(pid) + "/exe"))
             except OSError:
