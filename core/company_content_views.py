@@ -51,7 +51,18 @@ def company_content_feed(request, slug):
         return _company_temporarily_unavailable()
     target = f"/company/{slug.strip('/')}/" if slug != "company" else "/company/"
     links = CompanyContentLink.objects.filter(target_path=target).select_related("newsletter_story", "knowledge_article")
-    links = [x for x in links if (x.newsletter_story and x.newsletter_story.status == "published") or (x.knowledge_article and x.knowledge_article.published)]
+    # A published editorial state does not override a future publication embargo.
+    # Company feeds must use the same visibility boundary as newsletter detail.
+    now = timezone.now()
+    links = [
+        x for x in links
+        if (
+            x.newsletter_story
+            and x.newsletter_story.status == "published"
+            and x.newsletter_story.published_at is not None
+            and x.newsletter_story.published_at <= now
+        ) or (x.knowledge_article and x.knowledge_article.published)
+    ]
     if not links:
         raise Http404("Company content feed not found")
     return render(request, "core/company_content_feed.html", {"target": target, "links": links})
