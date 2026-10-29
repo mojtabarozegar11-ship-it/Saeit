@@ -1,0 +1,54 @@
+name: VPS root filesystem allocation evidence (read only)
+on:
+  push:
+    branches: [diagnostics/ssh-relay-flapping-20261029]
+    paths: [.github/workflows/vps-root-allocation-readonly-20261029.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Verify pinned known host and inspect disk allocation
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/saeit-root-evidence"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          if test -n "$VPS_KNOWN"; then
+            printf '%s' "$VPS_KNOWN" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/known"
+            echo 'VPS_HOST_KEY_SOURCE=EXISTING_SECRET'
+          else
+            for attempt in 1 2 3; do
+              timeout 9s ssh-keyscan -T 6 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null || true
+              if test -s "$d/known"; then break; fi
+              sleep 4
+            done
+            echo 'VPS_HOST_KEY_SOURCE=SCANNED'
+          fi
+          test -s "$d/known" || { echo 'VPS_KNOWN_HOST=UNAVAILABLE'; exit 1; }
+          fingerprint="$(ssh-keygen -lf "$d/known" -E sha256 2>/dev/null | awk '{print $2}' | sort -u)"
+          test "$fingerprint" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' || { echo 'VPS_PIN=MISMATCH_STOP'; exit 2; }
+          echo 'VPS_PIN=VERIFIED'
+          timeout 100s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 -o ConnectionAttempts=5 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo "AUTH_USER=$(id -un)"
+          echo "ROOT_MOUNT:"
+          df -hPT /
+          echo "FACTORY_MOUNT:"
+          df -hPT "$HOME/factory-runtime"
+          echo "BLOCK_DEVICES:"
+          lsblk -n -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS
+          echo "CPU_COUNT=$(nproc)"
+          echo "LOAD=$(cut -d ' ' -f1-3 /proc/loadavg)"
+          echo "D_STATE_PROCESSES=$(ps -e -o stat= | awk '$1 ~ /^D/ {n++} END {print n+0}')"
+          REMOTE
