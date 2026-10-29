@@ -1,0 +1,26 @@
+{
+  "schema": "s01-g01-independent-preview-integrity-v1",
+  "date_utc": "2026-10-29",
+  "scope": "Read-only archive integrity only; no gameplay, rights, live release or payment validation",
+  "source": {
+    "workflow_run": 40905370164,
+    "artifact_id": 12910839009,
+    "outer_sha256": "c6d3d9e211dc1bca65e353d841b47accf3b32ddaf3b125da269640c0c418e4f4",
+    "inner_sha256": "74157d96b5b39ce5d03c66ee413f335c58427c65c6d7f182afa3db23657709cd",
+    "source_revision_from_manifest": "33b5a05e4445f8ed943936bd5e09e39244c0cae2"
+  },
+  "checks": {
+    "outer_zip_crc": "PASS",
+    "inner_zip_crc": "PASS",
+    "no_duplicate_names": "PASS",
+    "no_unsafe_paths_or_symlinks": "PASS",
+    "manifest_sha256_and_sizes": "PASS (30 listed files)",
+    "manifest_file_set": "PARTIAL: 1 unmanifested README",
+    "commerce_policy_fail_closed": "PASS (checkoutEnabled:false; ownerApproved:false; verifiedBackend:false)"
+  },
+  "unmanifested_entries": {
+    "ramadan-war/PLAY-README.txt": "0e2775f86ab6dac1eb963d739df46beb41c1adf090d606f6386ec246ae73b1f7"
+  },
+  "stage": "OFFLINE_FILE_VERIFIED_NOT_DEPLOYED",
+  "next": "G owner reconcile packaging manifest including README; compare to current G branch before S release review"
+}
