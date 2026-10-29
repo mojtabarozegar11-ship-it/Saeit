@@ -16,7 +16,12 @@ const path=require('node:path');
     for(const slug of ['/store/','/store/product/72/','/store/product/225/','/store/product/879/']){
      const page=await context.newPage(),errors=[];
      page.on('pageerror',e=>errors.push(e.message.slice(0,240)));
-     const response=await page.goto('https://mojplaywin.com'+slug,{waitUntil:'domcontentloaded',timeout:40000});
+     let response;
+     try{response=await page.goto('https://mojplaywin.com'+slug,{waitUntil:'domcontentloaded',timeout:40000})}
+     catch(e){
+      results.push({device:device.name,path:slug,http:0,pageErrors:errors,navigationError:String(e.message||e).slice(0,240)});
+      await page.close();continue;
+     }
      const details=await page.evaluate(()=>{
       const controls=[...document.querySelectorAll('button,input[type=submit],a[href]')];
       const unlabeled=controls.filter(el=>!(el.getAttribute('aria-label')||el.getAttribute('title')||el.textContent||el.querySelector('img')?.alt||el.value||'').trim()).slice(0,25).map(el=>({tag:el.tagName,href:el.tagName==='A'?el.getAttribute('href'):null}));
