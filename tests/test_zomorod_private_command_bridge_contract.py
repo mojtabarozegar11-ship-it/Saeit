@@ -282,3 +282,13 @@ def test_emergency_direct_cpanel_path_never_lowers_identity_or_host_key_pins():
     assert 'ssh -F "$d/config" "$COMMAND_HOST"' in source
     assert "UserKnownHostsFile /dev/null" not in source
     assert "StrictHostKeyChecking no" not in source
+
+
+def test_ssh_control_socket_paths_fit_github_runner_unix_limit():
+    source = _source()
+    assert "ControlPath $d/control-%C" not in source
+    assert "ControlPath $d/cpanel.sock" in source
+    assert "ControlPath $d/direct.sock" in source
+    assert source.count("ControlMaster auto") == 2
+    assert 'install -d -m 700 "$d"' in source
+    assert "ControlPath /tmp/" not in source
