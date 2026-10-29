@@ -152,6 +152,9 @@ def classify_process_origin(executable, cmdline):
 
 def dominant_parent_origin(pid):
     """Inspect only a bounded parent chain; output fixed categories, not PIDs/argv."""
+    if pid == 1:
+        return {"state": "INIT_PARENT", "lineage": [], "depth_observed": 0,
+                "parent_is_init": True, "pid_argv_and_paths_redacted": True}
     lineage = []
     seen = set()
     status = "OBSERVED"
@@ -176,7 +179,7 @@ def dominant_parent_origin(pid):
             status = "PARTIAL"
             break
     return {"state": status, "lineage": lineage, "depth_observed": len(lineage),
-            "pid_argv_and_paths_redacted": True}
+            "parent_is_init": False, "pid_argv_and_paths_redacted": True}
 
 
 def process_pressure():
