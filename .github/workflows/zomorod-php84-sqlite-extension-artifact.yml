@@ -1,0 +1,41 @@
+name: Isolated PHP 8.4 SQLite extension compatibility artifact
+on:
+  push:
+    branches: [feature/zomorod-offline-php84-extension-qa-20261029]
+    paths: [.github/workflows/zomorod-php84-sqlite-extension-artifact.yml]
+permissions:
+  contents: read
+jobs:
+  export-offline-qa-modules:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_sqlite, sqlite3
+      - name: Confirm PHP ABI and copy only verified SQLite extension binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -r 'if(!extension_loaded("pdo_sqlite") || !extension_loaded("sqlite3")) exit(2);'
+          php -v | head -2
+          php -i | grep -E '^PHP API|^PHP Extension|^Zend Extension Build|^extension_dir'
+          extdir="$(php-config --extension-dir)"
+          test -f "$extdir/pdo_sqlite.so"
+          test -f "$extdir/sqlite3.so"
+          mkdir -p module
+          cp -p "$extdir/pdo_sqlite.so" "$extdir/sqlite3.so" module/
+          file module/*.so
+          ldd module/pdo_sqlite.so
+          ldd module/sqlite3.so
+          sha256sum module/*.so > module/SHA256SUMS
+          (cd module && sha256sum -c SHA256SUMS)
+          echo "PHP_SQLITE_EXTENSION_ARTIFACT=BUILT"
+          echo "COMPANY_DATA=NOT_ACCESSED"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: php84-pdo-sqlite-offline-compatibility
+          path: module/
+          retention-days: 3
+          if-no-files-found: error
