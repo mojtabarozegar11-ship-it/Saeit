@@ -1,0 +1,25 @@
+{
+  "schema": "s01-anonymous-checkout-route-matrix.v1",
+  "date_utc": "2026-10-29",
+  "source_run": 40913230725,
+  "source_artifact_id": 12914572131,
+  "source_head": "d3232e2465499769f11d0f436bb3fbce38690651",
+  "method": "GET-only anonymous Playwright; mobile 390px and desktop 1280px; no clicks, credentials, order, POST or payment",
+  "observations": {
+    "store_http": 200,
+    "product_pages_http": {
+      "72": 200,
+      "225": 200,
+      "879": 200
+    },
+    "unobstructed_checkout_links_per_product": 1,
+    "checkout_routes_final_path": "/accounts/login/",
+    "purchase_history_final_path": "/accounts/login/",
+    "all_final_login_http": 200,
+    "all_page_js_errors": 0,
+    "one_obstructed_non_checkout_header_link": "/crypto-payments/"
+  },
+  "interpretation": "Anonymous checkout and invoice history correctly require login; 200 on login is NOT checkout success. The observed obstruction is the non-checkout header crypto-payments link, not a product Buy link. No authenticated invoice/email/download or payment is proven.",
+  "status": "LIVE_ANONYMOUS_ROUTES_VERIFIED_ONLY; AUTHENTICATED_CHECKOUT_BLOCKED",
+  "next": "Verify exact cPanel source backup/rollback and Passenger database authority, then test authenticated non-billing invoice/email/download path."
+}
