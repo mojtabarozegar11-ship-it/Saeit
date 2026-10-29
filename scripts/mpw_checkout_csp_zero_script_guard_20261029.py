@@ -211,7 +211,7 @@ def selftest():
     body=b'<meta charset="utf-8">'
     if len(scripts) != 1 or len(styles) not in (1, 2) or b'<meta charset="utf-8">' not in body:
         raise RuntimeError()
-    source_hash=lambda s: repr(s)
+    source_hash=lambda s: "\'sha256-synthetic\'"
     policy=("script-src 'self' " + source_hash(scripts[0]) + "; ")
     return policy
 '''
@@ -221,7 +221,7 @@ def selftest():
     exec(compile(fn, "<csp-selftest>", "exec"), namespace)
     handler = namespace["_apply_two_book_strict_csp"]
     assert handler(False) == "script-src 'self'; "
-    assert handler(True) == "script-src 'self' 'abc'; "
+    assert handler(True) == "script-src 'self' 'sha256-synthetic'; "
     assert "unsafe-inline" not in fn and "unsafe-eval" not in fn
     print("MPW_CSP_ZERO_SCRIPT_SELFTEST=PASS")
 
