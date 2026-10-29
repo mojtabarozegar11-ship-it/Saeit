@@ -4,6 +4,10 @@ on:
     paths:
       - ".github/workflows/factory-uncertified-preview-publish-20261029.yml"
       - "scripts/publish_factory_free_tool.py"
+      - "scripts/factory_commercial_quality_release_guard_v1.py"
+      - "scripts/factory_product_rights_clearance_v1.py"
+      - "scripts/factory_quality_signed_approval_v1.py"
+      - "tests/test_factory_product_rights_clearance_v1.py"
   push:
     branches: [main]
     paths:
@@ -226,7 +230,7 @@ jobs:
           inbox=/home/zomorod2/.saeit-factory-inbox
           receiver_stage="/tmp/saeit-preview-$GITHUB_RUN_ID"
           ssh -F "$d/config" saeit-cpanel "umask 077; test ! -e '$receiver_stage'; mkdir -m 700 '$receiver_stage'"
-          scp -q -F "$d/config" scripts/store_receiver.py scripts/publish_factory_free_tool.py "saeit-cpanel:$receiver_stage/"
+          scp -q -F "$d/config" scripts/store_receiver.py scripts/publish_factory_free_tool.py scripts/factory_commercial_quality_release_guard_v1.py scripts/factory_product_rights_clearance_v1.py scripts/factory_quality_signed_approval_v1.py "saeit-cpanel:$receiver_stage/"
           ssh -F "$d/config" saeit-cpanel "python3 '$receiver_stage/store_receiver.py' prepare farm_enterprise_economics '$digest' --root '$inbox'"
           scp -q -F "$d/config" "$d/farm_enterprise_economics-internal-qa.zip" "saeit-cpanel:$inbox/incoming/farm_enterprise_economics/$digest.zip.partial"
           scp -q -F "$d/config" "$d/manufacturing_manifest.json" "saeit-cpanel:$inbox/incoming/farm_enterprise_economics/$digest.json.partial"
