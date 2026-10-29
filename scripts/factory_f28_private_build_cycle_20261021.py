@@ -17,7 +17,9 @@ import tempfile
 import zipfile
 
 RECIPE = "greenhouse_crop_margin"
-FILES = ("README.md", "calculator.py", "example_inputs.json", "test_calculator.py")
+FILES = ("GREENHOUSE_ECONOMICS_STUDIO.md", "README.md", "calculator.py",
+         "example_inputs.json", "greenhouse_economics_studio.html",
+         "greenhouse_engine.js", "test_calculator.py", "test_greenhouse_engine.js")
 SCHEMA = "zomorodmelal.factory.f28-private-build-cycle.v1"
 
 
@@ -138,6 +140,16 @@ def verify_customer_package(artifact, manifest):
                     if len(raw) > 400_000:
                         raise TechnicalDefect("F28_PACKAGE_FILE_OVERSIZE", "Unbounded recipe file")
                     (temp / name).write_bytes(raw)
+                html = (temp / "greenhouse_economics_studio.html").read_text(encoding="utf8")
+                engine = (temp / "greenhouse_engine.js").read_text(encoding="utf8")
+                marker = '<script id="model-source">'
+                if ('<html lang="en">' not in html or marker not in html
+                        or "connect-src 'none'" not in html
+                        or '<script src=' in html):
+                    raise TechnicalDefect("F28_BROWSER_BUNDLE_INVALID", "English offline browser package is not self-contained")
+                embedded = html.split(marker, 1)[1].split("</script>", 1)[0].strip()
+                if embedded != engine.strip():
+                    raise TechnicalDefect("F28_BROWSER_ENGINE_MISMATCH", "Browser distribution differs from audited engine")
                 cases = [
                     json.loads((temp / "example_inputs.json").read_text(encoding="utf8")),
                     {"currency":"USD","area_m2":1000,"expected_yield_kg_per_m2":12,
@@ -164,7 +176,8 @@ def verify_customer_package(artifact, manifest):
     except (OSError, zipfile.BadZipFile, subprocess.TimeoutExpired) as exc:
         raise TechnicalDefect("F28_CUSTOMER_PACKAGE_UNUSABLE", str(exc)[:350]) from exc
     return {"customer_scenarios_verified":2,"independent_arithmetic_oracle":True,
-            "zip_integrity_verified":True,"customer_cli_from_extracted_zip":True}
+            "zip_integrity_verified":True,"customer_cli_from_extracted_zip":True,
+            "standalone_english_browser_package_integrity":True}
 
 
 def build_cycle(source, maker_file, out, *, revision="local"):
