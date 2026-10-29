@@ -26,6 +26,21 @@ def evaluate(snapshot, now=None):
     available = fs.get('available_bytes')
     if fs.get('state') != 'OBSERVED' or not isinstance(available, int) or isinstance(available, bool) or available < MIN_AVAILABLE:
         blockers.append('ROOT_DISK_RESERVE_UNVERIFIED_OR_LOW')
+    # ext4 reserved blocks may be physically free but unavailable to non-root
+    # workers. Never interpret free_bytes as writable capacity.
+    free = fs.get('free_bytes')
+    if (isinstance(available, int) and not isinstance(available, bool)
+            and available == 0 and isinstance(free, int) and free > 0):
+        blockers.append('ROOT_RESERVED_BLOCKS_NOT_WORKER_WRITABLE')
+    cron = snapshot.get('cron', {})
+    worker = snapshot.get('worker', {})
+    if (isinstance(cron, dict) and isinstance(worker, dict)
+            and isinstance(cron.get('factory_per_minute_entries'), int)
+            and cron['factory_per_minute_entries'] >= 2
+            and isinstance(worker.get('factory_name_matches'), int)
+            and worker['factory_name_matches'] >= 100):
+        # Correlation is a triage risk, NOT proof cron spawned these processes.
+        blockers.append('CRON_PROCESS_OVERLAP_RISK_UNPROVEN_CAUSE')
     guest = snapshot.get('guest', {})
     cpu = guest.get('cpu_count')
     load = guest.get('loadavg')
