@@ -137,10 +137,10 @@ def gtf_gene_ids(gtf_path):
         for line_no, line in enumerate(stream, 1):
             if not line.strip() or line.startswith('#'):
                 continue
-            parts = line.rstrip('\\n').split('\\t')
+            parts = line.rstrip('\n').split('\t')
             if len(parts) != 9:
                 raise GateError(f'GTF must have nine columns at line {line_no}')
-            match = re.search(r'(?:^|;)\\s*gene_id\\s+"([^"]+)"\\s*(?:;|$)', parts[8])
+            match = re.search(r'(?:^|;)\s*gene_id\s+"([^"]+)"\s*(?:;|$)', parts[8])
             if not match:
                 raise GateError(f'Missing GTF gene_id attribute at line {line_no}')
             gid = match.group(1)
