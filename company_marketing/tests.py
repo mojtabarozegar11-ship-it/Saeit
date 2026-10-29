@@ -269,3 +269,39 @@ class MarketingTests(TestCase):
                                           "evidence_reference": ""})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(PerformanceMetric.objects.count(), 0)
+
+    @override_settings(COMPANY_MARKETING_PUBLISH_ENABLED=True, COMPANY_MESSAGING_SEND_ENABLED=True)
+    def test_verified_channel_identity_cannot_redirect_approved_post(self):
+        item = self.publication()
+        approve_publication(item.pk, self.owner)
+        self.channel.destination = "-99999"
+        with self.assertRaises(ValidationError):
+            self.channel.save()
+        self.channel.refresh_from_db()
+        self.assertEqual(self.channel.destination, "-10002")
+        self.channel.ownership_evidence = "replaced-control-record"
+        with self.assertRaises(ValidationError):
+            self.channel.save()
+        self.channel.refresh_from_db()
+        with patch("company_marketing.services.send_bot_message", return_value="remote-ack") as send:
+            self.assertEqual(dispatch_publication(item.pk), "accepted")
+            send.assert_called_once_with("bale", "-10002", "محتوای اختصاصی")
+
+    def test_verified_channel_can_be_safely_deactivated_not_reverified(self):
+        self.channel.active = False
+        self.channel.save()
+        self.channel.refresh_from_db()
+        self.assertFalse(self.channel.active)
+        url = "/company/office/marketing/channels/%s/verify/" % self.channel.pk
+        response = self.client.post(url, secure=True, data={"evidence": "new-proof-should-fail"})
+        self.assertEqual(response.status_code, 400)
+        self.channel.refresh_from_db()
+        self.assertEqual(self.channel.ownership_evidence, "private-control-log:49")
+
+    def test_unverified_channel_can_correct_destination_before_verification(self):
+        pending = ChannelAccount.objects.create(
+            unit=self.unit, platform="bale", title="در انتظار", destination="-111"
+        )
+        pending.destination = "-222"
+        pending.save()
+        self.assertEqual(ChannelAccount.objects.get(pk=pending.pk).destination, "-222")

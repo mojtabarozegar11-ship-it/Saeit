@@ -142,6 +142,8 @@ def verify_channel(request, pk):
     if not request.user.is_superuser:
         raise PermissionDenied("تأیید مالکیت فقط با مدیر ارشد.")
     account = get_object_or_404(ChannelAccount.objects.filter(unit__in=user_units(request.user)), pk=pk)
+    if account.is_company_owned or account.verified_at:
+        return HttpResponseBadRequest("کانال قبلاً احراز شده است؛ برای مقصد جدید حساب جدید بسازید.")
     evidence = (request.POST.get("evidence") or "").strip()
     if len(evidence) < 8 or len(evidence) > 255:
         return HttpResponseBadRequest("مرجع شواهد مالکیت ۸ تا ۲۵۵ نویسه باشد.")

@@ -75,6 +75,20 @@ class ChannelAccount(models.Model):
             raise ValidationError({"destination": "شناسه مقصد ضروری است."})
 
     def save(self, *args, **kwargs):
+        # A verified channel is an approved external destination. Re-pointing it
+        # would silently redirect previously approved publications.
+        if self.pk:
+            previous = type(self).objects.get(pk=self.pk)
+            if previous.is_company_owned and previous.verified_at and (
+                self.unit_id, self.platform, self.destination, self.is_company_owned,
+                self.ownership_evidence, self.verified_at
+            ) != (
+                previous.unit_id, previous.platform, previous.destination,
+                previous.is_company_owned, previous.ownership_evidence, previous.verified_at
+            ):
+                raise ValidationError(
+                    "هویت و مدرک کانال تأییدشده تغییر نمی‌کند؛ برای مقصد تازه حساب جدید بسازید."
+                )
         self.full_clean()
         return super().save(*args, **kwargs)
 

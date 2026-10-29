@@ -132,3 +132,61 @@ class MessagingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Message.objects.count(), 0)
         self.assertContains(response, "مخاطب")
+
+    @override_settings(
+        COMPANY_MESSAGING_SMS_ENABLED=True,
+        COMPANY_SMS_KAVENEGAR_KEY="offline-only-key",
+        COMPANY_SMS_KAVENEGAR_SENDER="100010",
+    )
+    def test_sms_requires_positive_upstream_message_id(self):
+        contact = Contact.objects.create(
+            unit=self.unit, name="SMS opt-in", phone_e164="+989123456789",
+            sms_consent_at=timezone.now(), consent_evidence="confirmed-optin-ticket-5",
+        )
+        missing = enqueue(Message(unit=self.unit, channel="sms", sender=self.owner,
+                                  contact=contact, body="پیام اول"))
+        with patch("company_messaging.services._http_post",
+                   return_value={"return": {"status": 200}, "entries": [{}]}) as upstream:
+            self.assertEqual(dispatch_one(missing.pk), "uncertain")
+            self.assertEqual(dispatch_one(missing.pk), "not_due")
+            upstream.assert_called_once()
+        missing.refresh_from_db()
+        self.assertEqual(missing.attempts, 1)
+        self.assertFalse(missing.external_reference)
+        valid = enqueue(Message(unit=self.unit, channel="sms", sender=self.owner,
+                                contact=contact, body="پیام دوم"))
+        with patch("company_messaging.services._http_post",
+                   return_value={"return": {"status": 200}, "entries": [{"messageid": 901}]}) as upstream:
+            self.assertEqual(dispatch_one(valid.pk), "accepted")
+            upstream.assert_called_once()
+        valid.refresh_from_db()
+        self.assertEqual(valid.external_reference, "901")
+
+    @override_settings(
+        COMPANY_MESSAGING_WHATSAPP_ENABLED=True,
+        COMPANY_WHATSAPP_ACCESS_TOKEN="offline-only-token",
+        COMPANY_WHATSAPP_PHONE_ID="999123",
+        COMPANY_WHATSAPP_TEMPLATE_NAME="approved_offline_template",
+        COMPANY_WHATSAPP_TEMPLATE_LANGUAGE="fa",
+    )
+    def test_whatsapp_requires_positive_upstream_message_id(self):
+        contact = Contact.objects.create(
+            unit=self.unit, name="WhatsApp opt-in", phone_e164="+989123456789",
+            whatsapp_consent_at=timezone.now(), consent_evidence="confirmed-optin-ticket-6",
+        )
+        missing = enqueue(Message(unit=self.unit, channel="whatsapp", sender=self.owner,
+                                  contact=contact, body="پیام اول"))
+        with patch("company_messaging.services._http_post", return_value={"messages": [{}]}) as upstream:
+            self.assertEqual(dispatch_one(missing.pk), "uncertain")
+            self.assertEqual(dispatch_one(missing.pk), "not_due")
+            upstream.assert_called_once()
+        missing.refresh_from_db()
+        self.assertFalse(missing.external_reference)
+        valid = enqueue(Message(unit=self.unit, channel="whatsapp", sender=self.owner,
+                                contact=contact, body="پیام دوم"))
+        with patch("company_messaging.services._http_post",
+                   return_value={"messages": [{"id": "wamid.offline-99"}]}) as upstream:
+            self.assertEqual(dispatch_one(valid.pk), "accepted")
+            upstream.assert_called_once()
+        valid.refresh_from_db()
+        self.assertEqual(valid.external_reference, "wamid.offline-99")

@@ -59,7 +59,12 @@ def _deliver(msg):
                             form, {"Content-Type": "application/x-www-form-urlencoded"})
         if result.get("return", {}).get("status") != 200:
             raise RuntimeError("sms_provider_rejected")
-        return str((result.get("entries") or [{}])[0].get("messageid", ""))[:128]
+        entries = result.get("entries")
+        message_id = (entries[0].get("messageid") if isinstance(entries, list)
+                      and entries and isinstance(entries[0], dict) else None)
+        if not message_id:
+            raise RuntimeError("sms_missing_message_id")
+        return str(message_id)[:128]
     if msg.channel == "telegram":
         token = getattr(settings, "COMPANY_TELEGRAM_BOT_TOKEN", "")
         if not token:
@@ -93,7 +98,12 @@ def _deliver(msg):
         result = _http_post("https://graph.facebook.com/v23.0/%s/messages" %
                             urllib.parse.quote(phone_id, safe=""), data,
                             {"Authorization": "Bearer " + token, "Content-Type": "application/json"})
-        return str((result.get("messages") or [{}])[0].get("id", ""))[:128]
+        messages = result.get("messages")
+        message_id = (messages[0].get("id") if isinstance(messages, list)
+                      and messages and isinstance(messages[0], dict) else None)
+        if not message_id:
+            raise RuntimeError("whatsapp_missing_message_id")
+        return str(message_id)[:128]
     raise ProviderNotReady("unknown_channel")
 
 
