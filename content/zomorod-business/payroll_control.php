@@ -112,6 +112,9 @@ function zmPayrollCreate(PDO $db,string $key,string $period,string $currency,arr
                 zmPayrollReject('شناسه تکراری با محتوای متفاوت.',409);
             $db->commit();return [(int)$previous['id'],false];
         }
+        $collision=$db->prepare('SELECT id FROM payroll_periods WHERE period=?');
+        $collision->execute([$period]);
+        if($collision->fetchColumn()!==false) zmPayrollReject('برای این دوره یک پرونده حقوق قبلاً ثبت شده است.',409);
         $db->prepare('INSERT INTO payroll_periods(period,request_key,payload_sha256,currency,gross_total,deduction_total,net_total,requested_by) VALUES(?,?,?,?,?,?,?,?)')
             ->execute([$period,$key,$hash,$currency,$gross,$deductions,$net,$actor]);
         $id=(int)$db->lastInsertId();
