@@ -1,8 +1,16 @@
 name: MojPlayWin live paid SKU rights and private file safety gate
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/mpw-live-three-sku-rights-gate-20261026.yml"
+      - "scripts/mpw_three_sku_preflight_20261029.py"
+      - "tests/test_mpw_three_sku_preflight_20261029.py"
   push:
     branches: [main]
-    paths: [".github/workflows/mpw-live-three-sku-rights-gate-20261026.yml"]
+    paths:
+      - ".github/workflows/mpw-live-three-sku-rights-gate-20261026.yml"
+      - "scripts/mpw_three_sku_preflight_20261029.py"
+      - "tests/test_mpw_three_sku_preflight_20261029.py"
   schedule:
     - cron: "41 */6 * * *"
   workflow_dispatch:
@@ -11,8 +19,17 @@ concurrency:
   group: mpw-live-three-sku-rights-audit-only
   cancel-in-progress: true
 jobs:
+  offline-preflight-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prove rights and deliverability diagnostics fail closed (synthetic only)
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p 'test_mpw_three_sku_preflight_20261029.py' -v
   rights-and-deliverability-audit:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    needs: offline-preflight-regression
+    if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -147,7 +164,7 @@ jobs:
             "read_only":True,
             "no_invoice_fields_printed":True},sort_keys=True))
           PY
-      - name: Verify actual closed-invoice HTTP response using synthetic expired quote
+      - name: Verify synthetic expired-quote view response without an HTTP network request
         shell: bash
         run: |
           set -euo pipefail
@@ -181,6 +198,11 @@ jobs:
           except Exception as exc:
             result["raised_exception_type"]=type(exc).__name__
           print("MPW_SYNTHETIC_CLOSED_INVOICE="+json.dumps(result,sort_keys=True))
+          if not (result.get("status_code")==200 and
+                  result.get("has_expired_explanation") is True and
+                  result.get("has_purchases_recovery") is True and
+                  result.get("has_stale_pay_address") is False):
+            raise AssertionError("SYNTHETIC_EXPIRED_INVOICE_ASSERTION_FAILED")
           PY
       - name: Check live login safe post-auth invoice return target without customer records
         shell: bash
@@ -211,6 +233,9 @@ jobs:
               result.append({"kind":"external_host" if "https:" in target else "same_site","passed":actual==expected,"safe_external_redirect":not actual.startswith("https://other.example"),"actual_destination_class":"invoice" if actual.startswith("/commerce/trx-easy/invoice/") else "product" if actual.startswith("/commerce/book/") else "purchases" if actual.startswith("/commerce/my-purchases/") else "other"})
             except Exception as e:result.append({"kind":"exception","type":type(e).__name__})
           print("MPW_LOGIN_RETURN_DIAG="+json.dumps({"synthetic":True,"customer_records_used":0,"cases":result},sort_keys=True))
+          if len(result)!=len(cases) or any(row.get("passed") is not True or
+                  row.get("safe_external_redirect") is not True for row in result):
+            raise AssertionError("LOGIN_RETURN_CONTRACT_FAILED")
           PY
       - name: Diagnose live TRX invoice routing and expiry without reading buyer details
         shell: bash
@@ -257,7 +282,7 @@ jobs:
       - name: Check all three publicly listed products without changing checkout or customer data
         run: |
           set -euo pipefail
-          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          report="$(timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-revenue-ssh/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
           import os,sys,json,importlib,hashlib
           from pathlib import Path
           root=Path("/home/zomorod2/Saeit-staging")
@@ -338,11 +363,13 @@ jobs:
               if not is_sellable:blocked.append(sku)
               else:sale_ready+=1
             print("MPW_PUBLIC_SKU_RIGHTS="+json.dumps(record,sort_keys=True))
-          print("MPW_PAID_SKUS_PASS="+str(sale_ready)+"/3")
-          print("MPW_PAID_SKUS_BLOCKED="+json.dumps(blocked))
+          print("MPW_LEGACY_PRECHECK_PASS="+str(sale_ready)+"/3")
+          print("MPW_LEGACY_PRECHECK_BLOCKED="+json.dumps(blocked))
           print("CHECK_READONLY=TRUE; ORDERS_MODIFIED=0; LICENSE_APPROVALS_CHANGED=0")
-          if blocked:sys.exit(3)
           PY
+          )"
+          printf '%s\n' "$report"
+          printf '%s\n' "$report" | PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/mpw_three_sku_preflight_20261029.py
       - name: Delete runner-only SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-revenue-ssh"

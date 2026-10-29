@@ -3,7 +3,6 @@ on:
   push:
     branches: [main]
     paths:
-      - ".github/workflows/zomorod-app-pages-deploy.yml"
       - "config/urls.py"
       - "config/settings.py"
       - "passenger_wsgi.py"
@@ -15,7 +14,6 @@ on:
       - "core/company_activity_models.py"
       - "core/economic_trade_models.py"
       - "core/views.py"
-      - "core/*.py"
       - "config/*.py"
       - "command_center/*.py"
       - "core/company_content_models.py"

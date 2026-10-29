@@ -11,7 +11,6 @@ on:
       - core/management/commands/seed_online_income_agents.py
       - core/tests/test_factory_native_master_bridge.py
       - deploy/install_factory_native_master_bridge.sh
-      - .github/workflows/factory-master-native-bridge-20261022.yml
 permissions: {contents: read}
 concurrency:
   group: saeit-authenticated-native-master-bridge

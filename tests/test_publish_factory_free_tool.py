@@ -54,8 +54,8 @@ class ReleaseTests(unittest.TestCase):
             publisher.publish(self.inbox, self.webroot)
         self.assertFalse((self.webroot / "factory-releases").exists())
 
-    def test_release_blocked_without_chatgpt_review_and_real_qc1000(self):
-        with self.assertRaisesRegex(ValueError, "QC1000_REQUIRED_FOR_FACTORY_EXIT"):
+    def test_release_blocked_without_signed_rights_evidence(self):
+        with self.assertRaisesRegex(ValueError, "RIGHTS_CLEARANCE_EVIDENCE_MISSING"):
             publisher.publish(self.inbox, self.webroot, release_authorized=True)
         self.assertFalse(
             (self.webroot / "factory-releases" / publisher.PUBLIC_SLUG).exists()
@@ -81,6 +81,58 @@ class ReleaseTests(unittest.TestCase):
         bad.mkdir()
         with self.assertRaisesRegex(ValueError, "WRONG_STOREFRONT"):
             publisher.publish(self.inbox, bad, release_authorized=True)
+
+    def test_preview_cannot_bypass_missing_signed_rights_clearance(self):
+        dest = self.webroot / "factory-releases" / publisher.PUBLIC_SLUG
+        dest.mkdir(parents=True)
+        old_zip = dest / publisher.PUBLIC_FILENAME
+        with zipfile.ZipFile(str(old_zip), "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(publisher.RECIPE + "/calculator.py", "print('old offline')")
+        old_sha = hashlib.sha256(old_zip.read_bytes()).hexdigest()
+        (dest / "SHA256SUMS.txt").write_text(
+            old_sha + "  " + publisher.PUBLIC_FILENAME + "\n"
+        )
+        (dest / "index.html").write_text(
+            "<title>Farm Enterprise Economics</title><a href=\""
+            + publisher.PUBLIC_FILENAME + "\">Download</a>"
+        )
+        (dest / ".htaccess").write_text("Options -Indexes\n")
+
+        with self.assertRaisesRegex(ValueError, "RIGHTS_CLEARANCE_EVIDENCE_MISSING"):
+            publisher.publish(
+                self.inbox, self.webroot, release_authorized=True,
+                uncertified_preview=True, expected_sha256=self.sha,
+            )
+        self.assertEqual(hashlib.sha256(old_zip.read_bytes()).hexdigest(), old_sha)
+        self.assertIn("Download", (dest / "index.html").read_text())
+
+
+    def test_preview_selects_exact_verified_digest_with_other_receipts_present(self):
+        recipe = publisher.RECIPE
+        second_zip = self.base / "second.zip"
+        with zipfile.ZipFile(str(second_zip), "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(recipe + "/calculator.py", "print('another offline edition')")
+        second_sha = hashlib.sha256(second_zip.read_bytes()).hexdigest()
+        incoming = self.inbox / "incoming" / recipe
+        (incoming / (second_sha + ".zip.partial")).write_bytes(second_zip.read_bytes())
+        (incoming / (second_sha + ".json.partial")).write_text(json.dumps({
+            "name": "Another private edition",
+            "recipe": recipe,
+            "artifact_sha256": second_sha,
+            "qa_status": "passed",
+            "commercial_status": "private_internal_qa_pass_not_published",
+            "price": None,
+            "public_listing_enabled": False,
+            "owner_publication_approval": False,
+        }))
+        receiver.finalize(self.inbox, recipe, second_sha)
+
+        with self.assertRaisesRegex(ValueError, "RIGHTS_CLEARANCE_EVIDENCE_MISSING"):
+            publisher.publish(
+                self.inbox, self.webroot, release_authorized=True,
+                uncertified_preview=True, expected_sha256=self.sha,
+            )
+        self.assertFalse((self.webroot / "factory-releases").exists())
 
 
 if __name__ == "__main__":

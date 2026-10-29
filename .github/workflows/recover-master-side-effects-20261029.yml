@@ -1,0 +1,250 @@
+name: Restore exact pre-activation site state and resume factory schedule
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/recover-master-side-effects-20261029.yml"
+permissions:
+  contents: read
+concurrency:
+  group: recover-master-side-effects-20261029
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Restore factory schedule after failed database snapshot
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-recovery"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          chmod 600 "$d/known"
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          ssh "${opts[@]}" githubops@178.239.147.150 bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          base="$HOME/factory-runtime"
+          app="$base/django-app"
+          ops="$base/operations"
+          backups="$ops/backups"
+          py="$base/.venv/bin/python"
+          marker="$backups/recovery-after-failed-master-activation-0cf34190988f5b2a35c38499ca67cab1950d0041.done"
+          if [ -f "$marker" ]; then
+            echo FACTORY_FAILURE_RECOVERY=already_completed
+            exit 0
+          fi
+          mapfile -t candidates < <(find "$backups" -maxdepth 1 -type d -name 'master-source-before-*' -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)
+          test "${#candidates[@]}" -eq 1
+          source_backup="${candidates[0]}"
+          stamp="${source_backup##*master-source-before-}"
+          cron_backup="$backups/cron-before-master-$stamp.txt"
+          db_backup="$backups/master-before-$stamp.sqlite3"
+          test -d "$source_backup" && test -f "$cron_backup"
+          test -x "$py" && test -f "$app/manage.py"
+          if [ -e "$db_backup" ]; then
+            test -f "$db_backup" && test ! -L "$db_backup"
+            echo MASTER_UNVERIFIED_FAILED_DB_SNAPSHOT_BYTES="$(stat -c %s "$db_backup")"
+            rm -f -- "$db_backup"
+            echo MASTER_INCOMPLETE_DB_BACKUP_REMOVED=failed_predeploy_snapshot
+          fi
+          old_tags="$(grep -c 'SAEIT_MASTER_AGENT_V1' "$cron_backup" || true)"
+          test "$old_tags" -eq 2
+          current_cron="$(mktemp /tmp/factory-cron-current.XXXXXX)"
+          merged_cron="$(mktemp /tmp/factory-cron-merged.XXXXXX)"
+          trap 'rm -f -- "$current_cron" "$merged_cron"' EXIT
+          crontab -l > "$current_cron" 2>/dev/null || : > "$current_cron"
+          if grep -E 'economic_autorun|autonomous_master_loop' "$current_cron" | grep -v 'SAEIT_MASTER_AGENT_V1' >/dev/null; then
+            echo FACTORY_CRON_RECOVERY=blocked_by_unmanaged_competing_loop >&2
+            exit 1
+          fi
+          grep -v 'SAEIT_MASTER_AGENT_V1' "$current_cron" > "$merged_cron" || true
+          grep 'SAEIT_MASTER_AGENT_V1' "$cron_backup" >> "$merged_cron"
+          crontab "$merged_cron"
+          test "$(crontab -l | grep -c 'SAEIT_MASTER_AGENT_V1' || true)" -eq 2
+          echo FACTORY_CRON_RECOVERY=restored_two_original_entries
+          modules=(
+            core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py
+            core/self_funding_policy.py core/task_runtime.py
+            core/management/commands/seed_online_income_agents.py
+            core/management/commands/run_economic_worker.py
+            core/management/commands/economic_worker.py core/worker_runner.py
+            core/management/commands/autonomous_master_loop.py
+            core/management/commands/online_income_cycle.py core/recovery_scheduler.py
+            core/management/commands/recover_stale_tasks.py
+          )
+          errors=0
+          for module in "${modules[@]}"; do
+            target="$app/$module"
+            backup="$source_backup/$module"
+            if [ -f "$backup" ] && [ ! -L "$backup" ] && [ ! -L "$target" ]; then
+              if [ ! -f "$target" ] || ! cmp -s "$backup" "$target"; then
+                if ! cp -p "$backup" "$target.recovery.tmp"; then
+                  rm -f -- "$target.recovery.tmp"
+                  errors=1
+                  continue
+                fi
+                mv -f "$target.recovery.tmp" "$target"
+              fi
+            elif [ -f "$source_backup/$module.absent" ] && [ ! -L "$target" ]; then
+              rm -f -- "$target"
+            else
+              errors=1
+            fi
+            rm -f -- "$target.rollback.tmp"
+          done
+          if [ "$errors" -eq 0 ]; then
+            echo MASTER_SOURCE_RECOVERY=matches_predeployment_backup
+          else
+            echo MASTER_SOURCE_RECOVERY=needs_manual_review >&2
+          fi
+          free_kib="$(df -Pk "$base" | awk 'NR==2 {print $4}')"
+          echo FACTORY_DISK_AVAILABLE_KIB="$free_kib"
+          if [ "$errors" -ne 0 ]; then exit 1; fi
+          install -m 600 /dev/null "$marker"
+          echo FACTORY_FAILURE_RECOVERY=complete
+          REMOTE
+      - name: Restore cPanel files from the pre-deployment backup
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/site-recovery"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          scan="$(ssh -i "$d/vps.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" githubops@178.239.147.150 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          backup="$HOME/.backups/zomorodmelal-app/0cf34190988f5b2a35c38499ca67cab1950d0041"
+          app="$HOME/Saeit"
+          root="$HOME/public_html"
+          done="$backup/restored-to-predeploy.flag"
+          if [ -f "$done" ]; then echo CPANEL_ROLLBACK=already_completed; exit 0; fi
+          test -f "$backup/deployed.flag" && test "$(cat "$backup/deployed.flag")" = ready
+          test -f "$backup/deployed-paths.txt" && test -d "$app"
+          test ! -L "$backup" && test ! -L "$app" && test ! -L "$root/.htaccess"
+          existing="$backup/existing.txt"
+          test -f "$existing"
+          while IFS= read -r rel; do
+            [ -n "$rel" ] || continue
+            case "/$rel/" in *"/../"*|*"/./"*) echo "INVALID_BACKUP_PATH" >&2; exit 1;; esac
+            target="$app/$rel"
+            if grep -Fxq "$rel" "$existing"; then
+              source="$backup/$rel"
+              test -f "$source" && test ! -L "$source" && test ! -L "$target"
+              mkdir -p "$(dirname "$target")"
+              cp -p "$source" "$target.rollback"
+              mv -f "$target.rollback" "$target"
+            else
+              test ! -L "$target"
+              rm -f -- "$target"
+            fi
+          done < "$backup/deployed-paths.txt"
+          assets=(
+            agriculture/assets/zomorod-olive-v1/platform-home.webp
+            agriculture/assets/zomorod-olive-v1/agriculture.webp
+            agriculture/assets/zomorod-olive-v1/smart-agriculture.webp
+            agriculture/assets/zomorod-olive-v1/industry.webp
+            agriculture/assets/zomorod-olive-v1/economy.webp
+            agriculture/assets/zomorod-olive-v1/research.webp
+            agriculture/assets/zomorod-olive-v1/knowledge.webp
+            agriculture/assets/zomorod-olive-v1/genetics.webp
+            agriculture/assets/zomorod-olive-v1/laboratory.webp
+          )
+          for rel in "${assets[@]}"; do
+            target="$root/$rel"
+            if grep -Fxq "$rel" "$backup/assets-existing.txt"; then
+              source="$backup/assets/$rel"
+              test -f "$source" && test ! -L "$source" && test ! -L "$target"
+              mkdir -p "$(dirname "$target")"
+              cp -p "$source" "$target.rollback"
+              mv -f "$target.rollback" "$target"
+            else
+              test ! -L "$target"
+              rm -f -- "$target"
+            fi
+          done
+          page_target="$root/agriculture/index.html"
+          if grep -Fxq yes "$backup/public-page-existing"; then
+            source="$backup/public_html/agriculture/index.html"
+            test -f "$source" && test ! -L "$source" && test ! -L "$page_target"
+            mkdir -p "$(dirname "$page_target")"
+            cp -p "$source" "$page_target.rollback"
+            mv -f "$page_target.rollback" "$page_target"
+          else
+            test ! -L "$page_target"
+            rm -f -- "$page_target"
+          fi
+          htaccess_backup="$backup/public_html/.htaccess"
+          test -f "$htaccess_backup" && test ! -L "$htaccess_backup"
+          cp -p "$htaccess_backup" "$root/.htaccess.rollback"
+          mv -f "$root/.htaccess.rollback" "$root/.htaccess"
+          for rel in "${assets[@]}"; do
+            target="$root/$rel"
+            if grep -Fxq "$rel" "$backup/assets-existing.txt"; then cmp -s "$backup/assets/$rel" "$target"; else test ! -e "$target"; fi
+          done
+          if grep -Fxq yes "$backup/public-page-existing"; then cmp -s "$backup/public_html/agriculture/index.html" "$page_target"; else test ! -e "$page_target"; fi
+          cmp -s "$htaccess_backup" "$root/.htaccess"
+          touch "$app/tmp/restart.txt"
+          : > "$done"
+          echo CPANEL_ROLLBACK=verified_from_immediate_predeploy_backup
+          REMOTE
+      - name: Confirm public pages still respond after rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /agriculture/ /agriculture/livestock/ /agriculture/market/; do
+            curl -fsS --max-time 20 -o /dev/null "https://zomorodmelal.ir$path"
+          done
+          echo PUBLIC_ROUTES=restored_and_responding

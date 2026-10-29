@@ -30,9 +30,25 @@ TARGETS={
 CONTEXT_OLD='    return {"mpw_trx_easy_enabled":released}\n'
 CONTEXT_NEW=CONTEXT_OLD+'''
 def rights_cleared_for_sale(product):
-    """Require independently recorded explicit rights approval, never truthy strings."""
+    """Fail closed on the exact SKU asset and rights-document linkage.
+
+    This checks metadata consistency only. A legitimate rights document and
+    its commercial scope still require independent verification before any
+    rights/publication flags may be approved.
+    """
     metadata = getattr(product, "metadata", None)
-    return type(metadata) is dict and metadata.get("rights_cleared") is True
+    if type(metadata) is not dict:
+        return False
+    if metadata.get("rights_cleared") is not True or metadata.get("publication_approved") is not True:
+        return False
+    # Truthy strings, malformed hashes, and an old product version must never pass.
+    catalog_sha = metadata.get("sha256")
+    approved_sha = metadata.get("rights_asset_sha256")
+    document_sha = metadata.get("rights_document_sha256")
+    def is_sha256(value):
+        return type(value) is str and len(value) == 64 and all(c in "0123456789abcdef" for c in value.lower())
+    return (is_sha256(catalog_sha) and is_sha256(approved_sha) and
+            catalog_sha.lower() == approved_sha.lower() and is_sha256(document_sha))
 '''
 WEB_IMPORT_OLD="from services.mpw_trx_walletless_core import PaymentHold\n"
 WEB_IMPORT_NEW=WEB_IMPORT_OLD+"from services.mpw_trx_commercial_context import rights_cleared_for_sale\n"
@@ -78,8 +94,14 @@ def check_structure(sources):
         tree=ast.parse(src)
         funcs={n.name:n for n in tree.body if isinstance(n,ast.FunctionDef)}
         if key=="context":
-            if "rights_cleared_for_sale" not in funcs:
+            helper=funcs.get("rights_cleared_for_sale")
+            if helper is None:
                 raise RuntimeError("RIGHTS_HELPER_ABSENT")
+            code=ast.get_source_segment(src,helper) or ""
+            if any(field not in code for field in (
+                    "rights_cleared", "publication_approved", "rights_asset_sha256",
+                    "rights_document_sha256", "sha256")):
+                raise RuntimeError("RIGHTS_LINKAGE_CHECK_ABSENT")
         elif key=="web":
             fn=funcs.get("_select_order")
             if fn is None or not any(isinstance(n,ast.With) for n in ast.walk(fn)):

@@ -1,0 +1,250 @@
+name: Publish free uncertified farm economics preview
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/factory-uncertified-preview-publish-20261029.yml"
+      - "scripts/publish_factory_free_tool.py"
+      - "scripts/factory_commercial_quality_release_guard_v1.py"
+      - "scripts/factory_product_rights_clearance_v1.py"
+      - "scripts/factory_quality_signed_approval_v1.py"
+      - "tests/test_factory_product_rights_clearance_v1.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/factory-uncertified-preview-publish-20261029.yml"
+      - "scripts/publish_factory_free_tool.py"
+      - "scripts/factory_commercial_quality_release_guard_v1.py"
+      - "scripts/factory_product_rights_clearance_v1.py"
+      - "scripts/factory_quality_signed_approval_v1.py"
+      - "tests/test_factory_product_rights_clearance_v1.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-uncertified-preview
+  cancel-in-progress: false
+jobs:
+  inspect-existing:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[owner-authorized-preview-inspect-20261029]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read existing dedicated preview path metadata
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/preview-inspect"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh -i "$d/vps.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" githubops@178.239.147.150 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import hashlib, os, stat
+          from pathlib import Path
+          root = Path("/home/zomorod2/mojplaywin.com/factory-releases/farm-enterprise-economics-v1")
+          try:
+              st = root.lstat()
+          except FileNotFoundError:
+              print("PREVIEW_DESTINATION_EXISTS=false")
+              raise SystemExit(0)
+          print("PREVIEW_DESTINATION_EXISTS=true")
+          print("PREVIEW_DESTINATION_IS_DIRECTORY=" + str(stat.S_ISDIR(st.st_mode)).lower())
+          print("PREVIEW_DESTINATION_IS_SYMLINK=" + str(stat.S_ISLNK(st.st_mode)).lower())
+          print("PREVIEW_DESTINATION_MODE=" + oct(stat.S_IMODE(st.st_mode)))
+          if stat.S_ISDIR(st.st_mode) and not stat.S_ISLNK(st.st_mode):
+              entries = sorted(root.iterdir(), key=lambda p: p.name)
+              print("PREVIEW_DESTINATION_ENTRY_COUNT=" + str(len(entries)))
+              for item in entries[:50]:
+                  meta = item.lstat()
+                  kind = "symlink" if stat.S_ISLNK(meta.st_mode) else "file" if stat.S_ISREG(meta.st_mode) else "directory" if stat.S_ISDIR(meta.st_mode) else "other"
+                  size = str(meta.st_size) if stat.S_ISREG(meta.st_mode) else "-"
+                  print("PREVIEW_ENTRY=" + item.name + "|" + kind + "|" + size)
+                  if stat.S_ISREG(meta.st_mode) and not stat.S_ISLNK(meta.st_mode):
+                      h = hashlib.sha256()
+                      with item.open("rb") as stream:
+                          for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                              h.update(chunk)
+                      print("PREVIEW_ENTRY_SHA256=" + item.name + "|" + h.hexdigest())
+          PY
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[owner-authorized-uncertified-preview-20261029]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Transfer the single existing technical-QA artifact and publish a disclosed free preview
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/uncertified-preview"
+          install -d -m 700 "$d"
+          trap 'if [[ -f "$d/config" ]]; then ssh -F "$d/config" saeit-cpanel "rm -rf -- /tmp/saeit-preview-$GITHUB_RUN_ID" >/dev/null 2>&1 || true; fi; rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh -i "$d/vps.key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" githubops@178.239.147.150 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          source_root=/home/githubops/factory-runtime/private/autonomous-product-cycle/digital-products/farm_enterprise_economics
+          ssh -F "$d/config" saeit-vps "test -d '$source_root' && test ! -L '$source_root' && test -s '$source_root/manufacturing_manifest.json' && test -s '$source_root/farm_enterprise_economics-internal-qa.zip' && test ! -L '$source_root/manufacturing_manifest.json' && test ! -L '$source_root/farm_enterprise_economics-internal-qa.zip'"
+          ssh -F "$d/config" saeit-vps bash -s -- "$source_root" <<'REMOTE'
+          set -euo pipefail
+          python3 - "$1" <<'PY'
+          import hashlib,json,sys
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          manifest_path=root/"manufacturing_manifest.json"
+          archive=root/"farm_enterprise_economics-internal-qa.zip"
+          doc=json.loads(manifest_path.read_text(encoding="utf8"))
+          if (not isinstance(doc,dict) or doc.get("recipe")!="farm_enterprise_economics"
+                  or doc.get("qa_status")!="passed"
+                  or doc.get("commercial_status")!="private_internal_qa_pass_not_published"
+                  or doc.get("owner_publication_approval") is not False
+                  or doc.get("public_listing_enabled") is not False
+                  or doc.get("price") is not None):
+              raise SystemExit("PREVIEW_SOURCE_MANIFEST_POLICY_INVALID")
+          digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+          if doc.get("artifact_sha256")!=digest:
+              raise SystemExit("PREVIEW_SOURCE_HASH_MISMATCH")
+          ledger=root.parent.parent/"qa-rework"/"farm_enterprise_economics"/"ledger.json"
+          if ledger.is_symlink():
+              raise SystemExit("PREVIEW_REWORK_LEDGER_UNSAFE")
+          if ledger.is_file():
+              state=json.loads(ledger.read_text(encoding="utf8"))
+              history=state.get("history")
+              if (state.get("schema")!="saeit.factory.qa-rework.v1"
+                      or state.get("current_status")!="technical_qa_pass_only_owner_and_content_review_pending"
+                      or not isinstance(history,list) or not history
+                      or not isinstance(history[-1],dict)
+                      or history[-1].get("status")!="technically_recovered"):
+                  raise SystemExit("PREVIEW_PRODUCT_BLOCKED_BY_REWORK")
+          print("FACTORY_PREVIEW_MANIFEST_AND_REWORK_STATE=PASS")
+          print("FACTORY_PREVIEW_ARTIFACT_BYTES="+str(archive.stat().st_size))
+          PY
+          REMOTE
+          scp -q -F "$d/config" "saeit-vps:$source_root/manufacturing_manifest.json" "$d/manufacturing_manifest.json"
+          scp -q -F "$d/config" "saeit-vps:$source_root/farm_enterprise_economics-internal-qa.zip" "$d/farm_enterprise_economics-internal-qa.zip"
+          python3 - "$d" <<'PY'
+          import importlib.util,sys,zipfile
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          spec=importlib.util.spec_from_file_location("factory_sender","scripts/factory_store_sender.py")
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          archive_path=root/"farm_enterprise_economics-internal-qa.zip"
+          digest=module.verify_source(root/"manufacturing_manifest.json",
+              archive_path,"farm_enterprise_economics")
+          source=Path("product_recipes/farm_enterprise_economics")
+          files=sorted(path.relative_to(source).as_posix() for path in source.rglob("*")
+              if path.is_file() and not any(part.startswith(".") or part=="__pycache__"
+                                             for part in path.relative_to(source).parts))
+          with zipfile.ZipFile(archive_path) as archive:
+              if set(archive.namelist())!={"farm_enterprise_economics/"+name for name in files}:
+                  raise SystemExit("PREVIEW_ARCHIVE_SOURCE_FILE_SET_MISMATCH")
+              for name in files:
+                  if archive.read("farm_enterprise_economics/"+name)!=(source/name).read_bytes():
+                      raise SystemExit("PREVIEW_ARCHIVE_SOURCE_BYTES_MISMATCH")
+          print("FACTORY_PREVIEW_SOURCE_TECHNICAL_QA_AND_HASH=PASS")
+          print("FACTORY_PREVIEW_MATCHES_TESTED_REPOSITORY_SOURCE=PASS")
+          print("FACTORY_PREVIEW_ARTIFACT_SHA256="+digest)
+          PY
+          digest="$(python3 - "$d/manufacturing_manifest.json" <<'PY'
+          import json,sys
+          print(json.load(open(sys.argv[1],encoding="utf8"))["artifact_sha256"])
+          PY
+          )"
+          cpanel_free_kib="$(ssh -F "$d/config" saeit-cpanel 'df -Pk /home/zomorod2/mojplaywin.com | awk "NR==2 {print \$4}"')"
+          [[ "$cpanel_free_kib" =~ ^[0-9]+$ ]]
+          artifact_bytes="$(stat -c %s "$d/farm_enterprise_economics-internal-qa.zip")"
+          required_kib="$(( (artifact_bytes * 2 + 67108864) / 1024 ))"
+          test "$cpanel_free_kib" -gt "$required_kib"
+          echo CPANEL_RELEASE_FREE_KIB="$cpanel_free_kib"
+          echo CPANEL_RELEASE_REQUIRED_KIB="$required_kib"
+          inbox=/home/zomorod2/.saeit-factory-inbox
+          receiver_stage="/tmp/saeit-preview-$GITHUB_RUN_ID"
+          ssh -F "$d/config" saeit-cpanel "umask 077; test ! -e '$receiver_stage'; mkdir -m 700 '$receiver_stage'"
+          scp -q -F "$d/config" scripts/store_receiver.py scripts/publish_factory_free_tool.py scripts/factory_commercial_quality_release_guard_v1.py scripts/factory_product_rights_clearance_v1.py scripts/factory_quality_signed_approval_v1.py "saeit-cpanel:$receiver_stage/"
+          ssh -F "$d/config" saeit-cpanel "python3 '$receiver_stage/store_receiver.py' prepare farm_enterprise_economics '$digest' --root '$inbox'"
+          scp -q -F "$d/config" "$d/farm_enterprise_economics-internal-qa.zip" "saeit-cpanel:$inbox/incoming/farm_enterprise_economics/$digest.zip.partial"
+          scp -q -F "$d/config" "$d/manufacturing_manifest.json" "saeit-cpanel:$inbox/incoming/farm_enterprise_economics/$digest.json.partial"
+          ssh -F "$d/config" saeit-cpanel "python3 '$receiver_stage/store_receiver.py' finalize farm_enterprise_economics '$digest' --root '$inbox'"
+          ssh -F "$d/config" saeit-cpanel "python3 '$receiver_stage/publish_factory_free_tool.py' --inbox '$inbox' --webroot /home/zomorod2/mojplaywin.com --authorize-publication --uncertified-preview --expected-sha256 '$digest'"
+          curl -fsS --max-time 20 "https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/" -o "$d/live.html"
+          grep -q "has not received QC1000" "$d/live.html"
+          curl -fsS --max-time 20 "https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/Farm_Enterprise_Economics_Toolkit_Free_v1.zip" -o "$d/public.zip"
+          test "$(sha256sum "$d/public.zip" | awk '{print $1}')" = "$digest"
+          echo FACTORY_PREVIEW_PUBLICATION=verified
+          echo FACTORY_PREVIEW_QC1000_CERTIFIED=false
+          echo FACTORY_PREVIEW_PAYMENT_ENABLED=false
+          ssh -F "$d/config" saeit-cpanel "rm -rf -- $receiver_stage"

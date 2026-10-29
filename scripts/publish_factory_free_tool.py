@@ -17,6 +17,7 @@ import re
 import shutil
 import sys
 import tempfile
+import zipfile
 
 RECIPE = "farm_enterprise_economics"
 PUBLIC_SLUG = "farm-enterprise-economics-v1"
@@ -43,7 +44,14 @@ def digest_file(path):
     return digest.hexdigest()
 
 
-def landing_page(sha):
+def landing_page(sha, *, uncertified_preview=False):
+    eyebrow = ("Uncertified Public Preview · Version 1.0" if uncertified_preview
+               else "Independent Factory Release · Version 1.0")
+    footer_text = ("Public evaluation preview · independent QC1000 certification not completed." if uncertified_preview
+                   else "An independent MojPlayWin digital tools release.")
+    disclosure = ("Free evaluation preview only. It has not received QC1000, independent scientific, professional, or commercial certification. Results are illustrative; validate inputs and decisions with qualified professionals. This is not investment, yield, tax, or legal advice."
+                  if uncertified_preview else "Technical release information and model limitations are listed below.")
+
     if not re.fullmatch("[0-9a-f]{64}", sha):
         raise ValueError("INVALID_SHA256")
     title = "Farm Enterprise Economics Toolkit — Free Edition"
@@ -85,12 +93,13 @@ footer{margin-top:50px;border-top:1px solid #344752;padding-top:25px;color:#c2d1
 <body>
 <main>
 <nav><a href="https://mojplaywin.com/">MojPlayWin</a> / Digital Tools / Farm Enterprise Economics</nav>
-<p class="eyebrow">Independent Factory Release · Version 1.0</p>
+<p class="eyebrow">""" + html.escape(eyebrow) + """</p>
 <h1>Farm Enterprise<br>Economics Toolkit</h1>
 <p class="lead">An offline, downloadable calculator that helps compare farm business units
 using your own selling prices, units sold and operating costs.</p>
 <a class="cta" href=\"""" + PUBLIC_FILENAME + """" download>Download the Free Toolkit (ZIP)</a>
 <p class="muted">No account, payment, API key, or internet connection is needed to run the calculator.</p>
+<section class="card"><h2>Certification and review status</h2><p>""" + html.escape(disclosure) + """</p></section>
 <section class="grid">
 <div class="card"><h2>Enterprise economics</h2><p>Calculate gross revenue, selling fees,
 variable costs, contribution margin and operating profit for up to 100 enterprises.</p></div>
@@ -150,21 +159,28 @@ def secure_parent(webroot):
     return parent
 
 
-def prepare_private_product(inbox):
+def prepare_private_product(inbox, *, uncertified_preview=False, expected_sha256=None):
     inbox = Path(inbox).expanduser().absolute()
     if inbox.is_symlink() or not inbox.is_dir():
         raise ValueError("SOURCE_INBOX_NOT_VERIFIED")
     receiver = _receiver()
-    receipt_dir = inbox / "receipts" / RECIPE
-    receipts = sorted(receipt_dir.glob("*.json")) if receipt_dir.is_dir() else []
-    verified = []
-    for receipt in receipts:
-        digest = receipt.stem
-        if re.fullmatch(r"[0-9a-f]{64}", digest) and receiver.status(inbox, RECIPE, digest):
-            verified.append(digest)
-    if len(verified) != 1:
-        raise ValueError("REQUIRE_EXACTLY_ONE_VERIFIED_RELEASE")
-    digest = verified[0]
+    if expected_sha256 is not None:
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+            raise ValueError("EXPECTED_SHA256_INVALID")
+        if not receiver.status(inbox, RECIPE, expected_sha256):
+            raise ValueError("EXPECTED_RELEASE_NOT_VERIFIED")
+        digest = expected_sha256
+    else:
+        receipt_dir = inbox / "receipts" / RECIPE
+        receipts = sorted(receipt_dir.glob("*.json")) if receipt_dir.is_dir() else []
+        verified = []
+        for receipt in receipts:
+            digest = receipt.stem
+            if re.fullmatch(r"[0-9a-f]{64}", digest) and receiver.status(inbox, RECIPE, digest):
+                verified.append(digest)
+        if len(verified) != 1:
+            raise ValueError("REQUIRE_EXACTLY_ONE_VERIFIED_RELEASE")
+        digest = verified[0]
     src = inbox / "packages" / RECIPE / (digest + ".zip")
     manifest_path = inbox / "packages" / RECIPE / (digest + ".json")
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -183,14 +199,53 @@ def prepare_private_product(inbox):
     spec=importlib.util.spec_from_file_location("factory_1000_public_guard",str(guardpath))
     guard=importlib.util.module_from_spec(spec)
     spec.loader.exec_module(guard)
-    clearance=guard.require_quality_clearance(inbox,RECIPE,digest,data,src)
-    if (clearance.get("status")!="VERIFIED_SIGNED_PREMIUM_1000"
-            or clearance.get("1000_quality_verified") is not True):
-        raise ValueError("QC1000_REQUIRED_FOR_FACTORY_EXIT")
+    # Rights are required for every public distribution, including free previews.
+    # QC1000 remains a separate bar for the certified release path.
+    guard.require_rights_clearance(inbox,RECIPE,digest,src)
+    if not uncertified_preview:
+        clearance=guard.require_quality_clearance(inbox,RECIPE,digest,data,src)
+        if (clearance.get("status")!="VERIFIED_SIGNED_PREMIUM_1000"
+                or clearance.get("1000_quality_verified") is not True):
+            raise ValueError("QC1000_REQUIRED_FOR_FACTORY_EXIT")
     return digest, src
 
 
-def publish(inbox, webroot, *, release_authorized=False):
+
+def is_replaceable_factory_release(public_dir):
+    """Accept only a complete, checksum-bound prior edition of this product."""
+    expected_names = {".htaccess", PUBLIC_FILENAME, "SHA256SUMS.txt", "index.html"}
+    try:
+        entries = list(public_dir.iterdir())
+        if {entry.name for entry in entries} != expected_names:
+            return False
+        if any(entry.is_symlink() or not entry.is_file() for entry in entries):
+            return False
+        package = public_dir / PUBLIC_FILENAME
+        digest = digest_file(package)
+        if ((public_dir / "SHA256SUMS.txt").read_text(encoding="utf-8").strip()
+                != digest + "  " + PUBLIC_FILENAME):
+            return False
+        page = (public_dir / "index.html").read_text(encoding="utf-8")
+        if "Farm Enterprise" not in page or PUBLIC_FILENAME not in page:
+            return False
+        with zipfile.ZipFile(str(package)) as archive:
+            infos = archive.infolist()
+            names = [item.filename for item in infos]
+            if not infos or len(names) != len(set(names)) or archive.testzip() is not None:
+                return False
+            for item in infos:
+                name = item.filename
+                if (not name.startswith(RECIPE + "/") or name.startswith("/")
+                        or "\\" in name or any(part in ("", ".", "..") for part in name.split("/"))
+                        or (item.external_attr >> 16) & 0o170000 == 0o120000):
+                    return False
+        return True
+    except (OSError, ValueError, zipfile.BadZipFile):
+        return False
+
+
+def publish(inbox, webroot, *, release_authorized=False, uncertified_preview=False,
+            expected_sha256=None):
     if release_authorized is not True:
         raise ValueError("EXPLICIT_PUBLICATION_AUTHORIZATION_REQUIRED")
     requested_root = Path(webroot).expanduser().absolute()
@@ -201,12 +256,15 @@ def publish(inbox, webroot, *, release_authorized=False):
     early_public_dir = requested_root / "factory-releases" / PUBLIC_SLUG
     if early_public_dir.is_symlink():
         raise ValueError("PUBLIC_RELEASE_SYMLINK_FORBIDDEN")
+    replace_existing = False
     if early_public_dir.exists() and (
             not early_public_dir.is_dir()
             or not (early_public_dir / "SHA256SUMS.txt").is_file()
             or not (early_public_dir / PUBLIC_FILENAME).is_file()):
         raise ValueError("REFUSING_TO_REPLACE_EXISTING_PUBLIC_RELEASE")
-    digest, source = prepare_private_product(inbox)
+    digest, source = prepare_private_product(
+        inbox, uncertified_preview=uncertified_preview,
+        expected_sha256=expected_sha256)
     parent = secure_parent(requested_root)
     public_dir = parent / PUBLIC_SLUG
     if public_dir.is_symlink():
@@ -219,11 +277,19 @@ def publish(inbox, webroot, *, release_authorized=False):
                 and digest_file(package) == digest
                 and checksums.read_text(encoding="utf-8").strip() ==
                   digest + "  " + PUBLIC_FILENAME):
+            page = (public_dir / "index.html").read_text(encoding="utf-8") if (public_dir / "index.html").is_file() else ""
+            if uncertified_preview and (not (public_dir / "index.html").is_file() or (public_dir / "index.html").is_symlink() or "has not received QC1000" not in page):
+                raise ValueError("EXISTING_PUBLIC_RELEASE_PREVIEW_STATUS_MISMATCH")
             return {"status": "existing_valid_release", "sha256": digest, "url": PUBLIC_URL}
-        raise ValueError("REFUSING_TO_REPLACE_EXISTING_PUBLIC_RELEASE")
+        if not (uncertified_preview and expected_sha256 is not None
+                and is_replaceable_factory_release(public_dir)):
+            raise ValueError("REFUSING_TO_REPLACE_EXISTING_PUBLIC_RELEASE")
+        replace_existing = True
     stage = Path(tempfile.mkdtemp(prefix=".saeit-release-", dir=str(parent)))
     try:
         stage.chmod(0o755)
+        if replace_existing:
+            shutil.copy2(str(public_dir / ".htaccess"), str(stage / ".htaccess"))
         package = stage / PUBLIC_FILENAME
         with source.open("rb") as src, package.open("wb") as dst:
             shutil.copyfileobj(src, dst)
@@ -234,13 +300,28 @@ def publish(inbox, webroot, *, release_authorized=False):
         checksum.write_text(digest + "  " + PUBLIC_FILENAME + "\n", encoding="utf-8")
         checksum.chmod(0o644)
         home = stage / "index.html"
-        home.write_text(landing_page(digest), encoding="utf-8")
+        home.write_text(landing_page(digest, uncertified_preview=uncertified_preview), encoding="utf-8")
         home.chmod(0o644)
-        os.replace(str(stage), str(public_dir))
+        if replace_existing:
+            backup = parent / ("." + PUBLIC_SLUG + ".previous-" + str(os.getpid()))
+            if backup.exists() or backup.is_symlink():
+                raise ValueError("PUBLIC_RELEASE_BACKUP_PATH_CONFLICT")
+            current = parent / PUBLIC_SLUG
+            if not is_replaceable_factory_release(current):
+                raise ValueError("PUBLIC_RELEASE_CHANGED_DURING_REPLACEMENT")
+            os.replace(str(current), str(backup))
+            try:
+                os.replace(str(stage), str(public_dir))
+            except BaseException:
+                os.replace(str(backup), str(public_dir))
+                raise
+            shutil.rmtree(str(backup))
+        else:
+            os.replace(str(stage), str(public_dir))
     finally:
         if stage.exists():
             shutil.rmtree(str(stage))
-    return {"status": "published_public_free_download", "sha256": digest, "url": PUBLIC_URL}
+    return {"status": ("published_public_uncertified_preview" if uncertified_preview else "published_public_free_download"), "sha256": digest, "url": PUBLIC_URL}
 
 
 def main(argv=None):
@@ -248,13 +329,20 @@ def main(argv=None):
     parser.add_argument("--inbox", required=True)
     parser.add_argument("--webroot", required=True)
     parser.add_argument("--authorize-publication", action="store_true")
+    parser.add_argument("--uncertified-preview", action="store_true",
+                        help="Publish a free, clearly disclosed preview without QC1000 certification.")
+    parser.add_argument("--expected-sha256",
+                        help="Require the exact checksum selected by the caller.")
     args = parser.parse_args(argv)
-    result = publish(args.inbox, args.webroot, release_authorized=args.authorize_publication)
+    result = publish(args.inbox, args.webroot, release_authorized=args.authorize_publication,
+                     uncertified_preview=args.uncertified_preview,
+                     expected_sha256=args.expected_sha256)
     print("FACTORY_RELEASE_STATUS=" + result["status"])
     print("FACTORY_RELEASE_URL=" + result["url"])
     print("FACTORY_RELEASE_SHA256=" + result["sha256"])
     print("FACTORY_RELEASE_PRICE=FREE")
     print("FACTORY_RELEASE_PAYMENT_ENABLED=false")
+    print("FACTORY_RELEASE_QC1000_CERTIFIED=" + str(not args.uncertified_preview).lower())
     return 0
 
 
@@ -262,6 +350,8 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except (OSError, ValueError, RuntimeError) as error:
-        print("FACTORY_PUBLICATION_FAILED=" + type(error).__name__ + ":" + str(error)[:140],
-              file=sys.stderr)
+        print("FACTORY_PUBLICATION_FAILED=" + type(error).__name__, file=sys.stderr)
+        reason = str(error)
+        if re.fullmatch(r"[A-Z0-9_]{3,80}", reason):
+            print("FACTORY_PUBLICATION_REASON=" + reason, file=sys.stderr)
         sys.exit(1)

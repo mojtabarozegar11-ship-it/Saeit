@@ -74,6 +74,14 @@
     .arena-categories a{display:inline-block;padding:9px 14px;border:1px solid #7d704f;border-radius:99px;background:#202a36;color:#f6e4be;font-size:.84rem}
     .arena-categories a:hover,.arena-categories a:focus-visible{background:#3b3426}
     .arena-empty{color:#f5ddac;padding:17px 6px}
+    .arena-lobby-tools,.arena-card-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+    .arena-lobby-tools{margin:15px 0 6px}
+    .arena-card-actions{border-top:1px solid #586075;padding-top:15px;margin-top:17px;position:relative}
+    .arena-lobby-button,.arena-card-button{border:1px solid #967a50;border-radius:9px;background:#192330;color:#f9e4b7;font:inherit;font-size:.88rem;min-height:42px;padding:10px 14px;cursor:pointer}
+    .arena-lobby-button[aria-pressed=true],.arena-card-button[aria-pressed=true]{background:#604823;border-color:#e4be7b;color:#fff}
+    .arena-lobby-button:hover,.arena-card-button:hover{background:#354356}
+    .arena-lobby-button:focus-visible,.arena-card-button:focus-visible{outline:3px solid #f5d89f;outline-offset:3px}
+    [dir=rtl] .arena-card-actions{direction:rtl}
     .section[id],#sports,#rules{scroll-margin-top:94px}
     .oracle-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
     .oracle-panel{border:1px solid #806a45;border-radius:16px;background:linear-gradient(135deg,#252032,#111d2a 65%,#12202c);padding:24px;min-width:0}
@@ -222,6 +230,11 @@
         <a id="arena-cat-wagers" href="#wager-lounge">Free MCD Practice · 7</a>
         <a id="arena-cat-predictions" href="#prediction-center">Predictions · 6</a>
       </nav>
+      <div class="arena-lobby-tools" aria-label="Personal game collection">
+        <button class="arena-lobby-button" type="button" id="arena-favs-only" aria-pressed="false">★ Favourites (0)</button>
+        <button class="arena-lobby-button" type="button" id="arena-recent" hidden>Continue last game</button>
+        <button class="arena-lobby-button" type="button" id="arena-back" hidden>← All games</button>
+      </div>
       <p class="arena-empty" id="arena-empty" hidden>No matching games. Try another search.</p>
     </div>
     <section class="section shell" id="casino-floor"><div class="section-head"><div class="eyebrow" data-en="THE CASINO FLOOR" data-fa="بخش کازینو">THE CASINO FLOOR</div><h2 data-en="Your next favourite game starts here" data-fa="بازی دلخواهتان را انتخاب کنید">Your next favourite game starts here</h2><p data-en="Explore roulette, cards and classic games at your own pace. Every game is free to play, with no cash stakes or prizes." data-fa="از رولت و بازی‌های ورقی تا سرگرمی‌های کلاسیک؛ بدون پرداخت پول، شرط نقدی یا جایزه مالی بازی کنید.">Explore roulette, cards and classic games at your own pace. Every game is free to play, with no cash stakes or prizes.</p></div><div class="cards" id="game-grid">
@@ -402,20 +415,93 @@
       es:{label:'Buscar un juego',placeholder:'Ajedrez, dados, ruleta...',count:'{n} experiencias encontradas',empty:'No hay juegos coincidentes. Prueba otra búsqueda.',casino:'Simulaciones de casino · 16',classic:'Ajedrez, backgammon y cartas · 6',dice:'Dados y azar · 15',oracles:'Oráculos y horóscopos · 12'}
     };
     const normalizeFind=s=>String(s).normalize('NFKC').toLowerCase().replace(/[يى]/g,'ی').replace(/ك/g,'ک');
+    // Only locally stored game identifiers; no profiles, passwords or financial data.
+    const ARENA_GRIDS=['game-grid','classic-game-grid','dice-game-grid','oracle-grid','wager-grid','prediction-grid'];
+    const ARENA_FAV_KEY='mpw-arena-favourites-v1',ARENA_RECENT_KEY='mpw-arena-recent-v1';
+    const lobbyCopy={
+      en:{fav:'Favourites',recent:'Continue',back:'← All games',focus:'Play solo',save:'☆ Save',saved:'★ Saved',none:'No matching games. Clear the search or favourites filter.'},
+      fa:{fav:'علاقه‌مندی‌ها',recent:'ادامه بازی',back:'بازگشت به همه بازی‌ها',focus:'اجرای مستقل',save:'☆ ذخیره',saved:'★ ذخیره‌شده',none:'بازی پیدا نشد؛ جست‌وجو یا فیلتر علاقه‌مندی‌ها را پاک کنید.'},
+      ar:{fav:'المفضلة',recent:'متابعة',back:'كل الألعاب',focus:'العب منفرداً',save:'☆ حفظ',saved:'★ محفوظ',none:'لا توجد ألعاب مطابقة؛ امسح البحث أو التصفية.'},
+      de:{fav:'Favoriten',recent:'Fortsetzen',back:'Alle Spiele',focus:'Einzeln spielen',save:'☆ Merken',saved:'★ Gemerkt',none:'Keine Treffer. Suche oder Filter zurücksetzen.'},
+      fr:{fav:'Favoris',recent:'Reprendre',back:'Tous les jeux',focus:'Jouer seul',save:'☆ Enregistrer',saved:'★ Enregistré',none:'Aucun jeu. Effacez la recherche ou le filtre.'},
+      es:{fav:'Favoritos',recent:'Continuar',back:'Todos los juegos',focus:'Jugar solo',save:'☆ Guardar',saved:'★ Guardado',none:'Sin resultados. Borra la búsqueda o el filtro.'}
+    };
+    let soloGame=null,onlyFavorites=false,recentGame=null;
+    const favGames=new Set();
+    try{const parsed=JSON.parse(localStorage.getItem(ARENA_FAV_KEY)||'[]');if(Array.isArray(parsed))for(const key of parsed.slice(0,62))if(typeof key==='string'&&key.length<100)favGames.add(key)}catch(_){}
+    try{recentGame=sessionStorage.getItem(ARENA_RECENT_KEY)}catch(_){}
+    function arenaCards(){return ARENA_GRIDS.flatMap(id=>[...$('#'+id).querySelectorAll('article')])}
+    function rememberArenaFavorites(){try{localStorage.setItem(ARENA_FAV_KEY,JSON.stringify([...favGames]))}catch(_){}}
+    function arenaLobbyRefresh(){
+      const t=lobbyCopy[locale];
+      const favBtn=$('#arena-favs-only'),back=$('#arena-back'),recent=$('#arena-recent');
+      favBtn.textContent='★ '+t.fav+' ('+favGames.size+')';
+      favBtn.setAttribute('aria-pressed',String(onlyFavorites));
+      back.textContent=t.back;back.hidden=!soloGame;
+      const previous=arenaCards().find(x=>x.dataset.arenaKey===recentGame);
+      recent.hidden=!previous||!!soloGame;
+      if(previous)recent.textContent=t.recent+': '+(previous.querySelector('h3')?.textContent||t.focus);
+      for(const item of arenaCards()){
+        const favorite=item.querySelector('[data-arena-favourite]'),focus=item.querySelector('[data-arena-focus]');
+        if(favorite){const saved=favGames.has(item.dataset.arenaKey);favorite.textContent=saved?t.saved:t.save;favorite.setAttribute('aria-pressed',String(saved))}
+        if(focus){focus.textContent=t.focus;focus.setAttribute('aria-label',t.focus+': '+(item.querySelector('h3')?.textContent||''))}
+      }
+    }
+    function arenaOpenSolo(key){
+      if(!arenaCards().some(x=>x.dataset.arenaKey===key))return;
+      soloGame=key;recentGame=key;onlyFavorites=false;$('#arena-search').value='';
+      try{sessionStorage.setItem(ARENA_RECENT_KEY,key)}catch(_){}
+      try{const url=new URL(location.href);url.searchParams.set('play',key);history.replaceState(null,'',url.href)}catch(_){}
+      filterArenaGames();
+      const current=arenaCards().find(x=>x.dataset.arenaKey===key);
+      current?.scrollIntoView({block:'start',behavior:'instant'});
+      current?.querySelector('[data-arena-focus]')?.focus();
+    }
+    function arenaCloseSolo(){
+      soloGame=null;
+      try{const url=new URL(location.href);url.searchParams.delete('play');history.replaceState(null,'',url.href)}catch(_){}
+      filterArenaGames();$('#arena-favs-only').focus();
+    }
+    function initArenaLobby(){
+      for(const id of ARENA_GRIDS){
+        const cards=[...$('#'+id).querySelectorAll('article')];
+        cards.forEach((item,i)=>{
+          const key=id+'-'+i;item.dataset.arenaKey=key;
+          if(item.querySelector('.arena-card-actions'))return;
+          const actions=document.createElement('div');actions.className='arena-card-actions';
+          const play=document.createElement('button');play.type='button';play.className='arena-card-button';play.dataset.arenaFocus='';play.addEventListener('click',()=>arenaOpenSolo(key));
+          const favorite=document.createElement('button');favorite.type='button';favorite.className='arena-card-button';favorite.dataset.arenaFavourite='';favorite.addEventListener('click',()=>{
+            if(favGames.has(key))favGames.delete(key);else favGames.add(key);
+            rememberArenaFavorites();arenaLobbyRefresh();
+            if(onlyFavorites)filterArenaGames();
+          });
+          actions.append(play,favorite);item.append(actions);
+        });
+      }
+      // Drop identifiers of cards no longer present in the current release.
+      const valid=new Set(arenaCards().map(x=>x.dataset.arenaKey));
+      for(const key of favGames)if(!valid.has(key))favGames.delete(key);
+      if(recentGame&&!valid.has(recentGame))recentGame=null;
+      $('#arena-favs-only').addEventListener('click',()=>{soloGame=null;onlyFavorites=!onlyFavorites;$('#arena-search').value='';try{const url=new URL(location.href);url.searchParams.delete('play');history.replaceState(null,'',url.href)}catch(_){}filterArenaGames()});
+      $('#arena-back').addEventListener('click',arenaCloseSolo);
+      $('#arena-recent').addEventListener('click',()=>{if(recentGame)arenaOpenSolo(recentGame)});
+      try{const linked=new URL(location.href).searchParams.get('play');if(linked&&valid.has(linked))soloGame=linked}catch(_){}
+      filterArenaGames();
+    }
     function filterArenaGames(){
       const query=normalizeFind($('#arena-search').value.trim());let count=0;
-      for(const id of ['game-grid','classic-game-grid','dice-game-grid','oracle-grid','wager-grid','prediction-grid']){
+      for(const id of ARENA_GRIDS){
         const grid=$('#'+id),cards=[...grid.querySelectorAll('article')];
         for(const item of cards){
           const title=item.querySelector('h3')?.textContent||'';
           const description=item.querySelector('p')?.textContent||'';
-          const show=!query||normalizeFind(title+' '+description).includes(query);
+          const show=(!soloGame||item.dataset.arenaKey===soloGame)&&(!onlyFavorites||favGames.has(item.dataset.arenaKey))&&(!query||normalizeFind(title+' '+description).includes(query));
           item.hidden=!show;if(show)count++;
         }
-        grid.closest('section').hidden=!!query&&cards.length>0&&cards.every(x=>x.hidden);
+        grid.closest('section').hidden=cards.length>0&&cards.every(x=>x.hidden);
       }
       $('#arena-count').textContent=finderCopy[locale].count.replace('{n}',String(count));
-      $('#arena-empty').hidden=count!==0;
+      $('#arena-empty').hidden=count!==0;arenaLobbyRefresh();
     }
     function translateArenaFinder(){
       const t=finderCopy[locale];
@@ -425,7 +511,7 @@
       $('#arena-cat-classic').textContent=t.classic;
       $('#arena-cat-dice').textContent=t.dice;
       $('#arena-cat-oracles').textContent=t.oracles;
-      $('#arena-empty').textContent=t.empty;
+      $('#arena-empty').textContent=soloGame?t.empty:lobbyCopy[locale].none;
       filterArenaGames();
     }
 
@@ -1118,6 +1204,7 @@
     translateNewGames();
     resetStatuses();
     $('#arena-search').addEventListener('input',filterArenaGames);
+    document.addEventListener('moj-arena-ready',initArenaLobby,{once:true});
     translateArenaFinder();
   })();
 
@@ -1980,6 +2067,7 @@
   if(languageChoice==='en')translate();
   else $('#language').dispatchEvent(new Event('change'));
   notice(tr('choose'));odds();bjRender();pokerRender();
+  document.dispatchEvent(new Event('moj-arena-ready'));
 })();
 
   </script>

@@ -1,0 +1,182 @@
+name: MojPlayWin cPanel isolated change candidate
+# Transfers a reviewed Git diff to a private, non-web inbox on cPanel.
+# It does not apply the patch, restart Passenger, alter databases, or publish files.
+on:
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: "Full commit SHA immediately before the reviewed change"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojplaywin-cpanel-change-candidate
+  cancel-in-progress: false
+
+jobs:
+  stage-change-candidate:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate reviewed diff and build private candidate package
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+          HEAD_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          base = os.environ["BASE_SHA"].strip().lower()
+          head = os.environ["HEAD_SHA"].strip().lower()
+          if not re.fullmatch(r"[0-9a-f]{40}", base) or not re.fullmatch(r"[0-9a-f]{40}", head):
+              raise SystemExit("base_sha and head SHA must be full 40-character commit IDs")
+          subprocess.run(["git", "cat-file", "-e", f"{base}^{{commit}}"], check=True)
+          subprocess.run(["git", "cat-file", "-e", f"{head}^{{commit}}"], check=True)
+          subprocess.run(["git", "merge-base", "--is-ancestor", base, head], check=True)
+
+          raw = subprocess.run(
+              ["git", "diff", "--name-only", "-z", base, head],
+              check=True, capture_output=True
+          ).stdout
+          paths = sorted({p.decode("utf-8") for p in raw.split(b"\0") if p})
+          if not paths:
+              raise SystemExit("No changed files exist between the selected commits")
+          if len(paths) > 500:
+              raise SystemExit("Candidate exceeds the 500-file safety limit")
+
+          blocked_parts = {".git", ".github", "node_modules", "venv", ".venv",
+                           "media", "uploads", "backups", "backup", "secrets"}
+          blocked_suffixes = {".pem", ".key", ".p12", ".pfx", ".sqlite", ".sqlite3",
+                              ".db", ".dump", ".sql"}
+          for p in paths:
+              parts = Path(p).parts
+              name = Path(p).name.lower()
+              if not p or p.startswith("/") or ".." in parts:
+                  raise SystemExit(f"Unsafe repository path rejected: {p!r}")
+              if blocked_parts.intersection(parts) or name.startswith(".env") or Path(name).suffix in blocked_suffixes:
+                  raise SystemExit(f"Sensitive or non-deployable path rejected: {p!r}")
+
+          bundle = Path(os.environ["RUNNER_TEMP"]) / "cpanel-candidate"
+          bundle.mkdir(mode=0o700)
+          patch = bundle / "change.patch"
+          with patch.open("wb") as out:
+              subprocess.run(["git", "diff", "--binary", base, head, "--", *paths],
+                             check=True, stdout=out)
+          digest = hashlib.sha256(patch.read_bytes()).hexdigest()
+          (bundle / "patch.sha256").write_text(f"{digest}  change.patch\n", encoding="ascii")
+          manifest = {
+              "classification": "PRIVATE_UNAPPLIED_CHANGE_CANDIDATE",
+              "base_sha": base,
+              "head_sha": head,
+              "run_id": os.environ["RUN_ID"],
+              "run_attempt": os.environ["RUN_ATTEMPT"],
+              "file_count": len(paths),
+              "files": paths,
+              "patch_sha256": digest,
+              "applied": False,
+              "published": False,
+          }
+          (bundle / "manifest.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+              encoding="utf-8"
+          )
+          if sum(p.stat().st_size for p in bundle.iterdir()) > 15 * 1024 * 1024:
+              raise SystemExit("Candidate package exceeds the 15 MiB safety limit")
+          PY
+          tar -czf "$RUNNER_TEMP/cpanel-candidate.tar.gz" -C "$RUNNER_TEMP/cpanel-candidate" change.patch patch.sha256 manifest.json
+
+      - name: Establish pinned SSH relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-change-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          chmod 600 "$d/host.known"
+
+      - name: Transfer patch to private cPanel inbox (never apply)
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-change-ssh"
+          candidate_id="${RUN_ID}-${RUN_ATTEMPT}"
+          root="/home/zomorod2/.codex-change-candidates"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel "set -eu; root='$root'; test ! -L \"\$root\"; install -d -m 700 \"\$root\"; test \"\$(stat -c %U \"\$root\")\" = zomorod2; test \"\$(stat -c %a \"\$root\")\" = 700"
+          timeout 30s scp -F "$d/config" "$RUNNER_TEMP/cpanel-candidate.tar.gz" "saeit-cpanel:$root/.incoming-$candidate_id.tar.gz"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel bash -s -- "$candidate_id" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          candidate_id="$1"
+          root="/home/zomorod2/.codex-change-candidates"
+          archive="$root/.incoming-$candidate_id.tar.gz"
+          temp="$root/.unpack-$candidate_id"
+          final="$root/$candidate_id"
+          test -f "$archive"
+          test ! -e "$final"
+          mkdir -m 700 "$temp"
+          tar -xzf "$archive" -C "$temp" --no-same-owner --no-same-permissions
+          (cd "$temp" && sha256sum -c patch.sha256)
+          test -s "$temp/manifest.json"
+          test -f "$temp/change.patch"
+          rm -f "$archive"
+          mv "$temp" "$final"
+          printf 'PRIVATE_CANDIDATE_STAGED id=%s applied=false published=false\n' "$candidate_id"
+          REMOTE

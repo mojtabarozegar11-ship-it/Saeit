@@ -137,3 +137,56 @@ test('TRON TRC20 USDT reads official contract without signing', async () => {
   assert.equal(await getTrc20Usdt(tronWeb,address),'12.345678 USDT');
   assert.deepEqual(methods,['balanceOf','decimals']);
 });
+
+
+const { circleAmount, circleMembers, circleOrder, makeCirclePlan, circleCSV } = require('./app.js');
+
+test('circle contribution precision and non-positive or malformed values', () => {
+  assert.equal(circleAmount('125.75'), 12575n);
+  assert.equal(circleAmount('0.01'), 1n);
+  for (const bad of ['0', '-1', '1.001', '01', '2e6', 'Infinity', '1000000000']) {
+    assert.throws(() => circleAmount(bad));
+  }
+});
+
+test('circle enforces 5–20 unique, non-sensitive member aliases', () => {
+  const five = ['Member A', 'Member B', 'Member C', 'Member D', 'Member E'];
+  assert.deepEqual(circleMembers(five), five);
+  assert.throws(() => circleMembers(five.slice(0, 4)), /5 to 20/);
+  assert.throws(() => circleMembers(Array(21).fill('A')), /5 to 20/);
+  assert.throws(() => circleMembers(['A','B','C','D','a']), /distinct/);
+  assert.throws(() => circleMembers(['A','B','C','D','=SUM(1,2)']), /alias/);
+  assert.throws(() => circleMembers(['A','B','C','D','']), /alias/);
+});
+
+test('secure randomized draw gives every member exactly one monthly turn', () => {
+  const names = ['A','B','C','D','E'];
+  let calls = 0;
+  const rng = { getRandomValues(buffer) { calls++; buffer[0] = calls; return buffer; } };
+  const p = makeCirclePlan({name:'Team circle',members:names,monthly:'125.75',start:'2026-12'},rng);
+  assert.equal(calls, 4);
+  assert.equal(p.schedule.length, 5);
+  assert.deepEqual(new Set(p.schedule.map(row=>row.recipient)), new Set(names));
+  assert.deepEqual(p.schedule.map(row=>row.month),['2026-12','2027-01','2027-02','2027-03','2027-04']);
+  assert.ok(p.schedule.every(row => row.expectedPool===62875n));
+  assert.equal(p.monthly,12575n);
+  assert.equal(p.members.length,5);
+  assert.equal(circleCSV(p).split('\r\n').length,7);
+});
+
+test('draw refuses weak randomness, invalid dates and invalid group sizes', () => {
+  const names = ['A','B','C','D','E'];
+  const args = { name:'Community circle',members:names,monthly:'10.00',start:'2026-11' };
+  assert.throws(() => makeCirclePlan(args,null), /secure browser random/);
+  assert.throws(() => makeCirclePlan({...args,start:'2026-13'},{getRandomValues(){}}), /starting month/);
+  assert.throws(() => makeCirclePlan({...args,members:['A','B','C']},{getRandomValues(){}}), /5 to 20/);
+});
+
+test('CSV import does not interpret spreadsheet formulas as executable cells', () => {
+  const names=['A','B','C','D','E'];
+  const rng={getRandomValues(buffer){buffer[0]=0;return buffer;}};
+  const plan=makeCirclePlan({name:'=2+2',members:names,monthly:'1.00',start:'2026-11'},rng);
+  const csv=circleCSV(plan);
+  assert.ok(csv.includes("\"'=2+2\""));
+  assert.ok(!csv.includes(',"=2+2"'));
+});
