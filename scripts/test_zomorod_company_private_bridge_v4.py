@@ -109,8 +109,10 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(bridge.Rejected):
             bridge.import_task(self.dbfile, json.dumps(raw).encode(), self.key, self.now)
         self.assertEqual(self.counts(), (0, 0, 0))
+        forged = json.loads(self.envelope().decode("utf-8"))
+        forged["sig"] = "0" * 64
         with self.assertRaises(bridge.Rejected):
-            bridge.import_task(self.dbfile, self.envelope(sig="0" * 64), self.key, self.now)
+            bridge.import_task(self.dbfile, json.dumps(forged).encode(), self.key, self.now)
 
     def test_old_future_replayed_and_wrong_operation_rejected(self):
         for changed in (
