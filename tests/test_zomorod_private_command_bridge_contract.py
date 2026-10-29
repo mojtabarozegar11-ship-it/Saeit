@@ -254,3 +254,31 @@ def test_action_actor_identity_is_checked_for_manual_and_app_comments(tmp_path):
     ]:
         result, _, _ = _run_gate(event, event_name, tmp_path, actor=actor)
         assert (result.returncode == 0) is permitted, (event_name, actor, result.stderr)
+
+
+def test_emergency_direct_cpanel_path_never_lowers_identity_or_host_key_pins():
+    source = _source()
+    assert "Host saeit-cpanel-direct" in source
+    direct = source.split("Host saeit-cpanel-direct", 1)[1].split("Host *", 1)[0]
+    for line in (
+        "HostName 178.239.147.125",
+        "User zomorod2",
+        "Port 1396",
+        "IdentityFile $d/host.key",
+        "UserKnownHostsFile $d/host.known",
+        "ProxyJump none",
+    ):
+        assert line in direct
+    assert "StrictHostKeyChecking yes" in source
+    assert "if test \"$session_ready\" = 1; then" in source
+    assert "command_host=saeit-cpanel" in source
+    assert "command_host=saeit-cpanel-direct" in source
+    assert "PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED" in source
+    assert "PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE" in source
+    assert 'printf \'command_host=%s\\n\' "$command_host" >> "$GITHUB_OUTPUT"' in source
+    assert source.count('case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct)') == 2
+    assert source.count('COMMAND_HOST: ${{ steps.link.outputs.command_host }}') == 2
+    assert 'ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" "$COMMAND_HOST"' in source
+    assert 'ssh -F "$d/config" "$COMMAND_HOST"' in source
+    assert "UserKnownHostsFile /dev/null" not in source
+    assert "StrictHostKeyChecking no" not in source
