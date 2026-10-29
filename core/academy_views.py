@@ -345,9 +345,15 @@ def education_bookmark(request, slug, lesson_id):
         raise Http404
     # Bookmark toggles are writes. Missing course/lesson/bookmark tables must
     # never be misreported as deleted lessons or trigger a partial mutation.
-    if missing_public_tables(EducationCourse, EducationLesson, EducationBookmark):
+    if missing_public_tables(EducationCourse, EducationLesson, EducationBookmark, EducationEnrollment):
         return unavailable_enrollment_response()
     lesson = get_object_or_404(EducationLesson, pk=lesson_id, course__slug=slug, course__active=True, course__approved=True, active=True)
+    # Bookmark endpoints must enforce the same entitlement as lesson reads:
+    # otherwise a signed-in non-buyer can save and reveal paid lesson metadata.
+    if not lesson.is_free_preview and not EducationEnrollment.objects.filter(
+        user=request.user, course=lesson.course, status__in=("active", "completed")
+    ).exists():
+        return JsonResponse({"ok": False, "error": "enrollment_required"}, status=403)
     bookmark = EducationBookmark.objects.filter(user=request.user, lesson=lesson).first()
     if bookmark:
         bookmark.delete()
