@@ -23,6 +23,8 @@ const {chromium}=require('playwright');
     });
     assert.ok(choice,'at least one legal arrow');
     const before=await page.evaluate(()=>window.ArrowMazeDebug.getState().remaining);
+    const domIds=await page.locator('[data-arrow-id]').evaluateAll(els=>els.map(el=>el.getAttribute('data-arrow-id')));
+    assert.ok(domIds.includes(choice),JSON.stringify({device:device.name,choice,domIds:domIds.slice(0,12),errors}));
     const selector='[data-arrow-id="'+choice+'"]';
     await page.locator(selector).focus();
     assert.equal(await page.locator(selector).getAttribute('tabindex'),'0');
