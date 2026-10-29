@@ -1,3 +1,4 @@
+from urllib.parse import unquote, urlsplit
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import render
@@ -9,10 +10,30 @@ from .public_catalog_guard import missing_public_tables, mark_public_data_unavai
 
 
 def safe_gallery_target_path(path):
-    """Allow only local, absolute, non-protocol gallery links in public HTML."""
+    """Reject disguised network-path and traversal links; keep safe local URLs."""
     if not isinstance(path, str) or not path.startswith("/") or path.startswith("//"):
         return ""
     if "\\" in path or any(ord(ch) < 32 or ord(ch) == 127 for ch in path):
+        return ""
+    try:
+        parsed = urlsplit(path)
+        if parsed.scheme or parsed.netloc or not parsed.path.startswith("/"):
+            return ""
+        decoded = parsed.path
+        # Multiple URL decoding stages can turn /%252fhost into //host.
+        # Fail closed without changing the displayed gallery or the stored URL.
+        for _ in range(3):
+            decoded_next = unquote(decoded)
+            if decoded_next == decoded:
+                break
+            decoded = decoded_next
+            if decoded.startswith("//") or "\\" in decoded:
+                return ""
+            if any(ord(ch) < 32 or ord(ch) == 127 for ch in decoded):
+                return ""
+        if decoded.startswith("//") or any(segment in (".", "..") for segment in decoded.split("/")):
+            return ""
+    except ValueError:
         return ""
     return path
 
