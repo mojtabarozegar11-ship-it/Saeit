@@ -144,10 +144,20 @@ function exportCampaignBackup(){
  const current=world&&!world.endless?JSON.stringify({...world,pickups:boundedCampaignPickups(world.pickups)}):storageRead(saveKey);
  const backup=makeCampaignBackup(current);
  if(!backup){toast('پیشرفت معتبر برای پشتیبان‌گیری پیدا نشد');return}
- const url=URL.createObjectURL(new Blob([backup],{type:'application/json'}));
- const a=document.createElement('a');a.href=url;a.download='ramadan-war-campaign-backup.json';
- document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
- toast('فایل پشتیبان بازی آماده شد');
+ let url=null;
+ try{
+  url=URL.createObjectURL(new Blob([backup],{type:'application/json'}));
+  const a=document.createElement('a');a.href=url;a.download='ramadan-war-campaign-backup.json';
+  document.body.appendChild(a);
+  try{a.click()}finally{a.remove()}
+  // Keep the object URL alive for slow mobile download hand-off.
+  const pendingUrl=url;setTimeout(()=>URL.revokeObjectURL(pendingUrl),60000);
+  url=null;
+  toast('درخواست دانلود پشتیبان ارسال شد؛ ذخیرهٔ فایل را در دانلودها بررسی کنید');
+ }catch(_){
+  if(url)URL.revokeObjectURL(url);
+  toast('دانلود پشتیبان ممکن نشد؛ پیشرفت فعلی را حفظ کنید و دوباره تلاش کنید');
+ }
 }
 $('#exportSave').onclick=exportCampaignBackup;$('#exportPauseSave').onclick=exportCampaignBackup;$('#resultExport').onclick=exportCampaignBackup;$('#retrySave').onclick=()=>{save();updatePauseSaveStatus();if(saveStatus==='saved')toast('پیشرفت کارزار اکنون ذخیره شد')};
 $('#importSave').onclick=()=>$('#importSaveFile').click();
