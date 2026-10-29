@@ -103,6 +103,21 @@ class ArtifactGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "compression ratio"):
             gate.checked_entries(FakeArchive(), {"bomb"})
 
+    def test_unix_device_and_fifo_zip_entries_rejected_before_crc(self):
+        from types import SimpleNamespace
+        import stat
+        for file_type in (stat.S_IFCHR, stat.S_IFBLK, stat.S_IFIFO, stat.S_IFSOCK, stat.S_IFDIR):
+            with self.subTest(file_type=file_type):
+                class FakeArchive:
+                    def infolist(self):
+                        return [SimpleNamespace(filename="ramadan-war/fake",
+                                                file_size=0, compress_size=0,
+                                                external_attr=(file_type | 0o600) << 16)]
+                    def testzip(self):
+                        raise AssertionError("CRC must not run on nonregular entry")
+                with self.assertRaisesRegex(ValueError, "unsafe archive entry"):
+                    gate.checked_entries(FakeArchive(), {"ramadan-war/fake"})
+
     def test_traversal_asset_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "unsafe archive entry"):
             gate.verify(fixture(traversal=True), REV, gate.git_blob(GAME))
