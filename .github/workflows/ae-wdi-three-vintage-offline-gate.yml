@@ -1,0 +1,26 @@
+name: AE WDI offline archive gate - synthetic parser tests only
+on:
+  push:
+    branches: [research/mr-2026-001-novelty-audit]
+    paths:
+      - research/quality_gates/ae_wdi_three_vintage_offline_gate.py
+      - research/quality_gates/test_ae_wdi_three_vintage_offline_gate.py
+      - .github/workflows/ae-wdi-three-vintage-offline-gate.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-parser-only:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax and negative regression fixtures - NO WDI download
+        run: |
+          python -m py_compile research/quality_gates/ae_wdi_three_vintage_offline_gate.py research/quality_gates/test_ae_wdi_three_vintage_offline_gate.py
+          python -m unittest discover -s research/quality_gates -p 'test_ae_wdi_three_vintage_offline_gate.py' -v
