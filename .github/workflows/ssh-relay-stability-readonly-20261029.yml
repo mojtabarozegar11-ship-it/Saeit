@@ -1,0 +1,59 @@
+name: One-shot SSH relay stability diagnostic (no credentials)
+on:
+  push:
+    branches:
+      - diagnostics/ssh-relay-flapping-20261029
+    paths:
+      - .github/workflows/ssh-relay-stability-readonly-20261029.yml
+permissions:
+  contents: read
+jobs:
+  tcp-and-host-key:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Sample pinned VPS and cPanel endpoints without authentication
+        shell: bash
+        run: |
+          set -euo pipefail
+          vps_pin='SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cpanel_pin='SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          vps_ok=0
+          cpanel_ok=0
+          mismatch=0
+          for sample in 1 2 3 4; do
+            echo "SAMPLE=$sample UTC=$(date -u +%H:%M:%S)"
+            for target in vps cpanel; do
+              case "$target" in
+                vps) host='178.239.147.150'; port=22; keytype=rsa; pin="$vps_pin" ;;
+                cpanel) host='zohal.pws-dns.net'; port=1396; keytype=ed25519; pin="$cpanel_pin" ;;
+              esac
+              keyfile="$RUNNER_TEMP/${target}-${sample}.pub"
+              timeout 9s ssh-keyscan -T 6 -p "$port" -t "$keytype" "$host" > "$keyfile" 2>/dev/null || true
+              if test ! -s "$keyfile"; then
+                echo "RESULT target=$target sample=$sample status=NO_SSH_KEY"
+                continue
+              fi
+              fingerprints="$(ssh-keygen -lf "$keyfile" -E sha256 2>/dev/null | awk '{print $2}' | sort -u || true)"
+              if test "$fingerprints" = "$pin"; then
+                echo "RESULT target=$target sample=$sample status=PINNED_KEY_SEEN"
+                if test "$target" = vps; then vps_ok=$((vps_ok+1)); else cpanel_ok=$((cpanel_ok+1)); fi
+              else
+                echo "RESULT target=$target sample=$sample status=KEY_MISMATCH_STOP"
+                mismatch=1
+              fi
+            done
+            if test "$sample" -lt 4; then sleep 7; fi
+          done
+          echo "SUMMARY VPS_PINNED_SAMPLES=$vps_ok/4 CPANEL_PINNED_SAMPLES=$cpanel_ok/4"
+          if test "$mismatch" -ne 0; then
+            echo "UNEXPECTED_HOST_IDENTITY=TRUE"
+            exit 2
+          fi
+          if test "$vps_ok" -eq 0; then
+            echo "VPS_DIRECT_SSH=UNREACHABLE_IN_ALL_SAMPLES"
+            exit 1
+          fi
+          if test "$vps_ok" -lt 4; then
+            echo "VPS_DIRECT_SSH=INTERMITTENT"
+          fi
