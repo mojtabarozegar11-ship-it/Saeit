@@ -88,6 +88,7 @@ def require_rights_clearance(inbox, recipe, artifact_sha256, package_path,
     evidence_root = root / "rights-evidence"
     if (directory.is_symlink()
             or (root / "rights-clearance").is_symlink()
+            or (root / "rights-clearance" / recipe).is_symlink()
             or (root / "quality-trust").is_symlink()
             or evidence_root.is_symlink()):
         raise ValueError("RIGHTS_PRIVATE_EVIDENCE_PATH_UNSAFE")
@@ -110,7 +111,8 @@ def require_rights_clearance(inbox, recipe, artifact_sha256, package_path,
             or not isinstance(manifest.get("territory"), str)
             or not manifest["territory"].strip()
             or not isinstance(manifest.get("term"), str)
-            or not manifest["term"].strip()):
+            or not manifest["term"].strip()
+            or type(manifest.get("commercial_distribution")) is not bool):
         raise ValueError("RIGHTS_MANIFEST_SCOPE_OR_VERSION_INVALID")
     if commercial_distribution and manifest.get("commercial_distribution") is not True:
         raise ValueError("COMMERCIAL_DISTRIBUTION_RIGHTS_NOT_GRANTED")
@@ -169,7 +171,10 @@ def require_rights_clearance(inbox, recipe, artifact_sha256, package_path,
         raise ValueError("RIGHTS_TRUST_REGISTRY_INVALID") from exc
     signers = {}
     payload = canonical(signed)
-    for row in receipt.get("approvals", []):
+    approvals = receipt.get("approvals")
+    if not isinstance(approvals, list):
+        raise ValueError("RIGHTS_REVIEWER_AND_OWNER_SIGNATURES_REQUIRED")
+    for row in approvals:
         if not isinstance(row, dict) or set(row) != {"reviewer_id", "role", "signature_hex"}:
             continue
         signer = row["reviewer_id"]
