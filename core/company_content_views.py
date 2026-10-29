@@ -65,12 +65,24 @@ def company_portal_home(request):
         if all(request.POST.get(x, "").strip() for x in required):
             if missing_public_tables(CompanyInquiry):
                 return _company_temporarily_unavailable()
-            CompanyInquiry.objects.create(
-                kind=request.POST["kind"].strip(), name=request.POST["name"].strip(),
-                organization=request.POST.get("organization", "").strip(), email=request.POST["email"].strip(),
-                phone=request.POST.get("phone", "").strip(), subject=request.POST["subject"].strip(),
-                message=request.POST["message"].strip(),
-            )
+            # Validate model choices, email format and database field lengths
+            # before any insert. Invalid user input must not become a 500 or
+            # a false confirmation, and must not be copied into public logs.
+            from django.core.exceptions import ValidationError
+            fields = {
+                "kind": request.POST["kind"].strip(), "name": request.POST["name"].strip(),
+                "organization": request.POST.get("organization", "").strip(),
+                "email": request.POST["email"].strip(),
+                "phone": request.POST.get("phone", "").strip(),
+                "subject": request.POST["subject"].strip(),
+                "message": request.POST["message"].strip(),
+            }
+            try:
+                CompanyInquiry(**fields).full_clean(validate_unique=False, validate_constraints=False)
+            except ValidationError:
+                messages.error(request, "اطلاعات درخواست معتبر نیست؛ لطفاً فیلدها را اصلاح کنید.")
+                return redirect("company")
+            CompanyInquiry.objects.create(**fields)
             messages.success(request, "درخواست شما با موفقیت ثبت شد و برای بررسی کارشناسی ارسال گردید.")
         else:
             messages.error(request, "لطفاً تمام فیلدهای الزامی را تکمیل کنید.")
