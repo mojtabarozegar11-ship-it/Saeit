@@ -112,9 +112,17 @@ jobs:
             if test -n "$scan"; then break; fi
             sleep 2
           done
-          test -n "$scan"
+          if test -z "$scan"; then
+            echo "CPANEL_KEYSCAN=EMPTY"
+            exit 1
+          fi
           printf '%s\n' "$scan" > "$d/host.candidate"
-          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          observed="$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)"
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
           cp "$d/host.candidate" "$d/host.known"
           echo "CPANEL_HOST_KEY=verified"
           echo "PINNED_PRIVATE_RELAY=verified"
