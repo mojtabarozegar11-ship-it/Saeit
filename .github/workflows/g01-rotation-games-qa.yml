@@ -60,3 +60,4 @@ jobs:
           node tests/game/g01-r28-studios-browser.cjs
           node --test tests/game/g01-r29-crown-fleet-save.test.cjs
           node tests/game/g01-r29-echo-pause-browser.cjs
+          node games/g01-handoffs/g01_s01_mobile_readonly_audit_r29.cjs --self-test
