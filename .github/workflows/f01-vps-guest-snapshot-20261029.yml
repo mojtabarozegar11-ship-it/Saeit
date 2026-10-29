@@ -6,6 +6,9 @@ on:
     paths:
       - .github/workflows/f01-vps-guest-snapshot-20261029.yml
       - scripts/f01_vps_console_snapshot_readonly_20261029.py
+      - scripts/f01_s01_release_preflight_20261029.py
+      - tests/test_f01_vps_console_snapshot_readonly_20261029.py
+      - tests/test_f01_s01_release_preflight_20261029.py
 permissions:
   contents: read
 concurrency:
@@ -18,6 +21,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Verify F-01 read-only diagnostic and S-01 release preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_vps_console_snapshot_readonly_20261029.py'
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_s01_release_preflight_20261029.py'
       - name: Authenticate pinned VPS and collect non-mutating evidence
         shell: bash
         env:
