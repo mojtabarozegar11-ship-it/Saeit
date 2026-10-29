@@ -162,7 +162,13 @@ jobs:
           print('ELIGIBLE_HTML_COUNT='+str(len(allowed)))
           private=Path.home()/'.private/zomorod-business/management.sqlite3'
           if private.is_file():
-              db_mode=private.stat().st_mode & 0o777
+              db_stat=private.stat()
+              db_mode=db_stat.st_mode & 0o777
+              dir_stat=private.parent.stat()
+              print("BUSINESS_DB_MODE="+format(db_mode,"03o"))
+              print("BUSINESS_DB_OWNED_BY_SSH_USER="+str(db_stat.st_uid==os.geteuid()))
+              print("BUSINESS_PRIVATE_DIR_MODE="+format(dir_stat.st_mode & 0o777,"03o"))
+              print("BUSINESS_PRIVATE_DIR_OWNED_BY_SSH_USER="+str(dir_stat.st_uid==os.geteuid()))
               print("BUSINESS_DB_PRIVATE_PERMISSIONS="+str((db_mode & 0o077)==0))
               print("BUSINESS_DB_SIZE_BYTES="+str(private.stat().st_size))
               try:
