@@ -1,0 +1,90 @@
+name: Owner private leech manuscript encrypted recovery
+on:
+  push:
+    branches: ['owner/leech-private-transfer-20261029']
+    paths: ['.github/workflows/owner-leech-private-transfer-20261029.yml']
+permissions: {contents: read}
+jobs:
+  recover-encrypted-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Read original VPS source without any server write and encrypt in transit
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "${VPS_KEY:-}"
+          work="$RUNNER_TEMP/owner-leech-export"
+          install -d -m 700 "$work"
+          trap 'rm -f -- "$work/key" "$work/recipient.crt"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" > /dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$work/recipient.crt" <<'PUBLIC_CERT'
+-----BEGIN CERTIFICATE-----
+MIIEOzCCAqOgAwIBAgIUGXUBGM6JTgdoIMkmtWZ6QXpjuigwDQYJKoZIhvcNAQEL
+BQAwLTErMCkGA1UEAwwibGVlY2gtbWFudXNjcmlwdC10cmFuc2Zlci0yMDI2MTAy
+OTAeFw0yNjEwMjkwNzE0MzZaFw0yNjEwMzAwNzE0MzZaMC0xKzApBgNVBAMMImxl
+ZWNoLW1hbnVzY3JpcHQtdHJhbnNmZXItMjAyNjEwMjkwggGiMA0GCSqGSIb3DQEB
+AQUAA4IBjwAwggGKAoIBgQDAbzebgGfpb4exIwb+EK4gwGLGZ9uqic4/agScgy3v
+wQxIwp7CoRmdiV7XWdgInwsI16sLQ7BPE1c70dx5RZdaJTYob3G2jP2Sywj0qWho
+nXAIVJBYiTs1DpV7AmZA+4BZKWrYh0Ybw1I9qp7DWiKimCRqi1X1paqxlTAm7U7n
+JMCGxaq7cqpCasnBKZWY+cRLRygHawVUp97xH2408LgWfHd2++Y6yepqHAUSfyuJ
+X8O/kZOZ6q7fptgrpMIO7NITT1li8fvizqUOUOuUBv86Mpuv8ZWUW6GkbN7zKnpQ
+CEGuapNYTFQBb7t1eiT9MjjRibgEqUXMnppOZJSpPQIO7nTeOqpmmRripOfDBwNn
+VdBgWZ3O0kAoXr26xpdoMUt7zffEBj43IQuGEiSb/Xs03Wi5LV61hWnlZvTYTwiX
+kbq9RfXe4dNQ5xUob4RAPUfC4uAjuo2gJHbROi3zp+bTlKL+TJNairVyGV39awoA
+/R4euyHJgKjARaIFy3426xMCAwEAAaNTMFEwHQYDVR0OBBYEFKQe6W+ERuWK6Nx+
+9DjGhF7nzG1dMB8GA1UdIwQYMBaAFKQe6W+ERuWK6Nx+9DjGhF7nzG1dMA8GA1Ud
+EwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggGBAIq6iztS0bdAvZ3W45yzpbGy
+4bcU7LJ0514OwcmkfSy8/owJZn5pLtiJhlS4nnTzqozbon4CijSpsK3kR3pI1VsF
+ZJmazQ83w6SK3MVSRsCQqkdRUzu+fPnU7W+ghSabW05wp0gkT8LQwukf2abHOz68
+A3+p8iOHi1dtmcAlpHq6htSU+kViJdsLkh3282XGQqTYEurgOsIAO3MK+tP51/s6
+oKLV5bDcoL4cPJoFcNKISW153Irrfgis5a5P61HN3hEUcGdykEmcKXqSRpkiKF1i
+SYrlxAg15CT0GeAO+LymElDr3vldr49bC/K27+Y6pwnv5MDhRcokeLNRyBEOCsjP
+GCHW9ReoBCTZb6I19hWqQmnQxhVUbVM1ajXPZKJFyNUR8ZA2YKvU1k4umWGvB/3H
+MABffcnTLnzoMC1Pi9kpL1NJQvfX1Zd/2CD6qbmNpd0y6e+40B87xK7oftII4EJe
+GmUk473su3tX80nTmCjE3iRO1cSq5boRbkMjicmwlQ==
+-----END CERTIFICATE-----
+PUBLIC_CERT
+          openssl x509 -in "$work/recipient.crt" -noout > /dev/null
+          ssh -T -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE' | openssl cms -encrypt -binary -stream -aes256 -outform DER -recip "$work/recipient.crt" -out "$work/leech-private-manuscript.tar.gz.cms"
+          set -euo pipefail
+          base="/home/githubops/factory-runtime/private/autonomous-product-cycle/production-instructions"
+          original="$base/stage-04/original-manuscript/WO-26102501"
+          test "$(id -un)" = githubops
+          test -d "$original" && test ! -L "$original"
+          test -r "$base/orders/WO-26102501.json"
+          test -r "$base/stage-04/authoring-inbox/WO-26102501--r001.json"
+          test -r "$base/stage-03/completed-designs/WO-26102501--r001.json"
+          test -r "$base/stage-02/completed-dossiers/WO-26102501--r001.json"
+          test -r "$base/stage-04/primary-research-addenda/WO-26102501--r001.json"
+          if find "$original" -type l -print -quit | grep -q .; then exit 42; fi
+          if ! find "$original" -type f -name 'chapter-*-part-*.md' -print -quit | grep -q .; then exit 43; fi
+          tar -C "$base" -czf - -- \
+            "orders/WO-26102501.json" \
+            "stage-02/completed-dossiers/WO-26102501--r001.json" \
+            "stage-03/completed-designs/WO-26102501--r001.json" \
+            "stage-04/authoring-inbox/WO-26102501--r001.json" \
+            "stage-04/primary-research-addenda/WO-26102501--r001.json" \
+            "stage-04/original-manuscript/WO-26102501"
+          REMOTE
+          test -s "$work/leech-private-manuscript.tar.gz.cms"
+          sha256sum "$work/leech-private-manuscript.tar.gz.cms" > "$work/leech-private-manuscript.tar.gz.cms.sha256"
+          echo 'LEECH_ENCRYPTED_TRANSFER_COMPLETE=true'
+          echo "LEECH_ENCRYPTED_BYTES=$(stat -c %s "$work/leech-private-manuscript.tar.gz.cms")"
+      - name: Retain only encrypted source archive for owner recovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: leech-private-manuscript-encrypted-20261029
+          path: |
+            ${{ runner.temp }}/owner-leech-export/leech-private-manuscript.tar.gz.cms
+            ${{ runner.temp }}/owner-leech-export/leech-private-manuscript.tar.gz.cms.sha256
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
