@@ -58,6 +58,45 @@ def evaluate(snapshot, now=None):
         reasons.append("D_STATE_UNOBSERVED")
     elif d > 8:
         reasons.append("HIGH_UNINTERRUPTIBLE_SLEEP_COUNT")
+    # A process-name match, cron entry or file header is never execution proof.
+    cron = mapping(snapshot.get("cron"))
+    if cron.get("state") != "OBSERVED":
+        reasons.append("CRON_UNOBSERVED")
+    else:
+        ticks = cron.get("factory_per_minute_entries")
+        if not natural_int(ticks) or ticks == 0:
+            reasons.append("FACTORY_MINUTE_CRON_UNCONFIRMED")
+        duplicates = cron.get("exact_duplicate_entries")
+        if not natural_int(duplicates):
+            reasons.append("CRON_DUPLICATE_COUNT_UNOBSERVED")
+        elif duplicates:
+            reasons.append("CRON_DUPLICATE_ENTRIES")
+    queue = mapping(mapping(snapshot.get("queue")).get("target_1"))
+    pending = queue.get("entries_at_least")
+    if queue.get("state") != "OBSERVED" or not natural_int(pending):
+        reasons.append("QUEUE_UNOBSERVED")
+    elif pending:
+        reasons.append("NONEMPTY_QUEUE_NEEDS_WORKER_RECEIPT")
+    if queue.get("truncated") is True:
+        reasons.append("QUEUE_SCAN_TRUNCATED")
+    worker = mapping(snapshot.get("worker"))
+    if worker.get("state") != "OBSERVED" or worker.get("truncated") is True:
+        reasons.append("WORKER_SCAN_INCOMPLETE")
+    init_shell = mapping(pressure.get("init_parent_executable_categories")).get("shell")
+    if natural_int(init_shell) and init_shell > 32:
+        reasons.append("ORPHAN_SHELL_STORM")
+    # No guessed private paths: absent targets mean unconfigured probes, not missing files.
+    for key, reason in (("locks", "LOCK_PROBE_NOT_CONFIGURED"),
+                        ("sqlite", "DB_HEADER_PROBE_NOT_CONFIGURED"),
+                        ("backup", "LOCAL_BACKUP_PROBE_NOT_CONFIGURED")):
+        targets = mapping(snapshot.get(key))
+        if not targets:
+            reasons.append(reason)
+        elif not any(mapping(v).get("state") in ("PRESENT", "OBSERVED") for v in targets.values()):
+            reasons.append(reason.replace("NOT_CONFIGURED", "NOT_OBSERVED"))
+    available_ram = mapping(guest.get("memory")).get("MemAvailable_kib")
+    if natural_int(available_ram) and available_ram < 512 * 1024:
+        reasons.append("AVAILABLE_RAM_BELOW_512MIB")
     if snapshot.get("offhost_backup_restored") != "VERIFIED":
         reasons.append("OFFHOST_RESTORE_NOT_PROVEN")
     if snapshot.get("worker_running_verified") is not True:
