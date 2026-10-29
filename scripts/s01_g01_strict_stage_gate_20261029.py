@@ -38,11 +38,25 @@ def verify(package):
             raise ValueError("CASEFOLD_MEMBER_COLLISION")
         if sum(item.file_size for item in members) > MAX_UNCOMPRESSED:
             raise ValueError("UNCOMPRESSED_SIZE_LIMIT")
+        # A file that is also a parent directory can overwrite or obstruct
+        # assets when unpacked by platform-specific staging extractors.
+        files = {item.filename for item in members if not item.is_dir()}
+        for name in names:
+            segments = name.rstrip("/").split("/")
+            if any("/".join(segments[:index]) in files
+                   for index in range(1, len(segments))):
+                raise ValueError("FILE_DIRECTORY_MEMBER_COLLISION")
         for item in members:
             # Browser/staging extractors only guarantee stored or deflated ZIP.
             # Reject other methods rather than silently shipping unusable assets.
             if item.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
                 raise ValueError("UNSUPPORTED_ZIP_COMPRESSION")
+            unix_mode = item.external_attr >> 16
+            kind = stat.S_IFMT(unix_mode)
+            if item.create_system == 3 and kind not in (0, stat.S_IFREG, stat.S_IFDIR):
+                raise ValueError("UNSAFE_ARCHIVE_MEMBER_TYPE")
+            if item.file_size > 5_000_000 and item.compress_size * 100 < item.file_size:
+                raise ValueError("SUSPICIOUS_COMPRESSION_RATIO")
             name = item.filename
             parts = PurePosixPath(name).parts
             if (not name.startswith(PREFIX) or "\\" in name or
