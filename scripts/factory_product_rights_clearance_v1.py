@@ -182,6 +182,15 @@ def require_rights_clearance(inbox, recipe, artifact_sha256, package_path,
             continue
         if row["role"] not in ("rights_reviewer", "owner"):
             continue
+        if row["role"] == "rights_reviewer":
+            qualification_sha = keys[signer].get("legal_qualification_evidence_sha256")
+            qualification = evidence_root / (str(qualification_sha) + ".pdf")
+            if (keys[signer].get("legal_qualification_verified") is not True
+                    or not isinstance(qualification_sha, str)
+                    or not HEX.fullmatch(qualification_sha)
+                    or qualification.is_symlink() or not qualification.is_file()
+                    or digest_file(qualification) != qualification_sha):
+                continue
         if approval.verify_sig(keys[signer]["public_key_pem"], payload, row["signature_hex"]):
             signers[signer] = row["role"]
     if set(signers.values()) != {"rights_reviewer", "owner"}:
