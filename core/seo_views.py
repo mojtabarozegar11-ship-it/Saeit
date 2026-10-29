@@ -125,6 +125,7 @@ def organization_jsonld():
     }, ensure_ascii=False)
 
 
+# zm-author-persian-view-20261023: preserve the public 200 HTML route without redirect.
 # The author profile is a public static document, not a database view.
 # Resolve every path component relative to a pinned directory descriptor:
 # O_NOFOLLOW on the final HTML alone does not protect symlinked parent dirs.
