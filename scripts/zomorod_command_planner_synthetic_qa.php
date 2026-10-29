@@ -34,8 +34,8 @@ try{
     must($snapshot['counts']['queued']===1 && $snapshot['counts']['in_progress']===1,'lifecycle_counts');
     must($snapshot['items'][0]['id']===1,'risk_priority_order');
     must($snapshot['items'][0]['action']==='ثبت خروجی مورد انتظار، طبقه ریسک و معیار پذیرش','missing_plan_next_action');
-    must($snapshot['items'][1]['id']===3,'second_priority_order');
-    must($snapshot['items'][2]['id']===2 && $snapshot['items'][2]['review']==='submitted','review_queue');
+    must($snapshot['items'][1]['id']===2 && $snapshot['items'][1]['review']==='submitted','review_queue_priority');
+    must($snapshot['items'][2]['id']===3,'third_priority_order');
     $before=(int)$db->query('SELECT COUNT(*) FROM task_events')->fetchColumn();
     ob_start();zmCcOpsRender($db);$markup=(string)ob_get_clean();
     must(str_contains($markup,'برنامه‌ریز عملیاتی مدیرعامل'),'screen_render');
