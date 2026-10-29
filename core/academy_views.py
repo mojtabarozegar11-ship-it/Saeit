@@ -368,7 +368,9 @@ def education_assessment(request, slug, assessment_id):
         return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     assessment = get_object_or_404(EducationAssessment, pk=assessment_id, course=course, active=True, approved=True)
-    enrollment = EducationEnrollment.objects.filter(course=course, user=request.user).exclude(status="cancelled").first()
+    enrollment = EducationEnrollment.objects.filter(
+        course=course, user=request.user, status__in=("active", "completed")
+    ).first()
     if not enrollment:
         return JsonResponse({"ok": False, "error": "enrollment_required"}, status=403)
     questions = assessment.questions.all()
@@ -383,7 +385,9 @@ def education_assessment_submit(request, slug, assessment_id):
         return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     assessment = get_object_or_404(EducationAssessment, pk=assessment_id, course=course, active=True, approved=True)
-    enrollment = EducationEnrollment.objects.filter(course=course, user=request.user).exclude(status="cancelled").first()
+    enrollment = EducationEnrollment.objects.filter(
+        course=course, user=request.user, status__in=("active", "completed")
+    ).first()
     if not enrollment:
         return JsonResponse({"ok": False, "error": "enrollment_required"}, status=403)
     questions = list(assessment.questions.all())
