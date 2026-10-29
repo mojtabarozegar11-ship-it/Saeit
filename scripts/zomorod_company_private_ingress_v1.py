@@ -192,18 +192,20 @@ def main() -> int:
             print("RECIPIENT_KEY=READY")
         elif args.action == "show-public-key":
             _safe_private_key(args.recipient_key, bridge)
-            print("COMMAND_PUBLIC_KEY_BEGIN")
+            print("COMMAND_PUBLIC_KEY_BEGIN", flush=True)
             sys.stdout.buffer.write(public_key_pem(args.recipient_key))
-            print("COMMAND_PUBLIC_KEY_END")
+            sys.stdout.buffer.flush()
+            print("COMMAND_PUBLIC_KEY_END", flush=True)
         else:
             raw = sys.stdin.buffer.read(MAX_ENVELOPE + 1)
             result = accept(raw, args.db, args.hmac_key, args.recipient_key)
             print("COMMAND_RECEIPT=" + result)
             if result == "ACCEPTED":
                 print("COMMAND_QUEUE=UPDATED")
-                print("COMMAND_PUBLIC_KEY_BEGIN")
+                print("COMMAND_PUBLIC_KEY_BEGIN", flush=True)
                 sys.stdout.buffer.write(public_key_pem(args.recipient_key))
-                print("COMMAND_PUBLIC_KEY_END")
+                sys.stdout.buffer.flush()
+                print("COMMAND_PUBLIC_KEY_END", flush=True)
             else:
                 print("COMMAND_QUEUE=UNCHANGED")
         return 0
