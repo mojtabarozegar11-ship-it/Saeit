@@ -1,0 +1,107 @@
+name: Factory offhost SQLite health 2026-10-29
+on:
+  push:
+    branches: [ops/factory-offhost-backup-preflight-20261029]
+    paths: [".github/workflows/factory-offhost-health-one-shot-20261029.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: factory-health-one-shot-20261029
+  cancel-in-progress: false
+jobs:
+  readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - name: Verify pinned identities and inventory without remote writes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/factory-offhost-probe"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"; rmdir "$d" 2>/dev/null || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.candidate" "$d/host.known"
+          echo SSH_PINNED_BOTH=PASS
+          timeout 150s ssh -T -F "$d/config" saeit-vps 'set -eu; test "$(id -un)" = githubops; date -u "+UTC=%Y-%m-%dT%H:%M:%SZ"; df -B1 -P /home/githubops/factory-runtime; awk "/MemTotal:/ {print \"MEM_KIB=\" \$2}" /proc/meminfo; echo FACTORY_BACKUP_CANDIDATES; find /home/githubops/factory-runtime -xdev -type f \( -iname "*.sqlite*" -o -iname "*.db" -o -iname "*.db.*" -o -iname "*.tar" -o -iname "*.tar.gz" -o -iname "*.tar.zst" \) -size +100M -printf "%s %p\n" | sort -rn | head -n 30; echo FACTORY_SIZES; du -x -h --max-depth=2 /home/githubops/factory-runtime 2>/dev/null | sort -hr | head -n 35; echo READONLY=PASS'
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel 'set -eu; test "$(id -un)" = zomorod2; python3 -c '"'"'import json,subprocess; a=json.loads(subprocess.check_output(["uapi","--output=json","Quota","get_quota_info"],timeout=30))["result"]; assert a["status"]==1; d=a["data"]; print("HOST_ACCOUNT_QUOTA_DATA="+str({k:v for k,v in d.items() if k in ("megabyte_limit","megabytes_remain","megabytes_used")}))'"'"'; echo HOST_READONLY=PASS'
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel 'p=/home/zomorod2/private-factory-backups/master-before-20261028T004026Z.sqlite3.partial-40803539296; f=/home/zomorod2/private-factory-backups/master-before-20261028T004026Z.sqlite3; if test -f "$p"; then stat -c "BACKUP_PARTIAL_BYTES=%s" "$p"; elif test -f "$f"; then stat -c "BACKUP_FINAL_BYTES=%s" "$f"; else echo BACKUP_DESTINATION_NOT_YET_CREATED; fi'
+          echo PREFLIGHT_NO_REMOTE_WRITE=PASS
+
+          python3 - <<'PY'
+          import json,os,shlex,subprocess
+          from pathlib import Path
+          cfg=str(Path(os.environ["RUNNER_TEMP"])/"factory-offhost-probe"/"config")
+          script="""
+          import hashlib,json,os,sqlite3,stat,sys,time,urllib.parse
+          p="/home/zomorod2/private-factory-backups/master-before-20261028T004026Z.sqlite3"
+          st=os.lstat(p)
+          if not stat.S_ISREG(st.st_mode) or st.st_size!=1396473856 or st.st_mode&0o077:
+              raise SystemExit("DESTINATION_FILE_SAFETY_CHECK_FAILED")
+          if os.path.islink(os.path.dirname(p)):
+              raise SystemExit("PRIVATE_DIRECTORY_SYMLINK")
+          con=sqlite3.connect("file:"+urllib.parse.quote(p)+"?mode=ro&immutable=1",uri=True,timeout=20)
+          started=time.monotonic()
+          timed_out=[False]
+          def progress():
+              if time.monotonic()-started>1050:
+                  timed_out[0]=True
+                  return 1
+              return 0
+          con.set_progress_handler(progress,50000)
+          try:
+              schema=int(con.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0])
+              if schema<10:raise SystemExit("BAD_SCHEMA_COUNT")
+              product=int(con.execute("SELECT COUNT(*) FROM core_product").fetchone()[0])
+              val=con.execute("PRAGMA quick_check").fetchone()
+              if timed_out[0]:raise SystemExit("SQLITE_CHECK_TIMEOUT_NOT_VERIFIED")
+              if not val or val[0]!="ok":raise SystemExit("SQLITE_QUICK_CHECK_FAILED")
+          finally:con.close()
+          print(json.dumps({"status":"SQLITE_QUICK_CHECK_PASS","schema_tables":schema,
+                            "product_rows":product,"elapsed_seconds":round(time.monotonic()-started,1),
+                            "offhost_file_bytes":st.st_size}))
+          """
+          cmd=" ".join(shlex.quote(x) for x in ("python3","-B","-c",script))
+          r=subprocess.run(["ssh","-T","-F",cfg,"saeit-cpanel",cmd],text=True,capture_output=True,timeout=1150)
+          if r.returncode:
+              print("HEALTH_CHECK_ERROR="+r.stderr[-2000:])
+              raise SystemExit("OFFHOST_DEEP_CHECK_FAILED")
+          print("DEEP_HEALTH_RESULT="+r.stdout.strip())
+          PY
