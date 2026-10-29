@@ -13,6 +13,8 @@ on:
       - tests/test_f01_sku72_225_archive_qc.py
       - scripts/f01_offhost_sqlite_backup_verify.py
       - tests/test_f01_offhost_sqlite_backup_verify.py
+      - scripts/f01_capacity_release_no_go_20261030.py
+      - tests/test_f01_capacity_release_no_go_20261030.py
 permissions:
   contents: read
 concurrency:
@@ -33,6 +35,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_s01_release_preflight_20261029.py'
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_sku72_225_archive_qc.py'
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_offhost_sqlite_backup_verify.py'
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_capacity_release_no_go_20261030.py'
       - name: Authenticate pinned VPS and collect non-mutating evidence
         shell: bash
         env:
@@ -87,4 +90,9 @@ jobs:
           print("F01_QUEUE="+json.dumps(d["queue"],sort_keys=True))
           print("F01_DB_BACKUP_RESTORE=NOT_VERIFIED")
           print("F01_WORKER_EXECUTION=NOT_VERIFIED")
+          PY
+          # The triage tool always returns 2 (NO_GO); it never authorizes restart.
+          rc=0
+          python3 scripts/f01_capacity_release_no_go_20261030.py "$d/snapshot.json" || rc=$?
+          test "$rc" = 2
           PY
