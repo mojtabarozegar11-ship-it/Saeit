@@ -96,6 +96,22 @@ class Stage6Audits(unittest.TestCase):
         for path, raw in originals.items():
             self.assertEqual(Path(path).read_bytes(), raw)
 
+    def test_owner_held_879_with_corrupt_stage2_receipt_is_not_silently_skipped(self):
+        self.fixture.mark_owner_held_879()
+        receipt_path = self.area / "stage-02/receipts" / self.name
+        receipt = stage34.read(receipt_path)
+        receipt["stage_3_packet_sha256"] = "0" * 64
+        stage34.atomic(receipt_path, receipt)
+        original_inbox = (self.area / "stage-06/inbox" / self.name).read_bytes()
+        result = stage6.execute(self.root, stage34, stage5)
+        self.assertEqual(result["stage6_owner_held_sku879_skipped"], 0)
+        self.assertEqual(result["stage6_integrity_blocked_this_tick"], 1)
+        self.assertEqual(result["stage6_technical_preflights_created_this_tick"], 0)
+        self.assertFalse((self.area / "stage-06/technical-preflight" / self.name).exists())
+        self.assertEqual((self.area / "stage-06/inbox" / self.name).read_bytes(), original_inbox)
+        self.assertIn("STAGE34_STAGE2_CHAIN_INTEGRITY_FAILED",
+                      self.obj("stage-06/blocked")["reason"])
+
     def test_repeat_is_idempotent(self):
         stage6.execute(self.root, stage34, stage5)
         again = stage6.execute(self.root, stage34, stage5)
