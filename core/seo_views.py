@@ -111,7 +111,24 @@ def persian_author_profile(request):
     from pathlib import Path
     from django.conf import settings
 
+    import os
+    import stat
+
     page = Path(settings.BASE_DIR) / "public/authors/mojtaba-rozegar/index.html"
-    if page.is_symlink() or not page.is_file():
+    # A public profile must not follow a swapped symlink or accidentally read
+    # a FIFO/device. The existing HTML is returned byte-for-byte unchanged.
+    try:
+        fd = os.open(page, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
         return HttpResponse(status=404)
-    return HttpResponse(page.read_bytes(), content_type="text/html; charset=utf-8")
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 1_000_000:
+            return HttpResponse(status=503)
+        with os.fdopen(os.dup(fd), "rb") as stream:
+            body = stream.read(1_000_001)
+    finally:
+        os.close(fd)
+    if len(body) > 1_000_000:
+        return HttpResponse(status=503)
+    return HttpResponse(body, content_type="text/html; charset=utf-8")
