@@ -7,6 +7,8 @@ stand-in for the Ramadan War route. No SSH, network, or payment calls.
 import hashlib
 import importlib.util
 import tempfile
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -23,6 +25,16 @@ def digest(value):
 
 
 class ScopedRollbackTests(unittest.TestCase):
+    def test_optimized_python_refuses_release_before_filesystem_access(self):
+        script = Path(__file__).with_name('deploy.py')
+        for optimization in ('-O', '-OO'):
+            with self.subTest(optimization=optimization):
+                result = subprocess.run([sys.executable, optimization, str(script), 'publish', '123456'],
+                                        capture_output=True, text=True, timeout=10)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('RAMADAN_RELEASE_REFUSED', result.stderr + result.stdout)
+
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
