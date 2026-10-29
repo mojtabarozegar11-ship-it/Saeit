@@ -2,9 +2,16 @@ name: Zomorod authenticated private command relay
 on:
   workflow_dispatch:
     inputs:
-      sealed_envelope:
-        description: Encrypted one-use command envelope
+      operation:
+        description: Read the current recipient public key or accept one encrypted command
         required: true
+        type: choice
+        options:
+          - show_public_key
+          - accept
+      sealed_envelope:
+        description: Encrypted one-use command envelope (required for accept)
+        required: false
         type: string
 permissions:
   contents: read
@@ -33,20 +40,26 @@ jobs:
           import json
           import sys
           from pathlib import Path
-          try:
-              event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-              raw = event["inputs"]["sealed_envelope"]
-              envelope = json.loads(raw)
-              valid = (isinstance(raw, str) and 2 <= len(raw.encode("utf-8")) <= 24000
-                       and isinstance(envelope, dict)
-                       and set(envelope) == {"v", "alg", "ek", "iv", "ct", "mac"}
-                       and envelope.get("v") == 1
-                       and envelope.get("alg") == "RSA-OAEP-256+A256CBC-HS256")
-          except Exception:
-              valid = False
-          if not valid:
-              raise SystemExit("SEALED_COMMAND_REJECTED")
-          print("SEALED_COMMAND_ENVELOPE=VALID")
+          event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          inputs = event.get("inputs", {})
+          if inputs.get("operation") not in ("show_public_key", "accept"):
+              raise SystemExit("OPERATION_REJECTED")
+          if inputs["operation"] == "accept":
+              try:
+                  raw = inputs["sealed_envelope"]
+                  envelope = json.loads(raw)
+                  valid = (isinstance(raw, str) and 2 <= len(raw.encode("utf-8")) <= 24000
+                           and isinstance(envelope, dict)
+                           and set(envelope) == {"v", "alg", "ek", "iv", "ct", "mac"}
+                           and envelope.get("v") == 1
+                           and envelope.get("alg") == "RSA-OAEP-256+A256CBC-HS256")
+              except Exception:
+                  valid = False
+              if not valid:
+                  raise SystemExit("SEALED_COMMAND_REJECTED")
+              print("SEALED_COMMAND_ENVELOPE=VALID")
+          else:
+              print("PUBLIC_KEY_REQUEST=AUTHORIZED")
           PY
       - name: Establish pinned private SSH relay
         shell: bash
@@ -98,7 +111,20 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_PRIVATE_RELAY=verified"
+      - name: Read the current recipient public key
+        if: inputs.operation == 'show_public_key'
+        shell: bash
+        run: |
+          set -euo pipefail
+          p="/home/zomorod2/.private/zomorod-business"
+          ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" saeit-cpanel "python3 -B '$p/company_ingress.py' show-public-key --db '$p/command-center.sqlite3' --hmac-key '$p/.company-bridge.key' --recipient-key '$p/.chat-command-rsa.key'" > "$RUNNER_TEMP/recipient-key.txt"
+          grep -Fq -- "-----BEGIN PUBLIC KEY-----" "$RUNNER_TEMP/recipient-key.txt"
+          grep -Fq -- "-----END PUBLIC KEY-----" "$RUNNER_TEMP/recipient-key.txt"
+          echo "CURRENT_RECIPIENT_PUBLIC_KEY_BEGIN"
+          sed -n '/^-----BEGIN PUBLIC KEY-----$/,/^-----END PUBLIC KEY-----$/p' "$RUNNER_TEMP/recipient-key.txt"
+          echo "CURRENT_RECIPIENT_PUBLIC_KEY_END"
       - name: Decrypt, authenticate, sign and queue the command privately
+        if: inputs.operation == 'accept'
         shell: bash
         run: |
           set -euo pipefail
@@ -124,4 +150,4 @@ jobs:
           echo "ROTATED_RECIPIENT_PUBLIC_KEY_END"
       - name: Remove temporary relay credentials and receipts
         if: always()
-        run: rm -rf "$RUNNER_TEMP/zomorod-command-channel"
+        run: rm -rf "$RUNNER_TEMP/zomorod-command-channel" "$RUNNER_TEMP/recipient-key.txt"
