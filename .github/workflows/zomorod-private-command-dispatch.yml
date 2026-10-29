@@ -81,10 +81,11 @@ jobs:
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
           vps_scan=""
-          for attempt in 1 2 3; do
-            vps_scan="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null || true)"
+          for attempt in 1 2 3 4 5 6; do
+            vps_scan="$(timeout 12s ssh-keyscan -T 9 -t rsa 178.239.147.150 2>/dev/null || true)"
             if test -n "$vps_scan"; then break; fi
-            sleep 2
+            echo "VPS_KEYSCAN_TRANSIENT_EMPTY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 6; then sleep 5; fi
           done
           if test -z "$vps_scan"; then
             echo "VPS_KEYSCAN=EMPTY"
@@ -130,10 +131,11 @@ jobs:
           EOF
           chmod 600 "$d/config"
           scan=""
-          for attempt in 1 2 3; do
-            scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null | awk '$2 == "ssh-ed25519" && $3 ~ /^[A-Za-z0-9+\/=]+$/ {print $1, $2, $3}' || true)"
+          for attempt in 1 2 3 4 5; do
+            scan="$(timeout 45s ssh -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-vps 'timeout 12s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null | awk '$2 == "ssh-ed25519" && $3 ~ /^[A-Za-z0-9+\/=]+$/ {print $1, $2, $3}' || true)"
             if test -n "$scan"; then break; fi
-            sleep 2
+            echo "CPANEL_VIA_VPS_KEYSCAN_TRANSIENT_EMPTY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 5; fi
           done
           if test -z "$scan"; then
             echo "CPANEL_KEYSCAN=EMPTY"
