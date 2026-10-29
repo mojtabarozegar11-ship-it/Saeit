@@ -67,6 +67,24 @@ class ReleaseGateTests(unittest.TestCase):
         s['guest']['memory']['MemAvailable_kib'] = 128 * 1024
         self.assertIn('GUEST_AVAILABLE_MEMORY_UNVERIFIED_OR_LOW', mod.evaluate(s, NOW)['blockers'])
 
+    def test_malformed_nested_values_fail_closed(self):
+        s = snapshot()
+        s['filesystem'] = ['bad']
+        s['guest'] = ['bad']
+        s['process_pressure'] = ['bad']
+        result = mod.evaluate(s, NOW)
+        self.assertEqual(result['guest_capacity_screen'], 'NO_GO')
+        self.assertIn('ROOT_DISK_RESERVE_UNVERIFIED_OR_LOW', result['blockers'])
+        self.assertIn('GUEST_CPU_LOAD_UNVERIFIED_OR_HIGH', result['blockers'])
+        self.assertIn('PROCESS_STORM_OR_IO_WAIT_UNVERIFIED_OR_HIGH', result['blockers'])
+
+    def test_nan_load_and_boolean_cpu_cannot_pass(self):
+        s = snapshot()
+        s['guest']['loadavg'] = [float('nan')]
+        s['guest']['cpu_count'] = True
+        result = mod.evaluate(s, NOW)
+        self.assertIn('GUEST_CPU_LOAD_UNVERIFIED_OR_HIGH', result['blockers'])
+
     def test_capacity_pass_is_not_deployment_approval(self):
         s = snapshot()
         s['offhost_backup_restored'] = 'VERIFIED'
