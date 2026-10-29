@@ -83,12 +83,14 @@ def test_dispatch_is_owner_main_only_for_manual_or_exact_issue_comment():
         "\n  repository_dispatch:", "\n  workflow_run:",
     ):
         assert forbidden not in triggers
-    assert (
-        "github.actor == 'mojtabarozegar11-ship-it'"
-        in source
-    )
+    assert "github.actor == 'mojtabarozegar11-ship-it'" in source
+    assert "github.actor == 'chatgpt-codex-connector[bot]'" in source
+    assert "github.event_name == 'workflow_dispatch'" in source
+    assert "github.event_name == 'issue_comment'" in source
     assert "github.ref == 'refs/heads/main'" in source
     assert 'test "$GITHUB_ACTOR" = "$EXPECTED_ACTOR"' in source
+    assert 'test "$GITHUB_ACTOR" = "$EXPECTED_APP_ACTOR"' in source
+    assert 'test "$GITHUB_EVENT_NAME" = "workflow_dispatch"' in source
     assert 'test "$GITHUB_REF" = "$EXPECTED_REF"' in source
     assert "contents: read" in source
     assert "    concurrency:\n      group: zomorod-private-chat-command-inbox" in source
@@ -111,7 +113,7 @@ def test_ssh_is_pinned_to_current_relay_and_new_host():
     assert "zohal.pws-dns.net" not in source
 
 
-def _run_gate(event, event_name, tmp_path):
+def _run_gate(event, event_name, tmp_path, actor="mojtabarozegar11-ship-it"):
     script = _inline_event_scripts()[0]
     event_path = tmp_path / "workflow-event.json"
     event_path.write_text(json.dumps(event), encoding="utf-8")
@@ -119,6 +121,7 @@ def _run_gate(event, event_name, tmp_path):
     env = os.environ.copy()
     env.update({
         "GITHUB_EVENT_NAME": event_name,
+        "GITHUB_ACTOR": actor,
         "GITHUB_OUTPUT": str(output_path),
         "RUNNER_TEMP": str(tmp_path),
     })
@@ -134,19 +137,18 @@ def _run_gate(event, event_name, tmp_path):
 
 
 def _owner_comment(body, *, issue_number=1600, user="mojtabarozegar11-ship-it",
-                   association="OWNER", action="created", pr=False):
+                   association="OWNER", action="created", pr=False, app=None):
     issue = {"number": issue_number}
     if pr:
         issue["pull_request"] = {"url": "https://example.invalid/pr"}
-    return {
-        "action": action,
-        "issue": issue,
-        "comment": {
-            "body": body,
-            "user": {"login": user},
-            "author_association": association,
-        },
+    comment = {
+        "body": body,
+        "user": {"login": user},
+        "author_association": association,
     }
+    if app is not None:
+        comment["performed_via_github_app"] = {"slug": app}
+    return {"action": action, "issue": issue, "comment": comment}
 
 
 @pytest.mark.parametrize(
@@ -235,3 +237,20 @@ def test_queue_receipt_is_required_and_execution_is_not_claimed():
     assert "if: steps.gate.outputs.operation == 'show_public_key'" in source
     assert "if: always()" in source
     assert 'rm -rf "$RUNNER_TEMP/zomorod-command-channel"' in source
+
+
+def test_action_actor_identity_is_checked_for_manual_and_app_comments(tmp_path):
+    owner = "mojtabarozegar11-ship-it"
+    bot = "chatgpt-codex-connector[bot]"
+    comment = _owner_comment("ZMR-PUBLIC-KEY-V1", app="chatgpt-codex-connector")
+    for event_name, event, actor, permitted in [
+        ("workflow_dispatch", {"inputs": {"operation": "show_public_key"}}, owner, True),
+        ("workflow_dispatch", {"inputs": {"operation": "show_public_key"}}, bot, False),
+        ("issue_comment", comment, owner, True),
+        ("issue_comment", comment, bot, True),
+        ("issue_comment", comment, "unrelated-bot[bot]", False),
+        ("issue_comment", _owner_comment("ZMR-PUBLIC-KEY-V1", app="unrelated-app"), bot, False),
+        ("issue_comment", _owner_comment("ZMR-PUBLIC-KEY-V1", user="unrelated"), bot, False),
+    ]:
+        result, _, _ = _run_gate(event, event_name, tmp_path, actor=actor)
+        assert (result.returncode == 0) is permitted, (event_name, actor, result.stderr)
