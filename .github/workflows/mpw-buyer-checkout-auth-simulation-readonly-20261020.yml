@@ -2,7 +2,7 @@ name: MojPlayWin two verified books authenticated buyer nonpayment path audit
 # Fresh read-only production checkout and authenticated nonpayment inspection 2026-10-24.
 on:
   push:
-    branches: [main]
+    branches: [main, ops/s01-ro-passenger-db-20261029-r12]
     paths: [".github/workflows/mpw-buyer-checkout-auth-simulation-readonly-20261020.yml"]
 permissions: {contents: read}
 jobs:
