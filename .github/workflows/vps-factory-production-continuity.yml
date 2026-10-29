@@ -146,33 +146,7 @@ jobs:
           cd "$root/django-app"
           export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
           export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
-          "$root/.venv/bin/python" - <<'PY'
-          import os
-          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-          import django
-          django.setup()
-          from django.conf import settings
-          from pathlib import Path
-          from django.db import connection
-          db=settings.DATABASES["default"]
-          engine=db["ENGINE"]
-          print("FACTORY_AUDIT_DB_ENGINE_KIND="+("sqlite" if engine.endswith("sqlite3") else "non_sqlite"))
-          if engine.endswith("sqlite3"):
-              source=Path(db["NAME"])
-              if source.is_symlink() or not source.is_file() or any(p.is_symlink() for p in source.parents):
-                  print("FACTORY_AUDIT_DB_FILE_STATUS=unsafe_or_missing")
-              else:
-                  print("FACTORY_AUDIT_DB_FILE_STATUS=present")
-                  print("FACTORY_AUDIT_DB_BYTES="+str(source.stat().st_size))
-                  with connection.cursor() as cursor:
-                      cursor.execute("PRAGMA journal_mode")
-                      print("FACTORY_AUDIT_SQLITE_JOURNAL_MODE="+str(cursor.fetchone()[0]))
-                      cursor.execute("PRAGMA busy_timeout")
-                      print("FACTORY_AUDIT_SQLITE_BUSY_TIMEOUT_MS="+str(cursor.fetchone()[0]))
-          from core.models import AgentTask, FactoryRun, Product
-          print("FACTORY_AUDIT_AGENT_TASK_ROWS="+str(AgentTask.objects.count()))
-          print("FACTORY_AUDIT_FACTORY_RUN_ROWS="+str(FactoryRun.objects.count()))
-          print("FACTORY_AUDIT_PRODUCT_ROWS="+str(Product.objects.count()))
+          "$root/.venv/bin/python" -B -c 'import os; os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings"); import django; django.setup(); from django.conf import settings; from pathlib import Path; from django.db import connection; from core.models import AgentTask, FactoryRun, Product; db=settings.DATABASES["default"]; engine=db["ENGINE"]; print("FACTORY_AUDIT_DB_ENGINE_KIND="+("sqlite" if engine.endswith("sqlite3") else "non_sqlite")); source=Path(db["NAME"]) if engine.endswith("sqlite3") else None; present=bool(source and source.is_file() and not source.is_symlink()); print("FACTORY_AUDIT_DB_FILE_STATUS="+("present" if present else "unsafe_or_missing")); print("FACTORY_AUDIT_DB_BYTES="+str(source.stat().st_size if present else "unavailable")); cursor=connection.cursor() if engine.endswith("sqlite3") else None; cursor.execute("PRAGMA journal_mode") if cursor else None; print("FACTORY_AUDIT_SQLITE_JOURNAL_MODE="+str(cursor.fetchone()[0]) if cursor else "FACTORY_AUDIT_SQLITE_JOURNAL_MODE=not_applicable"); cursor.execute("PRAGMA busy_timeout") if cursor else None; print("FACTORY_AUDIT_SQLITE_BUSY_TIMEOUT_MS="+str(cursor.fetchone()[0]) if cursor else "FACTORY_AUDIT_SQLITE_BUSY_TIMEOUT_MS=not_applicable"); print("FACTORY_AUDIT_AGENT_TASK_ROWS="+str(AgentTask.objects.count())); print("FACTORY_AUDIT_FACTORY_RUN_ROWS="+str(FactoryRun.objects.count())); print("FACTORY_AUDIT_PRODUCT_ROWS="+str(Product.objects.count()))'
           PY
           echo FACTORY_AUDIT_READ_ONLY=true
           REMOTE
