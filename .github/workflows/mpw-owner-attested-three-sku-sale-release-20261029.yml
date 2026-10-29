@@ -33,7 +33,7 @@ jobs:
           python3 scripts/mpw_checkout_csp_zero_script_guard_20261029.py selftest
   live:
     needs: contract
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
