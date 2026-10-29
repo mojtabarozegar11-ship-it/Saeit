@@ -129,3 +129,49 @@ class GalleryTargetSafetyTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(item.safe_target_path, "")
         self.assertEqual(rendered.call_args.args[2]["media"], [item])
+
+
+class AssessmentEnrollmentGateTests(SimpleTestCase):
+    def _assert_denied(self, method):
+        request = getattr(RequestFactory(), method)("/academy/course/paid/assessment/12/")
+        request.user = SimpleNamespace(is_authenticated=True, pk=9)
+        course = SimpleNamespace(slug="paid")
+        assessment = SimpleNamespace(pk=12)
+        with patch.object(academy_views, "missing_public_tables", return_value=False), \
+             patch.object(academy_views, "get_object_or_404", side_effect=[course, assessment]), \
+             patch.object(academy_views.EducationEnrollment.objects, "filter") as enrolled, \
+             patch.object(academy_views.EducationAttempt.objects, "create") as attempt_create, \
+             patch.object(academy_views, "render") as rendered:
+            enrolled.return_value.first.return_value = None
+            view = (academy_views.education_assessment_submit if method == "post"
+                    else academy_views.education_assessment)
+            response = view(request, "paid", 12)
+            self.assertEqual(response.status_code, 403)
+            self.assertIn(b"enrollment_required", response.content)
+            enrolled.assert_called_once_with(
+                course=course, user=request.user, status__in=("active", "completed")
+            )
+            attempt_create.assert_not_called()
+            rendered.assert_not_called()
+
+    def test_assessment_get_requires_active_or_completed_enrollment(self):
+        self._assert_denied("get")
+
+    def test_assessment_submission_cannot_write_without_valid_enrollment(self):
+        self._assert_denied("post")
+
+
+class DeeplyEncodedGalleryTargetTests(SimpleTestCase):
+    def test_multilayer_traversal_and_network_targets_are_rejected(self):
+        safe = company_content_views.safe_gallery_target_path
+        for layers in range(1, 11):
+            traversal = "%2e%2e"
+            network = "%2fexample.invalid"
+            for _ in range(layers - 1):
+                traversal = traversal.replace("%", "%25")
+                network = network.replace("%", "%25")
+            with self.subTest(layers=layers, kind="traversal"):
+                self.assertEqual(safe("/company/" + traversal + "/private/"), "")
+            with self.subTest(layers=layers, kind="network"):
+                self.assertEqual(safe("/" + network + "/private/"), "")
+        self.assertEqual(safe("/company/gallery/?q=%252F"), "/company/gallery/?q=%252F")
