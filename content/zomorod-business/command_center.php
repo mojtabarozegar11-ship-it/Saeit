@@ -6,6 +6,7 @@ declare(strict_types=1);
  * writes to the accounting DB, executes shell commands, or schedules jobs.
  */
 require_once __DIR__.'/command_quality.php';
+require_once __DIR__.'/command_planner.php';
 function zmCcDb(string $private): PDO {
     if (!is_dir($private) || is_link($private)) throw new RuntimeException('Private company storage unavailable');
     $file = $private.'/command-center.sqlite3';
@@ -169,6 +170,7 @@ function zmCcRender(PDO $control): void {
     echo '<div class="grid">';
     foreach($stats as $v)echo '<div class="card"><div class="metric">'.(int)$v['count'].'</div>'.esc($states[$v['state']]??$v['state']).'</div>';
     echo '</div>';
+    zmCcOpsRender($control);
     formBegin('cc_scan');echo '<button type="submit">بررسی دستی فاکتورهای معوق و کسری انبار</button></form>';
     echo '<p class="muted">این بررسی فقط کارهای قابل پیگیری ایجاد می‌کند و فاکتور یا موجودی را تغییر نمی‌دهد.</p></section>';
     echo '<section><h2>ثبت دستور جدید مدیرعامل</h2>';formBegin('cc_create');
