@@ -1,0 +1,105 @@
+name: Preflight private MOJ Pay database capability on cPanel
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/banknew-private-database-preflight-20261029.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: banknew-private-db-preflight
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-structure-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect isolated runtime and cPanel MySQL UAPI without changes
+        run: |
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          import json,os,shutil,subprocess
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojpay-bank-service-private')
+          assert root.is_dir() and not root.is_symlink()
+          py=root/'.venv'/'bin'/'python'
+          assert py.is_file(), 'BANKNEW_PRIVATE_VENV_MISSING'
+          check=subprocess.run([str(py),'-c','import django,MySQLdb;assert django.VERSION[:2]==(5,2);assert MySQLdb.version_info>=(2,2,1)'],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,text=True,timeout=20)
+          assert check.returncode==0, 'BANKNEW_PRIVATE_RUNTIME_DRIVER_NOT_READY'
+          print('BANKNEW_PRIVATE_RUNTIME_AND_MYSQLCLIENT=READY')
+          candidates=[shutil.which('uapi'),'/usr/local/cpanel/bin/uapi']
+          binary=next((p for p in candidates if p and Path(p).is_file() and os.access(p,os.X_OK)),None)
+          if not binary:
+              print('BANKNEW_CPANEL_UAPI_AVAILABLE=NO')
+          else:
+              print('BANKNEW_CPANEL_UAPI_AVAILABLE=YES')
+              result=subprocess.run([binary,'--output=json','Mysql','list_databases'],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=25)
+              if result.returncode:
+                  print('BANKNEW_CPANEL_MYSQL_LIST_ACCESS=DENIED')
+              else:
+                  try:
+                      value=json.loads(result.stdout)
+                      details=value.get('result',{})
+                      assert str(details.get('status'))=='1'
+                      databases=details.get('data',[])
+                      assert isinstance(databases,(list,dict))
+                      print('BANKNEW_CPANEL_MYSQL_LIST_ACCESS=YES')
+                      print('BANKNEW_DB_CAPABILITY_PREFLIGHT=PASS')
+                  except (ValueError,TypeError,AssertionError,AttributeError):
+                      print('BANKNEW_CPANEL_MYSQL_LIST_ACCESS=UNVERIFIED')
+          print('BANKNEW_DATABASES_MODIFIED=NO')
+          print('BANKNEW_NEW_CREDENTIALS_CREATED=NO')
+          print('BANKNEW_PUBLIC_API_CHANGED=NO')
+          print('BANKNEW_PAYMENTS_ACTIVE=NO')
+          PY
+      - name: Clear transient SSH relay credentials
+        if: always()
+        run: |
+          if test -d "$RUNNER_TEMP/mpw-structure-ssh"; then
+            find "$RUNNER_TEMP/mpw-structure-ssh" -type f -exec shred -u -- {} +
+            rmdir "$RUNNER_TEMP/mpw-structure-ssh"
+          fi
