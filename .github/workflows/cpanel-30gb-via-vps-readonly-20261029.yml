@@ -39,6 +39,9 @@ jobs:
           actual="$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
           test "$actual" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' || { echo 'VPS_PIN_MISMATCH_DO_NOT_CONNECT'; exit 1; }
           echo 'VPS_RSA_PIN=VERIFIED'
+          echo 'VPS_VERIFIED_PUBLIC_HOST_KEY_BEGIN'
+          awk '$2 == "ssh-rsa" {print $1, $2, $3}' "$d/vps.known"
+          echo 'VPS_VERIFIED_PUBLIC_HOST_KEY_END'
           cat > "$d/config" <<EOF
           Host checked-vps
             HostName 178.239.147.150
@@ -76,6 +79,9 @@ jobs:
           test "$pin" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' || { echo 'CPANEL_30GB_PIN_MISMATCH_DO_NOT_CONNECT'; exit 1; }
           cp "$d/cpanel.candidate" "$d/cpanel.known"
           echo 'CPANEL_30GB_ED25519_PIN=VERIFIED'
+          echo 'CPANEL_VERIFIED_PUBLIC_HOST_KEY_BEGIN'
+          awk '$2 == "ssh-ed25519" {print $1, $2, $3}' "$d/cpanel.known"
+          echo 'CPANEL_VERIFIED_PUBLIC_HOST_KEY_END'
           timeout 55s ssh -F "$d/config" checked-cpanel-30gb 'set -eu; test "$(id -un)" = "zomorod2"; test -d /home/zomorod2/Saeit-staging; echo CPANEL_30GB_IDENTITY_AND_STAGING=VERIFIED'
           timeout 55s ssh -F "$d/config" checked-cpanel-30gb 'set -eu; p=/home/zomorod2/.private/zomorod-business; test -f "$p/company_ingress.py"; test -f "$p/command-center.sqlite3"; test -f "$p/.chat-command-rsa.key"; echo PRIVATE_COMMAND_INGRESS_FILES=VERIFIED'
           echo 'No remote files changed; no deployments or migrations.'
