@@ -1,0 +1,246 @@
+{
+  "files": [
+    {
+      "bytes": 1534,
+      "path": ".github/workflows/zomorod-erp-offline-validation.yml",
+      "sha256": "3e12293fae007fc809dff221931e9cb25a23623ccf8bc8810513241f22e84361"
+    },
+    {
+      "bytes": 7998,
+      "path": "OFFLINE_QA_REPORT.json",
+      "sha256": "b844fda0481b2d9ceb2ea56976ea1df75e44fee01c74176294dc79c994abec0f"
+    },
+    {
+      "bytes": 311,
+      "path": "content/zomorod-business/.htaccess",
+      "sha256": "b21d5a55449c679afd0810b60e5b52e261a6c578c89b2f5d3f6d205b9cb0c9bc"
+    },
+    {
+      "bytes": 51890,
+      "path": "content/zomorod-business/app.php",
+      "sha256": "59f34e0bcb6c20bbd2b8cdbcc836de689d7acb5deb58b97b84280d148428fa18"
+    },
+    {
+      "bytes": 13513,
+      "path": "content/zomorod-business/command_center.php",
+      "sha256": "43bb5e250ba80e760f002badf5ca34f17bbb5c915164468ffc0226a301878357"
+    },
+    {
+      "bytes": 6220,
+      "path": "content/zomorod-business/command_planner.php",
+      "sha256": "b9aad3080f777f5d628035b6dd72dbd6366f378f21d9953833a21bd7b61f992a"
+    },
+    {
+      "bytes": 8853,
+      "path": "content/zomorod-business/command_quality.php",
+      "sha256": "2ddfc4d330de58c95ef1a4708dbaa71299a5cbca949a59177639a6a88b1c8fed"
+    },
+    {
+      "bytes": 5495,
+      "path": "content/zomorod-business/finance_audit.php",
+      "sha256": "d93006f4dd1c4f0c1173317c49321e27de81a37d89d600b2f63cc7ed3a48e5d0"
+    },
+    {
+      "bytes": 346,
+      "path": "content/zomorod-business/index.php",
+      "sha256": "93f3805ddf8a8298163ddf42dd43b1907ed295d325b64ec80a090d98ac0dc61b"
+    },
+    {
+      "bytes": 14324,
+      "path": "content/zomorod-business/industry_operations.php",
+      "sha256": "d1c10158f517f1ca78886ecee009926e6456e4f97ce4a1318e2fbfeae7ac8eb8"
+    },
+    {
+      "bytes": 10962,
+      "path": "content/zomorod-business/insights.php",
+      "sha256": "2b08b5372d5cac340afa201612d8d6f8a751e49bb32fe9cf35f7c280c5e9840c"
+    },
+    {
+      "bytes": 11654,
+      "path": "content/zomorod-business/payroll_control.php",
+      "sha256": "6ec0cc21636b24f0dfee1e942505be0abbc88bdd0cf5a78f78ab985af977616c"
+    },
+    {
+      "bytes": 5035,
+      "path": "content/zomorod-business/payroll_ui.php",
+      "sha256": "c7a6d3f3318d767d9620a4756fe6c8171aaff645eb423ed8762a16a129b4474c"
+    },
+    {
+      "bytes": 15997,
+      "path": "content/zomorod-business/period_controls.php",
+      "sha256": "cec5caad22f5a57dbb7930703f017bc5df1115ac031963e78c8f5452def8c67d"
+    },
+    {
+      "bytes": 12748,
+      "path": "content/zomorod-business/workflow_desk.php",
+      "sha256": "4e62a9a9561c320565c74ab89693bc0d2c939e5019187535719358fe26c3f7bc"
+    },
+    {
+      "bytes": 4573,
+      "path": "docs/zomorod-erp-development-transfer.md",
+      "sha256": "9ebc87dfd74ba85f817fb8d90c545203efa2d94b06578ee3fe98ff488d38d4b3"
+    },
+    {
+      "bytes": 5146,
+      "path": "docs/zomorod-offline-v2-qa.md",
+      "sha256": "c87d88aa4796135655b9248304f6b97cdb26cec4381dfd00cea453bafef00626"
+    },
+    {
+      "bytes": 2774,
+      "path": "docs/zomorod-offline-v3-qa.md",
+      "sha256": "aae064f9fe7cce5f6a5f7738c8f704eeeaddfc746c17f61444072a8a4594d8b5"
+    },
+    {
+      "bytes": 1763,
+      "path": "docs/zomorod-offline-v4-qa.md",
+      "sha256": "296f82e0f6d9eda4518bba3bcae9845055bf9c2727dbafa91a97da62a52b26d0"
+    },
+    {
+      "bytes": 2967,
+      "path": "docs/zomorod-offline-v5-qa.md",
+      "sha256": "1a5960859553729dc5132d25085be850fee99acc50b029c3149249ad341b8176"
+    },
+    {
+      "bytes": 2750,
+      "path": "docs/zomorod-offline-v6-qa.md",
+      "sha256": "2a67d12561556d0bbed6a62f6a16ad4baa05351ace7228f25ba9f60ce95e3970"
+    },
+    {
+      "bytes": 2727,
+      "path": "docs/zomorod-payroll-offline-handoff.md",
+      "sha256": "b639ec96fee321d3475fe25008fdad4edd58b0626208d807db6e128024c3fa93"
+    },
+    {
+      "bytes": 4194,
+      "path": "scripts/build_erp_offline_bundle.py",
+      "sha256": "5e7cc92b64ed87d42608b229c67506ed9fa71ac6a5757e3b8349c7f739212695"
+    },
+    {
+      "bytes": 4980,
+      "path": "scripts/erp_offline_gate.py",
+      "sha256": "0e1c7dccafc2e1a7fc4949d0252ba0c4c352beb72ece479e52d50bc6e422dc97"
+    },
+    {
+      "bytes": 6450,
+      "path": "scripts/finance_invariants.py",
+      "sha256": "8b4fe7b3101298eafc26d260359f935f8956e417b179637837f946d749028fd0"
+    },
+    {
+      "bytes": 3851,
+      "path": "scripts/run_all_offline_qa.py",
+      "sha256": "2fce98f9fd34cc2364292cad5f2e75774bcf015bc3ce540bd30d0297f0483184"
+    },
+    {
+      "bytes": 4506,
+      "path": "scripts/test_erp_offline_gate.py",
+      "sha256": "b9d62965d35d6e4b7baa9d555a78afb891d3ed58edc11fe308b1de4858753a05"
+    },
+    {
+      "bytes": 2264,
+      "path": "scripts/test_erp_static_integration.py",
+      "sha256": "68313cfe666279fa4e8cec077f77c819147f618e6d1eb92b288ff397b07f12c7"
+    },
+    {
+      "bytes": 5427,
+      "path": "scripts/test_finance_invariants.py",
+      "sha256": "7564a89b7bea017802d42cd84d8431b02a14b0c0ba766157bcb69849dba7d66a"
+    },
+    {
+      "bytes": 2981,
+      "path": "scripts/test_industry_sqlite_schema.py",
+      "sha256": "15626eccbac7de98f4ae1c71a070d178cab08e416b527488729e91d9fb07beba"
+    },
+    {
+      "bytes": 9645,
+      "path": "scripts/test_period_closure_sqlite.py",
+      "sha256": "ebc291e8772b85746e7fc013928c7b1fcf517fe35d54140f4de6748b8ab05034"
+    },
+    {
+      "bytes": 5739,
+      "path": "scripts/test_real_php_schema_sqlite_integration.py",
+      "sha256": "5ae568df845a58d4fec7b1d84b646881797d3977a542e109edd9a89384cdd3d2"
+    },
+    {
+      "bytes": 7795,
+      "path": "scripts/test_zomorod_company_private_bridge_v4.py",
+      "sha256": "deabb13886cfd687791eafa3c61c228e91f254bc7da247e3e231c107d9eacdf2"
+    },
+    {
+      "bytes": 2972,
+      "path": "scripts/verify_erp_bundle.py",
+      "sha256": "0ceaaa5942df6c9b052bda67641aa02c1d1a4534e33a3188bfa928259fd69a37"
+    },
+    {
+      "bytes": 7827,
+      "path": "scripts/zomorod_bridge_v5_private_e2e.py",
+      "sha256": "d78b01e8d5557b8621c6bf1a6a39843711de0ccc7d7dcaad52baa81e9044ede6"
+    },
+    {
+      "bytes": 5000,
+      "path": "scripts/zomorod_command_center_synthetic_qa.php",
+      "sha256": "42edb8f5502613f0e81250521f6de01b88689290f83a38433acaf2b81244bd4f"
+    },
+    {
+      "bytes": 3930,
+      "path": "scripts/zomorod_command_planner_synthetic_qa.php",
+      "sha256": "b3cbb778d1859d0b629ac5e662fc0008bd2801fd80e89ac75bd91268cac113b0"
+    },
+    {
+      "bytes": 4524,
+      "path": "scripts/zomorod_command_quality_synthetic_qa.php",
+      "sha256": "a8b04e7e1b74a033e594b1641f3f3d82b810ba7c16a3169b293b294ad1fa9ca8"
+    },
+    {
+      "bytes": 9286,
+      "path": "scripts/zomorod_company_private_bridge_v4.py",
+      "sha256": "e4d01e581f213b6c41da8c00ab582cc7138e976136dac0952f152e2bb9786271"
+    },
+    {
+      "bytes": 4074,
+      "path": "scripts/zomorod_finance_audit_synthetic_qa.php",
+      "sha256": "ecb107a77537071da1e6d5fa76553cd968372a50c5d567f425ec1a730846f2e7"
+    },
+    {
+      "bytes": 6103,
+      "path": "scripts/zomorod_industry_synthetic_qa.php",
+      "sha256": "882ab6b3ac1ec20bc3e13ce5b2df420ff37c6bb5da91cf9a07fac0c5a7856337"
+    },
+    {
+      "bytes": 5097,
+      "path": "scripts/zomorod_payroll_control_synthetic_qa.php",
+      "sha256": "0721f58803bc59bf6077fce31fbce2cc9838199bfbbe9fbb5cc95f95115ba54d"
+    },
+    {
+      "bytes": 5355,
+      "path": "scripts/zomorod_period_controls_synthetic_qa.php",
+      "sha256": "369e2e41a410bc943739ded72eb7caa1197c79cf888c6da5e7d685d3f8e107e2"
+    },
+    {
+      "bytes": 5724,
+      "path": "scripts/zomorod_workflow_desk_synthetic_qa.php",
+      "sha256": "b5480ac745c7c6afe084bba6b55179012e2906c39e1f2fa436947bc079ce7863"
+    },
+    {
+      "bytes": 9079,
+      "path": "scripts/zomorod_workflow_web_synthetic_qa.py",
+      "sha256": "0d4c69af397809c58cd35968e962c599b3d050421bbf0f04e9f4591451636e0d"
+    }
+  ],
+  "generated_source": "conversation_offline_workspace",
+  "live_website_modified": false,
+  "offline_checks_available_here": "PASS",
+  "one_hour_scheduler_created": false,
+  "package": "zomorod-erp-offline-v6-verified",
+  "php_database_tests": "PASS",
+  "production_data_included": false,
+  "required_gates": [
+    "PHP PDO_SQLite functional regression PASS",
+    "full statutory payroll/tax/treasury and accounting review",
+    "cross-site authenticated command bridge and server-only extensions reconciliation",
+    "complete agricultural/LIMS/MES functional acceptance",
+    "independent security and disaster-recovery tests",
+    "owner signoff before deployment or one-hour automation"
+  ],
+  "secret_material_included": false,
+  "status": "DEVELOPMENT_ONLY_NOT_PRODUCTION_DEPLOYABLE"
+}

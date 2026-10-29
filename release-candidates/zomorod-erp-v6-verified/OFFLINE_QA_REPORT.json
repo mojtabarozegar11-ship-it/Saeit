@@ -1,0 +1,139 @@
+{
+  "full_erp_readiness": false,
+  "full_offline_database_tests_verified": true,
+  "hourly_schedule_created": false,
+  "offline_checks_available_here": "PASS",
+  "php_sqlite_business_tests": "PASS",
+  "production_changed": false,
+  "suite": "zomorod_erp_offline_v6",
+  "tests": {
+    "bridge_synthetic_e2e": {
+      "detail": "BRIDGE_SYNTHETIC_E2E=PASS\nKEY_AND_DATA=EPHEMERAL_PRIVATE_ONLY\nSIGNED_RECEIPT=PASS DUPLICATE_REJECTED=PASS\nTAMPER_EXPIRY_PRIVILEGED_OP_REJECTED=PASS\nCOMPANY_TASK_DB=NOT_USED COMPANY_ACCOUNTING_DB=NOT_USED\nEXTERNAL_CHAT_SIGNER=NOT_CONNECTED",
+      "status": "PASS"
+    },
+    "php_lint:content/zomorod-business/app.php": {
+      "status": "PASS"
+    },
+    "php_lint:content/zomorod-business/command_center.php": {
+      "status": "PASS"
+    },
+    "php_lint:content/zomorod-business/command_planner.php": {
+      "status": "PASS"
+    },
+    "php_lint:content/zomorod-business/command_quality.php": {
+      "status": "PASS"
+    },
+    "php_lint:content/zomorod-business/finance_audit.php": {
+      "status": "PASS"
+    },
+    "php_lint:content/zomorod-business/index.php": {
+      "status": "PASS"
+    },
+    "php_lint:content/zomorod-business/industry_operations.php": {
+      "status": "PASS"
+    },
+    "php_lint:content/zomorod-business/insights.php": {
+      "status": "PASS"
+    },
+    "php_lint:content/zomorod-business/payroll_control.php": {
+      "status": "PASS"
+    },
+    "php_lint:content/zomorod-business/payroll_ui.php": {
+      "status": "PASS"
+    },
+    "php_lint:content/zomorod-business/period_controls.php": {
+      "status": "PASS"
+    },
+    "php_lint:content/zomorod-business/workflow_desk.php": {
+      "status": "PASS"
+    },
+    "php_lint:scripts/zomorod_command_center_synthetic_qa.php": {
+      "status": "PASS"
+    },
+    "php_lint:scripts/zomorod_command_planner_synthetic_qa.php": {
+      "status": "PASS"
+    },
+    "php_lint:scripts/zomorod_command_quality_synthetic_qa.php": {
+      "status": "PASS"
+    },
+    "php_lint:scripts/zomorod_finance_audit_synthetic_qa.php": {
+      "status": "PASS"
+    },
+    "php_lint:scripts/zomorod_industry_synthetic_qa.php": {
+      "status": "PASS"
+    },
+    "php_lint:scripts/zomorod_payroll_control_synthetic_qa.php": {
+      "status": "PASS"
+    },
+    "php_lint:scripts/zomorod_period_controls_synthetic_qa.php": {
+      "status": "PASS"
+    },
+    "php_lint:scripts/zomorod_workflow_desk_synthetic_qa.php": {
+      "status": "PASS"
+    },
+    "scripts/test_erp_offline_gate.py": {
+      "detail": ") ... ok\ntest_symlink_refused (__main__.OfflineSafetyTests.test_symlink_refused) ... ok\ntest_wrong_control_domain_fails_closed (__main__.OfflineSafetyTests.test_wrong_control_domain_fails_closed) ... ok\n\n----------------------------------------------------------------------\nRan 8 tests in 0.938s\n\nOK",
+      "status": "PASS"
+    },
+    "scripts/test_erp_static_integration.py": {
+      "detail": "t_public_entrypoint_separate (__main__.IntegrationTests.test_public_entrypoint_separate) ... ok\ntest_read_only_audit_implementation (__main__.IntegrationTests.test_read_only_audit_implementation) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.001s\n\nOK",
+      "status": "PASS"
+    },
+    "scripts/test_finance_invariants.py": {
+      "detail": "_.FinanceInvariants.test_wrong_invoice_account_even_when_balanced) ... ok\ntest_wrong_payment_account_even_when_balanced (__main__.FinanceInvariants.test_wrong_payment_account_even_when_balanced) ... ok\n\n----------------------------------------------------------------------\nRan 13 tests in 0.225s\n\nOK",
+      "status": "PASS"
+    },
+    "scripts/test_industry_sqlite_schema.py": {
+      "detail": "aint) ... ok\ntest_sqlite_integrity (__main__.IndustrySchemaTests.test_sqlite_integrity) ... ok\ntest_unique_and_status_constraints (__main__.IndustrySchemaTests.test_unique_and_status_constraints) ... ok\n\n----------------------------------------------------------------------\nRan 5 tests in 0.003s\n\nOK",
+      "status": "PASS"
+    },
+    "scripts/test_period_closure_sqlite.py": {
+      "detail": "iodSQLiteTests.test_period_guard_survives_concurrent_historical_invoice_attempt) ... ok\ntest_schema_and_invariant_ddl_installs (__main__.PeriodSQLiteTests.test_schema_and_invariant_ddl_installs) ... ok\n\n----------------------------------------------------------------------\nRan 13 tests in 0.693s\n\nOK",
+      "status": "PASS"
+    },
+    "scripts/test_real_php_schema_sqlite_integration.py": {
+      "detail": "d_php_schema_all_tables_and_triggers) ... ok\ntest_synthetic_invoice_payment_and_read_only_finance_audit (__main__.RealSchemaIntegration.test_synthetic_invoice_payment_and_read_only_finance_audit) ... ok\n\n----------------------------------------------------------------------\nRan 5 tests in 0.240s\n\nOK",
+      "status": "PASS"
+    },
+    "scripts/test_zomorod_company_private_bridge_v4.py": {
+      "detail": "s (__main__.BridgeTests.test_reject_extra_task_fields_and_invalid_categories) ... ok\ntest_signature_and_atomic_idempotent_create (__main__.BridgeTests.test_signature_and_atomic_idempotent_create) ... ok\n\n----------------------------------------------------------------------\nRan 7 tests in 0.053s\n\nOK",
+      "status": "PASS"
+    },
+    "scripts/zomorod_command_center_synthetic_qa.php": {
+      "detail": "COMMAND_CENTER_SYNTHETIC_QA=PASS\nTASK_DURABILITY=PASS TASK_DEDUPLICATION=PASS AUTHORIZATION=PASS\nMANUAL_SCAN_READONLY=PASS EVENT_LOG=PASS HTML_ESCAPING=PASS\nEXTERNAL_EXECUTION=DISABLED RECURRING_SCHEDULE=NOT_CREATED",
+      "status": "PASS"
+    },
+    "scripts/zomorod_command_planner_synthetic_qa.php": {
+      "detail": "COMMAND_PLANNER_SYNTHETIC_QA=PASS\nPRIORITIZATION=PASS MISSING_PLAN_DETECTION=PASS REVIEW_QUEUE=PASS\nOWNER_AUTHORIZATION=PASS READ_ONLY_RENDERING=PASS HTML_ESCAPING=PASS\nSCHEDULE=NOT_CREATED EXECUTION=NOT_ENABLED",
+      "status": "PASS"
+    },
+    "scripts/zomorod_command_quality_synthetic_qa.php": {
+      "detail": "COMMAND_QUALITY_SYNTHETIC_QA=PASS\nRISK_CLASSIFICATION=PASS ACCEPTANCE_GATE=PASS REJECT_RESUBMIT_APPROVE=PASS\nOWNER_ONLY_REVIEW=PASS EVIDENCE_URL_VALIDATION=PASS EVENT_AUDIT=PASS\nFINANCIAL_ACTIONS=NONE RECURRING_SCHEDULE=NOT_CREATED",
+      "status": "PASS"
+    },
+    "scripts/zomorod_finance_audit_synthetic_qa.php": {
+      "detail": "ZOMOROD_FINANCE_AUDIT_OFFLINE_QA=PASS\nBALANCE_FX_OVERPAYMENT_NEGATIVE_STOCK=PASS READ_ONLY_RBAC=PASS",
+      "status": "PASS"
+    },
+    "scripts/zomorod_industry_synthetic_qa.php": {
+      "detail": "ZOMOROD_INDUSTRY_OFFLINE_QA=PASS\nCROP_LAB_BATCH_ASSET=PASS QUALITY_TWO_PERSON_REVIEW=PASS\nIDEMPOTENCY_PERMISSIONS_XSS_AUDIT=PASS REAL_COMPANY_DB=UNTOUCHED",
+      "status": "PASS"
+    },
+    "scripts/zomorod_payroll_control_synthetic_qa.php": {
+      "detail": "PAYROLL_OFFLINE_PDO_SQLITE_QA=PASS\nARITHMETIC=PASS DEDUPE=PASS TWO_PERSON_CONTROL=PASS\nIMMUTABLE_AUDIT=PASS PRIVATE_STORAGE=PASS PERSISTENCE=PASS\nBANK_TRANSFERS=NONE TAX_FILINGS=NONE LIVE_EMPLOYEE_DATA=NONE",
+      "status": "PASS"
+    },
+    "scripts/zomorod_period_controls_synthetic_qa.php": {
+      "detail": "ZM_PERIOD_CLOSURE_SYNTHETIC_QA=PASS\nCURRENCY_BALANCE=PASS TWO_PERSON_APPROVAL=PASS DB_FREEZE=PASS\nIMMUTABLE_EVENTS=PASS CLOSED_POSTING_GUARD=PASS COMPANY_DB=NOT_USED",
+      "status": "PASS"
+    },
+    "scripts/zomorod_workflow_desk_synthetic_qa.php": {
+      "detail": "ZOMOROD_WORKFLOW_QA=PASS\nHIGH_RISK_SEPARATION=PASS IDPOTENCY=PASS WORKFLOW_AUDIT=PASS\nROLE_CONTROL=PASS PRIVATE_DB_PERMISSIONS=PASS XSS_ESCAPING=PASS\nBANK_AND_CONTRACT_EXECUTION=NONE RECURRING_TASK=NOT_CREATED",
+      "status": "PASS"
+    },
+    "scripts/zomorod_workflow_web_synthetic_qa.py": {
+      "detail": "WORKFLOW_AUTHENTICATED_WEB_QA=PASS\nCSRF_ROLE_CONTROLS=PASS SENSITIVE_TWO_PERSON_APPROVAL=PASS\nIDEMPOTENCY_AUDIT=PASS XSS_ESCAPING=PASS\nACCOUNTING_ENTRIES=ZERO SYNTHETIC_DATA_ONLY=YES\nPAYROLL_AUTHENTICATED_CSRF_TWO_PERSON_WEB_QA=PASS",
+      "status": "PASS"
+    }
+  }
+}
