@@ -116,6 +116,24 @@ class SnapshotTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "a").write_text("a")
             self.assertEqual(mod.queue(d)["entries_at_least"], 1)
+    def test_queue_uses_directory_fd_not_preopen_metadata(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "a").write_text("a")
+            with mock.patch.object(mod, "stat_path", side_effect=AssertionError("unsafe path stat")):
+                result = mod.queue(d)
+            self.assertEqual(result["state"], "OBSERVED")
+            self.assertEqual(result["entries_at_least"], 1)
+
+    def test_queue_symlinked_parent_refuses_enumeration(self):
+        with tempfile.TemporaryDirectory() as d:
+            private = Path(d) / "private"
+            private.mkdir()
+            (private / "queue").mkdir()
+            alias = Path(d) / "alias"
+            alias.symlink_to(private, target_is_directory=True)
+            result = mod.queue(alias / "queue")
+            self.assertEqual(result["state"], "SYMLINK_NOT_FOLLOWED")
+
     def test_missing_command(self):
         self.assertEqual(mod.command(["/no-such-f01-command"])["state"], "UNAVAILABLE")
 
