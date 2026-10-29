@@ -15,7 +15,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="Contact",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("name", models.CharField(max_length=180)),
                 ("email", models.EmailField(blank=True, max_length=254)),
                 ("phone_e164", models.CharField(blank=True, max_length=20)),
@@ -36,7 +36,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="Message",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("key", models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
                 ("channel", models.CharField(choices=[("internal", "داخلی"), ("email", "ایمیل"), ("sms", "پیامک"),
                                                      ("telegram", "تلگرام"), ("whatsapp", "واتساپ")], max_length=12)),
@@ -69,7 +69,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name="MessageEvent",
             fields=[
-                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
                 ("code", models.CharField(max_length=48)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("message", models.ForeignKey(on_delete=django.db.models.deletion.PROTECT,
