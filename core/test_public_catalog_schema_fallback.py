@@ -486,6 +486,7 @@ class PublicCatalogHealthyPathTests(SimpleTestCase):
         media_qs = MagicMock()
         media_qs.select_related.return_value = media_qs
         media_qs.filter.return_value = media_qs
+        media_qs.order_by.return_value = media_qs
         media_qs.__getitem__.return_value = [media]
         with (
             patch("core.company_content_views.missing_public_tables", return_value=False),
@@ -501,6 +502,7 @@ class PublicCatalogHealthyPathTests(SimpleTestCase):
         media_qs.select_related.assert_called_once_with("newsletter_story")
         media_qs.filter.assert_any_call(media_type="image")
         media_qs.filter.assert_any_call(title__icontains="orchard")
+        media_qs.order_by.assert_called_once_with("-published_at", "-pk")
         media_qs.__getitem__.assert_called_once_with(slice(None, 100, None))
 
     def test_newsletter_complete_schema_keeps_existing_public_items(self):
