@@ -60,9 +60,9 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
         tracks.order_by.return_value.__getitem__.return_value = [track]
         courses = MagicMock()
         courses.select_related.return_value.order_by.return_value.__getitem__.return_value = []
-        with patch("core.academy_views.missing_public_tables", return_value=False), \\
-             patch.object(EducationTrack.objects, "filter", return_value=tracks), \\
-             patch.object(EducationCourse.objects, "filter", return_value=courses), \\
+        with patch("core.academy_views.missing_public_tables", return_value=False), \
+             patch.object(EducationTrack.objects, "filter", return_value=tracks), \
+             patch.object(EducationCourse.objects, "filter", return_value=courses), \
              patch("core.academy_views.render", return_value=HttpResponse("academy")) as rendered:
             response = academy(self.requests.get("/academy/"))
         self.assertEqual(response.status_code, 200)
