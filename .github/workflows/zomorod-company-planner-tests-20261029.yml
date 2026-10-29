@@ -1,0 +1,36 @@
+name: Zomorod company operations planner synthetic CI
+on:
+  push:
+    branches: [feature/zomorod-command-center-v3-operations-planner-20261029]
+    paths:
+      - "content/zomorod-business/command_planner.php"
+      - "content/zomorod-business/command_center.php"
+      - "scripts/zomorod_command_planner_synthetic_qa.php"
+      - ".github/workflows/zomorod-company-planner-tests-20261029.yml"
+  pull_request:
+    paths:
+      - "content/zomorod-business/command_planner.php"
+      - "content/zomorod-business/command_center.php"
+      - "scripts/zomorod_command_planner_synthetic_qa.php"
+permissions:
+  contents: read
+jobs:
+  synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, sqlite3, mbstring
+      - name: Execute previous regressions and planner-specific tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/command_planner.php
+          php -l content/zomorod-business/command_quality.php
+          php -l content/zomorod-business/command_center.php
+          php scripts/zomorod_command_center_synthetic_qa.php
+          php scripts/zomorod_command_quality_synthetic_qa.php
+          php scripts/zomorod_command_planner_synthetic_qa.php
