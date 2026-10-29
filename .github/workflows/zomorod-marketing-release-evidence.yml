@@ -64,7 +64,17 @@ jobs:
             sleep 2
           done
           if test "$available" != 1; then
-            echo "::error::VPS_SSH_HOSTKEY_UNREACHABLE; no remote connection attempted"
+            if timeout 6 bash -c 'exec 3<>/dev/tcp/178.239.147.150/22' >/dev/null 2>&1; then
+              echo "VPS_TCP22=reachable"
+            else
+              echo "VPS_TCP22=unreachable"
+            fi
+            if ssh-keyscan -T 6 -t ed25519 178.239.147.150 > "$dir/vps.untrusted-ed25519" 2>/dev/null && test -s "$dir/vps.untrusted-ed25519"; then
+              echo "VPS_ED25519_HOSTKEY=present_untrusted"
+            else
+              echo "VPS_ED25519_HOSTKEY=unavailable"
+            fi
+            echo "::error::VPS_SSH_HOSTKEY_UNREACHABLE; pinned RSA trust not weakened"
             exit 1
           fi
           if test "$(ssh-keygen -lf "$dir/vps.candidate" -E sha256 | awk '{print $2}' | sort -u)" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
