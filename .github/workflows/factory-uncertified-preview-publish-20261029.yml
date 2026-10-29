@@ -13,6 +13,10 @@ on:
     paths:
       - ".github/workflows/factory-uncertified-preview-publish-20261029.yml"
       - "scripts/publish_factory_free_tool.py"
+      - "scripts/factory_commercial_quality_release_guard_v1.py"
+      - "scripts/factory_product_rights_clearance_v1.py"
+      - "scripts/factory_quality_signed_approval_v1.py"
+      - "tests/test_factory_product_rights_clearance_v1.py"
   workflow_dispatch:
 permissions:
   contents: read
