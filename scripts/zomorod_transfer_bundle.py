@@ -30,6 +30,8 @@ FILES = (
     "scripts/zomorod_command_quality_synthetic_qa.php",
     "scripts/zomorod_command_planner_synthetic_qa.php",
     "scripts/zomorod_workflow_desk_synthetic_qa.php",
+    "scripts/zomorod_workflow_web_synthetic_qa.py",
+    "docs/zomorod-erp-development-transfer.md",
 )
 STATUS = {
     "source_bundle": "prepared",
