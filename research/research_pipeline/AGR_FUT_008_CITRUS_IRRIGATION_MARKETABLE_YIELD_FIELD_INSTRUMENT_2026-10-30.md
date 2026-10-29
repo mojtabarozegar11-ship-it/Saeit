@@ -1,0 +1,28 @@
+# AGR-FUT-008 | Citrus irrigation input, marketable yield and fruit-quality field instrument
+**R-01 · 2026-10-30 · blank, independently usable observational protocol · READY_FOR_REVIEW; no enrolled farms, no results, no DOI.**
+
+## Question and inferential scope
+Among consented citrus orchard blocks, what is the within-site association between **measured applied irrigation m³/ha** and **marketable fruit yield kg/ha** across two consecutive harvest years, and how does measured fruit quality vary? This is an **observational** design, not a randomized irrigation intervention, water-consumption estimate or causal water-saving trial. Primary unit: **mapped orchard block × harvest year**. Irrigation events are nested within blocks, and blocks within orchards; fruit samples are subsamples, not independent farms.
+
+## Enrollment and measurement acceptance
+Enroll blocks before observing the current harvest outcome. Record cultivar, rootstock, planting age, tree density, soil, block polygon/area, irrigation system and shared-line topology. Include low-yield and zero-yield blocks; document consent and withdrawals privately. Predefine crop-specific harvest window and marketable grading criteria before collection. A dedicated calibrated cumulative meter is preferred; where a line serves multiple blocks, allocation must be independently metered or explicitly marked **UNRESOLVED** (never silently allocated by area). Record rainfall and heat stress from identified stations, with calibration and units.
+
+A collector can copy this header into a **private** UTF-8 CSV immediately; all filled rows, coordinates, contacts, meter photos, sample IDs and invoices must remain private:
+
+```csv
+study_id,site_code,block_code,harvest_year,cultivar,rootstock,block_area_ha,tree_age_years,trees_per_ha,soil_texture,irrigation_method,meter_code,meter_calibration_date,opening_meter_m3,closing_meter_m3,other_verified_irrigation_m3,shared_line_allocation_m3,meter_scope_status,applied_irrigation_m3,applied_irrigation_m3_ha,total_fruit_kg,marketable_fruit_kg,marketable_yield_kg_ha,grade_definition_version,fruit_sample_n,fruit_sample_selection_protocol,soluble_solids_brix,acidity_percent_method,quality_lab_batch,harvest_date_start,harvest_date_end,rainfall_mm,heat_metric_definition,heat_metric_value,management_record_code,missingness_code,source_manifest_sha256,review_status
+```
+
+## Computation and exclusion rules
+1. For a dedicated calibrated meter covering precisely the block, `applied_irrigation_m3 = closing_meter_m3 - opening_meter_m3 + other_verified_irrigation_m3` only if the reading sequence is monotone, dates cover the defined irrigation period and other input is independently documented. If a meter reset/rollover, unrecorded shared line, leak or calibration failure is possible, mark input **MISSING** and retain raw readings. For shared-line meters, a measured, independently traceable allocation is required; otherwise do not compute block water input.
+2. `applied_irrigation_m3_ha = applied_irrigation_m3 / block_area_ha` and `marketable_yield_kg_ha = marketable_fruit_kg / block_area_ha` only for validated positive area. Fruit totals must come from harvest/packhouse records; do not derive marketable yield from a nonrepresentative fruit subsample.
+3. Soluble solids (°Brix) and titratable acidity are **different laboratory measurements**. Report the sampling frame, instrument/method, calibration and batch. Never equate Brix with sugar mass or quality score, and never pool different citrus cultivars without stratification.
+4. Prespecify a quality sampling protocol (e.g., random spatial strata within each block, maturity window and fruit count) **before** harvest; no post hoc cherry-picking. Treat sample fruit as nested within block, not extra block-level replicates.
+5. Report irrigation water **input**, not crop evapotranspiration, consumptive use, basin savings or advice adherence. Even a negative water-yield association is not causal without a credible design controlling confounding.
+6. Maintain an enrollment flow (approached, eligible, consented, meter-valid, yield-valid, quality-valid, both-years observed) and explicit missingness codes: `NONE`, `NO_CONSENT`, `METER_MISSING`, `METER_SCOPE_UNRESOLVED`, `METER_CALIBRATION_UNVERIFIED`, `AREA_UNVERIFIED`, `YIELD_TICKET_MISSING`, `GRADE_UNVERIFIED`, `QUALITY_METHOD_UNVERIFIED`, `WITHDRAWN`.
+
+## Analysis plan gate
+Primary descriptive display: paired block-year irrigation m³/ha and marketable yield kg/ha, stratified by cultivar and site; report sample size, missingness and dispersion. Account for orchard/block clustering and year; select mixed versus fixed effects based on the actual design before estimation. Include cultivar, age, alternate bearing, rainfall, heat and management as potential confounders where supported by observed data. **No effect-size, p-value, study power, sample size target or savings claim is supplied here**, because no pilot variance or consented observations exist. Separate laboratory quality analyses from yield.
+
+## Handoff and acceptance
+Before any statistical analysis, R-01 must receive a deidentified private CSV, consent-status register, calibration/area evidence, lab and packhouse source documents, dated SHA-256 manifest and prespecified grading/missingness rules. A separate author decision is required before journal submission or publication. **Collector's next usable action:** create a private CSV from the header, enroll eligible block codes and record meter calibration and grading protocol prior to first observation. No real farms or field measurements are represented as completed.
