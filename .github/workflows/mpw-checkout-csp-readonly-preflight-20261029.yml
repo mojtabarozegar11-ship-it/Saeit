@@ -278,8 +278,22 @@ jobs:
           d="$(mktemp -d "$RUNNER_TEMP/s01-restore-XXXXXX")"
           trap 'rm -rf -- "$d"' EXIT
           stem="/home/zomorod2/.private_mojplaywin_main_agents/mpw-checkout-csp-preimage-f33d80b7e843a66c"
-          timeout 45s scp -q -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" "saeit-cpanel:$stem.bak" "$d/preimage.py"
-          timeout 45s scp -q -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" "saeit-cpanel:$stem.json" "$d/manifest.json"
+          # Retry only bounded, read-only copies over the same pinned SSH
+          # configuration. Never accept a partial pair or relax host-key checks.
+          restore_pair=0
+          for attempt in 1 2; do
+            rm -f "$d/preimage.py" "$d/manifest.json"
+            if timeout 35s scp -q -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" "saeit-cpanel:$stem.bak" "$d/preimage.py" \
+              && timeout 35s scp -q -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" "saeit-cpanel:$stem.json" "$d/manifest.json"; then
+              restore_pair=1
+              break
+            fi
+            if [ "$attempt" -eq 1 ]; then sleep 2; fi
+          done
+          if [ "$restore_pair" -ne 1 ]; then
+            echo 'S01_EPHEMERAL_OFFHOST_RESTORE=BLOCKED_PINNED_SCP'
+            exit 1
+          fi
           python3 - "$d" <<'PY'
           import hashlib, json, os, stat, sys
           from pathlib import Path
