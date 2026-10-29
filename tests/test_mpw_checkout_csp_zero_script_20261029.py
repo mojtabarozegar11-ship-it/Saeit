@@ -69,10 +69,17 @@ class CheckoutZeroScriptCSPTests(unittest.TestCase):
             "INSERT INTO orders VALUES (1)", "UPDATE orders SET paid=1",
             "DELETE FROM orders", "WITH x AS (DELETE FROM orders RETURNING *) SELECT * FROM x",
             "BEGIN", "PRAGMA writable_schema=ON", "/* hidden */ SELECT 1",
+            "SELECT 1; DELETE FROM orders", "SELECT * FROM orders FOR UPDATE",
+            "SELECT * FROM orders LOCK IN SHARE MODE",
+            "SELECT * INTO OUTFILE '/tmp/leak' FROM orders",
+            "SELECT * INTO DUMPFILE '/tmp/leak' FROM orders",
         ):
             with self.subTest(statement=statement):
                 with self.assertRaisesRegex(RuntimeError, "non-SELECT"):
                     module._read_only_checkout_sql(execute, statement, (), False, {})
+        self.assertEqual(executed, [" SELECT 1"])
+        with self.assertRaisesRegex(RuntimeError, "side-effect SQL"):
+            module._read_only_checkout_sql(execute, "SELECT 1", (), True, {})
         self.assertEqual(executed, [" SELECT 1"])
 
     def test_rollback_requires_authorization_before_any_file_access(self):
