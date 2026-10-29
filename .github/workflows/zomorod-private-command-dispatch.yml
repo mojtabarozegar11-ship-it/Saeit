@@ -17,9 +17,6 @@ on:
         type: string
 permissions:
   contents: read
-concurrency:
-  group: zomorod-private-chat-command-inbox
-  cancel-in-progress: false
 jobs:
   receive:
     if: >-
@@ -30,7 +27,7 @@ jobs:
         github.event_name == 'workflow_dispatch'
         || (
           github.event_name == 'issue_comment'
-          && github.event.issue.number == 1514
+          && github.event.issue.number == 1600
           && !github.event.issue.pull_request
           && github.event.comment.user.login == 'mojtabarozegar11-ship-it'
           && github.event.comment.author_association == 'OWNER'
@@ -40,6 +37,9 @@ jobs:
           )
         )
       )
+    concurrency:
+      group: zomorod-private-chat-command-inbox
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -74,7 +74,7 @@ jobs:
               comment = event.get("comment") or {}
               user = comment.get("user") or {}
               if (event.get("action") != "created"
-                      or issue.get("number") != 1514
+                      or issue.get("number") != 1600
                       or issue.get("pull_request")
                       or user.get("login") != "mojtabarozegar11-ship-it"
                       or comment.get("author_association") != "OWNER"):
@@ -194,14 +194,14 @@ jobs:
           # A single successful, pinned two-hop identity test proves both hops
           # and keeps the authenticated cPanel control session for subsequent steps.
           session_ready=0
-          for attempt in 1 2 3; do
+          for attempt in 1 2 3 4 5; do
             if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
               session_ready=1
               echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
               break
             fi
             echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
-            if test "$attempt" -lt 3; then sleep 12; fi
+            if test "$attempt" -lt 5; then sleep 12; fi
           done
           test "$session_ready" = 1 || { echo 'PINNED_30GB_RELAY_UNAVAILABLE'; exit 1; }
           echo 'PINNED_SESSION=AUTHENTICATED'
