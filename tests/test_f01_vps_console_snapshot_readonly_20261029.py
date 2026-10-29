@@ -153,6 +153,28 @@ class SnapshotTests(unittest.TestCase):
         self.assertFalse(observed["worker_health_verified"])
         self.assertNotIn("cmdline", str(observed).lower())
 
+    def test_parent_origin_categories_are_fixed_and_redacted(self):
+        self.assertEqual(mod.classify_process_origin("cron", b"/usr/sbin/cron"), "cron")
+        self.assertEqual(mod.classify_process_origin("bash", b"factory/private/run.py --secret-token=hidden"), "factory")
+        self.assertEqual(mod.classify_process_origin("python3", b"python3 worker.py"), "python")
+        self.assertEqual(mod.classify_process_origin("systemd", b"/usr/lib/systemd/systemd"), "systemd")
+        self.assertEqual(mod.classify_process_origin("bash", b"/bin/bash"), "shell")
+        self.assertEqual(mod.classify_process_origin("bash", b"master-agent internal"), "master-agent")
+
+    def test_dominant_parent_lineage_contains_no_pid_or_private_argv(self):
+        p = mod.dominant_parent_origin(__import__("os").getpid())
+        self.assertIn(p["state"], ("OBSERVED", "PARTIAL"))
+        self.assertTrue(p["pid_argv_and_paths_redacted"])
+        self.assertLessEqual(p["depth_observed"], 8)
+        self.assertNotIn("pid", str(p.get("lineage", [])))
+        for entry in p["lineage"]:
+            self.assertEqual(set(entry), {"category", "state", "threads"})
+            self.assertIn(entry["category"], ("cron", "systemd", "master-agent", "factory", "python", "shell", "other"))
+        q = mod.process_pressure()
+        self.assertIn("dominant_parent_origin", q)
+        self.assertIn("dominant_parent_child_states", q)
+        self.assertFalse(q["worker_health_verified"])
+
     def test_missing_command(self):
         self.assertEqual(mod.command(["/no-such-f01-command"])["state"], "UNAVAILABLE")
 
