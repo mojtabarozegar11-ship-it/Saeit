@@ -14,7 +14,8 @@ def snapshot():
     return {'schema': 'f01-vps-console-readonly.v1', 'read_only': True,
             'production_change': False, 'observed_utc': NOW.isoformat(),
             'filesystem': {'target_1': {'state': 'OBSERVED', 'available_bytes': 4 * 1024**3}},
-            'guest': {'cpu_count': 4, 'loadavg': [2, 2, 2]},
+            'guest': {'cpu_count': 4, 'loadavg': [2, 2, 2], 'memory': {'MemAvailable_kib': 1024 * 1024}},
+            'process_pressure': {'state': 'OBSERVED', 'all_process_states': {'D': 0}, 'factory_max_children_same_parent': 2},
             'offhost_backup_restored': 'NOT_VERIFIED', 'worker_running_verified': False}
 
 
@@ -34,6 +35,22 @@ class ReleaseGateTests(unittest.TestCase):
         s = snapshot()
         s['observed_utc'] = (NOW - dt.timedelta(hours=1)).isoformat()
         self.assertIn('STALE_OR_FUTURE_SNAPSHOT', mod.evaluate(s, NOW)['blockers'])
+
+    def test_io_wait_storm_blocks_shared_release(self):
+        s = snapshot()
+        s['process_pressure']['all_process_states']['D'] = 26
+        s['process_pressure']['factory_max_children_same_parent'] = 142
+        self.assertIn('PROCESS_STORM_OR_IO_WAIT_UNVERIFIED_OR_HIGH', mod.evaluate(s, NOW)['blockers'])
+
+    def test_missing_process_evidence_fails_closed(self):
+        s = snapshot()
+        s.pop('process_pressure')
+        self.assertIn('PROCESS_STORM_OR_IO_WAIT_UNVERIFIED_OR_HIGH', mod.evaluate(s, NOW)['blockers'])
+
+    def test_memory_starvation_fails_closed(self):
+        s = snapshot()
+        s['guest']['memory']['MemAvailable_kib'] = 128 * 1024
+        self.assertIn('GUEST_AVAILABLE_MEMORY_UNVERIFIED_OR_LOW', mod.evaluate(s, NOW)['blockers'])
 
     def test_capacity_pass_is_not_deployment_approval(self):
         s = snapshot()
