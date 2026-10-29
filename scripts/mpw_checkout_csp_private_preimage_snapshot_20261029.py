@@ -133,9 +133,47 @@ def snapshot(root=ROOT, expected_owner="zomorod2"):
     }
 
 
+
+def safe_failure_code(exc):
+    """Classify a blocked snapshot without exposing private exception text."""
+    if isinstance(exc, BlockingIOError):
+        return "LOCK_BUSY"
+    if isinstance(exc, RuntimeError):
+        message = str(exc)
+        rules = {
+            "unexpected cPanel user": "OWNER_MISMATCH",
+            "unexpected parent directory": "PARENT_TYPE_MISMATCH",
+            "private backup directory not secure": "BACKUP_DIRECTORY_UNSAFE",
+            "private backup directory owner mismatch": "BACKUP_DIRECTORY_OWNER_MISMATCH",
+            "unexpected source/backup file type": "SOURCE_OR_BACKUP_TYPE_MISMATCH",
+            "Passenger application root marker changed": "WSGI_ROOT_MISMATCH",
+            "checkout source unexpectedly large": "SOURCE_SIZE_DRIFT",
+            "checkout preimage SHA drift": "SOURCE_SHA_DRIFT",
+            "local backup filesystem lacks headroom": "BACKUP_HEADROOM_LOW",
+            "source changed during preimage snapshot": "SOURCE_CONCURRENT_DRIFT",
+            "snapshot preimage digest mismatch": "EXISTING_BACKUP_CORRUPT",
+            "snapshot permissions not private": "EXISTING_BACKUP_PERMISSIONS",
+            "snapshot manifest mismatch": "EXISTING_MANIFEST_MISMATCH",
+            "new preimage failed readback": "NEW_BACKUP_READBACK_FAILED",
+        }
+        return rules.get(message, "RUNTIME_GUARD_BLOCKED")
+    if isinstance(exc, FileNotFoundError):
+        return "REQUIRED_FILE_MISSING"
+    if isinstance(exc, PermissionError):
+        return "PERMISSION_DENIED"
+    if isinstance(exc, json.JSONDecodeError):
+        return "MANIFEST_JSON_INVALID"
+    return "UNCLASSIFIED_BLOCKER"
+
+
+
 if __name__ == "__main__":
     try:
         print("S01_PRIVATE_PREIMAGE=" + json.dumps(snapshot(), sort_keys=True))
-    except (OSError, ValueError, RuntimeError, KeyError, json.JSONDecodeError):
-        print("S01_PRIVATE_PREIMAGE=BLOCKED_NO_SOURCE_CHANGE")
+    except (OSError, ValueError, RuntimeError, KeyError, json.JSONDecodeError) as exc:
+        print("S01_PRIVATE_PREIMAGE=" + json.dumps({
+            "status": "BLOCKED_NO_SOURCE_CHANGE",
+            "reason_code": safe_failure_code(exc),
+            "release_permitted": False,
+        }, sort_keys=True))
         raise SystemExit(1)
