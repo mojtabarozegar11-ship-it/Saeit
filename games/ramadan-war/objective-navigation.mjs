@@ -27,3 +27,30 @@ export const INTERACT_RANGE=1.35;
 export function canInteractAt(px,py,tx,ty,range=INTERACT_RANGE){
   return [px,py,tx,ty,range].every(Number.isFinite)&&range>=0&&Math.hypot(px-tx,py-ty)<=range;
 }
+
+ // When a goal is blocked, guide only to a traversable position near it.
+export function objectiveApproachWaypoint(px,py,tx,ty,passable,radius=INTERACT_RANGE,size=16){
+  if (![px,py,tx,ty,radius].every(Number.isFinite)||radius<=0||radius>4||!Number.isInteger(size)||size<2||size>64||typeof passable!=='function')return null;
+  let best=null;
+  for(let y=Math.max(0,Math.floor(ty-radius-1));y<=Math.min(size-1,Math.ceil(ty+radius));y++){
+    for(let x=Math.max(0,Math.floor(tx-radius-1));x<=Math.min(size-1,Math.ceil(tx+radius));x++){
+      if(!passable(x,y))continue;
+      const cx=x+.5,cy=y+.5;
+      if(Math.hypot(cx-tx,cy-ty)>radius)continue;
+      const route=objectiveWaypoint(px,py,cx,cy,passable,size);
+      if(route&&(best===null||route.steps<best.steps))best=route;
+    }
+  }
+  return best;
+}
+// Recovery intel is order-independent: use the closest reachable package.
+export function closestReachableObjective(px,py,targets,passable,size=16){
+  if(!Array.isArray(targets)||targets.length>64||typeof passable!=='function')return null;
+  let best=null,steps=Infinity;
+  for(const target of targets){
+    if(!Array.isArray(target)||target.length<2||!target.slice(0,2).every(Number.isFinite))continue;
+    const route=objectiveWaypoint(px,py,target[0],target[1],passable,size);
+    if(route&&route.steps<steps){best=[target[0],target[1]];steps=route.steps}
+  }
+  return best;
+}
