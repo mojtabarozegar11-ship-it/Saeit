@@ -1,6 +1,7 @@
 import argparse
 import importlib.util
 from pathlib import Path
+from unittest import mock
 import tempfile
 import unittest
 
@@ -51,6 +52,36 @@ class SnapshotTests(unittest.TestCase):
             for category in ("filesystem", "queue", "locks", "sqlite", "backup"):
                 self.assertEqual(list(x[category]), ["target_1"])
                 self.assertNotIn(d, str(list(x[category])))
+
+    def test_lsblk_mountpoint_never_requested_or_emitted(self):
+        calls = []
+        def fake_command(argv):
+            calls.append(argv)
+            if argv[0] == "lsblk":
+                return {"state": "OBSERVED", "output": (
+                    '{"blockdevices":[{"name":"vda","size":"42",'
+                    '"mountpoint":"/PRIVATE/DO_NOT_LOG",'
+                    '"children":[{"name":"vda1","mountpoints":["/secret"]}]}]}')}
+            return {"state": "UNAVAILABLE"}
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(mod, "command", side_effect=fake_command):
+            args = argparse.Namespace(mount=[d], queue=[], lock=[], sqlite=[], backup=[])
+            result = mod.capture(args)
+        self.assertNotIn("MOUNTPOINT", str(calls[0]))
+        self.assertNotIn("/PRIVATE", str(result))
+        self.assertNotIn("/secret", str(result))
+        self.assertEqual(result["block_topology"]["devices"]["blockdevices"][0]["name"], "vda")
+
+    def test_sqlite_leaf_symlink_swap_fails_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            real = Path(d) / "private"
+            real.write_bytes(b"SQLite format 3\\0" + b"data")
+            link = Path(d) / "db"
+            link.symlink_to(real)
+            # Simulate a symlink swap after metadata validation.
+            with mock.patch.object(mod, "stat_path", return_value={"state":"PRESENT", "is_file":True}):
+                observed = mod.sqlite(link)
+            self.assertEqual(observed["state"], "UNAVAILABLE")
+            self.assertFalse(observed.get("sqlite_header_valid", False))
 
     def test_queue_bounded(self):
         with tempfile.TemporaryDirectory() as d:
