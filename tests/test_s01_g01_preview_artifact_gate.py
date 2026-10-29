@@ -107,6 +107,18 @@ class ArtifactGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsafe archive entry"):
             gate.verify(fixture(traversal=True), REV, gate.git_blob(GAME))
 
+    def test_oversized_outer_rejected_before_any_zip_parse(self):
+        class OversizedInput:
+            def __len__(self):
+                return gate.MAX_OUTER_BYTES + 1
+        with self.assertRaisesRegex(ValueError, "outer preview archive exceeds input budget"):
+            gate.verify(OversizedInput(), REV, gate.git_blob(GAME))
+
+    def test_oversized_inner_rejected_before_manifest_parse(self):
+        with patch.object(gate, "MAX_INNER_BYTES", 10):
+            with self.assertRaisesRegex(ValueError, "inner preview archive exceeds input budget"):
+                gate.verify(fixture(), REV, gate.git_blob(GAME))
+
 
 if __name__ == "__main__":
     unittest.main()
