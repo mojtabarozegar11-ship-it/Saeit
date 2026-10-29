@@ -88,6 +88,52 @@ class ProductionOrderGeneratorTests(unittest.TestCase):
         self.assertEqual(state["id"],"WO-100000000")
         self.assertEqual(len(self.get()[1]),2)
 
+    def test_owner_held_879_never_creates_new_order_from_stale_portfolio(self):
+        self.seed([base_entry(72, []), base_entry(879, []), base_entry(225, [])])
+        first = orders.generate(self.root)
+        second = orders.generate(self.root)
+        third = orders.generate(self.root)
+        self.assertEqual([first["action"], second["action"], third["action"]],
+                         ["issued", "issued", "no_new_meaningful_input"])
+        self.assertEqual([r["source_product_id"] for r in self.get()[1]], [72, 225])
+
+    def test_owner_hold_preserves_preexisting_879_workorder_byte_for_byte(self):
+        self.seed([base_entry(72, [])])
+        queue = self.root / "production-instructions" / "orders"
+        queue.mkdir(parents=True)
+        old = {"schema": orders.SCHEMA, "id": "WO-00000001",
+               "status": "issued", "fingerprint": "a" * 64,
+               "origin": "local-factory-research", "source_product_id": 879,
+               "phase": "research_rework",
+               "blocker": "FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED",
+               "public_distribution_allowed": False}
+        existing = queue / "WO-00000001.json"
+        orders.atomic_json(existing, old)
+        before = existing.read_bytes()
+        result = orders.generate(self.root)
+        self.assertEqual(result["action"], "issued")
+        self.assertEqual(existing.read_bytes(), before)
+        self.assertEqual(self.get()[1][-1]["source_product_id"], 72)
+
+    def test_explicit_sku879_snapshot_is_held_without_blocking_225(self):
+        self.seed([])
+        inp = self.root / "production-order-inputs"
+        inp.mkdir()
+        spec = "Design a complete offline prototype with documented functional tests and evidence."
+        (inp / "factory-invention-snapshot.json").write_text(json.dumps({
+            "schema": orders.SCHEMA,
+            "items": [
+                {"id": "SKU879", "title": "Owner-held kit no new production",
+                 "specification": spec},
+                {"id": "SKU225", "title": "Independent SKU225 production proposal",
+                 "specification": spec}
+            ]
+        }))
+        result = orders.generate(self.root)
+        self.assertEqual(result["action"], "issued")
+        self.assertEqual(self.get()[1][0]["source_product_id"], "SKU225")
+        self.assertEqual(orders.generate(self.root)["action"], "no_new_meaningful_input")
+
     def test_four_offline_channels_do_not_need_live_sites(self):
         self.seed([])
         inp=self.root/"production-order-inputs"
