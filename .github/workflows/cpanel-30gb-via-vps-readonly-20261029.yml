@@ -1,0 +1,80 @@
+name: Verify 30GB cPanel identity through pinned VPS hop (read-only)
+on:
+  push:
+    branches:
+      - diagnose/cpanel-30gb-route-20261029
+    paths:
+      - .github/workflows/cpanel-30gb-via-vps-readonly-20261029.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Validate pinned VPS, then current cPanel endpoint without remote changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          CPANEL_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$CPANEL_KEY" || { echo 'REQUIRED_PRIVATE_CREDENTIAL_MISSING'; exit 1; }
+          d="$RUNNER_TEMP/30gb-hop-readonly"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$CPANEL_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/cpanel.key"
+          chmod 600 "$d/vps.key" "$d/cpanel.key"
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/cpanel.key" >/dev/null
+          : > "$d/vps.known"
+          for attempt in 1 2 3 4 5 6; do
+            timeout 13s ssh-keyscan -T 9 -t rsa 178.239.147.150 2>/dev/null > "$d/vps.known" || true
+            if test -s "$d/vps.known"; then break; fi
+            if test "$attempt" -lt 6; then sleep 4; fi
+          done
+          test -s "$d/vps.known" || { echo 'VPS_KEYSCAN_EMPTY'; exit 1; }
+          actual="$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' || { echo 'VPS_PIN_MISMATCH_DO_NOT_CONNECT'; exit 1; }
+          echo 'VPS_RSA_PIN=VERIFIED'
+          cat > "$d/config" <<EOF
+          Host checked-vps
+            HostName 178.239.147.150
+            Port 22
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host checked-cpanel-30gb
+            HostName 178.239.147.125
+            Port 1396
+            User zomorod2
+            IdentityFile $d/cpanel.key
+            UserKnownHostsFile $d/cpanel.known
+            ProxyJump checked-vps
+          Host *
+            BatchMode yes
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            ConnectTimeout 12
+            ConnectionAttempts 2
+            ForwardAgent no
+            RequestTTY no
+            LogLevel ERROR
+          EOF
+          chmod 600 "$d/config"
+          : > "$d/cpanel.candidate"
+          for attempt in 1 2 3; do
+            timeout 40s ssh -F "$d/config" checked-vps 'timeout 15s ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125' 2>/dev/null |
+              awk '$1 == "[178.239.147.125]:1396" && $2 == "ssh-ed25519" && $3 ~ /^[A-Za-z0-9+\/=]+$/ {print $1, $2, $3}' > "$d/cpanel.candidate" || true
+            if test -s "$d/cpanel.candidate"; then break; fi
+            if test "$attempt" -lt 3; then sleep 4; fi
+          done
+          test -s "$d/cpanel.candidate" || { echo 'CPANEL_30GB_VIA_VPS_SCAN_EMPTY'; exit 1; }
+          pin="$(ssh-keygen -lf "$d/cpanel.candidate" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$pin" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' || { echo 'CPANEL_30GB_PIN_MISMATCH_DO_NOT_CONNECT'; exit 1; }
+          cp "$d/cpanel.candidate" "$d/cpanel.known"
+          echo 'CPANEL_30GB_ED25519_PIN=VERIFIED'
+          timeout 55s ssh -F "$d/config" checked-cpanel-30gb 'set -eu; test "$(id -un)" = "zomorod2"; test -d /home/zomorod2/Saeit-staging; echo CPANEL_30GB_IDENTITY_AND_STAGING=VERIFIED'
+          echo 'No remote files changed; no deployments or migrations.'
