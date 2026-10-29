@@ -286,6 +286,10 @@ def education_lesson_complete(request, slug, lesson_id):
 def education_bookmark(request, slug, lesson_id):
     if request.method != "POST":
         raise Http404
+    # Bookmark toggles are writes. Missing course/lesson/bookmark tables must
+    # never be misreported as deleted lessons or trigger a partial mutation.
+    if missing_public_tables(EducationCourse, EducationLesson, EducationBookmark):
+        return unavailable_enrollment_response()
     lesson = get_object_or_404(EducationLesson, pk=lesson_id, course__slug=slug, course__active=True, course__approved=True, active=True)
     bookmark = EducationBookmark.objects.filter(user=request.user, lesson=lesson).first()
     if bookmark:
