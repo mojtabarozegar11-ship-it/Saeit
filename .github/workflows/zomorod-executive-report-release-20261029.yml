@@ -1,0 +1,184 @@
+name: Zomorod business executive reports guarded private release
+on:
+  push:
+    branches: [feature/zomorod-business-executive-overview-20261029]
+    paths: [".github/workflows/zomorod-executive-report-release-20261029.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-business-executive-reports-release
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, sqlite3
+      - name: Synthetic private business regression including new dashboard
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/insights.php
+          mkdir -p "$HOME/.private/zomorod-business" "$HOME/public_html/business"
+          cp content/zomorod-business/app.php "$HOME/.private/zomorod-business/app.php"
+          cp content/zomorod-business/insights.php "$HOME/.private/zomorod-business/insights.php"
+          cp content/zomorod-business/index.php "$HOME/public_html/business/index.php"
+          python3 scripts/zomorod_business_synthetic_qa.py "$GITHUB_SHA"
+      - name: Connect through pinned VPS to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_PRIVATE_RELAY=verified"
+      - name: Stage private module after unique-anchor read-only preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          p="$HOME/.private/zomorod-business"
+          backup="$HOME/.backups/zomorod-business-insights/$1-$2"
+          test -f "$p/app.php" && test ! -L "$p/app.php"
+          test -f "$p/management.sqlite3" && test ! -L "$p/management.sqlite3"
+          test ! -e "$p/insights.php"
+          test ! -e "$backup"
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin"; then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php"; fi
+          "$phpbin" -l "$p/app.php" >/dev/null
+          python3 - "$p/app.php" <<'PY'
+          import pathlib,sys
+          s=pathlib.Path(sys.argv[1]).read_bytes()
+          a="'dashboard'=>'داشبورد','accounts'".encode()
+          b=b"    } elseif($page==='agent_center'){"
+          if s.count(a)!=1 or s.count(b)!=1 or b"insights.php" in s:
+              raise SystemExit("BUSINESS_INSIGHTS_PREFLIGHT=REFUSED_CHANGED_LIVE_CODE")
+          print("BUSINESS_INSIGHTS_PREFLIGHT=PASS")
+          PY
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          cp -p "$p/app.php" "$backup/app.php.before"
+          chmod 600 "$backup/app.php.before"
+          sha256sum "$HOME/public_html/index.html" "$HOME/public_html/.htaccess" > "$backup/public-checksums.sha256"
+          for name in mohammad ghanadi amozeshgah tala company about; do
+            if test -f "$HOME/public_html/$name/index.html"; then
+              sha256sum "$HOME/public_html/$name/index.html" >> "$backup/public-checksums.sha256"
+            fi
+          done
+          REMOTE
+          backup="/home/zomorod2/.backups/zomorod-business-insights/$GITHUB_SHA-$GITHUB_RUN_ID"
+          tar -cf - -C content/zomorod-business insights.php |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$backup'"
+      - name: Surgical patch and live public/login verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          p="$HOME/.private/zomorod-business"
+          backup="$HOME/.backups/zomorod-business-insights/$1-$2"
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin"; then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php"; fi
+          test -f "$backup/app.php.before" && test -f "$backup/insights.php"
+          "$phpbin" -l "$backup/insights.php"
+          python3 - "$backup/app.php.before" "$backup/candidate.php" <<'PY'
+          import pathlib,sys
+          s=pathlib.Path(sys.argv[1]).read_bytes()
+          nav="'dashboard'=>'داشبورد','accounts'".encode()
+          nav2="'dashboard'=>'داشبورد','insights'=>'گزارش مدیریتی','accounts'".encode()
+          route=b"    } elseif($page==='agent_center'){"
+          route2=("    } elseif($page==='insights'){\n"
+                  "        authorize('view');\n"
+                  "        require $private.'/insights.php';\n"
+                  "    } elseif($page==='agent_center'){").encode()
+          if s.count(nav)!=1 or s.count(route)!=1 or b"insights.php" in s:
+              raise SystemExit("BUSINESS_INSIGHTS_PATCH=UNSAFE_ANCHOR")
+          patched=s.replace(nav,nav2).replace(route,route2)
+          if patched.count(nav2)!=1 or patched.count(route2)!=1:
+              raise SystemExit("BUSINESS_INSIGHTS_PATCH=INVALID")
+          pathlib.Path(sys.argv[2]).write_bytes(patched)
+          PY
+          chmod 600 "$backup/candidate.php"
+          "$phpbin" -l "$backup/candidate.php"
+          install -m 600 "$backup/insights.php" "$p/insights.php.next-$1"
+          install -m 600 "$backup/candidate.php" "$p/app.php.next-$1"
+          module=0;swapped=0
+          rollback(){
+            if test "$swapped" = 1; then
+              cp -p "$backup/app.php.before" "$p/app.php.rollback-$1"
+              mv -f "$p/app.php.rollback-$1" "$p/app.php"
+            fi
+            if test "$module" = 1; then rm -f "$p/insights.php"; fi
+            rm -f "$p/insights.php.next-$1" "$p/app.php.next-$1"
+            echo "BUSINESS_INSIGHTS_ROLLBACK=APPLIED"
+          }
+          finish(){ rc=$?;trap - EXIT;if test "$rc" -ne 0; then rollback; fi;exit "$rc"; }
+          trap finish EXIT
+          mv -f "$p/insights.php.next-$1" "$p/insights.php";module=1
+          mv -f "$p/app.php.next-$1" "$p/app.php";swapped=1
+          "$phpbin" -l "$p/app.php"
+          "$phpbin" -l "$p/insights.php"
+          cmp -s "$p/insights.php" "$backup/insights.php"
+          status="$(curl -sS -L --max-time 30 -o "$backup/unauthenticated.html" -w '%{http_code}' "https://zomorodmelal.ir/business/?page=insights&verify=$1")"
+          test "$status" = 200
+          grep -Fq "ورود مدیر و حسابدار" "$backup/unauthenticated.html"
+          ! grep -Fq "مرکز گزارش و کنترل مدیریتی" "$backup/unauthenticated.html"
+          ! grep -Fq "توکن فعال‌سازی" "$backup/unauthenticated.html"
+          sha256sum -c --status "$backup/public-checksums.sha256"
+          trap - EXIT
+          echo "BUSINESS_PRIVATE_INSIGHTS=DEPLOY_SUCCESS"
+          echo "EXISTING_PRIVATE_PHP_EXTENSIONS=PRESERVED"
+          echo "DB_SCHEMA_CHANGES=NONE"
+          REMOTE
+      - name: Remove temporary SSH keys
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-business-tokenless"
