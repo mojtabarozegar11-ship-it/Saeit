@@ -55,4 +55,12 @@ jobs:
           if command -v ss >/dev/null 2>&1; then
             echo "VPS_PORT22_LISTENING=$(ss -lnt | awk '$4 ~ /:22$/ {n++} END {print n+0}')"
           fi
+          echo "VPS_CPU_COUNT=$(nproc)"
+          echo "VPS_D_STATE_PROCESSES=$(ps -e -o stat= | awk '$1 ~ /^D/ {n++} END {print n+0}')"
+          echo "VPS_ROOT_FS"
+          df -hPT /
+          echo "VPS_FACTORY_FS"
+          df -hPT "$HOME/factory-runtime"
+          echo "VPS_BLOCK_DEVICES"
+          lsblk -n -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS
           REMOTE
