@@ -284,26 +284,26 @@ jobs:
               await page.locator('#mcd-reset').click();
               assert.equal(await page.locator('#mcd-balance').innerText(),'1,000.00 MCD');
               await page.locator('#oracle-zodiac select').selectOption('8');
-              await page.locator('#oracle-zodiac button').click();
+              await page.locator('#oracle-zodiac button.btn').click();
               const horoscope=await page.locator('#oracle-zodiac .oracle-answer').innerText();
               assert.ok(horoscope.includes('Sagittarius'));
-              await page.locator('#oracle-zodiac button').click();
+              await page.locator('#oracle-zodiac button.btn').click();
               assert.equal(await page.locator('#oracle-zodiac .oracle-answer').innerText(),horoscope,'same sign on same day must be stable');
               await page.locator('#oracle-chinese input').fill('2024');
-              await page.locator('#oracle-chinese button').click();
+              await page.locator('#oracle-chinese button.btn').click();
               assert.match(await page.locator('#oracle-chinese .oracle-answer').innerText(),/Dragon/);
               await page.locator('#oracle-numerology input').fill('1984-05-22');
-              await page.locator('#oracle-numerology button').click();
+              await page.locator('#oracle-numerology button.btn').click();
               assert.match(await page.locator('#oracle-numerology .oracle-answer').innerText(),/Life path/);
               for(const id of ['tarot','tarot3','coffee','runes','iching','dream','poetry','yesno','lucky']){
-                await page.locator('#oracle-'+id+' button').click();
+                await page.locator('#oracle-'+id+' button.btn').click();
                 const answer=await page.locator('#oracle-'+id+' .oracle-answer').innerText();
                 assert.ok(answer.length>35,id+' must generate a meaningful reading');
               }
               assert.equal((await page.locator('#oracle-tarot3 .oracle-answer').innerText()).split('🃏').length-1,3);
               assert.equal((await page.locator('#oracle-iching .oracle-answer').innerText()).split('━━').length>5,true);
               await page.locator('#oracle-numerology input').fill('1890-01-01');
-              await page.locator('#oracle-numerology button').click();
+              await page.locator('#oracle-numerology button.btn').click();
               assert.equal(await page.locator('#oracle-numerology .oracle-answer').innerText(),'Choose a birth date.');
               await page.locator('#language').selectOption('fa');
               assert.equal(await page.locator('#nav-predictions').innerText(),'پیش‌بینی زنده');
