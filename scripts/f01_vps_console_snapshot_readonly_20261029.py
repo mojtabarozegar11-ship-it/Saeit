@@ -111,9 +111,58 @@ def parse_proc_stat(raw):
             "threads": int(fields[17])}
 
 
+
+def classify_process_origin(executable, cmdline):
+    """Return only a fixed category; never expose command lines or process IDs."""
+    name = executable.lower()
+    cmd = cmdline.lower()
+    if name in ("cron", "crond") or b"/cron" in cmd or b"crond" in cmd:
+        return "cron"
+    if name == "systemd" or b"/systemd" in cmd:
+        return "systemd"
+    if b"master-agent" in cmd or b"master_agent" in cmd:
+        return "master-agent"
+    if b"factory" in cmd:
+        return "factory"
+    if name.startswith("python"):
+        return "python"
+    if name in ("bash", "sh", "dash"):
+        return "shell"
+    return "other"
+
+def dominant_parent_origin(pid):
+    """Inspect only a bounded parent chain; output fixed categories, not PIDs/argv."""
+    lineage = []
+    seen = set()
+    status = "OBSERVED"
+    for _ in range(8):
+        if pid <= 1 or pid in seen:
+            break
+        seen.add(pid)
+        try:
+            with open("/proc/" + str(pid) + "/stat", encoding="utf-8") as handle:
+                meta = parse_proc_stat(handle.read(4096))
+            with open("/proc/" + str(pid) + "/cmdline", "rb") as handle:
+                cmd = handle.read(4096).replace(b"\\0", b" ")
+            try:
+                exe = os.path.basename(os.readlink("/proc/" + str(pid) + "/exe"))
+            except OSError:
+                exe = "unavailable"
+            lineage.append({"category": classify_process_origin(exe, cmd),
+                            "state": meta["state"][:1],
+                            "threads": meta["threads"]})
+            pid = meta["ppid"]
+        except (OSError, ValueError, IndexError):
+            status = "PARTIAL"
+            break
+    return {"state": status, "lineage": lineage, "depth_observed": len(lineage),
+            "pid_argv_and_paths_redacted": True}
+
+
 def process_pressure():
     """Aggregate process storm evidence; never emit PID, command line or private path."""
     states, factory_states, executable_types, parents = {}, {}, {}, {}
+    parent_child_states = {}
     scanned = factory = factory_threads = factory_cpu_ticks = 0
     limit = 1200
     try:
@@ -140,6 +189,8 @@ def process_pressure():
             factory_cpu_ticks += meta["cpu_ticks"]
             parent = meta["ppid"]
             parents[parent] = parents.get(parent, 0) + 1
+            by_state = parent_child_states.setdefault(parent, {})
+            by_state[state] = by_state.get(state, 0) + 1
             try:
                 executable = os.path.basename(os.readlink("/proc/" + entry.name + "/exe")).lower()
             except OSError:
@@ -157,6 +208,8 @@ def process_pressure():
             else:
                 kind = "other"
             executable_types[kind] = executable_types.get(kind, 0) + 1
+        dominant = max(parents, key=parents.get) if parents else None
+        origin = dominant_parent_origin(dominant) if dominant is not None else {"state": "NONE", "lineage": [], "depth_observed": 0, "pid_argv_and_paths_redacted": True}
         return {"state": "OBSERVED", "pids_scanned": min(scanned, limit),
                 "truncated": scanned > limit, "all_process_states": states,
                 "factory_name_matches": factory, "factory_states": factory_states,
@@ -164,6 +217,8 @@ def process_pressure():
                 "factory_cpu_ticks_cumulative": factory_cpu_ticks,
                 "factory_distinct_parent_count": len(parents),
                 "factory_max_children_same_parent": max(parents.values(), default=0),
+                "dominant_parent_child_states": parent_child_states.get(dominant, {}),
+                "dominant_parent_origin": origin,
                 "factory_executable_categories": executable_types,
                 "pid_command_and_paths_redacted": True,
                 "worker_health_verified": False}
