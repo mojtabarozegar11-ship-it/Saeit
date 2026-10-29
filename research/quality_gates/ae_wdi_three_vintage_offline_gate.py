@@ -3,7 +3,7 @@
 
 No download, no external dependencies, no benchmark, no inferred historical values.
 Usage: python ae_wdi_three_vintage_offline_gate.py /private/wdi_manifest.json
-Manifest: {"releases":[{"id":"2024-12-16","source_url":"...","path":"...",
+Manifest: {"releases":[{"id":"2024-12-16","source_url":"...","resolved_url":"...", "path":"...",
 "sha256":"64 hex chars","bytes":12345,"retrieved_utc":"2026-10-29T00:00:00Z"}, ...]}
 The SHA-256 and byte counts must come from independently downloaded REAL files.
 """
@@ -18,6 +18,13 @@ import zipfile
 OFFICIAL = {
     "2024-12-16": "https://databank.worldbank.org/data/download/Archive/WDI_excel_2024_12_16.zip",
     "2025-12-19": "https://databank.worldbank.org/data/download/Archive/WDI_excel_2025_12_19.zip",
+    "2026-10-08": "https://databankfiles.worldbank.org/public/ddpext_download/Archive/WDI_EXCEL_2026_10_08.zip",
+}
+# The World Bank archive index links (source_url) are not the redirected file URLs.
+# Pin both endpoints; a successful ZIP checksum alone cannot establish the retrieval origin.
+FINAL_OFFICIAL = {
+    "2024-12-16": "https://databankfiles.worldbank.org/public/ddpext_download/Archive/WDI_excel_2024_12_16.zip",
+    "2025-12-19": "https://databankfiles.worldbank.org/public/ddpext_download/Archive/WDI_excel_2025_12_19.zip",
     "2026-10-08": "https://databankfiles.worldbank.org/public/ddpext_download/Archive/WDI_EXCEL_2026_10_08.zip",
 }
 MAX_UNCOMPRESSED = 3 * 1024**3
@@ -38,6 +45,8 @@ def verify(manifest):
         release = record["id"]
         if record.get("source_url") != OFFICIAL[release]:
             raise EvidenceGateError("Official source URL mismatch: " + release)
+        if record.get("resolved_url") != FINAL_OFFICIAL[release]:
+            raise EvidenceGateError("Official redirect/final URL mismatch: " + release)
         stamp = record.get("retrieved_utc")
         if not isinstance(stamp, str) or not stamp.endswith("Z"):
             raise EvidenceGateError("UTC retrieval timestamp missing: " + release)
@@ -85,7 +94,7 @@ def verify(manifest):
         except (zipfile.BadZipFile, OSError) as exc:
             raise EvidenceGateError("Corrupt/unreadable archive: " + release) from exc
         result.append({"release": release, "bytes": expected_bytes,
-                       "sha256": h.hexdigest(), "workbooks": sheets})
+                       "sha256": h.hexdigest(), "source_url": OFFICIAL[release], "resolved_url": FINAL_OFFICIAL[release], "workbooks": sheets})
     return {"state": "ARCHIVE_INTEGRITY_ONLY_NOT_HISTORICAL_BENCHMARK",
             "releases": result,
             "remaining": ["verify workbook series/base-year metadata",
