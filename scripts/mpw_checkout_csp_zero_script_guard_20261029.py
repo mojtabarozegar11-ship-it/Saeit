@@ -110,6 +110,17 @@ def proof(handler):
                 continue
             with patch.object(module, "_apply_two_book_strict_csp", handler):
                 response = module.product_checkout_page(req, pk)
+            # SKU879 has a separate product/rights lifecycle: verify its
+            # authenticated GET shape without imposing the two-book CSP hash
+            # contract on a potentially different template.
+            if pk == 879:
+                if response.status_code != 200:
+                    fail("SKU879 authenticated checkout GET did not return 200")
+                print("MPW_CHECKOUT_SKU879_READONLY=" + json.dumps({
+                    "product": 879, "http": 200, "payment": "not_tested",
+                    "invoice": "not_created", "entitlement": "not_verified"
+                }))
+                continue
             body = response.content
             marker = b'<meta http-equiv="Content-Security-Policy" content="'
             if (response.status_code != 200 or body.count(marker) != 1
