@@ -97,12 +97,13 @@ def cron():
 
 def workers():
     count = matched = 0
+    scan_limit = 1200  # Do not truncate at 500 when the observed guest has >500 PIDs.
     try:
         for e in os.scandir("/proc"):
             if not e.name.isdigit():
                 continue
             count += 1
-            if count > LIMIT:
+            if count > scan_limit:
                 break
             try:
                 with open("/proc/" + e.name + "/cmdline", "rb") as f:
@@ -111,8 +112,8 @@ def workers():
                     matched += 1
             except OSError:
                 pass
-        return {"state": "OBSERVED", "pids_scanned": min(count, LIMIT),
-                "factory_name_matches": matched, "truncated": count > LIMIT,
+        return {"state": "OBSERVED", "pids_scanned": min(count, scan_limit),
+                "factory_name_matches": matched, "truncated": count > scan_limit,
                 "command_lines_redacted": True}
     except OSError as exc:
         return {"state": "UNAVAILABLE", "error_class": type(exc).__name__}
