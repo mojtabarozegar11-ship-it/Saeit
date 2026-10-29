@@ -64,10 +64,10 @@ def verify(package):
                     metadata.get("sha256") != hashlib.sha256(data).hexdigest()):
                 raise ValueError("MANIFEST_DIGEST_MISMATCH")
         policy = archive.read(PREFIX + "moj1-commerce-policy.mjs").decode("utf-8")
-        if not all(re.search(r"\\b" + flag + r"\\s*:\\s*false\\b", policy)
+        if not all(re.search(r"\b" + flag + r"\s*:\s*false\b", policy)
                    for flag in POLICY_FLAGS):
             raise ValueError("MOJ1_DISABLED_SOURCE_FLAGS_MISSING")
-        if not re.search(r"\\bcontractAddress\\s*:\\s*null\\b", policy):
+        if not re.search(r"\bcontractAddress\s*:\s*null\b", policy):
             raise ValueError("MOJ1_CONTRACT_MUST_BE_NULL")
     return {
         "schema": "s01-g01-stage-acceptance.v1",
