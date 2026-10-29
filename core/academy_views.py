@@ -9,7 +9,7 @@ from .public_catalog_guard import missing_public_tables, mark_public_data_unavai
 from .models import (
     EducationTrack, EducationCourse, EducationResource, EducationLesson,
     EducationEnrollment, EducationProgress, EducationBookmark,
-    EducationAssessment, EducationQuestion, EducationAttempt, EducationCertificate, Product, Order,
+    EducationAssessment, EducationQuestion, EducationAttempt, EducationCertificate, Product, Order, OrderItem,
 )
 
 
@@ -201,11 +201,15 @@ def education_course_detail(request, slug):
 def education_enroll(request, slug):
     if request.method != "POST":
         raise Http404
-    # No paid-entitlement lookup or enrollment mutation against a partial schema.
-    if missing_public_tables(EducationCourse, EducationEnrollment, Product, Order):
+    # Free enrollment must remain available when unrelated commerce tables are
+    # missing; paid enrollment must check the OrderItem join before any query
+    # or mutation, otherwise a partial rollout raises HTTP 500.
+    if missing_public_tables(EducationCourse, EducationEnrollment):
         return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     if not course.is_free:
+        if missing_public_tables(Product, Order, OrderItem):
+            return unavailable_enrollment_response()
         paid = Order.objects.filter(
             customer=request.user, status="paid",
             items__product=course.product,
