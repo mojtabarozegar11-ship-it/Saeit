@@ -94,6 +94,7 @@ def _api(request):
                 "manual_ai_review": True, "model_api_enabled": False,
                 "idempotent_intake": True,
                 "evidence_integrity_check": True,
+                "staff_evidence_snapshot": True,
                 "independent_certification_enabled": False,
                 "staff": bool(request.user.is_authenticated and request.user.is_staff),
             })
@@ -152,9 +153,13 @@ def _api(request):
             )
         elif action == "staff_file":
             _require_staff(request)
-            path, name = cases.staff_file(payload.get("case_id", ""), payload.get("file_id", ""))
-            response = FileResponse(path.open("rb"), as_attachment=True, filename=name,
-                                    content_type="application/octet-stream")
+            stream, name = cases.open_staff_file(payload.get("case_id", ""), payload.get("file_id", ""))
+            try:
+                response = FileResponse(stream, as_attachment=True, filename=name,
+                                        content_type="application/octet-stream")
+            except BaseException:
+                stream.close()
+                raise
             response["Cache-Control"] = "no-store, max-age=0"
             response["X-Content-Type-Options"] = "nosniff"
             response["Content-Security-Policy"] = "default-src 'none'; sandbox"
