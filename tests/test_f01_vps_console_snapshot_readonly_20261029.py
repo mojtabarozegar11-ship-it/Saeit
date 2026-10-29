@@ -22,7 +22,7 @@ class SnapshotTests(unittest.TestCase):
     def test_sqlite_only_reads_header(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "db"
-            p.write_bytes(b"SQLite format 3\\0" + b"x" * 40)
+            p.write_bytes(b"SQLite format 3\0" + b"x" * 40)
             self.assertTrue(mod.sqlite(p)["sqlite_header_valid"])
             self.assertEqual(mod.sqlite(p)["integrity_check"], "NOT_RUN")
     def test_no_deployment_claim(self):
