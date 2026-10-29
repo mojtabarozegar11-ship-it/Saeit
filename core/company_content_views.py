@@ -64,11 +64,16 @@ def company_content_feed(request, slug):
     links = [
         x for x in links
         if (
-            x.newsletter_story
+            x.content_type == "newsletter"
+            and x.newsletter_story
             and x.newsletter_story.status == "published"
             and x.newsletter_story.published_at is not None
             and x.newsletter_story.published_at <= now
-        ) or (x.knowledge_article and x.knowledge_article.published)
+        ) or (
+            x.content_type == "knowledge"
+            and x.knowledge_article
+            and x.knowledge_article.published
+        )
     ]
     if not links:
         raise Http404("Company content feed not found")
