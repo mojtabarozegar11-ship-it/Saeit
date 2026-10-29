@@ -19,8 +19,21 @@ const assert=require('node:assert/strict');
     await page.waitForFunction(()=>window.RamadanWarDebug?.start,null,{timeout:20000});
     assert(await page.locator('#exportSave').isVisible());
     assert(await page.locator('#importSave').isVisible());
+    assert.equal(await page.locator('#soundHome').getAttribute('aria-pressed'),'true');
+    await page.locator('#soundHome').click();
+    assert.equal(await page.locator('#soundHome').getAttribute('aria-pressed'),'false');
+    await page.reload({waitUntil:'domcontentloaded'});
+    await page.waitForFunction(()=>window.RamadanWarDebug?.start);
+    assert.equal(await page.locator('#soundHome').getAttribute('aria-pressed'),'false',
+      'muted setting persists across browser reload');
+    await page.locator('#soundHome').click();
+    assert.equal(await page.locator('#soundHome').getAttribute('aria-pressed'),'true');
     await page.evaluate(()=>window.RamadanWarDebug.start());
     await page.locator('#pause').click();
+    assert.equal(await page.locator('#soundPause').getAttribute('aria-pressed'),'true');
+    await page.locator('#soundPause').click();
+    assert.equal(await page.locator('#soundPause').getAttribute('aria-pressed'),'false');
+    await page.locator('#soundPause').click();
     await page.locator('#goHome').click();
     const before=await page.evaluate(()=>localStorage.getItem('rwNativeCampaign'));
     assert(before&&JSON.parse(before).hero===0);
@@ -33,6 +46,16 @@ const assert=require('node:assert/strict');
     await page.locator('#newGame').click();
     assert.equal(await page.evaluate(()=>localStorage.getItem('rwNativeCampaign')),before,
       'cancelling new game must preserve campaign');
+    // A schema-valid but unrecoverable arena must never overwrite the original
+    // campaign through a pending 5-second autosave or pagehide.
+    const stranded=JSON.parse(before);
+    stranded.enemies=Array.from({length:7},()=>({x:3.5,y:3.5,type:0,hp:39,max:39,life:1.5}));
+    const strandedRaw=JSON.stringify(stranded);
+    await page.evaluate(raw=>localStorage.setItem('rwNativeCampaign',raw),strandedRaw);
+    await page.locator('#start').click();
+    await page.waitForTimeout(5200);
+    assert.equal(await page.evaluate(()=>localStorage.getItem('rwNativeCampaign')),strandedRaw,
+      'failed resume must preserve the original stored campaign');
     await page.evaluate(()=>localStorage.setItem('rwNativeCampaign','corrupted but retained'));
     page.once('dialog',dialog=>dialog.accept());
     await page.locator('#importSaveFile').setInputFiles({name:'campaign.json',
