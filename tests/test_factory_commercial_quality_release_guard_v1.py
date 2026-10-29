@@ -14,7 +14,7 @@ class PublicReleaseSafety(unittest.TestCase):
             root=Path(t)
             package=root/"example.zip";package.write_bytes(b"real_new_factory_package")
             sha=hashlib.sha256(package.read_bytes()).hexdigest()
-            with self.assertRaisesRegex(ValueError,"RIGHTS_CLEARANCE_EVIDENCE_MISSING"):
+            with self.assertRaisesRegex(ValueError,"SIGNED_1000_QUALITY_GATE_EVIDENCE_MISSING"):
                 mod.require_quality_clearance(root,"test_product",sha,
                     {"professional_quality_standard":"100_groups_x_10"},package)
     def test_old_free_release_is_not_false_labeled_1000(self):
