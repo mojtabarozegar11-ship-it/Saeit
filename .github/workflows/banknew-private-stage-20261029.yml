@@ -1,0 +1,153 @@
+name: Stage isolated MOJ Pay server source privately on cPanel
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/banknew-private-stage-20261029.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: banknew-private-code-stage
+  cancel-in-progress: false
+jobs:
+  private-stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout only banknew source and this workflow
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            banknew
+            .github/workflows
+      - name: Bound and syntax-check the exact private package
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('banknew')
+          assert root.is_dir() and not root.is_symlink()
+          required=('isolated_settings.py','isolated_wsgi.py','isolated_urls.py','identity_views.py','identity_urls.py','google_identity.py','models.py','migrations/0001_initial.py')
+          for name in required:
+              item=root/name
+              assert item.is_file() and not item.is_symlink(), name
+          files=list(root.rglob('*'))
+          assert not any(p.is_symlink() for p in files)
+          assert sum(p.stat().st_size for p in files if p.is_file()) < 2000000
+          for py in root.rglob('*.py'):
+              compile(py.read_text(encoding='utf-8'),str(py),'exec')
+          print('PRIVATE_SOURCE_PREFLIGHT=PASS')
+          PY
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-structure-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Reserve a new private directory outside all public websites
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          parent=Path('/home/zomorod2')
+          final=parent/'mojpay-bank-service-private'
+          candidate=parent/'.mojpay-bank-private-candidate-20261029'
+          assert parent.is_dir() and not parent.is_symlink()
+          assert not final.exists() and not final.is_symlink(), 'PRIVATE_BANK_SERVICE_ALREADY_EXISTS_REFUSING_OVERWRITE'
+          assert not candidate.exists() and not candidate.is_symlink(), 'CANDIDATE_ALREADY_EXISTS_REFUSING_OVERWRITE'
+          candidate.mkdir(mode=0o700)
+          (candidate/'.banknew-stage-marker').write_text('banknew-scoped-stage-20261029',encoding='utf-8')
+          print('BANKNEW_PRIVATE_STAGE_RESERVED=YES')
+          PY
+      - name: Copy only version-controlled banknew package to private candidate
+        run: |
+          timeout 90s scp -q -r -F "$RUNNER_TEMP/mpw-structure-ssh/config" banknew saeit-cpanel:/home/zomorod2/.mojpay-bank-private-candidate-20261029/
+      - name: Validate with host Python 3.11 and atomically promote private source
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import os, subprocess
+          parent=Path('/home/zomorod2')
+          candidate=parent/'.mojpay-bank-private-candidate-20261029'
+          final=parent/'mojpay-bank-service-private'
+          assert candidate.is_dir() and not candidate.is_symlink()
+          assert (candidate/'.banknew-stage-marker').read_text(encoding='utf-8')=='banknew-scoped-stage-20261029'
+          assert not final.exists() and not final.is_symlink()
+          package=candidate/'banknew'
+          required=('isolated_settings.py','isolated_wsgi.py','isolated_urls.py','identity_views.py','identity_urls.py','google_identity.py','models.py','migrations/0001_initial.py')
+          for name in required:
+              item=package/name
+              assert item.is_file() and not item.is_symlink(), 'MISSING_PRIVATE_FILE'
+          assert not any(p.is_symlink() for p in package.rglob('*')), 'PRIVATE_SYMLINK_REFUSED'
+          total=sum(p.stat().st_size for p in package.rglob('*') if p.is_file())
+          assert 0 < total < 2000000, 'PRIVATE_STAGE_SIZE_REFUSED'
+          runner='/opt/alt/python311/bin/python3.11'
+          assert Path(runner).is_file(), 'HOST_PYTHON311_MISSING'
+          subprocess.run((runner,'-m','compileall','-q',str(package)),check=True,timeout=40)
+          os.chmod(package,0o700)
+          candidate.rename(final)
+          print('BANKNEW_PRIVATE_SOURCE_STAGED=YES')
+          print('BANKNEW_HOST_PYTHON311_SYNTAX_OK=YES')
+          print('BANKNEW_LIVE_PUBLIC_FILES_CHANGED=NO')
+          print('BANKNEW_FINANCIAL_OPERATIONS_ENABLED=NO')
+          PY
+      - name: Remove remote partial candidate on failed private staging only
+        if: failure()
+        run: |
+          if test -f "$RUNNER_TEMP/mpw-structure-ssh/config"; then
+            timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY' || true
+          from pathlib import Path
+          import shutil
+          candidate=Path('/home/zomorod2/.mojpay-bank-private-candidate-20261029')
+          final=Path('/home/zomorod2/mojpay-bank-service-private')
+          marker=candidate/'.banknew-stage-marker'
+          if candidate.is_dir() and not candidate.is_symlink() and not final.exists() and marker.is_file() and not marker.is_symlink() and marker.read_text(encoding='utf-8')=='banknew-scoped-stage-20261029':
+              shutil.rmtree(candidate)
+              print('BANKNEW_NEW_FAILED_CANDIDATE_CLEANED=YES')
+          PY
+          fi
+      - name: Clear temporary SSH relay credentials
+        if: always()
+        run: |
+          if test -d "$RUNNER_TEMP/mpw-structure-ssh"; then
+            find "$RUNNER_TEMP/mpw-structure-ssh" -type f -exec shred -u -- {} +
+            rmdir "$RUNNER_TEMP/mpw-structure-ssh"
+          fi
