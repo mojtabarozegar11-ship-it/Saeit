@@ -178,7 +178,7 @@ jobs:
                           if isinstance(row,dict) and row.get("id") == "diskusage":
                               used = str(row.get("count","")).strip()
                               limit = str(row.get("max","")).strip()
-                              numeric = r"[0-9]+(?:\\.[0-9]+)?\\s*(?:B|KB|MB|GB|TB|PB)"
+                              numeric = r"[0-9]+(?:[.][0-9]+)?[ ]*(?:B|KB|MB|GB|TB|PB)"
                               if re.fullmatch(numeric,used,re.I):
                                   base["account_used"] = used
                               if re.fullmatch(numeric,limit,re.I):
