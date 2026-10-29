@@ -17,7 +17,7 @@ const path=require('node:path');
      if(blocked)await context.addInitScript(()=>{Storage.prototype.setItem=function(){throw new DOMException('Storage unavailable','QuotaExceededError')}});
      const page=await context.newPage(),errors=[];
      page.on('pageerror',e=>errors.push(e.message));
-     await page.route('**/game.js',route=>route.fulfill({status:200,contentType:'text/javascript',body:source.replace(marker,'window.__qaCompleteMission=()=>{world.missionPassed=true};window.__qaShowResult=showResult;'+marker)}));
+     await page.route('**/game.js',route=>route.fulfill({status:200,contentType:'text/javascript',body:source.replace(marker,'window.__qaCompleteMission=()=>{world.missionKills=4;world.kills=4;world.objective.done=2;world.enemies=[];world.missionPassed=true};window.__qaShowResult=showResult;'+marker)}));
      const response=await page.goto(process.env.GAME_URL,{waitUntil:'domcontentloaded',timeout:45000});
      assert.equal(response.status(),200);
      await page.waitForFunction(()=>typeof window.__qaShowResult==='function');
