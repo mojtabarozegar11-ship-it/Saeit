@@ -100,6 +100,60 @@ jobs:
           result['local_preflight']=('PASS' if all(result.get(x,False) for x in required) else 'BLOCKED')
           print('S01_CSP_READONLY_PREFLIGHT='+json.dumps(result,sort_keys=True))
           PY
+      - name: Inspect account quota and rollback preimage without modifying cPanel
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' <<'PY'
+          import hashlib, json, os, shutil, subprocess
+          from pathlib import Path
+          home = Path("/home/zomorod2")
+          source = home / "Saeit-staging/mpw_commerce/product_checkout_page.py"
+          backup_dir = home / ".private_mojplaywin_main_agents"
+          wsgi = home / "mojplaywin.com/passenger_wsgi.py"
+          expected = "f33d80b7e843a66c9a55d8a8da46d5fb6049fb4c487f8f559c3471cfd42cdf74"
+          result = {
+              "scope": "S01_CHECKOUT_RELEASE_GATE_READONLY",
+              "source_sha_matches_preimage": source.is_file() and not source.is_symlink()
+                  and hashlib.sha256(source.read_bytes()).hexdigest() == expected,
+              "local_preimage_backup_matches": False,
+              "cpanel_quota_uapi": "not_verified",
+              "account_quota_headroom_verified": False,
+              "passenger_db_authority_verified": False,
+              "independent_offhost_restore_verified": False,
+              "customer_orders_created": 0, "payments_created": 0,
+              "cpanel_writes": False, "passenger_restart": False,
+          }
+          if backup_dir.is_dir() and not backup_dir.is_symlink():
+              for p in list(backup_dir.glob("mpw-checkout-csp-*.bak"))[:40]:
+                  if p.is_file() and not p.is_symlink() and p.stat().st_size < 2_000_000:
+                      if hashlib.sha256(p.read_bytes()).hexdigest() == expected:
+                          result["local_preimage_backup_matches"] = True
+                          break
+          # cPanel UAPI is queried read-only; neither its raw JSON nor account
+          # identifiers, paths, environment values or credentials are logged.
+          uapi = shutil.which("uapi")
+          if uapi:
+              try:
+                  probe = subprocess.run(
+                      [uapi, "--output=json", "Quota", "get_quota_info"],
+                      capture_output=True, text=True, timeout=12, check=False
+                  )
+                  if probe.returncode == 0:
+                      data = json.loads(probe.stdout)
+                      status = data.get("result", {}).get("status")
+                      result["cpanel_quota_uapi"] = (
+                          "responded" if status == 1 else "unsupported_or_failed"
+                      )
+              except (OSError, ValueError, subprocess.TimeoutExpired):
+                  result["cpanel_quota_uapi"] = "unavailable"
+          # Static WSGI text is NOT equivalent to the live Passenger process
+          # environment. Do not promote shell-selected SQLite to production DB.
+          result["passenger_wsgi_exists"] = wsgi.is_file() and not wsgi.is_symlink()
+          result["safe_to_publish"] = False
+          print("S01_CHECKOUT_RELEASE_GATE=" + json.dumps(result, sort_keys=True))
+          PY
       - name: Capture non-transactional public HTTP and sitemap status
         shell: bash
         run: |
