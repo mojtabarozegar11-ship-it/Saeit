@@ -57,7 +57,7 @@ jobs:
           cp scripts/zomorod_treasury_synthetic_qa.php dist/treasury-handoff/scripts/
           cp scripts/zomorod_workflow_web_synthetic_qa.py dist/treasury-handoff/scripts/
           cp docs/zomorod-treasury-v7-private-offline.md dist/treasury-handoff/docs/
-          (cd dist/treasury-handoff && find . -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum --check --status SHA256SUMS)
+          (cd dist/treasury-handoff && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum --check --status SHA256SUMS)
           tar -czf dist/zomorod-treasury-offline-v7.tar.gz -C dist treasury-handoff
           tar -tzf dist/zomorod-treasury-offline-v7.tar.gz | grep -q 'treasury-handoff/SHA256SUMS'
           echo "TREASURY_HANDOFF_SOURCE=VERIFIED"
