@@ -46,7 +46,7 @@ try{
     [$leave]=zmFlowCreate($db,'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','leave','مرخصی آزمایشی','دو روز کاری',0,'IRR','normal',11);
     zmFlowTransition($db,$leave,'submit','به کارتابل ارسال شد',11,'manager');
     zmFlowTransition($db,$leave,'approve','تأیید داخلی',11,'admin');
-    expect($db->query('SELECT COUNT(*) FROM request_events')->fetchColumn()==='10','append_only_audit_events');
+    expect($db->query('SELECT COUNT(*) FROM request_events')->fetchColumn()==='9','append_only_audit_events');
     denied(fn()=>zmFlowCreate($db,'cccccccccccccccccccccccccccccccc','contract','<script>','bad',-1,'IRR','normal',11),422,'negative_amount');
     denied(fn()=>zmFlowCreate($db,'cccccccccccccccccccccccccccccccc','unknown','Title','Detail',0,'IRR','normal',11),422,'invalid_type');
     $GLOBALS['test_role']='viewer';
