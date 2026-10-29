@@ -97,6 +97,79 @@ def workers():
     except OSError as exc:
         return {"state": "UNAVAILABLE", "error_class": type(exc).__name__}
 
+
+def parse_proc_stat(raw):
+    """Parse /proc/PID/stat without confusing parentheses in process names."""
+    _, marker, tail = raw.rpartition(") ")
+    if not marker:
+        raise ValueError("Malformed proc stat")
+    fields = tail.split()
+    if len(fields) < 20:
+        raise ValueError("Short proc stat")
+    return {"state": fields[0], "ppid": int(fields[1]),
+            "cpu_ticks": int(fields[11]) + int(fields[12]),
+            "threads": int(fields[17])}
+
+
+def process_pressure():
+    """Aggregate process storm evidence; never emit PID, command line or private path."""
+    states, factory_states, executable_types, parents = {}, {}, {}, {}
+    scanned = factory = factory_threads = factory_cpu_ticks = 0
+    limit = 1200
+    try:
+        for entry in os.scandir("/proc"):
+            if not entry.name.isdigit():
+                continue
+            scanned += 1
+            if scanned > limit:
+                break
+            try:
+                with open("/proc/" + entry.name + "/stat", encoding="utf-8") as handle:
+                    meta = parse_proc_stat(handle.read(4096))
+                with open("/proc/" + entry.name + "/cmdline", "rb") as handle:
+                    cmd = handle.read(4096).replace(b"\\0", b" ").lower()
+            except (OSError, ValueError, IndexError):
+                continue
+            state = meta["state"][:1]
+            states[state] = states.get(state, 0) + 1
+            if b"factory" not in cmd and b"master-agent" not in cmd:
+                continue
+            factory += 1
+            factory_states[state] = factory_states.get(state, 0) + 1
+            factory_threads += meta["threads"]
+            factory_cpu_ticks += meta["cpu_ticks"]
+            parent = meta["ppid"]
+            parents[parent] = parents.get(parent, 0) + 1
+            try:
+                executable = os.path.basename(os.readlink("/proc/" + entry.name + "/exe")).lower()
+            except OSError:
+                executable = "unavailable"
+            if executable.startswith("python"):
+                kind = "python"
+            elif executable.startswith("node"):
+                kind = "node"
+            elif executable in ("bash", "sh", "dash"):
+                kind = "shell"
+            elif executable in ("cron", "crond"):
+                kind = "cron"
+            elif executable == "unavailable":
+                kind = "unavailable"
+            else:
+                kind = "other"
+            executable_types[kind] = executable_types.get(kind, 0) + 1
+        return {"state": "OBSERVED", "pids_scanned": min(scanned, limit),
+                "truncated": scanned > limit, "all_process_states": states,
+                "factory_name_matches": factory, "factory_states": factory_states,
+                "factory_threads": factory_threads,
+                "factory_cpu_ticks_cumulative": factory_cpu_ticks,
+                "factory_distinct_parent_count": len(parents),
+                "factory_max_children_same_parent": max(parents.values(), default=0),
+                "factory_executable_categories": executable_types,
+                "pid_command_and_paths_redacted": True,
+                "worker_health_verified": False}
+    except OSError as exc:
+        return {"state": "UNAVAILABLE", "error_class": type(exc).__name__}
+
 def queue(path):
     """Count entries through no-follow directory descriptors; never enumerate contents."""
     try:
@@ -199,7 +272,7 @@ def capture(args):
             "guest": {"uid": os.getuid(), "cpu_count": os.cpu_count(),
                       "loadavg": load, "memory": memory()},
             "filesystem": indexed_targets(args.mount, mount),
-            "block_topology": topo, "cron": cron(), "worker": workers(),
+            "block_topology": topo, "cron": cron(), "worker": workers(), "process_pressure": process_pressure(),
             "queue": indexed_targets(args.queue, queue),
             "locks": indexed_targets(args.lock, stat_path),
             "sqlite": indexed_targets(args.sqlite, sqlite),
