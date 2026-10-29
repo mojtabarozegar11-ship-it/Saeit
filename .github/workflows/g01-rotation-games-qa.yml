@@ -5,6 +5,7 @@ on:
       - 'games/air-supremacy/index.html'
       - 'games/crown-defender/index.html'
       - 'tests/game/g01-rotation-smoke.cjs'
+      - 'tests/game/g01-public-qa-guards.test.mjs'
       - '.github/workflows/g01-rotation-games-qa.yml'
   workflow_dispatch:
 permissions:
@@ -24,6 +25,8 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/g01-playwright" --no-save playwright@1.56.1
           "$RUNNER_TEMP/g01-playwright/node_modules/.bin/playwright" install chromium
+      - name: Verify public game QA exports cannot mutate gameplay
+        run: node --test tests/game/g01-public-qa-guards.test.mjs
       - name: Test pause/resume and combat input in desktop/mobile Chromium
         env:
           NODE_PATH: ${{ runner.temp }}/g01-playwright/node_modules
