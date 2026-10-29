@@ -59,7 +59,11 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
               .test(x.name+' '+x.href)).slice(0,60));
             } catch(e) { error = error || ('DOM_'+(e.name||'Error')).slice(0,60); }
           }
+          // HTTP 200 at a login redirect is not a completed buyer checkout.
+          const authRequired = finalPath === '/accounts/login/' &&
+            (/\/checkout\/$/.test(path) || path.includes('/purchases/'));
           rows.push({device:device.name,path,http,finalPath,error,jsErrors,controls,
+            authRequired,authenticatedBuyerFlowVerified:false,
             checkoutLinks:controls.filter(c=>/\/checkout\/$/.test(c.href||'')&&c.reasons.length===0).length});
           await page.close();
         }
@@ -67,13 +71,18 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
     }
     const report={schema:'s01-anonymous-get-controls.v1',scope:'GET_ONLY_NO_PAYMENT',
       checkedAt:new Date().toISOString(),ordersCreated:0,paymentsCreated:0,rows,
-      complete:rows.length===URLS.length*2 && rows.every(r=>r.http>=200&&r.http<500&&!r.error)};
+      complete:rows.length===URLS.length*2 && rows.every(r=>r.http>=200&&r.http<500&&!r.error),
+      completeMeaning:'ANONYMOUS_GET_OBSERVATION_ONLY',
+      authGatedRoutes:rows.filter(r=>r.authRequired).length,
+      authenticatedBuyerFlowVerified:false,invoiceVerified:false,
+      paymentVerified:false,emailDeliveryVerified:false,downloadVerified:false,
+      commercialDeliveryStatus:'NOT_VERIFIED'};
     fs.writeFileSync('s01-public-checkout-controls.json',JSON.stringify(report,null,2));
     if (!report.complete) process.exitCode=2; // A partial scan must not be green.
     console.log(JSON.stringify({schema:report.schema,rows:rows.map(x=>({
       device:x.device,path:x.path,http:x.http,finalPath:x.finalPath,checkoutLinks:x.checkoutLinks,controls:x.controls.length,
       disabled:x.controls.filter(c=>c.reasons.length).length,
-      jsErrors:x.jsErrors.length,error:x.error
+      jsErrors:x.jsErrors.length,authRequired:x.authRequired,error:x.error
     }))}));
   } finally {await browser.close();}
 })().catch(e=>{console.error('S01_READONLY_DIAGNOSTIC_ERROR='+e.name);process.exitCode=1;});
