@@ -11,6 +11,7 @@ on:
           - accept
           - check_receipt_window
           - diagnose_vps
+          - diagnose_cpanel_direct
       sealed_envelope:
         description: Encrypted one-use command envelope (required for accept)
         required: false
@@ -44,7 +45,7 @@ jobs:
           from pathlib import Path
           event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           inputs = event.get("inputs", {})
-          if inputs.get("operation") not in ("show_public_key", "accept", "check_receipt_window", "diagnose_vps"):
+          if inputs.get("operation") not in ("show_public_key", "accept", "check_receipt_window", "diagnose_vps", "diagnose_cpanel_direct"):
               raise SystemExit("OPERATION_REJECTED")
           if inputs["operation"] == "accept":
               try:
@@ -141,6 +142,17 @@ jobs:
           cp "$d/host.candidate" "$d/host.known"
           echo "CPANEL_HOST_KEY=verified"
           echo "PINNED_PRIVATE_RELAY=verified"
+          if test "$OPERATION" = "diagnose_cpanel_direct"; then
+            # Probe the replacement 30GB host directly, without using the VPS hop.
+            # No writes, no secret output, pinned host key, single bounded attempt.
+            if timeout 25s ssh -F "$d/config" -o ProxyJump=none -o ControlMaster=no -o ConnectTimeout=10 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null; then
+              echo 'CPANEL30GB_DIRECT=AUTHENTICATED'
+            else
+              echo 'CPANEL30GB_DIRECT=UNAVAILABLE'
+              exit 1
+            fi
+            exit 0
+          fi
           if test "$OPERATION" = "diagnose_vps"; then
             # Only a bounded, read-only direct SSH inspection. No cPanel connection or data writes.
             vps_diagnostic_ok=0
