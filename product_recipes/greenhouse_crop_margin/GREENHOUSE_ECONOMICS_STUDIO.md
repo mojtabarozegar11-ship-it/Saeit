@@ -18,8 +18,11 @@ or additional JS file is required. The separately testable engine
   independent annual cost and revenue changes, cash flows, NPV, ROI and payback.
 - Nine price/yield shock scenarios; optional 2,000 seeded triangular simulation
   using user-defined limits. The modeled loss rate is NOT a measured probability.
-- Export JSON inputs and CSV report, print/save PDF, locally import JSON,
-  compare up to 20 scenarios in page memory. No remote requests or trackers.
+- Export/import JSON scenarios, a detailed CSV report (assumptions, resource costs,
+  financial results and model limitations), and a separate CSV with up to 20
+  locally compared scenarios. Clear the comparison without reloading. Print/save PDF.
+  Invalid input clears prior financial figures to prevent stale output.
+  No remote requests or trackers.
 - Mobile-responsive English interface with input labels and keyboard controls.
 
 ## Technical verification
