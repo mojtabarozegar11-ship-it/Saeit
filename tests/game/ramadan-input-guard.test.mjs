@@ -59,7 +59,8 @@ test('all finite-resource actions and reload fail closed outside active gameplay
 
 test('focus loss releases sticky movement and fire and pauses the active game', () => {
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
-  assert.match(game, /function releaseGameInputs\(\)\{keys=\{\};fireHeld=false;fireId=null;joyId=null;aimId=null;joyF=joyS=0/);
+  assert.match(game, /function releaseGameInputs\(\)\{const oldFire=fireId,oldJoy=joyId,oldAim=aimId;keys=\{\};fireHeld=false;fireId=null;joyId=null;aimId=null;joyF=joyS=0/);
+  assert.match(game, /safeReleaseCapture\(\$\('#fire'\),oldFire\);safeReleaseCapture\(stick,oldJoy\);safeReleaseCapture\(canvas,oldAim\)/);
   assert.match(game, /addEventListener\('blur',\(\)=>\{releaseGameInputs\(\);if\(screen==='game'\)/);
   assert.match(game, /visibilitychange.*document\.hidden/);
   assert.match(game, /function showScreen\(name\)\{if\(name!=='game'\)releaseGameInputs\(\)/);
@@ -164,7 +165,7 @@ test('tablet aiming and mouse drag cannot fire, while primary desktop click stil
   const game = readFileSync(new URL('../../games/ramadan-war/game.js', import.meta.url), 'utf8');
   assert.match(game,/canvas\.addEventListener\('click',e=>\{const eligible=shouldFireCanvasClick\(e,screen,innerWidth,aimGesture\)/);
   assert.ok(game.includes('recordPointerGestureMovement(aimGesture,e);'), 'move/release displacement must use the shared guard');
-  assert.ok(game.includes("function releaseGameInputs(){keys={};fireHeld=false;fireId=null;joyId=null;aimId=null;joyF=joyS=0;aimGesture=null"));
+  assert.ok(game.includes("function releaseGameInputs(){const oldFire=fireId,oldJoy=joyId,oldAim=aimId;keys={};fireHeld=false;fireId=null;joyId=null;aimId=null;joyF=joyS=0;aimGesture=null"));
 });
 
 
