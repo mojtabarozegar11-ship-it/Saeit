@@ -17,6 +17,7 @@ import re
 import shutil
 import sys
 import tempfile
+import zipfile
 
 RECIPE = "farm_enterprise_economics"
 PUBLIC_SLUG = "farm-enterprise-economics-v1"
@@ -206,6 +207,40 @@ def prepare_private_product(inbox, *, uncertified_preview=False, expected_sha256
     return digest, src
 
 
+
+def is_replaceable_factory_release(public_dir):
+    """Accept only a complete, checksum-bound prior edition of this product."""
+    expected_names = {".htaccess", PUBLIC_FILENAME, "SHA256SUMS.txt", "index.html"}
+    try:
+        entries = list(public_dir.iterdir())
+        if {entry.name for entry in entries} != expected_names:
+            return False
+        if any(entry.is_symlink() or not entry.is_file() for entry in entries):
+            return False
+        package = public_dir / PUBLIC_FILENAME
+        digest = digest_file(package)
+        if ((public_dir / "SHA256SUMS.txt").read_text(encoding="utf-8").strip()
+                != digest + "  " + PUBLIC_FILENAME):
+            return False
+        page = (public_dir / "index.html").read_text(encoding="utf-8")
+        if "Farm Enterprise" not in page or PUBLIC_FILENAME not in page:
+            return False
+        with zipfile.ZipFile(str(package)) as archive:
+            infos = archive.infolist()
+            names = [item.filename for item in infos]
+            if not infos or len(names) != len(set(names)) or archive.testzip() is not None:
+                return False
+            for item in infos:
+                name = item.filename
+                if (not name.startswith(RECIPE + "/") or name.startswith("/")
+                        or "\\" in name or any(part in ("", ".", "..") for part in name.split("/"))
+                        or (item.external_attr >> 16) & 0o170000 == 0o120000):
+                    return False
+        return True
+    except (OSError, ValueError, zipfile.BadZipFile):
+        return False
+
+
 def publish(inbox, webroot, *, release_authorized=False, uncertified_preview=False,
             expected_sha256=None):
     if release_authorized is not True:
@@ -218,6 +253,7 @@ def publish(inbox, webroot, *, release_authorized=False, uncertified_preview=Fal
     early_public_dir = requested_root / "factory-releases" / PUBLIC_SLUG
     if early_public_dir.is_symlink():
         raise ValueError("PUBLIC_RELEASE_SYMLINK_FORBIDDEN")
+    replace_existing = False
     if early_public_dir.exists() and (
             not early_public_dir.is_dir()
             or not (early_public_dir / "SHA256SUMS.txt").is_file()
@@ -242,10 +278,15 @@ def publish(inbox, webroot, *, release_authorized=False, uncertified_preview=Fal
             if uncertified_preview and (not (public_dir / "index.html").is_file() or (public_dir / "index.html").is_symlink() or "has not received QC1000" not in page):
                 raise ValueError("EXISTING_PUBLIC_RELEASE_PREVIEW_STATUS_MISMATCH")
             return {"status": "existing_valid_release", "sha256": digest, "url": PUBLIC_URL}
-        raise ValueError("REFUSING_TO_REPLACE_EXISTING_PUBLIC_RELEASE")
+        if not (uncertified_preview and expected_sha256 is not None
+                and is_replaceable_factory_release(public_dir)):
+            raise ValueError("REFUSING_TO_REPLACE_EXISTING_PUBLIC_RELEASE")
+        replace_existing = True
     stage = Path(tempfile.mkdtemp(prefix=".saeit-release-", dir=str(parent)))
     try:
         stage.chmod(0o755)
+        if replace_existing:
+            shutil.copy2(str(public_dir / ".htaccess"), str(stage / ".htaccess"))
         package = stage / PUBLIC_FILENAME
         with source.open("rb") as src, package.open("wb") as dst:
             shutil.copyfileobj(src, dst)
@@ -258,7 +299,22 @@ def publish(inbox, webroot, *, release_authorized=False, uncertified_preview=Fal
         home = stage / "index.html"
         home.write_text(landing_page(digest, uncertified_preview=uncertified_preview), encoding="utf-8")
         home.chmod(0o644)
-        os.replace(str(stage), str(public_dir))
+        if replace_existing:
+            backup = parent / ("." + PUBLIC_SLUG + ".previous-" + str(os.getpid()))
+            if backup.exists() or backup.is_symlink():
+                raise ValueError("PUBLIC_RELEASE_BACKUP_PATH_CONFLICT")
+            current = parent / PUBLIC_SLUG
+            if not is_replaceable_factory_release(current):
+                raise ValueError("PUBLIC_RELEASE_CHANGED_DURING_REPLACEMENT")
+            os.replace(str(current), str(backup))
+            try:
+                os.replace(str(stage), str(public_dir))
+            except BaseException:
+                os.replace(str(backup), str(public_dir))
+                raise
+            shutil.rmtree(str(backup))
+        else:
+            os.replace(str(stage), str(public_dir))
     finally:
         if stage.exists():
             shutil.rmtree(str(stage))

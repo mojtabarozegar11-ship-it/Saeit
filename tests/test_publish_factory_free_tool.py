@@ -82,6 +82,33 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "WRONG_STOREFRONT"):
             publisher.publish(self.inbox, bad, release_authorized=True)
 
+    def test_preview_replaces_only_complete_checksum_bound_prior_edition(self):
+        dest = self.webroot / "factory-releases" / publisher.PUBLIC_SLUG
+        dest.mkdir(parents=True)
+        old_zip = dest / publisher.PUBLIC_FILENAME
+        with zipfile.ZipFile(str(old_zip), "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(publisher.RECIPE + "/calculator.py", "print('old offline')")
+        old_sha = hashlib.sha256(old_zip.read_bytes()).hexdigest()
+        (dest / "SHA256SUMS.txt").write_text(
+            old_sha + "  " + publisher.PUBLIC_FILENAME + "\n"
+        )
+        (dest / "index.html").write_text(
+            "<title>Farm Enterprise Economics</title><a href=\""
+            + publisher.PUBLIC_FILENAME + "\">Download</a>"
+        )
+        (dest / ".htaccess").write_text("Options -Indexes\n")
+
+        result = publisher.publish(
+            self.inbox, self.webroot, release_authorized=True,
+            uncertified_preview=True, expected_sha256=self.sha,
+        )
+
+        self.assertEqual(result["status"], "published_public_uncertified_preview")
+        self.assertEqual(result["sha256"], self.sha)
+        self.assertIn("has not received QC1000", (dest / "index.html").read_text())
+        self.assertEqual((dest / ".htaccess").read_text(), "Options -Indexes\n")
+        self.assertEqual(hashlib.sha256((dest / publisher.PUBLIC_FILENAME).read_bytes()).hexdigest(), self.sha)
+
     def test_preview_selects_exact_verified_digest_with_other_receipts_present(self):
         recipe = publisher.RECIPE
         second_zip = self.base / "second.zip"
