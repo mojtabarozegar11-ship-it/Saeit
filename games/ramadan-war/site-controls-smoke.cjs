@@ -21,7 +21,7 @@ const fs=require('node:fs/promises');
     assert.equal(await page.locator('#reload').isDisabled(),false,'partial magazine should permit touch reload');
     await page.locator('#reload').click();
     assert(await page.locator('#reload').isDisabled(),'reload cannot be stacked during animation');
-    await page.waitForTimeout(1800);
+    await page.waitForFunction(()=>window.RamadanWarDebug.getState()?.ammo===8,null,{timeout:8000});
     const reloadState=await page.evaluate(()=>({ammo:window.RamadanWarDebug.getState()?.ammo,label:document.querySelector('#ammoText').textContent,mode:window.RamadanWarDebug.getState()?.mode}));
     console.log('RAMADAN_RELOAD_DIAGNOSTIC',c.name,reloadState);
     assert.equal(reloadState.ammo,8,'manual reload must restore full magazine');

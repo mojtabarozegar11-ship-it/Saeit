@@ -41,3 +41,13 @@ test('boss status reports armor percentage rather than a static search prompt',(
  const result=vm.runInNewContext(src+'\nobjectiveInfo()',context);
  assert(result[1].includes('50٪'),result[1]);
 });
+
+test('low-frame-rate catch-up advances real gameplay time with bounded physics substeps',()=>{
+ const src=sourceBetween('let frameQueued=false;','\nfunction playTone(');
+ const deltas=[];let renders=0;
+ const ctx={screen:'game',last:1000,requestAnimationFrame(){},tick(dt){deltas.push(dt)},render(){renders++}};
+ vm.runInNewContext(src+'\nframe(1200)',ctx);
+ assert.equal(deltas.length,5,'200ms frame must not be reduced to one 40ms game tick');
+ assert(Math.abs(deltas.reduce((a,b)=>a+b,0)-.2)<1e-8);
+ assert.equal(renders,1);
+});

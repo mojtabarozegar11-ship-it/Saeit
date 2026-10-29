@@ -130,7 +130,7 @@ function render(ts){engine.render(world,ts);if(world){gameRoot.classList.toggle(
 // A pending callback is reused when play resumes before the browser delivers it.
 let frameQueued=false;
 function scheduleFrame(){if(screen!=='game'||frameQueued)return;frameQueued=true;requestAnimationFrame(frame)}
-function frame(ts){frameQueued=false;if(screen!=='game')return;const dt=Math.min(.04,(ts-last)/1000||.016);last=ts;tick(dt);render(ts);if(screen==='game')scheduleFrame()}
+function frame(ts){frameQueued=false;if(screen!=='game')return;const elapsed=Math.min(.32,Math.max(0,(ts-last)/1000||.016));last=ts;const steps=Math.max(1,Math.ceil(elapsed/.04));for(let i=0;i<steps&&screen==='game';i++)tick(elapsed/steps);render(ts);if(screen==='game')scheduleFrame()}
 function playTone(freq,dur){if(!soundEnabled)return;try{audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='square';o.frequency.value=freq;g.gain.value=.025;o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur)}catch(_){}}
 function modalResultHome(){world=null;showScreen('home')}
 syncSoundControls();$('#soundHome').onclick=toggleSound;$('#soundPause').onclick=toggleSound;
