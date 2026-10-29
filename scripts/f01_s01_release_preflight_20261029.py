@@ -3,15 +3,23 @@
 import argparse
 import datetime as dt
 import json
+import math
 import sys
 
 MIN_AVAILABLE = 2 * 1024**3
 MAX_AGE = dt.timedelta(minutes=15)
 
+def mapping(value):
+    return value if isinstance(value, dict) else {}
+
+def natural_int(value):
+    return type(value) is int and value >= 0
+
 
 def evaluate(snapshot, now=None):
     now = now or dt.datetime.now(dt.timezone.utc)
     blockers = []
+    snapshot = mapping(snapshot)
     if snapshot.get('schema') != 'f01-vps-console-readonly.v1':
         blockers.append('UNRECOGNIZED_SCHEMA')
     if snapshot.get('read_only') is not True or snapshot.get('production_change') is not False:
@@ -22,43 +30,42 @@ def evaluate(snapshot, now=None):
             blockers.append('STALE_OR_FUTURE_SNAPSHOT')
     except (KeyError, TypeError, ValueError):
         blockers.append('MISSING_OR_INVALID_TIMESTAMP')
-    fs = snapshot.get('filesystem', {}).get('target_1', {})
+    fs = mapping(mapping(snapshot.get('filesystem')).get('target_1'))
     available = fs.get('available_bytes')
-    if fs.get('state') != 'OBSERVED' or not isinstance(available, int) or isinstance(available, bool) or available < MIN_AVAILABLE:
+    if fs.get('state') != 'OBSERVED' or not natural_int(available) or available < MIN_AVAILABLE:
         blockers.append('ROOT_DISK_RESERVE_UNVERIFIED_OR_LOW')
     # ext4 reserved blocks may be physically free but unavailable to non-root
     # workers. Never interpret free_bytes as writable capacity.
     free = fs.get('free_bytes')
-    if (isinstance(available, int) and not isinstance(available, bool)
-            and available == 0 and isinstance(free, int) and free > 0):
+    if (natural_int(available)
+            and available == 0 and natural_int(free) and free > 0):
         blockers.append('ROOT_RESERVED_BLOCKS_NOT_WORKER_WRITABLE')
-    cron = snapshot.get('cron', {})
-    worker = snapshot.get('worker', {})
-    if (isinstance(cron, dict) and isinstance(worker, dict)
-            and isinstance(cron.get('factory_per_minute_entries'), int)
+    cron = mapping(snapshot.get('cron'))
+    worker = mapping(snapshot.get('worker'))
+    if (natural_int(cron.get('factory_per_minute_entries'))
             and cron['factory_per_minute_entries'] >= 2
-            and isinstance(worker.get('factory_name_matches'), int)
+            and natural_int(worker.get('factory_name_matches'))
             and worker['factory_name_matches'] >= 100):
         # Correlation is a triage risk, NOT proof cron spawned these processes.
         blockers.append('CRON_PROCESS_OVERLAP_RISK_UNPROVEN_CAUSE')
-    guest = snapshot.get('guest', {})
+    guest = mapping(snapshot.get('guest'))
     cpu = guest.get('cpu_count')
     load = guest.get('loadavg')
-    if not isinstance(cpu, int) or cpu <= 0 or not isinstance(load, list) or len(load) < 1 or not isinstance(load[0], (int, float)) or load[0] > 4 * cpu:
+    if not natural_int(cpu) or cpu == 0 or not isinstance(load, list) or not load or type(load[0]) not in (int, float) or not math.isfinite(load[0]) or load[0] < 0 or load[0] > 4 * cpu:
         blockers.append('GUEST_CPU_LOAD_UNVERIFIED_OR_HIGH')
-    pressure = snapshot.get('process_pressure', {})
+    pressure = mapping(snapshot.get('process_pressure'))
     states = pressure.get('all_process_states', {})
     blocked_io = states.get('D') if isinstance(states, dict) else None
     fanout = pressure.get('factory_max_children_same_parent')
     if (pressure.get('state') != 'OBSERVED'
-            or not isinstance(blocked_io, int) or isinstance(blocked_io, bool)
+            or not natural_int(blocked_io)
             or blocked_io > 8
-            or not isinstance(fanout, int) or isinstance(fanout, bool)
+            or not natural_int(fanout)
             or fanout > 32):
         blockers.append('PROCESS_STORM_OR_IO_WAIT_UNVERIFIED_OR_HIGH')
-    mem = guest.get('memory', {})
+    mem = mapping(guest.get('memory'))
     mem_avail = mem.get('MemAvailable_kib') if isinstance(mem, dict) else None
-    if not isinstance(mem_avail, int) or isinstance(mem_avail, bool) or mem_avail < 512 * 1024:
+    if not natural_int(mem_avail) or mem_avail < 512 * 1024:
         blockers.append('GUEST_AVAILABLE_MEMORY_UNVERIFIED_OR_LOW')
     if snapshot.get('offhost_backup_restored') != 'VERIFIED':
         blockers.append('OFFHOST_RESTORE_UNVERIFIED')
