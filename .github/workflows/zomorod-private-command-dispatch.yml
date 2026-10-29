@@ -21,12 +21,18 @@ jobs:
   receive:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit'
-      && github.actor == 'mojtabarozegar11-ship-it'
       && github.ref == 'refs/heads/main'
       && (
-        github.event_name == 'workflow_dispatch'
+        (
+          github.event_name == 'workflow_dispatch'
+          && github.actor == 'mojtabarozegar11-ship-it'
+        )
         || (
           github.event_name == 'issue_comment'
+          && (
+            github.actor == 'mojtabarozegar11-ship-it'
+            || github.actor == 'chatgpt-codex-connector[bot]'
+          )
           && github.event.issue.number == 1600
           && !github.event.issue.pull_request
           && github.event.comment.user.login == 'mojtabarozegar11-ship-it'
@@ -51,11 +57,18 @@ jobs:
         shell: bash
         env:
           EXPECTED_ACTOR: mojtabarozegar11-ship-it
+          EXPECTED_APP_ACTOR: chatgpt-codex-connector[bot]
           EXPECTED_REF: refs/heads/main
         run: |
           set -euo pipefail
-          test "$GITHUB_ACTOR" = "$EXPECTED_ACTOR"
           test "$GITHUB_REF" = "$EXPECTED_REF"
+          if test "$GITHUB_EVENT_NAME" = "workflow_dispatch"; then
+            test "$GITHUB_ACTOR" = "$EXPECTED_ACTOR"
+          elif test "$GITHUB_EVENT_NAME" = "issue_comment"; then
+            test "$GITHUB_ACTOR" = "$EXPECTED_ACTOR" || test "$GITHUB_ACTOR" = "$EXPECTED_APP_ACTOR"
+          else
+            exit 1
+          fi
           umask 077
           python3 - "$GITHUB_EVENT_PATH" <<'PY'
           import json
@@ -65,7 +78,10 @@ jobs:
 
           event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           event_name = os.environ.get("GITHUB_EVENT_NAME")
+          actor = os.environ.get("GITHUB_ACTOR")
           if event_name == "workflow_dispatch":
+              if actor != "mojtabarozegar11-ship-it":
+                  raise SystemExit("MANUAL_OWNER_REJECTED")
               inputs = event.get("inputs") or {}
               operation = inputs.get("operation")
               raw = inputs.get("sealed_envelope")
@@ -74,11 +90,18 @@ jobs:
               comment = event.get("comment") or {}
               user = comment.get("user") or {}
               if (event.get("action") != "created"
+                      or actor not in ("mojtabarozegar11-ship-it", "chatgpt-codex-connector[bot]")
                       or issue.get("number") != 1600
                       or issue.get("pull_request")
                       or user.get("login") != "mojtabarozegar11-ship-it"
                       or comment.get("author_association") != "OWNER"):
                   raise SystemExit("COMMENT_OWNER_REJECTED")
+              if actor == "chatgpt-codex-connector[bot]":
+                  app = comment.get("performed_via_github_app")
+                  if app is not None and (
+                          not isinstance(app, dict)
+                          or app.get("slug") != "chatgpt-codex-connector"):
+                      raise SystemExit("COMMENT_APP_REJECTED")
               body = comment.get("body")
               if body == "ZMR-PUBLIC-KEY-V1":
                   operation, raw = "show_public_key", None
