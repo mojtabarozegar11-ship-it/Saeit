@@ -81,6 +81,41 @@ class OwnerAgri200Test(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"P0_UNSAFE_EXISTING_ORDER"):
             MODULE.install(self.root,CATALOG)
 
+    def test_deleted_historical_order_cannot_be_recreated(self):
+        MODULE.install(self.root,CATALOG)
+        index=self.root/"production-instructions/owner-agri200-p0-index.json"
+        old_index=index.read_bytes()
+        queue=self.root/"production-instructions/orders"
+        (queue/"WO-00000001.json").unlink()  # synthetic temp fixture only
+        with self.assertRaisesRegex(ValueError,"P0_HISTORICAL_ORDER_MISSING_RECONCILE_NOT_RECREATE"):
+            MODULE.install(self.root,CATALOG)
+        self.assertEqual(index.read_bytes(),old_index)
+        self.assertEqual(len(list(queue.glob("WO-*.json"))),199)
+
+    def test_all_deleted_historical_orders_remain_blocked(self):
+        MODULE.install(self.root,CATALOG)
+        index=self.root/"production-instructions/owner-agri200-p0-index.json"
+        old_index=index.read_bytes()
+        queue=self.root/"production-instructions/orders"
+        for item in queue.glob("WO-*.json"):
+            item.unlink()  # synthetic temp fixture only
+        with self.assertRaisesRegex(ValueError,"P0_HISTORICAL_ORDER_MISSING_RECONCILE_NOT_RECREATE"):
+            MODULE.install(self.root,CATALOG)
+        self.assertEqual(index.read_bytes(),old_index)
+        self.assertEqual(list(queue.glob("WO-*.json")),[])
+
+    def test_tampered_historical_index_refuses_rebinding(self):
+        MODULE.install(self.root,CATALOG)
+        index=self.root/"production-instructions/owner-agri200-p0-index.json"
+        data=json.loads(index.read_text())
+        data["order_ids_ranked"][0]="WO-99999999"
+        MODULE.save(index,data)
+        old_index=index.read_bytes()
+        with self.assertRaisesRegex(ValueError,"P0_HISTORICAL_ORDER_MISSING_RECONCILE_NOT_RECREATE"):
+            MODULE.install(self.root,CATALOG)
+        self.assertEqual(index.read_bytes(),old_index)
+
+
 
 if __name__=="__main__":
     unittest.main()
