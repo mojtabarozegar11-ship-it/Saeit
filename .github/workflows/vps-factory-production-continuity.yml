@@ -373,3 +373,4 @@ jobs:
 # Operator-requested safe continuity verification on 2026-10-14; VPS-local watchdog remains authoritative.
 # Owner-requested existing-loop activation check: VPS factory, 2026-10-16.
 # Owner-requested read-only VPS capacity remeasurement (2026-10-29).
+# [factory-readonly-audit-20261029]
