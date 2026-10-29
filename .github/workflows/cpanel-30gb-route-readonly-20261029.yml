@@ -1,0 +1,48 @@
+name: Compare old SSH endpoint with current 30GB cPanel host (read-only)
+on:
+  push:
+    branches:
+      - diagnose/cpanel-30gb-route-20261029
+    paths:
+      - .github/workflows/cpanel-30gb-route-readonly-20261029.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Resolve old cPanel hostname and probe both endpoints without credentials
+        shell: bash
+        env:
+          OLD_HOST: zohal.pws-dns.net
+          CURRENT_HOST_IP: 178.239.147.125
+          EXPECTED_PIN: SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04
+        run: |
+          set -euo pipefail
+          echo '## Read-only SSH destination comparison' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Current 30GB hosting IP: `178.239.147.125` (from hosting activation email, not yet SSH-verified).' >> "$GITHUB_STEP_SUMMARY"
+          resolution="$(getent ahostsv4 "$OLD_HOST" | awk '{print $1}' | sort -u | paste -sd, - || true)"
+          echo "OLD_HOST_DNS=${resolution:-UNRESOLVED}"
+          echo "Old hostname DNS: \`${resolution:-UNRESOLVED}\`" >> "$GITHUB_STEP_SUMMARY"
+          for label in old new; do
+            if test "$label" = old; then target="$OLD_HOST"; else target="$CURRENT_HOST_IP"; fi
+            candidate="$RUNNER_TEMP/${label}.ed25519"
+            : > "$candidate"
+            for attempt in 1 2; do
+              timeout 16s ssh-keyscan -T 10 -p 1396 -t ed25519 "$target" 2>/dev/null |
+                awk '$2 == "ssh-ed25519" && $3 ~ /^[A-Za-z0-9+\/=]+$/ {print $1, $2, $3}' > "$candidate" || true
+              if test -s "$candidate"; then break; fi
+            done
+            if ! test -s "$candidate"; then
+              result='NO_ED25519_KEY_DIRECT_FROM_RUNNER'
+            else
+              actual="$(ssh-keygen -lf "$candidate" -E sha256 | awk '{print $2}' | sort -u)"
+              if test "$actual" = "$EXPECTED_PIN"; then result='PIN_MATCH';
+              else result='PIN_MISMATCH_DO_NOT_TRUST'; fi
+            fi
+            echo "CPANEL_${label^^}_SSH=${result}"
+            echo "- ${label} endpoint (${target} port 1396): **${result}**" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo 'No SSH login, secret use, DNS edits, deployment, migration or file modification was performed.' >> "$GITHUB_STEP_SUMMARY"
