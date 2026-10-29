@@ -115,7 +115,7 @@ function zmCcTransition(PDO $control, int $id, string $state, string $note, int 
         mbSafeLen($note)>1000 || (($state==='done'||$state==='blocked'||$state==='cancelled')&&trim($note)==='')) {
         bail('وضعیت یا توضیح اقدام نامعتبر است.',422);
     }
-    $control->exec('BEGIN IMMEDIATE');
+    $control->beginTransaction();
     try {
         $get=$control->prepare('SELECT state FROM tasks WHERE id=?');
         $get->execute([$id]);
