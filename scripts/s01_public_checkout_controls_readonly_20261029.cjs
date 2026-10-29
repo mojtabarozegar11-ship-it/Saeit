@@ -3,6 +3,7 @@
 // clicks, submissions, cookies, payment calls, credentials or customer data.
 const fs = require('node:fs');
 const {chromium} = require('playwright');
+const {classifyNavigation} = require('./s01_checkout_route_verdict_20261029.cjs');
 const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/product/879/',
   '/store/product/72/checkout/','/store/product/225/checkout/',
   '/store/product/879/checkout/','/commerce/trx-easy/purchases/'];
@@ -60,10 +61,9 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
             } catch(e) { error = error || ('DOM_'+(e.name||'Error')).slice(0,60); }
           }
           // HTTP 200 at a login redirect is not a completed buyer checkout.
-          const authRequired = finalPath === '/accounts/login/' &&
-            (/\/checkout\/$/.test(path) || path.includes('/purchases/'));
+          const verdict = classifyNavigation(path, http, finalPath, error);
           rows.push({device:device.name,path,http,finalPath,error,jsErrors,controls,
-            authRequired,authenticatedBuyerFlowVerified:false,
+            ...verdict,authenticatedBuyerFlowVerified:false,
             checkoutLinks:controls.filter(c=>/\/checkout\/$/.test(c.href||'')&&c.reasons.length===0).length});
           await page.close();
         }
@@ -71,7 +71,7 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
     }
     const report={schema:'s01-anonymous-get-controls.v1',scope:'GET_ONLY_NO_PAYMENT',
       checkedAt:new Date().toISOString(),ordersCreated:0,paymentsCreated:0,rows,
-      complete:rows.length===URLS.length*2 && rows.every(r=>r.http>=200&&r.http<500&&!r.error),
+      complete:rows.length===URLS.length*2 && rows.every(r=>r.observedSafe&&r.jsErrors.length===0),
       completeMeaning:'ANONYMOUS_GET_OBSERVATION_ONLY',
       authGatedRoutes:rows.filter(r=>r.authRequired).length,
       authenticatedBuyerFlowVerified:false,invoiceVerified:false,
@@ -82,7 +82,8 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
     console.log(JSON.stringify({schema:report.schema,rows:rows.map(x=>({
       device:x.device,path:x.path,http:x.http,finalPath:x.finalPath,checkoutLinks:x.checkoutLinks,controls:x.controls.length,
       disabled:x.controls.filter(c=>c.reasons.length).length,
-      jsErrors:x.jsErrors.length,authRequired:x.authRequired,error:x.error
+      jsErrors:x.jsErrors.length,authRequired:x.authRequired,
+      unexpectedRedirect:x.unexpectedRedirect,error:x.error
     }))}));
   } finally {await browser.close();}
 })().catch(e=>{console.error('S01_READONLY_DIAGNOSTIC_ERROR='+e.name);process.exitCode=1;});
