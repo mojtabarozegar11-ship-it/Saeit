@@ -75,6 +75,20 @@ class StageGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "CASEFOLD_MEMBER_COLLISION"):
             gate.verify(self.path)
 
+    def test_archive_size_limit_fails_before_zip_processing(self):
+        from unittest.mock import patch
+        self.build()
+        with patch.object(gate, "MAX_ARCHIVE_BYTES", 100):
+            with self.assertRaisesRegex(ValueError, "UNSAFE_OR_OVERSIZED_ARCHIVE"):
+                gate.verify(self.path)
+
+    def test_manifest_size_limit_blocks_untrusted_json_expansion(self):
+        from unittest.mock import patch
+        self.build()
+        with patch.object(gate, "MAX_MANIFEST_BYTES", 10):
+            with self.assertRaisesRegex(ValueError, "OVERSIZED_MANIFEST"):
+                gate.verify(self.path)
+
     def test_nonportable_compression_is_rejected_before_release(self):
         self.build()
         with zipfile.ZipFile(self.path, "a") as archive:
