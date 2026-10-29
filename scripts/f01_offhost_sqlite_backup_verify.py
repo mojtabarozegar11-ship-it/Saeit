@@ -5,6 +5,7 @@ Input is not modified. A passing test does NOT prove off-host provenance,
 backup freshness, WAL completeness, production restore, or deploy readiness.
 """
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -48,7 +49,7 @@ def check_input(path):
             os.close(fd)
             raise
     except OSError as exc:
-        if exc.errno in (getattr(os, "ELOOP", 40), 20, 40):
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
             raise Blocked("LINKED_PATH") from exc
         raise
     finally:
