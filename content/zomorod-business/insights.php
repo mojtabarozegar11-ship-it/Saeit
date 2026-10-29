@@ -27,10 +27,10 @@ $params = [$from, $to];
 if ($kind !== 'all') { $where[] = 'i.kind = ?'; $params[] = $kind; }
 if ($currency !== 'all') { $where[] = 'i.currency = ?'; $params[] = $currency; }
 if ($term !== '') {
-    $where[] = '(i.invoice_no LIKE ? OR p.name LIKE ?)';
-    $like = '%' . str_replace(['%', '_', '\\'], ['\\%', '\\_', '\\\\'], $term) . '%';
-    $params[] = $like;
-    $params[] = $like;
+    // instr() treats percent and underscore as literals, not SQL LIKE wildcards.
+    $where[] = '(instr(i.invoice_no, ?) > 0 OR instr(p.name, ?) > 0)';
+    $params[] = $term;
+    $params[] = $term;
 }
 $filter = implode(' AND ', $where);
 $paidJoin = ' LEFT JOIN (SELECT invoice_id,SUM(amount) paid FROM invoice_payments GROUP BY invoice_id) ip ON ip.invoice_id=i.id ';
