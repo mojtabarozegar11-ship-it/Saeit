@@ -3,7 +3,9 @@ name: MojPlayWin two verified books authenticated buyer nonpayment path audit
 on:
   push:
     branches: [main, ops/s01-ro-passenger-db-20261029-r12]
-    paths: [".github/workflows/mpw-buyer-checkout-auth-simulation-readonly-20261020.yml"]
+    paths:
+      - ".github/workflows/mpw-buyer-checkout-auth-simulation-readonly-20261020.yml"
+      - "scripts/mpw_checkout_csp_zero_script_guard_20261029.py"
 permissions: {contents: read}
 jobs:
   audit:
