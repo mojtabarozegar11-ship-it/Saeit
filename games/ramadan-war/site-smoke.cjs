@@ -211,7 +211,7 @@ const assert=require('node:assert/strict');
       'earned pickup score must survive an immediate reload');
     console.log('RAMADAN_COLLECTIBLE_IMMEDIATE_SAVE_PASS',v.name);
    }
-   const savedBeforeReload=await page.evaluate(()=>window.RamadanWarDebug.getState());
+   // Compare with the authoritative pause save, not a stale pre-pause HUD value.
    // Pausing is a durable checkpoint even when no five-second timer has fired.
    const pausePosition=await page.evaluate(()=>{
      const g=window.RamadanWarDebug;
@@ -219,12 +219,12 @@ const assert=require('node:assert/strict');
      return g.qaPosition();
    });
    await page.locator('#pause').click();
-   assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('rwNativeCampaign')).x),
-     pausePosition.x,'pause must immediately persist the latest player position');
+   const pauseCheckpoint=await page.evaluate(()=>JSON.parse(localStorage.getItem('rwNativeCampaign')));
+   assert.equal(pauseCheckpoint.x,pausePosition.x,'pause must immediately persist the latest player position');
    console.log('RAMADAN_PAUSE_IMMEDIATE_SAVE_PASS',v.name);await page.locator('#pausePanel:not(.hidden)').waitFor();await page.reload({waitUntil:'domcontentloaded'});
    assert.match(await page.locator('#start').innerText(),/ادامه/);
    await page.locator('#start').click();
-   state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,savedBeforeReload.rockets);assert.equal(state.drones,savedBeforeReload.drones);assert.equal(state.mode,'game');
+   state=await page.evaluate(()=>window.RamadanWarDebug.getState());assert.equal(state.stage,0);assert.equal(state.rockets,pauseCheckpoint.rockets);assert.equal(state.drones,pauseCheckpoint.drones);assert.equal(state.mode,'game');
    // A real pointer click exercises the published control path, unlike debug.fire().
    assert((await page.locator('#pause').getAttribute('aria-label'))?.length>=3,'pause needs a screen-reader name');
    if(localCandidate)await page.evaluate(()=>{for(let i=0;i<40;i++)window.RamadanWarDebug.tick(.04)});
