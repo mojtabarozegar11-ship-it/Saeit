@@ -121,7 +121,7 @@ class GalleryTargetSafetyTests(SimpleTestCase):
     def test_gallery_view_sets_only_safe_target_for_template(self):
         item = SimpleNamespace(target_path="//outside.invalid")
         queryset = MagicMock()
-        queryset.filter.return_value.select_related.return_value.__getitem__.return_value = [item]
+        queryset.filter.return_value.select_related.return_value.order_by.return_value.__getitem__.return_value = [item]
         with patch.object(company_content_views, "missing_public_tables", return_value=False), \
              patch.object(company_content_views.CompanyGalleryMedia.objects, "filter", return_value=queryset), \
              patch.object(company_content_views, "render", return_value=HttpResponse("gallery")) as rendered:
@@ -129,6 +129,7 @@ class GalleryTargetSafetyTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(item.safe_target_path, "")
         self.assertEqual(rendered.call_args.args[2]["media"], [item])
+        queryset.filter.return_value.select_related.return_value.order_by.assert_called_once_with("-published_at", "-pk")
 
 
 class AssessmentEnrollmentGateTests(SimpleTestCase):
