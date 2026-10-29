@@ -5,6 +5,7 @@ Never opens, modifies or processes SKU879. No claim of content quality, rights,
 shop deliverability, or correspondence with any private VPS candidate.
 """
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -41,14 +42,24 @@ def verify(sku, archive, expected_sha256=None):
     if sku not in (72, 225):
         raise QCBlocked("SKU_NOT_AUTHORIZED")
     path = Path(archive).absolute()
-    # Fail closed on linked path components; the leaf is also O_NOFOLLOW.
-    if any(part.is_symlink() for part in (path, *path.parents)):
-        raise QCBlocked("LINKED_PATH")
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    # Pin each ancestor by descriptor: a symlink swap cannot redirect the open.
+    directory_flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                       | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
+    leaf_flags = (os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                  | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0))
     try:
-        fd = os.open(path, flags)
+        parent_fd = os.open("/", directory_flags)
+        try:
+            for component in path.parts[1:-1]:
+                next_fd = os.open(component, directory_flags, dir_fd=parent_fd)
+                os.close(parent_fd)
+                parent_fd = next_fd
+            fd = os.open(path.parts[-1], leaf_flags, dir_fd=parent_fd)
+        finally:
+            os.close(parent_fd)
     except OSError as exc:
-        raise QCBlocked("ARCHIVE_UNAVAILABLE") from exc
+        reason = "LINKED_PATH" if exc.errno in (errno.ELOOP, errno.ENOTDIR) else "ARCHIVE_UNAVAILABLE"
+        raise QCBlocked(reason) from exc
     with os.fdopen(fd, "rb") as handle:
         meta = os.fstat(handle.fileno())
         if not stat.S_ISREG(meta.st_mode) or meta.st_size > MAX_ARCHIVE_BYTES:
@@ -79,8 +90,9 @@ def verify(sku, archive, expected_sha256=None):
                         raise QCBlocked("DUPLICATE_MEMBER_NAME")
                     seen.add(key)
                     mode = (info.external_attr >> 16) & 0xffff
-                    if stat.S_ISLNK(mode):
-                        raise QCBlocked("SYMLINK_MEMBER")
+                    member_type = stat.S_IFMT(mode)
+                    if member_type not in (0, stat.S_IFREG, stat.S_IFDIR):
+                        raise QCBlocked("SPECIAL_FILE_MEMBER")
                     if info.flag_bits & 1:
                         raise QCBlocked("ENCRYPTED_MEMBER")
                     if info.file_size > MAX_ENTRY_BYTES:
