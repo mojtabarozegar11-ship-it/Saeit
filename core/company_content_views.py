@@ -61,7 +61,9 @@ def company_gallery(request):
             media = media.filter(media_type=kind)
         if query:
             media = media.filter(title__icontains=query)
-        media = list(media[:100])
+        # Stable newest-first pagination: unordered slices can reshuffle
+        # published media between requests and hide recently approved work.
+        media = list(media.order_by("-published_at", "-pk")[:100])
         for item in media:
             item.safe_target_path = safe_gallery_target_path(item.target_path)
     response = render(request, "core/company_gallery.html", {
