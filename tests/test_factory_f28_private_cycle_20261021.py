@@ -39,6 +39,7 @@ class F28PrivateCycleTests(unittest.TestCase):
         self.assertGreaterEqual(receipt["technical_tests"], 10)
         self.assertEqual(receipt["independent_black_box_checks"]["customer_scenarios_verified"], 2)
         self.assertTrue(receipt["independent_black_box_checks"]["customer_cli_from_extracted_zip"])
+        self.assertTrue(receipt["independent_black_box_checks"]["standalone_english_browser_package_integrity"])
         self.assertFalse(receipt["independent_professional_quality_1000_passed"])
         self.assertFalse(receipt["commercial_release_authorized"])
         stock = self.private / "private-stock" / "greenhouse_crop_margin"
@@ -77,6 +78,17 @@ class F28PrivateCycleTests(unittest.TestCase):
         self.assertFalse(order["commercial_release_authorized"])
         self.assertFalse((self.private / "private-stock" / "greenhouse_crop_margin"
                           / "greenhouse_crop_margin-internal-qa.zip").exists())
+
+    def test_mismatched_browser_source_is_blocked_before_private_stock(self):
+        browser = self.source / "greenhouse_economics_studio.html"
+        html = browser.read_text(encoding="utf8")
+        browser.write_text(html.replace("/* Greenhouse Economics Studio",
+                                       "/* Tampered Greenhouse Economics Studio", 1),
+                           encoding="utf8")
+        failed = self.build()
+        self.assertEqual(failed["status"], "blocked_rework_required")
+        self.assertEqual(failed["defect_code"], "F28_BROWSER_ENGINE_MISMATCH")
+        self.assertFalse(failed["commercial_release_authorized"])
 
     def test_separate_arithmetic_oracle_rejects_loss_making_price(self):
         inputs = {"area_m2":1000, "expected_yield_kg_per_m2":12,
