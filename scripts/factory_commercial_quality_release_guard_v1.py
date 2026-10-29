@@ -187,7 +187,23 @@ def require_chatgpt_final_review(inbox,recipe,artifact_sha,product_manifest,pack
             "artifact_sha256":artifact_sha,
             "reviewed_files":len(actual)}
 
+def require_rights_clearance(inbox,recipe,package_digest,package_path,*,commercial_distribution=False):
+    """Require independently signed rights evidence for the exact distributable bytes."""
+    module_path=Path(__file__).resolve().with_name("factory_product_rights_clearance_v1.py")
+    if module_path.is_symlink() or not module_path.is_file():
+        raise ValueError("RIGHTS_CLEARANCE_GUARD_UNAVAILABLE")
+    spec=importlib.util.spec_from_file_location("factory_artifact_rights",str(module_path))
+    if spec is None or spec.loader is None:
+        raise ValueError("RIGHTS_CLEARANCE_GUARD_UNAVAILABLE")
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.require_rights_clearance(
+        inbox,recipe,package_digest,package_path,
+        commercial_distribution=commercial_distribution
+    )
+
 def require_quality_clearance(inbox,recipe,package_digest,product_manifest,package_path):
+    require_rights_clearance(inbox,recipe,package_digest,package_path)
     if not isinstance(product_manifest,dict):
         raise ValueError("INVALID_PRIVATE_FACTORY_MANIFEST")
     if product_manifest.get("professional_quality_standard")!="100_groups_x_10":
