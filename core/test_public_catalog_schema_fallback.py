@@ -10,7 +10,7 @@ from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase
 from django.template.loader import render_to_string
 
-from core.academy_views import academy, education_course_detail, education_lesson, education_enroll, education_lesson_complete
+from core.academy_views import academy, education_course_detail, education_lesson, education_enroll, education_lesson_complete, education_bookmark
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
 from core.newsletter_views import newsletter_home, newsletter_detail, safe_json_ld
 from core.public_catalog_guard import missing_public_tables, mark_public_data_unavailable
@@ -125,6 +125,74 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
             response = company_portal_home(request)
         self.assertEqual(response.status_code, 302)
         create.assert_called_once()
+
+
+    def test_bookmark_missing_schema_returns_503_before_lookup_or_write(self):
+        request = self.requests.post("/education/course/example/lesson/1/bookmark/")
+        request.user = SimpleNamespace(is_authenticated=True)
+        with patch("core.academy_views.missing_public_tables", return_value=True) as guard, patch(
+            "core.academy_views.get_object_or_404"
+        ) as lookup, patch(
+            "core.academy_views.EducationBookmark.objects.create"
+        ) as write, patch(
+            "core.academy_views.EducationBookmark.objects.filter"
+        ) as read:
+            response = education_bookmark(request, "example", 1)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(json.loads(response.content)["error"], "education_temporarily_unavailable")
+        from core.academy_views import EducationBookmark
+        self.assertIn(EducationBookmark, guard.call_args.args)
+        lookup.assert_not_called()
+        read.assert_not_called()
+        write.assert_not_called()
+
+    def test_bookmark_healthy_schema_preserves_existing_toggle(self):
+        request = self.requests.post("/education/course/example/lesson/1/bookmark/")
+        request.user = SimpleNamespace(is_authenticated=True)
+        with patch("core.academy_views.missing_public_tables", return_value=False), patch(
+            "core.academy_views.get_object_or_404", return_value=SimpleNamespace(id=1)
+        ), patch(
+            "core.academy_views.EducationBookmark.objects.filter"
+        ) as lookup, patch(
+            "core.academy_views.EducationBookmark.objects.create",
+            return_value=SimpleNamespace(pk=42)
+        ) as create:
+            lookup.return_value.first.return_value = None
+            response = education_bookmark(request, "example", 1)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content)["bookmark_id"], 42)
+        create.assert_called_once()
+
+    def test_company_inquiry_rejects_invalid_email_and_kind_without_insert(self):
+        for kind, email in (("research", "invalid-email"), ("not-a-real-kind", "sender@example.com")):
+            request = self.requests.post("/company/", {
+                "kind": kind, "name": "Sender", "email": email,
+                "subject": "Question", "message": "Details",
+            })
+            with patch("core.company_content_views.missing_public_tables", return_value=False), patch(
+                "core.company_content_views.CompanyInquiry.objects.create"
+            ) as create, patch("django.contrib.messages.error") as error, patch(
+                "django.shortcuts.redirect", return_value=HttpResponse(status=302)
+            ):
+                response = company_portal_home(request)
+            self.assertEqual(response.status_code, 302)
+            error.assert_called_once()
+            create.assert_not_called()
+
+    def test_company_inquiry_rejects_oversized_subject_before_insert(self):
+        request = self.requests.post("/company/", {
+            "kind": "research", "name": "Sender", "email": "sender@example.com",
+            "subject": "X" * 301, "message": "Details",
+        })
+        with patch("core.company_content_views.missing_public_tables", return_value=False), patch(
+            "core.company_content_views.CompanyInquiry.objects.create"
+        ) as create, patch("django.contrib.messages.error"), patch(
+            "django.shortcuts.redirect", return_value=HttpResponse(status=302)
+        ):
+            response = company_portal_home(request)
+        self.assertEqual(response.status_code, 302)
+        create.assert_not_called()
 
 
 class PublicCatalogTruthfulTemplateTests(SimpleTestCase):
