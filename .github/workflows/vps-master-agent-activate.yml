@@ -103,7 +103,9 @@ jobs:
           import os,sys,tarfile
           from pathlib import Path
           root=Path(sys.argv[1])
-          if root.is_symlink() or not root.is_dir():
+          # Revalidate the full path at extraction time: a directory may
+          # have been swapped after the earlier read-only SSH preflight.
+          if any(part.is_symlink() for part in (root, *root.parents)) or not root.is_dir():
               raise SystemExit("MASTER_STAGE_ROOT_UNSAFE")
           expected={"deploy/activate_vps_master_agent.sh","scripts/vps_master_evolution_cycle.py",
                     "core/autonomous_brain.py","core/economic_tool_pack.py","core/economic_master_agent.py",
