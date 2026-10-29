@@ -317,7 +317,43 @@ class CaseServiceTests(unittest.TestCase):
                        (json.dumps(changed), code))
         self.assertEqual(service.registry(self.secret), [])
         self.assertFalse(service.verify_public_report(code, proof, self.secret)["verified"])
-        self.assertFalse(service.case_status(code, item["access_key"], self.secret)["review_integrity_valid"])
+        tampered_status = service.case_status(code, item["access_key"], self.secret)
+        self.assertFalse(tampered_status["review_integrity_valid"])
+        self.assertNotIn("review", tampered_status)
+        staff_status = service.staff_case(code, self.secret)
+        self.assertFalse(staff_status["review_integrity_valid"])
+        self.assertNotIn("review", staff_status)
+
+    def test_corrupted_stored_review_is_not_exposed_or_published(self):
+        item = self.create(public=True)
+        code = item["case_id"]
+        service.set_status(code, "in_review", "staff:2", "Start authorized expert review")
+        service.submit_review(code, "staff:2", make_review(), self.secret)
+        proof = service.case_status(code, item["access_key"], self.secret)["review"]["integrity"]["proof"]
+        with service.database() as db, db:
+            db.execute("UPDATE cases SET review=? WHERE code=?", ("{not-json", code))
+        owner_view = service.case_status(code, item["access_key"], self.secret)
+        staff_view = service.staff_case(code, self.secret)
+        for result in (owner_view, staff_view):
+            self.assertFalse(result["review_integrity_valid"])
+            self.assertNotIn("review", result)
+            self.assertEqual(result["status"], "reviewed")
+        self.assertEqual(service.registry(self.secret), [])
+        self.assertFalse(service.verify_public_report(code, proof, self.secret)["verified"])
+
+    def test_unsigned_legacy_review_is_withheld_from_private_tracking(self):
+        item = self.create(public=False)
+        code = item["case_id"]
+        service.set_status(code, "in_review", "staff:4", "Start authorized expert review")
+        service.submit_review(code, "staff:4", make_review(), self.secret)
+        with service.database() as db, db:
+            row = db.execute("SELECT review FROM cases WHERE code=?", (code,)).fetchone()
+            record = json.loads(row["review"])
+            record.pop("integrity")
+            db.execute("UPDATE cases SET review=? WHERE code=?", (json.dumps(record), code))
+        owner_view = service.case_status(code, item["access_key"], self.secret)
+        self.assertFalse(owner_view["review_integrity_valid"])
+        self.assertNotIn("review", owner_view)
 
     def test_private_signed_report_is_not_publicly_disclosed(self):
         item = self.create(public=False)
