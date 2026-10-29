@@ -1,0 +1,36 @@
+name: Zomorod sandbox PHP 8.4 SQLite extension compatibility probe
+on:
+  push:
+    branches: [feature/zomorod-erp-treasury-offline-v7-20261029]
+    paths: [".github/workflows/zomorod-php84-sqlite-sandbox-artifact.yml"]
+permissions:
+  contents: read
+jobs:
+  build-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_sqlite, sqlite3, mbstring
+      - name: Copy only dynamically linked SQLite PHP extensions for temporary local validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -r 'if (!extension_loaded("pdo_sqlite") || !extension_loaded("sqlite3")) exit(1);'
+          php -r 'if (PHP_MAJOR_VERSION !== 8 || PHP_MINOR_VERSION !== 4) exit(2);'
+          d="$(php-config --extension-dir)"
+          test -f "$d/pdo_sqlite.so" && test -f "$d/sqlite3.so"
+          mkdir -p dist/php84
+          cp "$d/pdo_sqlite.so" "$d/sqlite3.so" dist/php84/
+          php -i | grep '^PHP Extension Build' > dist/php84/version.txt
+          (cd dist/php84 && sha256sum pdo_sqlite.so sqlite3.so > SHA256SUMS && sha256sum --check SHA256SUMS)
+          echo "PHP84_SQLITE_EXTENSIONS=READY_FOR_LOCAL_ABI_CHECK"
+          echo "COMPANY_DATA=NONE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: php84-sqlite-sandbox-extensions
+          path: dist/php84/
+          if-no-files-found: error
+          retention-days: 2
