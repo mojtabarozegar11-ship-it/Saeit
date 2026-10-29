@@ -54,8 +54,8 @@ class ReleaseTests(unittest.TestCase):
             publisher.publish(self.inbox, self.webroot)
         self.assertFalse((self.webroot / "factory-releases").exists())
 
-    def test_release_blocked_without_chatgpt_review_and_real_qc1000(self):
-        with self.assertRaisesRegex(ValueError, "QC1000_REQUIRED_FOR_FACTORY_EXIT"):
+    def test_release_blocked_without_signed_rights_evidence(self):
+        with self.assertRaisesRegex(ValueError, "RIGHTS_CLEARANCE_EVIDENCE_MISSING"):
             publisher.publish(self.inbox, self.webroot, release_authorized=True)
         self.assertFalse(
             (self.webroot / "factory-releases" / publisher.PUBLIC_SLUG).exists()
@@ -82,7 +82,7 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "WRONG_STOREFRONT"):
             publisher.publish(self.inbox, bad, release_authorized=True)
 
-    def test_preview_replaces_only_complete_checksum_bound_prior_edition(self):
+    def test_preview_cannot_bypass_missing_signed_rights_clearance(self):
         dest = self.webroot / "factory-releases" / publisher.PUBLIC_SLUG
         dest.mkdir(parents=True)
         old_zip = dest / publisher.PUBLIC_FILENAME
@@ -98,16 +98,14 @@ class ReleaseTests(unittest.TestCase):
         )
         (dest / ".htaccess").write_text("Options -Indexes\n")
 
-        result = publisher.publish(
-            self.inbox, self.webroot, release_authorized=True,
-            uncertified_preview=True, expected_sha256=self.sha,
-        )
+        with self.assertRaisesRegex(ValueError, "RIGHTS_CLEARANCE_EVIDENCE_MISSING"):
+            publisher.publish(
+                self.inbox, self.webroot, release_authorized=True,
+                uncertified_preview=True, expected_sha256=self.sha,
+            )
+        self.assertEqual(hashlib.sha256(old_zip.read_bytes()).hexdigest(), old_sha)
+        self.assertIn("Download", (dest / "index.html").read_text())
 
-        self.assertEqual(result["status"], "published_public_uncertified_preview")
-        self.assertEqual(result["sha256"], self.sha)
-        self.assertIn("has not received QC1000", (dest / "index.html").read_text())
-        self.assertEqual((dest / ".htaccess").read_text(), "Options -Indexes\n")
-        self.assertEqual(hashlib.sha256((dest / publisher.PUBLIC_FILENAME).read_bytes()).hexdigest(), self.sha)
 
     def test_preview_selects_exact_verified_digest_with_other_receipts_present(self):
         recipe = publisher.RECIPE
@@ -129,15 +127,12 @@ class ReleaseTests(unittest.TestCase):
         }))
         receiver.finalize(self.inbox, recipe, second_sha)
 
-        result = publisher.publish(
-            self.inbox, self.webroot, release_authorized=True,
-            uncertified_preview=True, expected_sha256=self.sha,
-        )
-
-        self.assertEqual(result["status"], "published_public_uncertified_preview")
-        self.assertEqual(result["sha256"], self.sha)
-        page = (self.webroot / "factory-releases" / publisher.PUBLIC_SLUG / "index.html").read_text()
-        self.assertIn("has not received QC1000", page)
+        with self.assertRaisesRegex(ValueError, "RIGHTS_CLEARANCE_EVIDENCE_MISSING"):
+            publisher.publish(
+                self.inbox, self.webroot, release_authorized=True,
+                uncertified_preview=True, expected_sha256=self.sha,
+            )
+        self.assertFalse((self.webroot / "factory-releases").exists())
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ def load_guard():
 class ReleaseMustHaveRealExecutionReceipts(unittest.TestCase):
     def test_old_editions_never_receive_qc1000(self):
         gate=load_guard()
+        gate.require_rights_clearance=lambda *args,**kwargs: {"status":"test-only"}
         row=gate.require_quality_clearance("/dev/null","some_product","a"*64,
              {"professional_quality_standard":"legacy"},"/dev/null")
         self.assertIs(row["1000_quality_verified"],False)
@@ -52,6 +53,9 @@ class ReleaseMustHaveRealExecutionReceipts(unittest.TestCase):
             )
             original=gate.__file__
             gate.__file__=str(base/"factory_commercial_quality_release_guard_v1.py")
+            # This unit test isolates QC receipt validation; the rights guard
+            # has separate fail-closed coverage in its own test module.
+            gate.require_rights_clearance=lambda *args,**kwargs: {"status":"test-only"}
             try:
                 with self.assertRaisesRegex(ValueError,
                        "QC1000_TRUSTED_REAL_EXECUTION_EVIDENCE_MISSING"):

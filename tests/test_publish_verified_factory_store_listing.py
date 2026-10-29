@@ -23,7 +23,11 @@ def script(name):
         original_loaded = instance.loaded
         def loaded(module_name, filename):
             if module_name == "factory_premium_commercial_guard":
-                return SimpleNamespace(require_quality_clearance=lambda *args: {
+                return SimpleNamespace(
+                    require_rights_clearance=lambda *args, **kwargs: {
+                        "status": "VERIFIED_SIGNED_ARTIFACT_RIGHTS"
+                    },
+                    require_quality_clearance=lambda *args: {
                     "status": "VERIFIED_SIGNED_PREMIUM_1000",
                     "1000_quality_verified": True,
                     "chatgpt_final_review": "CHATGPT_FINAL_REVIEW_VERIFIED",
