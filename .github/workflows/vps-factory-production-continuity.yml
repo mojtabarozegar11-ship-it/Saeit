@@ -113,9 +113,15 @@ jobs:
           root="$HOME/factory-runtime"
           test -d "$root" && test ! -L "$root"
           free_bytes="$(df -B1 --output=avail "$root" | awk 'NR==2 {print $1}')"
+          disk_size_bytes="$(df -B1 --output=size "$root" | awk 'NR==2 {print $1}')"
+          disk_used_bytes="$(df -B1 --output=used "$root" | awk 'NR==2 {print $1}')"
           inode_free="$(df -Pi "$root" | awk 'NR==2 {print $4}')"
-          [[ "$free_bytes" =~ ^[0-9]+$ && "$inode_free" =~ ^[0-9]+$ ]]
+          ram_total_kb="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)"
+          [[ "$free_bytes" =~ ^[0-9]+$ && "$disk_size_bytes" =~ ^[0-9]+$ && "$disk_used_bytes" =~ ^[0-9]+$ && "$inode_free" =~ ^[0-9]+$ && "$ram_total_kb" =~ ^[0-9]+$ ]]
+          echo FACTORY_AUDIT_FILESYSTEM_SIZE_BYTES="$disk_size_bytes"
+          echo FACTORY_AUDIT_FILESYSTEM_USED_BYTES="$disk_used_bytes"
           echo FACTORY_AUDIT_FREE_BYTES="$free_bytes"
+          echo FACTORY_AUDIT_RAM_TOTAL_KB="$ram_total_kb"
           echo FACTORY_AUDIT_INODES_FREE="$inode_free"
           echo FACTORY_AUDIT_RESERVE_BYTES="$((512*1024*1024))"
           current="$(mktemp /tmp/factory-audit-cron.XXXXXX)"
