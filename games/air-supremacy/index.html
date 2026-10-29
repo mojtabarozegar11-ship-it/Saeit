@@ -304,7 +304,10 @@ function refreshHangar(){
 }
 function buyUpgrade(key){
  const cost=upgradeCost(key);if(cost===null||profile.credits<cost||run)return;
- profile.credits-=cost;profile.upgrades[key]++;persistProfile();refreshHangar();
+ const oldCredits=profile.credits,oldLevel=profile.upgrades[key];
+ profile.credits-=cost;profile.upgrades[key]++;
+ if(!persistProfile()){profile.credits=oldCredits;profile.upgrades[key]=oldLevel;refreshHangar();return}
+ refreshHangar();
 }
 for(const key of ['cannon','armor','missile'])$(key+'Upgrade').addEventListener('click',()=>buyUpgrade(key));
 $('difficulty').addEventListener('change',()=>{if(run)return;profile.difficulty=$('difficulty').value==='ace'?'ace':'cadet';persistProfile();refreshHangar()});
