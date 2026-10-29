@@ -1,0 +1,29 @@
+name: VPS capacity verification from provider screenshot
+on:
+  push:
+    branches: [ops/factory-offhost-backup-preflight-20261029]
+    paths: [".github/workflows/factory-guest-capacity-one-shot-20261029.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Inspect VPS guest geometry without any write
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-capacity-proof"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" 2>/dev/null || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'set -eu; test "$(id -un)" = githubops; date -u "+CAPACITY_CHECK_UTC=%Y-%m-%dT%H:%M:%SZ"; echo DISKS; lsblk -b -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT; echo MOUNT; findmnt -no SOURCE,FSTYPE,TARGET /; echo FILESYSTEM; df -B1 -P /; awk "/MemTotal:/ {print \"MEM_TOTAL_KIB=\" \$2}" /proc/meminfo; echo CPU_CORES="$(nproc)"; echo VIRTUAL_DISK_AND_RAM_READ_ONLY=PASS'
