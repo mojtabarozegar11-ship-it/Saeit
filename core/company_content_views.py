@@ -8,6 +8,15 @@ from .company_inquiry_models import CompanyInquiry
 from .public_catalog_guard import missing_public_tables, mark_public_data_unavailable
 
 
+def safe_gallery_target_path(path):
+    """Allow only local, absolute, non-protocol gallery links in public HTML."""
+    if not isinstance(path, str) or not path.startswith("/") or path.startswith("//"):
+        return ""
+    if "\\" in path or any(ord(ch) < 32 or ord(ch) == 127 for ch in path):
+        return ""
+    return path
+
+
 def company_gallery(request):
     catalog_unavailable = missing_public_tables(CompanyGalleryMedia, NewsletterStory)
     kind = request.GET.get("type", "").strip().lower()
@@ -27,7 +36,9 @@ def company_gallery(request):
             media = media.filter(media_type=kind)
         if query:
             media = media.filter(title__icontains=query)
-        media = media[:100]
+        media = list(media[:100])
+        for item in media:
+            item.safe_target_path = safe_gallery_target_path(item.target_path)
     response = render(request, "core/company_gallery.html", {
         "media": media, "query": query, "kind": kind,
         "catalog_temporarily_unavailable": catalog_unavailable,
