@@ -326,6 +326,8 @@
     try{window.print();}catch(error){cleanup();throw error;}
   }
   function downloadCaseReport(details) {
+    if(details.review_integrity_valid!==true || !details.review)
+      throw Error("A signed integrity-verified assessment is required for export");
     const exportData={
       schema:"AYAR-PRIVATE-REVIEW-EXPORT-v1",
       exported_at:new Date().toISOString(),
@@ -461,23 +463,22 @@
       copy.type="button";copy.addEventListener("click",()=>copyReviewPacket(details,target).catch(error=>message(error.message,"error")));
       target.append(packet,copy,h("p","The copyable packet excludes contact details, private access keys and product URLs; inspect filenames and other text before sharing. Send actual evidence only with authorization.","a-small"));
     }
-    if(details.review){
+    if(details.review_integrity_valid===false){
+      target.append(h("p","The stored assessment failed integrity verification. Its scores and evidence notes are withheld; contact AYAR support.","a-alert error"));
+    }
+    if(details.review && details.review_integrity_valid===true){
       renderReport(target,details.review);
-      if(details.review_integrity_valid===false){
-        target.append(h("p","Warning: this stored report failed its AYAR integrity check. Contact support before relying on it.","a-alert error"));
-      }
-      const exportButton=h("button","Download documented review (JSON) ↓","a-button a-button-secondary");
-      exportButton.type="button";exportButton.addEventListener("click",()=>downloadCaseReport(details));
+      const exportButton=h("button","Download verified review (JSON) ↓","a-button a-button-secondary");
+      exportButton.type="button";
+      exportButton.addEventListener("click",()=>{
+        try{downloadCaseReport(details);}catch(error){message(error.message,"error");}
+      });
       target.append(exportButton);
       if(target.id==="casePanel" && details.status==="reviewed"){
-        if(details.review_integrity_valid===true){
-          const print=h("button","Print / Save as PDF ↓","a-button a-button-secondary");
-          print.type="button";
-          print.addEventListener("click",()=>{try{printAssessment(details);}catch(error){message(error.message,"error");}});
-          target.append(print,h("p","Use the browser print dialog and choose Save as PDF. The signed record marker remains included; this is an AI-assisted report, not independent certification.","a-small"));
-        }else{
-          target.append(h("p","Printable report unavailable until the AYAR integrity reference is verified.","a-small"));
-        }
+        const print=h("button","Print / Save as PDF ↓","a-button a-button-secondary");
+        print.type="button";
+        print.addEventListener("click",()=>{try{printAssessment(details);}catch(error){message(error.message,"error");}});
+        target.append(print,h("p","Use the browser print dialog and choose Save as PDF. The signed record marker remains included; this is an AI-assisted report, not independent certification.","a-small"));
       }
     }
     target.append(h("h3","Case history"));
