@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   receive:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it' && github.ref == 'refs/heads/feature/zomorod-command-bridge-private-v4-20261029'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -31,7 +31,7 @@ jobs:
         shell: bash
         env:
           EXPECTED_ACTOR: mojtabarozegar11-ship-it
-          EXPECTED_REF: refs/heads/feature/zomorod-command-bridge-private-v4-20261029
+          EXPECTED_REF: refs/heads/main
         run: |
           set -euo pipefail
           test "$GITHUB_ACTOR" = "$EXPECTED_ACTOR"
@@ -77,8 +77,19 @@ jobs:
           chmod 600 "$d/"*.key
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
           echo "VPS_HOST_KEY=verified"
           cat > "$d/config" <<EOF
           Host saeit-vps
@@ -88,12 +99,15 @@ jobs:
             IdentityFile $d/vps.key
             UserKnownHostsFile $d/vps.known
           Host saeit-cpanel
-            HostName zohal.pws-dns.net
+            HostName 178.239.147.125
             User zomorod2
             Port 1396
             IdentityFile $d/host.key
             UserKnownHostsFile $d/host.known
             ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/control-%C
+            ControlPersist 300
           Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
@@ -106,18 +120,38 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$d/config"
-          scan=""
-          for attempt in 1 2 3; do
-            scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null || true)"
-            if test -n "$scan"; then break; fi
-            sleep 2
-          done
-          test -n "$scan"
-          printf '%s\n' "$scan" > "$d/host.candidate"
-          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
           cp "$d/host.candidate" "$d/host.known"
           echo "CPANEL_HOST_KEY=verified"
           echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 3; then sleep 12; fi
+          done
+          test "$session_ready" = 1 || { echo 'PINNED_30GB_RELAY_UNAVAILABLE'; exit 1; }
+          echo 'PINNED_SESSION=AUTHENTICATED'
       - name: Read the current recipient public key
         if: inputs.operation == 'show_public_key'
         shell: bash
