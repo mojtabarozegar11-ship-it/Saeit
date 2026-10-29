@@ -77,8 +77,28 @@ jobs:
           chmod 600 "$d/"*.key
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          vps_scan=""
+          for attempt in 1 2 3; do
+            vps_scan="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null || true)"
+            if test -n "$vps_scan"; then break; fi
+            sleep 2
+          done
+          if test -z "$vps_scan"; then
+            echo "VPS_KEYSCAN=EMPTY"
+            exit 1
+          fi
+          printf '%s\n' "$vps_scan" > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
           echo "VPS_HOST_KEY=verified"
           cat > "$d/config" <<EOF
           Host saeit-vps
