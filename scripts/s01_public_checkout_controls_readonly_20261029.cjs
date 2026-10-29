@@ -17,9 +17,15 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
         serviceWorkers:'block',acceptDownloads:false,
         extraHTTPHeaders:{'Cache-Control':'no-cache'}
       });
-      // Fail closed: no POST, PUT, PATCH, DELETE, websocket or other mutation.
-      await context.route('**/*', route => route.request().method()==='GET'
-        ? route.continue() : route.abort('blockedbyclient'));
+      // Fail closed: no mutating requests or navigation to third-party hosts.
+      // Passive external subresources may still load; external page navigation may not.
+      await context.route('**/*', route => {
+        const req = route.request();
+        if (req.method() !== 'GET') return route.abort('blockedbyclient');
+        if (req.isNavigationRequest() && new URL(req.url()).origin !== 'https://mojplaywin.com')
+          return route.abort('blockedbyclient');
+        return route.continue();
+      });
       try {
         for (const path of URLS) {
           const page = await context.newPage();
