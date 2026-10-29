@@ -174,6 +174,23 @@ jobs:
           else
             echo 'SSHD_1433Z_RATE_LIMIT_LOG=NOT_VISIBLE'
           fi
+          if sudo -n true >/dev/null 2>&1; then
+            echo 'VPS_SUDO_READONLY=AVAILABLE'
+            if test -x /usr/sbin/sshd; then
+              sudo -n /usr/sbin/sshd -T 2>/dev/null | awk '
+                $1 == "maxstartups" {print "SSHD_EFFECTIVE_MAXSTARTUPS=" $2}
+                $1 == "persourcemaxstartups" {print "SSHD_EFFECTIVE_PER_SOURCE_MAX=" $2}
+                $1 == "persourcepenalties" {print "SSHD_EFFECTIVE_PER_SOURCE_PENALTIES=" $2}
+              ' || true
+            fi
+            if command -v journalctl >/dev/null 2>&1; then
+              count="$(sudo -n journalctl -u ssh -u sshd --since '2026-10-29 14:00:00 UTC' --until '2026-10-29 15:10:00 UTC' --no-pager -q -o cat 2>/dev/null | grep -Eic 'MaxStartups|PerSourcePenalties|drop connection|refused connect|kex_exchange_identification' || true)"
+              case "$count" in ''|*[!0-9]*) count='UNAVAILABLE';; esac
+              echo "SSHD_REJECTION_PATTERN_COUNT=$count"
+            fi
+          else
+            echo 'VPS_SUDO_READONLY=UNAVAILABLE'
+          fi
           VPS_READONLY
               then
                 vps_diagnostic_ok=1
