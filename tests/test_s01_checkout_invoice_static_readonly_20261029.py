@@ -22,6 +22,9 @@ class InvoiceStaticReadOnlyTests(unittest.TestCase):
             )
             result = inspect_source(root, require_wsg=False)
             self.assertFalse(result["invoice_idempotency_verified"])
+            self.assertFalse(result["source_contract_complete"])
+            self.assertFalse(result["safe_to_publish"])
+            self.assertIn("mpw_commerce/downloads.py:download_paid_item", result["missing_contract_functions"])
             self.assertFalse(result["database_identity_verified"])
             self.assertEqual(result["orders_created"], 0)
             item = result["modules"][0]
@@ -70,6 +73,8 @@ class InvoiceStaticReadOnlyTests(unittest.TestCase):
             result = inspect_source(Path(tmp), require_wsg=False)
             self.assertTrue(all(not m["exists"] for m in result["modules"]))
             self.assertFalse(result["buyer_delivery_verified"])
+            self.assertFalse(result["source_contract_complete"])
+            self.assertGreaterEqual(len(result["missing_contract_functions"]), 5)
 
 
 if __name__ == "__main__":
