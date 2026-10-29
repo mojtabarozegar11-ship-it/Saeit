@@ -22,16 +22,22 @@ async function run(){
     assert.equal((await air.goto(base+'/games/air-supremacy/index.html',{waitUntil:'domcontentloaded',timeout:45000})).status(),200);
     await air.waitForFunction(()=>window.__g01AirInput);
     await air.locator('#launch').click();
-    // Use a real active browser pointer: synthetic PointerEvent cannot acquire capture.
-    const boostBox=await air.locator('#boostBtn').boundingBox();assert(boostBox,'boost button visible');
-    await air.mouse.move(boostBox.x+boostBox.width/2,boostBox.y+boostBox.height/2);
-    await air.mouse.down();
-    await air.waitForFunction(()=>window.__g01AirInput().afterburner,{timeout:5000});
-    await air.mouse.move(10,10);await air.mouse.up();
-    await air.waitForFunction(()=>!window.__g01AirInput().boostHeld,{timeout:5000});
-    await air.mouse.move(boostBox.x+boostBox.width/2,boostBox.y+boostBox.height/2);
-    await air.mouse.down();
-    await air.waitForFunction(()=>window.__g01AirInput().boostHeld,{timeout:5000});
+    // Desktop boost uses keyboard; touch controls are intentionally hidden there.
+    // Mobile uses a real active pointer so pointer capture can be tested.
+    if(mobile){
+     const boostBox=await air.locator('#boostBtn').boundingBox();assert(boostBox,'mobile boost button visible');
+     await air.mouse.move(boostBox.x+boostBox.width/2,boostBox.y+boostBox.height/2);
+     await air.mouse.down();
+     await air.waitForFunction(()=>window.__g01AirInput().afterburner,{timeout:5000});
+     await air.mouse.move(10,10);await air.mouse.up();
+     await air.waitForFunction(()=>!window.__g01AirInput().boostHeld,{timeout:5000});
+     await air.mouse.move(boostBox.x+boostBox.width/2,boostBox.y+boostBox.height/2);
+     await air.mouse.down();
+     await air.waitForFunction(()=>window.__g01AirInput().boostHeld,{timeout:5000});
+    }else{
+     await air.keyboard.down('e');
+     await air.waitForFunction(()=>window.__g01AirInput().afterburner,{timeout:5000});
+    }
     await air.locator('#pauseBtn').click();
     const paused=await air.evaluate(()=>window.__g01AirInput());
     assert(paused.paused&&!paused.afterburner&&!paused.boostHeld,'afterburner must stop immediately on pause');
