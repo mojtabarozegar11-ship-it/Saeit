@@ -125,30 +125,51 @@ def organization_jsonld():
     }, ensure_ascii=False)
 
 
-# zm-author-persian-view-20261023: a real 200 HTML response, not a canonical-damaging 301.
-@require_GET
-def persian_author_profile(request):
-    from pathlib import Path
-    from django.conf import settings
-
+# The author profile is a public static document, not a database view.
+# Resolve every path component relative to a pinned directory descriptor:
+# O_NOFOLLOW on the final HTML alone does not protect symlinked parent dirs.
+def _read_author_html(base_dir):
     import os
     import stat
 
-    page = Path(settings.BASE_DIR) / "public/authors/mojtaba-rozegar/index.html"
-    # A public profile must not follow a swapped symlink or accidentally read
-    # a FIFO/device. The existing HTML is returned byte-for-byte unchanged.
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_fd = os.open(str(base_dir), directory_flags)
     try:
-        fd = os.open(page, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        for segment in ("public", "authors", "mojtaba-rozegar"):
+            next_fd = os.open(segment, directory_flags, dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_fd
+        file_fd = os.open(
+            "index.html", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+            dir_fd=directory_fd,
+        )
+        try:
+            before = os.fstat(file_fd)
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                    or before.st_size < 1 or before.st_size > 1_000_000):
+                raise ValueError("unsafe public profile file")
+            with os.fdopen(os.dup(file_fd), "rb") as stream:
+                body = stream.read(1_000_001)
+            after = os.fstat(file_fd)
+            if (len(body) != before.st_size or len(body) > 1_000_000
+                    or after.st_ino != before.st_ino
+                    or after.st_size != before.st_size
+                    or after.st_mtime_ns != before.st_mtime_ns):
+                raise ValueError("public profile changed during read")
+            return body
+        finally:
+            os.close(file_fd)
+    finally:
+        os.close(directory_fd)
+
+
+@require_GET
+def persian_author_profile(request):
+    from django.conf import settings
+    try:
+        body = _read_author_html(settings.BASE_DIR)
     except OSError:
         return HttpResponse(status=404)
-    try:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_size > 1_000_000:
-            return HttpResponse(status=503)
-        with os.fdopen(os.dup(fd), "rb") as stream:
-            body = stream.read(1_000_001)
-    finally:
-        os.close(fd)
-    if len(body) > 1_000_000:
+    except ValueError:
         return HttpResponse(status=503)
     return HttpResponse(body, content_type="text/html; charset=utf-8")
