@@ -115,6 +115,10 @@ def sqlite(path):
     except OSError as exc:
         return {"state": "UNAVAILABLE", "error_class": type(exc).__name__}
 
+def indexed_targets(paths, reader):
+    # Public Actions logs must not disclose private DB/backup/lock path names.
+    return {"target_" + str(i + 1): reader(path) for i, path in enumerate(paths)}
+
 def capture(args):
     topo = command(["lsblk", "-b", "-J", "-o", "NAME,SIZE,FSTYPE,MOUNTPOINT,TYPE"])
     if topo["state"] == "OBSERVED":
@@ -129,14 +133,15 @@ def capture(args):
     return {"schema": "f01-vps-console-readonly.v1",
             "observed_utc": dt.datetime.now(UTC).isoformat(),
             "read_only": True, "production_change": False, "deployment_authorized": False,
+            "path_labels_redacted": True,
             "guest": {"uid": os.getuid(), "cpu_count": os.cpu_count(),
                       "loadavg": load, "memory": memory()},
-            "filesystem": {p: mount(p) for p in args.mount},
+            "filesystem": indexed_targets(args.mount, mount),
             "block_topology": topo, "cron": cron(), "worker": workers(),
-            "queue": {p: queue(p) for p in args.queue},
-            "locks": {p: stat_path(p) for p in args.lock},
-            "sqlite": {p: sqlite(p) for p in args.sqlite},
-            "backup": {p: stat_path(p) for p in args.backup},
+            "queue": indexed_targets(args.queue, queue),
+            "locks": indexed_targets(args.lock, stat_path),
+            "sqlite": indexed_targets(args.sqlite, sqlite),
+            "backup": indexed_targets(args.backup, stat_path),
             "offhost_backup_restored": "NOT_VERIFIED",
             "worker_running_verified": False,
             "notes": ["Process-name matches do not prove worker health.",
