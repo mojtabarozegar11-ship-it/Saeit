@@ -7,12 +7,83 @@ on:
     branches: [main]
     paths: [.github/workflows/vps-factory-production-continuity.yml]
   workflow_dispatch:
+    inputs:
+      recovery_authorized:
+        description: Owner has authorized a one-time factory loop recovery
+        required: true
+        type: boolean
+        default: false
+      offhost_backup_verified:
+        description: Restorable off-host backup was independently verified
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
   group: saeit-vps-factory-continuity
   cancel-in-progress: false
 jobs:
+  pause-loop-low-disk:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[factory-pause-low-disk-loop-20261029]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Gracefully pause only the verified loop when free disk is below reserve
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-pause"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/factory-runtime"
+          ops="$root/operations"
+          script="$ops/vps-only-loop.sh"
+          pidfile="$ops/vps-only-loop.pid"
+          free_bytes="$(df -B1 --output=avail "$root" | awk 'NR==2 {print $1}')"
+          [[ "$free_bytes" =~ ^[0-9]+$ ]]
+          echo "FACTORY_PAUSE_FREE_BYTES=$free_bytes"
+          if (( free_bytes >= 536870912 )); then
+            echo FACTORY_PAUSE_SKIPPED_DISK_ABOVE_RESERVE
+            exit 0
+          fi
+          pid="$(cat "$pidfile" 2>/dev/null || true)"
+          if ! [[ "$pid" =~ ^[0-9]+$ ]] || ! test -r "/proc/$pid/cmdline"; then
+            echo FACTORY_PAUSE_NO_VERIFIED_PID
+            exit 1
+          fi
+          if [[ "$(stat -c %u "/proc/$pid")" != "$(id -u)" ]] || ! tr '\0' ' ' < "/proc/$pid/cmdline" | grep -Fq -- "$script"; then
+            echo FACTORY_PAUSE_PID_IDENTITY_MISMATCH
+            exit 1
+          fi
+          if ! kill -0 "$pid" 2>/dev/null; then
+            echo FACTORY_PAUSE_PROCESS_ALREADY_EXITED
+            exit 0
+          fi
+          kill -TERM "$pid"
+          echo FACTORY_PAUSE_TERM_SENT=true
+          for attempt in {1..10}; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo FACTORY_PAUSE_LOOP_STOPPED=true
+              exit 0
+            fi
+            sleep 1
+          done
+          echo FACTORY_PAUSE_LOOP_STOPPED=false
+          exit 1
+          REMOTE
+
   audit-readonly:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[factory-readonly-audit-20261029]')
     runs-on: ubuntu-24.04
@@ -107,7 +178,7 @@ jobs:
           REMOTE
 
   ensure:
-    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[factory-readonly-audit-20261029]')
+    if: github.event_name != 'push' || (!contains(github.event.head_commit.message, '[factory-readonly-audit-20261029]') && !contains(github.event.head_commit.message, '[factory-pause-low-disk-loop-20261029]'))
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -138,6 +209,8 @@ jobs:
           pidfile="$ops/vps-only-loop.pid"
           log="$ops/vps-only-factory.log"
           test -x "$script"
+          recovery_authorized='${{ inputs.recovery_authorized }}'
+          offhost_backup_verified='${{ inputs.offhost_backup_verified }}'
           grep -q 'FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider' "$script"
           echo VPS_FACTORY_PREFLIGHT_OK
           report_database_state() {
@@ -259,6 +332,17 @@ jobs:
             ps -p "$current_pid" -o args= || true
             exit 1
           else
+            if [[ "$recovery_authorized" != "true" || "$offhost_backup_verified" != "true" ]]; then
+              echo FACTORY_AUTOSTART_BLOCKED_RECOVERY_GATE
+              exit 0
+            fi
+            free_bytes="$(df -B1 --output=avail "$base" | awk 'NR==2 {print $1}')"
+            [[ "$free_bytes" =~ ^[0-9]+$ ]]
+            echo "FACTORY_RECOVERY_FREE_BYTES=$free_bytes"
+            if (( free_bytes < 536870912 )); then
+              echo FACTORY_AUTOSTART_BLOCKED_LOW_DISK
+              exit 1
+            fi
             nohup "$script" 9>&- </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
             printf '%s\\n' "$!" > "$pidfile"
             sleep 3
