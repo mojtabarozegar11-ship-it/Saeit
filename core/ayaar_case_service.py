@@ -435,7 +435,15 @@ def as_case(db, code, include_private=False):
         )],
     }
     if row["review"]:
-        values["review"] = json.loads(row["review"])
+        try:
+            report = json.loads(row["review"])
+        except (ValueError, TypeError):
+            values["review_integrity_valid"] = False
+        else:
+            if isinstance(report, dict):
+                values["review"] = report
+            else:
+                values["review_integrity_valid"] = False
     if include_private:
         values.update({
             "contact_email": row["requester_email"],
@@ -456,14 +464,23 @@ def case_status(code, access_key, secret_key):
         if row is None or not hmac.compare_digest(digest, row["secret_hash"]):
             raise CaseError("Invalid case reference or access key", 403)
         result = as_case(db, code)
-        if result.get("review"):
-            integrity = result["review"].get("integrity")
-            result["review_integrity_valid"] = (
-                checked_report_proof(db.execute("SELECT * FROM cases WHERE code=?", (code,)).fetchone(),
-                                     result["review"], secret_key) is not None
-                if integrity else None
-            )
-        return result
+        return shield_unverified_report(db, code, result, secret_key)
+
+
+def shield_unverified_report(db, code, result, secret_key):
+    """Never expose unverified report scores or notes through private APIs.
+
+    The underlying database record is preserved for forensic recovery, while
+    clients receive only a failure marker until a valid signed report exists.
+    """
+    report = result.get("review")
+    if report is not None:
+        row = db.execute("SELECT * FROM cases WHERE code=?", (code,)).fetchone()
+        valid = checked_report_proof(row, report, secret_key) is not None
+        result["review_integrity_valid"] = valid
+        if not valid:
+            result.pop("review", None)
+    return result
 
 
 def grant_ai_consent(code, access_key, secret_key):
@@ -605,11 +622,14 @@ def staff_list(limit=40):
         return [dict(row) for row in rows]
 
 
-def staff_case(code):
+def staff_case(code, secret_key=None):
     with database() as db:
         safe_code = clean(code, 28, True)
         verify_evidence_integrity(db, safe_code)
-        return as_case(db, safe_code, include_private=True)
+        result = as_case(db, safe_code, include_private=True)
+        if result.get("review") and not secret_key:
+            raise CaseError("Report signing key required for staff verification", 503)
+        return shield_unverified_report(db, safe_code, result, secret_key)
 
 
 def set_status(code, status, actor, note):
@@ -826,7 +846,13 @@ def registry(secret_key):
         ).fetchall()
         results = []
         for row in rows:
-            report = json.loads(row["review"])
+            try:
+                report = json.loads(row["review"])
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(report, dict) or not all(
+                    key in report for key in ("grade", "score", "notice")):
+                continue
             proof = checked_report_proof(row, report, secret_key)
             if report.get("integrity") and proof is None:
                 # Fail closed on a changed or malformed signed report.
@@ -859,7 +885,12 @@ def verify_public_report(code, supplied_proof, secret_key):
         ).fetchone()
         if row is None or not row["review"]:
             return negative
-        report = json.loads(row["review"])
+        try:
+            report = json.loads(row["review"])
+        except (ValueError, TypeError):
+            return negative
+        if not isinstance(report, dict):
+            return negative
         stored = checked_report_proof(row, report, secret_key)
         if not stored or not hmac.compare_digest(stored, supplied_proof.strip()):
             return negative
