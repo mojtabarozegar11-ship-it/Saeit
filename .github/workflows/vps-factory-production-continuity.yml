@@ -127,10 +127,12 @@ jobs:
           python3 -c '
           import os, subprocess, sys
           root = sys.argv[1]
-          result = subprocess.run(
-              ["timeout", "20s", "du", "-x", "--max-depth=1", "-B1", "--null", root],
-              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
-          )
+          def scan(path):
+              return subprocess.run(
+                  ["timeout", "20s", "du", "-x", "--max-depth=1", "-B1", "--null", path],
+                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
+              )
+          result = scan(root)
           totals = {"application": 0, "operations": 0, "runtime_data": 0, "temporary": 0, "backups": 0, "other": 0}
           names = {"django-app": "application", "operations": "operations", "var": "runtime_data", "tmp": "temporary", "backups": "backups"}
           for record in result.stdout.split(bytes([0])):
@@ -138,16 +140,34 @@ jobs:
                   continue
               try:
                   size, path = record.split(bytes([9]), 1)
-                  path = path.rstrip(bytes([47]))
-                  if path.decode(errors="replace") == root:
+                  path_text = os.fsdecode(path.rstrip(bytes([47])))
+                  if path_text == root.rstrip("/"):
                       continue
-                  name = os.path.basename(os.fsdecode(path))
+                  name = os.path.basename(path_text)
                   totals[names.get(name, "other")] += int(size)
               except (ValueError, OSError):
                   continue
           for key, value in totals.items():
               print(f"FACTORY_AUDIT_USAGE_{key.upper()}_BYTES={value}")
           print("FACTORY_AUDIT_USAGE_SCAN_COMPLETE=" + str(result.returncode == 0).lower())
+          fs = scan("/")
+          fs_totals = {"home": 0, "var": 0, "usr": 0, "opt": 0, "root": 0, "tmp": 0, "system": 0, "other": 0}
+          fs_names = {"home": "home", "var": "var", "usr": "usr", "opt": "opt", "root": "root", "tmp": "tmp", "etc": "system", "lib": "system", "lib64": "system", "bin": "system", "sbin": "system", "boot": "system", "snap": "system"}
+          for record in fs.stdout.split(bytes([0])):
+              if not record:
+                  continue
+              try:
+                  size, path = record.split(bytes([9]), 1)
+                  path_text = os.fsdecode(path.rstrip(bytes([47])))
+                  if not path_text:
+                      continue
+                  name = os.path.basename(path_text)
+                  fs_totals[fs_names.get(name, "other")] += int(size)
+              except (ValueError, OSError):
+                  continue
+          for key, value in fs_totals.items():
+              print(f"FACTORY_AUDIT_FILESYSTEM_TOP_{key.upper()}_BYTES={value}")
+          print("FACTORY_AUDIT_FILESYSTEM_TOP_SCAN_COMPLETE=" + str(fs.returncode == 0).lower())
           ' "$root"
           current="$(mktemp /tmp/factory-audit-cron.XXXXXX)"
           trap 'rm -f -- "$current"' EXIT
