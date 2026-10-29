@@ -11,7 +11,7 @@ import os
 import stat
 import sys
 import zipfile
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 MAX_ARCHIVE_BYTES = 2 * 1024**3
 MAX_UNCOMPRESSED_BYTES = 4 * 1024**3
@@ -27,8 +27,14 @@ class QCBlocked(Exception):
 def _safe_name(name):
     if not name or "\\" in name or "\x00" in name or name.startswith("/"):
         return False
-    parts = PurePosixPath(name).parts
-    return all(p not in ("", ".", "..") for p in parts) and not name.startswith("./")
+    # PurePosixPath normalizes interior "." and repeated separators: reject
+    # raw aliases before normalization, including Windows drive and controls.
+    parts = name.rstrip("/").split("/")
+    if any(p in ("", ".", "..") for p in parts):
+        return False
+    if ":" in parts[0] or any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
+        return False
+    return True
 
 
 def verify(sku, archive, expected_sha256=None):
