@@ -1,0 +1,97 @@
+name: F-01 pinned VPS guest snapshot (read only)
+on:
+  push:
+    branches:
+      - f01/vps-readonly-console-snapshot-20261029
+    paths:
+      - .github/workflows/f01-vps-guest-snapshot-20261029.yml
+      - scripts/f01_vps_console_snapshot_readonly_20261029.py
+      - scripts/f01_s01_release_preflight_20261029.py
+      - tests/test_f01_vps_console_snapshot_readonly_20261029.py
+      - tests/test_f01_s01_release_preflight_20261029.py
+      - scripts/f01_sku72_225_archive_qc.py
+      - tests/test_f01_sku72_225_archive_qc.py
+      - scripts/f01_offhost_sqlite_backup_verify.py
+      - tests/test_f01_offhost_sqlite_backup_verify.py
+      - scripts/f01_capacity_release_no_go_20261030.py
+      - tests/test_f01_capacity_release_no_go_20261030.py
+permissions:
+  contents: read
+concurrency:
+  group: f01-vps-readonly-guest-snapshot
+  cancel-in-progress: false
+jobs:
+  snapshot:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify F-01 read-only diagnostic and S-01 release preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_vps_console_snapshot_readonly_20261029.py'
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_s01_release_preflight_20261029.py'
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_sku72_225_archive_qc.py'
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_offhost_sqlite_backup_verify.py'
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_capacity_release_no_go_20261030.py'
+      - name: Authenticate pinned VPS and collect non-mutating evidence
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/f01-vps-guest"
+          install -d -m 700 "$d"
+          test -n "$VPS_KEY" || { echo 'VPS_KEY=UNAVAILABLE'; exit 1; }
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          # Known public key from the existing, verified main-branch relay.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/known"
+          observed="$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}')"
+          test "$observed" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' || { echo 'VPS_HOST_KEY=PIN_MISMATCH'; exit 2; }
+          echo 'VPS_HOST_KEY=PIN_VERIFIED'
+          success=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 60s ssh -T -i "$d/key" \
+              -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$d/known" -o ConnectTimeout=25 \
+              -o ConnectionAttempts=1 -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=2 -o ForwardAgent=no \
+              githubops@178.239.147.150 \
+              'python3 -B - --mount / --mount /home --mount /home/githubops/factory-runtime --queue /home/githubops/factory-runtime/private/autonomous-product-cycle' \
+              < scripts/f01_vps_console_snapshot_readonly_20261029.py > "$d/snapshot.json"; then
+              success=1
+              echo "VPS_SSH_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "VPS_SSH_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          test "$success" = 1 || { echo 'VPS_GUEST_SNAPSHOT=UNAVAILABLE'; exit 1; }
+          python3 - "$d/snapshot.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          d=json.loads(Path(sys.argv[1]).read_text())
+          assert d["schema"]=="f01-vps-console-readonly.v1"
+          assert d["read_only"] is True and d["deployment_authorized"] is False
+          print("F01_GUEST_OBSERVED_UTC="+d["observed_utc"])
+          print("F01_CPU_COUNT="+str(d["guest"]["cpu_count"]))
+          print("F01_LOADAVG="+json.dumps(d["guest"]["loadavg"]))
+          print("F01_MEMORY="+json.dumps(d["guest"]["memory"],sort_keys=True))
+          print("F01_FILESYSTEM="+json.dumps(d["filesystem"],sort_keys=True))
+          print("F01_BLOCK_TOPOLOGY="+json.dumps(d["block_topology"],sort_keys=True))
+          print("F01_CRON="+json.dumps(d["cron"],sort_keys=True))
+          print("F01_WORKER="+json.dumps(d["worker"],sort_keys=True))
+          print("F01_PROCESS_PRESSURE="+json.dumps(d["process_pressure"],sort_keys=True))
+          print("F01_QUEUE="+json.dumps(d["queue"],sort_keys=True))
+          print("F01_DB_BACKUP_RESTORE=NOT_VERIFIED")
+          print("F01_WORKER_EXECUTION=NOT_VERIFIED")
+          PY
+          # The triage tool always returns 2 (NO_GO); it never authorizes restart.
+          rc=0
+          python3 scripts/f01_capacity_release_no_go_20261030.py "$d/snapshot.json" || rc=$?
+          test "$rc" = 2

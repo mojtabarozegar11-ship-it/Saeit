@@ -1,0 +1,19 @@
+{
+  "id": "F01_TO_B01_C95_INDEPENDENT_QA_20261029",
+  "source": "B-01 private Library C95 companion PDF + manifest (not mirrored to public repository)",
+  "source_manifest_sha256": "88423427aae6f82f8b8b0202f8d7825c23db169d8e9c211755bc60a6f2766042",
+  "pdf_sha256": "056e3b4698b6ff5e7f804152e41a31d2b39a101e37fa37fe7343ae15a20d4cdb",
+  "pdf_manifest_sha256_match": true,
+  "pdf_bytes_match": true,
+  "pdf_pages": 2,
+  "nonblank_pages": 2,
+  "chapter22_present": true,
+  "chapter30_present": true,
+  "synthetic_mass_balance_residual_kg": 0,
+  "synthetic_custody_coverage_percent": 90,
+  "legal_scientific_release": "NOT_VERIFIED",
+  "rights_media_review": "NOT_VERIFIED",
+  "handoff_owner": "B-01",
+  "adoption_status": "READY_FOR_REVIEW",
+  "next": "B-01 independent scientific/legal scope review; do not publish from this offline QA"
+}
