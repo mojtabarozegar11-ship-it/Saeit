@@ -119,3 +119,79 @@ test("Single-file browser distribution contains the identical audited engine",()
   vm.runInNewContext(match[1],context,{timeout:1000});
   assert.equal(context.module.exports.calculate(sample).cycle.cycleMargin,5380);
 });
+
+test("Offline English UI works for comparison exports, reset, CSV and JSON import",()=>{
+  const html=fs.readFileSync(path.join(__dirname,"greenhouse_economics_studio.html"),"utf8");
+  const matched=html.match(/<script>\s*([\s\S]*?)\s*<\/script>\s*<\/body>/);
+  assert.ok(matched,"customer UI script must exist");
+  const nodes=new Map(), downloaded=[];
+  function node(tag){
+    const listeners={};
+    const n={tagName:tag,value:"",files:[],children:[],textContent:"",className:"",
+      appendChild(child){this.children.push(child);return child;},
+      replaceChildren(...items){this.children=items;},
+      addEventListener(kind,handler){listeners[kind]=handler;},
+      fire(kind,event){assert.ok(listeners[kind],this._id+" missing "+kind);return listeners[kind](event||{target:this});},
+      click(){if(listeners.click)listeners.click({target:this});},
+      remove(){}};
+    Object.defineProperty(n,"id",{get(){return this._id;},set(v){this._id=v;nodes.set(v,this);}});
+    return n;
+  }
+  for(const [,id] of html.matchAll(/\bid="([^"]+)"/g)){if(!nodes.has(id)){const el=node("div");el.id=id;}}
+  const document={getElementById(id){return nodes.get(id);},createElement:node,body:node("body")};
+  class MemoryBlob{constructor(parts,options){this.body=parts.join("");this.mime=options.type;}}
+  class MemoryReader{readAsText(file){this.result=file.content;this.onload();}}
+  let prints=0;
+  const context={document,GreenhouseEngine:E,Blob:MemoryBlob,FileReader:MemoryReader,
+    URL:{createObjectURL(blob){downloaded.push(blob);return "blob:memory";},revokeObjectURL(){}},
+    window:{print(){prints++;}},setTimeout(fn){fn();}};
+  context.globalThis=context;
+  vm.runInNewContext(matched[1],context,{timeout:5000});
+  const byId=id=>{const item=nodes.get(id);assert.ok(item,id+" missing");return item;};
+  const click=id=>byId(id).fire("click");
+  assert.equal(byId("metrics").children.length,9,"sample calculates on open");
+  click("export-compare");
+  assert.match(byId("status").textContent,/No saved comparisons/);
+  click("save");
+  assert.equal(byId("comparison").children.length,1);
+  byId("f-project").value="Second greenhouse";
+  click("save");
+  assert.equal(byId("comparison").children.length,2);
+  click("export-compare");
+  assert.match(downloaded.at(-1).body,/Second greenhouse/);
+  assert.match(downloaded.at(-1).body,/Year-one net operating cash/);
+  click("clear-compare");
+  assert.equal(byId("comparison").children.length,0);
+  click("export-compare");
+  assert.match(byId("status").textContent,/No saved comparisons/);
+
+  byId("f-project").value="=1+2";
+  click("export-csv");
+  assert.match(downloaded.at(-1).body,/'=1\+2/,"spreadsheet formula must be escaped");
+  assert.match(downloaded.at(-1).body,/Cycle water cost/);
+  assert.match(downloaded.at(-1).body,/Model scope/);
+  click("export-json");
+  assert.match(downloaded.at(-1).body,/"schema": "F28\/3"/);
+  click("print");
+  assert.equal(prints,1);
+
+  byId("f-areaM2").value="-1";
+  click("run");
+  assert.equal(byId("metrics").children.length,0,"old financial results must disappear on invalid input");
+  assert.equal(byId("cash").children.length,0);
+  assert.match(byId("status").textContent,/Results cleared/);
+  click("restore");
+  assert.equal(byId("metrics").children.length,9);
+
+  const input=byId("import-file");
+  input.files=[{size:120,content:JSON.stringify({schema:"F28/3",scenario:{...sample,project:"Imported reference case"}})}];
+  input.fire("change",{target:input});
+  assert.equal(byId("f-project").value,"Imported reference case");
+  assert.match(byId("status").textContent,/imported and validated/);
+  assert.equal(byId("metrics").children.length,9);
+
+  input.files=[{size:50,content:'{"scenario":{"areaM2":-1}}'}];
+  input.fire("change",{target:input});
+  assert.match(byId("status").textContent,/Import failed/);
+  assert.equal(byId("f-project").value,"Imported reference case","invalid import cannot replace valid inputs");
+});
