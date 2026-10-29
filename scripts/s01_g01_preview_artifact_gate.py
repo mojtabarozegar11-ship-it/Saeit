@@ -32,7 +32,7 @@ def checked_entries(archive, expected):
            i.file_size > max(i.compress_size, 1) * 1000 for i in infos):
         raise ValueError("preview archive compression ratio unsafe")
     names = [i.filename for i in infos]
-    if len(names) != len(set(names)) or set(names) != expected:
+    if len(names) != len(set(names)) or (expected is not None and set(names) != expected):
         raise ValueError("archive entry set differs from manifest")
     for info in infos:
         name = info.filename
@@ -56,6 +56,9 @@ def verify(outer_bytes, expected_revision, expected_game_blob):
         checked_entries(outer, {"ramadan-war-preview.zip"})
         inner_bytes = outer.read("ramadan-war-preview.zip")
     with ZipFile(io.BytesIO(inner_bytes)) as inner:
+        # Validate the entire nested ZIP's metadata and CRC before reading
+        # even its manifest; untrusted manifest bytes cannot bypass limits.
+        checked_entries(inner, None)
         root = "ramadan-war/"
         manifest_name = root + "preview-manifest.json"
         readme_name = root + "PLAY-README.txt"
