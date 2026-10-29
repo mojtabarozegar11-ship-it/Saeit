@@ -31,3 +31,16 @@ test('HTTP 500, 404, and navigation error never pass', () => {
   }
   assert.equal(classifyNavigation('/store/',200,'/store/','TimeoutError').observedSafe,false);
 });
+
+test('redirect-only HTTP statuses cannot count as observed safe pages', () => {
+  for (const status of [301,302,303,307,308,399]) {
+    const v=classifyNavigation('/store/product/72/checkout/',status,'/accounts/login/',null);
+    assert.equal(v.authRequired,true);
+    assert.equal(v.observedSafe,false);
+  }
+});
+test('invalid or noninteger status cannot pass', () => {
+  for (const status of [null,undefined,NaN,'200',200.5,-1]) {
+    assert.equal(classifyNavigation('/store/',status,'/store/',null).observedSafe,false);
+  }
+});
