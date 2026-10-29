@@ -48,7 +48,7 @@ test('actual save() wiring leaves an existing campaign slot untouched in endless
  assert.ok(start>0 && end>start,'save implementation must exist');
  const source=game.slice(start,end);
  const calls=[];
- const context={world:{mission:6,endless:true,victory:false,gameOver:false,pickups:[]},
+ const context={screen:'game',world:{mission:6,endless:true,victory:false,gameOver:false,pickups:[]}, 
   campaignSaveDisposition,saveKey:'rwNativeCampaign',
   boundedCampaignPickups:()=>[],storageWrite:(key,val)=>{calls.push(['write',key,val]);return true},
   storageRemove:key=>{calls.push(['remove',key]);return true},toast(){}};
@@ -62,4 +62,7 @@ test('actual save() wiring leaves an existing campaign slot untouched in endless
  vm.runInNewContext('save();',context);
  assert.equal(calls.length,2);
  assert.equal(calls[1][0],'remove');
+ context.screen='home';context.world.gameOver=false;
+ vm.runInNewContext('save();',context);
+ assert.equal(calls.length,2,'home autosave must not overwrite an invalid imported campaign');
 });
