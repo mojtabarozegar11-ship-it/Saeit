@@ -59,6 +59,18 @@ class ArchiveQCTests(unittest.TestCase):
             with self.assertRaisesRegex(qc.QCBlocked, "LINKED_PATH"):
                 qc.verify(72, alias)
 
+    def test_raw_path_aliases_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "unsafe.zip"
+            for member in ("assets/./index.html", "assets//index.html",
+                           "C:/windows.txt", "assets/../index.html",
+                           "assets/control\\x01.txt"):
+                with self.subTest(member=member):
+                    with zipfile.ZipFile(p, "w") as z:
+                        z.writestr(member, "x")
+                    with self.assertRaisesRegex(qc.QCBlocked, "UNSAFE_MEMBER_NAME"):
+                        qc.verify(72, p)
+
     def test_non_zip_refused(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "fake.zip"
