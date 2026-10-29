@@ -42,10 +42,10 @@ class MasterWorkflowReleaseGateTests(unittest.TestCase):
         s = self.text
         self.assertLess(s.index("MASTER_REMOTE_PREFLIGHT_LINKED_STAGE_BLOCKED"),
                         s.index("ssh \"\u0024{opts[@]}\" githubops@178.239.147.150 'install -d"))
-        start = "python3 - <<'PREFLIGHT'\\n"
+        start = "python3 - <<'PREFLIGHT'\n"
         self.assertIn(start, s)
         program = textwrap.dedent(
-            s.split(start, 1)[1].split("\\n          PREFLIGHT", 1)[0])
+            s.split(start, 1)[1].split("\n          PREFLIGHT", 1)[0])
         with tempfile.TemporaryDirectory() as root:
             base = Path(root) / "factory-runtime"
             base.mkdir()
