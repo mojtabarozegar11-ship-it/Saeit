@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
       - name: Read current factory VPS disk, cron, process and database state
         env:
-          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
