@@ -128,7 +128,7 @@ def parse_proc_stat(raw):
         raise ValueError("Short proc stat")
     return {"state": fields[0], "ppid": int(fields[1]),
             "cpu_ticks": int(fields[11]) + int(fields[12]),
-            "threads": int(fields[17])}
+            "threads": int(fields[17]), "start_ticks": int(fields[19])}
 
 
 
@@ -182,10 +182,34 @@ def dominant_parent_origin(pid):
             "parent_is_init": False, "pid_argv_and_paths_redacted": True}
 
 
+def process_age_bucket(start_ticks, uptime_seconds, clock_ticks):
+    """Coarse process age; no start time, PID or command line is exposed."""
+    if not isinstance(start_ticks, int) or not isinstance(clock_ticks, int) or clock_ticks <= 0:
+        return "unknown"
+    if not isinstance(uptime_seconds, (float, int)):
+        return "unknown"
+    age = uptime_seconds - start_ticks / clock_ticks
+    if age < 0:
+        return "unknown"
+    if age < 60:
+        return "lt_1m"
+    if age < 3600:
+        return "1m_to_1h"
+    if age < 86400:
+        return "1h_to_1d"
+    return "gte_1d"
+
+
 def process_pressure():
     """Aggregate process storm evidence; never emit PID, command line or private path."""
     states, factory_states, executable_types, parents = {}, {}, {}, {}
     parent_child_states = {}
+    age_buckets, init_orphan_age_buckets = {}, {}
+    try:
+        uptime_seconds = float(Path("/proc/uptime").read_text().split()[0])
+        clock_ticks = os.sysconf("SC_CLK_TCK")
+    except (OSError, ValueError, IndexError):
+        uptime_seconds, clock_ticks = None, None
     scanned = factory = factory_threads = factory_cpu_ticks = 0
     limit = 1200
     try:
@@ -211,6 +235,10 @@ def process_pressure():
             factory_threads += meta["threads"]
             factory_cpu_ticks += meta["cpu_ticks"]
             parent = meta["ppid"]
+            age_class = process_age_bucket(meta["start_ticks"], uptime_seconds, clock_ticks)
+            age_buckets[age_class] = age_buckets.get(age_class, 0) + 1
+            if parent == 1:
+                init_orphan_age_buckets[age_class] = init_orphan_age_buckets.get(age_class, 0) + 1
             parents[parent] = parents.get(parent, 0) + 1
             by_state = parent_child_states.setdefault(parent, {})
             by_state[state] = by_state.get(state, 0) + 1
@@ -239,6 +267,9 @@ def process_pressure():
                 "factory_threads": factory_threads,
                 "factory_cpu_ticks_cumulative": factory_cpu_ticks,
                 "factory_distinct_parent_count": len(parents),
+                "factory_age_buckets": age_buckets,
+                "init_parent_factory_age_buckets": init_orphan_age_buckets,
+                "age_estimate_uses_proc_uptime": uptime_seconds is not None,
                 "factory_max_children_same_parent": max(parents.values(), default=0),
                 "dominant_parent_child_states": parent_child_states.get(dominant, {}),
                 "dominant_parent_origin": origin,
