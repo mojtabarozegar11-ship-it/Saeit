@@ -5,6 +5,9 @@ on:
       - 'games/air-supremacy/index.html'
       - 'games/crown-defender/index.html'
       - 'games/echoform/signal-lattice.html'
+      - 'templates/studio_raha/index.html'
+      - 'templates/taniya_studio/index.html'
+      - 'tests/game/g01-r28-studios-browser.cjs'
       - 'tests/game/g01-echoform-r26.test.cjs'
       - 'tests/game/g01-air-profile-save-r26.test.cjs'
       - 'tests/game/g01-rotation-smoke.cjs'
@@ -51,3 +54,4 @@ jobs:
           done
           node tests/game/g01-rotation-smoke.cjs
           node tests/game/g01-r27-rotation-browser.cjs
+          node tests/game/g01-r28-studios-browser.cjs
