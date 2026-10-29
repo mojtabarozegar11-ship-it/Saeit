@@ -1,0 +1,52 @@
+name: Owner Leech Factory Cadence Read Only Audit
+on:
+  push:
+    branches: ['owner/leech-private-transfer-20261029']
+    paths: ['.github/workflows/owner-leech-cadence-readonly-20261029.yml']
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Inspect only the specific retired leech work order
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "${VPS_KEY:-}"
+          work="$RUNNER_TEMP/leech-readonly-audit"
+          install -d -m 700 "$work"
+          trap 'rm -f -- "$work/key"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo "AUDITED_ACCOUNT=$(id -un)"
+          if crontab -l >/dev/null 2>&1; then
+            count="$(crontab -l | grep -Eic 'leech|WO-26102501' || true)"
+            echo "OWNER_LEECH_CRONTAB_LINES=$count"
+          else
+            echo "OWNER_LEECH_CRONTAB_UNAVAILABLE=true"
+          fi
+          if command -v pgrep >/dev/null; then
+            pcount="$(pgrep -fc 'leech-professional-author.py|factory_leech_free_offline_original_author' || true)"
+            echo "OWNER_LEECH_PROCESS_MATCHES=$pcount"
+          fi
+          root="/home/githubops/factory-runtime/private/autonomous-product-cycle/production-instructions"
+          test -d "$root/stage-04/original-manuscript/WO-26102501" && echo "SOURCE_RETAINED=true"
+          if test -r "$root/stage-04/original-manuscript/WO-26102501/status.json"; then
+            python3 - "$root/stage-04/original-manuscript/WO-26102501/status.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1]))
+          print("STATUS_NEXT_CHAPTER="+str(x.get("next_chapter")))
+          print("STATUS_NEXT_PART="+str(x.get("next_part")))
+          PY
+          fi
+          echo "READ_ONLY_AUDIT_COMPLETE=true"
+          REMOTE
