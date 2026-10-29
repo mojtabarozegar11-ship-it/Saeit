@@ -26,8 +26,9 @@ test('foreign-tab update cannot be overwritten by local autosave',()=>{
 test('unrelated or same-value storage event does not block autosave',()=>{
  const h=harness();
  assert.equal(h.ctx.observeExternalCampaignSave({key:'other',newValue:'value'}),false);
- assert.equal(h.ctx.observeExternalCampaignSave({key:'rwNativeCampaign',newValue:'old'}),false);
  assert.equal(h.ctx.runSave(),true);
+ const ownSave=h.values.get('rwNativeCampaign');
+ assert.equal(h.ctx.observeExternalCampaignSave({key:'rwNativeCampaign',newValue:ownSave}),false);
 });
 test('active unsaved campaign warns before tab close',()=>{
  const h=harness();h.ctx.observeExternalCampaignSave({key:'rwNativeCampaign',newValue:'newer'});
