@@ -54,6 +54,8 @@ def _archive_inventory(package):
                 if (item.is_dir() or not _safe_member(name) or name in actual
                         or ((item.external_attr >> 16) & 0o170000) == 0o120000):
                     raise ValueError("RIGHTS_ARCHIVE_MEMBER_UNSAFE")
+                if item.file_size < 0 or total + item.file_size > MAX_TOTAL:
+                    raise ValueError("RIGHTS_ARCHIVE_SIZE_INVALID")
                 data = archive.read(item)
                 total += len(data)
                 if len(data) != item.file_size or total > MAX_TOTAL:
@@ -76,11 +78,19 @@ def require_rights_clearance(inbox, recipe, artifact_sha256, package_path,
         raise ValueError("RIGHTS_ARTIFACT_HASH_MISMATCH")
 
     root = Path(inbox)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("RIGHTS_PRIVATE_INBOX_INVALID")
     directory = root / "rights-clearance" / recipe / artifact_sha256
     manifest_path = directory / "rights-manifest.json"
     decision_path = directory / "signed-clearance.json"
     registry_path = root / "quality-trust" / "trusted-reviewers.json"
     approval_path = Path(__file__).resolve().with_name("factory_quality_signed_approval_v1.py")
+    evidence_root = root / "rights-evidence"
+    if (directory.is_symlink()
+            or (root / "rights-clearance").is_symlink()
+            or (root / "quality-trust").is_symlink()
+            or evidence_root.is_symlink()):
+        raise ValueError("RIGHTS_PRIVATE_EVIDENCE_PATH_UNSAFE")
     for path in (manifest_path, decision_path, registry_path, approval_path):
         if path.is_symlink() or not path.is_file():
             raise ValueError("RIGHTS_CLEARANCE_EVIDENCE_MISSING")
@@ -110,7 +120,6 @@ def require_rights_clearance(inbox, recipe, artifact_sha256, package_path,
     if not isinstance(components, list) or len(components) != len(actual):
         raise ValueError("RIGHTS_COMPONENT_INVENTORY_INCOMPLETE")
     seen = set()
-    evidence_root = root / "rights-evidence"
     for row in components:
         if (not isinstance(row, dict)
                 or set(row) != {"path", "sha256", "size", "rights_holder", "rights_basis",
@@ -139,7 +148,9 @@ def require_rights_clearance(inbox, recipe, artifact_sha256, package_path,
         raise ValueError("RIGHTS_COMPONENT_INVENTORY_INCOMPLETE")
 
     manifest_sha = hashlib.sha256(canonical(manifest)).hexdigest()
-    signed = receipt.get("decision") if isinstance(receipt, dict) else None
+    if not isinstance(receipt, dict):
+        raise ValueError("RIGHTS_DECISION_INVALID")
+    signed = receipt.get("decision")
     if (receipt.get("schema") != DECISION_SCHEMA or not isinstance(signed, dict)
             or signed.get("recipe") != recipe
             or signed.get("artifact_sha256") != artifact_sha256
