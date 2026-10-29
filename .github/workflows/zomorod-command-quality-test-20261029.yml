@@ -1,0 +1,39 @@
+name: Zomorod command center v2 quality gates synthetic QA
+on:
+  push:
+    branches: [feature/zomorod-command-center-v2-quality-gates-20261029]
+    paths:
+      - "content/zomorod-business/command_center.php"
+      - "content/zomorod-business/command_quality.php"
+      - "content/zomorod-business/app.php"
+      - "scripts/zomorod_command_quality_synthetic_qa.php"
+      - "scripts/zomorod_command_center_synthetic_qa.php"
+      - ".github/workflows/zomorod-command-quality-test-20261029.yml"
+  pull_request:
+    paths:
+      - "content/zomorod-business/command_center.php"
+      - "content/zomorod-business/command_quality.php"
+      - "scripts/zomorod_command_quality_synthetic_qa.php"
+permissions:
+  contents: read
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_sqlite, sqlite3, mbstring
+      - name: Lint and run both original and quality-gate synthetic regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/command_center.php
+          php -l content/zomorod-business/command_quality.php
+          php -l scripts/zomorod_command_center_synthetic_qa.php
+          php -l scripts/zomorod_command_quality_synthetic_qa.php
+          php scripts/zomorod_command_center_synthetic_qa.php
+          php scripts/zomorod_command_quality_synthetic_qa.php
