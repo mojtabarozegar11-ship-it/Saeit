@@ -23,10 +23,20 @@ def verify(path):
             raise ValueError("unsafe member count or duplicate names")
         if sum(m.file_size for m in z.infolist()) > 65_000_000:
             raise ValueError("uncompressed size exceeds limit")
+        seen_casefold = set()
         for m in z.infolist():
             parts = pathlib.PurePosixPath(m.filename).parts
-            if not parts or parts[0] != "ramadan-war" or ".." in parts or m.filename.startswith("/"):
+            if (len(parts) != 2 or parts[0] != "ramadan-war" or
+                    parts[1] in (".", "..") or "\\" in m.filename or
+                    any(ord(ch) < 32 for ch in m.filename)):
                 raise ValueError("unsafe archive path")
+            folded = m.filename.casefold()
+            if folded in seen_casefold:
+                raise ValueError("case-insensitive archive collision")
+            seen_casefold.add(folded)
+            if m.file_size > 15_000_000 or (m.file_size > 1_000_000 and
+                    m.file_size > max(1, m.compress_size) * 250):
+                raise ValueError("unsafe member size or compression ratio")
             if stat.S_IFMT(m.external_attr >> 16) == stat.S_IFLNK:
                 raise ValueError("archive symlink forbidden")
         present = {n.removeprefix("ramadan-war/") for n in names}
@@ -35,6 +45,8 @@ def verify(path):
         manifest = json.loads(z.read("ramadan-war/preview-manifest.json"))
         if not manifest.get("version", "").startswith("G01-R"):
             raise ValueError("missing G-01 version")
+        if set(manifest["files"]) != present - {"preview-manifest.json"}:
+            raise ValueError("manifest does not cover every archive member")
         for name, meta in manifest["files"].items():
             data = z.read("ramadan-war/" + name)
             if len(data) != meta["bytes"] or hashlib.sha256(data).hexdigest() != meta["sha256"]:
