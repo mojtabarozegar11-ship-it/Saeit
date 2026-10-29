@@ -75,6 +75,27 @@ class Stage6Audits(unittest.TestCase):
         self.assertEqual(result["quality1000_certifications_created"], 0)
         self.assertFalse((self.area / "stage-07").exists())
 
+    def test_owner_held_879_stage6_does_not_advance_or_rewrite_legacy(self):
+        # Existing Stage5/6 artifacts remain byte-identical after the owner hold.
+        self.fixture.mark_owner_held_879()
+        originals = {
+            str(p): p.read_bytes() for p in (
+                self.area / "stage-06/inbox" / self.name,
+                self.area / "stage-05/completed-drafts" / self.name,
+                self.area / "stage-05/receipts" / self.name,
+                self.area / "stage-02/receipts" / self.name,
+            )
+        }
+        result = stage6.execute(self.root, stage34, stage5)
+        self.assertEqual(result["stage6_owner_held_sku879_skipped"], 1)
+        self.assertEqual(result["stage6_technical_preflights_created_this_tick"], 0)
+        self.assertEqual(result["stage6_integrity_blocked_this_tick"], 0)
+        self.assertFalse((self.area / "stage-06/technical-preflight" / self.name).exists())
+        self.assertFalse((self.area / "stage-05/substantive-rework-inbox" / self.name).exists())
+        self.assertFalse((self.area / "stage-06/blocked" / self.name).exists())
+        for path, raw in originals.items():
+            self.assertEqual(Path(path).read_bytes(), raw)
+
     def test_repeat_is_idempotent(self):
         stage6.execute(self.root, stage34, stage5)
         again = stage6.execute(self.root, stage34, stage5)
