@@ -311,6 +311,24 @@ class PublicCatalogDetailRouteRegressionTests(SimpleTestCase):
         payment_query.assert_not_called()
         create.assert_called_once()
 
+    def test_cancelled_course_enrollment_never_claims_active_access(self):
+        request = self.requests.post("/education/course/free-example/enroll/")
+        request.user = SimpleNamespace(is_authenticated=True)
+        course = SimpleNamespace(is_free=True)
+        cancelled = SimpleNamespace(pk=123, status="cancelled")
+        with patch("core.academy_views.missing_public_tables", return_value=False), patch(
+            "core.academy_views.get_object_or_404", return_value=course
+        ), patch(
+            "core.academy_views.EducationEnrollment.objects.get_or_create",
+            return_value=(cancelled, False)
+        ) as lookup:
+            response = education_enroll(request, "free-example")
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(json.loads(response.content), {
+            "ok": False, "error": "enrollment_not_active"
+        })
+        lookup.assert_called_once()
+
     def test_lesson_completion_does_not_write_when_progress_table_missing(self):
         request = self.requests.post("/education/course/example/lesson/1/complete/")
         request.user = SimpleNamespace(is_authenticated=True)
