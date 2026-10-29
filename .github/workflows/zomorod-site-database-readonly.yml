@@ -1,7 +1,7 @@
 name: Zomorod read-only active database and migration inventory
 on:
   push:
-    branches: [main]
+    branches: [main, ops/s01-ro-passenger-db-20261029-r12]
     paths: [".github/workflows/zomorod-site-database-readonly.yml"]
   workflow_dispatch:
 permissions:
