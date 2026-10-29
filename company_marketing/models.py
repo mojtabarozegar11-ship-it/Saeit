@@ -44,6 +44,10 @@ class Campaign(models.Model):
         if self.budget_ceiling_irr is None or self.budget_ceiling_irr < 0:
             raise ValidationError({"budget_ceiling_irr": "بودجه منفی مجاز نیست."})
 
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
     def __str__(self):
         return self.title
 
@@ -69,6 +73,10 @@ class ChannelAccount(models.Model):
             raise ValidationError("مالکیت کانال باید با مرجع و زمان ثبت شود.")
         if not self.destination.strip():
             raise ValidationError({"destination": "شناسه مقصد ضروری است."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return "%s — %s" % (self.get_platform_display(), self.title)
@@ -180,6 +188,10 @@ class Lead(models.Model):
                                     or self.verified_sale_irr <= 0):
             raise ValidationError("فروش واقعی بدون سند و مبلغ تأییدشده ثبت نمی‌شود.")
 
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
 
 class PerformanceMetric(models.Model):
     publication = models.ForeignKey(Publication, on_delete=models.PROTECT, related_name="metrics")
@@ -200,3 +212,7 @@ class PerformanceMetric(models.Model):
             raise ValidationError("هزینه منفی مجاز نیست.")
         if not self.evidence_reference.strip():
             raise ValidationError("منبع مستقل آمار ضروری است.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)

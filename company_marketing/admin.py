@@ -1,7 +1,7 @@
 """Unit-isolated administration; publication approval and sending only via audited service."""
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
-from ecosystem_hub.access import user_units
+from ecosystem_hub.access import user_units, require_unit
 from .models import Campaign, ChannelAccount, Publication, PublicationEvent, Lead, PerformanceMetric
 
 
@@ -26,8 +26,7 @@ class UnitScopedAdmin(admin.ModelAdmin):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
-        if not user_units(request.user).filter(pk=obj.unit_id).exists():
-            raise PermissionDenied("واحد خارج از دامنه مجوز است.")
+        require_unit(request.user, obj.unit, write=True)
         obj.full_clean()
         super().save_model(request, obj, form, change)
 
@@ -121,8 +120,7 @@ class PerformanceMetricAdmin(admin.ModelAdmin):
             kwargs["queryset"] = Publication.objects.filter(campaign__unit__in=user_units(request.user))
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
     def save_model(self, request, obj, form, change):
-        if not user_units(request.user).filter(pk=obj.publication.campaign.unit_id).exists():
-            raise PermissionDenied
+        require_unit(request.user, obj.publication.campaign.unit, write=True)
         obj.recorded_by = request.user
         obj.full_clean()
         super().save_model(request, obj, form, change)

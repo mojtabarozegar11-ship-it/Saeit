@@ -11,7 +11,8 @@
     {% if can_add_lead %}<a class="btn" href="{% url 'company_marketing:new_lead' %}">+ سرنخ</a>{% endif %}
     {% if can_add_metric %}<a class="btn" href="{% url 'company_marketing:new_metric' %}">+ عملکرد</a>{% endif %}</div>
   </div>
-  <p><strong>فروش مستند (ریال):</strong> {{ verified_sale_irr }} &nbsp; <strong>هزینه ثبت‌شده (ریال):</strong> {{ recorded_cost_irr }} &nbsp; <strong>سرنخ‌های فروش:</strong> {{ lead_count }}</p>
+  <p><strong>فروش مستند (ریال):</strong> {{ verified_sale_irr }} &nbsp; <strong>هزینه ثبت‌شده (ریال):</strong> {{ recorded_cost_irr }} &nbsp; <strong>سرنخ‌های CRM:</strong> {{ lead_count }}</p>
+  <p><strong>نمایش مستند:</strong> {{ impressions }} &nbsp; <strong>کلیک مستند:</strong> {{ clicks }} &nbsp; <strong>سرنخ اعلامی کانال‌ها:</strong> {{ reported_leads }} &nbsp; <strong>CTR:</strong> {% if ctr_percent is not None %}{{ ctr_percent }}٪{% else %}ناموجود{% endif %}</p>
   <p class="muted">این ارقام بر اساس ثبت داخلیِ دارای مرجع سند هستند، نه تأیید تراکنش بانکی. پذیرش API معادل مشاهده یا تحویل پیام نیست.</p>
 </section>
 <section class="panel"><h2>کمپین‌ها</h2>

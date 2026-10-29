@@ -31,12 +31,19 @@ def dashboard(request):
     pubs = visible_publications(request.user)
     leads = Lead.objects.filter(unit__in=units)
     metrics = PerformanceMetric.objects.filter(publication__campaign__unit__in=units)
+    totals = metrics.aggregate(impressions=Sum("impressions"), clicks=Sum("clicks"),
+                               recorded_leads=Sum("leads"), cost_irr=Sum("cost_irr"))
     return no_cache(render(request, "company_marketing/dashboard.html", {
         "campaigns": campaigns[:80], "publications": pubs[:100],
         "accounts": ChannelAccount.objects.filter(unit__in=units)[:100],
         "lead_count": leads.count(),
         "verified_sale_irr": leads.filter(stage="won").aggregate(v=Sum("verified_sale_irr"))["v"] or 0,
-        "recorded_cost_irr": metrics.aggregate(v=Sum("cost_irr"))["v"] or 0,
+        "recorded_cost_irr": totals["cost_irr"] or 0,
+        "impressions": totals["impressions"] or 0,
+        "clicks": totals["clicks"] or 0,
+        "reported_leads": totals["recorded_leads"] or 0,
+        "ctr_percent": round((100 * (totals["clicks"] or 0) / totals["impressions"]), 2)
+        if totals["impressions"] else None,
         "can_add_campaign": request.user.is_superuser or request.user.has_perm("company_marketing.add_campaign"),
         "can_add_publication": request.user.is_superuser or request.user.has_perm("company_marketing.add_publication"),
         "can_add_channel": request.user.is_superuser or request.user.has_perm("company_marketing.add_channelaccount"),
@@ -54,6 +61,7 @@ def new_campaign(request):
     form = CampaignForm(request.POST or None, user=request.user)
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)
+        require_unit(request.user, item.unit, write=True)
         item.owner = request.user
         item.full_clean()
         item.save()
@@ -70,6 +78,7 @@ def new_publication(request):
     form = PublicationForm(request.POST or None, user=request.user)
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)
+        require_unit(request.user, item.campaign.unit, write=True)
         item.created_by = request.user
         if not item.scheduled_at:
             item.scheduled_at = timezone.now()
