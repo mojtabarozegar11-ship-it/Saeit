@@ -73,7 +73,7 @@ def test_dispatch_is_owner_main_only_for_manual_or_exact_issue_comment():
     triggers = source.split("permissions:", 1)[0]
     assert "  workflow_dispatch:\n" in triggers
     assert "  issue_comment:\n    types: [created]\n" in triggers
-    assert "github.event.issue.number == 1514" in source
+    assert "github.event.issue.number == 1600" in source
     assert "github.event.comment.author_association == 'OWNER'" in source
     assert "github.event.comment.user.login == 'mojtabarozegar11-ship-it'" in source
     assert "github.event.comment.body == 'ZMR-PUBLIC-KEY-V1'" in source
@@ -91,6 +91,9 @@ def test_dispatch_is_owner_main_only_for_manual_or_exact_issue_comment():
     assert 'test "$GITHUB_ACTOR" = "$EXPECTED_ACTOR"' in source
     assert 'test "$GITHUB_REF" = "$EXPECTED_REF"' in source
     assert "contents: read" in source
+    assert "    concurrency:\n      group: zomorod-private-chat-command-inbox" in source
+    assert "for attempt in 1 2 3 4 5; do" in source
+    assert "if test \"$attempt\" -lt 5; then sleep 12; fi" in source
 
 
 def test_ssh_is_pinned_to_current_relay_and_new_host():
@@ -130,7 +133,7 @@ def _run_gate(event, event_name, tmp_path):
     return result, output_path, tmp_path / "zomorod-sealed-command.txt"
 
 
-def _owner_comment(body, *, issue_number=1514, user="mojtabarozegar11-ship-it",
+def _owner_comment(body, *, issue_number=1600, user="mojtabarozegar11-ship-it",
                    association="OWNER", action="created", pr=False):
     issue = {"number": issue_number}
     if pr:
@@ -186,7 +189,7 @@ def test_manual_input_gate_rejects_bad_envelopes(
     [
         (_owner_comment("ZMR-PUBLIC-KEY-V1"), True, "show_public_key"),
         (_owner_comment("ZMR-SEALED-COMMAND-V1\n" + json.dumps(VALID_ENVELOPE)), True, "accept"),
-        (_owner_comment("ZMR-PUBLIC-KEY-V1", issue_number=1515), False, None),
+        (_owner_comment("ZMR-PUBLIC-KEY-V1", issue_number=1601), False, None),
         (_owner_comment("ZMR-PUBLIC-KEY-V1", user="another-user"), False, None),
         (_owner_comment("ZMR-PUBLIC-KEY-V1", association="CONTRIBUTOR"), False, None),
         (_owner_comment("ZMR-PUBLIC-KEY-V1", action="edited"), False, None),
