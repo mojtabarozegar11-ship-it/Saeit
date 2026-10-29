@@ -285,3 +285,104 @@ class PublicCatalogDetailRouteRegressionTests(SimpleTestCase):
             select_related.return_value.filter.return_value.first.return_value = None
             with self.assertRaises(Http404):
                 newsletter_detail(self.requests.get("/newsletter/not-found/"), "not-found")
+
+
+class PublicCatalogHealthyPathTests(SimpleTestCase):
+    """No-DB checks that a full required-table set keeps existing read paths."""
+
+    def setUp(self):
+        self.requests = RequestFactory()
+
+    def test_all_required_table_names_preserve_normal_branch(self):
+        from core.academy_views import EducationTrack, EducationCourse
+        required = (EducationTrack, EducationCourse)
+        with patch("core.public_catalog_guard.connection") as db:
+            db.introspection.table_names.return_value = [item._meta.db_table for item in required]
+            self.assertFalse(missing_public_tables(*required))
+            db.introspection.table_names.assert_called_once_with()
+
+    def test_introspection_connection_error_is_not_disguised_as_empty_catalog(self):
+        from django.db.utils import OperationalError
+        from core.academy_views import EducationCourse
+        with patch("core.public_catalog_guard.connection") as db:
+            db.introspection.table_names.side_effect = OperationalError("unavailable")
+            with self.assertRaises(OperationalError):
+                missing_public_tables(EducationCourse)
+
+    def test_academy_complete_schema_preserves_course_search_and_filters(self):
+        track = SimpleNamespace(key="agri", title="Agriculture", meta="AGRI", description="Learning")
+        course = SimpleNamespace(title="Orchard course")
+        course_qs = MagicMock()
+        course_qs.select_related.return_value = course_qs
+        course_qs.filter.return_value = course_qs
+        course_qs.order_by.return_value = [course]
+        with (
+            patch("core.academy_views.missing_public_tables", return_value=False),
+            patch("core.academy_views.EducationTrack.objects.filter", return_value=[track]) as track_query,
+            patch("core.academy_views.EducationCourse.objects.filter", return_value=course_qs) as course_query,
+            patch("core.academy_views.render", return_value=HttpResponse("healthy academy")) as render_mock,
+        ):
+            response = academy(self.requests.get("/academy/?q=orchard&track=agri&access=free"))
+        context = render_mock.call_args.args[2]
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("X-ZM-Data-Status", response)
+        self.assertFalse(context["catalog_temporarily_unavailable"])
+        self.assertEqual(context["tracks"][0]["key"], "agri")
+        self.assertEqual(context["courses"], [course])
+        track_query.assert_called_once_with(active=True)
+        course_query.assert_called_once_with(active=True, approved=True)
+        course_qs.select_related.assert_called_once_with("track")
+        course_qs.filter.assert_any_call(track__key="agri")
+        course_qs.filter.assert_any_call(is_free=True)
+        course_qs.order_by.assert_called_once_with("track__sort_order", "title")
+
+    def test_gallery_complete_schema_keeps_published_media_and_filtering(self):
+        media = SimpleNamespace(title="Orchard photo")
+        media_qs = MagicMock()
+        media_qs.select_related.return_value = media_qs
+        media_qs.filter.return_value = media_qs
+        media_qs.__getitem__.return_value = [media]
+        with (
+            patch("core.company_content_views.missing_public_tables", return_value=False),
+            patch("core.company_content_views.CompanyGalleryMedia.objects.filter", return_value=media_qs),
+            patch("core.company_content_views.render", return_value=HttpResponse("healthy gallery")) as render_mock,
+        ):
+            response = company_gallery(self.requests.get("/company-gallery/?type=image&q=orchard"))
+        context = render_mock.call_args.args[2]
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("X-ZM-Data-Status", response)
+        self.assertFalse(context["catalog_temporarily_unavailable"])
+        self.assertEqual(context["media"], [media])
+        media_qs.select_related.assert_called_once_with("newsletter_story")
+        media_qs.filter.assert_any_call(media_type="image")
+        media_qs.filter.assert_any_call(title__icontains="orchard")
+        media_qs.__getitem__.assert_called_once_with(slice(None, 100, None))
+
+    def test_newsletter_complete_schema_keeps_existing_public_items(self):
+        story, source, publication, schedule = (object() for _ in range(4))
+        stories_qs, sources_qs, publications_qs, schedule_qs = (MagicMock() for _ in range(4))
+        stories_qs.select_related.return_value = stories_qs
+        stories_qs.__getitem__.return_value = [story]
+        sources_qs.__getitem__.return_value = [source]
+        publications_qs.order_by.return_value = publications_qs
+        publications_qs.__getitem__.return_value = [publication]
+        schedule_qs.first.return_value = schedule
+        with (
+            patch("core.newsletter_views.missing_public_tables", return_value=False),
+            patch("core.newsletter_views.NewsletterStory.objects.filter", return_value=stories_qs),
+            patch("core.newsletter_views.NewsletterSource.objects.filter", return_value=sources_qs),
+            patch("core.newsletter_views.NewsletterPublication.objects.select_related", return_value=publications_qs),
+            patch("core.newsletter_views.NewsletterSchedule.objects.filter", return_value=schedule_qs),
+            patch("core.newsletter_views.render", return_value=HttpResponse("healthy newsletter")) as render_mock,
+        ):
+            response = newsletter_home(self.requests.get("/newsletter/"))
+        context = render_mock.call_args.args[2]
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("X-ZM-Data-Status", response)
+        self.assertFalse(context["catalog_temporarily_unavailable"])
+        self.assertEqual(context["stories"], [story])
+        self.assertEqual(context["sources"], [source])
+        self.assertEqual(context["publications"], [publication])
+        self.assertIs(context["schedule"], schedule)
+        stories_qs.select_related.assert_called_once_with("source", "agent")
+        publications_qs.order_by.assert_called_once_with("-created_at")
