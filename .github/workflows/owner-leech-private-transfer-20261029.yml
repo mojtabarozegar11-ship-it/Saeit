@@ -26,32 +26,32 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
           test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           cat > "$work/recipient.crt" <<'PUBLIC_CERT'
------BEGIN CERTIFICATE-----
-MIIEOzCCAqOgAwIBAgIUGXUBGM6JTgdoIMkmtWZ6QXpjuigwDQYJKoZIhvcNAQEL
-BQAwLTErMCkGA1UEAwwibGVlY2gtbWFudXNjcmlwdC10cmFuc2Zlci0yMDI2MTAy
-OTAeFw0yNjEwMjkwNzE0MzZaFw0yNjEwMzAwNzE0MzZaMC0xKzApBgNVBAMMImxl
-ZWNoLW1hbnVzY3JpcHQtdHJhbnNmZXItMjAyNjEwMjkwggGiMA0GCSqGSIb3DQEB
-AQUAA4IBjwAwggGKAoIBgQDAbzebgGfpb4exIwb+EK4gwGLGZ9uqic4/agScgy3v
-wQxIwp7CoRmdiV7XWdgInwsI16sLQ7BPE1c70dx5RZdaJTYob3G2jP2Sywj0qWho
-nXAIVJBYiTs1DpV7AmZA+4BZKWrYh0Ybw1I9qp7DWiKimCRqi1X1paqxlTAm7U7n
-JMCGxaq7cqpCasnBKZWY+cRLRygHawVUp97xH2408LgWfHd2++Y6yepqHAUSfyuJ
-X8O/kZOZ6q7fptgrpMIO7NITT1li8fvizqUOUOuUBv86Mpuv8ZWUW6GkbN7zKnpQ
-CEGuapNYTFQBb7t1eiT9MjjRibgEqUXMnppOZJSpPQIO7nTeOqpmmRripOfDBwNn
-VdBgWZ3O0kAoXr26xpdoMUt7zffEBj43IQuGEiSb/Xs03Wi5LV61hWnlZvTYTwiX
-kbq9RfXe4dNQ5xUob4RAPUfC4uAjuo2gJHbROi3zp+bTlKL+TJNairVyGV39awoA
-/R4euyHJgKjARaIFy3426xMCAwEAAaNTMFEwHQYDVR0OBBYEFKQe6W+ERuWK6Nx+
-9DjGhF7nzG1dMB8GA1UdIwQYMBaAFKQe6W+ERuWK6Nx+9DjGhF7nzG1dMA8GA1Ud
-EwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggGBAIq6iztS0bdAvZ3W45yzpbGy
-4bcU7LJ0514OwcmkfSy8/owJZn5pLtiJhlS4nnTzqozbon4CijSpsK3kR3pI1VsF
-ZJmazQ83w6SK3MVSRsCQqkdRUzu+fPnU7W+ghSabW05wp0gkT8LQwukf2abHOz68
-A3+p8iOHi1dtmcAlpHq6htSU+kViJdsLkh3282XGQqTYEurgOsIAO3MK+tP51/s6
-oKLV5bDcoL4cPJoFcNKISW153Irrfgis5a5P61HN3hEUcGdykEmcKXqSRpkiKF1i
-SYrlxAg15CT0GeAO+LymElDr3vldr49bC/K27+Y6pwnv5MDhRcokeLNRyBEOCsjP
-GCHW9ReoBCTZb6I19hWqQmnQxhVUbVM1ajXPZKJFyNUR8ZA2YKvU1k4umWGvB/3H
-MABffcnTLnzoMC1Pi9kpL1NJQvfX1Zd/2CD6qbmNpd0y6e+40B87xK7oftII4EJe
-GmUk473su3tX80nTmCjE3iRO1cSq5boRbkMjicmwlQ==
------END CERTIFICATE-----
-PUBLIC_CERT
+          -----BEGIN CERTIFICATE-----
+          MIIEOzCCAqOgAwIBAgIUGXUBGM6JTgdoIMkmtWZ6QXpjuigwDQYJKoZIhvcNAQEL
+          BQAwLTErMCkGA1UEAwwibGVlY2gtbWFudXNjcmlwdC10cmFuc2Zlci0yMDI2MTAy
+          OTAeFw0yNjEwMjkwNzE0MzZaFw0yNjEwMzAwNzE0MzZaMC0xKzApBgNVBAMMImxl
+          ZWNoLW1hbnVzY3JpcHQtdHJhbnNmZXItMjAyNjEwMjkwggGiMA0GCSqGSIb3DQEB
+          AQUAA4IBjwAwggGKAoIBgQDAbzebgGfpb4exIwb+EK4gwGLGZ9uqic4/agScgy3v
+          wQxIwp7CoRmdiV7XWdgInwsI16sLQ7BPE1c70dx5RZdaJTYob3G2jP2Sywj0qWho
+          nXAIVJBYiTs1DpV7AmZA+4BZKWrYh0Ybw1I9qp7DWiKimCRqi1X1paqxlTAm7U7n
+          JMCGxaq7cqpCasnBKZWY+cRLRygHawVUp97xH2408LgWfHd2++Y6yepqHAUSfyuJ
+          X8O/kZOZ6q7fptgrpMIO7NITT1li8fvizqUOUOuUBv86Mpuv8ZWUW6GkbN7zKnpQ
+          CEGuapNYTFQBb7t1eiT9MjjRibgEqUXMnppOZJSpPQIO7nTeOqpmmRripOfDBwNn
+          VdBgWZ3O0kAoXr26xpdoMUt7zffEBj43IQuGEiSb/Xs03Wi5LV61hWnlZvTYTwiX
+          kbq9RfXe4dNQ5xUob4RAPUfC4uAjuo2gJHbROi3zp+bTlKL+TJNairVyGV39awoA
+          /R4euyHJgKjARaIFy3426xMCAwEAAaNTMFEwHQYDVR0OBBYEFKQe6W+ERuWK6Nx+
+          9DjGhF7nzG1dMB8GA1UdIwQYMBaAFKQe6W+ERuWK6Nx+9DjGhF7nzG1dMA8GA1Ud
+          EwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggGBAIq6iztS0bdAvZ3W45yzpbGy
+          4bcU7LJ0514OwcmkfSy8/owJZn5pLtiJhlS4nnTzqozbon4CijSpsK3kR3pI1VsF
+          ZJmazQ83w6SK3MVSRsCQqkdRUzu+fPnU7W+ghSabW05wp0gkT8LQwukf2abHOz68
+          A3+p8iOHi1dtmcAlpHq6htSU+kViJdsLkh3282XGQqTYEurgOsIAO3MK+tP51/s6
+          oKLV5bDcoL4cPJoFcNKISW153Irrfgis5a5P61HN3hEUcGdykEmcKXqSRpkiKF1i
+          SYrlxAg15CT0GeAO+LymElDr3vldr49bC/K27+Y6pwnv5MDhRcokeLNRyBEOCsjP
+          GCHW9ReoBCTZb6I19hWqQmnQxhVUbVM1ajXPZKJFyNUR8ZA2YKvU1k4umWGvB/3H
+          MABffcnTLnzoMC1Pi9kpL1NJQvfX1Zd/2CD6qbmNpd0y6e+40B87xK7oftII4EJe
+          GmUk473su3tX80nTmCjE3iRO1cSq5boRbkMjicmwlQ==
+          -----END CERTIFICATE-----
+          PUBLIC_CERT
           openssl x509 -in "$work/recipient.crt" -noout > /dev/null
           ssh -T -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE' | openssl cms -encrypt -binary -stream -aes256 -outform DER -recip "$work/recipient.crt" -out "$work/leech-private-manuscript.tar.gz.cms"
           set -euo pipefail
