@@ -79,6 +79,7 @@ jobs:
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo "VPS_HOST_KEY=verified"
           cat > "$d/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
@@ -105,11 +106,17 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$d/config"
-          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          scan=""
+          for attempt in 1 2 3; do
+            scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null || true)"
+            if test -n "$scan"; then break; fi
+            sleep 2
+          done
           test -n "$scan"
           printf '%s\n' "$scan" > "$d/host.candidate"
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
           echo "PINNED_PRIVATE_RELAY=verified"
       - name: Read the current recipient public key
         if: inputs.operation == 'show_public_key'
