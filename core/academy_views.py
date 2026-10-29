@@ -98,8 +98,11 @@ def education_dashboard_progress(enrollment):
     excluded from the active-course completion denominator and numerator.
     """
     total = enrollment.course.lessons.filter(active=True).count()
-    done = enrollment.progress.filter(completed=True, lesson__active=True).count()
-    percent = min(100, round(done * 100 / total)) if total else 0
+    recorded_done = enrollment.progress.filter(completed=True, lesson__active=True).count()
+    # Inconsistent or historical progress must not display "5 of 3" lessons
+    # even when the percentage is already capped at 100.
+    done = min(total, recorded_done)
+    percent = round(done * 100 / total) if total else 0
     return total, done, percent
 
 
