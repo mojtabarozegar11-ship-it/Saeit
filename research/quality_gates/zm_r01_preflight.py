@@ -127,6 +127,30 @@ def check_gtf(p, contigs):
     if other: raise GateError(f'Annotation seqnames absent from FASTA: {sorted(other)[:8]}')
     return seen
 
+def gtf_gene_ids(gtf_path):
+    """Read GTF gene_id attributes; reject absent gene provenance.
+
+    This checks ID consistency only, NOT annotation identity or biology.
+    """
+    ids = set()
+    with gtf_path.open(encoding='utf-8') as stream:
+        for line_no, line in enumerate(stream, 1):
+            if not line.strip() or line.startswith('#'):
+                continue
+            parts = line.rstrip('\\n').split('\\t')
+            if len(parts) != 9:
+                raise GateError(f'GTF must have nine columns at line {line_no}')
+            match = re.search(r'(?:^|;)\\s*gene_id\\s+"([^"]+)"\\s*(?:;|$)', parts[8])
+            if not match:
+                raise GateError(f'Missing GTF gene_id attribute at line {line_no}')
+            gid = match.group(1)
+            if not gid or gid != gid.strip() or any(ch.isspace() for ch in gid):
+                raise GateError(f'Invalid GTF gene_id at line {line_no}')
+            ids.add(gid)
+    if not ids:
+        raise GateError('No GTF gene IDs available to cross-check raw counts')
+    return ids
+
 MAX_R_INTEGER = 2147483647
 
 def valid_raw_integer_count(cell):
@@ -142,7 +166,7 @@ def valid_raw_integer_count(cell):
     return len(significant) < len(limit) or (len(significant) == len(limit) and significant <= limit)
 
 
-def check_count_matrix(cpath, library_ids):
+def check_count_matrix(cpath, library_ids, annotated_gene_ids=None):
     """Validate an existing TSV count matrix without estimating any expression values."""
     with cpath.open(encoding='utf-8', newline='') as f:
         reader = csv.reader(f, delimiter='\t')
@@ -161,6 +185,8 @@ def check_count_matrix(cpath, library_ids):
             if (not gene or gene != gene.strip() or any(ch.isspace() for ch in gene)
                     or gene in genes):
                 raise GateError('Missing, malformed or duplicate gene ID')
+            if annotated_gene_ids is not None and gene not in annotated_gene_ids:
+                raise GateError('Count-matrix gene ID absent from GTF: ' + gene)
             genes.add(gene)
             n += 1
             if any(not valid_raw_integer_count(x) for x in row[1:]):
@@ -219,7 +245,7 @@ def validate(manifest_file):
     if not isinstance(counts, dict):
         raise GateError('No valid raw integer count-matrix metadata; cannot run DESeq2')
     cpath=file_with_digest(root,counts.get('path'),counts.get('sha256'),'sha256')
-    n=check_count_matrix(cpath, ids)
+    n=check_count_matrix(cpath, ids, gtf_gene_ids(gtf))
     return {'manifest':'FILE_INTEGRITY_AND_METADATA_PASS_ONLY','libraries':24,'fastq_files':48,'genes':n,'conditions':dict(conditions),
             'scientific_gates_remaining':['independent biological provenance verification','alignment/QC reports','design specification','valid DESeq2 execution','FDR provenance']}
 
