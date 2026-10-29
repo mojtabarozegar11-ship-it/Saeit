@@ -11,7 +11,7 @@ on:
       - .github/workflows/mpw-checkout-csp-readonly-preflight-20261029.yml
 permissions: {contents: read}
 concurrency:
-  group: s01-mpw-checkout-csp-readonly
+  group: s01-pinned-cpanel-relay-single-session
   cancel-in-progress: false
 jobs:
   preflight:
