@@ -124,6 +124,34 @@ jobs:
           echo FACTORY_AUDIT_RAM_TOTAL_KB="$ram_total_kb"
           echo FACTORY_AUDIT_INODES_FREE="$inode_free"
           echo FACTORY_AUDIT_RESERVE_BYTES="$((512*1024*1024))"
+          python3 - "$root" <<'PY'
+          import os, subprocess, sys
+          root = sys.argv[1]
+          result = subprocess.run(
+              ["timeout", "20s", "du", "-x", "--max-depth=1", "-B1", "--null", root],
+              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
+          )
+          totals = {"application": 0, "operations": 0, "runtime_data": 0,
+                    "temporary": 0, "backups": 0, "other": 0}
+          names = {"django-app": "application", "operations": "operations",
+                   "var": "runtime_data", "tmp": "temporary",
+                   "backups": "backups"}
+          for record in result.stdout.split(b"\\0"):
+              if not record:
+                  continue
+              try:
+                  size, path = record.split(b"\\t", 1)
+                  value = int(size)
+                  name = os.path.basename(os.fsdecode(path.rstrip(b"/")))
+                  if os.fsdecode(path.rstrip(b"/")) == root:
+                      continue
+                  totals[names.get(name, "other")] += value
+              except (ValueError, OSError):
+                  continue
+          for key, value in totals.items():
+              print(f"FACTORY_AUDIT_USAGE_{key.upper()}_BYTES={value}")
+          print("FACTORY_AUDIT_USAGE_SCAN_COMPLETE=" + str(result.returncode == 0).lower())
+          PY
           current="$(mktemp /tmp/factory-audit-cron.XXXXXX)"
           trap 'rm -f -- "$current"' EXIT
           crontab -l > "$current" 2>/dev/null || : > "$current"
