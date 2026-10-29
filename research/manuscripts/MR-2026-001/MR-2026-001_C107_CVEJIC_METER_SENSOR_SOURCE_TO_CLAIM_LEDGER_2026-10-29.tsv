@@ -1,0 +1,9 @@
+id	source_locator	original_observation	admissible_inference	prohibited_inference	status
+CVEJIC_C107_METER_BASELINE	Cvejic 2020 Results section 3 (2017 baseline)	74% lacked water consumption records; 26% used water meters	Limited baseline metering coverage is reported	Treat 26% as complete longitudinal meter data or 74% as water loss	MEASUREMENT_FRAME_RESOLVED
+CVEJIC_C107_DIARY_MISSING	Cvejic 2020 Results section 3	91% did not regularly record irrigation actions in early diaries	Substantial event record missingness	Reconstruct complete irrigation-event adherence	MISSINGNESS_CONFIRMED
+CVEJIC_C107_FOLLOWUP	Cvejic 2020 Methods section 2.3	2020 telephone contacts every third week improved diaries	Telephone follow-up increased self-report completeness	Assume independent continuous meter verification	MEASUREMENT_FRAME_RESOLVED
+CVEJIC_C107_SENSOR_PRE	Cvejic 2020 Methods section 2.1	Manufacturer calibration soil-moisture RMSE 3.8-14.2 vol% (median 9.9)	Error refers to soil volumetric water content	Treat as pumped-volume error or meter accuracy	UNIT_SCOPE_RESOLVED
+CVEJIC_C107_SENSOR_POST	Cvejic 2020 Methods section 2.1	Site-calibrated RMSE 0.4-2.9 vol% (median 1.5); 0.004-0.029 m3/m3	Improved soil-water status measurement	Infer independently measured water conservation	UNIT_SCOPE_RESOLVED
+CVEJIC_C107_SIMULATION	Cvejic 2020 Methods section 2.3; Results Figure 3	25% water-volume saving is a conditional model scenario	Scenario result may be reported as simulated	Claim observed causal 25% saving	OBSERVED_VOLUME_EFFECT_BLOCKED
+CVEJIC_C107_RESPONSE	Cvejic 2020 Results section 3	2019 46 email advice users conflicts with 35 interested farms; 2020 item denominators absent	Keep years and survey frames separate	Invent participant roster or interpret 46 as verified 46%	BLOCKED
+Source: https://www.mdpi.com/2073-4395/10/9/1238
