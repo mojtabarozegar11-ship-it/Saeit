@@ -71,6 +71,18 @@ jobs:
           # Pinned 30GB host identity. Only read-only identity probes may retry.
           printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" || { echo 'S01_CPANEL_HOST_PIN=BLOCKED'; exit 1; }
+          # Diagnose the VPS hop separately; F-01 has authenticated to this
+          # pinned host on earlier runs, which does NOT prove cPanel access.
+          vps_ready=0
+          for attempt in 1 2; do
+            if timeout 35s ssh -T -F "$d/config" -o ConnectTimeout=15 -o ConnectionAttempts=1 saeit-vps 'test "$(id -un)" = "githubops"' >/dev/null 2>&1; then
+              vps_ready=1
+              break
+            fi
+            echo "S01_VPS_HOP_RETRY=$attempt"
+          done
+          test "$vps_ready" = 1 || { echo 'S01_VPS_HOP=BLOCKED'; exit 1; }
+          echo 'S01_VPS_HOP=VERIFIED'
           session_ready=0
           # Use the previously successful pinned two-hop banner timing from
           # the existing owner command relay; do not relax host-key checks.
