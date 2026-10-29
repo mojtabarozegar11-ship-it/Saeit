@@ -120,6 +120,28 @@ jobs:
               assert.equal(sportCalls,0,'No secondary feed call before age self-declaration');
               assert.equal(dayCalls,0,'No daily combat API before age self-declaration');
               await page.locator('#age-confirm').click();
+
+              // First-party discovery: focus mode and saved games must preserve all 62 titles.
+              assert.equal(await page.locator('[data-arena-focus]').count(),62);
+              assert.equal(await page.locator('[data-arena-favourite]').count(),62);
+              await page.locator('#game-grid article').first().locator('[data-arena-favourite]').click();
+              assert.equal(await page.locator('#game-grid article').first().locator('[data-arena-favourite]').getAttribute('aria-pressed'),'true');
+              await page.locator('#arena-favs-only').click();
+              assert.equal(await page.locator('#arena-count').innerText(),'1 experiences found');
+              assert.equal(await page.locator('#game-grid article:not([hidden])').count(),1);
+              await page.locator('#arena-favs-only').click();
+              assert.equal(await page.locator('#arena-count').innerText(),'62 experiences found');
+              await page.locator('#game-grid article').first().locator('[data-arena-focus]').click();
+              assert.equal(await page.locator('#game-grid article:not([hidden])').count(),1);
+              assert.equal(await page.locator('#classic-game-grid article:not([hidden])').count(),0);
+              assert.equal(await page.locator('#arena-back').isVisible(),true);
+              await page.locator('#arena-back').click();
+              assert.equal(await page.locator('#arena-count').innerText(),'62 experiences found');
+              assert.equal(await page.locator('#arena-recent').isVisible(),true);
+              await page.locator('#arena-recent').click();
+              assert.equal(await page.locator('#game-grid article:not([hidden])').count(),1);
+              await page.locator('#arena-back').click();
+
               await page.locator('#real-match-920001').waitFor({state:'visible'});
               assert.equal(await page.locator('#live-league').inputValue(),'la1','Spain is the default');
               assert.equal(await page.locator('#real-match-920001 form').count(),1,'Spain has free picks');
