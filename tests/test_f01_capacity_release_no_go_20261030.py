@@ -50,6 +50,30 @@ class Triage(unittest.TestCase):
         self.assertFalse(r["deployment_authorized"])
         self.assertFalse(r["restart_authorized"])
 
+    def test_malformed_nested_telemetry_is_no_go_not_exception(self):
+        s = sample()
+        s["filesystem"] = ["unexpected"]
+        s["guest"] = ["unexpected"]
+        s["process_pressure"] = ["unexpected"]
+        r = evaluate(s, NOW)
+        self.assertIn("FILESYSTEM_UNOBSERVED", r["reasons"])
+        self.assertIn("CPU_PRESSURE_UNOBSERVED", r["reasons"])
+        self.assertIn("D_STATE_UNOBSERVED", r["reasons"])
+        self.assertFalse(r["deployment_authorized"])
+
+    def test_nonfinite_load_and_boolean_resource_values_rejected(self):
+        s = sample()
+        s["guest"]["loadavg"] = [float("nan")]
+        s["guest"]["cpu_count"] = True
+        s["guest"]["memory"]["MemTotal_kib"] = True
+        s["filesystem"]["target_1"]["available_bytes"] = True
+        s["process_pressure"]["all_process_states"]["D"] = True
+        r = evaluate(s, NOW)
+        self.assertIn("CPU_PRESSURE_UNOBSERVED", r["reasons"])
+        self.assertIn("FILESYSTEM_UNOBSERVED", r["reasons"])
+        self.assertIn("D_STATE_UNOBSERVED", r["reasons"])
+        self.assertIn("PAID_8GIB_RAM_NOT_OBSERVED", r["reasons"])
+
     def test_cli_never_returns_go(self):
         p = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1]/"scripts"/"f01_capacity_release_no_go_20261030.py"), "-"], input=json.dumps(sample()), text=True, capture_output=True)
         self.assertEqual(p.returncode,2)
