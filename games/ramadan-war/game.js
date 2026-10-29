@@ -88,7 +88,17 @@ function observeExternalCampaignSave(event){
 if(event.key!==saveKey&&!(event.key===null&&lastSavedSnapshot!==undefined))return false;
 if(event.key===saveKey&&event.newValue===lastSavedSnapshot)return false;
 foreignSaveDetected=true;if(world&&!world.endless){saveStatus='failed';toast('ذخیرهٔ کارزار در برگهٔ دیگری تغییر کرده است؛ از این برگه پشتیبان بگیرید و سپس صفحه را بازخوانی کنید')}return true}
-function warnUnsavedCampaignBeforeExit(event){if(!world||world.endless||saveStatus!=='failed')return;event.preventDefault();event.returnValue=''}
+function warnUnsavedCampaignBeforeExit(event){
+ // Flush the latest live campaign before a desktop tab closes; the periodic autosave
+ // may still be five seconds behind. A blocked/conflicting save must warn the player.
+ if(!world||world.endless||world.victory||world.gameOver)return;
+ if(saveStatus!=='failed')save();
+ if(saveStatus==='failed'){event.preventDefault();event.returnValue=''}
+}
+function saveCampaignOnHidden(){
+ // Mobile browsers often suspend a hidden tab without pagehide/beforeunload.
+ if(document.visibilityState==='hidden'&&world&&!world.endless)save();
+}
 function updatePauseSaveStatus(){const status=$('#pauseSaveStatus'),retry=$('#retrySave');if(!status||!retry)return;const survival=world?.endless===true;retry.hidden=survival||saveStatus==='saved';status.textContent=foreignSaveDetected?'ذخیره در برگهٔ دیگری تغییر کرده است؛ ابتدا پشتیبان بگیرید، سپس صفحه را بازخوانی کنید.':survival?'حالت بقا ذخیرهٔ کارزار را تغییر نمی‌دهد؛ رکورد موج‌های تکمیل‌شده فقط با اجازهٔ مرورگر نگه‌داری می‌شود.':saveStatus==='saved'?'پیشرفت کارزار در این مرورگر ذخیره شد. برای انتقال به دستگاه دیگر پشتیبان بگیرید.':'ذخیرهٔ خودکار انجام نشد؛ «تلاش دوباره» یا «پشتیبان پیشرفت» را انتخاب کنید.'}
 function restore(){// A corrupt disk save must never discard a newer in-memory campaign.
 const previousWorld=hasResumableCampaignInMemory()?world:null,previousHero=hero;
@@ -238,7 +248,7 @@ addEventListener('compositionstart',()=>{keys={};updateHeldFire()});
 document.addEventListener('focusin',e=>{if(shouldReleaseHeldKeysOnFocus(screen,e.target)){keys={};updateHeldFire()}});
 addEventListener('blur',()=>{releaseGameInputs();if(screen==='game')$('#pause').click()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){releaseGameInputs();if(screen==='game')$('#pause').click()}});
-addEventListener('pagehide',save);addEventListener('storage',observeExternalCampaignSave);addEventListener('beforeunload',warnUnsavedCampaignBeforeExit);setInterval(save,5000);
+addEventListener('pagehide',save);addEventListener('storage',observeExternalCampaignSave);addEventListener('beforeunload',warnUnsavedCampaignBeforeExit);addEventListener('visibilitychange',saveCampaignOnHidden);setInterval(save,5000);
 const qaIsLocal=['localhost','127.0.0.1'].includes(location.hostname);
 const debugApi={
  heroes:Object.freeze([...NAMES]),skills:Object.freeze([...SKILLS]),
