@@ -12,7 +12,7 @@ BACKUPS=HOME/".local/share/mpw-owner-rights-release-20261029"
 SKUS=(72,225,879)
 # Stable digest for the owner's explicit declaration in this session. The
 # declaration text is not copied to public logs or product-facing pages.
-OWNER_STATEMENT_SHA256="8b4e96d9c69e4c40bb785d7e2fa44d38a4c015823bf64f51f8b868e640075b31"
+OWNER_STATEMENT_SHA256="6ad2a44037ef778ff149e0cd05a22abee89a3dc439d5b2fe7704ed54aee02f20"
 
 def digest_file(path):
     h=hashlib.sha256()
