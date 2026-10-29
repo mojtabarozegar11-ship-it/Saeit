@@ -90,13 +90,13 @@ class ReleaseTests(unittest.TestCase):
             archive.writestr(publisher.RECIPE + "/calculator.py", "print('old offline')")
         old_sha = hashlib.sha256(old_zip.read_bytes()).hexdigest()
         (dest / "SHA256SUMS.txt").write_text(
-            old_sha + "  " + publisher.PUBLIC_FILENAME + "\\n"
+            old_sha + "  " + publisher.PUBLIC_FILENAME + "\n"
         )
         (dest / "index.html").write_text(
-            "<title>Farm Enterprise Economics</title><a href=\\\""
-            + publisher.PUBLIC_FILENAME + "\\\">Download</a>"
+            "<title>Farm Enterprise Economics</title><a href=\""
+            + publisher.PUBLIC_FILENAME + "\">Download</a>"
         )
-        (dest / ".htaccess").write_text("Options -Indexes\\n")
+        (dest / ".htaccess").write_text("Options -Indexes\n")
 
         result = publisher.publish(
             self.inbox, self.webroot, release_authorized=True,
@@ -106,7 +106,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(result["status"], "published_public_uncertified_preview")
         self.assertEqual(result["sha256"], self.sha)
         self.assertIn("has not received QC1000", (dest / "index.html").read_text())
-        self.assertEqual((dest / ".htaccess").read_text(), "Options -Indexes\\n")
+        self.assertEqual((dest / ".htaccess").read_text(), "Options -Indexes\n")
         self.assertEqual(hashlib.sha256((dest / publisher.PUBLIC_FILENAME).read_bytes()).hexdigest(), self.sha)
 
     def test_preview_selects_exact_verified_digest_with_other_receipts_present(self):
