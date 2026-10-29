@@ -108,6 +108,9 @@ jobs:
             IdentityFile $d/host.key
             UserKnownHostsFile $d/host.known
             ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/control-%C
+            ControlPersist 300
           Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
@@ -136,6 +139,18 @@ jobs:
           cp "$d/host.candidate" "$d/host.known"
           echo "CPANEL_HOST_KEY=verified"
           echo "PINNED_PRIVATE_RELAY=verified"
+          # Retry only a harmless identity command to establish one reusable authenticated SSH session.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 70s ssh -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null; then
+              session_ready=1
+              break
+            fi
+            echo "PINNED_SESSION_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 8; fi
+          done
+          test "$session_ready" = 1 || { echo 'PINNED_SESSION_UNAVAILABLE'; exit 1; }
+          echo 'PINNED_SESSION=AUTHENTICATED'
       - name: Read the current recipient public key
         if: inputs.operation == 'show_public_key'
         shell: bash
@@ -214,4 +229,10 @@ jobs:
           echo "ROTATED_RECIPIENT_PUBLIC_KEY_END"
       - name: Remove temporary relay credentials and receipts
         if: always()
-        run: rm -rf "$RUNNER_TEMP/zomorod-command-channel" "$RUNNER_TEMP/recipient-key.txt"
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          if test -f "$d/config"; then
+            ssh -F "$d/config" -O exit saeit-cpanel >/dev/null 2>&1 || true
+          fi
+          rm -rf "$d" "$RUNNER_TEMP/recipient-key.txt"
