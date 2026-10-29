@@ -77,4 +77,5 @@ jobs:
           cp "$d/cpanel.candidate" "$d/cpanel.known"
           echo 'CPANEL_30GB_ED25519_PIN=VERIFIED'
           timeout 55s ssh -F "$d/config" checked-cpanel-30gb 'set -eu; test "$(id -un)" = "zomorod2"; test -d /home/zomorod2/Saeit-staging; echo CPANEL_30GB_IDENTITY_AND_STAGING=VERIFIED'
+          timeout 55s ssh -F "$d/config" checked-cpanel-30gb 'set -eu; p=/home/zomorod2/.private/zomorod-business; test -f "$p/company_ingress.py"; test -f "$p/command-center.sqlite3"; test -f "$p/.chat-command-rsa.key"; echo PRIVATE_COMMAND_INGRESS_FILES=VERIFIED'
           echo 'No remote files changed; no deployments or migrations.'
