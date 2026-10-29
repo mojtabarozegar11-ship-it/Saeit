@@ -45,7 +45,7 @@ def safe_gallery_target_path(path):
 def company_gallery(request):
     catalog_unavailable = missing_public_tables(CompanyGalleryMedia, NewsletterStory)
     kind = request.GET.get("type", "").strip().lower()
-    query = request.GET.get("q", "").strip()
+    query = request.GET.get("q", "").strip()[:120]  # Avoid unbounded public title scans
     media = []
     if not catalog_unavailable:
         now = timezone.now()
