@@ -120,6 +120,28 @@ jobs:
               assert.equal(sportCalls,0,'No secondary feed call before age self-declaration');
               assert.equal(dayCalls,0,'No daily combat API before age self-declaration');
               await page.locator('#age-confirm').click();
+
+              // First-party discovery: focus mode and saved games must preserve all 62 titles.
+              assert.equal(await page.locator('[data-arena-focus]').count(),62,'Focus buttons missing; page errors: '+errors.join(' | '));
+              assert.equal(await page.locator('[data-arena-favourite]').count(),62);
+              await page.locator('#game-grid article').first().locator('[data-arena-favourite]').click();
+              assert.equal(await page.locator('#game-grid article').first().locator('[data-arena-favourite]').getAttribute('aria-pressed'),'true');
+              await page.locator('#arena-favs-only').click();
+              assert.equal(await page.locator('#arena-count').innerText(),'1 experiences found');
+              assert.equal(await page.locator('#game-grid article:not([hidden])').count(),1);
+              await page.locator('#arena-favs-only').click();
+              assert.equal(await page.locator('#arena-count').innerText(),'62 experiences found');
+              await page.locator('#game-grid article').first().locator('[data-arena-focus]').click();
+              assert.equal(await page.locator('#game-grid article:not([hidden])').count(),1);
+              assert.equal(await page.locator('#classic-game-grid article:not([hidden])').count(),0);
+              assert.equal(await page.locator('#arena-back').isVisible(),true);
+              await page.locator('#arena-back').click();
+              assert.equal(await page.locator('#arena-count').innerText(),'62 experiences found');
+              assert.equal(await page.locator('#arena-recent').isVisible(),true);
+              await page.locator('#arena-recent').click();
+              assert.equal(await page.locator('#game-grid article:not([hidden])').count(),1);
+              await page.locator('#arena-back').click();
+
               await page.locator('#real-match-920001').waitFor({state:'visible'});
               assert.equal(await page.locator('#live-league').inputValue(),'la1','Spain is the default');
               assert.equal(await page.locator('#real-match-920001 form').count(),1,'Spain has free picks');
@@ -262,26 +284,26 @@ jobs:
               await page.locator('#mcd-reset').click();
               assert.equal(await page.locator('#mcd-balance').innerText(),'1,000.00 MCD');
               await page.locator('#oracle-zodiac select').selectOption('8');
-              await page.locator('#oracle-zodiac button').click();
+              await page.locator('#oracle-zodiac button.btn').click();
               const horoscope=await page.locator('#oracle-zodiac .oracle-answer').innerText();
               assert.ok(horoscope.includes('Sagittarius'));
-              await page.locator('#oracle-zodiac button').click();
+              await page.locator('#oracle-zodiac button.btn').click();
               assert.equal(await page.locator('#oracle-zodiac .oracle-answer').innerText(),horoscope,'same sign on same day must be stable');
               await page.locator('#oracle-chinese input').fill('2024');
-              await page.locator('#oracle-chinese button').click();
+              await page.locator('#oracle-chinese button.btn').click();
               assert.match(await page.locator('#oracle-chinese .oracle-answer').innerText(),/Dragon/);
               await page.locator('#oracle-numerology input').fill('1984-05-22');
-              await page.locator('#oracle-numerology button').click();
+              await page.locator('#oracle-numerology button.btn').click();
               assert.match(await page.locator('#oracle-numerology .oracle-answer').innerText(),/Life path/);
               for(const id of ['tarot','tarot3','coffee','runes','iching','dream','poetry','yesno','lucky']){
-                await page.locator('#oracle-'+id+' button').click();
+                await page.locator('#oracle-'+id+' button.btn').click();
                 const answer=await page.locator('#oracle-'+id+' .oracle-answer').innerText();
                 assert.ok(answer.length>35,id+' must generate a meaningful reading');
               }
               assert.equal((await page.locator('#oracle-tarot3 .oracle-answer').innerText()).split('🃏').length-1,3);
               assert.equal((await page.locator('#oracle-iching .oracle-answer').innerText()).split('━━').length>5,true);
               await page.locator('#oracle-numerology input').fill('1890-01-01');
-              await page.locator('#oracle-numerology button').click();
+              await page.locator('#oracle-numerology button.btn').click();
               assert.equal(await page.locator('#oracle-numerology .oracle-answer').innerText(),'Choose a birth date.');
               await page.locator('#language').selectOption('fa');
               assert.equal(await page.locator('#nav-predictions').innerText(),'پیش‌بینی زنده');

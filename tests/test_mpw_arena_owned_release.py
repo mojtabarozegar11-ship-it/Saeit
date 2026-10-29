@@ -138,6 +138,18 @@ class GuardedArenaPublicationTests(unittest.TestCase):
         self.assertIn("horseCountryLabel(event.country)", content)
         self.assertIn("if(json.length&&rows.length<1)throw Error('No valid fixtures');", content)
 
+    def test_game_lobby_has_no_fake_private_auth(self):
+        content = (SRC / "site_releases/mojplaywin/arena/index.html").read_text(encoding="utf-8")
+        for key in ("arena-favs-only", "arena-recent", "arena-back", "ARENA_FAV_KEY",
+                    "initArenaLobby()", "data-arena-favourite", "data-arena-focus",
+                    "sessionStorage.setItem(ARENA_RECENT_KEY", "lobbyCopy"):
+            with self.subTest(key=key):
+                self.assertIn(key, content)
+        self.assertIn("for(const id of ARENA_GRIDS)", content)
+        self.assertIn("const valid=new Set(arenaCards()", content)
+        self.assertNotIn("type=\"password\"", content)
+        self.assertIn("Real-money betting unavailable", content)
+
     def test_public_data_read_is_tightly_allowlisted(self):
         content = (SRC / "site_releases/mojplaywin/arena/index.html").read_text(encoding="utf-8")
         candidate = self.home / "network-check.html"
