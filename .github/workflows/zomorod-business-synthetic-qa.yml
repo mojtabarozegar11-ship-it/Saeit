@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/zomorod-business-synthetic-qa.yml"
       - "content/zomorod-business/app.php"
+      - "content/zomorod-business/insights.php"
       - "scripts/zomorod_business_synthetic_qa.py"
   pull_request:
     branches: [main]
@@ -30,9 +31,11 @@ jobs:
           set -euo pipefail
           php -m | grep -qi pdo_sqlite
           php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/insights.php
           php -l content/zomorod-business/index.php
           python3 -m py_compile scripts/zomorod_business_synthetic_qa.py
           mkdir -p "$HOME/.private/zomorod-business" "$HOME/public_html/business"
           cp content/zomorod-business/app.php "$HOME/.private/zomorod-business/app.php"
+          cp content/zomorod-business/insights.php "$HOME/.private/zomorod-business/insights.php"
           cp content/zomorod-business/index.php "$HOME/public_html/business/index.php"
           python3 scripts/zomorod_business_synthetic_qa.py "$GITHUB_SHA"
