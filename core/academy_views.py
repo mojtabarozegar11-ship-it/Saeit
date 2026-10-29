@@ -176,7 +176,6 @@ def education_enroll(request, slug):
         return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     if not course.is_free:
-        from .models import Order
         paid = Order.objects.filter(
             customer=request.user, status="paid",
             items__product=course.product,
