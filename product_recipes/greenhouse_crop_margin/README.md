@@ -1,5 +1,11 @@
 # Greenhouse Crop Margin and Break-even Planner
 
+## English standalone application — Greenhouse Economics Studio v3
+
+For immediate offline use, download **greenhouse_economics_studio.html** and open it in a modern browser. This is a complete single-file English interface; no server, Python installation, network connection or account is required. Its independently testable calculation source is **greenhouse_engine.js**, embedded into the distributed HTML. The standalone UI includes explicit crop-cycle resource costs, multi-year investment cash flows (NPV, ROI, payback), conservative break-even thresholds, 9 stress cases, optional seeded uncertainty, CSV/JSON exports, local JSON import, printing/PDF, and session-only comparisons.
+
+See **GREENHOUSE_ECONOMICS_STUDIO.md** for operator instructions, model exclusions and quality scope. No live pricing or yield data is fetched; sample values are synthetic and should always be replaced with independently verified local values. Passing technical tests does not establish specialist scientific quality or commercial release clearance.
+
 A small offline calculator for comparing user-entered greenhouse growing scenarios. It estimates gross and saleable yield, sales revenue, variable and fixed costs, net margin, margin per square metre, the minimum break-even selling price, and the minimum gross yield per square metre required to cover entered costs.
 
 ## Run
