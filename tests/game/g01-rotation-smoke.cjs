@@ -38,7 +38,11 @@ async function run(){
      await air.keyboard.down('e');
      await air.waitForFunction(()=>window.__g01AirInput().afterburner,{timeout:5000});
     }
-    await air.locator('#pauseBtn').click();
+    if(mobile){
+     // Second independent touch must pause while the boost pointer remains captured.
+     const pauseBox=await air.locator('#pauseBtn').boundingBox();assert(pauseBox);
+     await air.touchscreen.tap(pauseBox.x+pauseBox.width/2,pauseBox.y+pauseBox.height/2);
+    }else await air.locator('#pauseBtn').click();
     const paused=await air.evaluate(()=>window.__g01AirInput());
     assert(paused.paused&&!paused.afterburner&&!paused.boostHeld,'afterburner must stop immediately on pause');
     await air.locator('#resumeBtn').click();
