@@ -70,6 +70,22 @@ function zmPayrollDb(string $private): PDO {
           OR OLD.net_total!=NEW.net_total OR OLD.requested_by!=NEW.requested_by
           OR OLD.state IN ('approved','cancelled')
         BEGIN SELECT RAISE(ABORT,'Payroll record protected'); END");
+    // A direct SQL caller cannot mark a period approved without independent review.
+    $db->exec("CREATE TRIGGER IF NOT EXISTS payroll_periods_state_transition
+        BEFORE UPDATE ON payroll_periods
+        WHEN NOT (
+            (OLD.state='draft' AND NEW.state='submitted' AND NEW.reviewed_by IS NULL
+                AND length(trim(NEW.review_reason))>0)
+            OR (OLD.state='draft' AND NEW.state='cancelled' AND NEW.reviewed_by IS NULL
+                AND length(trim(NEW.review_reason))>0)
+            OR (OLD.state='submitted' AND NEW.state='approved'
+                AND NEW.reviewed_by IS NOT NULL AND NEW.reviewed_by!=OLD.requested_by
+                AND length(trim(NEW.review_reason))>0)
+            OR (OLD.state='submitted' AND NEW.state='rejected'
+                AND NEW.reviewed_by IS NOT NULL AND NEW.reviewed_by!=OLD.requested_by
+                AND length(trim(NEW.review_reason))>0)
+        )
+        BEGIN SELECT RAISE(ABORT,'Invalid payroll approval transition'); END");
     return $db;
 }
 function zmPayrollReject(string $message,int $code=422): never {
