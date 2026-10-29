@@ -68,6 +68,55 @@ class Stage34Tests(unittest.TestCase):
         callback(obj)
         mod.atomic(path, obj)
 
+    def mark_owner_held_879(self):
+        origin = mod.read(self.area / "stage-02/inbox" / self.name)
+        origin["work_order"]["source_product_id"] = 879
+        mod.atomic(self.area / "stage-02/inbox" / self.name, origin)
+        research = mod.read(self.area / "stage-02/completed-dossiers" / self.name)
+        research["source_product_id"] = 879
+        research["stage_1_handoff_sha256"] = mod.digest(origin)
+        mod.atomic(self.area / "stage-02/completed-dossiers" / self.name, research)
+        packet = mod.read(self.area / "stage-03/inbox" / self.name)
+        packet["desk_research_sha256"] = mod.digest(research)
+        mod.atomic(self.area / "stage-03/inbox" / self.name, packet)
+        receipt = mod.read(self.area / "stage-02/receipts" / self.name)
+        receipt["research_sha256"] = mod.digest(research)
+        receipt["stage_3_packet_sha256"] = mod.digest(packet)
+        mod.atomic(self.area / "stage-02/receipts" / self.name, receipt)
+
+    def test_owner_held_879_does_not_advance_stage3_or_modify_receipts(self):
+        self.mark_owner_held_879()
+        original = {
+            str(p): p.read_bytes() for p in
+            (self.area / "stage-02").rglob("*.json")
+        }
+        result = mod.execute(self.root)
+        self.assertEqual(result["stage3_owner_held_sku879_skipped"], 1)
+        self.assertEqual(result["stage3_new"], 0)
+        self.assertEqual(result["stage3_blocked_this_tick"], 0)
+        self.assertFalse((self.area / "stage-03/completed-designs" / self.name).exists())
+        self.assertFalse((self.area / "stage-03/blocked" / self.name).exists())
+        for path, data in original.items():
+            self.assertEqual(Path(path).read_bytes(), data)
+
+    def test_owner_held_879_existing_stage4_packet_is_preserved(self):
+        self.assertTrue(mod.stage3(self.area, self.name))
+        old = self.area / "stage-04/inbox" / self.name
+        before = old.read_bytes()
+        self.mark_owner_held_879()
+        result = mod.execute(self.root)
+        self.assertEqual(result["stage4_owner_held_sku879_skipped"], 1)
+        self.assertEqual(result["stage4_new"], 0)
+        self.assertEqual(old.read_bytes(), before)
+        self.assertFalse((self.area / "stage-05/inbox" / self.name).exists())
+
+    def test_owner_hold_matches_only_explicit_identity(self):
+        for source in (879, "879", "SKU879", "SKU-879", "MPW-879"):
+            self.assertTrue(mod.owner_held_sku879({"source_product_id": source}))
+        for source in (72, 225, "AGRI-879", "Atelier Interior"):
+            self.assertFalse(mod.owner_held_sku879({"source_product_id": source}))
+        self.assertFalse(mod.owner_held_sku879({"title": "Atelier Interior"}))
+
     def test_expanding_order_and_revision_identifiers_parse(self):
         match = mod.NAME.fullmatch("WO-100000000--r1000.json")
         self.assertIsNotNone(match)

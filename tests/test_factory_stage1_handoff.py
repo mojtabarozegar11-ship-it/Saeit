@@ -64,6 +64,23 @@ class IndependentStageOneTests(unittest.TestCase):
         self.assertFalse((self.root / "production-warehouse").exists())
         self.assertEqual(STAGE.run(self.root)["new_handoffs"], 0)
 
+    def test_owner_held_879_is_not_forwarded_and_72_remains_eligible(self):
+        held = self.input_order("WO-00000001")
+        held["source_product_id"] = 879
+        held_path = self.orders / "WO-00000001.json"
+        GEN.atomic_json(held_path, held)
+        before = held_path.read_bytes()
+        accepted = self.input_order("WO-00000002")
+        accepted["source_product_id"] = 72
+        GEN.atomic_json(self.orders / "WO-00000002.json", accepted)
+        result = STAGE.run(self.root)
+        self.assertEqual(result["new_handoffs"], 1)
+        self.assertEqual(result["blocked_items_this_run"], 1)
+        inbox = self.root / "production-instructions" / "stage-02" / "inbox"
+        self.assertFalse((inbox / "WO-00000001--r001.json").exists())
+        self.assertTrue((inbox / "WO-00000002--r001.json").is_file())
+        self.assertEqual(held_path.read_bytes(), before)
+
     def test_invalid_input_blocked_without_forwarding(self):
         doc = self.input_order()
         doc["publication_approved"] = True
