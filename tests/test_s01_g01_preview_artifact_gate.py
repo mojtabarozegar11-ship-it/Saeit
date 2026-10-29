@@ -73,6 +73,28 @@ class ArtifactGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differs from reviewed"):
             gate.verify(fixture(), REV, "b" * 40)
 
+    def test_oversized_decompression_budget_rejected_before_crc(self):
+        from types import SimpleNamespace
+        class FakeArchive:
+            def infolist(self):
+                return [SimpleNamespace(filename="large", file_size=97_000_000,
+                                        compress_size=96_000_000, external_attr=0)]
+            def testzip(self):
+                raise AssertionError("CRC must not run on oversized input")
+        with self.assertRaisesRegex(ValueError, "extraction budget"):
+            gate.checked_entries(FakeArchive(), {"large"})
+
+    def test_extreme_compression_ratio_rejected_before_crc(self):
+        from types import SimpleNamespace
+        class FakeArchive:
+            def infolist(self):
+                return [SimpleNamespace(filename="bomb", file_size=8_000_000,
+                                        compress_size=100, external_attr=0)]
+            def testzip(self):
+                raise AssertionError("CRC must not run on zip bomb")
+        with self.assertRaisesRegex(ValueError, "compression ratio"):
+            gate.checked_entries(FakeArchive(), {"bomb"})
+
     def test_traversal_asset_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "unsafe archive entry"):
             gate.verify(fixture(traversal=True), REV, gate.git_blob(GAME))
