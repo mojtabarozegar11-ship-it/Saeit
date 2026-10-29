@@ -139,7 +139,17 @@ try {
         }
     }
     if(($_GET['page']??'')==='logout'){$_SESSION=[];session_destroy();header('Location: /business/',true,303);exit;}
-    $uid=actor();$user=$uid?q($db,'SELECT id,username,role,active FROM users WHERE id=?',[$uid])[0]??null:null;
+    $uid=actor();$user=$uid?q($db,'SELECT id,username,role,active,password_hash FROM users WHERE id=?',[$uid])[0]??null:null;
+    // A password rotation invalidates all previous sessions, including CLI resets.
+    // Existing sessions without a credential stamp must authenticate again.
+    if($user){
+        $stamp=hash('sha256',(string)$user['password_hash']);
+        if(!is_string($_SESSION['credential_stamp']??null) ||
+           !hash_equals($stamp,(string)$_SESSION['credential_stamp'])){
+            unset($_SESSION['uid'],$_SESSION['role'],$_SESSION['credential_stamp']);
+            $user=null;
+        }
+    }
     if(!$user||(int)$user['active']!==1){
         if($_SERVER['REQUEST_METHOD']==='POST'){
             verifyCsrf();$username=req('username');$pass=req('password');
@@ -149,7 +159,9 @@ try {
             if(!$acc||!password_verify($pass,$acc[0]['password_hash'])){
                 $_SESSION['failed_count']=$attempts+1;$_SESSION['failed_at']=time();bail('نام کاربری یا رمز عبور اشتباه است.',401);
             }
-            $_SESSION['uid']=(int)$acc[0]['id'];$_SESSION['role']=$acc[0]['role'];$_SESSION['failed_count']=0;session_regenerate_id(true);
+            $_SESSION['uid']=(int)$acc[0]['id'];$_SESSION['role']=$acc[0]['role'];
+            $_SESSION['credential_stamp']=hash('sha256',(string)$acc[0]['password_hash']);
+            $_SESSION['failed_count']=0;session_regenerate_id(true);
             header('Location: ?page=dashboard',true,303);exit;
         }
         layoutStart('login');echo '<section class="sign"><h1>ورود مدیر و حسابدار</h1><p>دسترسی فقط برای کاربران مجاز شرکت.</p>';formBegin('login');echo '<label>نام کاربری</label><input name="username" required autocomplete="username"><label>رمز عبور</label><input name="password" type="password" required autocomplete="current-password"><button>ورود امن</button></form></section>';layoutEnd();exit;
@@ -168,7 +180,9 @@ try {
             if(strlen($new)<16||strlen($new)>200||$new!==$confirmation||hash_equals($previous,$new)) bail('گذرواژه جدید باید دست‌کم ۱۶ نویسه، متفاوت با قبلی و مطابق تکرار آن باشد.');
             $hash=one($db,'SELECT password_hash FROM users WHERE id=? AND active=1',[actor()]);
             if(!is_string($hash)||!password_verify($previous,$hash)) bail('گذرواژه فعلی صحیح نیست.',403);
-            $db->prepare('UPDATE users SET password_hash=? WHERE id=?')->execute([password_hash($new,PASSWORD_DEFAULT),actor()]);
+            $newHash=password_hash($new,PASSWORD_DEFAULT);
+            $db->prepare('UPDATE users SET password_hash=? WHERE id=?')->execute([$newHash,actor()]);
+            $_SESSION['credential_stamp']=hash('sha256',$newHash);
             audit($db,'security','password-change');
             session_regenerate_id(true);
         } elseif($action==='account'){
