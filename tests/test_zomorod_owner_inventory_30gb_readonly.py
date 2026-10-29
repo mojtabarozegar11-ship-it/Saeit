@@ -34,6 +34,10 @@ def test_only_readonly_live_sqlite_and_site_inspection():
     assert "mode=ro" in live
     assert "PRAGMA quick_check" in live
     assert "BUSINESS_DB_PRIVATE_PERMISSIONS" in live
+    assert "BUSINESS_DB_MODE" in live
+    assert "BUSINESS_DB_OWNED_BY_SSH_USER" in live
+    assert "BUSINESS_PRIVATE_DIR_MODE" in live
+    assert "BUSINESS_PRIVATE_DIR_OWNED_BY_SSH_USER" in live
     assert "BUSINESS_ADMIN_COUNT" in live
     assert "BUSINESS_DB_SIZE_BYTES" in live
     for forbidden in ("INSERT INTO", "UPDATE users", "DROP TABLE", "DELETE FROM", "VACUUM", "CREATE TABLE", "chmod ", "chown ", "rsync ", "scp ", "tar -xf"):
