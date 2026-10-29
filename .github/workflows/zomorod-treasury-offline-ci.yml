@@ -4,12 +4,18 @@ on:
     branches: [feature/zomorod-erp-treasury-offline-v7-20261029]
     paths:
       - "content/zomorod-business/treasury_control.php"
+      - "content/zomorod-business/treasury_ui.php"
+      - "content/zomorod-business/app.php"
       - "scripts/zomorod_treasury_synthetic_qa.php"
+      - "scripts/zomorod_workflow_web_synthetic_qa.py"
       - ".github/workflows/zomorod-treasury-offline-ci.yml"
   pull_request:
     paths:
       - "content/zomorod-business/treasury_control.php"
+      - "content/zomorod-business/treasury_ui.php"
+      - "content/zomorod-business/app.php"
       - "scripts/zomorod_treasury_synthetic_qa.php"
+      - "scripts/zomorod_workflow_web_synthetic_qa.py"
 permissions:
   contents: read
 jobs:
@@ -31,7 +37,9 @@ jobs:
         run: |
           set -euo pipefail
           php -r 'exit(extension_loaded("pdo_sqlite")?0:2);'
+          php -l content/zomorod-business/app.php
           php -l content/zomorod-business/treasury_control.php
+          php -l content/zomorod-business/treasury_ui.php
           php scripts/zomorod_treasury_synthetic_qa.php
           php scripts/zomorod_payroll_control_synthetic_qa.php
           php scripts/zomorod_workflow_desk_synthetic_qa.php
