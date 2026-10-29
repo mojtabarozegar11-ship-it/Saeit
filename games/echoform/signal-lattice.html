@@ -28,8 +28,8 @@ function choose(i){if(phase!=='input')return;if(sequence[cursor]!==i){light(i,'w
 $('start').addEventListener('click',start);
 $('repeat').addEventListener('click',()=>{if(phase!=='input'||replays>=1)return;replays++;playback(session)});
 document.addEventListener('keydown',e=>{if(e.ctrlKey||e.altKey||e.metaKey||e.isComposing||e.repeat||e.target instanceof HTMLElement&&e.target.closest('button,input,textarea,select'))return;const keys='123456789abcdefg';const i=keys.indexOf(e.key.toLowerCase());if(i>=0&&i<16&&phase==='input'){e.preventDefault();choose(i)}});
-window.addEventListener('blur',()=>{if(phase==='input'){phase='paused';update();setStatus('Paused while the window is inactive. Press Replay pattern to continue.');$('repeat').disabled=false}});
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&phase==='input'){phase='paused';update();setStatus('Paused while hidden. Replay the pattern when you return.');$('repeat').disabled=false}});
+window.addEventListener('blur',()=>{if(phase==='input'||phase==='show'){session++;phase='paused';update();setStatus('Paused while the window is inactive. Press Replay pattern to continue.');$('repeat').disabled=false}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&(phase==='input'||phase==='show')){session++;phase='paused';update();setStatus('Paused while hidden. Replay the pattern when you return.');$('repeat').disabled=false}});
 $('repeat').addEventListener('click',()=>{if(phase==='paused'){replays=1;playback(session)}});
 update();
 })();
