@@ -135,6 +135,7 @@ test("Offline English UI works for comparison exports, reset, CSV and JSON impor
       click(){if(listeners.click)listeners.click({target:this});},
       remove(){}};
     Object.defineProperty(n,"id",{get(){return this._id;},set(v){this._id=v;nodes.set(v,this);}});
+    Object.defineProperty(n,"value",{get(){return this._value===undefined?"":this._value;},set(v){this._value=String(v);}});
     return n;
   }
   for(const [,id] of html.matchAll(/\bid="([^"]+)"/g)){if(!nodes.has(id)){const el=node("div");el.id=id;}}
@@ -149,7 +150,7 @@ test("Offline English UI works for comparison exports, reset, CSV and JSON impor
   vm.runInNewContext(matched[1],context,{timeout:5000});
   const byId=id=>{const item=nodes.get(id);assert.ok(item,id+" missing");return item;};
   const click=id=>byId(id).fire("click");
-  assert.equal(byId("metrics").children.length,9,"sample calculates on open");
+  assert.equal(byId("metrics").children.length,9,byId("status").textContent||"sample calculates on open");
   click("export-compare");
   assert.match(byId("status").textContent,/No saved comparisons/);
   click("save");
