@@ -73,6 +73,14 @@ class CheckoutZeroScriptCSPTests(unittest.TestCase):
             "SELECT * FROM orders LOCK IN SHARE MODE",
             "SELECT * INTO OUTFILE '/tmp/leak' FROM orders",
             "SELECT * INTO DUMPFILE '/tmp/leak' FROM orders",
+            "SELECT * FROM orders FOR SHARE",
+            "SELECT * INTO backup_orders FROM orders",
+            "SELECT GET_LOCK('checkout', 60)",
+            "SELECT SLEEP(5)",
+            "SELECT LOAD_FILE('/etc/passwd')",
+            "SELECT 1 /* unsafe comment */",
+            "SELECT 1 -- hidden",
+            "SELECT 1 # hidden",
         ):
             with self.subTest(statement=statement):
                 with self.assertRaisesRegex(RuntimeError, "non-SELECT"):
