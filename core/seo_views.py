@@ -1,6 +1,7 @@
 import json
 from django.db.models import Q
 from django.http import HttpResponse
+from django.db import DatabaseError
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
@@ -11,6 +12,7 @@ from .models import KnowledgeArticle, Product
 from .knowledge_agent_models import KnowledgeBook, KnowledgeDomain
 from .newsletter_models import NewsletterStory
 from .blog_models import BlogPage
+from .public_catalog_guard import missing_public_tables, mark_public_data_unavailable
 
 
 def _norm(value):
@@ -69,22 +71,40 @@ def robots_txt(request):
     return HttpResponse(body, content_type="text/plain; charset=utf-8")
 
 
+def _unavailable_sitemap():
+    # A temporary schema outage is not an empty sitemap and must not be cached.
+    response = HttpResponse(
+        '<?xml version="1.0" encoding="UTF-8"?><error>Temporarily unavailable</error>',
+        status=503, content_type="application/xml",
+    )
+    response["Retry-After"] = "300"
+    return mark_public_data_unavailable(response)
+
+
 @require_GET
 def sitemap_xml(request):
+    if missing_public_tables(
+        BlogPage, NewsletterStory, KnowledgeArticle, KnowledgeBook,
+        KnowledgeDomain, Product,
+    ):
+        return _unavailable_sitemap()
     urls = ["/", "/company/", "/company/executive/", "/research/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/weather/", "/economy/", "/studio/", "/newsletter/", "/blog/", "/store/", "/auctions/", "/ghanadi/", "/company-gallery/", "/agriculture/genetics/", "/en/authors/mojtaba-rozegar/", "/authors/mojtaba-rozegar/"]
-    urls += [f"/blog/{quote(str(code), safe='')}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]
-    company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 55, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
-    for kind, count in company_ranges.items():
-        urls.extend(f"/company/{kind}-{i}/" for i in range(1, count + 1))
-    stories = NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()).values_list("slug", flat=True)
-    urls += [f"/newsletter/{slug}/" for slug in stories]
-    articles = KnowledgeArticle.objects.filter(published=True).values_list("slug", flat=True)
-    urls += [f"/knowledge/article/{slug}/" for slug in articles]
-    books = KnowledgeBook.objects.values_list("code", flat=True)
-    urls += [f"/knowledge/book/{code}/" for code in books]
-    domains = KnowledgeDomain.objects.filter(active=True).values_list("code", flat=True)
-    urls += [f"/knowledge/domain/{code}/" for code in domains]
-    urls += [f"/store/product/{pk}/" for pk in Product.objects.filter(active=True).values_list("pk",flat=True)]
+    try:
+        urls += [f"/blog/{quote(str(code), safe='')}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]
+        company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 55, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
+        for kind, count in company_ranges.items():
+            urls.extend(f"/company/{kind}-{i}/" for i in range(1, count + 1))
+        stories = NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()).values_list("slug", flat=True)
+        urls += [f"/newsletter/{slug}/" for slug in stories]
+        articles = KnowledgeArticle.objects.filter(published=True).values_list("slug", flat=True)
+        urls += [f"/knowledge/article/{slug}/" for slug in articles]
+        books = KnowledgeBook.objects.values_list("code", flat=True)
+        urls += [f"/knowledge/book/{code}/" for code in books]
+        domains = KnowledgeDomain.objects.filter(active=True).values_list("code", flat=True)
+        urls += [f"/knowledge/domain/{code}/" for code in domains]
+        urls += [f"/store/product/{pk}/" for pk in Product.objects.filter(active=True).values_list("pk",flat=True)]
+    except DatabaseError:
+        return _unavailable_sitemap()
     items = "".join(f"<url><loc>{xml_escape('https://zomorodmelal.ir' + u)}</loc></url>" for u in dict.fromkeys(urls))
     return HttpResponse(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{items}</urlset>', content_type="application/xml")
 
