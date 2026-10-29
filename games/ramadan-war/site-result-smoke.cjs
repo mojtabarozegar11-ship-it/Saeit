@@ -33,6 +33,14 @@ const path=require('node:path');
      const backup=JSON.parse(fs.readFileSync(await download.path(),'utf8'));
      assert.equal(backup.format,'ramadan-war-campaign-v1');
      assert.equal(backup.campaign.missionPassed,true);
+     // Returning home must not destroy the only copy of a completed unsaved stage.
+     await page.locator('#resultHome').click();
+     assert.equal(await page.locator('#home').isVisible(),true);
+     if(blocked){
+      assert.equal(await page.locator('#start').innerText(),'ادامهٔ نبرد','unsaved completed stage remains resumable');
+      await page.locator('#start').click();
+      assert.equal(await page.locator('#resultExport').isVisible(),true,'in-memory stage remains exportable after home');
+     }
      await page.evaluate(()=>window.__qaShowResult('پایان','بازی تمام شد','over'));
      assert.equal(await page.locator('#resultExport').isVisible(),false,'defeat must not offer a stale completed-stage export');
      assert.deepEqual(errors,[],'no uncaught browser exceptions');
