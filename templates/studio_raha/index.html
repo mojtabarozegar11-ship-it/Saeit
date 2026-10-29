@@ -145,18 +145,20 @@ function colorGame(stage,g){const colors=[['Coral','#ff6b76'],['Sunshine','#ffd9
 function reactionGame(stage){stage.innerHTML='<div class="stage-message">Ready? Wait for green, then tap fast!</div>';let b=button('Wait for it…',()=>{if(!b.dataset.ready){showToast('Too soon! Try again.');reactionGame(stage);return}message(stage,'🚀 Lightning fast! Want another round?');b.textContent='Play again';b.dataset.ready='';b.onclick=()=>reactionGame(stage)},'alt');b.style.minWidth='190px';stage.append(b);let delay=1000+Math.random()*2400;setTimeout(()=>{if(!$('#gameOverlay').classList.contains('open'))return;b.dataset.ready='1';b.textContent='TAP NOW!';b.classList.remove('alt')},delay)}
 function drawGame(stage){stage.innerHTML='<div class="stage-message">Draw anything you can imagine.</div><canvas class="draw-pad" width="600" height="250" aria-label="Drawing canvas"></canvas><div class="stage-actions"></div>';const c=stage.querySelector('canvas'),ctx=c.getContext('2d');ctx.lineWidth=8;ctx.lineCap='round';ctx.strokeStyle='#1670e8';let down=false;function pos(e){const r=c.getBoundingClientRect();return[(e.clientX-r.left)*c.width/r.width,(e.clientY-r.top)*c.height/r.height]}c.onpointerdown=e=>{down=true;c.setPointerCapture(e.pointerId);const p=pos(e);ctx.beginPath();ctx.moveTo(...p)};c.onpointermove=e=>{if(down){const p=pos(e);ctx.lineTo(...p);ctx.stroke()}};c.onpointerup=()=>down=false;stage.querySelector('.stage-actions').append(button('Clear canvas',()=>ctx.clearRect(0,0,c.width,c.height),'alt'))}
 function runnerGame(stage){
- let cleared=0,lives=3,progress=0,resolved=false,active=true,raf=0,last=0,jumpUntil=0;
+ let cleared=0,lives=3,progress=0,resolved=false,active=true,raf=0,last=0,jumpUntil=0,hiddenAt=0;
  stage.innerHTML='<div class="stage-message" id="runnerStatus" role="status" aria-live="polite">Jump over eight real obstacles. Three hearts available.</div><div class="stage-actions"><span class="stage-message" id="runScore">Cleared: 0 / 8 · Hearts: 3</span></div><div id="runnerTrack" role="img" aria-label="Jungle track with a moving obstacle" style="position:relative;width:100%;min-width:0;height:110px;overflow:hidden;border-radius:16px;background:linear-gradient(#c9f7e0,#8cd69d);border-bottom:8px solid #5b9858"><span id="runnerHero" style="position:absolute;left:20%;bottom:5px;font-size:32px">🐾</span><span id="runnerObstacle" style="position:absolute;left:100%;bottom:5px;font-size:32px">🌿</span></div>';
  const track=stage.querySelector('#runnerTrack'),runner=stage.querySelector('#runnerHero'),obstacle=stage.querySelector('#runnerObstacle'),status=stage.querySelector('#runnerStatus'),counter=stage.querySelector('#runScore');
- function stop(){if(!active)return;active=false;cancelAnimationFrame(raf);document.removeEventListener('keydown',onKey);stage.removeEventListener('runner:stop',stop)}
+ function stop(){if(!active)return;active=false;cancelAnimationFrame(raf);document.removeEventListener('keydown',onKey);document.removeEventListener('visibilitychange',onVisibility);stage.removeEventListener('runner:stop',stop)}
  function finish(won){stop();status.textContent=won?'🏆 You cleared all eight jungle obstacles!':'No hearts left. Try the jungle again!';jumpButton.disabled=true;stage.append(button('Run again',()=>runnerGame(stage),'alt'))}
  function jump(){const now=performance.now();if(!active||jumpUntil>now)return;jumpUntil=now+620;runner.style.transform='translateY(-45px)'}
  function onKey(e){if(e.code!=='Space'||e.repeat||!active||!document.getElementById('gameOverlay').classList.contains('open'))return;if(e.target.closest?.('input,textarea,select'))return;e.preventDefault();jump()}
+ function onVisibility(){if(!active)return;if(document.hidden){hiddenAt=performance.now()}else if(hiddenAt){const elapsed=performance.now()-hiddenAt;if(jumpUntil>hiddenAt)jumpUntil+=elapsed;last=performance.now();hiddenAt=0}}
  const jumpButton=button('Jump! 🐾',jump);jumpButton.style.minWidth='150px';stage.append(jumpButton);
  const hint=document.createElement('small');hint.textContent='Tap Jump or press Space just before the obstacle reaches the runner.';hint.style.color='#526c7b';stage.append(hint);
- document.addEventListener('keydown',onKey);stage.addEventListener('runner:stop',stop);
+ document.addEventListener('keydown',onKey);document.addEventListener('visibilitychange',onVisibility);stage.addEventListener('runner:stop',stop);
  function frame(t){
   if(!active)return;
+  if(document.hidden){raf=requestAnimationFrame(frame);return}
   if(!document.getElementById('gameOverlay').classList.contains('open')||stage.querySelector('#runnerTrack')!==track){stop();return}
   const dt=Math.min(50,Math.max(0,t-(last||t)));last=t;progress+=dt*.00055;
   runner.style.transform=jumpUntil>t?'translateY(-45px)':'';
