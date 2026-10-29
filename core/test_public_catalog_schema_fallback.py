@@ -437,13 +437,20 @@ class PublicCatalogHealthyPathTests(SimpleTestCase):
             self.assertFalse(missing_public_tables(*required))
             db.introspection.table_names.assert_called_once_with()
 
-    def test_introspection_connection_error_is_not_disguised_as_empty_catalog(self):
+    def test_introspection_connection_error_returns_unavailable_not_empty(self):
         from django.db.utils import OperationalError
         from core.academy_views import EducationCourse
         with patch("core.public_catalog_guard.connection") as db:
             db.introspection.table_names.side_effect = OperationalError("unavailable")
-            with self.assertRaises(OperationalError):
-                missing_public_tables(EducationCourse)
+            self.assertTrue(missing_public_tables(EducationCourse))
+            db.introspection.table_names.assert_called_once_with()
+
+    def test_introspection_programming_error_also_fails_closed(self):
+        from django.db.utils import ProgrammingError
+        from core.academy_views import EducationCourse
+        with patch("core.public_catalog_guard.connection") as db:
+            db.introspection.table_names.side_effect = ProgrammingError("bad schema")
+            self.assertTrue(missing_public_tables(EducationCourse))
 
     def test_academy_complete_schema_preserves_course_search_and_filters(self):
         track = SimpleNamespace(key="agri", title="Agriculture", meta="AGRI", description="Learning")
