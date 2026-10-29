@@ -98,7 +98,7 @@ def education_dashboard_progress(enrollment):
     excluded from the active-course completion denominator and numerator.
     """
     total = enrollment.course.lessons.filter(active=True).count()
-    recorded_done = enrollment.progress.filter(completed=True, lesson__active=True).count()
+    recorded_done = enrollment.progress.filter(completed=True, lesson__active=True, lesson__course=enrollment.course).count()
     # Inconsistent or historical progress must not display "5 of 3" lessons
     # even when the percentage is already capped at 100.
     done = min(total, recorded_done)
@@ -331,7 +331,7 @@ def education_lesson_complete(request, slug, lesson_id):
     progress.completed_at = timezone.now()
     progress.save()
     total = lesson.course.lessons.filter(active=True).count()
-    done = enrollment.progress.filter(completed=True, lesson__active=True).count()
+    done = enrollment.progress.filter(completed=True, lesson__active=True, lesson__course=course).count()
     if total and done >= total:
         enrollment.status = "completed"
         enrollment.completed_at = timezone.now()
@@ -364,6 +364,8 @@ def education_bookmark(request, slug, lesson_id):
 
 @login_required
 def education_assessment(request, slug, assessment_id):
+    if missing_public_tables(EducationCourse, EducationAssessment, EducationQuestion, EducationEnrollment):
+        return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     assessment = get_object_or_404(EducationAssessment, pk=assessment_id, course=course, active=True, approved=True)
     enrollment = EducationEnrollment.objects.filter(course=course, user=request.user).exclude(status="cancelled").first()
@@ -377,6 +379,8 @@ def education_assessment(request, slug, assessment_id):
 def education_assessment_submit(request, slug, assessment_id):
     if request.method != "POST":
         raise Http404
+    if missing_public_tables(EducationCourse, EducationAssessment, EducationQuestion, EducationEnrollment, EducationAttempt):
+        return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     assessment = get_object_or_404(EducationAssessment, pk=assessment_id, course=course, active=True, approved=True)
     enrollment = EducationEnrollment.objects.filter(course=course, user=request.user).exclude(status="cancelled").first()
