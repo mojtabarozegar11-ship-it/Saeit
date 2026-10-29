@@ -44,6 +44,45 @@ class GuardTests(unittest.TestCase):
                 patched[key]=new
         guard.check_structure(patched)
 
+    def test_rights_attestation_is_asset_bound_and_fails_closed(self):
+        """All inputs synthetic; these flags are not independent legal proof."""
+        context,_=guard.transform("context",fixture()["context"])
+        namespace={}
+        exec(context,namespace)
+        approved=namespace["rights_cleared_for_sale"]
+        sha="a"*64
+        metadata={"rights_cleared":True,"publication_approved":True,
+                  "sha256":sha,"rights_asset_sha256":sha,
+                  "rights_document_sha256":"b"*64}
+        self.assertTrue(approved(SimpleNamespace(metadata=metadata)))
+        self.assertFalse(approved(SimpleNamespace(metadata=None)))
+        self.assertFalse(approved(SimpleNamespace(metadata="approved")))
+        self.assertFalse(approved(None))
+        for field,value in (
+            ("rights_cleared","true"),("rights_cleared",False),
+            ("publication_approved","true"),("publication_approved",False),
+            ("sha256","not-a-sha"),("rights_asset_sha256","c"*64),
+            ("rights_asset_sha256","a"*63),("rights_document_sha256",""),
+            ("rights_document_sha256","not-independent-proof")):
+            with self.subTest(field=field,value=value):
+                changed=dict(metadata,**{field:value})
+                self.assertFalse(approved(SimpleNamespace(metadata=changed)))
+        for field in metadata:
+            with self.subTest(missing=field):
+                changed=dict(metadata)
+                del changed[field]
+                self.assertFalse(approved(SimpleNamespace(metadata=changed)))
+        # Case-only hex normalization is legitimate and does not change digest.
+        metadata["sha256"]="A"*64
+        self.assertTrue(approved(SimpleNamespace(metadata=metadata)))
+
+    def test_weak_legacy_helper_is_rejected_by_structure_gate(self):
+        context,_=guard.transform("context",fixture()["context"])
+        weak=context.replace(
+            "rights_asset_sha256", "rights_asset_sha_weak", 1)
+        with self.assertRaisesRegex(RuntimeError,"RIGHTS_LINKAGE_CHECK_ABSENT"):
+            guard.check_structure({"context":weak})
+
     def test_catalog_stays_visible_while_new_checkout_is_guarded(self):
         """Rights clearance must not remove the three existing public listings."""
         original=fixture()["pages"]
