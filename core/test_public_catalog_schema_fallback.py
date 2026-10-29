@@ -582,3 +582,19 @@ class PublicCatalogQueryBoundsTests(SimpleTestCase):
             response = company_gallery(RequestFactory().get("/company-gallery/", {"q": "x" * 20000}))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(rendered.call_args.args[2]["query"], "x" * 120)
+
+
+class GalleryBoundedFilterTests(SimpleTestCase):
+    def test_oversized_media_type_does_not_enter_unbounded_template_context(self):
+        with patch("core.company_content_views.missing_public_tables", return_value=True), \
+             patch("core.company_content_views.render", return_value=HttpResponse("gallery")) as rendered:
+            response = company_gallery(RequestFactory().get("/company-gallery/", {"type": "IMAGE" + "x" * 10000}))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(rendered.call_args.args[2]["kind"], ("image" + "x" * 11))
+        self.assertEqual(rendered.call_args.args[2]["media"], [])
+
+    def test_normal_media_type_is_preserved(self):
+        with patch("core.company_content_views.missing_public_tables", return_value=True), \
+             patch("core.company_content_views.render", return_value=HttpResponse("gallery")) as rendered:
+            company_gallery(RequestFactory().get("/company-gallery/", {"type": "VIDEO"}))
+        self.assertEqual(rendered.call_args.args[2]["kind"], "video")
