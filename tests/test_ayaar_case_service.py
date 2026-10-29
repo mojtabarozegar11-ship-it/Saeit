@@ -411,6 +411,49 @@ class CaseServiceTests(unittest.TestCase):
         self.assertEqual(mismatch.exception.status, 409)
         self.assertEqual(service.staff_case(code)["status"], "in_review")
 
+    def test_staff_download_snapshots_verified_bytes_before_response(self):
+        original = b"%PDF-1.7\noriginal private evidence 012345\n%%EOF"
+        item = self.create(uploads=[FakeEvidence("original.pdf", original)])
+        stored = service.staff_case(item["case_id"])["files"][0]
+        path, _ = service.staff_file(item["case_id"], stored["id"])
+        stream, name = service.open_staff_file(item["case_id"], stored["id"])
+        self.assertEqual(name, "original.pdf")
+        try:
+            # Replacement after verification must not change the response bytes.
+            path.write_bytes(original.replace(b"012345", b"654321"))
+            self.assertEqual(stream.read(), original)
+        finally:
+            stream.close()
+        with self.assertRaises(service.CaseError) as changed:
+            service.open_staff_file(item["case_id"], stored["id"])
+        self.assertEqual(changed.exception.status, 409)
+
+    def test_staff_download_rejects_symlink_and_missing_files(self):
+        original = b"Private original evidence for staff only"
+        item = self.create(uploads=[FakeEvidence("notes.txt", original)])
+        stored = service.staff_case(item["case_id"])["files"][0]
+        path, _ = service.staff_file(item["case_id"], stored["id"])
+        backup = path.with_suffix(".private-backup")
+        path.rename(backup)
+        path.symlink_to(backup)
+        with self.assertRaises(service.CaseError) as symlink:
+            service.open_staff_file(item["case_id"], stored["id"])
+        self.assertEqual(symlink.exception.status, 503)
+        path.unlink()
+        with self.assertRaises(service.CaseError) as missing:
+            service.open_staff_file(item["case_id"], stored["id"])
+        self.assertEqual(missing.exception.status, 503)
+
+    def test_staff_download_rejects_truncated_evidence(self):
+        original = b"%PDF-1.7\noriginal private evidence\n%%EOF"
+        item = self.create(uploads=[FakeEvidence("short.pdf", original)])
+        stored = service.staff_case(item["case_id"])["files"][0]
+        path, _ = service.staff_file(item["case_id"], stored["id"])
+        path.write_bytes(original[:-1])
+        with self.assertRaises(service.CaseError) as truncated:
+            service.open_staff_file(item["case_id"], stored["id"])
+        self.assertEqual(truncated.exception.status, 409)
+
     def test_staff_download_refuses_same_length_file_tampering(self):
         original = b"%PDF-1.7\\nverified bytes 1234\\n%%EOF"
         item = self.create(uploads=[FakeEvidence("tamper.pdf", original)])
