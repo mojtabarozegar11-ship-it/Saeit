@@ -39,6 +39,9 @@ try{
         ['employee_ref'=>'EMP999','base'=>50,'addition'=>0,'deduction'=>0],
     ],51),422,'duplicate_employee');
     blocked(fn()=>zmPayrollCreate($db,'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee','2026-13','IRR',$lines,51),422,'invalid_month');
+    try{$db->exec("UPDATE payroll_periods SET state='approved',reviewed_by=51,review_reason='Bypass' WHERE id=1");check(false,'sql_self_approval_blocked');}
+    catch(PDOException $e){check(true,'sql_self_approval_blocked');}
+    blocked(fn()=>zmPayrollDecision($db,1,'submit',51,'viewer','viewer not allowed'),403,'viewer_cannot_submit');
     zmPayrollDecision($db,1,'submit',51,'accountant','مستندات آزمون آماده');
     blocked(fn()=>zmPayrollDecision($db,1,'approve',51,'admin','Self approval'),403,'self_approve');
     blocked(fn()=>zmPayrollDecision($db,1,'approve',88,'accountant','Not authorized'),403,'non_admin_approval');
