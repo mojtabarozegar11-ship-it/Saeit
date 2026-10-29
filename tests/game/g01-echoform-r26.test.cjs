@@ -1,0 +1,21 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
+const html=fs.readFileSync(path.join(__dirname,'../../games/echoform/signal-lattice.html'),'utf8');
+let code=html.match(/<script>([\s\S]*?)<\/script>/)[1];
+code=code.replace("window.addEventListener('blur'", "window.__test=()=>({cursor,sequence:[...sequence],phase});window.addEventListener('blur'");
+const fake=()=>({textContent:'',disabled:false,className:'',style:{},children:[],attrs:{},classList:{add(){},remove(){}},setAttribute(k,v){this.attrs[k]=v},addEventListener(n,f){const k='on'+n,prev=this[k];this[k]=prev?function(...a){prev(...a);f(...a)}:f},appendChild(el){this.children.push(el)}});
+const elems={};for(const id of ['board','best','round','progress','repeat','start','status'])elems[id]=fake();
+const document={getElementById:id=>elems[id],createElement:()=>fake(),addEventListener(){}};
+const window={addEventListener(){}},localStorage={getItem:()=>null,setItem:()=>{}};
+vm.runInNewContext(code,{document,window,localStorage,HTMLElement:class {},Math,Promise,setTimeout:fn=>{queueMicrotask(fn);return 1}});
+const flush=()=>new Promise(r=>setTimeout(r,25));
+(async()=>{
+ elems.start.onclick();await flush();
+ let state=window.__test();assert.equal(state.phase,'input');
+ elems.board.children[state.sequence[0]].onclick();await flush();
+ state=window.__test();assert.equal(state.phase,'input');assert.equal(state.sequence.length,2);
+ elems.board.children[state.sequence[0]].onclick();state=window.__test();assert.equal(state.cursor,1);
+ elems.repeat.onclick();await flush();state=window.__test();
+ assert.equal(state.cursor,1,'replay must preserve correctly entered signals');assert.equal(state.phase,'input');
+ assert.match(elems.status.textContent,/continue at signal 2 of 2/);
+ console.log('ECHOFORM R26 replay-progress preservation PASS');
+})().catch(e=>{console.error(e);process.exitCode=1});
