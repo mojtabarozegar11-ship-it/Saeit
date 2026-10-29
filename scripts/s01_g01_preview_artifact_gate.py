@@ -24,6 +24,13 @@ def git_blob(data):
 
 def checked_entries(archive, expected):
     infos = archive.infolist()
+    # Bound decompression before CRC or payload reads. An exact manifest alone
+    # does not prevent a compressed preview from exhausting runner memory.
+    if len(infos) > 100 or sum(i.file_size for i in infos) > 96_000_000:
+        raise ValueError("preview archive exceeds bounded extraction budget")
+    if any(i.file_size > 1_000_000 and
+           i.file_size > max(i.compress_size, 1) * 1000 for i in infos):
+        raise ValueError("preview archive compression ratio unsafe")
     names = [i.filename for i in infos]
     if len(names) != len(set(names)) or set(names) != expected:
         raise ValueError("archive entry set differs from manifest")
