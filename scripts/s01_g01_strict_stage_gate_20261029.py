@@ -35,6 +35,10 @@ def verify(package):
         if sum(item.file_size for item in members) > MAX_UNCOMPRESSED:
             raise ValueError("UNCOMPRESSED_SIZE_LIMIT")
         for item in members:
+            # Browser/staging extractors only guarantee stored or deflated ZIP.
+            # Reject other methods rather than silently shipping unusable assets.
+            if item.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+                raise ValueError("UNSUPPORTED_ZIP_COMPRESSION")
             name = item.filename
             parts = PurePosixPath(name).parts
             if (not name.startswith(PREFIX) or "\\" in name or
