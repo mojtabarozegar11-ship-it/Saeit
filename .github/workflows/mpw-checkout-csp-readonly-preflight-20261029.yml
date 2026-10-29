@@ -4,6 +4,8 @@ on:
     paths:
       - scripts/mpw_checkout_csp_zero_script_guard_20261029.py
       - scripts/s01_passenger_runtime_readonly_20261029.py
+      - scripts/s01_checkout_invoice_static_readonly_20261029.py
+      - tests/test_s01_checkout_invoice_static_readonly_20261029.py
       - tests/test_s01_passenger_runtime_readonly_20261029.py
       - tests/test_mpw_checkout_csp_zero_script_20261029.py
       - .github/workflows/mpw-checkout-csp-readonly-preflight-20261029.yml
@@ -27,6 +29,10 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_passenger_runtime_readonly_20261029.py -v
+      - name: Regression-test bounded invoice source map
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_invoice_static_readonly_20261029.py -v
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -233,6 +239,13 @@ jobs:
           timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
             "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;exec(compile(base64.b64decode(sys.argv[1]),\"s01_passenger_probe\",\"exec\"))' '$script64'"
           echo "S01_PASSENGER_DB_AUTHORITY=NOT_VERIFIED_BY_PROCESS_METADATA"
+      - name: Read only invoice code call-shapes without database or customer access
+        shell: bash
+        run: |
+          set -euo pipefail
+          script64="$(base64 -w0 scripts/s01_checkout_invoice_static_readonly_20261029.py)"
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;exec(compile(base64.b64decode(sys.argv[1]),\"s01_invoice_static_probe\",\"exec\"))' '$script64'"
       - name: Capture non-transactional public HTTP and sitemap status
         shell: bash
         run: |
