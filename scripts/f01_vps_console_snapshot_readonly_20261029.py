@@ -65,6 +65,25 @@ def memory():
     except (OSError, ValueError, IndexError) as exc:
         return {"state": "UNAVAILABLE", "error_class": type(exc).__name__}
 
+def cron_schedule_summary(lines):
+    """Summarize cron cadence without returning commands, schedules or paths."""
+    per_minute = factory_per_minute = special = 0
+    for line in lines:
+        parts = line.split(None, 5)
+        if not parts:
+            continue
+        if parts[0].startswith("@"):
+            special += 1
+        elif len(parts) >= 6 and parts[0] in ("*", "*/1") and all(x == "*" for x in parts[1:5]):
+            per_minute += 1
+            if "factory" in line.lower() or "master-agent" in line.lower():
+                factory_per_minute += 1
+    return {"per_minute_entries": per_minute,
+            "factory_per_minute_entries": factory_per_minute,
+            "special_entries": special,
+            "exact_duplicate_entries": len(lines) - len(set(lines)),
+            "commands_and_schedules_redacted": True}
+
 def cron():
     x = command(["crontab", "-l"])
     if x["state"] != "OBSERVED":
@@ -73,6 +92,7 @@ def cron():
              if s.strip() and not s.lstrip().startswith("#") and "=" not in s.split()[0]]
     return {"state": "OBSERVED", "active_entries": len(lines),
             "factory_entries": sum("factory" in s.lower() for s in lines),
+            **cron_schedule_summary(lines),
             "contents_redacted": True}
 
 def workers():
