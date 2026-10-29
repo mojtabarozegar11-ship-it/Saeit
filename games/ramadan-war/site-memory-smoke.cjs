@@ -11,6 +11,12 @@ const assert=require('node:assert/strict');
     await context.addInitScript(()=>{Storage.prototype.setItem=function(){throw new DOMException('Storage unavailable','QuotaExceededError')}});
     const page=await context.newPage(),errors=[];
     page.on('pageerror',e=>errors.push(e.message));
+    // Playwright dialog callbacks are async: a pending dismiss can reject after
+    // the context closes, causing an unhandled rejection and a false CI failure.
+    // Handle the rejection explicitly without masking errors on a live page.
+    page.on('dialog',dialog=>{void dialog.dismiss().catch(error=>{
+     if(!page.isClosed())errors.push('dialog dismiss failed: '+error.message);
+    })});
     const response=await page.goto(process.env.GAME_URL,{waitUntil:'domcontentloaded',timeout:45000});
     assert.equal(response.status(),200);
     await page.waitForFunction(()=>window.RamadanWarDebug?.getState);
@@ -23,13 +29,11 @@ const assert=require('node:assert/strict');
     await page.locator('#start').click();
     assert.equal((await page.evaluate(()=>window.RamadanWarDebug.getState())).mode,'game');
     await page.locator('#pause').click();await page.locator('#goHome').click();
-    page.once('dialog',dialog=>dialog.dismiss());
     await page.locator('#newGame').click();
     assert(await page.locator('#home').isVisible());
     assert.equal(await page.locator('#start').innerText(),'ادامهٔ نبرد');
     const [download]=await Promise.all([page.waitForEvent('download'),page.locator('#exportSave').click()]);
     assert.equal(download.suggestedFilename(),'ramadan-war-campaign-backup.json');
-    page.once('dialog',dialog=>dialog.dismiss());
     await page.locator('#importSaveFile').setInputFiles(await download.path());
     assert.equal(await page.locator('#start').innerText(),'ادامهٔ نبرد');
     assert.deepEqual(errors,[]);
