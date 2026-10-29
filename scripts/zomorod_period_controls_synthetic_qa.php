@@ -21,8 +21,8 @@ $db->exec('CREATE TABLE users(id INTEGER PRIMARY KEY, role TEXT)');
 $db->exec("INSERT INTO users(id,role) VALUES(1,'accountant'),(2,'admin')");
 $db->exec('CREATE TABLE journal_entries(id INTEGER PRIMARY KEY,doc_no TEXT,doc_date TEXT)');
 $db->exec('CREATE TABLE journal_lines(id INTEGER PRIMARY KEY,entry_id INTEGER REFERENCES journal_entries(id),account_id INTEGER,currency TEXT,debit INTEGER,credit INTEGER)');
-$db->exec('CREATE TABLE invoices(id INTEGER PRIMARY KEY,invoice_date TEXT,invoice_no TEXT)');
-$db->exec('CREATE TABLE invoice_payments(id INTEGER PRIMARY KEY,invoice_id INTEGER REFERENCES invoices(id),paid_on TEXT,amount INTEGER)');
+$db->exec('CREATE TABLE invoices(id INTEGER PRIMARY KEY,invoice_date TEXT,invoice_no TEXT,posted_entry INTEGER REFERENCES journal_entries(id))');
+$db->exec('CREATE TABLE invoice_payments(id INTEGER PRIMARY KEY,invoice_id INTEGER REFERENCES invoices(id),paid_on TEXT,amount INTEGER,entry_id INTEGER REFERENCES journal_entries(id))');
 zmPeriodSchema($db);
 $db->exec("INSERT INTO journal_entries VALUES(1,'TEST-1','2026-10-03')");
 $db->exec("INSERT INTO journal_lines VALUES(1,1,10,'IRR',10000,0),(2,1,20,'IRR',0,9900)");
@@ -39,13 +39,13 @@ rejected(fn()=>zmPeriodAction($db,'period_close','2026-10','Wrong role',2,'accou
 $ledgerDenied=false;
 try{$db->exec('UPDATE journal_lines SET credit=9998 WHERE id=2');}catch(PDOException $e){$ledgerDenied=true;}
 expect($ledgerDenied,'frozen_period_refuses_mutation');
-$db->exec("INSERT INTO invoices VALUES(1,'2026-09-03','LEGACY-INV')");
+$db->exec("INSERT INTO invoices(id,invoice_date,invoice_no) VALUES(1,'2026-09-03','LEGACY-INV')");
 $invoiceDenied=false;
-try{$db->exec("INSERT INTO invoices VALUES(2,'2026-10-11','BACKDATED')");}catch(PDOException $e){$invoiceDenied=true;}
+try{$db->exec("INSERT INTO invoices(id,invoice_date,invoice_no) VALUES(2,'2026-10-11','BACKDATED')");}catch(PDOException $e){$invoiceDenied=true;}
 expect($invoiceDenied,'frozen_invoice_blocked');
-$db->exec("INSERT INTO invoice_payments VALUES(1,1,'2026-11-02',100)");
+$db->exec("INSERT INTO invoice_payments(id,invoice_id,paid_on,amount) VALUES(1,1,'2026-11-02',100)");
 $paymentDenied=false;
-try{$db->exec("INSERT INTO invoice_payments VALUES(2,1,'2026-10-11',100)");}catch(PDOException $e){$paymentDenied=true;}
+try{$db->exec("INSERT INTO invoice_payments(id,invoice_id,paid_on,amount) VALUES(2,1,'2026-10-11',100)");}catch(PDOException $e){$paymentDenied=true;}
 expect($paymentDenied,'frozen_payment_blocked');
 zmPeriodAction($db,'period_close','2026-10','Manually reviewed evidence for synthetic data',2,'admin');
 expect($db->query("SELECT approved_by FROM zm_accounting_periods WHERE period_key='2026-10'")->fetchColumn()==2,'second_admin_approval');
