@@ -1,0 +1,72 @@
+name: Zomorod treasury private offline SQLite regression
+on:
+  push:
+    branches: [feature/zomorod-erp-treasury-offline-v7-20261029]
+    paths:
+      - "content/zomorod-business/treasury_control.php"
+      - "content/zomorod-business/treasury_ui.php"
+      - "content/zomorod-business/app.php"
+      - "scripts/zomorod_treasury_synthetic_qa.php"
+      - "scripts/zomorod_workflow_web_synthetic_qa.py"
+      - ".github/workflows/zomorod-treasury-offline-ci.yml"
+  pull_request:
+    paths:
+      - "content/zomorod-business/treasury_control.php"
+      - "content/zomorod-business/treasury_ui.php"
+      - "content/zomorod-business/app.php"
+      - "scripts/zomorod_treasury_synthetic_qa.php"
+      - "scripts/zomorod_workflow_web_synthetic_qa.py"
+permissions:
+  contents: read
+jobs:
+  pure-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, sqlite3, mbstring
+      - name: Test private treasury approval and baseline payroll in temporary SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -r 'exit(extension_loaded("pdo_sqlite")?0:2);'
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/treasury_control.php
+          php -l content/zomorod-business/treasury_ui.php
+          php scripts/zomorod_treasury_synthetic_qa.php
+          php scripts/zomorod_payroll_control_synthetic_qa.php
+          php scripts/zomorod_workflow_desk_synthetic_qa.php
+          python3 scripts/zomorod_workflow_web_synthetic_qa.py
+          echo "OFFLINE_TREASURY_AND_BASELINE=PASS"
+          echo "LIVE_BANK_OR_ACCOUNTING=NOT_TOUCHED"
+      - name: Build source-only treasury handoff with SHA-256 manifest
+        if: matrix.php == '8.3'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/treasury-handoff/content dist/treasury-handoff/scripts dist/treasury-handoff/docs
+          cp content/zomorod-business/treasury_control.php dist/treasury-handoff/content/
+          cp content/zomorod-business/treasury_ui.php dist/treasury-handoff/content/
+          cp scripts/zomorod_treasury_synthetic_qa.php dist/treasury-handoff/scripts/
+          cp scripts/zomorod_workflow_web_synthetic_qa.py dist/treasury-handoff/scripts/
+          cp docs/zomorod-treasury-v7-private-offline.md dist/treasury-handoff/docs/
+          (cd dist/treasury-handoff && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS && sha256sum --check --status SHA256SUMS)
+          tar -czf dist/zomorod-treasury-offline-v7.tar.gz -C dist treasury-handoff
+          tar -tzf dist/zomorod-treasury-offline-v7.tar.gz | grep -q 'treasury-handoff/SHA256SUMS'
+          echo "TREASURY_HANDOFF_SOURCE=VERIFIED"
+          echo "PRODUCTION_TRANSFER_READY=NO"
+      - name: Publish offline source bundle
+        if: matrix.php == '8.3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-treasury-offline-v7
+          path: dist/zomorod-treasury-offline-v7.tar.gz
+          if-no-files-found: error
+          retention-days: 14
