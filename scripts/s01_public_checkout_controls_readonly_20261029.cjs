@@ -3,7 +3,9 @@
 // clicks, submissions, cookies, payment calls, credentials or customer data.
 const fs = require('node:fs');
 const {chromium} = require('playwright');
-const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/product/879/'];
+const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/product/879/',
+  '/store/product/72/checkout/','/store/product/225/checkout/',
+  '/store/product/879/checkout/','/commerce/trx-easy/purchases/'];
 (async () => {
   const browser = await chromium.launch({headless:true});
   const rows = [];
@@ -20,13 +22,15 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
       try {
         for (const path of URLS) {
           const page = await context.newPage();
-          let http=0, error=null;
+          let http=0, error=null, finalPath=null;
           const jsErrors=[];
           page.on('pageerror', e => jsErrors.push((e.name||'JavaScriptError').slice(0,60)));
           try {
             const response=await page.goto('https://mojplaywin.com'+path,
               {waitUntil:'domcontentloaded',timeout:25000});
             http=response?.status()||0;
+            const final=new URL(page.url());
+            finalPath=final.origin==='https://mojplaywin.com'?final.pathname:'[external-redirect]';
           } catch(e) {error=(e.name||'NavigationError').slice(0,60);}
           const controls=await page.evaluate(() => [...document.querySelectorAll('button,a[href],input[type="submit"]')]
             .map(el=>{
@@ -51,7 +55,8 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
                 coveredBy:covered?{tag:hit.tagName,id:(hit.id||'').slice(0,60)}:null};
             }).filter(x=>/checkout|invoice|pay|buy|purchase|cart|فاکتور|پرداخت|خرید|سبد/i
               .test(x.name+' '+x.href)).slice(0,60));
-          rows.push({device:device.name,path,http,error,jsErrors,controls});
+          rows.push({device:device.name,path,http,finalPath,error,jsErrors,controls,
+            checkoutLinks:controls.filter(c=>/\/checkout\/$/.test(c.href||'')&&c.reasons.length===0).length});
           await page.close();
         }
       } finally {await context.close();}
@@ -60,7 +65,7 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
       checkedAt:new Date().toISOString(),ordersCreated:0,paymentsCreated:0,rows};
     fs.writeFileSync('s01-public-checkout-controls.json',JSON.stringify(report,null,2));
     console.log(JSON.stringify({schema:report.schema,rows:rows.map(x=>({
-      device:x.device,path:x.path,http:x.http,controls:x.controls.length,
+      device:x.device,path:x.path,http:x.http,finalPath:x.finalPath,checkoutLinks:x.checkoutLinks,controls:x.controls.length,
       disabled:x.controls.filter(c=>c.reasons.length).length,
       jsErrors:x.jsErrors.length,error:x.error
     }))}));
