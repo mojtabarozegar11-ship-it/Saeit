@@ -39,7 +39,7 @@ class StageGateTests(unittest.TestCase):
             for name, data in files.items():
                 z.writestr("ramadan-war/" + name, data)
             z.writestr("ramadan-war/preview-manifest.json", json.dumps({
-                "version": "G01-R24", "files": manifest_files
+                "version": "G01-R26", "files": manifest_files
             }))
 
     def test_valid_complete_manifest_is_review_only(self):
