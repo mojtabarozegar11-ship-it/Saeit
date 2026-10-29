@@ -116,7 +116,9 @@ def sqlite(path):
     if s["state"] != "PRESENT" or not s["is_file"]:
         return s
     try:
-        with open(path, "rb") as f:
+        # Fail closed on a swapped symlink leaf; never follow it to another file.
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+        with os.fdopen(os.open(path, flags), "rb") as f:
             header = f.read(16)
         return {**s, "sqlite_header_valid": header == b"SQLite format 3\0",
                 "integrity_check": "NOT_RUN"}
@@ -128,10 +130,19 @@ def indexed_targets(paths, reader):
     return {"target_" + str(i + 1): reader(path) for i, path in enumerate(paths)}
 
 def capture(args):
-    topo = command(["lsblk", "-b", "-J", "-o", "NAME,SIZE,FSTYPE,MOUNTPOINT,TYPE"])
+    # Device topology must not disclose private mountpoint paths in CI logs.
+    topo = command(["lsblk", "-b", "-J", "-o", "NAME,SIZE,FSTYPE,TYPE"])
     if topo["state"] == "OBSERVED":
         try:
-            topo = {"state": "OBSERVED", "devices": json.loads(topo["output"])}
+            # Defense in depth: strip unexpected path-bearing fields from JSON.
+            def scrub_device(node):
+                if isinstance(node, list):
+                    return [scrub_device(x) for x in node]
+                if isinstance(node, dict):
+                    return {k: scrub_device(v) for k, v in node.items()
+                            if k.lower() in {"blockdevices", "children", "name", "size", "fstype", "type"}}
+                return node
+            topo = {"state": "OBSERVED", "devices": scrub_device(json.loads(topo["output"]))}
         except ValueError:
             topo = {"state": "UNAVAILABLE", "error_class": "InvalidLsblkJson"}
     try:
