@@ -84,7 +84,7 @@ if(screen==='home'||screen==='heroes')return false;
 if(world&&!world.endless&&lastSavedSnapshot!==undefined&&storageRead(saveKey)!==lastSavedSnapshot){foreignSaveDetected=true;saveStatus='failed';if(!saveWarningShown){saveWarningShown=true;toast('ذخیره در برگهٔ دیگری تغییر کرده است؛ پشتیبان بگیرید و صفحه را بازخوانی کنید')}return false}
 if(foreignSaveDetected&&world&&!world.endless){saveStatus='failed';return false}const action=campaignSaveDisposition(world);if(action==='keep'){saveStatus=world?.endless?'survival':'not-saved';return false}if(action==='remove'){storageRemove(saveKey);saveStatus='not-saved';return true}try{const snapshot=JSON.stringify({...world,pickups:boundedCampaignPickups(world.pickups)});const ok=storageWrite(saveKey,snapshot)&&storageRead(saveKey)===snapshot;saveStatus=ok?'saved':'failed';if(ok){saveWarningShown=false;lastSavedSnapshot=snapshot}else if(!saveWarningShown){saveWarningShown=true;toast('ذخیرهٔ مرورگر غیرفعال است؛ از پیشرفت پشتیبان بگیرید')}return ok}catch(_){saveStatus='failed';if(!saveWarningShown){saveWarningShown=true;toast('ذخیرهٔ مرورگر ناموفق بود؛ از پیشرفت پشتیبان بگیرید')}return false}}
 function observeExternalCampaignSave(event){
-// localStorage.clear() emits key=null and must invalidate a previously saved campaign.
+// Clearing the browser storage emits key=null; invalidate the previous campaign snapshot.
 if(event.key!==saveKey&&!(event.key===null&&lastSavedSnapshot!==undefined))return false;
 if(event.key===saveKey&&event.newValue===lastSavedSnapshot)return false;
 foreignSaveDetected=true;if(world&&!world.endless){saveStatus='failed';toast('ذخیرهٔ کارزار در برگهٔ دیگری تغییر کرده است؛ از این برگه پشتیبان بگیرید و سپس صفحه را بازخوانی کنید')}return true}
