@@ -19,6 +19,11 @@ for(const f of ['studio_raha/index.html','taniya_studio/index.html']){
    assert.match(await page.locator('#runScore').textContent(),/Cleared: 0 \/ 8/);
    await page.locator('#gameStage button').first().click();
    assert.match(await page.locator('#runScore').textContent(),/Cleared: 0 \/ 8/,'tap is not a fake score');
+   await page.locator('#gameStage button').filter({hasText:'Pause ⏸'}).click();
+   const frozen=await page.locator('#runnerObstacle').evaluate(el=>el.style.left);
+   await page.waitForTimeout(220);
+   assert.equal(await page.locator('#runnerObstacle').evaluate(el=>el.style.left),frozen,'pause freezes the actual obstacle');
+   await page.locator('#gameStage button').filter({hasText:'Resume ▶'}).click();
    await page.waitForTimeout(850);
    await page.keyboard.press('Space');
    await page.waitForTimeout(700);
@@ -45,6 +50,13 @@ for(const f of ['studio_raha/index.html','taniya_studio/index.html']){
   await page.locator('.play[data-game="Cake Maker"]').click();
   assert.equal(await page.locator('#icing').inputValue(),'#0088ff','cake icing restored after reload');
   assert.match(await page.locator('#cakepreview').textContent(),/🌼.*🕯️🕯️/,'topping and candles restored');
+  await page.locator('[data-action="candle-remove"]').click();
+  assert.equal((await page.locator('#cakepreview').textContent()).match(/🕯️/g)?.length,1,'candle removal updates the visible cake');
+  const [revisedDownload]=await Promise.all([page.waitForEvent('download'),page.locator('[data-action="cake-download"]').click()]);
+  const revisedSvg=fs.readFileSync(await revisedDownload.path(),'utf8');
+  assert.equal((revisedSvg.match(/fill="#ffa322"/g)||[]).length,1,'download reflects removed candle');
+  await page.reload({waitUntil:'domcontentloaded'});await page.locator('.play[data-game="Cake Maker"]').click();
+  assert.equal((await page.locator('#cakepreview').textContent()).match(/🕯️/g)?.length,1,'removed candle stays removed after reload');
   await page.locator('[data-action="cake-reset"]').click();
   assert.equal(await page.evaluate(()=>localStorage.getItem('taniyaCakeDesign')),null,'reset clears saved cake');
   assert(!String(await page.locator('#cakepreview').textContent()).includes('🕯️'),'reset clears candles');
