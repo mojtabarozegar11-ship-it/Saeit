@@ -1,0 +1,124 @@
+name: Zomorod authenticated private command relay
+on:
+  workflow_dispatch:
+    inputs:
+      sealed_envelope:
+        description: Encrypted one-use command envelope
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-private-chat-command-inbox
+  cancel-in-progress: false
+jobs:
+  receive:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it' && github.ref == 'refs/heads/feature/zomorod-command-bridge-private-v4-20261029'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Authenticate owner and validate encrypted input
+        shell: bash
+        env:
+          EXPECTED_ACTOR: mojtabarozegar11-ship-it
+          EXPECTED_REF: refs/heads/feature/zomorod-command-bridge-private-v4-20261029
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTOR" = "$EXPECTED_ACTOR"
+          test "$GITHUB_REF" = "$EXPECTED_REF"
+          python3 - "$GITHUB_EVENT_PATH" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          try:
+              event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+              raw = event["inputs"]["sealed_envelope"]
+              envelope = json.loads(raw)
+              valid = (isinstance(raw, str) and 2 <= len(raw.encode("utf-8")) <= 24000
+                       and isinstance(envelope, dict)
+                       and set(envelope) == {"v", "alg", "ek", "iv", "ct", "mac"}
+                       and envelope.get("v") == 1
+                       and envelope.get("alg") == "RSA-OAEP-256+A256CBC-HS256")
+          except Exception:
+              valid = False
+          if not valid:
+              raise SystemExit("SEALED_COMMAND_REJECTED")
+          print("SEALED_COMMAND_ENVELOPE=VALID")
+          PY
+      - name: Establish pinned private SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_PRIVATE_RELAY=verified"
+      - name: Decrypt, authenticate, sign and queue the command privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          p="/home/zomorod2/.private/zomorod-business"
+          python3 - "$GITHUB_EVENT_PATH" <<'PY' | ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" saeit-cpanel "python3 -B '/home/zomorod2/.private/zomorod-business/company_ingress.py' accept --db '/home/zomorod2/.private/zomorod-business/command-center.sqlite3' --hmac-key '/home/zomorod2/.private/zomorod-business/.company-bridge.key' --recipient-key '/home/zomorod2/.private/zomorod-business/.chat-command-rsa.key'" > "$d/receipt.txt"
+          import json
+          import sys
+          from pathlib import Path
+          event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          sys.stdout.write(event["inputs"]["sealed_envelope"])
+          PY
+          grep -Fq "COMMAND_RECEIPT=ACCEPTED" "$d/receipt.txt"
+          grep -Fq "COMMAND_QUEUE=UPDATED" "$d/receipt.txt"
+          echo "PRIVATE_COMMAND_RECEIPT=ACCEPTED"
+          echo "PRIVATE_TASK_QUEUE=UPDATED"
+          echo "COMPANY_WORK_EXECUTION=NOT_PERFORMED"
+          echo "ROTATED_RECIPIENT_PUBLIC_KEY_BEGIN"
+          sed -n '/^COMMAND_PUBLIC_KEY_BEGIN$/,/^COMMAND_PUBLIC_KEY_END$/p' "$d/receipt.txt"
+          echo "ROTATED_RECIPIENT_PUBLIC_KEY_END"
+      - name: Remove temporary relay credentials and receipts
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-command-channel"
