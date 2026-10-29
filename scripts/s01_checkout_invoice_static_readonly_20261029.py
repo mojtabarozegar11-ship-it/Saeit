@@ -25,13 +25,36 @@ SELECTED = {
 }
 
 def read_regular(root, relative):
-    path = root / relative
-    if not path.is_relative_to(root):
-        raise RuntimeError("path escaped application")
-    info = path.lstat()
-    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > MAX_BYTES:
-        raise RuntimeError("nonregular, linked or oversized source")
-    return path.read_bytes()
+    """Open each component beneath the pinned root without following symlinks.
+
+    Descriptor-relative traversal prevents an intermediate directory symlink
+    (or a rename race) from redirecting this diagnostic into unrelated files.
+    """
+    rel = Path(relative)
+    if rel.is_absolute() or not rel.parts or any(part in ("..", ".") for part in rel.parts):
+        raise RuntimeError("source path must remain beneath application root")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_fd = os.open(root, directory_flags)
+    try:
+        for part in rel.parts[:-1]:
+            next_fd = os.open(part, directory_flags, dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_fd
+        file_fd = os.open(rel.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                          dir_fd=directory_fd)
+        try:
+            info = os.fstat(file_fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > MAX_BYTES:
+                raise RuntimeError("nonregular, linked or oversized source")
+            with os.fdopen(os.dup(file_fd), "rb") as stream:
+                data = stream.read(MAX_BYTES + 1)
+            if len(data) > MAX_BYTES:
+                raise RuntimeError("source grew beyond read budget")
+            return data
+        finally:
+            os.close(file_fd)
+    finally:
+        os.close(directory_fd)
 
 def function_signals(node):
     calls = []
