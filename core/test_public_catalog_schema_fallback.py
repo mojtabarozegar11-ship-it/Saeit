@@ -477,9 +477,12 @@ class PublicCatalogHealthyPathTests(SimpleTestCase):
         course_qs.filter.return_value = course_qs
         course_qs.order_by.return_value = course_qs
         course_qs.__getitem__.return_value = [course]
+        track_qs = MagicMock()
+        track_qs.order_by.return_value = track_qs
+        track_qs.__getitem__.return_value = [track]
         with (
             patch("core.academy_views.missing_public_tables", return_value=False),
-            patch("core.academy_views.EducationTrack.objects.filter", return_value=[track]) as track_query,
+            patch("core.academy_views.EducationTrack.objects.filter", return_value=track_qs) as track_query,
             patch("core.academy_views.EducationCourse.objects.filter", return_value=course_qs) as course_query,
             patch("core.academy_views.render", return_value=HttpResponse("healthy academy")) as render_mock,
         ):
@@ -491,6 +494,8 @@ class PublicCatalogHealthyPathTests(SimpleTestCase):
         self.assertEqual(context["tracks"][0]["key"], "agri")
         self.assertEqual(context["courses"], [course])
         track_query.assert_called_once_with(active=True)
+        track_qs.order_by.assert_called_once_with("sort_order", "pk")
+        track_qs.__getitem__.assert_called_once_with(slice(None, 100, None))
         course_query.assert_called_once_with(active=True, approved=True)
         course_qs.select_related.assert_called_once_with("track")
         course_qs.filter.assert_any_call(track__key="agri")
