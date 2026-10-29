@@ -19,10 +19,14 @@ REQUIRED = {
 POLICY_FLAGS = ("ownerApproved", "checkoutEnabled", "verifiedBackend")
 MAX_MEMBERS = 150
 MAX_UNCOMPRESSED = 65_000_000
+MAX_ARCHIVE_BYTES = 100_000_000
+MAX_MANIFEST_BYTES = 1_000_000
 
 
 def verify(package):
     package = Path(package)
+    if package.is_symlink() or not package.is_file() or package.stat().st_size > MAX_ARCHIVE_BYTES:
+        raise ValueError("UNSAFE_OR_OVERSIZED_ARCHIVE")
     with zipfile.ZipFile(package) as archive:
         members = archive.infolist()
         names = [item.filename for item in members]
@@ -53,6 +57,8 @@ def verify(package):
         }
         if not REQUIRED <= actual or PREFIX + "preview-manifest.json" not in names:
             raise ValueError("MISSING_REQUIRED_RUNTIME")
+        if archive.getinfo(PREFIX + "preview-manifest.json").file_size > MAX_MANIFEST_BYTES:
+            raise ValueError("OVERSIZED_MANIFEST")
         manifest = json.loads(archive.read(PREFIX + "preview-manifest.json"))
         if not isinstance(manifest, dict) or not re.fullmatch(
             r"G01-R[0-9]+(?:[._-][A-Za-z0-9]+)*", str(manifest.get("version", ""))
@@ -77,6 +83,11 @@ def verify(package):
             raise ValueError("MOJ1_DISABLED_SOURCE_FLAGS_MISSING")
         if not re.search(r"\bcontractAddress\s*:\s*null\b", policy):
             raise ValueError("MOJ1_CONTRACT_MUST_BE_NULL")
+    # Never buffer an untrusted ZIP in memory merely to calculate its digest.
+    digest = hashlib.sha256()
+    with package.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
     return {
         "schema": "s01-g01-stage-acceptance.v1",
         "status": "READY_FOR_REVIEW",
@@ -85,7 +96,7 @@ def verify(package):
         "deploy_authorized": False,
         "live_verified": False,
         "member_count": len(names),
-        "package_sha256": hashlib.sha256(package.read_bytes()).hexdigest(),
+        "package_sha256": digest.hexdigest(),
     }
 
 
