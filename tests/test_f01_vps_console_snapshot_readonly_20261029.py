@@ -161,6 +161,13 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(mod.classify_process_origin("bash", b"/bin/bash"), "shell")
         self.assertEqual(mod.classify_process_origin("bash", b"master-agent internal"), "master-agent")
 
+    def test_init_parented_fanout_is_explicit_not_misreported(self):
+        p = mod.dominant_parent_origin(1)
+        self.assertEqual(p["state"], "INIT_PARENT")
+        self.assertTrue(p["parent_is_init"])
+        self.assertEqual(p["depth_observed"], 0)
+        self.assertTrue(p["pid_argv_and_paths_redacted"])
+
     def test_dominant_parent_lineage_contains_no_pid_or_private_argv(self):
         p = mod.dominant_parent_origin(__import__("os").getpid())
         self.assertIn(p["state"], ("OBSERVED", "PARTIAL"))
