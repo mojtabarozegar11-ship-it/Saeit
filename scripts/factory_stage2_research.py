@@ -91,6 +91,17 @@ def record_once(path, value, conflict):
     return True
 
 
+def owner_held_sku879(order):
+    """Exact owner hold; never infer equality from an Atelier source kit."""
+    if not isinstance(order, dict):
+        return False
+    source = order.get("source_product_id")
+    return (source == 879
+            or (isinstance(source, str) and source.upper() in
+                {"879", "SKU879", "SKU-879", "MPW-879"})
+            or order.get("store_sku") in (879, "879"))
+
+
 def prioritize(packet):
     order = packet.get("work_order")
     if not isinstance(order, dict):
@@ -386,6 +397,7 @@ def stage2_loop(root, batch=100, only_order_id=None, excluded_orders=None):
         os.chmod(lock, 0o600)
         fcntl.flock(locked.fileno(), fcntl.LOCK_EX)
         candidates = []
+        held = 0
         for file in inbox.iterdir():
             # Stage 1 atomically writes a dot-prefixed temporary packet before
             # os.replace(). Ignore only that narrowly shaped in-flight name;
@@ -398,6 +410,12 @@ def stage2_loop(root, batch=100, only_order_id=None, excluded_orders=None):
             if file.is_symlink() or not file.is_file() or INBOX_FILE.fullmatch(file.name) is None:
                 raise RuntimeError("STAGE2_UNEXPECTED_INBOX_FILE:" + file.name)
             packet = read(file)
+            if owner_held_sku879(packet.get("work_order")):
+                # A legacy handoff may predate the stage-1 owner hold. Verify
+                # its receipt/hash before ignoring it; never delete or rewrite.
+                verified_stage1_packet(area, file.name)
+                held += 1
+                continue
             candidates.append((prioritize(packet), 1, file.name, packet))
         returns = area / "stage-02" / "return-inbox"
         directory(returns)
@@ -407,6 +425,9 @@ def stage2_loop(root, batch=100, only_order_id=None, excluded_orders=None):
             # Verify each return before ranking it; no unsourced return can override
             # original source order or bypass proven stage-2 research.
             packet, order = verified_return(area, file.name)
+            if owner_held_sku879(order):
+                held += 1
+                continue
             candidates.append((prioritize(packet), 0, file.name, packet))
         candidates.sort(key=lambda x: (x[0][0], x[1], x[0][1], x[0][2]))
         if only_order_id is not None:
@@ -461,6 +482,7 @@ def stage2_loop(root, batch=100, only_order_id=None, excluded_orders=None):
                 invalid += 1
         counters = {
             "schema": RESEARCH_SCHEMA, "stage": 2, "input_packet_count": total,
+            "owner_held_sku879_packets_skipped": held,
             "newly_completed_research_dossiers": completed,
             "newly_documented_missing_sources": missing,
             "blocked_invalid_inputs": invalid,
