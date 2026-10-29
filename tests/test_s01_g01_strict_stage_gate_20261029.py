@@ -49,6 +49,12 @@ class StageGateTests(unittest.TestCase):
         self.assertFalse(result["deploy_authorized"])
         self.assertFalse(result["live_verified"])
 
+    def test_r26_navigation_runtime_is_mandatory_even_with_valid_manifest(self):
+        self.files.pop("objective-navigation.mjs")
+        self.build()
+        with self.assertRaisesRegex(ValueError, "MISSING_REQUIRED_RUNTIME"):
+            gate.verify(self.path)
+
     def test_manifest_must_cover_every_runtime_asset(self):
         self.build(omit_manifest_name="game.js")
         with self.assertRaisesRegex(ValueError, "MANIFEST_COVERAGE_MISMATCH"):
