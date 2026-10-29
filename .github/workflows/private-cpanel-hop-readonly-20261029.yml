@@ -1,0 +1,74 @@
+name: One-shot pinned VPS to cPanel route verification
+on:
+  push:
+    branches: [diagnostics/ssh-relay-flapping-20261029]
+    paths: [.github/workflows/private-cpanel-hop-readonly-20261029.yml]
+permissions:
+  contents: read
+jobs:
+  hop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Verify existing VPS and cPanel SSH identities and read-only login
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/private-cpanel-hop"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          for variable in VPS_KEY HOST_KEY; do
+            p="$d/$variable.key"
+            printf '%s' "${!variable}" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$p"
+            chmod 600 "$p"
+            ssh-keygen -y -P "" -f "$p" >/dev/null
+          done
+          for attempt in 1 2 3 4 5 6; do
+            ssh-keyscan -T 8 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null || true
+            if test -s "$d/vps.known"; then break; fi
+            echo "VPS_KEYSCAN_RETRY=$attempt"
+            sleep 4
+          done
+          test -s "$d/vps.known" || exit 1
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' || exit 2
+          cat > "$d/config" <<EOF
+          Host relay-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host relay-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ConnectionAttempts 2
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan=""
+          for attempt in 1 2 3 4; do
+            scan="$(timeout 40s ssh -F "$d/config" relay-vps 'timeout 12s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null || true)"
+            if test -n "$scan"; then break; fi
+            echo "CPANEL_KEYSCAN_VIA_VPS_RETRY=$attempt"
+            sleep 5
+          done
+          test -n "$scan" || { echo 'CPANEL_HOP_KEYSCAN=UNAVAILABLE'; exit 1; }
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' || { echo 'CPANEL_HOST_IDENTITY=MISMATCH_STOP'; exit 2; }
+          echo 'CPANEL_HOST_IDENTITY=PINNED'
+          timeout 90s ssh -F "$d/config" relay-cpanel 'test "$(id -un)" = zomorod2 && echo CPANEL_AUTH_LOGIN=SUCCESS && test -d /home/zomorod2/Saeit-staging && echo CPANEL_STAGING_DIRECTORY=PRESENT'
