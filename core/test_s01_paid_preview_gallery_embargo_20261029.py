@@ -106,6 +106,18 @@ class GalleryTargetSafetyTests(SimpleTestCase):
             with self.subTest(path=unsafe):
                 self.assertEqual(safe(unsafe), "")
 
+    def test_percent_encoded_network_paths_and_traversal_fail_closed(self):
+        safe = company_content_views.safe_gallery_target_path
+        for unsafe in (
+            "/%2fexternal.invalid/path", "/%252fexternal.invalid/path",
+            "/company/%2e%2e/admin/", "/company/%252e%252e/admin/",
+            "/company/%5cexternal.invalid", "/company/%0dheader",
+        ):
+            with self.subTest(path=unsafe):
+                self.assertEqual(safe(unsafe), "")
+        self.assertEqual(safe("/company/projects/?q=%2F"), "/company/projects/?q=%2F")
+        self.assertEqual(safe("/research/projects/#details"), "/research/projects/#details")
+
     def test_gallery_view_sets_only_safe_target_for_template(self):
         item = SimpleNamespace(target_path="//outside.invalid")
         queryset = MagicMock()
