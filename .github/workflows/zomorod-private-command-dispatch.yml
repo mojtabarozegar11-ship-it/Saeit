@@ -1,0 +1,318 @@
+name: Zomorod authenticated private command relay
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Read the current recipient public key or accept one encrypted command
+        required: true
+        type: choice
+        options:
+          - show_public_key
+          - accept
+          - check_receipt_window
+          - diagnose_vps
+          - diagnose_cpanel_direct
+      sealed_envelope:
+        description: Encrypted one-use command envelope (required for accept)
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-private-chat-command-inbox
+  cancel-in-progress: false
+jobs:
+  receive:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it' && github.ref == 'refs/heads/feature/zomorod-command-bridge-private-v4-20261029'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Authenticate owner and validate encrypted input
+        shell: bash
+        env:
+          EXPECTED_ACTOR: mojtabarozegar11-ship-it
+          EXPECTED_REF: refs/heads/feature/zomorod-command-bridge-private-v4-20261029
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTOR" = "$EXPECTED_ACTOR"
+          test "$GITHUB_REF" = "$EXPECTED_REF"
+          python3 - "$GITHUB_EVENT_PATH" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          inputs = event.get("inputs", {})
+          if inputs.get("operation") not in ("show_public_key", "accept", "check_receipt_window", "diagnose_vps", "diagnose_cpanel_direct"):
+              raise SystemExit("OPERATION_REJECTED")
+          if inputs["operation"] == "accept":
+              try:
+                  raw = inputs["sealed_envelope"]
+                  envelope = json.loads(raw)
+                  valid = (isinstance(raw, str) and 2 <= len(raw.encode("utf-8")) <= 24000
+                           and isinstance(envelope, dict)
+                           and set(envelope) == {"v", "alg", "ek", "iv", "ct", "mac"}
+                           and envelope.get("v") == 1
+                           and envelope.get("alg") == "RSA-OAEP-256+A256CBC-HS256")
+              except Exception:
+                  valid = False
+              if not valid:
+                  raise SystemExit("SEALED_COMMAND_REJECTED")
+              print("SEALED_COMMAND_ENVELOPE=VALID")
+          elif inputs["operation"] == "show_public_key":
+              print("PUBLIC_KEY_REQUEST=AUTHORIZED")
+          else:
+              print("RECEIPT_CHECK=AUTHORIZED")
+          PY
+      - name: Establish pinned private SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/control-%C
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          if test "$OPERATION" = "diagnose_cpanel_direct"; then
+            # Probe the replacement 30GB host directly, without using the VPS hop.
+            # No writes, no secret output, pinned host key, single bounded attempt.
+            if timeout 25s ssh -F "$d/config" -o ProxyJump=none -o ControlMaster=no -o ConnectTimeout=10 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null; then
+              echo 'CPANEL30GB_DIRECT=AUTHENTICATED'
+            else
+              echo 'CPANEL30GB_DIRECT=UNAVAILABLE'
+              exit 1
+            fi
+            exit 0
+          fi
+          if test "$OPERATION" = "diagnose_vps"; then
+            # Only a bounded, read-only direct SSH inspection. No cPanel connection or data writes.
+            vps_diagnostic_ok=0
+            for attempt in 1 2 3; do
+              if timeout 35s ssh -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=1 saeit-vps 'bash -s' <<'VPS_READONLY'
+          set -eu
+          test "$(id -un)" = "githubops"
+          echo 'VPS_SSH_HOP=AUTHENTICATED'
+          if command -v systemctl >/dev/null 2>&1 && { systemctl is-active --quiet ssh || systemctl is-active --quiet sshd; }; then
+            echo 'SSHD_SERVICE=ACTIVE'
+          else
+            echo 'SSHD_SERVICE=NOT_CONFIRMED'
+          fi
+          if command -v ss >/dev/null 2>&1 && ss -H -ltn 2>/dev/null | awk '$4 ~ /:22$/ {found=1} END {exit !found}'; then
+            echo 'SSHD_PORT22_LISTENER=PRESENT'
+          else
+            echo 'SSHD_PORT22_LISTENER=NOT_CONFIRMED'
+          fi
+          if command -v fail2ban-client >/dev/null 2>&1; then
+            echo 'FAIL2BAN_CLIENT=INSTALLED'
+          else
+            echo 'FAIL2BAN_CLIENT=NOT_INSTALLED'
+          fi
+          if test -r /etc/ssh/sshd_config && grep -Eiq '^[[:space:]]*MaxStartups[[:space:]]' /etc/ssh/sshd_config; then
+            echo 'MAXSTARTUPS_OVERRIDE=PRESENT'
+          else
+            echo 'MAXSTARTUPS_OVERRIDE=NOT_VISIBLE'
+          fi
+          if command -v journalctl >/dev/null 2>&1 && journalctl -u ssh -u sshd --since '2026-10-29 14:30:00 UTC' --until '2026-10-29 14:40:00 UTC' --no-pager -q -o cat 2>/dev/null | grep -Eiq 'MaxStartups|PerSourcePenalties|drop connection|kex_exchange_identification'; then
+            echo 'SSHD_1433Z_RATE_LIMIT_LOG=FOUND'
+          else
+            echo 'SSHD_1433Z_RATE_LIMIT_LOG=NOT_VISIBLE'
+          fi
+          if sudo -n true >/dev/null 2>&1; then
+            echo 'VPS_SUDO_READONLY=AVAILABLE'
+            if test -x /usr/sbin/sshd; then
+              sudo -n /usr/sbin/sshd -T 2>/dev/null | awk '
+                $1 == "maxstartups" {print "SSHD_EFFECTIVE_MAXSTARTUPS=" $2}
+                $1 == "persourcemaxstartups" {print "SSHD_EFFECTIVE_PER_SOURCE_MAX=" $2}
+                $1 == "persourcepenalties" {print "SSHD_EFFECTIVE_PER_SOURCE_PENALTIES=" $2}
+              ' || true
+            fi
+            if command -v journalctl >/dev/null 2>&1; then
+              count="$(sudo -n journalctl -u ssh -u sshd --since '2026-10-29 14:00:00 UTC' --until '2026-10-29 15:10:00 UTC' --no-pager -q -o cat 2>/dev/null | grep -Eic 'MaxStartups|PerSourcePenalties|drop connection|refused connect|kex_exchange_identification' || true)"
+              case "$count" in ''|*[!0-9]*) count='UNAVAILABLE';; esac
+              echo "SSHD_REJECTION_PATTERN_COUNT=$count"
+            fi
+          else
+            echo 'VPS_SUDO_READONLY=UNAVAILABLE'
+          fi
+          VPS_READONLY
+              then
+                vps_diagnostic_ok=1
+                break
+              fi
+              echo "VPS_DIAGNOSTIC_CONNECT_FAILED_ATTEMPT=$attempt"
+              if test "$attempt" -lt 3; then sleep 7; fi
+            done
+            test "$vps_diagnostic_ok" = 1 || { echo 'VPS_DIAGNOSTIC_UNAVAILABLE'; exit 1; }
+            echo 'VPS_DIAGNOSTIC=READ_ONLY_COMPLETED'
+            exit 0
+          fi
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 3; then sleep 12; fi
+          done
+          test "$session_ready" = 1 || { echo 'PINNED_30GB_RELAY_UNAVAILABLE'; exit 1; }
+          echo 'PINNED_SESSION=AUTHENTICATED'
+      - name: Read the current recipient public key
+        if: inputs.operation == 'show_public_key'
+        shell: bash
+        run: |
+          set -euo pipefail
+          p="/home/zomorod2/.private/zomorod-business"
+          key_read_ok=0
+          for attempt in 1 2 3 4; do
+            if timeout 75s ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" -o ConnectTimeout=15 -o ConnectionAttempts=2 saeit-cpanel "python3 -B '$p/company_ingress.py' show-public-key --db '$p/command-center.sqlite3' --hmac-key '$p/.company-bridge.key' --recipient-key '$p/.chat-command-rsa.key'" > "$RUNNER_TEMP/recipient-key.txt"; then
+              if grep -Fq -- "-----BEGIN PUBLIC KEY-----" "$RUNNER_TEMP/recipient-key.txt" && grep -Fq -- "-----END PUBLIC KEY-----" "$RUNNER_TEMP/recipient-key.txt"; then
+                key_read_ok=1
+                break
+              fi
+            fi
+            echo "READ_ONLY_PUBLIC_KEY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 4; then sleep 6; fi
+          done
+          test "$key_read_ok" = 1 || { echo 'READ_ONLY_PUBLIC_KEY_UNAVAILABLE'; exit 1; }
+          echo "CURRENT_RECIPIENT_PUBLIC_KEY_BEGIN"
+          sed -n '/^-----BEGIN PUBLIC KEY-----$/,/^-----END PUBLIC KEY-----$/p' "$RUNNER_TEMP/recipient-key.txt"
+          echo "CURRENT_RECIPIENT_PUBLIC_KEY_END"
+      - name: Reconcile the prior receipt window without reading task contents
+        if: inputs.operation == 'check_receipt_window'
+        shell: bash
+        run: |
+          set -euo pipefail
+          p="/home/zomorod2/.private/zomorod-business/command-center.sqlite3"
+          ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" saeit-cpanel "python3 -B - '$p'" <<'PY'
+          import sqlite3
+          import sys
+          from pathlib import Path
+
+          uri = Path(sys.argv[1]).as_uri() + "?mode=ro"
+          start, end = 1793268780, 1793268790
+          try:
+              with sqlite3.connect(uri, uri=True, timeout=5) as db:
+                  exists = db.execute(
+                      "SELECT 1 FROM sqlite_master WHERE type='table' AND name='bridge_receipts'"
+                  ).fetchone()
+                  if not exists:
+                      print("PRIVATE_RECEIPT_WINDOW=EMPTY")
+                  else:
+                      count = db.execute(
+                          "SELECT COUNT(*) FROM bridge_receipts WHERE accepted_at BETWEEN ? AND ?",
+                          (start, end),
+                      ).fetchone()[0]
+                      print("PRIVATE_RECEIPT_WINDOW=" + ("NONEMPTY" if count else "EMPTY"))
+          except sqlite3.Error:
+              print("PRIVATE_RECEIPT_WINDOW=UNAVAILABLE")
+              raise SystemExit(2)
+          PY
+      - name: Decrypt, authenticate, sign and queue the command privately
+        if: inputs.operation == 'accept'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          p="/home/zomorod2/.private/zomorod-business"
+          python3 - "$GITHUB_EVENT_PATH" <<'PY' | ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" saeit-cpanel "python3 -B '/home/zomorod2/.private/zomorod-business/company_ingress.py' accept --db '/home/zomorod2/.private/zomorod-business/command-center.sqlite3' --hmac-key '/home/zomorod2/.private/zomorod-business/.company-bridge.key' --recipient-key '/home/zomorod2/.private/zomorod-business/.chat-command-rsa.key'" > "$d/receipt.txt"
+          import json
+          import sys
+          from pathlib import Path
+          event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          sys.stdout.write(event["inputs"]["sealed_envelope"])
+          PY
+          grep -Fq "COMMAND_RECEIPT=ACCEPTED" "$d/receipt.txt"
+          grep -Fq "COMMAND_QUEUE=UPDATED" "$d/receipt.txt"
+          echo "PRIVATE_COMMAND_RECEIPT=ACCEPTED"
+          echo "PRIVATE_TASK_QUEUE=UPDATED"
+          echo "COMPANY_WORK_EXECUTION=NOT_PERFORMED"
+          ssh -F "$d/config" saeit-cpanel "python3 -B '$p/company_ingress.py' show-public-key --db '$p/command-center.sqlite3' --hmac-key '$p/.company-bridge.key' --recipient-key '$p/.chat-command-rsa.key'" > "$d/recipient-key.txt"
+          grep -Fq -- "-----BEGIN PUBLIC KEY-----" "$d/recipient-key.txt"
+          grep -Fq -- "-----END PUBLIC KEY-----" "$d/recipient-key.txt"
+          echo "ROTATED_RECIPIENT_PUBLIC_KEY_BEGIN"
+          sed -n '/^-----BEGIN PUBLIC KEY-----$/,/^-----END PUBLIC KEY-----$/p' "$d/recipient-key.txt"
+          echo "ROTATED_RECIPIENT_PUBLIC_KEY_END"
+      - name: Remove temporary relay credentials and receipts
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          if test -f "$d/config"; then
+            ssh -F "$d/config" -O exit saeit-cpanel >/dev/null 2>&1 || true
+          fi
+          rm -rf "$d" "$RUNNER_TEMP/recipient-key.txt"

@@ -1,0 +1,44 @@
+name: Zomorod 30GB cPanel one-time direct SSH proof
+on:
+  push:
+    branches:
+      - feature/zomorod-command-bridge-private-v4-20261029
+    paths:
+      - .github/workflows/zomorod-30gb-direct-probe-20261029.yml
+permissions:
+  contents: read
+jobs:
+  read_only_direct:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/zomorod-command-bridge-private-v4-20261029'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Check direct SSH access to replacement 30GB cPanel
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel30-direct"
+          install -d -m 700 "$d"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/id"
+          chmod 600 "$d/id"
+          ssh-keygen -y -P "" -f "$d/id" >/dev/null
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/known"
+          fp="$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}')"
+          test "$fp" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          echo 'CPANEL30GB_HOST_KEY=PINNED'
+          if timeout 26s ssh -p 1396 -i "$d/id" -o UserKnownHostsFile="$d/known" -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 -o ConnectionAttempts=1 -o ServerAliveInterval=6 -o ServerAliveCountMax=2 -o RequestTTY=no -o ForwardAgent=no zomorod2@178.239.147.125 'test "$(id -un)" = "zomorod2"'; then
+            echo 'CPANEL30GB_DIRECT_SSH=AUTHENTICATED'
+          else
+            echo 'CPANEL30GB_DIRECT_SSH=UNAVAILABLE'
+            exit 1
+          fi
+          if timeout 12s ssh -p 1396 -i "$d/id" -o UserKnownHostsFile="$d/known" -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=1 -o RequestTTY=no -o ForwardAgent=no zomorod2@178.239.147.125 'test -r /home/zomorod2/.private/zomorod-business/company_ingress.py'; then
+            echo 'CPANEL30GB_PRIVATE_INBOX=READABLE'
+          else
+            echo 'CPANEL30GB_PRIVATE_INBOX=NOT_CONFIRMED'
+          fi
+          echo 'CPANEL30GB_DIRECT_PROBE=READ_ONLY_COMPLETED'

@@ -1,0 +1,157 @@
+name: Zomorod private CLI command bridge guarded installation
+on:
+  push:
+    branches: [feature/zomorod-command-bridge-private-v4-20261029]
+    paths: [".github/workflows/zomorod-company-bridge-v4-private-install.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-private-company-command-bridge-install
+  cancel-in-progress: false
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify isolated cryptographic and replay regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_company_private_bridge_v4.py
+          python3 scripts/test_zomorod_company_private_bridge_v4.py
+      - name: Connect through pinned VPS to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_PRIVATE_RELAY=verified"
+
+
+
+
+      - name: Preflight actual private management installation without any writes to company data
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          expected="$(sha256sum content/zomorod-business/command_center.php | awk '{print $1}')"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" "$expected" <<'REMOTE'
+          set -euo pipefail
+          p="$HOME/.private/zomorod-business"
+          stage="$HOME/.backups/zomorod-business-command-bridge/$1-$2"
+          fail(){ echo "BRIDGE_PRIVATE_INSTALL_REFUSED=$1";exit 41; }
+          test -d "$p" && test ! -L "$p" || fail missing_private_directory
+          test -f "$p/management.sqlite3" && test ! -L "$p/management.sqlite3" || fail missing_accounting_db
+          test -f "$p/app.php" && test ! -L "$p/app.php" || fail missing_private_app
+          test -f "$p/command_center.php" && test ! -L "$p/command_center.php" || fail missing_command_center
+          test -f "$p/command_planner.php" && test ! -L "$p/command_planner.php" || fail missing_planner
+          test "$(sha256sum "$p/command_center.php" | awk '{print $1}')" = "$3" || fail module_hash_mismatch
+          test ! -e "$p/company_bridge.py" && test ! -L "$p/company_bridge.py" || fail bridge_already_installed
+          test ! -e "$p/.company-bridge.key" && test ! -L "$p/.company-bridge.key" || fail existing_key_needs_review
+          test ! -e "$stage" || fail duplicate_stage
+          command -v python3 >/dev/null || fail missing_python3
+          mkdir -p "$(dirname "$stage")"
+          mkdir -m 700 "$stage"
+          sha256sum "$HOME/public_html/index.html" "$HOME/public_html/.htaccess" > "$stage/public-checksums.sha256"
+          echo "PRIVATE_BRIDGE_PREFLIGHT=PASS"
+          REMOTE
+          target="/home/zomorod2/.backups/zomorod-business-command-bridge/$GITHUB_SHA-$GITHUB_RUN_ID"
+          tar -cf - -C scripts zomorod_company_private_bridge_v4.py |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$target'"
+      - name: Install dormant CLI bridge and provision private signer key solely on cPanel
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          sha="$1"
+          p="$HOME/.private/zomorod-business"
+          stage="$HOME/.backups/zomorod-business-command-bridge/$1-$2"
+          script="$p/company_bridge.py"
+          key="$p/.company-bridge.key"
+          test -f "$stage/zomorod_company_private_bridge_v4.py"
+          test ! -e "$script" && test ! -e "$key"
+          python3 -m py_compile "$stage/zomorod_company_private_bridge_v4.py"
+          install -m 600 "$stage/zomorod_company_private_bridge_v4.py" "$script.next-$sha"
+          installed=0;provisioned=0
+          rollback(){
+            if test "$installed" = 1; then rm -f "$script"; fi
+            if test "$provisioned" = 1; then rm -f "$key"; fi
+            rm -f "$script.next-$sha"
+            echo "BRIDGE_PRIVATE_INSTALL_ROLLBACK=APPLIED"
+          }
+          finish(){ result=$?;trap - EXIT;if test "$result" -ne 0;then rollback;fi;exit "$result"; }
+          trap finish EXIT
+          mv -f "$script.next-$sha" "$script";installed=1
+          python3 "$script" --db "$p/command-center.sqlite3" --key "$key" init-key
+          provisioned=1
+          test -f "$key" && test ! -L "$key"
+          test "$(stat -c %a "$key")" = 600
+          test "$(stat -c %a "$script")" = 600
+          cmp -s "$script" "$stage/zomorod_company_private_bridge_v4.py"
+          if test -f "$p/command-center.sqlite3" && test ! -L "$p/command-center.sqlite3";then
+            python3 "$script" --db "$p/command-center.sqlite3" --key "$key" status
+          else
+            echo "BRIDGE_COMMAND_DB=NOT_YET_INITIALIZED_BY_AUTHORIZED_OWNER"
+          fi
+          status="$(curl -sS -L --max-time 25 -o "$stage/public-login.html" -w '%{http_code}' "https://zomorodmelal.ir/business/?page=command_center&bridgecheck=$sha")"
+          test "$status" = 200
+          grep -Fq "ورود مدیر و حسابدار" "$stage/public-login.html"
+          ! grep -Fq "صف وظایف ماندگار" "$stage/public-login.html"
+          sha256sum -c --status "$stage/public-checksums.sha256"
+          trap - EXIT
+          echo "PRIVATE_BRIDGE_INSTALLED=DORMANT_CLI_ONLY"
+          echo "SECRET_EXPOSURE=NONE"
+          echo "CHATGPT_SIGNER=NOT_CONNECTED"
+          echo "SCHEDULED_AUTOMATION=NOT_CREATED"
+          echo "ACCOUNTING_DATABASE=UNCHANGED"
+          REMOTE
+      - name: Remove temporary SSH relay credentials from runner
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-business-tokenless"

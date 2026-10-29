@@ -1,0 +1,24 @@
+name: Zomorod encrypted private command ingress security
+on:
+  push:
+    branches: [feature/zomorod-command-bridge-private-v4-20261029]
+    paths:
+      - "scripts/zomorod_company_private_ingress_v1.py"
+      - "scripts/test_zomorod_company_private_ingress_v1.py"
+      - ".github/workflows/zomorod-company-bridge-v4-ingress-tests.yml"
+  pull_request:
+    paths:
+      - "scripts/zomorod_company_private_ingress_v1.py"
+      - "scripts/test_zomorod_company_private_ingress_v1.py"
+permissions:
+  contents: read
+jobs:
+  crypto-and-queue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check ingress and bridge syntax
+        run: python3 -m py_compile scripts/zomorod_company_private_ingress_v1.py scripts/zomorod_company_private_bridge_v4.py
+      - name: Exercise recipient encryption, HMAC, tamper rejection and private task queue
+        run: python3 -B -m unittest -v scripts/test_zomorod_company_private_ingress_v1.py scripts/test_zomorod_company_private_bridge_v4.py

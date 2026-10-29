@@ -1,0 +1,109 @@
+name: Zomorod 30GB cPanel via VPS bounded read-only relay proof
+on:
+  push:
+    branches:
+      - feature/zomorod-command-bridge-private-v4-20261029
+    paths:
+      - .github/workflows/zomorod-30gb-via-vps-probe-20261029.yml
+permissions:
+  contents: read
+jobs:
+  relay_probe:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/zomorod-command-bridge-private-v4-20261029'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify pinned two-hop SSH and private inbox without writing
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-via-vps"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/cpanel.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/cpanel.key" >/dev/null
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/cpanel.known"
+          vpsfp="$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}')"
+          hostfp="$(ssh-keygen -lf "$d/cpanel.known" -E sha256 | awk '{print $2}')"
+          test "$vpsfp" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          test "$hostfp" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          echo 'TWO_HOP_HOST_KEYS=PINNED'
+          printf '%s\n' \
+            'Host saeit-vps' \
+            '  HostName 178.239.147.150' \
+            '  User githubops' \
+            '  Port 22' \
+            "  IdentityFile $d/vps.key" \
+            "  UserKnownHostsFile $d/vps.known" \
+            'Host saeit-cpanel' \
+            '  HostName 178.239.147.125' \
+            '  User zomorod2' \
+            '  Port 1396' \
+            "  IdentityFile $d/cpanel.key" \
+            "  UserKnownHostsFile $d/cpanel.known" \
+            '  ProxyJump saeit-vps' \
+            '  ControlMaster auto' \
+            "  ControlPath $d/control-%C" \
+            '  ControlPersist 120' \
+            'Host *' \
+            '  StrictHostKeyChecking yes' \
+            '  IdentitiesOnly yes' \
+            '  BatchMode yes' \
+            '  ConnectTimeout 25' \
+            '  ConnectionAttempts 1' \
+            '  ServerAliveInterval 7' \
+            '  ServerAliveCountMax 2' \
+            '  RequestTTY no' \
+            '  ForwardAgent no' > "$d/config"
+          chmod 600 "$d/config"
+          ok=0
+          for attempt in 1 2 3; do
+            if timeout 55s ssh -F "$d/config" saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py'; then
+              ok=1
+              echo "TWO_HOP_READ_ONLY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "TWO_HOP_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 3; then sleep 12; fi
+          done
+          test "$ok" = 1 || { echo 'TWO_HOP_READ_ONLY=UNAVAILABLE'; exit 1; }
+          echo 'CPANEL30GB_PRIVATE_INBOX=READABLE'
+          # Verify the real command-center application responds without exposing the key.
+          p="/home/zomorod2/.private/zomorod-business"
+          if timeout 45s ssh -F "$d/config" saeit-cpanel "python3 -B '$p/company_ingress.py' show-public-key --db '$p/command-center.sqlite3' --hmac-key '$p/.company-bridge.key' --recipient-key '$p/.chat-command-rsa.key'" > "$d/key.out"; then
+            if grep -Fq -- '-----BEGIN PUBLIC KEY-----' "$d/key.out" && grep -Fq -- '-----END PUBLIC KEY-----' "$d/key.out"; then
+              echo 'PRIVATE_INGRESS_PUBLIC_KEY_API=READ_ONLY_OK'
+            else
+              echo 'PRIVATE_INGRESS_PUBLIC_KEY_API=INVALID_RESPONSE'
+              exit 1
+            fi
+          else
+            echo 'PRIVATE_INGRESS_PUBLIC_KEY_API=UNAVAILABLE'
+            exit 1
+          fi
+          # Read the private receipt database in SQLite read-only mode.
+          timeout 35s ssh -F "$d/config" saeit-cpanel "python3 -B - '$p/command-center.sqlite3'" <<'PY'
+          import sqlite3
+          import sys
+          from pathlib import Path
+          target = Path(sys.argv[1])
+          if not target.is_file():
+              print("PRIVATE_RECIPT_DB=NOT_FOUND")
+              raise SystemExit(2)
+          with sqlite3.connect(target.as_uri() + "?mode=ro", uri=True, timeout=5) as db:
+              db.execute("PRAGMA query_only=ON")
+              db.execute("SELECT 1").fetchone()
+              print("PRIVATE_RECIPT_DB=READ_ONLY_OK")
+              exists = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bridge_receipts'").fetchone()
+              print("PRIVATE_RECEIPTS_TABLE=" + ("PRESENT" if exists else "ABSENT"))
+          PY
+          echo 'PRIVATE_CONTROL_CENTER=READ_ONLY_VERIFIED'
+          echo 'TWO_HOP_READ_ONLY=COMPLETED'
