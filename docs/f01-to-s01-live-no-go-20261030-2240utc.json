@@ -1,0 +1,32 @@
+{
+  "schema": "f01-to-s01-release-resource-no-go.v2",
+  "owner": "F-01",
+  "recipient": "S-01",
+  "source_run": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40967277997",
+  "observed_utc": "2026-10-29T22:40:44.986206+00:00",
+  "source_ci_at_observation": "56 offline tests passed; subsequent changes require exact-head CI",
+  "resource_snapshot": {
+    "root_available_unprivileged_bytes": 0,
+    "root_free_including_reserved_bytes": 2158596096,
+    "guest_vcpu": 3,
+    "loadavg_1min": 153.02,
+    "guest_memtotal_kib": 4030372,
+    "guest_memavailable_kib": 193256,
+    "d_state_processes": 134,
+    "factory_process_name_matches": 397,
+    "init_parent_shell_matches": 142,
+    "cron_factory_per_minute_entries": 3,
+    "queue_entries_at_least": 69,
+    "worker_live_receipt": false,
+    "offhost_restore_verified": false
+  },
+  "safe_action": "NO_GO for shared staging/production deploy, cron mutation, worker start, restart or cleanup; S-owned site source untouched.",
+  "f_owned_changes": [
+    "ce5a8fac1ce10af9b1d870de0e8df248501a11b9",
+    "08d7abb474f351b4061ffcb07f35411849161b6b",
+    "7ac7acc32d702ba4fce7f751ae2a469f5db1ac32"
+  ],
+  "acceptance": "S-01 must independently verify off-host backup restore, resource capacity, exact-head CI and site rollback before its own deployment.",
+  "sku879": "EXCLUDED_FROM_FACTORY; no queue/cron changes",
+  "sku72_225": "UNCHANGED_PRODUCTION_CONTENT"
+}
