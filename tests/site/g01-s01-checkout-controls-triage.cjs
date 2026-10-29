@@ -13,12 +13,16 @@ const {chromium}=require('playwright');
    await ctx.route('**/*',route=>route.request().method()==='GET'?route.continue():route.abort('blockedbyclient'));
    try{
     for(const slug of ['/store/','/store/product/72/','/store/product/225/','/store/product/879/']){
-     const page=await ctx.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message.slice(0,180)));
+     const page=await ctx.newPage(),errors=[];page.on('pageerror',e=>errors.push((e.name||'JavaScriptError').slice(0,80)));
      let response=null,error=null;
      try{response=await page.goto('https://mojplaywin.com'+slug,{waitUntil:'domcontentloaded',timeout:35000})}catch(e){error=String(e.message).slice(0,180)}
      const controls=await page.evaluate(()=>[...document.querySelectorAll('button,a[href],input[type=submit]')].map(el=>{
       const rect=el.getBoundingClientRect(),style=getComputedStyle(el),name=(el.getAttribute('aria-label')||el.innerText||el.value||'').trim().slice(0,80);
-      return {tag:el.tagName,id:(el.id||'').slice(0,80),name,href:el.tagName==='A'?(el.getAttribute('href')||'').slice(0,160):null,disabled:!!el.disabled,ariaDisabled:el.getAttribute('aria-disabled'),visible:rect.width>0&&rect.height>0&&style.visibility!=='hidden'&&style.display!=='none',pointerEvents:style.pointerEvents,tabIndex:el.tabIndex};
+      const visible=rect.width>0&&rect.height>0&&style.visibility!=='hidden'&&style.display!=='none';
+      const x=rect.left+rect.width/2,y=rect.top+rect.height/2,inViewport=visible&&x>=0&&y>=0&&x<innerWidth&&y<innerHeight;
+      const hit=inViewport?document.elementFromPoint(x,y):null,centerBlocked=!!(hit&&hit!==el&&!el.contains(hit));
+      let href=null;if(el.tagName==='A'){try{const u=new URL(el.href);href=u.origin===location.origin?u.pathname:'[external]'}catch(_){href='[invalid]'}}
+      return {tag:el.tagName,id:(el.id||'').slice(0,80),name,href,disabled:!!el.disabled,ariaDisabled:el.getAttribute('aria-disabled'),visible,pointerEvents:style.pointerEvents,tabIndex:el.tabIndex,centerBlocked,centerChecked:inViewport};
      }).filter(x=>/checkout|invoice|pay|buy|purchase|cart|فاکتور|پرداخت|خرید|سبد/i.test(x.name+' '+x.href)).slice(0,60));
      const record={device:device.name,path:slug,http:response?.status()||0,error,jsErrors:errors,controls};
      rows.push(record);
