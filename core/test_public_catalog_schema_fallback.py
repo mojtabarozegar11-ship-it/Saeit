@@ -11,7 +11,7 @@ from django.test import RequestFactory, SimpleTestCase
 from django.template.loader import render_to_string
 
 from core.academy_views import academy, education_course_detail, education_lesson, education_enroll, education_lesson_complete
-from core.company_content_views import company_gallery
+from core.company_content_views import company_gallery, company_content_feed, company_portal_home
 from core.newsletter_views import newsletter_home, newsletter_detail, safe_json_ld
 from core.public_catalog_guard import missing_public_tables, mark_public_data_unavailable
 
@@ -80,6 +80,51 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
         self.assertTrue(context["catalog_temporarily_unavailable"])
         from core.newsletter_views import Agent
         self.assertIn(Agent, guard_mock.call_args.args)
+
+
+    def test_company_feed_missing_schema_returns_retryable_503_without_query(self):
+        with patch("core.company_content_views.missing_public_tables", return_value=True) as guard, patch(
+            "core.company_content_views.CompanyContentLink.objects.filter"
+        ) as query:
+            response = company_content_feed(self.requests.get("/company/research/"), "research")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertIn("/company/", response.content.decode("utf8"))
+        self.assertEqual(len(guard.call_args.args), 3)
+        query.assert_not_called()
+
+    def test_company_inquiry_missing_schema_never_accepts_or_writes_submission(self):
+        request = self.requests.post("/company/", {
+            "kind": "research", "name": "Private Sender", "email": "private@example.invalid",
+            "subject": "Private Subject", "message": "Sensitive content",
+        })
+        with patch("core.company_content_views.missing_public_tables", return_value=True), patch(
+            "core.company_content_views.CompanyInquiry.objects.create"
+        ) as create:
+            response = company_portal_home(request)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertNotIn(b"Private Sender", response.content)
+        self.assertNotIn(b"Sensitive content", response.content)
+        create.assert_not_called()
+
+    def test_company_inquiry_healthy_schema_preserves_existing_submission(self):
+        request = self.requests.post("/company/", {
+            "kind": "research", "name": "Sender", "email": "sender@example.invalid",
+            "subject": "Question", "message": "Details",
+        })
+        with patch("core.company_content_views.missing_public_tables", return_value=False), patch(
+            "core.company_content_views.CompanyInquiry.objects.create"
+        ) as create, patch("django.contrib.messages.success"), patch(
+            "django.shortcuts.redirect", return_value=HttpResponse(status=302)
+        ):
+            response = company_portal_home(request)
+        self.assertEqual(response.status_code, 302)
+        create.assert_called_once()
 
 
 class PublicCatalogTruthfulTemplateTests(SimpleTestCase):
