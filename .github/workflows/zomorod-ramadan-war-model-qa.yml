@@ -44,7 +44,7 @@ jobs:
       - name: Verify all preview runtime imports and fail-closed MOJ1 policy
         run: python3 -m unittest discover -s games/ramadan-war -p 'test_preview_runtime_deps.py' -v
       - name: Verify integrated campaign save, input, accessibility and security regressions
-        run: node --test tests/game/ramadan-input-guard.test.mjs tests/game/ramadan-save-validation.test.mjs tests/game/ramadan-save-provenance.test.mjs tests/game/ramadan-legacy-recovery-guard.test.mjs tests/game/ramadan-campaign-checkpoint.test.mjs
+        run: node --test tests/game/ramadan-input-guard.test.mjs tests/game/ramadan-save-validation.test.mjs tests/game/ramadan-save-provenance.test.mjs tests/game/ramadan-legacy-recovery-guard.test.mjs tests/game/ramadan-campaign-checkpoint.test.mjs tests/game/ramadan-mobile-survival.test.mjs
       - name: Validate offline campaign backup export/import and fail-closed inputs
         run: node --test games/ramadan-war/test-campaign-backup.mjs
       - name: Full desktop and mobile gameplay with real GLB texture loading
@@ -65,6 +65,7 @@ jobs:
           done
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-smoke.cjs
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-backup-smoke.cjs
+          GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-controls-smoke.cjs
       - name: Build SHA-256-verified standalone playable web preview
         run: |
           set -euo pipefail
