@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -13,8 +14,14 @@ def company_gallery(request):
     query = request.GET.get("q", "").strip()
     media = []
     if not catalog_unavailable:
+        now = timezone.now()
+        # A published gallery item must not reveal media attached to an
+        # embargoed/draft newsletter story. Standalone media remains visible.
         media = CompanyGalleryMedia.objects.filter(
-            published=True, published_at__lte=timezone.now()
+            published=True, published_at__lte=now
+        ).filter(
+            Q(newsletter_story__isnull=True) |
+            Q(newsletter_story__status="published", newsletter_story__published_at__lte=now)
         ).select_related("newsletter_story")
         if kind in {"image", "video"}:
             media = media.filter(media_type=kind)
