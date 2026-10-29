@@ -5,7 +5,7 @@ import pathlib
 import tempfile
 import unittest
 import zipfile
-from ae_wdi_three_vintage_offline_gate import OFFICIAL, EvidenceGateError, verify
+from ae_wdi_three_vintage_offline_gate import OFFICIAL, FINAL_OFFICIAL, EvidenceGateError, verify
 
 class WdiArchiveGateTests(unittest.TestCase):
     def setUp(self):
@@ -17,7 +17,7 @@ class WdiArchiveGateTests(unittest.TestCase):
             p = self.root / ("fixture_" + str(idx) + ".zip")
             with zipfile.ZipFile(p, "w") as z:
                 z.writestr("fixture.xlsx", b"NOT_A_REAL_WDI_WORKBOOK")
-            self.releases.append({"id":release, "source_url":url, "path":p.name,
+            self.releases.append({"id":release, "source_url":url, "resolved_url":FINAL_OFFICIAL[release], "path":p.name,
                 "sha256":hashlib.sha256(p.read_bytes()).hexdigest(),
                 "bytes":p.stat().st_size, "retrieved_utc":"2026-10-29T00:00:00Z"})
     def manifest(self):
@@ -28,6 +28,14 @@ class WdiArchiveGateTests(unittest.TestCase):
         result = verify(self.manifest())
         self.assertEqual(result["state"], "ARCHIVE_INTEGRITY_ONLY_NOT_HISTORICAL_BENCHMARK")
         self.assertEqual(len(result["releases"]), 3)
+    def test_mismatched_final_url_fails_closed(self):
+        self.releases[0]["resolved_url"] = "https://untrusted.example/WDI_excel_2024_12_16.zip"
+        with self.assertRaisesRegex(EvidenceGateError, "redirect/final URL mismatch"):
+            verify(self.manifest())
+    def test_missing_final_url_fails_closed(self):
+        del self.releases[1]["resolved_url"]
+        with self.assertRaisesRegex(EvidenceGateError, "redirect/final URL mismatch"):
+            verify(self.manifest())
     def test_sha_mismatch_fails_closed(self):
         self.releases[0]["sha256"] = "0"*64
         with self.assertRaisesRegex(EvidenceGateError, "SHA-256 mismatch"):
