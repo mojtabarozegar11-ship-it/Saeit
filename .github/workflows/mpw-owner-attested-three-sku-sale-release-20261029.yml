@@ -120,12 +120,22 @@ jobs:
             if [ "$owner_applied" = 1 ]; then
               timeout 75s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_owner_attested_sku_metadata_20261029.py' rollback '$GITHUB_RUN_ID'" || true
             fi
+            timeout 35s ssh -T -F "$d/config" saeit-cpanel "$py -" <<'PY' || true
+            from pathlib import Path
+            for root in (Path('/home/zomorod2/Saeit-staging'),Path('/home/zomorod2/mojplaywin.com')):
+                if root.is_symlink() or not root.is_dir(): raise SystemExit('UNSAFE_PASSENGER_ROOT')
+                tmp=root/'tmp'
+                if tmp.is_symlink() or not tmp.is_dir(): raise SystemExit('UNSAFE_RESTART_DIRECTORY')
+                marker=tmp/'restart.txt'
+                if marker.is_symlink(): raise SystemExit('UNSAFE_RESTART_MARKER')
+                marker.touch()
+            PY
           }
           trap rollback ERR
-          timeout 75s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_owner_attested_sku_metadata_20261029.py' apply '$GITHUB_RUN_ID'"
           owner_applied=1
-          timeout 90s ssh -T -F "$d/config" saeit-cpanel "MPW_CSP_RELEASE_APPROVED=YES $py '$remote/mpw_checkout_csp_zero_script_guard_20261029.py' publish '$GITHUB_RUN_ID'"
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_owner_attested_sku_metadata_20261029.py' apply '$GITHUB_RUN_ID'"
           csp_applied=1
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "MPW_CSP_RELEASE_APPROVED=YES $py '$remote/mpw_checkout_csp_zero_script_guard_20261029.py' publish '$GITHUB_RUN_ID'"
           rights_apply_armed=1
           timeout 110s ssh -T -F "$d/config" saeit-cpanel "$py - apply '$GITHUB_RUN_ID'" < scripts/mpw_trx_rights_live_guard_20261028.py
           timeout 75s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_owner_attested_sku_metadata_20261029.py' verify '$GITHUB_RUN_ID'"
