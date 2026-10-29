@@ -1,0 +1,54 @@
+name: Owner Leech Factory Targeted Schedule Retirement
+on:
+  push:
+    branches: ['owner/leech-private-transfer-20261029']
+    paths: ['.github/workflows/owner-leech-retire-cron-20261029.yml']
+permissions: {contents: read}
+jobs:
+  retire-only-this-order:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Stop only the transferred leech factory scheduled entry
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "${VPS_KEY:-}"
+          work="$RUNNER_TEMP/leech-cron-retirement"
+          install -d -m 700 "$work"
+          trap 'rm -f -- "$work/key"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$work/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -c '"'"'import subprocess,re,sys,hashlib
+r=subprocess.run(["crontab","-l"],capture_output=True,text=True)
+if r.returncode != 0:
+    raise SystemExit("LEECH_CRON_UNAVAILABLE")
+original=r.stdout
+lines=original.splitlines(keepends=True)
+matches=[s for s in lines if s.strip() and not s.lstrip().startswith("#") and re.search(r"leech|WO-26102501",s,re.I)]
+if len(matches)>1:
+    raise SystemExit("LEECH_RETIRE_AMBIGUOUS_MULTIPLE_ACTIVE_ENTRIES")
+if not matches:
+    print("LEECH_FACTORY_CRON_ALREADY_DISABLED=true")
+    raise SystemExit(0)
+replacement="".join(s for s in lines if s!=matches[0])
+prior_hash=hashlib.sha256(original.encode()).hexdigest()
+p=subprocess.run(["crontab","-"],input=replacement,capture_output=True,text=True)
+if p.returncode!=0:
+    print("LEECH_RETIRE_WRITE_FAILED="+p.stderr.strip()[:200])
+    raise SystemExit(4)
+after=subprocess.run(["crontab","-l"],capture_output=True,text=True)
+if after.returncode!=0 and replacement.strip():
+    raise SystemExit("LEECH_RETIRE_RECHECK_UNAVAILABLE")
+if after.stdout != replacement:
+    raise SystemExit("LEECH_RETIRE_RECHECK_MISMATCH")
+print("LEECH_FACTORY_CRON_DISABLED=true")
+print("OTHER_SCHEDULE_LINES_PRESERVED="+str(len(lines)-1))
+print("PRIOR_CRON_SHA256="+prior_hash)
+'"'"''
