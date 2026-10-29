@@ -32,15 +32,15 @@ const OUT = process.env.RUNNER_TEMP || '/tmp';
     if(profile.kind==='mobile'){
       assert.equal(await page.locator('#boostBtn').isVisible(),true);
       await page.locator('#boostBtn').dispatchEvent('pointerdown');
-      await page.waitForTimeout(150);
+      await page.waitForFunction(()=>Number(document.querySelector('#speedReading')?.textContent)>600,null,{timeout:5000});
       const speed=await page.locator('#speedReading').innerText();
       assert.ok(Number(speed)>600,'mobile afterburner must drive displayed speed, got '+speed);
       await page.locator('#boostBtn').dispatchEvent('pointerup');
     }else{
       await page.keyboard.down('e');
-      await page.waitForTimeout(160);
+      await page.waitForFunction(()=>Number(document.querySelector('#speedReading')?.textContent)>600,null,{timeout:5000});
       const speed=await page.locator('#speedReading').innerText();
-      assert.ok(Number(speed)>600,'desktop afterburner must drive displayed speed');
+      assert.ok(Number(speed)>600,'desktop afterburner must drive displayed speed, got '+speed);
       await page.keyboard.up('e');
       await page.keyboard.press('Space');
     }
