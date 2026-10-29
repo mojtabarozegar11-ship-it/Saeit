@@ -5,6 +5,7 @@ on:
       - f01/vps-readonly-console-snapshot-20261029
     paths:
       - .github/workflows/f01-vps-guest-snapshot-20261029.yml
+      - scripts/f01_vps_console_snapshot_readonly_20261029.py
 permissions:
   contents: read
 concurrency:
@@ -67,6 +68,7 @@ jobs:
           print("F01_BLOCK_TOPOLOGY="+json.dumps(d["block_topology"],sort_keys=True))
           print("F01_CRON="+json.dumps(d["cron"],sort_keys=True))
           print("F01_WORKER="+json.dumps(d["worker"],sort_keys=True))
+          print("F01_PROCESS_PRESSURE="+json.dumps(d["process_pressure"],sort_keys=True))
           print("F01_QUEUE="+json.dumps(d["queue"],sort_keys=True))
           print("F01_DB_BACKUP_RESTORE=NOT_VERIFIED")
           print("F01_WORKER_EXECUTION=NOT_VERIFIED")
