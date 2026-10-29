@@ -3,6 +3,11 @@
 from pathlib import Path
 import hashlib, json, os, re, sys
 
+# Security invariants below use assertions: never run a release with -O/PYTHONOPTIMIZE.
+# Fail at module load, before any stage or production filesystem access.
+if sys.flags.optimize:
+    raise SystemExit('RAMADAN_RELEASE_REFUSED: optimized Python disables security assertions')
+
 ROOT=Path('/home/zomorod2/public_html')
 ROW='ZM-R25'; GAME_ID='ZM-R25-GAME-RAMADAN-WAR-20261022'; GAME=ROOT/'ramadan-war'
 MARK='ZM-RAMADAN-WAR-WEB-CARD-20261022'
