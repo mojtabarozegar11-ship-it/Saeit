@@ -1,0 +1,165 @@
+name: Zomorod marketing release evidence (read-only)
+on:
+  pull_request:
+    branches:
+      - feature/zomorod-erp-release-preflight-20261017
+    paths:
+      - ".github/workflows/zomorod-marketing-release-evidence.yml"
+      - "company_marketing/**"
+      - "company_messaging/**"
+      - "config/urls.py"
+      - "config/settings.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-marketing-release-readonly
+  cancel-in-progress: false
+jobs:
+  readiness:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Scope declaration
+        run: |
+          echo "SITE_SCOPE=zomorodmelal.ir only"
+          echo "MODE=read-only evidence; no migrations, restart, deploy, send or account mutation"
+          echo "PRODUCTION_DEPLOY_ALLOWED=no"
+      - name: Probe public and private routes without signing in
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in / /api/health/ /company/office/login/ /company/office/messages/ /company/office/marketing/; do
+            status="$(curl --silent --output /dev/null --max-time 12 --connect-timeout 7 --write-out '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "PUBLIC_ROUTE=$route HTTP=${status:-unknown}"
+          done
+      - name: Set up pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          install -d -m 700 "$dir"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$dir/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$dir/host.key"
+          chmod 600 "$dir/"*.key
+          ssh-keygen -y -P "" -f "$dir/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$dir/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$dir/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$dir/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$dir/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $dir/vps.key
+            UserKnownHostsFile $dir/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $dir/host.key
+            UserKnownHostsFile $dir/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$dir/config"
+          ssh -F "$dir/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$dir/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$dir/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "PINNED_CPANEL_RELAY=verified"
+      - name: Inspect deployed Zomorod code, effective database and Python without writing
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          ssh -F "$dir/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          app="/home/zomorod2/Saeit"
+          web="/home/zomorod2/public_html"
+          test -d "$app" && test ! -L "$app"
+          test -f "$app/manage.py"
+          echo "PRODUCTION_APP=present"
+          for rel in company_messaging/models.py company_marketing/models.py enterprise_portal/models.py ecosystem_hub/models.py company_messaging/migrations/0001_initial.py company_marketing/migrations/0001_initial.py; do
+            if test -f "$app/$rel"; then
+              echo "PRODUCTION_FILE=$rel present"
+            else
+              echo "PRODUCTION_FILE=$rel absent"
+            fi
+          done
+          if test -f "$web/.htaccess" && grep -Fq 'PassengerAppRoot "/home/zomorod2/Saeit"' "$web/.htaccess"; then
+            echo "PASSENGER_APP_ROOT=expected"
+          else
+            echo "PASSENGER_APP_ROOT=needs_review"
+          fi
+          df -Pk "$app" | awk 'NR==2 {printf "CPANEL_AVAILABLE_MB=%d\n", $4/1024}'
+          if test -x "/home/zomorod2/virtualenv/Saeit/3.10/bin/python"; then
+            interpreter="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
+          elif test -x "/home/zomorod2/virtualenv/Saeit/3.11/bin/python"; then
+            interpreter="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"
+          else
+            echo "SITE_PYTHON=not_found"; exit 0
+          fi
+          cd "$app"
+          "$interpreter" - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          try:
+              import django
+              django.setup()
+              from django.conf import settings
+              from django.urls import resolve
+          except Exception as exc:
+              print("DJANGO_STARTUP=failed:"+type(exc).__name__)
+          else:
+              print("DJANGO_STARTUP=ok")
+              info=settings.DATABASES["default"]
+              print("EFFECTIVE_DB_ENGINE="+info["ENGINE"].split(".")[-1])
+              print("EFFECTIVE_DB_CONFIGURED="+str(bool(info.get("NAME"))).lower())
+              for route in ("/company/office/login/","/company/office/messages/","/company/office/marketing/"):
+                  try:
+                      match=resolve(route)
+                  except Exception:
+                      print("ROUTE_RESOLVE="+route+" missing")
+                  else:
+                      print("ROUTE_RESOLVE="+route+" name="+str(match.url_name))
+              try:
+                  from django.db import connection
+                  if info["ENGINE"].endswith("sqlite3"):
+                      import sqlite3,pathlib,urllib.parse
+                      path=pathlib.Path(str(info["NAME"]))
+                      if not path.is_absolute():path=pathlib.Path.cwd()/path
+                      uri="file:"+urllib.parse.quote(str(path))+"?mode=ro"
+                      with sqlite3.connect(uri,uri=True,timeout=3) as db:
+                          db.execute("SELECT 1")
+                  else:
+                      with connection.cursor() as cur:
+                          cur.execute("SELECT 1")
+                          cur.fetchone()
+              except Exception as exc:
+                  print("EFFECTIVE_DB_READ=failed:"+type(exc).__name__)
+              else:
+                  print("EFFECTIVE_DB_READ=ok")
+          PY
+          REMOTE
+      - name: Require restore proof and provider rights before any deployment
+        run: |
+          echo "RESTORE_VERIFIED=not-established-by-this-readonly-probe"
+          echo "PRIVATE_LOGIN_AUTHENTICATED=not-established-by-this-readonly-probe"
+          echo "OFFICIAL_BOT_CHANNEL_TOKENS=not-established-by-this-readonly-probe"
+          echo "PRODUCTION_DEPLOY_ALLOWED=no"
