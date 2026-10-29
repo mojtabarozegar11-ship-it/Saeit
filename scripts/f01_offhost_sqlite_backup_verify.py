@@ -20,15 +20,39 @@ class Blocked(Exception):
     pass
 
 def check_input(path):
+    """Open every ancestor and the leaf by descriptor, never following symlinks.
+
+    A path-component symlink swap between a preliminary is_symlink() check
+    and a later open() must not redirect the verifier to an unintended file.
+    """
     p = Path(path).absolute()
-    if any(x.is_symlink() for x in (p, *p.parents)):
-        raise Blocked("LINKED_PATH")
-    fd = os.open(p, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
-    meta = os.fstat(fd)
-    if not stat.S_ISREG(meta.st_mode) or meta.st_size < 100 or meta.st_size > MAX_BYTES:
-        os.close(fd)
-        raise Blocked("UNBOUNDED_OR_INVALID_INPUT")
-    return fd, meta.st_size
+    directory_flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                       | getattr(os, "O_NOFOLLOW", 0)
+                       | getattr(os, "O_CLOEXEC", 0))
+    leaf_flags = (os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                  | getattr(os, "O_NONBLOCK", 0)
+                  | getattr(os, "O_CLOEXEC", 0))
+    parent_fd = os.open("/", directory_flags)
+    try:
+        for component in p.parts[1:-1]:
+            next_fd = os.open(component, directory_flags, dir_fd=parent_fd)
+            os.close(parent_fd)
+            parent_fd = next_fd
+        fd = os.open(p.parts[-1], leaf_flags, dir_fd=parent_fd)
+        try:
+            meta = os.fstat(fd)
+            if not stat.S_ISREG(meta.st_mode) or not 100 <= meta.st_size <= MAX_BYTES:
+                raise Blocked("UNBOUNDED_OR_INVALID_INPUT")
+            return fd, meta.st_size
+        except BaseException:
+            os.close(fd)
+            raise
+    except OSError as exc:
+        if exc.errno in (getattr(os, "ELOOP", 40), 20, 40):
+            raise Blocked("LINKED_PATH") from exc
+        raise
+    finally:
+        os.close(parent_fd)
 
 def verify(path, expected_sha256, temp_root=None):
     if not expected_sha256 or len(expected_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in expected_sha256):
