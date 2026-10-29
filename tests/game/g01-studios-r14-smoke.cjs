@@ -31,7 +31,7 @@ for(const f of ['studio_raha/index.html','taniya_studio/index.html']){
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:8771/templates/taniya_studio/index.html',{waitUntil:'domcontentloaded'});
   await page.locator('.play[data-game="Cake Maker"]').click();
-  await page.locator('#icing').fill('#0088ff');
+  await page.locator('#icing').evaluate(el=>{el.value='#0088ff';el.dispatchEvent(new Event('input',{bubbles:true}))});
   await page.locator('[data-top="🌼"]').click();
   await page.locator('[data-action="candle"]').click({clickCount:2});
   assert.match(await page.locator('#cakepreview').textContent(),/🕯️🕯️/);
