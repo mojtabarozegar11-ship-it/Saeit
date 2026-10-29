@@ -16,7 +16,7 @@ test('extract arrival keeps kill quota visible rather than claiming readiness',(
 test('defense hold uses same radius as objective timer and suppresses misleading waypoint',()=>{
  assert.match(game,/const inDefenseZone=p\.kind==='defend'\&\&Math\.hypot\(world\.x-site\[0\],world\.y-site\[1\]\)<2\.5/);
  assert.match(game,/inDefenseZone\?'در منطقه دفاع · موقعیت را حفظ کن'/);
- assert.match(game,/const waypoint=\(inInteractRange\|\|inDefenseZone\)\?null:objectiveWaypoint/);
+ assert.match(game,/const waypoint=\(inInteractRange\|\|inDefenseZone(?:\|\|nearIntel)?\)\?null:objectiveWaypoint/);
  assert.ok(objectiveWaypoint(8.5,7.5,8.5,7.5,()=>true,16));
 });
 test('guidance hides arrow and assistive direction when already at objective',()=>{
