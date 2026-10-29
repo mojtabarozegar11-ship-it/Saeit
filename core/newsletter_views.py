@@ -21,6 +21,18 @@ def safe_json_ld(payload):
             .replace("&", "\\u0026"))
 
 
+def verified_story_author(story):
+    """Attribute structured data to the stored editorial byline, not a fixed CEO.
+
+    A blank byline is attributed to the publisher organization; never invent a
+    person's credentials, role or profile URL for unrelated articles.
+    """
+    byline = (story.author_name or "").strip()
+    if byline:
+        return {"@type": "Person", "name": byline}
+    return {"@type": "Organization", "name": "شرکت کشت و صنعت زمرد ملل"}
+
+
 def newsletter_home(request):
     from django.utils import timezone
     catalog_unavailable = missing_public_tables(
@@ -93,7 +105,7 @@ def newsletter_detail(request, slug):
         "description": story.summary,
         "datePublished": story.published_at.isoformat() if story.published_at else story.created_at.isoformat(),
         "dateModified": story.updated_at.isoformat(),
-        "author": {"@type": "Person", "name": "مجتبی روزگار", "jobTitle": "محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل", "url": "https://zomorodmelal.ir/company/executive/"},
+        "author": verified_story_author(story),
         "publisher": {"@type": "Organization", "name": "شرکت کشت و صنعت زمرد ملل", "url": "https://zomorodmelal.ir/"},
         "image": [request.build_absolute_uri(story.image.url)] if story.image else [],
         "mainEntityOfPage": {"@type": "WebPage", "@id": f"https://zomorodmelal.ir/newsletter/{story.slug}/"}
