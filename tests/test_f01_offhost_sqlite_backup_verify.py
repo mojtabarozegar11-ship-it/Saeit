@@ -1,5 +1,6 @@
 """Synthetic-only regression for isolated off-host SQLite rehearsal."""
 import hashlib
+import os
 import sqlite3
 import sys
 import tempfile
@@ -42,6 +43,27 @@ class VerifyTest(unittest.TestCase):
             q.symlink_to(p)
             with self.assertRaisesRegex(Blocked, "LINKED_PATH"):
                 verify(q, "0" * 64, d)
+
+    def test_symlinked_ancestor_rejected_without_following(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            actual = root / "actual"
+            actual.mkdir()
+            target = actual / "backup.sqlite3"
+            target.write_bytes(b"X" * 1024)
+            alias = root / "alias"
+            alias.symlink_to(actual, target_is_directory=True)
+            with self.assertRaisesRegex(Blocked, "LINKED_PATH"):
+                verify(alias / "backup.sqlite3", "0" * 64, d)
+
+    def test_fifo_is_rejected_without_blocking(self):
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("FIFO not available on this platform")
+        with tempfile.TemporaryDirectory() as d:
+            fifo = Path(d) / "named_pipe"
+            os.mkfifo(fifo)
+            with self.assertRaisesRegex(Blocked, "UNBOUNDED_OR_INVALID_INPUT"):
+                verify(fifo, "0" * 64, d)
 
     def test_digest_required(self):
         with self.assertRaisesRegex(Blocked, "EXPECTED_SHA256_REQUIRED"):
