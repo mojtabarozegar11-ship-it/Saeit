@@ -29,7 +29,7 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
       try {
         for (const path of URLS) {
           const page = await context.newPage();
-          let http=0, error=null, finalPath=null;
+          let http=0, error=null, finalPath=null, finalSearch='';
           const jsErrors=[];
           page.on('pageerror', e => jsErrors.push((e.name||'JavaScriptError').slice(0,60)));
           try {
@@ -38,6 +38,7 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
             http=response?.status()||0;
             const final=new URL(page.url());
             finalPath=final.origin==='https://mojplaywin.com'?final.pathname:'[external-redirect]';
+            finalSearch=final.origin==='https://mojplaywin.com'?final.search:'';
           } catch(e) {error=(e.name||'NavigationError').slice(0,60);}
           let controls=[];
           if (http > 0 && finalPath !== '[external-redirect]') {
@@ -54,7 +55,10 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
               if(el.tagName==='A'){try{
                 const u=new URL(el.href);href=u.origin===location.origin?u.pathname:'[external]';
               }catch(_){href='[invalid]';}}
-              const reasons=[el.disabled?'native-disabled':null,
+              const rawHref=el.tagName==='A'?(el.getAttribute('href')||'').trim():null;
+              const reasons=[rawHref!==null&&(!rawHref||rawHref==='#'||/^javascript:/i.test(rawHref))?'invalid-action-link':null,
+                el.closest('[aria-hidden="true"]')?'assistive-tech-hidden':null,
+                el.disabled?'native-disabled':null,
                 el.getAttribute('aria-disabled')==='true'?'aria-disabled':null,
                 style.pointerEvents==='none'?'pointer-events-none':null,
                 el.closest('fieldset[disabled]')?'disabled-fieldset':null,
@@ -67,10 +71,14 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
             } catch(e) { error = error || ('DOM_'+(e.name||'Error')).slice(0,60); }
           }
           // HTTP 200 at a login redirect is not a completed buyer checkout.
-          const verdict = classifyNavigation(path, http, finalPath, error);
+          const verdict = classifyNavigation(path, http, finalPath, error, finalSearch);
+          const productId=/^\/store\/product\/(\d+)\/$/.exec(path)?.[1]||null;
+          const validCheckoutHref=href=>productId?href===`/store/product/${productId}/checkout/`:
+            /^\/store\/product\/\d+\/checkout\/$/.test(href||'');
           rows.push({device:device.name,path,http,finalPath,error,jsErrors,controls,
             ...verdict,authenticatedBuyerFlowVerified:false,
-            checkoutLinks:controls.filter(c=>/\/checkout\/$/.test(c.href||'')&&c.reasons.length===0).length});
+            checkoutLinks:controls.filter(c=>validCheckoutHref(c.href)&&c.reasons.length===0).length,
+            mismatchedCheckoutLinks:productId?controls.filter(c=>/\/checkout\/$/.test(c.href||'')&&!validCheckoutHref(c.href)).length:0});
           await page.close();
         }
       } finally {await context.close();}
