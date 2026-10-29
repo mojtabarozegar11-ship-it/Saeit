@@ -42,9 +42,12 @@ def checked_entries(archive, expected):
     for info in infos:
         name = info.filename
         path = PurePosixPath(name)
+        entry_type = (info.external_attr >> 16) & 0o170000
         if (not name or name.startswith("/") or "\\" in name or
                 ".." in path.parts or path.as_posix() != name or
-                name.endswith("/") or (info.external_attr >> 16) & 0o170000 == stat.S_IFLNK):
+                name.endswith("/") or entry_type not in (0, stat.S_IFREG)):
+            # Also reject Unix device nodes, sockets, FIFOs and directories;
+            # an offline preview may contain regular files only.
             raise ValueError("unsafe archive entry")
         if info.file_size > 12_000_000:
             raise ValueError("unexpectedly large preview asset")
