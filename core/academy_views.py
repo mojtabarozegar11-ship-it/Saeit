@@ -9,8 +9,15 @@ from .public_catalog_guard import missing_public_tables, mark_public_data_unavai
 from .models import (
     EducationTrack, EducationCourse, EducationResource, EducationLesson,
     EducationEnrollment, EducationProgress, EducationBookmark,
-    EducationAssessment, EducationQuestion, EducationAttempt, EducationCertificate, Product,
+    EducationAssessment, EducationQuestion, EducationAttempt, EducationCertificate, Product, Order,
 )
+
+
+def unavailable_enrollment_response():
+    """Retryable, non-mutating response when an enrollment dependency is missing."""
+    response = JsonResponse({"ok": False, "error": "education_temporarily_unavailable"}, status=503)
+    response["Retry-After"] = "300"
+    return mark_public_data_unavailable(response)
 
 
 def academy(request):
@@ -164,6 +171,9 @@ def education_course_detail(request, slug):
 def education_enroll(request, slug):
     if request.method != "POST":
         raise Http404
+    # No paid-entitlement lookup or enrollment mutation against a partial schema.
+    if missing_public_tables(EducationCourse, EducationEnrollment, Product, Order):
+        return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     if not course.is_free:
         from .models import Order
@@ -253,6 +263,9 @@ def education_lesson(request, slug, lesson_id):
 def education_lesson_complete(request, slug, lesson_id):
     if request.method != "POST":
         raise Http404
+    # Preserve the previous completion state if required tables are unavailable.
+    if missing_public_tables(EducationCourse, EducationLesson, EducationEnrollment, EducationProgress):
+        return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     lesson = get_object_or_404(EducationLesson, pk=lesson_id, course=course, active=True)
     enrollment = get_object_or_404(EducationEnrollment, course=course, user=request.user, status="active")
