@@ -41,8 +41,8 @@ def academy(request):
         if db_tracks:
             tracks = [{"key": x.key, "title": x.title, "meta": x.meta, "text": x.description} for x in db_tracks]
     course_q = request.GET.get("q", "").strip()[:120]  # Bound user-controlled DB search cost
-    track_key = request.GET.get("track", "").strip()
-    access = request.GET.get("access", "").strip()
+    track_key = request.GET.get("track", "").strip()[:64]
+    access = request.GET.get("access", "").strip()[:16]
     courses = []
     if not catalog_unavailable:
         course_qs = EducationCourse.objects.filter(active=True, approved=True).select_related("track")
@@ -55,7 +55,9 @@ def academy(request):
             course_qs = course_qs.filter(is_free=True)
         elif access == "paid":
             course_qs = course_qs.filter(is_free=False)
-        courses = list(course_qs.order_by("track__sort_order", "title"))
+        # Bound the public page's memory and query work without altering the
+        # first page of its established track/title ordering.
+        courses = list(course_qs.order_by("track__sort_order", "title")[:100])
     resources = [
         {"kind": "جزوه", "title": "کتابخانه جزوه‌های آموزشی", "text": "جزوه‌های سطح‌بندی‌شده، قابل مطالعه و قابل تکمیل برای هر مسیر.", "access": "رایگان محدود"},
         {"kind": "دوره", "title": "دوره‌های جامع مهارتی", "text": "درس‌نامه، ویدئو، تمرین، پروژه، آزمون و گواهی در مسیرهای منتخب.", "access": "رایگان + پولی"},
