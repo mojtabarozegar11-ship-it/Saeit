@@ -1,12 +1,12 @@
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Sum, Q
-from django.http import Http404
+from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
-from ecosystem_hub.access import user_units
+from ecosystem_hub.access import user_units, require_unit
 from enterprise_portal.views import office_access, no_cache
-from .forms import CampaignForm, PublicationForm
+from .forms import CampaignForm, PublicationForm, ChannelAccountForm, LeadForm, PerformanceMetricForm
 from .models import Campaign, ChannelAccount, Publication, Lead, PerformanceMetric
 from .services import approve_publication
 
@@ -39,6 +39,11 @@ def dashboard(request):
         "recorded_cost_irr": metrics.aggregate(v=Sum("cost_irr"))["v"] or 0,
         "can_add_campaign": request.user.is_superuser or request.user.has_perm("company_marketing.add_campaign"),
         "can_add_publication": request.user.is_superuser or request.user.has_perm("company_marketing.add_publication"),
+        "can_add_channel": request.user.is_superuser or request.user.has_perm("company_marketing.add_channelaccount"),
+        "can_add_lead": request.user.is_superuser or request.user.has_perm("company_marketing.add_lead"),
+        "can_add_metric": request.user.is_superuser or request.user.has_perm("company_marketing.add_performancemetric"),
+        "can_manage_campaigns": request.user.is_superuser or request.user.has_perm("company_marketing.manage_company_campaigns"),
+        "can_verify_channel": request.user.is_superuser,
     }))
 
 
@@ -101,3 +106,94 @@ def approve(request, pk):
             "can_approve": True, "error": exc.messages,
         }, status=400))
     return no_cache(redirect("company_marketing:detail", pk=pk))
+
+
+@office_access
+@require_http_methods(["GET", "POST"])
+def new_channel(request):
+    require_perm(request.user, "add_channelaccount")
+    form = ChannelAccountForm(request.POST or None, user=request.user)
+    if request.method == "POST" and form.is_valid():
+        item = form.save(commit=False)
+        require_unit(request.user, item.unit, write=True)
+        item.is_company_owned = False
+        item.verified_at = None
+        item.ownership_evidence = ""
+        item.full_clean()
+        item.save()
+        return no_cache(redirect("company_marketing:dashboard"))
+    return no_cache(render(request, "company_marketing/form.html", {
+        "form": form, "heading": "ثبت حساب شبکه", "submit": "ثبت برای احراز مالکیت",
+    }))
+
+
+@office_access
+@require_POST
+def verify_channel(request, pk):
+    if not request.user.is_superuser:
+        raise PermissionDenied("تأیید مالکیت فقط با مدیر ارشد.")
+    account = get_object_or_404(ChannelAccount.objects.filter(unit__in=user_units(request.user)), pk=pk)
+    evidence = (request.POST.get("evidence") or "").strip()
+    if len(evidence) < 8 or len(evidence) > 255:
+        return HttpResponseBadRequest("مرجع شواهد مالکیت ۸ تا ۲۵۵ نویسه باشد.")
+    account.ownership_evidence = evidence
+    account.is_company_owned = True
+    account.verified_at = timezone.now()
+    account.full_clean()
+    account.save()
+    return no_cache(redirect("company_marketing:dashboard"))
+
+
+@office_access
+@require_http_methods(["GET", "POST"])
+def new_lead(request):
+    require_perm(request.user, "add_lead")
+    form = LeadForm(request.POST or None, user=request.user)
+    if request.method == "POST" and form.is_valid():
+        item = form.save(commit=False)
+        require_unit(request.user, item.unit, write=True)
+        item.owner = request.user
+        item.full_clean()
+        item.save()
+        return no_cache(redirect("company_marketing:dashboard"))
+    return no_cache(render(request, "company_marketing/form.html", {
+        "form": form, "heading": "سرنخ بازاریابی", "submit": "ثبت سرنخ",
+    }))
+
+
+@office_access
+@require_http_methods(["GET", "POST"])
+def new_metric(request):
+    require_perm(request.user, "add_performancemetric")
+    form = PerformanceMetricForm(request.POST or None, user=request.user)
+    if request.method == "POST" and form.is_valid():
+        item = form.save(commit=False)
+        require_unit(request.user, item.publication.campaign.unit, write=True)
+        item.recorded_by = request.user
+        item.full_clean()
+        item.save()
+        return no_cache(redirect("company_marketing:dashboard"))
+    return no_cache(render(request, "company_marketing/form.html", {
+        "form": form, "heading": "ثبت آمار مستند کمپین", "submit": "ثبت شاخص عملکرد",
+    }))
+
+
+@office_access
+@require_POST
+def set_campaign_state(request, pk):
+    require_perm(request.user, "manage_company_campaigns")
+    item = get_object_or_404(Campaign.objects.filter(unit__in=user_units(request.user)), pk=pk)
+    require_unit(request.user, item.unit, write=True)
+    new_state = request.POST.get("status")
+    allowed = {
+        "draft": ("active", "closed"),
+        "active": ("paused", "closed"),
+        "paused": ("active", "closed"),
+        "closed": (),
+    }
+    if new_state not in allowed[item.status]:
+        return HttpResponseBadRequest("تغییر وضعیت کمپین مجاز نیست.")
+    item.status = new_state
+    item.full_clean()
+    item.save(update_fields=["status"])
+    return no_cache(redirect("company_marketing:dashboard"))

@@ -217,3 +217,55 @@ class MarketingTests(TestCase):
                    return_value={"data": {"message_id": "rub-9"}}) as call:
             self.assertEqual(send_bot_message("rubika", "c1", "سلام"), "rub-9")
             self.assertIn("botapi.rubika.ir/v3/", call.call_args.args[0])
+
+
+    def test_new_channel_uses_pending_verification_without_network(self):
+        response = self.client.post("/company/office/marketing/channels/new/", secure=True,
+                                    data={"unit": self.unit.pk, "platform": "rubika",
+                                          "title": "کانال جدید", "destination": "u-new",
+                                          "active": True})
+        self.assertEqual(response.status_code, 302)
+        created = ChannelAccount.objects.get(destination="u-new")
+        self.assertFalse(created.is_company_owned)
+        self.assertIsNone(created.verified_at)
+
+    def test_channel_verification_requires_owner_and_evidence(self):
+        account = ChannelAccount.objects.create(
+            unit=self.unit, platform="bale", title="در انتظار", destination="123"
+        )
+        url = "/company/office/marketing/channels/%s/verify/" % account.pk
+        self.assertEqual(self.client.get(url, secure=True).status_code, 405)
+        self.assertEqual(self.client.post(url, secure=True, data={"evidence": "company-control-42"}).status_code, 302)
+        account.refresh_from_db()
+        self.assertTrue(account.is_company_owned)
+        self.assertTrue(account.verified_at)
+
+    def test_campaign_start_and_pause_are_post_only(self):
+        self.campaign.status = "draft"
+        self.campaign.save()
+        url = "/company/office/marketing/campaigns/%s/state/" % self.campaign.pk
+        self.assertEqual(self.client.get(url, secure=True).status_code, 405)
+        self.assertEqual(self.client.post(url, secure=True, data={"status": "active"}).status_code, 302)
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.status, "active")
+        self.assertEqual(self.client.post(url, secure=True, data={"status": "paused"}).status_code, 302)
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.status, "paused")
+
+    def test_new_lead_cannot_claim_undocumented_sale(self):
+        contact = Contact.objects.create(unit=self.unit, name="مشتری جدید")
+        response = self.client.post("/company/office/marketing/leads/new/", secure=True,
+                                    data={"unit": self.unit.pk, "campaign": self.campaign.pk,
+                                          "contact": contact.pk, "stage": "won", "source": "bale",
+                                          "estimated_value_irr": "100000", "verified_sale_irr": "0"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Lead.objects.count(), 0)
+
+    def test_new_metrics_require_evidence(self):
+        item = self.publication()
+        response = self.client.post("/company/office/marketing/metrics/new/", secure=True,
+                                    data={"publication": item.pk, "recorded_on": str(timezone.localdate()),
+                                          "impressions": 100, "clicks": 10, "leads": 1, "cost_irr": 0,
+                                          "evidence_reference": ""})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(PerformanceMetric.objects.count(), 0)
