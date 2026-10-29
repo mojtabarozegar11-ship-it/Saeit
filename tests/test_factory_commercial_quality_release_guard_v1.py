@@ -22,9 +22,18 @@ class PublicReleaseSafety(unittest.TestCase):
             root=Path(t)
             package=root/"legacy.zip";package.write_bytes(b"old free published product")
             digest=hashlib.sha256(package.read_bytes()).hexdigest()
+            result=mod.require_quality_clearance(root,"farm_enterprise_economics",digest,
+                                                 {"qa_status":"passed"},package)
+            self.assertEqual(result["status"],"LEGACY_UNASSESSED_REQUIRES_MIGRATION")
+            self.assertIs(result["1000_quality_verified"],False)
+    def test_public_release_rights_gate_still_blocks_without_evidence(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t)
+            package=root/"legacy.zip";package.write_bytes(b"public package")
+            digest=hashlib.sha256(package.read_bytes()).hexdigest()
             with self.assertRaisesRegex(ValueError,"RIGHTS_CLEARANCE_EVIDENCE_MISSING"):
-                mod.require_quality_clearance(root,"farm_enterprise_economics",digest,
-                                              {"qa_status":"passed"},package)
+                mod.require_rights_clearance(root,"farm_enterprise_economics",digest,package)
+
     def test_new_factory_cannot_smuggle_relative_path_to_quality_files(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t)
