@@ -35,3 +35,12 @@ jobs:
             sleep 1
           done
           NODE_PATH="$RUNNER_TEMP/g01-studios-playwright/node_modules" node tests/game/g01-studios-r14-smoke.cjs
+      - name: S-01 public checkout controls audit (GET only)
+        run: NODE_PATH="$RUNNER_TEMP/g01-studios-playwright/node_modules" node tests/site/g01-s01-checkout-controls-triage.cjs
+      - name: Upload non-sensitive S-01 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g01-s01-public-checkout-controls
+          path: g01-s01-audit-output/
+          retention-days: 7
