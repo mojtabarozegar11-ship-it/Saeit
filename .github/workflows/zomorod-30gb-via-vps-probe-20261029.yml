@@ -57,7 +57,7 @@ jobs:
             '  StrictHostKeyChecking yes' \
             '  IdentitiesOnly yes' \
             '  BatchMode yes' \
-            '  ConnectTimeout 10' \
+            '  ConnectTimeout 25' \
             '  ConnectionAttempts 1' \
             '  ServerAliveInterval 7' \
             '  ServerAliveCountMax 2' \
@@ -65,14 +65,14 @@ jobs:
             '  ForwardAgent no' > "$d/config"
           chmod 600 "$d/config"
           ok=0
-          for attempt in 1 2 3 4 5; do
-            if timeout 38s ssh -F "$d/config" saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py'; then
+          for attempt in 1 2 3; do
+            if timeout 55s ssh -F "$d/config" saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py'; then
               ok=1
               echo "TWO_HOP_READ_ONLY_AUTHENTICATED_ON_ATTEMPT=$attempt"
               break
             fi
             echo "TWO_HOP_RETRY_ATTEMPT=$attempt"
-            if test "$attempt" -lt 5; then sleep 6; fi
+            if test "$attempt" -lt 3; then sleep 12; fi
           done
           test "$ok" = 1 || { echo 'TWO_HOP_READ_ONLY=UNAVAILABLE'; exit 1; }
           echo 'CPANEL30GB_PRIVATE_INBOX=READABLE'
