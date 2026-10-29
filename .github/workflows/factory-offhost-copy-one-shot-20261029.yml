@@ -95,7 +95,10 @@ jobs:
           print(json.dumps({"bytes":s.st_size,"sha256":h,"sqlite_schema_readable":"ok"}))
           """
           check=subprocess.run(remote("saeit-vps","python3","-B","-c",source_code,source),
-                               capture_output=True,text=True,timeout=200,check=True)
+                               capture_output=True,text=True,timeout=200)
+          if check.returncode != 0:
+              print('SOURCE_CHECK_REMOTE_ERROR='+check.stderr[-1500:],file=sys.stderr)
+              raise SystemExit('SOURCE_CHECK_REMOTE_FAILED')
           data=json.loads(check.stdout)
           count=int(data["bytes"])
           expected=data["sha256"]
