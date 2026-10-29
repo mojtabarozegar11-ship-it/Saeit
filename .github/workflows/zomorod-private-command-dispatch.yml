@@ -10,6 +10,7 @@ on:
           - show_public_key
           - accept
           - check_receipt_window
+          - diagnose_vps
       sealed_envelope:
         description: Encrypted one-use command envelope (required for accept)
         required: false
@@ -43,7 +44,7 @@ jobs:
           from pathlib import Path
           event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           inputs = event.get("inputs", {})
-          if inputs.get("operation") not in ("show_public_key", "accept", "check_receipt_window"):
+          if inputs.get("operation") not in ("show_public_key", "accept", "check_receipt_window", "diagnose_vps"):
               raise SystemExit("OPERATION_REJECTED")
           if inputs["operation"] == "accept":
               try:
@@ -69,6 +70,7 @@ jobs:
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          OPERATION: ${{ inputs.operation }}
         run: |
           set -euo pipefail
           umask 077
@@ -139,6 +141,51 @@ jobs:
           cp "$d/host.candidate" "$d/host.known"
           echo "CPANEL_HOST_KEY=verified"
           echo "PINNED_PRIVATE_RELAY=verified"
+          if test "$OPERATION" = "diagnose_vps"; then
+            # Only a bounded, read-only direct SSH inspection. No cPanel connection or data writes.
+            vps_diagnostic_ok=0
+            for attempt in 1 2 3; do
+              if timeout 35s ssh -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=1 saeit-vps 'bash -s' <<'VPS_READONLY'
+          set -eu
+          test "$(id -un)" = "githubops"
+          echo 'VPS_SSH_HOP=AUTHENTICATED'
+          if command -v systemctl >/dev/null 2>&1 && { systemctl is-active --quiet ssh || systemctl is-active --quiet sshd; }; then
+            echo 'SSHD_SERVICE=ACTIVE'
+          else
+            echo 'SSHD_SERVICE=NOT_CONFIRMED'
+          fi
+          if command -v ss >/dev/null 2>&1 && ss -H -ltn 2>/dev/null | awk '$4 ~ /:22$/ {found=1} END {exit !found}'; then
+            echo 'SSHD_PORT22_LISTENER=PRESENT'
+          else
+            echo 'SSHD_PORT22_LISTENER=NOT_CONFIRMED'
+          fi
+          if command -v fail2ban-client >/dev/null 2>&1; then
+            echo 'FAIL2BAN_CLIENT=INSTALLED'
+          else
+            echo 'FAIL2BAN_CLIENT=NOT_INSTALLED'
+          fi
+          if test -r /etc/ssh/sshd_config && grep -Eiq '^[[:space:]]*MaxStartups[[:space:]]' /etc/ssh/sshd_config; then
+            echo 'MAXSTARTUPS_OVERRIDE=PRESENT'
+          else
+            echo 'MAXSTARTUPS_OVERRIDE=NOT_VISIBLE'
+          fi
+          if command -v journalctl >/dev/null 2>&1 && journalctl -u ssh -u sshd --since '2026-10-29 14:30:00 UTC' --until '2026-10-29 14:40:00 UTC' --no-pager -q -o cat 2>/dev/null | grep -Eiq 'MaxStartups|PerSourcePenalties|drop connection|kex_exchange_identification'; then
+            echo 'SSHD_1433Z_RATE_LIMIT_LOG=FOUND'
+          else
+            echo 'SSHD_1433Z_RATE_LIMIT_LOG=NOT_VISIBLE'
+          fi
+          VPS_READONLY
+              then
+                vps_diagnostic_ok=1
+                break
+              fi
+              echo "VPS_DIAGNOSTIC_CONNECT_FAILED_ATTEMPT=$attempt"
+              if test "$attempt" -lt 3; then sleep 7; fi
+            done
+            test "$vps_diagnostic_ok" = 1 || { echo 'VPS_DIAGNOSTIC_UNAVAILABLE'; exit 1; }
+            echo 'VPS_DIAGNOSTIC=READ_ONLY_COMPLETED'
+            exit 0
+          fi
           # Narrow a connectivity failure to the VPS hop or the downstream 30GB host.
           # This is read-only and intentionally uses only one short VPS attempt.
           if timeout 25s ssh -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=1 saeit-vps 'test "$(id -un)" = "githubops"' >/dev/null; then
