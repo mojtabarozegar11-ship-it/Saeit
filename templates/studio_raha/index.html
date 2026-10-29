@@ -148,6 +148,7 @@ function runnerGame(stage){
  let cleared=0,lives=3,progress=0,resolved=false,active=true,paused=false,pausedAt=0,raf=0,last=0,jumpUntil=0,hiddenAt=0;
  stage.innerHTML='<div class="stage-message" id="runnerStatus" role="status" aria-live="polite">Jump over eight real obstacles. Three hearts available.</div><div class="stage-actions"><span class="stage-message" id="runScore">Cleared: 0 / 8 · Hearts: 3</span></div><div id="runnerTrack" role="img" aria-label="Jungle track with a moving obstacle" style="position:relative;width:100%;min-width:0;height:110px;overflow:hidden;border-radius:16px;background:linear-gradient(#c9f7e0,#8cd69d);border-bottom:8px solid #5b9858"><span id="runnerHero" style="position:absolute;left:20%;bottom:5px;font-size:32px">🐾</span><span id="runnerObstacle" style="position:absolute;left:100%;bottom:5px;font-size:32px">🌿</span></div>';
  const track=stage.querySelector('#runnerTrack'),runner=stage.querySelector('#runnerHero'),obstacle=stage.querySelector('#runnerObstacle'),status=stage.querySelector('#runnerStatus'),counter=stage.querySelector('#runScore');
+ const jungleObstacles=['🌿','🪵','🪨','🌵'];
  function stop(){if(!active)return;active=false;cancelAnimationFrame(raf);document.removeEventListener('keydown',onKey);document.removeEventListener('visibilitychange',onVisibility);stage.removeEventListener('runner:stop',stop)}
  function finish(won){stop();status.textContent=won?'🏆 You cleared all eight jungle obstacles!':'No hearts left. Try the jungle again!';jumpButton.disabled=true;stage.append(button('Run again',()=>runnerGame(stage),'alt'))}
  function jump(){const now=performance.now();if(!active||paused||jumpUntil>now)return;jumpUntil=now+620;runner.style.transform='translateY(-45px)'}
@@ -161,11 +162,11 @@ function runnerGame(stage){
   if(!active)return;
   if(document.hidden||paused){last=t;raf=requestAnimationFrame(frame);return}
   if(!document.getElementById('gameOverlay').classList.contains('open')||stage.querySelector('#runnerTrack')!==track){stop();return}
-  const dt=Math.min(50,Math.max(0,t-(last||t)));last=t;progress+=dt*.00055;
+  const dt=Math.min(50,Math.max(0,t-(last||t)));last=t;progress+=dt*Math.min(.00085,.00055+cleared*.00004);
   runner.style.transform=jumpUntil>t?'translateY(-45px)':'';
   obstacle.style.left=(100-progress*100)+'%';
   if(progress>=.75&&!resolved){resolved=true;if(jumpUntil>t){cleared++;status.textContent='Great jump! Keep your timing.'}else{lives--;status.textContent='Ouch! Jump a little earlier next time.'}counter.textContent='Cleared: '+cleared+' / 8 · Hearts: '+lives;if(cleared>=8){finish(true);return}if(lives<=0){finish(false);return}}
-  if(progress>=1.05){progress=0;resolved=false}
+  if(progress>=1.05){progress=0;resolved=false;obstacle.textContent=jungleObstacles[(cleared+lives)%jungleObstacles.length]}
   raf=requestAnimationFrame(frame);
  }
  raf=requestAnimationFrame(frame);
