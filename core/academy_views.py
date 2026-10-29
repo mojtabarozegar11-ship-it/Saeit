@@ -223,6 +223,20 @@ def education_enroll(request, slug):
 
 
 def education_certificate(request, code):
+    # A missing certificate/enrollment schema must never look like a revoked
+    # qualification or a deleted course. Keep the normal healthy path intact.
+    if missing_public_tables(EducationCertificate, EducationEnrollment, EducationCourse):
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>گواهی موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>گواهی موقتاً در دسترس نیست</h1>'
+            '<p role="status">بازیابی اطلاعات گواهی در حال پیگیری است.</p>'
+            '<p><a href="/academy/">بازگشت به آموزشگاه</a></p>'
+            '</main></body></html>',
+            status=503, content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
     certificate = get_object_or_404(
         EducationCertificate.objects.select_related("enrollment__course"),
         code=code,
@@ -234,6 +248,9 @@ def education_certificate(request, code):
 def education_issue_certificate(request, slug):
     if request.method != "POST":
         raise Http404
+    # Never issue a duplicate/partial certificate during a schema outage.
+    if missing_public_tables(EducationCertificate, EducationEnrollment, EducationCourse):
+        return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     enrollment = get_object_or_404(EducationEnrollment, course=course, user=request.user, status="completed")
     certificate, created = EducationCertificate.objects.get_or_create(
