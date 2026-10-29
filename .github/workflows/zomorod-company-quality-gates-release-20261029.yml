@@ -82,6 +82,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-business-tokenless"
+          git fetch --no-tags --depth=1 origin 88ff29ee98008ed6fb63f5088b0dbd8a78d02b1b
           git show 88ff29ee98008ed6fb63f5088b0dbd8a78d02b1b:content/zomorod-business/command_center.php > "$d/v1-command-center.php"
           expected="$(sha256sum "$d/v1-command-center.php" | cut -d ' ' -f1)"
           ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" "$expected" <<'REMOTE'
