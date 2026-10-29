@@ -74,6 +74,16 @@ jobs:
           import shutil
           from pathlib import Path
           base=Path.home()/"factory-runtime"
+          # Refuse linked ancestors and staging paths BEFORE mkdir/SCP: an
+          # existing operations symlink would otherwise redirect the bundle
+          # outside the authorized factory root, despite later tar checks.
+          stage=base/"operations/master-activation-source"
+          if any(part.is_symlink() for part in (stage, *stage.parents)):
+              print("MASTER_REMOTE_PREFLIGHT_LINKED_STAGE_BLOCKED")
+              raise SystemExit(76)
+          if not base.is_dir():
+              print("MASTER_REMOTE_PREFLIGHT_ROOT_MISSING")
+              raise SystemExit(77)
           free=shutil.disk_usage(base).free
           required=5*1024**3+128*1024**2
           if free < required:
