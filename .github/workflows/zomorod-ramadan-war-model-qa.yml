@@ -44,7 +44,7 @@ jobs:
       - name: Verify all preview runtime imports and fail-closed MOJ1 policy
         run: python3 -m unittest discover -s games/ramadan-war -p 'test_preview_runtime_deps.py' -v
       - name: Verify integrated campaign save, input, accessibility and security regressions
-        run: node --test tests/game/ramadan-input-guard.test.mjs tests/game/ramadan-save-validation.test.mjs tests/game/ramadan-save-provenance.test.mjs tests/game/ramadan-legacy-recovery-guard.test.mjs tests/game/ramadan-campaign-checkpoint.test.mjs tests/game/ramadan-mobile-survival.test.mjs tests/game/ramadan-terminal-save.test.mjs tests/game/ramadan-restore-fallback.test.mjs tests/game/ramadan-import-transaction.test.mjs tests/game/ramadan-cross-tab.test.mjs
+        run: node --test tests/game/ramadan-input-guard.test.mjs tests/game/ramadan-save-validation.test.mjs tests/game/ramadan-save-provenance.test.mjs tests/game/ramadan-legacy-recovery-guard.test.mjs tests/game/ramadan-campaign-checkpoint.test.mjs tests/game/ramadan-mobile-survival.test.mjs tests/game/ramadan-terminal-save.test.mjs tests/game/ramadan-restore-fallback.test.mjs tests/game/ramadan-import-transaction.test.mjs tests/game/ramadan-cross-tab.test.mjs tests/game/ramadan-r25-victory-defend.test.mjs
       - name: Verify packaged R17-R23 campaign recovery regressions
         run: node --test games/ramadan-war/qa/*.test.mjs
       - name: Validate offline campaign backup export/import and fail-closed inputs
