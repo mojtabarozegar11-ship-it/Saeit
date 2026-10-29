@@ -104,6 +104,30 @@ class StageGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "UNSAFE_ARCHIVE_MEMBER"):
             gate.verify(self.path)
 
+    def test_file_directory_member_collision_rejected(self):
+        self.build(extra={"game.js/child.txt": b"conflicting path"})
+        with self.assertRaisesRegex(ValueError, "FILE_DIRECTORY_MEMBER_COLLISION"):
+            gate.verify(self.path)
+
+    def test_unix_device_member_rejected(self):
+        import stat
+        self.build()
+        special = zipfile.ZipInfo("ramadan-war/device")
+        special.create_system = 3
+        special.external_attr = (stat.S_IFCHR | 0o600) << 16
+        with zipfile.ZipFile(self.path, "a") as archive:
+            archive.writestr(special, b"device")
+        with self.assertRaisesRegex(ValueError, "UNSAFE_ARCHIVE_MEMBER_TYPE"):
+            gate.verify(self.path)
+
+    def test_extreme_compression_ratio_rejected(self):
+        self.build()
+        with zipfile.ZipFile(self.path, "a") as archive:
+            archive.writestr("ramadan-war/bomb.txt", b"0" * 6_000_000,
+                             compress_type=zipfile.ZIP_DEFLATED)
+        with self.assertRaisesRegex(ValueError, "SUSPICIOUS_COMPRESSION_RATIO"):
+            gate.verify(self.path)
+
 
 if __name__ == "__main__":
     unittest.main()
