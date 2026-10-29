@@ -7,9 +7,9 @@ const start=source.indexOf("$('#importSaveFile').onchange=async e=>{");
 const end=source.indexOf("};$('#survival').onclick",start);
 assert.ok(start>=0&&end>start,'production import handler exists');
 const handler=source.slice(start+"$('#importSaveFile').onchange=".length,end+1);
-async function run({old='OLD_SAVE',activate=true,writeOk=true,removeOk=true}={}){
+async function run({old='OLD_SAVE',activate=true,writeOk=true,removeOk=true,foreign=false,baseline=undefined}={}){
  const state=new Map(old===null?[]:[['rwNativeCampaign',old]]),messages=[];
- const ctx={saveKey:'rwNativeCampaign',saveStatus:'not-saved',hero:2,
+ const ctx={saveKey:'rwNativeCampaign',saveStatus:'not-saved',hero:2,foreignSaveDetected:foreign,lastSavedSnapshot:baseline,
   MAX_CAMPAIGN_BACKUP_BYTES:512*1024,
   readCampaignBackup:()=> 'NEW_SAVE',
   storageRead:k=>state.has(k)?state.get(k):null,
@@ -42,4 +42,10 @@ test('successful activation commits imported campaign',async()=>{
 test('failed browser write leaves previous save intact',async()=>{
  const r=await run({writeOk:false});
  assert.equal(r.state.get('rwNativeCampaign'),'OLD_SAVE');
+});
+
+test('import refuses stale-tab overwrite and preserves newer campaign',async()=>{
+ const r=await run({old:'NEWER_OTHER_TAB',baseline:'OLD_BASELINE'});
+ assert.equal(r.state.get('rwNativeCampaign'),'NEWER_OTHER_TAB');
+ assert.match(r.messages.at(-1),/برگهٔ دیگری/);
 });
