@@ -150,7 +150,7 @@ function runnerGame(stage){
  const track=stage.querySelector('#runnerTrack'),runner=stage.querySelector('#runnerHero'),obstacle=stage.querySelector('#runnerObstacle'),status=stage.querySelector('#runnerStatus'),counter=stage.querySelector('#runScore');
  function stop(){if(!active)return;active=false;cancelAnimationFrame(raf);document.removeEventListener('keydown',onKey);stage.removeEventListener('runner:stop',stop)}
  function finish(won){stop();status.textContent=won?'🏆 You cleared all eight jungle obstacles!':'No hearts left. Try the jungle again!';jumpButton.disabled=true;stage.append(button('Run again',()=>runnerGame(stage),'alt'))}
- function jump(){if(!active)return;jumpUntil=performance.now()+620;runner.style.transform='translateY(-45px)'}
+ function jump(){const now=performance.now();if(!active||jumpUntil>now)return;jumpUntil=now+620;runner.style.transform='translateY(-45px)'}
  function onKey(e){if(e.code!=='Space'||e.repeat||!active||!document.getElementById('gameOverlay').classList.contains('open'))return;if(e.target.closest?.('input,textarea,select'))return;e.preventDefault();jump()}
  const jumpButton=button('Jump! 🐾',jump);jumpButton.style.minWidth='150px';stage.append(jumpButton);
  const hint=document.createElement('small');hint.textContent='Tap Jump or press Space just before the obstacle reaches the runner.';hint.style.color='#526c7b';stage.append(hint);
