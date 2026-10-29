@@ -76,7 +76,7 @@ def workers():
                 break
             try:
                 with open("/proc/" + e.name + "/cmdline", "rb") as f:
-                    cmd = f.read(8192).replace(b"\\0", b" ").lower()
+                    cmd = f.read(8192).replace(b"\0", b" ").lower()
                 if b"factory" in cmd or b"master-agent" in cmd:
                     matched += 1
             except OSError:
@@ -110,7 +110,7 @@ def sqlite(path):
     try:
         with open(path, "rb") as f:
             header = f.read(16)
-        return {**s, "sqlite_header_valid": header == b"SQLite format 3\\0",
+        return {**s, "sqlite_header_valid": header == b"SQLite format 3\0",
                 "integrity_check": "NOT_RUN"}
     except OSError as exc:
         return {"state": "UNAVAILABLE", "error_class": type(exc).__name__}
@@ -150,7 +150,7 @@ def main():
     if not a.mount:
         a.mount = ["/", "/home", "/home/githubops/factory-runtime"]
     json.dump(capture(a), sys.stdout, ensure_ascii=False, sort_keys=True, indent=2)
-    sys.stdout.write("\\n")
+    sys.stdout.write("\n")
 
 if __name__ == "__main__":
     main()
