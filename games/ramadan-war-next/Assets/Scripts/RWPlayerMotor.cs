@@ -15,7 +15,7 @@ namespace RamadanWar.Next
         public int Reserve { get; private set; } = 240;
         private const int Magazine = 30;
         private float pitch, verticalVelocity, nextShot, reloadEnd, bobTime;
-        private bool reloading, finished, ads;
+        private bool reloading, finished, ads, suppressMouseFireUntilRelease;
         private Vector2 touchMove, touchLook;
         private bool touchFire, touchInteract, touchReload;
         private Transform gun;
@@ -28,6 +28,11 @@ namespace RamadanWar.Next
             EnhancedTouchSupport.Enable();
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
+        }
+
+        private void OnDestroy()
+        {
+            EnhancedTouchSupport.Disable();
         }
 
         private void Start()
@@ -54,8 +59,11 @@ namespace RamadanWar.Next
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible = true;
             }
+            if (mouse != null && !mouse.leftButton.isPressed) suppressMouseFireUntilRelease = false;
             if (mouse != null && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked)
             {
+                // The click that captures the cursor must not also fire a weapon.
+                suppressMouseFireUntilRelease = true;
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
             }
@@ -105,7 +113,7 @@ namespace RamadanWar.Next
                 (pad != null && pad.buttonNorth.wasPressedThisFrame) || touchInteract)
                 Game.TryInteract();
 
-            var firing = (mouse != null && mouse.leftButton.isPressed && Cursor.lockState == CursorLockMode.Locked) ||
+            var firing = (mouse != null && mouse.leftButton.isPressed && !suppressMouseFireUntilRelease && Cursor.lockState == CursorLockMode.Locked) ||
                          (pad != null && pad.rightTrigger.ReadValue() > .3f) || touchFire;
             if (firing) Fire();
             recoil = Mathf.MoveTowards(recoil, 0, 5.5f * Time.deltaTime);

@@ -1,0 +1,19 @@
+name: Ramadan Unity Source Contract (No License Required)
+on:
+  pull_request:
+    paths:
+      - 'games/ramadan-war-next/**'
+      - '.github/workflows/ramadan-unity-source-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  structural-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify Unity project structure and enemy renderer safety
+        run: python3 games/ramadan-war-next/tools/check_contract.py

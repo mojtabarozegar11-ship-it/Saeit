@@ -39,6 +39,12 @@ for path, tokens in required.items():
         clean = "".join(stripped)
         assert clean.count("{") == clean.count("}"), f"unbalanced C# braces: {path}"
 
+# Static regression for Unity prefabs whose visible mesh is nested under the enemy root.
+# This is NOT a substitute for Unity compilation or a runtime prefab test.
+brain = (root / "Assets/Scripts/RWEnemyBrain.cs").read_text(encoding="utf-8")
+assert "GetComponentInChildren<Renderer>()" in brain, "enemy mesh must be resolved from child prefabs"
+assert "if (renderComponent != null) originalColor = renderComponent.material.color;" in brain, "renderer-less prefab must not crash AI initialization"
+
 manifest = json.loads((root / "Packages/manifest.json").read_text())
 deps = manifest["dependencies"]
 for package in ("com.unity.inputsystem", "com.unity.render-pipelines.universal", "com.unity.ugui"):
