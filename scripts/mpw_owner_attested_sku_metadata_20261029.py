@@ -146,9 +146,29 @@ def rollback(run):
             p.save(update_fields=["metadata"])
     print("MPW_OWNER_RIGHTS_METADATA=ROLLED_BACK_EXACT_SNAPSHOT; SKUS=72,225,879")
 
+
+def restart_passenger():
+    from pathlib import Path
+    for root in (HOME/"Saeit-staging",HOME/"mojplaywin.com"):
+        if root.is_symlink() or not root.is_dir():
+            raise RuntimeError("UNSAFE_PASSENGER_ROOT")
+        wsgi=root/"passenger_wsgi.py"
+        if root.name=="mojplaywin.com":
+            if wsgi.is_symlink() or not wsgi.is_file() or "Saeit-staging" not in wsgi.read_text("utf8","replace"):
+                raise RuntimeError("PASSENGER_MAPPING_CHANGED")
+        tmp=root/"tmp"
+        if tmp.is_symlink() or not tmp.is_dir():
+            raise RuntimeError("UNSAFE_RESTART_DIRECTORY")
+        marker=tmp/"restart.txt"
+        if marker.is_symlink() or (marker.exists() and not marker.is_file()):
+            raise RuntimeError("UNSAFE_RESTART_MARKER")
+        marker.touch()
+    print("MPW_PASSENGER_RESTART_MARKERS=TOUCHED; ORDERS=0; PAYMENTS=0")
+
 if __name__=="__main__":
     if len(sys.argv)==2 and sys.argv[1]=="check": check()
     elif len(sys.argv)==3 and sys.argv[1]=="apply": apply(sys.argv[2])
     elif len(sys.argv)==3 and sys.argv[1]=="verify": verify(sys.argv[2])
     elif len(sys.argv)==3 and sys.argv[1]=="rollback": rollback(sys.argv[2])
+    elif len(sys.argv)==2 and sys.argv[1]=="restart": restart_passenger()
     else: raise SystemExit("Usage: check | apply RUN_ID | verify RUN_ID | rollback RUN_ID")
