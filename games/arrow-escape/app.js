@@ -132,7 +132,7 @@
       (p.x + .5) + '" cy="' + (p.y + .5) + '" r=".47"/>').join('');
     return '<g class="cube-arrow' + hint + '" data-arrow-id="' + piece.id +
       '" role="button" aria-label="پیکان ' + piece.id +
-      '" tabindex="-1"><path class="arrow-touch" d="' + shape +
+      '" tabindex="0"><path class="arrow-touch" d="' + shape +
       '"/><path class="arrow-stroke" d="' + shape +
       '"/><polygon class="arrow-head" points="' + tip + '"/>' + hitPoints + '</g>';
   }
@@ -397,6 +397,14 @@
       paintAngle();
     }, { passive: false });
     stage.addEventListener('keydown', e => {
+      // SVG arrow groups are keyboard-focusable; Enter/Space performs the same
+      // legal-move check as touch without triggering a page scroll.
+      const arrow = e.target.closest?.('[data-arrow-id]');
+      if (arrow && stage.contains(arrow) && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        pickArrow(arrow.dataset.arrowId);
+        return;
+      }
       const delta = 18;
       if (e.key === 'ArrowLeft') yAngle -= delta;
       else if (e.key === 'ArrowRight') yAngle += delta;
