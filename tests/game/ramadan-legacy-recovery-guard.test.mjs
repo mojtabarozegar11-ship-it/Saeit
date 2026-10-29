@@ -45,6 +45,7 @@ test('malformed and oversized browser storage is rejected before JSON parsing',(
 test('continue never silently overwrites an invalid save with a fresh campaign',()=>{
   const source=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
   assert.match(source,/const s=parseCampaignSave\(storageRead\(saveKey\)\)/);
-  assert.match(source,/if\(!restore\(\)\)\{toast\([^;]+;return\}/);
+  assert.match(source,/if\(!restore\(\)\)\{if\(hasResumableCampaignInMemory\(\)&&resumeInMemoryCampaign\(\)\)/);
+  assert.match(source,/toast\('ذخیرهٔ قبلی نامعتبر است؛ برای شروع مجدد «بازی تازه» را انتخاب کنید'\);return/);
   assert.doesNotMatch(source,/if\(!restore\(\)\)newWorld\(false\)/);
 });
