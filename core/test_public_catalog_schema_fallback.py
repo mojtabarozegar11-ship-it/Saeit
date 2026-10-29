@@ -257,19 +257,42 @@ class PublicCatalogDetailRouteRegressionTests(SimpleTestCase):
     def test_paid_course_enrollment_does_not_mutate_when_rights_tables_missing(self):
         request = self.requests.post("/education/course/example/enroll/")
         request.user = SimpleNamespace(is_authenticated=True)
-        with patch("core.academy_views.missing_public_tables", return_value=True) as guard, patch(
-            "core.academy_views.get_object_or_404"
-        ) as lookup, patch("core.academy_views.EducationEnrollment.objects.get_or_create") as mutate:
+        paid_course = SimpleNamespace(is_free=False)
+        with patch("core.academy_views.missing_public_tables", side_effect=[False, True]) as guard, patch(
+            "core.academy_views.get_object_or_404", return_value=paid_course
+        ) as lookup, patch("core.academy_views.EducationEnrollment.objects.get_or_create") as mutate, patch(
+            "core.academy_views.Order.objects.filter"
+        ) as payment_query:
             response = education_enroll(request, "example")
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response["Retry-After"], "300")
         self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
         self.assertEqual(json.loads(response.content)["error"], "education_temporarily_unavailable")
-        from core.academy_views import Order, Product
-        self.assertIn(Order, guard.call_args.args)
-        self.assertIn(Product, guard.call_args.args)
-        lookup.assert_not_called()
+        from core.academy_views import Order, OrderItem, Product, EducationCourse, EducationEnrollment
+        self.assertEqual(guard.call_count, 2)
+        self.assertEqual(guard.call_args_list[0].args, (EducationCourse, EducationEnrollment))
+        self.assertEqual(guard.call_args_list[1].args, (Product, Order, OrderItem))
+        lookup.assert_called_once()
         mutate.assert_not_called()
+        payment_query.assert_not_called()
+
+    def test_free_course_enrollment_does_not_require_payment_schema(self):
+        request = self.requests.post("/education/course/free-example/enroll/")
+        request.user = SimpleNamespace(is_authenticated=True)
+        course = SimpleNamespace(is_free=True)
+        enrollment = SimpleNamespace(pk=123)
+        with patch("core.academy_views.missing_public_tables", return_value=False) as guard, patch(
+            "core.academy_views.get_object_or_404", return_value=course
+        ), patch("core.academy_views.EducationEnrollment.objects.get_or_create",
+                 return_value=(enrollment, True)) as create, patch(
+            "core.academy_views.Order.objects.filter"
+        ) as payment_query:
+            response = education_enroll(request, "free-example")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content)["enrollment_id"], 123)
+        guard.assert_called_once()
+        payment_query.assert_not_called()
+        create.assert_called_once()
 
     def test_lesson_completion_does_not_write_when_progress_table_missing(self):
         request = self.requests.post("/education/course/example/lesson/1/complete/")
