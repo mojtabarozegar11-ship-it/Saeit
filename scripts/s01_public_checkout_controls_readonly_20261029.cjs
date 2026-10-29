@@ -32,7 +32,9 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
             const final=new URL(page.url());
             finalPath=final.origin==='https://mojplaywin.com'?final.pathname:'[external-redirect]';
           } catch(e) {error=(e.name||'NavigationError').slice(0,60);}
-          const controls=await page.evaluate(() => [...document.querySelectorAll('button,a[href],input[type="submit"]')]
+          let controls=[];
+          if (http > 0 && finalPath !== '[external-redirect]') {
+            try { controls=await page.evaluate(() => [...document.querySelectorAll('button,a[href],input[type="submit"]')]
             .map(el=>{
               const r=el.getBoundingClientRect(),style=getComputedStyle(el);
               const name=(el.getAttribute('aria-label')||el.innerText||el.value||'').trim().slice(0,80);
@@ -55,6 +57,8 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
                 coveredBy:covered?{tag:hit.tagName,id:(hit.id||'').slice(0,60)}:null};
             }).filter(x=>/checkout|invoice|pay|buy|purchase|cart|فاکتور|پرداخت|خرید|سبد/i
               .test(x.name+' '+x.href)).slice(0,60));
+            } catch(e) { error = error || ('DOM_'+(e.name||'Error')).slice(0,60); }
+          }
           rows.push({device:device.name,path,http,finalPath,error,jsErrors,controls,
             checkoutLinks:controls.filter(c=>/\/checkout\/$/.test(c.href||'')&&c.reasons.length===0).length});
           await page.close();
@@ -62,8 +66,10 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
       } finally {await context.close();}
     }
     const report={schema:'s01-anonymous-get-controls.v1',scope:'GET_ONLY_NO_PAYMENT',
-      checkedAt:new Date().toISOString(),ordersCreated:0,paymentsCreated:0,rows};
+      checkedAt:new Date().toISOString(),ordersCreated:0,paymentsCreated:0,rows,
+      complete:rows.length===URLS.length*2 && rows.every(r=>r.http>=200&&r.http<500&&!r.error)};
     fs.writeFileSync('s01-public-checkout-controls.json',JSON.stringify(report,null,2));
+    if (!report.complete) process.exitCode=2; // A partial scan must not be green.
     console.log(JSON.stringify({schema:report.schema,rows:rows.map(x=>({
       device:x.device,path:x.path,http:x.http,finalPath:x.finalPath,checkoutLinks:x.checkoutLinks,controls:x.controls.length,
       disabled:x.controls.filter(c=>c.reasons.length).length,
