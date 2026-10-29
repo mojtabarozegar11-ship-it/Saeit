@@ -24,6 +24,6 @@ test('Air Supremacy keeps test mutators on loopback only',()=>{
 test('Crown Defender exposes only copied read-only telemetry on public hosts',()=>{
  assert.match(crown,/const crownQa=\{getState:/);
  assert.match(crown,/const publicCrownQa=\{getState:crownQa\.getState,getEffects:crownQa\.getEffects,getFleet:crownQa\.getFleet\}/);
- assert.match(crown,/Object\.freeze\(\['localhost','127\.0\.0\.1'\]\.includes\(location\.hostname\)\?crownQa:publicCrownQa\)/);
+ assert.match(crown,/Object\.freeze\(typeof location!=='undefined'&&\['localhost','127\.0\.0\.1'\]\.includes\(location\.hostname\)\?crownQa:publicCrownQa\)/);
  assert.doesNotMatch(crown,/window\.__mpwCrownDefenderTest=\{getState:/);
 });
