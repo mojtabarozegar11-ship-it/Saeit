@@ -11,10 +11,16 @@ import sys
 UTC = dt.timezone.utc
 LIMIT = 500
 
+def has_symlink_component(path):
+    """Reject a linked ancestor too; checking only the leaf can follow a link."""
+    p = Path(path).absolute()
+    return any(part.is_symlink() for part in (p, *p.parents))
+
+
 def stat_path(path):
     try:
         p = Path(path)
-        if p.is_symlink():
+        if has_symlink_component(p):
             return {"state": "SYMLINK_NOT_FOLLOWED"}
         s = p.stat()
         return {"state": "PRESENT", "is_file": p.is_file(), "is_dir": p.is_dir(),
@@ -27,6 +33,8 @@ def stat_path(path):
 
 def mount(path):
     try:
+        if has_symlink_component(path):
+            return {"state": "SYMLINK_NOT_FOLLOWED"}
         v = os.statvfs(path)
         return {"state": "OBSERVED", "total_bytes": v.f_frsize * v.f_blocks,
                 "available_bytes": v.f_frsize * v.f_bavail,
