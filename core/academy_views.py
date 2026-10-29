@@ -37,7 +37,7 @@ def academy(request):
     # is absent. Never present missing data as an actually empty catalog.
     catalog_unavailable = missing_public_tables(EducationTrack, EducationCourse)
     if not catalog_unavailable:
-        db_tracks = list(EducationTrack.objects.filter(active=True))
+        db_tracks = list(EducationTrack.objects.filter(active=True).order_by("sort_order", "pk")[:100])
         if db_tracks:
             tracks = [{"key": x.key, "title": x.title, "meta": x.meta, "text": x.description} for x in db_tracks]
     course_q = request.GET.get("q", "").strip()[:120]  # Bound user-controlled DB search cost
