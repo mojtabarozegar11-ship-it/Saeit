@@ -1,4 +1,6 @@
 import importlib.util
+import os
+import stat
 from pathlib import Path
 import tempfile
 import unittest
@@ -70,6 +72,33 @@ class ArchiveQCTests(unittest.TestCase):
                         z.writestr(member, "x")
                     with self.assertRaisesRegex(qc.QCBlocked, "UNSAFE_MEMBER_NAME"):
                         qc.verify(72, p)
+
+    def test_linked_ancestor_rejected_without_following(self):
+        with tempfile.TemporaryDirectory() as d:
+            private = Path(d) / "private"
+            private.mkdir()
+            archive = private / "safe.zip"
+            with zipfile.ZipFile(archive, "w") as z:
+                z.writestr("ok.txt", "ok")
+            alias = Path(d) / "alias"
+            alias.symlink_to(private, target_is_directory=True)
+            with self.assertRaisesRegex(qc.QCBlocked, "LINKED_PATH"):
+                qc.verify(72, alias / "safe.zip")
+
+    def test_fifo_archive_and_special_zip_member_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            fifo = Path(d) / "fifo.zip"
+            os.mkfifo(fifo)
+            with self.assertRaisesRegex(qc.QCBlocked, "NOT_BOUNDED_REGULAR_FILE"):
+                qc.verify(72, fifo)
+            archive = Path(d) / "device.zip"
+            info = zipfile.ZipInfo("special")
+            info.create_system = 3
+            info.external_attr = (stat.S_IFCHR | 0o600) << 16
+            with zipfile.ZipFile(archive, "w") as z:
+                z.writestr(info, b"")
+            with self.assertRaisesRegex(qc.QCBlocked, "SPECIAL_FILE_MEMBER"):
+                qc.verify(225, archive)
 
     def test_non_zip_refused(self):
         with tempfile.TemporaryDirectory() as d:
