@@ -72,8 +72,14 @@ def _read_only_checkout_sql(execute, sql, params, many, context):
     In particular, no UPDATE, INSERT, DELETE, PRAGMA or transaction control is
     authorized by this probe. Fail closed if the view starts writing.
     """
-    if not isinstance(sql, str) or not re.match(r"^\s*SELECT\b", sql, re.IGNORECASE):
-        fail("Checkout proof refused non-SELECT database operation")
+    # A SELECT prefix is not a sufficient read-only guarantee: some database
+    # drivers accept multiple statements, and SELECT ... FOR UPDATE/INTO can
+    # acquire locks or create server-side files. Fail closed on these shapes.
+    if (many or not isinstance(sql, str)
+            or not re.match(r"^\s*SELECT\b", sql, re.IGNORECASE)
+            or ";" in sql
+            or re.search(r"\bFOR\s+UPDATE\b|\bLOCK\s+IN\s+SHARE\s+MODE\b|\bINTO\s+(?:OUTFILE|DUMPFILE)\b", sql, re.IGNORECASE)):
+        fail("Checkout proof refused non-SELECT or side-effect SQL operation")
     return execute(sql, params, many, context)
 
 
