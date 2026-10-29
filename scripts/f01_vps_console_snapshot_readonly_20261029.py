@@ -98,18 +98,31 @@ def workers():
         return {"state": "UNAVAILABLE", "error_class": type(exc).__name__}
 
 def queue(path):
-    s = stat_path(path)
-    if s["state"] != "PRESENT" or not s["is_dir"]:
-        return s
+    """Count entries through no-follow directory descriptors; never enumerate contents."""
     try:
-        count = 0
-        with os.scandir(path) as entries:
-            for _ in entries:
-                count += 1
-                if count >= LIMIT:
-                    break
-        return {"state": "OBSERVED", "entries_at_least": count,
-                "truncated": count >= LIMIT, "contents_redacted": True}
+        if has_symlink_component(path):
+            return {"state": "SYMLINK_NOT_FOLLOWED"}
+        parts = Path(path).absolute().parts
+        flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                 | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
+        fd = os.open("/", flags)
+        try:
+            for component in parts[1:]:
+                next_fd = os.open(component, flags, dir_fd=fd)
+                os.close(fd)
+                fd = next_fd
+            count = 0
+            with os.scandir(fd) as entries:
+                for _ in entries:
+                    count += 1
+                    if count >= LIMIT:
+                        break
+            return {"state": "OBSERVED", "entries_at_least": count,
+                    "truncated": count >= LIMIT, "contents_redacted": True}
+        finally:
+            os.close(fd)
+    except FileNotFoundError:
+        return {"state": "MISSING"}
     except OSError as exc:
         return {"state": "UNAVAILABLE", "error_class": type(exc).__name__}
 
