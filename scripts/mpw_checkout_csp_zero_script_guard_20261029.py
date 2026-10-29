@@ -158,6 +158,14 @@ def release_lock():
 def publish(run):
     if os.environ.get("MPW_CSP_RELEASE_APPROVED") != "YES":
         fail("Production source write blocked without explicit release gate")
+    # A local backup alone cannot authorize a production release. Both
+    # independently checked recovery and effective Passenger DB identity must
+    # be explicitly attested by the release operator; never infer them from
+    # the SSH shell's SQLite configuration or an old workflow run.
+    if os.environ.get("MPW_CSP_OFFHOST_RESTORE_VERIFIED") != "YES":
+        fail("Production source write blocked: independent off-host restore not verified")
+    if os.environ.get("MPW_CSP_PASSENGER_DB_AUTHORITY_VERIFIED") != "YES":
+        fail("Production source write blocked: Passenger database authority not verified")
     guard()
     with release_lock():
         return _publish_locked(run)
@@ -222,7 +230,16 @@ def verify(run):
     }))
 
 def rollback(run):
+    # A rollback is a production write too: serialize it with publish and
+    # require the same explicit owner-controlled release authorization.
+    if os.environ.get("MPW_CSP_RELEASE_APPROVED") != "YES":
+        fail("Production rollback blocked without explicit release gate")
     guard()
+    with release_lock():
+        return _rollback_locked(run)
+
+
+def _rollback_locked(run):
     backup, manifest = ident(run)
     if backup.is_symlink() or manifest.is_symlink() or not backup.is_file() or not manifest.is_file():
         fail("No rollback files")
