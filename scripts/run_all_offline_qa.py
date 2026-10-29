@@ -17,6 +17,8 @@ SUITES=[
  'scripts/test_period_closure_sqlite.py',
  'scripts/test_finance_invariants.py',
  'scripts/test_real_php_schema_sqlite_integration.py',
+ 'scripts/test_zomorod_owner_password_rotate.py',
+ 'scripts/zomorod_workflow_web_synthetic_qa.py',
 ]
 PHP_SUITES=[
  'scripts/zomorod_command_center_synthetic_qa.php',
@@ -27,6 +29,7 @@ PHP_SUITES=[
  'scripts/zomorod_finance_audit_synthetic_qa.php',
  'scripts/zomorod_period_controls_synthetic_qa.php',
  'scripts/zomorod_payroll_control_synthetic_qa.php',
+ 'scripts/zomorod_treasury_synthetic_qa.php',
 ]
 
 def run(command:list[str])->tuple[bool,str]:
