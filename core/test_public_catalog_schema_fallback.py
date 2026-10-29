@@ -10,7 +10,7 @@ from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase
 from django.template.loader import render_to_string
 
-from core.academy_views import academy, education_course_detail, education_lesson
+from core.academy_views import academy, education_course_detail, education_lesson, education_enroll, education_lesson_complete
 from core.company_content_views import company_gallery
 from core.newsletter_views import newsletter_home, newsletter_detail, safe_json_ld
 from core.public_catalog_guard import missing_public_tables, mark_public_data_unavailable
@@ -140,6 +140,39 @@ class PublicCatalogDetailRouteRegressionTests(SimpleTestCase):
 
     def setUp(self):
         self.requests = RequestFactory()
+
+    def test_paid_course_enrollment_does_not_mutate_when_rights_tables_missing(self):
+        request = self.requests.post("/education/course/example/enroll/")
+        request.user = SimpleNamespace(is_authenticated=True)
+        with patch("core.academy_views.missing_public_tables", return_value=True) as guard, patch(
+            "core.academy_views.get_object_or_404"
+        ) as lookup, patch("core.academy_views.EducationEnrollment.objects.get_or_create") as mutate:
+            response = education_enroll(request, "example")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
+        self.assertEqual(json.loads(response.content)["error"], "education_temporarily_unavailable")
+        from core.academy_views import Order, Product
+        self.assertIn(Order, guard.call_args.args)
+        self.assertIn(Product, guard.call_args.args)
+        lookup.assert_not_called()
+        mutate.assert_not_called()
+
+    def test_lesson_completion_does_not_write_when_progress_table_missing(self):
+        request = self.requests.post("/education/course/example/lesson/1/complete/")
+        request.user = SimpleNamespace(is_authenticated=True)
+        with patch("core.academy_views.missing_public_tables", return_value=True) as guard, patch(
+            "core.academy_views.get_object_or_404"
+        ) as lookup, patch("core.academy_views.EducationProgress.objects.get_or_create") as mutate:
+            response = education_lesson_complete(request, "example", 1)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
+        self.assertIn("no-store", response["Cache-Control"])
+        from core.academy_views import EducationProgress
+        self.assertIn(EducationProgress, guard.call_args.args)
+        lookup.assert_not_called()
+        mutate.assert_not_called()
 
     def test_authenticated_course_detail_has_no_undefined_lesson_lookup(self):
         request = self.requests.get("/education/course/example/")
