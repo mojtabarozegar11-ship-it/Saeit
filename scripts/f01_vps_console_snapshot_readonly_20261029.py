@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """F-01 bounded read-only VPS guest evidence snapshot; no SSH, writes, or deploy."""
 import argparse
+import errno
+import stat
 import datetime as dt
 import json
 import os
@@ -111,17 +113,45 @@ def queue(path):
     except OSError as exc:
         return {"state": "UNAVAILABLE", "error_class": type(exc).__name__}
 
-def sqlite(path):
-    s = stat_path(path)
-    if s["state"] != "PRESENT" or not s["is_file"]:
-        return s
+def _open_sqlite_regular_nofollow(path):
+    """Open each directory component by fd, blocking ancestor/leaf link swaps."""
+    parts = Path(path).absolute().parts
+    dir_flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                 | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
+    leaf_flags = (os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                  | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0))
+    parent_fd = os.open("/", dir_flags)
     try:
-        # Fail closed on a swapped symlink leaf; never follow it to another file.
-        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
-        with os.fdopen(os.open(path, flags), "rb") as f:
+        for component in parts[1:-1]:
+            next_fd = os.open(component, dir_flags, dir_fd=parent_fd)
+            os.close(parent_fd)
+            parent_fd = next_fd
+        leaf_fd = os.open(parts[-1], leaf_flags, dir_fd=parent_fd)
+        try:
+            if not stat.S_ISREG(os.fstat(leaf_fd).st_mode):
+                raise OSError(errno.EINVAL, "Not a regular SQLite file")
+            return leaf_fd
+        except BaseException:
+            os.close(leaf_fd)
+            raise
+    finally:
+        os.close(parent_fd)
+
+
+def sqlite(path):
+    """Read SQLite magic only; no SQLite connection or integrity/write attempt."""
+    try:
+        fd = _open_sqlite_regular_nofollow(path)
+        with os.fdopen(fd, "rb") as f:
+            metadata = os.fstat(f.fileno())
             header = f.read(16)
-        return {**s, "sqlite_header_valid": header == b"SQLite format 3\0",
+        return {"state": "PRESENT", "is_file": True, "is_dir": False,
+                "bytes": metadata.st_size,
+                "mtime_utc": dt.datetime.fromtimestamp(metadata.st_mtime, UTC).isoformat(),
+                "sqlite_header_valid": header == b"SQLite format 3\\0",
                 "integrity_check": "NOT_RUN"}
+    except FileNotFoundError:
+        return {"state": "MISSING"}
     except OSError as exc:
         return {"state": "UNAVAILABLE", "error_class": type(exc).__name__}
 
