@@ -1,0 +1,278 @@
+name: Zomorod one-use encrypted owner credential rotation
+on:
+  push:
+    branches: ['fix/zomorod-owner-sealed-rotation-20261029']
+    paths:
+      - '.github/workflows/zomorod-owner-sealed-rotation.yml'
+      - 'scripts/zomorod_owner_password_rotate.php'
+      - 'scripts/zomorod_owner_sealed_rotate.py'
+      - 'scripts/test_zomorod_owner_password_rotate.py'
+      - 'tests/test_zomorod_owner_sealed_rotate.py'
+      - 'tests/test_zomorod_owner_rotation_workflow.py'
+  pull_request:
+    paths:
+      - '.github/workflows/zomorod-owner-sealed-rotation.yml'
+      - 'scripts/zomorod_owner_password_rotate.php'
+      - 'scripts/zomorod_owner_sealed_rotate.py'
+      - 'scripts/test_zomorod_owner_password_rotate.py'
+      - 'tests/test_zomorod_owner_sealed_rotate.py'
+      - 'tests/test_zomorod_owner_rotation_workflow.py'
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-owner-credential-rotation-one-use
+  cancel-in-progress: false
+jobs:
+  offline-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, sqlite3
+      - name: Verify PHP/SQLite rotation, RSA envelope and workflow guards without credentials
+        run: |
+          set -euo pipefail
+          php -l scripts/zomorod_owner_password_rotate.php
+          python3 scripts/test_zomorod_owner_password_rotate.py
+          python3 - <<'PY'
+          import runpy
+          for path in ('tests/test_zomorod_owner_sealed_rotate.py',
+                       'tests/test_zomorod_owner_rotation_workflow.py'):
+              ns=runpy.run_path(path)
+              names=sorted(x for x in ns if x.startswith('test_') and callable(ns[x]))
+              assert len(names)>=4
+              for name in names:
+                  ns[name]()
+                  print(name+'=PASS')
+          PY
+          echo OWNER_ROTATION_OFFLINE_QA=PASS
+          echo NO_LIVE_CREDENTIAL_TESTED=TRUE
+  protected-owner-operation:
+    if: >-
+      github.event_name == 'issue_comment'
+      && github.ref == 'refs/heads/main'
+      && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+      && github.event.issue.number == 1600
+      && !github.event.issue.pull_request
+      && (
+        github.actor == 'mojtabarozegar11-ship-it'
+        || github.actor == 'chatgpt-codex-connector[bot]'
+      )
+      && github.event.comment.user.login == 'mojtabarozegar11-ship-it'
+      && github.event.comment.author_association == 'OWNER'
+      && (
+        github.event.comment.body == 'ZMR-OWNER-ROTATE-INSPECT-V1'
+        || startsWith(github.event.comment.body, 'ZMR-OWNER-ROTATE-V1')
+      )
+    needs: offline-safety
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate owner comment and preserve only ciphertext
+        id: gate
+        env:
+          EXPECTED_ACTOR: mojtabarozegar11-ship-it
+          EXPECTED_BOT_ACTOR: chatgpt-codex-connector[bot]
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - "$GITHUB_EVENT_PATH" <<'PY'
+          import json,os,re,sys
+          from pathlib import Path
+          event=json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+          comment=event.get('comment') or {}
+          issue=event.get('issue') or {}
+          user=comment.get('user') or {}
+          actor=os.environ.get('GITHUB_ACTOR')
+          if (event.get('action')!='created' or issue.get('number')!=1600
+                  or issue.get('pull_request') or user.get('login')!='mojtabarozegar11-ship-it'
+                  or comment.get('author_association')!='OWNER'
+                  or actor not in ('mojtabarozegar11-ship-it','chatgpt-codex-connector[bot]')
+                  or os.environ.get('GITHUB_REF')!='refs/heads/main'):
+              raise SystemExit('OWNER_ROTATION_COMMENT_AUTH_BLOCKED')
+          if actor=='chatgpt-codex-connector[bot]':
+              app=comment.get('performed_via_github_app')
+              if app is not None and (not isinstance(app,dict) or
+                                      app.get('slug')!='chatgpt-codex-connector'):
+                  raise SystemExit('OWNER_ROTATION_BOT_BLOCKED')
+          body=comment.get('body')
+          if body=='ZMR-OWNER-ROTATE-INSPECT-V1':
+              mode='inspect'
+          elif isinstance(body,str) and body.startswith('ZMR-OWNER-ROTATE-V1\n'):
+              mode='rotate'
+              encoded=body.split('\n',1)[1].strip()
+              if not 340<=len(encoded)<=2048 or re.fullmatch(r'[A-Za-z0-9+/]+={0,2}',encoded) is None:
+                  raise SystemExit('OWNER_ROTATION_CIPHERTEXT_FORMAT_BLOCKED')
+              out=Path(os.environ['RUNNER_TEMP'])/'zomorod-owner-encrypted.txt'
+              fd=os.open(out,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+              with os.fdopen(fd,'w',encoding='ascii') as handle:
+                  handle.write(encoded)
+          else:
+              raise SystemExit('OWNER_ROTATION_MARKER_BLOCKED')
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as stream:
+              stream.write('operation='+mode+'\n')
+          print('OWNER_OPERATION_INPUT=AUTHENTICATED')
+          print('OWNER_OPERATION_SECRET=NEVER_LOGGED')
+          PY
+      - name: Prepare pinned cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Install verified private CLI files only outside the web root
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          p="/home/zomorod2/.private/zomorod-business/.owner-rotation-tools"
+          ssh -F "$d/config" "$COMMAND_HOST" "test -d /home/zomorod2/.private/zomorod-business && install -d -m 700 '$p' && test \"\$(stat -c %a '$p')\" = 700 && test \"\$(stat -c %u '$p')\" = \"\$(id -u)\""
+          scp -F "$d/config" scripts/zomorod_owner_password_rotate.php scripts/zomorod_owner_sealed_rotate.py "$COMMAND_HOST:$p/"
+          ssh -F "$d/config" "$COMMAND_HOST" "chmod 600 '$p/zomorod_owner_password_rotate.php' '$p/zomorod_owner_sealed_rotate.py' && python3 -B -m py_compile '$p/zomorod_owner_sealed_rotate.py' && php -l '$p/zomorod_owner_password_rotate.php' >/dev/null"
+          echo 'OWNER_PRIVATE_TOOL_INSTALL=SUCCESS'
+      - name: Execute exact owner preflight or sealed rotation on cPanel
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+          OPERATION: ${{ steps.gate.outputs.operation }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          p="/home/zomorod2/.private/zomorod-business/.owner-rotation-tools/zomorod_owner_sealed_rotate.py"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          if test "$OPERATION" = inspect; then
+            ssh -F "$d/config" "$COMMAND_HOST" "python3 -B '$p' inspect"
+            echo 'OWNER_ROTATION_LIVE_ACTION=INSPECT_ONLY'
+          elif test "$OPERATION" = rotate; then
+            test -f "$RUNNER_TEMP/zomorod-owner-encrypted.txt"
+            ssh -F "$d/config" "$COMMAND_HOST" "python3 -B '$p' rotate" < "$RUNNER_TEMP/zomorod-owner-encrypted.txt"
+            echo 'OWNER_ROTATION_LIVE_ACTION=ROTATE_REQUESTED'
+          else
+            exit 1
+          fi
+      - name: Remove ephemeral runner SSH and encrypted input
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-command-channel" "$RUNNER_TEMP/zomorod-owner-encrypted.txt"
