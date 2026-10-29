@@ -1,5 +1,10 @@
 """Fail-closed master activation workflow policy. No production access or writes."""
 from pathlib import Path
+import os
+import subprocess
+import sys
+import tempfile
+import textwrap
 import unittest
 
 WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/vps-master-agent-activate.yml"
@@ -32,6 +37,28 @@ class MasterWorkflowReleaseGateTests(unittest.TestCase):
         self.assertLess(gate, extract)
         self.assertIn("required=5*1024**3+128*1024**2", s)
         self.assertIn("raise SystemExit(75)", s)
+
+    def test_linked_stage_ancestor_blocks_before_remote_writes(self):
+        s = self.text
+        self.assertLess(s.index("MASTER_REMOTE_PREFLIGHT_LINKED_STAGE_BLOCKED"),
+                        s.index("ssh \"\u0024{opts[@]}\" githubops@178.239.147.150 'install -d"))
+        start = "python3 - <<'PREFLIGHT'\\n"
+        self.assertIn(start, s)
+        program = textwrap.dedent(
+            s.split(start, 1)[1].split("\\n          PREFLIGHT", 1)[0])
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root) / "factory-runtime"
+            base.mkdir()
+            destination = Path(root) / "outside"
+            destination.mkdir()
+            (base / "operations").symlink_to(destination, target_is_directory=True)
+            result = subprocess.run(
+                [sys.executable, "-B", "-c", program],
+                env={**os.environ, "HOME": root},
+                capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 76, result.stderr)
+            self.assertIn("MASTER_REMOTE_PREFLIGHT_LINKED_STAGE_BLOCKED",
+                          result.stdout)
 
     def test_staging_is_atomic_and_rejects_links(self):
         s = self.text
