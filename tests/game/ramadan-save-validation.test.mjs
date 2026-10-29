@@ -435,7 +435,9 @@ test('one animation frame owns gameplay after rapid pause/resume and repeated re
 test('public Ramadan telemetry cannot mutate the campaign or invoke QA-only controls', () => {
   const source=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
   const start=source.indexOf('const qaIsLocal=');
-  const end=source.indexOf(';if(storageRead(saveKey))',start);
+  const debugAssignment='window.RamadanWarDebug=Object.freeze(debugApi);';
+  const debugEnd=source.indexOf(debugAssignment,start);
+  const end=debugEnd<0?-1:debugEnd+debugAssignment.length;
   assert.ok(start>0&&end>start,'extract the actual published debug API setup');
   const world={objective:{done:1,hold:0},enemies:[],mission:0,hero:0,endless:false};
   const makeContext=hostname=>({
