@@ -76,4 +76,34 @@ jobs:
           done
           test "$ok" = 1 || { echo 'TWO_HOP_READ_ONLY=UNAVAILABLE'; exit 1; }
           echo 'CPANEL30GB_PRIVATE_INBOX=READABLE'
+          # Verify the real command-center application responds without exposing the key.
+          p="/home/zomorod2/.private/zomorod-business"
+          if timeout 45s ssh -F "$d/config" saeit-cpanel "python3 -B '$p/company_ingress.py' show-public-key --db '$p/command-center.sqlite3' --hmac-key '$p/.company-bridge.key' --recipient-key '$p/.chat-command-rsa.key'" > "$d/key.out"; then
+            if grep -Fq -- '-----BEGIN PUBLIC KEY-----' "$d/key.out" && grep -Fq -- '-----END PUBLIC KEY-----' "$d/key.out"; then
+              echo 'PRIVATE_INGRESS_PUBLIC_KEY_API=READ_ONLY_OK'
+            else
+              echo 'PRIVATE_INGRESS_PUBLIC_KEY_API=INVALID_RESPONSE'
+              exit 1
+            fi
+          else
+            echo 'PRIVATE_INGRESS_PUBLIC_KEY_API=UNAVAILABLE'
+            exit 1
+          fi
+          # Read the private receipt database in SQLite read-only mode.
+          timeout 35s ssh -F "$d/config" saeit-cpanel "python3 -B - '$p/command-center.sqlite3'" <<'PY'
+          import sqlite3
+          import sys
+          from pathlib import Path
+          target = Path(sys.argv[1])
+          if not target.is_file():
+              print("PRIVATE_RECIPT_DB=NOT_FOUND")
+              raise SystemExit(2)
+          with sqlite3.connect(target.as_uri() + "?mode=ro", uri=True, timeout=5) as db:
+              db.execute("PRAGMA query_only=ON")
+              db.execute("SELECT 1").fetchone()
+              print("PRIVATE_RECIPT_DB=READ_ONLY_OK")
+              exists = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='bridge_receipts'").fetchone()
+              print("PRIVATE_RECEIPTS_TABLE=" + ("PRESENT" if exists else "ABSENT"))
+          PY
+          echo 'PRIVATE_CONTROL_CENTER=READ_ONLY_VERIFIED'
           echo 'TWO_HOP_READ_ONLY=COMPLETED'
