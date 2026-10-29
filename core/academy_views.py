@@ -301,7 +301,10 @@ def education_lesson(request, slug, lesson_id):
     if request.user.is_authenticated:
         enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status__in=("active", "completed")).first()
     if not enrollment:
-        if not (course.is_free and lesson.is_free_preview):
+        # The editor's explicit is_free_preview flag is the access boundary:
+        # allow that single preview on both free and paid courses, but never
+        # expose other paid lessons or enrollment-only progress/resources.
+        if not lesson.is_free_preview:
             return JsonResponse({"ok": False, "error": "enrollment_required"}, status=403)
         return render(request, "core/education_lesson.html", {"course": course, "lesson": lesson, "enrollment": None, "progress": None, "previous_lesson": previous_lesson, "next_lesson": next_lesson, "lesson_position": position + 1, "lesson_total": len(lessons), "bookmarked": bookmarked})
     # GET must not create a progress row; completion POST owns that mutation.
