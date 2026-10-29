@@ -112,7 +112,7 @@ jobs:
             IdentityFile $d/vps.key
             UserKnownHostsFile $d/vps.known
           Host saeit-cpanel
-            HostName zohal.pws-dns.net
+            HostName 178.239.147.125
             User zomorod2
             Port 1396
             IdentityFile $d/host.key
@@ -132,7 +132,7 @@ jobs:
           chmod 600 "$d/config"
           scan=""
           for attempt in 1 2 3 4 5; do
-            scan="$(timeout 45s ssh -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-vps 'timeout 12s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null | awk '$2 == "ssh-ed25519" && $3 ~ /^[A-Za-z0-9+\/=]+$/ {print $1, $2, $3}' || true)"
+            scan="$(timeout 45s ssh -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-vps 'timeout 12s ssh-keyscan -T 8 -p 1396 -t ed25519 178.239.147.125' 2>/dev/null | awk '$2 == "ssh-ed25519" && $3 ~ /^[A-Za-z0-9+\/=]+$/ {print $1, $2, $3}' || true)"
             if test -n "$scan"; then break; fi
             echo "CPANEL_VIA_VPS_KEYSCAN_TRANSIENT_EMPTY_ATTEMPT=$attempt"
             if test "$attempt" -lt 5; then sleep 5; fi
