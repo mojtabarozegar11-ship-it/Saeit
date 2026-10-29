@@ -120,16 +120,7 @@ jobs:
             if [ "$owner_applied" = 1 ]; then
               timeout 75s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_owner_attested_sku_metadata_20261029.py' rollback '$GITHUB_RUN_ID'" || true
             fi
-            timeout 35s ssh -T -F "$d/config" saeit-cpanel "$py -" <<'PY' || true
-            from pathlib import Path
-            for root in (Path('/home/zomorod2/Saeit-staging'),Path('/home/zomorod2/mojplaywin.com')):
-                if root.is_symlink() or not root.is_dir(): raise SystemExit('UNSAFE_PASSENGER_ROOT')
-                tmp=root/'tmp'
-                if tmp.is_symlink() or not tmp.is_dir(): raise SystemExit('UNSAFE_RESTART_DIRECTORY')
-                marker=tmp/'restart.txt'
-                if marker.is_symlink(): raise SystemExit('UNSAFE_RESTART_MARKER')
-                marker.touch()
-            PY
+            timeout 35s ssh -T -F "$d/config" saeit-cpanel "$py '$remote/mpw_owner_attested_sku_metadata_20261029.py' restart" || true
           }
           trap rollback ERR
           owner_applied=1
