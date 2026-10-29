@@ -7,7 +7,7 @@ on:
       - .github/workflows/mpw-checkout-csp-private-preimage-snapshot-20261029.yml
 permissions: {contents: read}
 concurrency:
-  group: s01-private-checkout-preimage
+  group: s01-pinned-cpanel-relay-single-session
   cancel-in-progress: false
 jobs:
   snapshot_only:
