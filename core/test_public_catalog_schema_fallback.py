@@ -458,7 +458,8 @@ class PublicCatalogHealthyPathTests(SimpleTestCase):
         course_qs = MagicMock()
         course_qs.select_related.return_value = course_qs
         course_qs.filter.return_value = course_qs
-        course_qs.order_by.return_value = [course]
+        course_qs.order_by.return_value = course_qs
+        course_qs.__getitem__.return_value = [course]
         with (
             patch("core.academy_views.missing_public_tables", return_value=False),
             patch("core.academy_views.EducationTrack.objects.filter", return_value=[track]) as track_query,
@@ -478,6 +479,7 @@ class PublicCatalogHealthyPathTests(SimpleTestCase):
         course_qs.filter.assert_any_call(track__key="agri")
         course_qs.filter.assert_any_call(is_free=True)
         course_qs.order_by.assert_called_once_with("track__sort_order", "title")
+        course_qs.__getitem__.assert_called_once_with(slice(None, 100, None))
 
     def test_gallery_complete_schema_keeps_published_media_and_filtering(self):
         media = SimpleNamespace(title="Orchard photo", target_path="/company/")
