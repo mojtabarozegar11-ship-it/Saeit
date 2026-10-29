@@ -32,6 +32,15 @@ class SnapshotTests(unittest.TestCase):
             self.assertFalse(x["deployment_authorized"])
             self.assertFalse(x["worker_running_verified"])
             self.assertEqual(x["offhost_backup_restored"], "NOT_VERIFIED")
+    def test_private_path_labels_are_redacted(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = argparse.Namespace(mount=[d], queue=[d], lock=[d], sqlite=[d], backup=[d])
+            x = mod.capture(a)
+            self.assertTrue(x["path_labels_redacted"])
+            for category in ("filesystem", "queue", "locks", "sqlite", "backup"):
+                self.assertEqual(list(x[category]), ["target_1"])
+                self.assertNotIn(d, str(list(x[category])))
+
     def test_queue_bounded(self):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "a").write_text("a")
