@@ -482,7 +482,7 @@
       const valid=new Set(arenaCards().map(x=>x.dataset.arenaKey));
       for(const key of favGames)if(!valid.has(key))favGames.delete(key);
       if(recentGame&&!valid.has(recentGame))recentGame=null;
-      $('#arena-favs-only').addEventListener('click',()=>{soloGame=null;onlyFavorites=!onlyFavorites;$('#arena-search').value='';filterArenaGames()});
+      $('#arena-favs-only').addEventListener('click',()=>{soloGame=null;onlyFavorites=!onlyFavorites;$('#arena-search').value='';try{const url=new URL(location.href);url.searchParams.delete('play');history.replaceState(null,'',url.href)}catch(_){}filterArenaGames()});
       $('#arena-back').addEventListener('click',arenaCloseSolo);
       $('#arena-recent').addEventListener('click',()=>{if(recentGame)arenaOpenSolo(recentGame)});
       try{const linked=new URL(location.href).searchParams.get('play');if(linked&&valid.has(linked))soloGame=linked}catch(_){}
@@ -1204,6 +1204,7 @@
     translateNewGames();
     resetStatuses();
     $('#arena-search').addEventListener('input',filterArenaGames);
+    document.addEventListener('moj-arena-ready',initArenaLobby,{once:true});
     translateArenaFinder();
   })();
 
@@ -2063,10 +2064,10 @@
   })();
   $('#language').value=languageChoice;
   $('#language').addEventListener('change',()=>{try{localStorage.setItem('moj-arena-language',$('#language').value)}catch(_){}});
-  initArenaLobby();
   if(languageChoice==='en')translate();
   else $('#language').dispatchEvent(new Event('change'));
   notice(tr('choose'));odds();bjRender();pokerRender();
+  document.dispatchEvent(new Event('moj-arena-ready'));
 })();
 
   </script>
