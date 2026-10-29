@@ -16,7 +16,7 @@ async function run(){
      let html=fs.readFileSync(path.join(root,'games/air-supremacy/index.html'),'utf8');
      const anchor='refreshHangar();spawnScenery();last=performance.now();requestAnimationFrame(loop);';
      assert(html.includes(anchor));
-     html=html.replace(anchor,'window.__g01AirInput=()=>({afterburner,boostHeld,paused,run,stickX:stick.x,stickY:stick.y});'+anchor);
+     html=html.replace(anchor,'window.__g01AirInput=()=>({afterburner,boostHeld,paused,run,stickX:stick.x,stickY:stick.y,pointerId,keyCount:key.size});'+anchor);
      route.fulfill({status:200,contentType:'text/html',body:html});
     });
     assert.equal((await air.goto(base+'/games/air-supremacy/index.html',{waitUntil:'domcontentloaded',timeout:45000})).status(),200);
@@ -48,6 +48,22 @@ async function run(){
     await air.locator('#resumeBtn').click();
     await air.waitForTimeout(100);
     assert.equal((await air.evaluate(()=>window.__g01AirInput())).afterburner,false,'boost must not relatch on resume');
+    // Focused UI controls must not fire weapons or register gameplay keys.
+    await air.evaluate(()=>document.querySelector('#pauseBtn').dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,code:'KeyM'})));
+    assert.equal((await air.evaluate(()=>window.__g01AirInput())).keyCount,0,'focused UI keyboard event must not control the aircraft');
+    if(mobile){
+      const stickBox=await air.locator('#stickArea').boundingBox();assert(stickBox);
+      await air.mouse.move(stickBox.x+stickBox.width*.23,stickBox.y+stickBox.height*.8);
+      await air.mouse.down();
+      await air.waitForFunction(()=>window.__g01AirInput().pointerId!==null,{timeout:5000});
+      const pid=(await air.evaluate(()=>window.__g01AirInput())).pointerId;
+      const pauseBox=await air.locator('#pauseBtn').boundingBox();assert(pauseBox);
+      await air.touchscreen.tap(pauseBox.x+pauseBox.width/2,pauseBox.y+pauseBox.height/2);
+      assert.equal((await air.evaluate(()=>window.__g01AirInput())).pointerId,null,'pause clears joystick ownership');
+      assert.equal(await air.evaluate(pid=>document.querySelector('#stickArea').hasPointerCapture(pid),pid),false,'pause releases joystick capture');
+      await air.mouse.up();
+      await air.locator('#resumeBtn').click();
+    }
     assert.deepEqual(airErrors,[]);
     console.log('AIR_THRUST_PAUSE_'+(mobile?'MOBILE':'DESKTOP')+'=PASS');
     await air.close();
@@ -71,6 +87,12 @@ async function run(){
     await crown.evaluate(()=>window.__mpwCrownDefenderTest.gameOver(false));
     assert.equal((await crown.evaluate(()=>window.__g01CrownInput())).keyCount,0);
     await crown.keyboard.up('ArrowRight');
+    await crown.evaluate(()=>window.__mpwCrownDefenderTest.start());
+    await crown.evaluate(()=>{
+      document.querySelector('#mode').dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,code:'ArrowRight'}));
+      document.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,code:'KeyE',ctrlKey:true}));
+    });
+    assert.equal((await crown.evaluate(()=>window.__g01CrownInput())).keyCount,0,'focused controls and modifier shortcuts must not become combat input');
     assert.deepEqual(crownErrors,[]);
     console.log('CROWN_HANGAR_INPUT_'+(mobile?'MOBILE':'DESKTOP')+'=PASS');
     await crown.close();
