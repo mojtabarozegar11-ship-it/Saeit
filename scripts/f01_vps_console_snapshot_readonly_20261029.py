@@ -127,7 +127,7 @@ def process_pressure():
                 with open("/proc/" + entry.name + "/stat", encoding="utf-8") as handle:
                     meta = parse_proc_stat(handle.read(4096))
                 with open("/proc/" + entry.name + "/cmdline", "rb") as handle:
-                    cmd = handle.read(4096).replace(b"\\0", b" ").lower()
+                    cmd = handle.read(4096).replace(b"\0", b" ").lower()
             except (OSError, ValueError, IndexError):
                 continue
             state = meta["state"][:1]
