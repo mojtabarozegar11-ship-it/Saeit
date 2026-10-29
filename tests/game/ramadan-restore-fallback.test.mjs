@@ -44,7 +44,7 @@ test('graphics restoration error preserves the previous playable campaign',()=>{
  const previous={mission:2,score:550};
  const disk={mission:1,hero:1,x:2.5,y:7.5,missionKills:0,pickups:[],enemies:[],hostile:[],missiles:[]};
  const {ctx,restore}=harness(previous,disk,{valid:true,throwBuild:true});
- assert.equal(restore(),false);assert.equal(ctx.world,previous);
+ assert.equal(restore(),false);assert.equal(ctx.world,previous);assert.equal(ctx.hero,0,'hero selection must roll back after graphics restore failure');
 });
 test('valid disk save replaces the old in-memory checkpoint',()=>{
  const previous={mission:2,score:550};
