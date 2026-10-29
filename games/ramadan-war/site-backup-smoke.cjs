@@ -65,14 +65,19 @@ const assert=require('node:assert/strict');
     const memoryBackup=JSON.parse(memoryBytes.toString('utf8'));
     assert.equal(memoryBackup.format,'ramadan-war-campaign-v1');
     assert.notDeepEqual(memoryBackup.campaign.enemies,stranded.enemies,'backup exports live memory, not stale disk');
-    page.once('dialog',dialog=>dialog.accept());
-    await page.reload({waitUntil:'domcontentloaded'});
-    await page.waitForFunction(()=>window.RamadanWarDebug?.start);
-    page.once('dialog',dialog=>dialog.accept());
-    await page.locator('#importSaveFile').setInputFiles({name:'campaign.json',
+    // A fresh tab avoids a browser-specific beforeunload dialog during recovery.
+    // The old tab remains paused and must not overwrite the restored backup.
+    const recovery=await context.newPage(),recoveryErrors=[];
+    recovery.on('pageerror',e=>recoveryErrors.push(e.message));
+    await recovery.goto(process.env.GAME_URL,{waitUntil:'domcontentloaded',timeout:45000});
+    await recovery.waitForFunction(()=>window.RamadanWarDebug?.start);
+    recovery.once('dialog',dialog=>dialog.accept());
+    await recovery.locator('#importSaveFile').setInputFiles({name:'campaign.json',
       mimeType:'application/json',buffer:memoryBytes});
-    await page.waitForFunction(()=>{try{return JSON.parse(localStorage.getItem('rwNativeCampaign')).hero===0}catch{return false}},null,{timeout:10000});
-    assert.equal(await page.locator('#start').innerText(),'ادامهٔ نبرد');
+    await recovery.waitForFunction(()=>{try{return JSON.parse(localStorage.getItem('rwNativeCampaign')).hero===0}catch{return false}},null,{timeout:10000});
+    assert.equal(await recovery.locator('#start').innerText(),'ادامهٔ نبرد');
+    assert.deepEqual(recoveryErrors,[]);
+    await recovery.close();
     assert.deepEqual(errors,[]);
     console.log('RAMADAN_CAMPAIGN_BACKUP_'+config.name.toUpperCase()+'=PASS');
    }finally{await context.close()}
