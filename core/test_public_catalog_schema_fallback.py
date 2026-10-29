@@ -477,6 +477,7 @@ class PublicCatalogHealthyPathTests(SimpleTestCase):
         stories_qs.select_related.return_value = stories_qs
         stories_qs.__getitem__.return_value = [story]
         sources_qs.__getitem__.return_value = [source]
+        publications_qs.select_related.return_value = publications_qs
         publications_qs.order_by.return_value = publications_qs
         publications_qs.__getitem__.return_value = [publication]
         schedule_qs.first.return_value = schedule
@@ -484,7 +485,7 @@ class PublicCatalogHealthyPathTests(SimpleTestCase):
             patch("core.newsletter_views.missing_public_tables", return_value=False),
             patch("core.newsletter_views.NewsletterStory.objects.filter", return_value=stories_qs),
             patch("core.newsletter_views.NewsletterSource.objects.filter", return_value=sources_qs),
-            patch("core.newsletter_views.NewsletterPublication.objects.select_related", return_value=publications_qs),
+            patch("core.newsletter_views.NewsletterPublication.objects.filter", return_value=publications_qs) as publication_query,
             patch("core.newsletter_views.NewsletterSchedule.objects.filter", return_value=schedule_qs),
             patch("core.newsletter_views.render", return_value=HttpResponse("healthy newsletter")) as render_mock,
         ):
@@ -498,4 +499,10 @@ class PublicCatalogHealthyPathTests(SimpleTestCase):
         self.assertEqual(context["publications"], [publication])
         self.assertIs(context["schedule"], schedule)
         stories_qs.select_related.assert_called_once_with("source", "agent")
+        publications_qs.select_related.assert_called_once_with("story")
         publications_qs.order_by.assert_called_once_with("-created_at")
+        public_filters = publication_query.call_args.kwargs
+        self.assertEqual(public_filters["story__status"], "published")
+        self.assertEqual(public_filters["status"], "published")
+        self.assertIn("story__published_at__lte", public_filters)
+        self.assertIn("published_at__lte", public_filters)
