@@ -96,7 +96,12 @@ def newsletter_detail(request, slug):
     ).first()
     if story is None:
         raise Http404("Newsletter story not found")
-    related = NewsletterStory.objects.filter(status="published").exclude(pk=story.pk).filter(story_type=story.story_type)[:6]
+    # A future-dated story may be editorially marked published but remains
+    # embargoed. Related links must obey the same visibility gate as detail.
+    related = (NewsletterStory.objects.filter(
+        status="published", published_at__lte=timezone.now(),
+        story_type=story.story_type,
+    ).exclude(pk=story.pk).order_by("-published_at")[:6])
     publications = story.publications.order_by("channel")
     article_jsonld = safe_json_ld({
         "@context": "https://schema.org",
