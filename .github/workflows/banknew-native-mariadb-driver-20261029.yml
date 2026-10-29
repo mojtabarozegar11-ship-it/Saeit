@@ -1,0 +1,198 @@
+name: Build private native MariaDB driver for MOJ Pay on cPanel
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/banknew-native-mariadb-driver-20261029.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: banknew-private-mariadb-driver
+  cancel-in-progress: false
+jobs:
+  mysqlclient:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare bounded mysqlclient source and offline build tools
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,urllib.request
+          with urllib.request.urlopen('https://pypi.org/pypi/mysqlclient/2.3.0/json',timeout=30) as r:
+              data=json.load(r)
+          source=[x for x in data['urls'] if x['filename']=='mysqlclient-2.3.0.tar.gz' and x['packagetype']=='sdist']
+          assert len(source)==1 and source[0]['url'].startswith('https://files.pythonhosted.org/')
+          with urllib.request.urlopen(source[0]['url'],timeout=30) as r:
+              payload=r.read(2000000)
+          assert hashlib.sha256(payload).hexdigest()==source[0]['digests']['sha256']
+          d=Path('wheels');d.mkdir(exist_ok=True)
+          (d/'mysqlclient-2.3.0.tar.gz').write_bytes(payload)
+          print('MYSQLCLIENT_OFFICIAL_PYPI_SHA256_MATCH=YES')
+          PY
+          python3 -m pip download --disable-pip-version-check --only-binary=:all: --dest wheels 'setuptools>=69,<83' 'wheel>=0.42,<1'
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          d=Path('wheels')
+          files=sorted(p for p in d.iterdir() if p.is_file())
+          assert 3<=len(files)<=20
+          assert len([p for p in files if p.name.startswith('mysqlclient-') and p.name.endswith('.tar.gz')])==1
+          assert all(not p.is_symlink() for p in files)
+          assert sum(p.stat().st_size for p in files)<20000000
+          (d/'CHECKSUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in files),encoding='utf-8')
+          print('BANKNEW_MYSQLCLIENT_OFFLINE_SOURCES_VERIFIED=YES')
+          PY
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-structure-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Reserve a new native-driver build in the existing private runtime
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import os,shutil,subprocess
+          root=Path('/home/zomorod2/mojpay-bank-service-private')
+          venv=root/'.venv'/'bin'/'python'
+          assert root.is_dir() and not root.is_symlink()
+          assert venv.is_file()
+          assert not (root/'.native-mysqlclient-build').exists() and not (root/'.native-mysqlclient-build').is_symlink()
+          assert not (root/'.native-mysqlclient-marker').exists()
+          stat=os.statvfs(str(root))
+          assert stat.f_bavail*stat.f_frsize >= 250*1024*1024, 'HOST_FREE_SPACE_TOO_LOW_FOR_NATIVE_BUILD'
+          gcc=shutil.which('gcc')
+          pkg=shutil.which('pkg-config')
+          assert gcc is not None and pkg is not None, 'HOST_NATIVE_COMPILER_OR_PKG_CONFIG_UNAVAILABLE'
+          supported=any(subprocess.run([pkg,'--exists',name],timeout=10).returncode==0 for name in ('mysqlclient','mariadb','libmariadb'))
+          assert supported, 'HOST_MARIADB_DEVELOPMENT_LIBS_UNAVAILABLE'
+          already=subprocess.run([str(venv),'-c','import importlib.util;print(importlib.util.find_spec("MySQLdb") is not None)'],check=True,capture_output=True,text=True,timeout=15).stdout.strip()
+          assert already=='False', 'MYSQLCLIENT_ALREADY_EXISTS_REFUSING_OVERWRITE'
+          (root/'.native-mysqlclient-build').mkdir(mode=0o700)
+          (root/'.native-mysqlclient-marker').write_text('mojpay-mysqlclient-new-20261029',encoding='utf-8')
+          print('BANKNEW_HOST_NATIVE_MARIADB_PREREQUISITES=PASS')
+          PY
+      - name: Transfer only vetted source and build wheels to private directory
+        run: |
+          timeout 90s scp -q -F "$RUNNER_TEMP/mpw-structure-ssh/config" wheels/* saeit-cpanel:/home/zomorod2/mojpay-bank-service-private/.native-mysqlclient-build/
+      - name: Build native wheel locally on cPanel and install into bank venv only
+        run: |
+          timeout 240s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib,subprocess
+          root=Path('/home/zomorod2/mojpay-bank-service-private')
+          marker=root/'.native-mysqlclient-marker'
+          assert marker.is_file() and marker.read_text(encoding='utf-8')=='mojpay-mysqlclient-new-20261029'
+          d=root/'.native-mysqlclient-build'
+          assert d.is_dir() and not d.is_symlink()
+          lines=(d/'CHECKSUMS').read_text(encoding='utf-8').splitlines()
+          assert 3<=len(lines)<=20
+          for line in lines:
+              sha,name=line.split('  ',1)
+              assert '/' not in name and '\\' not in name
+              f=d/name
+              assert f.is_file() and not f.is_symlink() and hashlib.sha256(f.read_bytes()).hexdigest()==sha
+          source=list(d.glob('mysqlclient-*.tar.gz'))
+          assert len(source)==1
+          runner='/opt/alt/python311/bin/python3.11'
+          build=root/'.native-mysqlclient-build-venv'
+          assert not build.exists() and not build.is_symlink()
+          subprocess.run((runner,'-m','venv',str(build)),check=True,timeout=60,stdout=subprocess.DEVNULL)
+          buildpy=build/'bin'/'python'
+          subprocess.run((str(buildpy),'-m','pip','install','--disable-pip-version-check','--no-index','--no-cache-dir','--find-links='+str(d),'setuptools','wheel'),check=True,timeout=75,stdout=subprocess.DEVNULL)
+          subprocess.run((str(buildpy),'-m','pip','wheel','--no-index','--no-build-isolation','--no-deps','--wheel-dir',str(d),str(source[0])),check=True,timeout=120,stdout=subprocess.DEVNULL)
+          compiled=list(d.glob('mysqlclient-*.whl'))
+          assert len(compiled)==1
+          venv=root/'.venv'/'bin'/'python'
+          subprocess.run((str(venv),'-m','pip','install','--disable-pip-version-check','--no-index','--no-deps','--no-cache-dir',str(compiled[0])),check=True,timeout=60,stdout=subprocess.DEVNULL)
+          subprocess.run((str(venv),'-c','import MySQLdb;assert MySQLdb.version_info>=(2,2,1)'),check=True,timeout=30,stdout=subprocess.DEVNULL)
+          subprocess.run((str(venv),'-m','pip','check'),check=True,timeout=30,stdout=subprocess.DEVNULL)
+          freeze=subprocess.run((str(venv),'-m','pip','freeze','--disable-pip-version-check'),check=True,capture_output=True,text=True,timeout=20)
+          lock=root/'banknew-installed-dependencies.txt'
+          assert lock.is_file() and not lock.is_symlink()
+          lock.write_text(freeze.stdout,encoding='utf-8')
+          lock.chmod(0o600)
+          print('BANKNEW_NATIVE_MYSQLCLIENT_INSTALLED=YES')
+          print('BANKNEW_RUNTIME_MARIADB_DRIVER_USABLE=YES')
+          print('BANKNEW_EXISTING_DATABASES_UNTOUCHED=YES')
+          print('BANKNEW_PUBLIC_API_ENABLED=NO')
+          PY
+      - name: Clean temporary build tools and source on success
+        run: |
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import shutil
+          root=Path('/home/zomorod2/mojpay-bank-service-private')
+          marker=root/'.native-mysqlclient-marker'
+          if marker.is_file() and not marker.is_symlink() and marker.read_text(encoding='utf-8')=='mojpay-mysqlclient-new-20261029':
+              for name in ('.native-mysqlclient-build-venv','.native-mysqlclient-build'):
+                  path=root/name
+                  if path.is_dir() and not path.is_symlink(): shutil.rmtree(path)
+              marker.unlink()
+              print('BANKNEW_MYSQLCLIENT_BUILD_ARTIFACTS_CLEANED=YES')
+          PY
+      - name: Clean only newly-created temporary build on failure
+        if: failure()
+        run: |
+          if test -f "$RUNNER_TEMP/mpw-structure-ssh/config"; then
+            timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-structure-ssh/config" saeit-cpanel 'python3 -' <<'PY' || true
+          from pathlib import Path
+          import shutil
+          root=Path('/home/zomorod2/mojpay-bank-service-private')
+          marker=root/'.native-mysqlclient-marker'
+          if marker.is_file() and not marker.is_symlink() and marker.read_text(encoding='utf-8')=='mojpay-mysqlclient-new-20261029':
+              for name in ('.native-mysqlclient-build-venv','.native-mysqlclient-build'):
+                  path=root/name
+                  if path.is_dir() and not path.is_symlink(): shutil.rmtree(path)
+              marker.unlink()
+              print('BANKNEW_FAILED_NATIVE_BUILD_TEMP_CLEANED=YES')
+          PY
+          fi
+      - name: Clear transient SSH relay credentials
+        if: always()
+        run: |
+          if test -d "$RUNNER_TEMP/mpw-structure-ssh"; then
+            find "$RUNNER_TEMP/mpw-structure-ssh" -type f -exec shred -u -- {} +
+            rmdir "$RUNNER_TEMP/mpw-structure-ssh"
+          fi
