@@ -175,6 +175,22 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn("dominant_parent_child_states", q)
         self.assertFalse(q["worker_health_verified"])
 
+    def test_cron_fanout_counts_only_no_commands(self):
+        lines = [
+            "* * * * * /private/factory/launch --token=secret",
+            "* * * * * /private/factory/launch --token=secret",
+            "*/1 * * * * /private/master-agent/runner",
+            "0 * * * * /usr/bin/echo hourly",
+            "@reboot /usr/bin/echo startup",
+        ]
+        out = mod.cron_schedule_summary(lines)
+        self.assertEqual(out["per_minute_entries"], 3)
+        self.assertEqual(out["factory_per_minute_entries"], 3)
+        self.assertEqual(out["exact_duplicate_entries"], 1)
+        self.assertEqual(out["special_entries"], 1)
+        self.assertNotIn("secret", str(out))
+        self.assertTrue(out["commands_and_schedules_redacted"])
+
     def test_missing_command(self):
         self.assertEqual(mod.command(["/no-such-f01-command"])["state"], "UNAVAILABLE")
 
