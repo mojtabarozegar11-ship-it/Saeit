@@ -28,13 +28,17 @@ def verify(package):
         names = [item.filename for item in members]
         if not names or len(names) > MAX_MEMBERS or len(names) != len(set(names)):
             raise ValueError("INVALID_MEMBER_SET")
+        # Web and extraction targets may be case-insensitive. Never allow two
+        # different archive members to overwrite the same runtime asset.
+        if len(set(name.casefold() for name in names)) != len(names):
+            raise ValueError("CASEFOLD_MEMBER_COLLISION")
         if sum(item.file_size for item in members) > MAX_UNCOMPRESSED:
             raise ValueError("UNCOMPRESSED_SIZE_LIMIT")
         for item in members:
             name = item.filename
             parts = PurePosixPath(name).parts
             if (not name.startswith(PREFIX) or "\\" in name or
-                    any(p in (".", "..") for p in parts) or
+                    any(p in ("", ".", "..") for p in name.rstrip("/").split("/")) or
                     "//" in name or name.startswith("/") or
                     (item.flag_bits & 0x1) or
                     stat.S_IFMT(item.external_attr >> 16) == stat.S_IFLNK):
