@@ -19,6 +19,17 @@ class SnapshotTests(unittest.TestCase):
             q = Path(d) / "l"
             q.symlink_to(p)
             self.assertEqual(mod.stat_path(q)["state"], "SYMLINK_NOT_FOLLOWED")
+    def test_linked_ancestor_is_not_followed_for_filesystem_or_queue(self):
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d) / "actual"
+            base.mkdir()
+            (base / "private").mkdir()
+            link = Path(d) / "alias"
+            link.symlink_to(base, target_is_directory=True)
+            self.assertEqual(mod.stat_path(link / "private")["state"], "SYMLINK_NOT_FOLLOWED")
+            self.assertEqual(mod.mount(link / "private")["state"], "SYMLINK_NOT_FOLLOWED")
+            self.assertEqual(mod.queue(link / "private")["state"], "SYMLINK_NOT_FOLLOWED")
+
     def test_sqlite_only_reads_header(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "db"
