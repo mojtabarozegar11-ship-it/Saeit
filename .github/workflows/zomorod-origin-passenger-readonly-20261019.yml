@@ -1,7 +1,7 @@
 name: Zomorod origin vs Passenger forensic read-only
 on:
   push:
-    branches: [main]
+    branches: [main, ops/s01-ro-passenger-db-20261029-r12]
     paths: [".github/workflows/zomorod-origin-passenger-readonly-20261019.yml"]
   workflow_dispatch:
 permissions:
