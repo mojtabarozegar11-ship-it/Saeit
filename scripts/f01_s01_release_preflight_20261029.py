@@ -31,6 +31,20 @@ def evaluate(snapshot, now=None):
     load = guest.get('loadavg')
     if not isinstance(cpu, int) or cpu <= 0 or not isinstance(load, list) or len(load) < 1 or not isinstance(load[0], (int, float)) or load[0] > 4 * cpu:
         blockers.append('GUEST_CPU_LOAD_UNVERIFIED_OR_HIGH')
+    pressure = snapshot.get('process_pressure', {})
+    states = pressure.get('all_process_states', {})
+    blocked_io = states.get('D') if isinstance(states, dict) else None
+    fanout = pressure.get('factory_max_children_same_parent')
+    if (pressure.get('state') != 'OBSERVED'
+            or not isinstance(blocked_io, int) or isinstance(blocked_io, bool)
+            or blocked_io > 8
+            or not isinstance(fanout, int) or isinstance(fanout, bool)
+            or fanout > 32):
+        blockers.append('PROCESS_STORM_OR_IO_WAIT_UNVERIFIED_OR_HIGH')
+    mem = guest.get('memory', {})
+    mem_avail = mem.get('MemAvailable_kib') if isinstance(mem, dict) else None
+    if not isinstance(mem_avail, int) or isinstance(mem_avail, bool) or mem_avail < 512 * 1024:
+        blockers.append('GUEST_AVAILABLE_MEMORY_UNVERIFIED_OR_LOW')
     if snapshot.get('offhost_backup_restored') != 'VERIFIED':
         blockers.append('OFFHOST_RESTORE_UNVERIFIED')
     if snapshot.get('worker_running_verified') is not True:
