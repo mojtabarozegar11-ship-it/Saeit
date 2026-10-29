@@ -50,7 +50,7 @@ footer{padding:24px 8px 30px;color:#557060;font-size:.86rem}#status{min-height:2
 <section class="panel"><h2>Annual cash-flow analysis</h2><p class="helper">Year 0 capital investment is subtracted in NPV and cumulative cash flow; depreciation, financing, taxes and terminal value are excluded.</p><div class="tablewrap"><table><thead><tr><th>Year</th><th>Revenue</th><th>Variable costs</th><th>Annual fixed costs</th><th>Net operating cash flow</th><th>Cumulative after initial investment</th></tr></thead><tbody id="cash"></tbody></table></div></section>
 <section class="panel"><h2>Price and yield stress matrix</h2><p class="helper">Price changes −10%, 0%, +10%; yield changes −20%, 0%, +20%. Unit resource rates and fixed costs are held constant; per-kg packaging and logistics vary with saleable harvest.</p><div class="tablewrap"><table><thead><tr><th>Yield change</th><th>Price change</th><th>Year-one net operating margin</th><th>Per-cycle margin</th></tr></thead><tbody id="stress"></tbody></table></div></section>
 <section class="panel"><h2>Optional model-only uncertainty</h2><p id="risk-message" class="helper">Provide all four risk bounds to calculate repeatable 2,000-draw triangular scenarios.</p><div id="risk-metrics" class="metrics"></div></section>
-<section id="compare-panel" class="panel"><h2>Scenario comparison (this session only)</h2><p class="helper">Save up to 20 scenarios; export data before closing this tab.</p><div class="tablewrap"><table><thead><tr><th>Project / crop</th><th>Year-one margin</th><th>NPV</th><th>Break-even price/kg</th></tr></thead><tbody id="comparison"></tbody></table></div></section>
+<section id="compare-panel" class="panel"><h2>Scenario comparison (this session only)</h2><p class="helper">Save up to 20 scenarios locally in this tab. Export the entire comparison to CSV before closing.</p><div class="actions"><button id="export-compare" type="button" class="secondary">Export comparison CSV</button><button id="clear-compare" type="button" class="secondary">Clear comparison</button></div><div class="tablewrap"><table><thead><tr><th>Project / crop</th><th>Year-one margin</th><th>NPV</th><th>Break-even price/kg</th></tr></thead><tbody id="comparison"></tbody></table></div></section>
 </div></div>
 <footer>Greenhouse Economics Studio v3.0.0 · Copyright © 2026 Mojtaba Roozegar · All rights reserved. This local planning tool does not transmit your information. For material investments, obtain independent agronomic, accounting and regional market review.</footer>
 </main>
@@ -365,27 +365,35 @@ function render(result){
 }
 function calculate(){
  try{var inputs=read(),out=E.calculate(inputs);last=out;lastInputs=inputs;render(out);status("Calculated successfully. All figures use your entered assumptions.");return out;}
- catch(err){status("Check your inputs: "+err.message,true);return null;}
+ catch(err){last=null;lastInputs=null;["metrics","costs","cash","stress","risk-metrics"].forEach(function(key){id(key).replaceChildren();});id("risk-message").textContent="Enter valid assumptions to view risk results.";status("Check your inputs: "+err.message+". Results cleared until inputs are valid.",true);return null;}
 }
 function csvSafe(value){var s=String(value);if(typeof value==="string"&&/^[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}
 function download(name,body,mime){var b=new Blob([body],{type:mime}),url=URL.createObjectURL(b),a=make("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);}
 function csvReport(out){
  var c=out.inputs.currency,rows=[["Metric","Value","Unit"]];
  function add(label,n,unit){rows.push([label,n,unit||c]);}
- add("Project",out.inputs.project,"text");add("Crop",out.inputs.crop,"text");add("Season",out.inputs.season,"text");
+ add("Project",out.inputs.project,"text");add("Crop",out.inputs.crop,"text");add("Season",out.inputs.season,"text");add("Region",out.inputs.region,"text");
+ add("Area",out.inputs.areaM2,"m²");add("Crop cycles per year",out.inputs.cyclesYear,"cycles");add("Planning horizon",out.inputs.years,"years");
+ add("Initial investment",out.inputs.initialInvestment);add("Annual fixed cash expenses",out.inputs.fixedAnnual);
+ add("Annual discount rate",out.inputs.discountPct,"%");add("Annual revenue change",out.inputs.revenueGrowthPct,"%");add("Annual cost change",out.inputs.costGrowthPct,"%");
  add("Cycle gross kg",out.cycle.grossKg,"kg");add("Cycle saleable kg",out.cycle.saleableKg,"kg");
- add("Cycle revenue",out.cycle.revenue);add("Cycle variable cost",out.cycle.variableCost);
+ add("Cycle revenue",out.cycle.revenue);Object.keys(out.cycle.breakdown).forEach(function(key){add("Cycle "+key+" cost",out.cycle.breakdown[key]);});add("Cycle variable cost",out.cycle.variableCost);
  add("Cycle net margin",out.cycle.cycleMargin);add("Year 1 net operating cash",out.yearOne.netCashFlow);
- add("Investment NPV",out.financials.npv);add("Break-even price / kg",out.breakEven.pricePerKg);
+ add("Investment NPV",out.financials.npv);add("Simple investment ROI",out.financials.roiPct,"%");add("Cash payback",out.financials.paybackYears,"years");add("Break-even price / kg",out.breakEven.pricePerKg);
  add("Break-even yield kg / m²",out.breakEven.grossYieldKgM2,"kg/m²");
  out.financials.years.forEach(function(y){add("Year "+y.year+" net operating cash",y.netCashFlow);});
  out.stress.forEach(function(s){add("Stress yield "+s.yieldChangePct+"% price "+s.priceChangePct+"%",s.annualNet);});
+ if(out.risk){add("Modeled loss frequency (uncalibrated)",out.risk.annualLossFrequencyPct,"%");add("Risk 5th percentile",out.risk.p05);add("Risk median",out.risk.median);add("Risk 95th percentile",out.risk.p95);}
+ rows.push(["Model scope",out.scope,"text"]);
  return rows.map(function(r){return r.map(csvSafe).join(",");}).join("\r\n")+"\r\n";
 }
-function compare(out){if(saved.length>=20){status("Limit reached: export and restart to compare more than 20 scenarios.",true);return;}saved.push(out);var table=id("comparison");table.replaceChildren();
+function comparisonCsv(){var rows=[["Project","Crop","Region","Currency","Year-one net operating cash","NPV","Break-even price/kg","Break-even gross yield kg/m²","Years","Cycles per year"]];saved.forEach(function(r){var p=r.inputs;rows.push([p.project,p.crop,p.region,p.currency,r.yearOne.netCashFlow,r.financials.npv,r.breakEven.pricePerKg,r.breakEven.grossYieldKgM2,p.years,p.cyclesYear]);});return rows.map(function(r){return r.map(csvSafe).join(",");}).join("\r\n")+"\r\n";}
+function compare(out){if(saved.length>=20){status("Limit reached: export or clear the comparison before adding more scenarios.",true);return;}saved.push(out);var table=id("comparison");table.replaceChildren();
  saved.forEach(function(r){addRow(table,[r.inputs.project+" / "+r.inputs.crop,money(r.yearOne.netCashFlow,r.inputs.currency),money(r.financials.npv,r.inputs.currency),money(r.breakEven.pricePerKg,r.inputs.currency)]);});status("Scenario saved in memory. Export before leaving this page.");
 }
 makeForm();fill(defaults);calculate();
+id("export-compare").addEventListener("click",function(){if(!saved.length){status("No saved comparisons to export.",true);return;}download("greenhouse-scenario-comparison.csv",comparisonCsv(),"text/csv;charset=utf-8");status("Comparison CSV exported for "+saved.length+" saved scenarios.");});
+id("clear-compare").addEventListener("click",function(){saved=[];id("comparison").replaceChildren();status("Saved comparisons cleared from this tab.");});
 id("run").addEventListener("click",calculate);
 id("restore").addEventListener("click",function(){fill(defaults);calculate();});
 id("save").addEventListener("click",function(){var r=calculate();if(r)compare(r);});
