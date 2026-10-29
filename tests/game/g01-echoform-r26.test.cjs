@@ -3,7 +3,7 @@ const html=fs.readFileSync(path.join(__dirname,'../../games/echoform/signal-latt
 let code=html.match(/<script>([\s\S]*?)<\/script>/)[1];
 code=code.replace("window.addEventListener('blur'", "window.__test=()=>({cursor,sequence:[...sequence],phase});window.addEventListener('blur'");
 const fake=()=>({textContent:'',disabled:false,className:'',style:{},children:[],attrs:{},classList:{add(){},remove(){}},setAttribute(k,v){this.attrs[k]=v},addEventListener(n,f){const k='on'+n,prev=this[k];this[k]=prev?function(...a){prev(...a);f(...a)}:f},appendChild(el){this.children.push(el)}});
-const elems={};for(const id of ['board','best','round','progress','repeat','start','status'])elems[id]=fake();
+const elems={};for(const id of ['board','best','round','progress','repeat','pause','start','status'])elems[id]=fake();
 const document={getElementById:id=>elems[id],createElement:()=>fake(),addEventListener(){}};
 const window={addEventListener(){}},localStorage={getItem:()=>null,setItem:()=>{}};
 vm.runInNewContext(code,{document,window,localStorage,HTMLElement:class {},Math,Promise,setTimeout:fn=>{queueMicrotask(fn);return 1}});
