@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import datetime as dt
 import hashlib
+import io
 import hmac
 import json
 import os
@@ -884,3 +885,58 @@ def staff_file(code, file_id):
         verify_evidence_integrity(db, clean(code, 28, True), clean(file_id, 30, True))
         path = root() / "evidence" / row["stored_name"]
         return path, row["original_name"]
+
+def open_staff_file(code, file_id):
+    """Freeze the exact verified evidence bytes before sending a staff download.
+
+    Files are at most MAX_FILE bytes. A bounded in-memory snapshot avoids the
+    previous check-then-reopen race, and ensures the response cannot stream
+    replacement bytes if the underlying private path changes after validation.
+    """
+    safe_code = clean(code, 28, True)
+    safe_id = clean(file_id, 30, True)
+    with database() as db:
+        row = db.execute(
+            "SELECT original_name,stored_name,size,sha256 FROM files WHERE code=? AND id=?",
+            (safe_code, safe_id)
+        ).fetchone()
+        if row is None:
+            raise CaseError("Evidence file not found", 404)
+        directory = root() / "evidence"
+        if not directory.is_dir() or directory.is_symlink():
+            raise CaseError("Private evidence workspace unavailable", 503)
+        stored = row["stored_name"]
+        if not isinstance(stored, str) or not re.fullmatch(
+                r"[0-9a-f]{24}\.(?:pdf|png|jpe?g|txt)", stored):
+            raise CaseError("Unsafe evidence storage reference", 503)
+        size = row["size"]
+        recorded = row["sha256"]
+        if not isinstance(size, int) or not 0 < size <= MAX_FILE:
+            raise CaseError("Invalid recorded evidence length", 409)
+        if not isinstance(recorded, str) or not re.fullmatch(r"[0-9a-f]{64}", recorded):
+            raise CaseError("Invalid recorded evidence digest", 409)
+        try:
+            descriptor = os.open(
+                str(directory / stored), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+            )
+            try:
+                source = os.fdopen(descriptor, "rb")
+            except BaseException:
+                os.close(descriptor)
+                raise
+            with source:
+                info = os.fstat(source.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_size != size:
+                    raise CaseError("Evidence file length or type changed", 409)
+                content = source.read(MAX_FILE + 1)
+        except CaseError:
+            raise
+        except (OSError, ValueError) as exc:
+            raise CaseError("Evidence unavailable or unsafe for review", 503) from exc
+        if len(content) != size:
+            raise CaseError("Evidence file length changed during snapshot", 409)
+        if not hmac.compare_digest(hashlib.sha256(content).hexdigest(), recorded):
+            raise CaseError("Evidence integrity mismatch: original file changed", 409)
+        return io.BytesIO(content), row["original_name"]
+
+
