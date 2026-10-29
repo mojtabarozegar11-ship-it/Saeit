@@ -70,7 +70,9 @@ assert 'SMOKE-INV-1' in report and 'Synthetic Counterparty' in report
 assert 'مطالبات و بدهی‌های سررسیدگذشته' in report
 assert '100.00' in report and 'USD' in report
 no_result=request('GET','insights',extra_query={'from':'2026-10-01','to':'2026-10-31','term':'no_such_invoice'})
-assert 'نتیجه‌ای پیدا نشد' in no_result and 'SMOKE-INV-1' not in no_result
+assert 'نتیجه‌ای پیدا نشد' in no_result
+# Overdue alerts cover ALL historical periods, deliberately independent of the invoice filter.
+assert 'SMOKE-INV-1' in no_result
 invalid=request('GET','insights',extra_query={'from':'2026-10-31','to':'2026-10-01'})
 assert 'درخواست انجام نشد' in invalid
 bad=request('POST','journal',{'csrf':csrf,'action':'journal','currency':'USD','date':'2026-10-18','doc_no':'SMOKE-BAD','note':'Invalid dummy','account_0':'1010','debit_0':'80.00','account_1':'3000','credit_1':'50.00'})
