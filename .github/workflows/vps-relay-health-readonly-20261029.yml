@@ -1,0 +1,58 @@
+name: One-shot VPS authenticated health (read only)
+on:
+  push:
+    branches:
+      - diagnostics/ssh-relay-flapping-20261029
+    paths:
+      - .github/workflows/vps-relay-health-readonly-20261029.yml
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Check pinned VPS identity, then disk and SSH health read-only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo "VPS_KEY=NOT_CONFIGURED"; exit 2; }
+          d="$RUNNER_TEMP/saeit-vps-health"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          candidate=""
+          for attempt in 1 2 3 4 5 6; do
+            candidate="$(ssh-keyscan -T 8 -t rsa 178.239.147.150 2>/dev/null || true)"
+            if test -n "$candidate"; then break; fi
+            echo "VPS_KEYSCAN_RETRY=$attempt"
+            sleep 4
+          done
+          test -n "$candidate" || { echo "VPS_KEYSCAN=UNAVAILABLE"; exit 1; }
+          printf '%s\n' "$candidate" > "$d/known"
+          expected='SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          actual="$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = "$expected" || { echo "VPS_HOST_IDENTITY=MISMATCH_STOP"; exit 2; }
+          echo "VPS_HOST_IDENTITY=PINNED"
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ConnectionAttempts=4 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo "VPS_AUTH_USER=$(id -un)"
+          printf "VPS_UPTIME_SECONDS="
+          cut -d " " -f1 /proc/uptime
+          echo "VPS_LOAD_AVERAGE=$(cut -d " " -f1-3 /proc/loadavg)"
+          awk '/MemAvailable:/ {print "VPS_AVAILABLE_MEMORY_KIB=" $2}' /proc/meminfo
+          echo "VPS_HOME_FREE_KIB=$(df -Pk "$HOME" | awk "NR==2 {print \$4}")"
+          echo "VPS_HOME_FREE_INODES=$(df -Pi "$HOME" | awk "NR==2 {print \$4}")"
+          if test -d "$HOME/factory-runtime"; then
+            echo "FACTORY_RUNTIME_FREE_KIB=$(df -Pk "$HOME/factory-runtime" | awk "NR==2 {print \$4}")"
+            echo "FACTORY_RUNTIME_FREE_INODES=$(df -Pi "$HOME/factory-runtime" | awk "NR==2 {print \$4}")"
+          fi
+          if command -v ss >/dev/null 2>&1; then
+            echo "VPS_PORT22_LISTENING=$(ss -lnt | awk '\$4 ~ /:22$/ {n++} END {print n+0}')"
+          fi
+          REMOTE
