@@ -33,8 +33,10 @@ jobs:
         run: |
           python manage.py makemigrations --check --dry-run company_messaging
           python manage.py check
-      - name: Message security and regression tests
-        run: python manage.py test company_messaging enterprise_portal ecosystem_hub --verbosity 1
+      - name: Messaging isolation and security tests
+        run: python manage.py test company_messaging --verbosity 2
+      - name: Parent ERP and ecosystem regression tests
+        run: python manage.py test enterprise_portal ecosystem_hub --verbosity 1
       - name: No public route removal
         run: |
           python - <<'PY'
