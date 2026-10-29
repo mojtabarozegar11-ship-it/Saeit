@@ -166,7 +166,7 @@ jobs:
           test -n "$VPS_KEY"
           echo VPS_KEY_PRESENT
           d="$RUNNER_TEMP/vps-factory"; mkdir -p "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","\n").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
           chmod 600 "$d/key"
           ssh-keygen -y -P "" -f "$d/key" >/dev/null
           chmod 600 "$d/key"
@@ -201,143 +201,10 @@ jobs:
           from django.conf import settings
           from django.db import connection
           from pathlib import Path
-          engine=settings.DATABASES["default"]["ENGINE"]
-          print("FACTORY_DB_ENGINE_KIND="+("sqlite" if engine.endswith("sqlite3") else "non_sqlite"))
-          if engine.endswith("sqlite3"):
-              timeout=settings.DATABASES["default"].get("OPTIONS",{}).get("timeout",5)
-              print("FACTORY_SQLITE_CONFIGURED_BUSY_TIMEOUT_SECONDS="+str(timeout))
-              with connection.cursor() as cursor:
-                  cursor.execute("PRAGMA journal_mode")
-                  print("FACTORY_SQLITE_JOURNAL_MODE="+str(cursor.fetchone()[0]))
-                  cursor.execute("PRAGMA busy_timeout")
-                  print("FACTORY_SQLITE_ACTUAL_BUSY_TIMEOUT_MS="+str(cursor.fetchone()[0]))
-              for name in ("core/management/commands/factory_staging_tick.py",
-                           "core/management/commands/seed_factory_agents.py"):
-                  file=Path(name)
-                  if file.is_file() and not file.is_symlink():
-                      rows=file.read_text(encoding="utf8").splitlines()
-                      points=[i for i,row in enumerate(rows)
-                              if "seed_factory_agents" in row or "atomic" in row
-                              or "transaction" in row or "retry" in row.lower()]
-                      print("FACTORY_SOURCE_SIGNALS="+file.name+":"+
-                            ",".join(str(i+1)+":"+rows[i].strip()[:120] for i in points[:20]))
-          # Bounded private-runtime control-flow inspection; credentials and payloads excluded.
-          for file_name, low, high in (
-              ("core/management/commands/factory_staging_tick.py", 15, 43),
-              ("core/management/commands/seed_factory_agents.py", 32, 68),
-          ):
-              file = Path(file_name)
-              if file.is_file() and not file.is_symlink():
-                  for line_no, line in enumerate(file.read_text(encoding="utf-8").splitlines(), 1):
-                      if low <= line_no <= high:
-                          if re.search(r"(?i)(password|secret|token|api_key|private_key)", line):
-                              continue
-                          print(f"FACTORY_CODE_WINDOW {file.name}:{line_no}:{line[:150]}")
           from django.apps import apps
-          pattern = re.compile(r"(factory|task|queue|probe|opportun|evidence|research|workflow|schedule|job|run)", re.I)
-          for model in apps.get_app_config("core").get_models():
-              if pattern.search(model.__name__) or pattern.search(model._meta.db_table):
-                  try:
-                      print(f"FACTORY_MODEL_COUNT {model._meta.label}={model.objects.count()}")
-                  except Exception as exc:
-                      print(f"FACTORY_MODEL_COUNT_ERROR {model._meta.label}={type(exc).__name__}")
-          path = os.path.join(os.path.dirname(os.path.dirname(__file__)) if "__file__" in globals() else ".", "var/factory/discovery/latest.json")
-          try:
-              with open(path, encoding="utf-8") as f:
-                  data = json.load(f)
-              print("FACTORY_DISCOVERY_KEYS=" + ",".join(sorted(k for k in data if isinstance(k, str))[:40]))
-              for key in ("status", "stage", "opportunity_count", "evidence_count", "pending_evidence_count", "waiting_for_evidence"):
-                  value = data.get(key)
-                  if isinstance(value, (str, int, float, bool)) or value is None:
-                      print(f"FACTORY_DISCOVERY_{key.upper()}={value}")
-          except FileNotFoundError:
-              print("FACTORY_DISCOVERY_FILE_MISSING")
-          except Exception as exc:
-              print(f"FACTORY_DISCOVERY_READ_ERROR={type(exc).__name__}")
+          import re
           PY
           }
-          pid_is_factory() {
-            [[ "$1" =~ ^[0-9]+$ ]] &&
-              kill -0 "$1" 2>/dev/null &&
-              ps -p "$1" -o args= | grep -Fq -- "$script"
-          }
-          report_factory() {
-            local fpid="$1"
-            echo FACTORY_LOOP_ALIVE
-            echo "FACTORY_PID=$fpid"
-            ps -p "$fpid" -o etime=,args= | sed 's/^/FACTORY_PROCESS=/'
-            if test -f "$log"; then
-              printf 'FACTORY_LOG_MTIME=%s\\n' "$(stat -c %y "$log")"
-              echo FACTORY_RECENT_ACTIVITY
-              tail -n 35 "$log" || true
-              # Read-only post-repair checks: bounded real loop evidence, not PID-only health.
-              printf 'FACTORY_AGENT_SEED_NO_WRITE_LAST_500=%s\n' "$(tail -n 500 "$log" | grep -c -F 'FACTORY_AGENT_SEED_HEALTHY_NO_WRITE' || true)"
-              printf 'FACTORY_AGENT_SEED_REFRESH_LAST_500=%s\n' "$(tail -n 500 "$log" | grep -c -F 'FACTORY_AGENT_SEED_REFRESHED' || true)"
-              printf 'FACTORY_SQLITE_LOCK_ERRORS_LAST_500=%s\n' "$(tail -n 500 "$log" | grep -c -F 'database is locked' || true)"
-              printf 'FACTORY_TICK_FAILURES_LAST_500=%s\n' "$(tail -n 500 "$log" | grep -c -F 'TICK_EXIT_FAILURE' || true)"
-            else
-              echo FACTORY_LOG_MISSING
-            fi
-            report_database_state
-          }
-          exec 9>"$ops/vps-only-launch-v2.lock"
-          if ! flock -n 9; then
-            echo FACTORY_LAUNCH_LOCK_BUSY
-            current_pid="$(cat "$pidfile" 2>/dev/null || true)"
-            if pid_is_factory "$current_pid"; then
-              report_factory "$current_pid"
-              exit 0
-            fi
-            if [[ "$current_pid" =~ ^[0-9]+$ ]] && kill -0 "$current_pid" 2>/dev/null; then
-              echo FACTORY_PID_NOT_VERIFIED
-              ps -p "$current_pid" -o args= || true
-              exit 1
-            fi
-            echo FACTORY_LOCK_BUSY_NO_VERIFIED_PID
-            ps -eo pid,ppid,args | grep -F 'vps-only-loop' | grep -v grep || true
-            exit 1
-          fi
-          current_pid="$(cat "$pidfile" 2>/dev/null || true)"
-          if pid_is_factory "$current_pid"; then
-            report_factory "$current_pid"
-          elif [[ "$current_pid" =~ ^[0-9]+$ ]] && kill -0 "$current_pid" 2>/dev/null; then
-            echo FACTORY_PID_NOT_VERIFIED
-            ps -p "$current_pid" -o args= || true
-            exit 1
-          else
-            if [[ "$recovery_authorized" != "true" || "$offhost_backup_verified" != "true" ]]; then
-              echo FACTORY_AUTOSTART_BLOCKED_RECOVERY_GATE
-              exit 0
-            fi
-            cd "$base/django-app"
-            export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
-            export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
-            db_bytes="$("$base/.venv/bin/python" -B -c 'import os; os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings"); import django; django.setup(); from django.conf import settings; from pathlib import Path; db=settings.DATABASES["default"]; assert db["ENGINE"].endswith("sqlite3"), "RECOVERY_DB_BACKEND_UNSUPPORTED"; source=Path(db["NAME"]); assert source.is_file() and not source.is_symlink() and not any(parent.is_symlink() for parent in source.parents), "RECOVERY_DB_PATH_UNSAFE"; print(source.stat().st_size)')"
-            [[ "$db_bytes" =~ ^[0-9]+$ ]]
-            free_bytes="$(df -B1 --output=avail "$base" | awk 'NR==2 {print $1}')"
-            [[ "$free_bytes" =~ ^[0-9]+$ ]]
-            required_bytes="$((5*1024*1024*1024 + db_bytes + 128*1024*1024))"
-            echo "FACTORY_RECOVERY_FREE_BYTES=$free_bytes"
-            echo "FACTORY_RECOVERY_DB_BYTES=$db_bytes"
-            echo "FACTORY_RECOVERY_REQUIRED_BYTES=$required_bytes"
-            if (( free_bytes < required_bytes )); then
-              echo FACTORY_AUTOSTART_BLOCKED_CAPACITY
-              exit 1
-            fi
-            nohup "$script" 9>&- </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
-            printf '%s\\n' "$!" > "$pidfile"
-            sleep 3
-            current_pid="$(cat "$pidfile")"
-            kill -0 "$current_pid"
-            if ! pid_is_factory "$current_pid"; then
-              echo FACTORY_START_NOT_VERIFIED
-              ps -p "$current_pid" -o args= || true
-              exit 1
-            fi
-            echo FACTORY_LOOP_RECOVERED
-            report_factory "$current_pid"
-          fi
           REMOTE
 
-# Operator-requested safe continuity verification on 2026-10-14; VPS-local watchdog remains authoritative.
-# Owner-requested existing-loop activation check: VPS factory, 2026-10-16.
+# Read-only VPS measurement requested to verify current capacity and recovery gates (2026-10-29).
