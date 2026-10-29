@@ -1,0 +1,125 @@
+name: Zomorod business isolated read-only production integrity audit
+on:
+  push:
+    branches: [feature/zomorod-business-csv-export-20261029]
+    paths: [".github/workflows/zomorod-business-private-health-audit-20261029.yml"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect through pinned VPS to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_PRIVATE_RELAY=verified"
+
+      - name: Validate private management schema and entrypoints without changing data
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          p="$HOME/.private/zomorod-business"
+          web="$HOME/public_html/business"
+          test -f "$p/app.php" && test ! -L "$p/app.php"
+          test -f "$p/insights.php" && test ! -L "$p/insights.php"
+          test -f "$p/management.sqlite3" && test ! -L "$p/management.sqlite3"
+          test -f "$web/index.php"
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin";then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php";fi
+          "$phpbin" -l "$p/app.php" >/dev/null
+          "$phpbin" -l "$p/insights.php" >/dev/null
+          grep -Fq "'insights'=>'گزارش مدیریتی'" "$p/app.php"
+          grep -Fq "require \$private.'/insights.php'" "$p/app.php"
+          "$phpbin" - "$p/management.sqlite3" <<'PHP'
+          <?php
+          $file = $argv[1];
+          if (!is_file($file) || is_link($file)) exit(10);
+          $db = new PDO('sqlite:'.$file,null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_TIMEOUT=>10]);
+          $db->exec('PRAGMA query_only=ON');
+          $needed = ['users','ledger_accounts','journal_entries','journal_lines','parties','invoices',
+                     'invoice_payments','inventory','inventory_movements','employees','documents','projects','audit_events'];
+          $found = $db->query("SELECT name FROM sqlite_master WHERE type='table'")->fetchAll(PDO::FETCH_COLUMN);
+          if (count(array_diff($needed,$found)) > 0) exit(11);
+          if ($db->query('PRAGMA integrity_check')->fetchColumn() !== 'ok') exit(12);
+          if ($db->query('PRAGMA foreign_key_check')->fetch(PDO::FETCH_NUM) !== false) exit(13);
+          $admins = (int)$db->query("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1")->fetchColumn();
+          if ($admins < 1) exit(14);
+          $unbalanced = (int)$db->query(
+              "SELECT COUNT(*) FROM (
+                  SELECT j.id,l.currency,SUM(l.debit) dr,SUM(l.credit) cr
+                  FROM journal_entries j JOIN journal_lines l ON l.entry_id=j.id
+                  GROUP BY j.id,l.currency HAVING dr!=cr OR dr<=0
+              )"
+          )->fetchColumn();
+          if ($unbalanced !== 0) exit(15);
+          $overpaid = (int)$db->query(
+              "SELECT COUNT(*) FROM (
+                  SELECT i.id,i.amount,COALESCE(SUM(p.amount),0) paid
+                  FROM invoices i LEFT JOIN invoice_payments p ON p.invoice_id=i.id
+                  GROUP BY i.id HAVING paid > i.amount
+              )"
+          )->fetchColumn();
+          if ($overpaid !== 0) exit(16);
+          echo "PRIVATE_SCHEMA_INTEGRITY=PASS\n";
+          echo "PRIVATE_ACCOUNTING_BALANCE=PASS\n";
+          echo "PRIVATE_PAYMENT_CONSTRAINTS=PASS\n";
+          echo "ACTIVE_ADMIN_EXISTS=YES\n";
+          PHP
+          code="$(curl -sS -L --max-time 25 -o /dev/null -w '%{http_code}' 'https://zomorodmelal.ir/business/?page=insights&read-only-audit=20261029')"
+          test "$code" = 200
+          echo "UNAUTHENTICATED_ROUTE_HTTP=200"
+          echo "READ_ONLY_AUDIT=COMPLETE"
+          REMOTE
+      - name: Remove temporary runner SSH files
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-business-tokenless"
