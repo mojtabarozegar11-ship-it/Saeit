@@ -1,0 +1,191 @@
+name: Zomorod guarded private payroll UI release (fail closed)
+on:
+  push:
+    branches: [feature/zomorod-payroll-offline-controls-20261029]
+    paths: [.github/workflows/zomorod-payroll-guarded-private-release.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-business-private-release
+  cancel-in-progress: false
+jobs:
+  private-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3,mbstring
+      - name: Gate payroll, CSRF, role segregation and existing ERP tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/payroll_control.php
+          php -l content/zomorod-business/payroll_ui.php
+          php scripts/zomorod_payroll_control_synthetic_qa.php
+          php scripts/zomorod_command_center_synthetic_qa.php
+          php scripts/zomorod_command_quality_synthetic_qa.php
+          php scripts/zomorod_command_planner_synthetic_qa.php
+          php scripts/zomorod_workflow_desk_synthetic_qa.php
+          python3 scripts/zomorod_workflow_web_synthetic_qa.py
+          echo "PAYROLL_RELEASE_QUALITY_GATE=PASS"
+      - name: Establish existing pinned relay through VPS to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-payroll-private-release"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/cpanel.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/cpanel.key" >/dev/null
+          timeout 20 ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/cpanel.key
+            UserKnownHostsFile $d/cpanel.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(timeout 25 ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)" || { echo "RELEASE_STOP=CPANEL_UNREACHABLE_FROM_PINNED_VPS";exit 21; }
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/cpanel.candidate"
+          test "$(ssh-keygen -lf "$d/cpanel.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/cpanel.candidate" "$d/cpanel.known"
+          timeout 35 ssh -F "$d/config" saeit-cpanel 'test "$(id -un)" = "zomorod2"' || { echo "RELEASE_STOP=CPANEL_AUTH_UNAVAILABLE";exit 22; }
+          echo "PRIVATE_RELAY=PINNED_AND_AUTHENTICATED"
+      - name: Snapshot exact private code and stage isolated modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-payroll-private-release"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          p="$HOME/.private/zomorod-business"
+          stage="$HOME/.backups/zomorod-business-payroll-release/$1-$2"
+          stop(){ echo "PAYROLL_RELEASE_STOP=$1";exit 23; }
+          test -d "$p" && test ! -L "$p" || stop missing_private_directory
+          test -f "$p/app.php" && test ! -L "$p/app.php" || stop missing_live_app
+          test -f "$p/management.sqlite3" && test ! -L "$p/management.sqlite3" || stop missing_live_ledger
+          test ! -e "$p/payroll_control.php" && test ! -e "$p/payroll_ui.php" || stop already_installed_requires_review
+          test ! -e "$stage" || stop stage_exists
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin";then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php";fi
+          "$phpbin" -l "$p/app.php" >/dev/null || stop invalid_live_app
+          mkdir -p "$(dirname "$stage")"
+          mkdir -m 700 "$stage"
+          cp -p "$p/app.php" "$stage/app.before"
+          chmod 600 "$stage/app.before"
+          sha256sum "$p/app.php" > "$stage/live-app.sha256"
+          sha256sum "$HOME/public_html/index.html" "$HOME/public_html/.htaccess" > "$stage/public.sha256"
+          python3 - "$p/management.sqlite3" "$stage/ledger.snapshot.sqlite3" <<'PY'
+          import sqlite3,os,sys
+          source=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
+          backup=sqlite3.connect(sys.argv[2])
+          source.backup(backup)
+          assert backup.execute('pragma integrity_check').fetchone()[0]=='ok'
+          backup.close();source.close();os.chmod(sys.argv[2],0o600)
+          PY
+          echo "PAYROLL_SNAPSHOT=VERIFIED"
+          REMOTE
+          stage="/home/zomorod2/.backups/zomorod-business-payroll-release/$GITHUB_SHA-$GITHUB_RUN_ID"
+          tar -cf - -C content/zomorod-business payroll_control.php payroll_ui.php |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
+      - name: Patch only private PHP route and atomically publish payroll modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-payroll-private-release"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          p="$HOME/.private/zomorod-business"
+          stage="$HOME/.backups/zomorod-business-payroll-release/$1-$2"
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin";then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php";fi
+          test -f "$stage/app.before"
+          test -f "$stage/payroll_control.php" && test -f "$stage/payroll_ui.php"
+          "$phpbin" -l "$stage/payroll_control.php" >/dev/null
+          "$phpbin" -l "$stage/payroll_ui.php" >/dev/null
+          python3 - "$stage/app.before" "$stage/app.next" <<'PY'
+          import sys
+          source=open(sys.argv[1],encoding='utf-8').read()
+          changes=[
+          ("if(is_file($private.'/command_center.php')) require_once $private.'/command_center.php';",
+           "if(is_file($private.'/command_center.php')) require_once $private.'/command_center.php';\nif(is_file($private.'/payroll_control.php')) require_once $private.'/payroll_control.php';\nif(is_file($private.'/payroll_ui.php')) require_once $private.'/payroll_ui.php';"),
+          ("'employees'=>'منابع انسانی','documents'",
+           "'employees'=>'منابع انسانی','payroll'=>'محاسبهٔ حقوق','documents'"),
+          ("        } elseif($action==='user'){",
+           "        } elseif(in_array($action,['payroll_create','payroll_decision'],true)){\n            if(!function_exists('zmPayrollUiHandle'))bail('کنترل حقوق در دسترس نیست.',503);\n            zmPayrollUiHandle(zmPayrollDb($private),$action);\n        } elseif($action==='user'){"),
+          ("    } elseif($page==='accounts'){",
+           "    } elseif($page==='payroll'){\n        authorize('view');\n        if(!function_exists('zmPayrollUiRender'))bail('پنل حقوق در دسترس نیست.',503);\n        zmPayrollUiRender(zmPayrollDb($private));\n    } elseif($page==='accounts'){")]
+          for old,new in changes:
+              if source.count(old)!=1:
+                  print('PAYROLL_RELEASE_STOP=LIVE_APP_DRIFT_OR_AMBIGUOUS_ANCHOR')
+                  sys.exit(31)
+              source=source.replace(old,new)
+          with open(sys.argv[2],'w',encoding='utf-8') as f:f.write(source)
+          PY
+          "$phpbin" -l "$stage/app.next" >/dev/null
+          test ! -e "$p/payroll_control.php" && test ! -e "$p/payroll_ui.php"
+          cmp -s "$p/app.php" "$stage/app.before"
+          changed_app=0;installed_a=0;installed_b=0
+          rollback(){
+            if test "$changed_app" = 1;then cp -p "$stage/app.before" "$p/app.php.rollback-$1";mv -f "$p/app.php.rollback-$1" "$p/app.php";fi
+            if test "$installed_a" = 1;then rm -f "$p/payroll_control.php";fi
+            if test "$installed_b" = 1;then rm -f "$p/payroll_ui.php";fi
+            echo "PAYROLL_RELEASE_ROLLBACK=COMPLETE"
+          }
+          finish(){ result=$?;trap - EXIT;if test "$result" -ne 0;then rollback "$1";fi;exit "$result"; }
+          trap finish EXIT
+          install -m 600 "$stage/payroll_control.php" "$p/payroll_control.php";installed_a=1
+          install -m 600 "$stage/payroll_ui.php" "$p/payroll_ui.php";installed_b=1
+          install -m 600 "$stage/app.next" "$p/app.php.pending-$1"
+          mv -f "$p/app.php.pending-$1" "$p/app.php";changed_app=1
+          "$phpbin" -l "$p/app.php" >/dev/null
+          cmp -s "$p/payroll_control.php" "$stage/payroll_control.php"
+          cmp -s "$p/payroll_ui.php" "$stage/payroll_ui.php"
+          status="$(curl -sS -L --max-time 30 -o "$stage/anon.html" -w '%{http_code}' "https://zomorodmelal.ir/business/?page=payroll&check=$1")"
+          test "$status" = 200
+          grep -Fq 'ورود مدیر و حسابدار' "$stage/anon.html"
+          ! grep -Fq 'محاسبهٔ پیشنهادی حقوق و دستمزد' "$stage/anon.html"
+          sha256sum -c --status "$stage/public.sha256"
+          trap - EXIT
+          echo "PAYROLL_PRIVATE_RELEASE=SUCCESS"
+          echo "ACCOUNTING_LEDGER_WRITES=NONE"
+          echo "PUBLIC_SITE=UNCHANGED"
+          echo "PAYROLL_BANK_TRANSFER=DISABLED"
+          echo "NEW_HOURLY_AUTOMATION=NONE"
+          REMOTE
+      - name: Clear transient relay keys
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-payroll-private-release"
