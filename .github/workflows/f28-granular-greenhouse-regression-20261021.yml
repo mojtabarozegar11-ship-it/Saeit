@@ -7,6 +7,10 @@ on:
       - product_recipes/greenhouse_crop_margin/test_calculator.py
       - product_recipes/greenhouse_crop_margin/README.md
       - product_recipes/greenhouse_crop_margin/example_inputs.json
+      - product_recipes/greenhouse_crop_margin/GREENHOUSE_ECONOMICS_STUDIO.md
+      - product_recipes/greenhouse_crop_margin/greenhouse_economics_studio.html
+      - product_recipes/greenhouse_crop_margin/greenhouse_engine.js
+      - product_recipes/greenhouse_crop_margin/test_greenhouse_engine.js
       - scripts/factory_f28_private_build_cycle_20261021.py
       - scripts/factory_f28_private_warehouse_intake_20261021.py
       - scripts/factory_verified_customer_cycle_20261021.py
@@ -23,6 +27,10 @@ on:
       - product_recipes/greenhouse_crop_margin/test_calculator.py
       - product_recipes/greenhouse_crop_margin/README.md
       - product_recipes/greenhouse_crop_margin/example_inputs.json
+      - product_recipes/greenhouse_crop_margin/GREENHOUSE_ECONOMICS_STUDIO.md
+      - product_recipes/greenhouse_crop_margin/greenhouse_economics_studio.html
+      - product_recipes/greenhouse_crop_margin/greenhouse_engine.js
+      - product_recipes/greenhouse_crop_margin/test_greenhouse_engine.js
       - scripts/factory_f28_private_build_cycle_20261021.py
       - scripts/factory_f28_private_warehouse_intake_20261021.py
       - scripts/factory_verified_customer_cycle_20261021.py
@@ -45,10 +53,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Verify greenhouse model syntax and deterministic user-supplied scenario tests
         shell: bash
         run: |
           set -euo pipefail
+          node --test product_recipes/greenhouse_crop_margin/test_greenhouse_engine.js
           python3 -m py_compile product_recipes/greenhouse_crop_margin/calculator.py scripts/factory_f28_private_build_cycle_20261021.py scripts/factory_f28_private_warehouse_intake_20261021.py scripts/factory_verified_customer_cycle_20261021.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s product_recipes/greenhouse_crop_margin -p test_calculator.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_factory_f28_private_cycle_20261021 -v
@@ -99,7 +111,7 @@ jobs:
           host="githubops@178.239.147.150"
           stage="/home/githubops/factory-runtime/operations/f28-granular-candidates/$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh -T "${opts[@]}" "$host" "set -eu; umask 077; mkdir -p /home/githubops/factory-runtime/operations/f28-granular-candidates; test ! -e '$stage'; mkdir -m 700 '$stage'"
-          for file in calculator.py test_calculator.py README.md; do
+          for file in GREENHOUSE_ECONOMICS_STUDIO.md README.md calculator.py example_inputs.json greenhouse_economics_studio.html greenhouse_engine.js test_calculator.py test_greenhouse_engine.js; do
             source="product_recipes/greenhouse_crop_margin/$file"
             scp -q "${opts[@]}" "$source" "$host:$stage/$file"
             want="$(sha256sum "$source" | cut -d' ' -f1)"
@@ -108,7 +120,7 @@ jobs:
           done
           # Stage a genuine recipe and pinned manufacturer in isolated private stock.
           ssh -T "${opts[@]}" "$host" "mkdir -m 700 -p '$stage/recipes/greenhouse_crop_margin' '$stage/scripts'"
-          for file in calculator.py test_calculator.py README.md example_inputs.json; do
+          for file in GREENHOUSE_ECONOMICS_STUDIO.md README.md calculator.py example_inputs.json greenhouse_economics_studio.html greenhouse_engine.js test_calculator.py test_greenhouse_engine.js; do
             source="product_recipes/greenhouse_crop_margin/$file"
             scp -q "${opts[@]}" "$source" "$host:$stage/recipes/greenhouse_crop_margin/$file"
             want="$(sha256sum "$source" | cut -d' ' -f1)"
@@ -135,7 +147,9 @@ jobs:
           from pathlib import Path
           root=Path(sys.argv[1])
           outputs={name:hashlib.sha256((root/name).read_bytes()).hexdigest()
-                   for name in ("calculator.py","test_calculator.py","README.md")}
+                   for name in ("GREENHOUSE_ECONOMICS_STUDIO.md","README.md","calculator.py","example_inputs.json",
+                                 "greenhouse_economics_studio.html","greenhouse_engine.js",
+                                 "test_calculator.py","test_greenhouse_engine.js")}
           manifest={"schema":"saeit.factory.f28-granular-private-candidate.v1",
                     "source_commit":sys.argv[2],"sha256":outputs,
                     "on_vps_technical_tests_passed":True,
@@ -147,7 +161,7 @@ jobs:
               json.dump(manifest,out,sort_keys=True,indent=2);out.write("\n")
           os.chmod(target,0o600)
           assert json.loads(target.read_text())==manifest
-          print("F28_VPS_PRIVATE_CANDIDATE_SHA256_VERIFIED=3")
+          print("F28_VPS_PRIVATE_CANDIDATE_SHA256_VERIFIED=8")
           print("F28_VPS_PRIVATE_CANDIDATE_TESTS=PASS")
           print("F28_COMMERCIAL_RELEASE=BLOCKED_INDEPENDENT_REVIEW_PENDING")
           PY
@@ -164,6 +178,7 @@ jobs:
           zipfile=private/"private-stock/greenhouse_crop_margin/greenhouse_crop_margin-internal-qa.zip"
           assert doc["status"]=="private_technical_candidate_verified"
           assert doc["independent_black_box_checks"]["customer_scenarios_verified"]==2
+          assert doc["independent_black_box_checks"]["standalone_english_browser_package_integrity"] is True
           assert doc["technical_tests"]>=10
           assert hashlib.sha256(zipfile.read_bytes()).hexdigest()==doc["artifact_sha256"]
           assert doc["commercial_release_authorized"] is False

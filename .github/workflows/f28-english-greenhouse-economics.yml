@@ -1,0 +1,37 @@
+name: F28 English greenhouse economics studio QA
+on:
+  pull_request:
+    paths:
+      - 'product_recipes/greenhouse_crop_margin/**'
+      - '.github/workflows/f28-english-greenhouse-economics.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-economics-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run English product economic and bundle regression
+        run: node --test product_recipes/greenhouse_crop_margin/test_greenhouse_engine.js
+      - name: Run existing Python greenhouse economic regressions
+        run: python3 -B -m unittest discover -s product_recipes/greenhouse_crop_margin -p 'test_calculator.py' -v
+      - name: Verify customer ZIP build, browser bundle integrity, and private warehouse intake
+        run: python3 -B -m unittest -v tests.test_factory_f28_private_cycle_20261021 tests.test_factory_f28_private_warehouse_intake_20261021
+      - name: Verify no remote browser scripts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          doc=Path('product_recipes/greenhouse_crop_margin/greenhouse_economics_studio.html').read_text(encoding='utf-8')
+          assert '<html lang="en">' in doc
+          assert 'connect-src ' in doc and "'none'" in doc
+          assert '<script src=' not in doc
+          assert 'Copyright' in doc
+          print('F28_ENGLISH_OFFLINE_STANDALONE=PASS')
+          PY
