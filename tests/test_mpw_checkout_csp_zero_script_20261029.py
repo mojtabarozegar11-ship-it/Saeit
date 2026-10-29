@@ -55,6 +55,26 @@ class CheckoutZeroScriptCSPTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "Passenger database authority not verified"):
                     module.publish("40808335828")
 
+    def test_synthetic_checkout_sql_guard_allows_only_select(self):
+        executed = []
+        def execute(sql, params, many, context):
+            executed.append(sql)
+            return "read-ok"
+        self.assertEqual(
+            module._read_only_checkout_sql(execute, " SELECT 1", (), False, {}),
+            "read-ok",
+        )
+        self.assertEqual(executed, [" SELECT 1"])
+        for statement in (
+            "INSERT INTO orders VALUES (1)", "UPDATE orders SET paid=1",
+            "DELETE FROM orders", "WITH x AS (DELETE FROM orders RETURNING *) SELECT * FROM x",
+            "BEGIN", "PRAGMA writable_schema=ON", "/* hidden */ SELECT 1",
+        ):
+            with self.subTest(statement=statement):
+                with self.assertRaisesRegex(RuntimeError, "non-SELECT"):
+                    module._read_only_checkout_sql(execute, statement, (), False, {})
+        self.assertEqual(executed, [" SELECT 1"])
+
     def test_rollback_requires_authorization_before_any_file_access(self):
         with patch.dict(os.environ, {"MPW_CSP_RELEASE_APPROVED": ""}):
             with patch.object(module, "guard", side_effect=AssertionError("guard must not run")):
