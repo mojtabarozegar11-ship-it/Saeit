@@ -64,6 +64,18 @@ class StageGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "UNSAFE_ARCHIVE_MEMBER"):
             gate.verify(self.path)
 
+    def test_case_insensitive_member_alias_is_rejected(self):
+        self.build(extra={"GAME.js": b"alias"})
+        with self.assertRaisesRegex(ValueError, "CASEFOLD_MEMBER_COLLISION"):
+            gate.verify(self.path)
+
+    def test_explicit_dot_segment_alias_is_rejected(self):
+        self.build()
+        with zipfile.ZipFile(self.path, "a") as archive:
+            archive.writestr("ramadan-war/./game.js", b"alias")
+        with self.assertRaisesRegex(ValueError, "UNSAFE_ARCHIVE_MEMBER"):
+            gate.verify(self.path)
+
 
 if __name__ == "__main__":
     unittest.main()
