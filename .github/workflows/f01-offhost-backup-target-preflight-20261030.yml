@@ -162,29 +162,32 @@ jobs:
               "backup_or_restore_proven": False,
               "restart_authorized": False,
           }
-          # cPanel StatsBar API is read-only. Do not print its raw response, even on errors.
+          # Use the documented StatsBar result.data[].count/max structure.
+          # The account quota, not host filesystem free, limits safe backup size.
           try:
-              p = subprocess.run(["uapi","--output=json","StatsBar","get_stats",
-                                  "display=diskusage|diskquota"],
-                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                  timeout=15, check=False, text=True)
+              tool = "/usr/local/cpanel/bin/uapi"
+              p = subprocess.run([tool,"--output=json","--user=zomorod2",
+                                  "StatsBar","get_stats","display=diskusage"],
+                                  stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+                                  timeout=15,check=False,text=True)
               if p.returncode == 0 and len(p.stdout) < 200000:
-                  data = json.loads(p.stdout).get("data")
-                  if isinstance(data, list):
+                  response = json.loads(p.stdout)
+                  data = response.get("result",{}).get("data",response.get("data"))
+                  if isinstance(data,list):
                       for row in data:
-                          if not isinstance(row, dict): continue
-                          key = str(row.get("id","")).lower()
-                          if key in ("diskusage","diskquota","disklimit"):
-                              value = str(row.get("value",""))[:60]
-                              if re.fullmatch(r"[0-9.,]+\s*(?:[KMGTPE]?B|%)?", value, re.I):
-                                  base["account_"+key] = value
-              # The UAPI fields may report usage/limit but are not authoritative
-              # evidence of safely available quota unless both parse reliably.
-              values = [base.get("account_diskusage"),base.get("account_diskquota")]
-              if all(v is not None for v in values):
-                  base["account_used"] = values[0]
-                  base["account_quota"] = values[1]
-          except (OSError, ValueError, subprocess.TimeoutExpired):
+                          if isinstance(row,dict) and row.get("id") == "diskusage":
+                              used = str(row.get("count","")).strip()
+                              limit = str(row.get("max","")).strip()
+                              numeric = r"[0-9]+(?:\\.[0-9]+)?\\s*(?:B|KB|MB|GB|TB|PB)"
+                              if re.fullmatch(numeric,used,re.I):
+                                  base["account_used"] = used
+                              if re.fullmatch(numeric,limit,re.I):
+                                  base["account_quota"] = limit
+                                  base["account_limit_source"] = "CPANEL_UAPI_STATS"
+                              elif limit.lower() == "unlimited":
+                                  base["account_quota"] = "UNLIMITED_REPORTED"
+              # Never log raw response: it may contain other account metadata.
+          except (OSError, ValueError, subprocess.TimeoutExpired, TypeError):
               pass
           print("CPANEL_CAPACITY_EVIDENCE="+json.dumps(base,sort_keys=True))
           PY
