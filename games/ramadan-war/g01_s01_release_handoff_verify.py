@@ -43,10 +43,14 @@ def verify(path):
         if REQUIRED - present:
             raise ValueError("missing runtime files: " + ",".join(sorted(REQUIRED - present)))
         manifest = json.loads(z.read("ramadan-war/preview-manifest.json"))
-        if not manifest.get("version", "").startswith("G01-R"):
-            raise ValueError("missing G-01 version")
-        if set(manifest["files"]) != present - {"preview-manifest.json"}:
-            raise ValueError("manifest does not cover every archive member")
+        local_version = isinstance(manifest.get("version"), str) and manifest["version"].startswith("G01-R")
+        ci_preview = (manifest.get("format") == "ramadan-war-offline-preview-v1" and
+                      manifest.get("payment_status") == "disabled")
+        if not (local_version or ci_preview):
+            raise ValueError("unrecognized or unsafe G-01 preview manifest")
+        excluded = {"preview-manifest.json"} | ({"PLAY-README.txt"} if ci_preview else set())
+        if set(manifest["files"]) != present - excluded:
+            raise ValueError("manifest does not cover every required payload member")
         for name, meta in manifest["files"].items():
             data = z.read("ramadan-war/" + name)
             if len(data) != meta["bytes"] or hashlib.sha256(data).hexdigest() != meta["sha256"]:
