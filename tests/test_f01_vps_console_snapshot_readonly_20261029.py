@@ -219,6 +219,34 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotIn("secret", str(out))
         self.assertTrue(out["commands_and_schedules_redacted"])
 
+    def test_wait_channel_classification_never_returns_raw_symbols(self):
+        cases = {
+            "io_schedule": "storage_io",
+            "jbd2_log_wait_commit": "storage_io",
+            "futex_wait_queue": "lock_wait",
+            "sk_wait_data": "ipc_network",
+            "hrtimer_nanosleep": "timer_sleep",
+            "0": "unavailable",
+            "PRIVATE_MOUNT_NAME": "other",
+        }
+        for symbol, expected in cases.items():
+            self.assertEqual(mod.classify_wait_channel(symbol), expected)
+            self.assertNotIn(symbol, str({"class": mod.classify_wait_channel(symbol)}))
+
+    def test_process_wait_and_init_categories_are_redacted(self):
+        result = mod.process_pressure()
+        self.assertEqual(result["state"], "OBSERVED")
+        self.assertTrue(result["wait_channels_coarse_and_redacted"])
+        self.assertEqual(sum(result["d_state_wait_categories"].values()),
+                         result["all_process_states"].get("D", 0))
+        self.assertEqual(sum(result["factory_d_state_wait_categories"].values()),
+                         result["factory_states"].get("D", 0))
+        self.assertEqual(sum(result["init_parent_executable_categories"].values()),
+                         sum(result["init_parent_factory_age_buckets"].values()))
+        allowed = {"storage_io", "lock_wait", "ipc_network", "timer_sleep", "unavailable", "other"}
+        self.assertTrue(set(result["d_state_wait_categories"]).issubset(allowed))
+        self.assertFalse(result["worker_health_verified"])
+
     def test_missing_command(self):
         self.assertEqual(mod.command(["/no-such-f01-command"])["state"], "UNAVAILABLE")
 
