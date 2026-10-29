@@ -26,6 +26,8 @@ if(is_file($private.'/command_center.php')) require_once $private.'/command_cent
 if(is_file($private.'/workflow_desk.php')) require_once $private.'/workflow_desk.php';
 if(is_file($private.'/payroll_control.php')) require_once $private.'/payroll_control.php';
 if(is_file($private.'/payroll_ui.php')) require_once $private.'/payroll_ui.php';
+if(is_file($private.'/treasury_control.php')) require_once $private.'/treasury_control.php';
+if(is_file($private.'/treasury_ui.php')) require_once $private.'/treasury_ui.php';
 if(is_file($private.'/industry_operations.php')) require_once $private.'/industry_operations.php';
 if(is_file($private.'/finance_audit.php')) require_once $private.'/finance_audit.php';
 require_once $private.'/period_controls.php';
@@ -89,7 +91,7 @@ function record(PDO $db,string $number,string $date,string $note,string $cur,arr
 }
 function uniqueNo(string $prefix):string {return $prefix.'-'.gmdate('YmdHis').'-'.strtoupper(substr(bin2hex(random_bytes(5)),0,8));}
 function layoutStart(string $page,?array $user=null):void {
-    $nav=['dashboard'=>'داشبورد','insights'=>'گزارش مدیریتی','command_center'=>'مرکز فرمان هوشمند','workflow_desk'=>'اتوماسیون و کارتابل','industry_ops'=>'عملیات کشاورزی و تولید','finance_audit'=>'کنترل مالی','period_controls'=>'بستن دورهٔ مالی','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','payroll'=>'حقوق و دستمزد','documents'=>'مکاتبات','projects'=>'پروژه‌ها','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
+    $nav=['dashboard'=>'داشبورد','insights'=>'گزارش مدیریتی','command_center'=>'مرکز فرمان هوشمند','workflow_desk'=>'اتوماسیون و کارتابل','industry_ops'=>'عملیات کشاورزی و تولید','finance_audit'=>'کنترل مالی','period_controls'=>'بستن دورهٔ مالی','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','treasury'=>'خزانه‌داری داخلی','payroll'=>'حقوق و دستمزد','documents'=>'مکاتبات','projects'=>'پروژه‌ها','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
     $navHtml='';foreach($nav as $key=>$label){if($key==='users'&&role()!=='admin')continue;$navHtml.='<a class="'.($page===$key?'sel':'').'" href="?page='.esc($key).'">'.esc($label).'</a>';}
     echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.esc(APP_TITLE).'</title><link rel="icon" type="image/webp" href="/static/site/zomorod-v7/company-logo.webp"><style>\n    :root{font-family:Tahoma,Arial,sans-serif;color:#e9e7d9;background:#0c1811}*{box-sizing:border-box}body{margin:0;background:#203b23;min-height:100vh}a{color:#d9bc72;text-decoration:none}header{padding:20px 4%;background:#1a341e;border-bottom:3px double #e5c374;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:21px;color:#edcd79;font-weight:bold}.small{font-size:12px;color:#b9c0ae}nav{display:flex;overflow:auto;gap:8px;padding:16px 4%;background:#1a341e;scrollbar-width:thin}nav a{white-space:nowrap;padding:11px 13px;background:#284c30;border:1px solid #e1c47f;border-radius:12px}nav .sel{color:#081509;background:#d8ba6e;border-color:#f3d590}main{max-width:1260px;margin:auto;padding:26px 20px 70px}h1,h2,h3{color:#edcf88}h1{font-size:clamp(23px,3vw,32px)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:15px;margin:18px 0}.card,section{background:#18291e;border:1px solid #546545;border-radius:18px;padding:20px;margin:16px 0;box-shadow:0 8px 28px #0002}.metric{font-size:28px;color:#f1d68e;font-weight:bold}table{border-collapse:collapse;width:100%;min-width:580px}th,td{padding:12px;text-align:right;border-bottom:1px solid #405243}th{color:#e4cb83}.scroll{overflow:auto}label{display:block;color:#d1dcbf;margin:9px 0 5px}input,textarea,select{font:inherit;color:#f3eedc;background:#0c1a12;border:1px solid #647153;border-radius:9px;padding:11px;width:100%;max-width:440px}textarea{min-height:88px}button{background:linear-gradient(120deg,#a98741,#f3d584);border:1px solid #f8dd9a;color:#15200e;padding:12px 19px;border-radius:12px;cursor:pointer;font-weight:bold;margin-top:13px}button:hover{filter:brightness(1.1)}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 18px}.form .full{grid-column:1/-1}.notice{border:1px solid #b99550;background:#354027;padding:15px;border-radius:12px}.danger{background:#4d1e20;border-color:#c26b6b}.muted{color:#bec8b6}.account-line{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}.sign{max-width:540px;margin:70px auto;padding:30px}footer{padding:24px 4%;border-top:1px solid #52613b;text-align:center;color:#bdc7ae;font-size:12px}.tags{display:flex;flex-wrap:wrap;gap:8px}.tags span{border:1px solid #6b7050;border-radius:15px;padding:4px 10px}@media(max-width:650px){.account-line{grid-template-columns:1fr 1fr}.account-line select{grid-column:1/-1}main{padding:14px 12px}header{padding:15px}}\n    </style></head><body><header><div><div class="brand"><img src="/static/site/zomorod-v7/company-logo.webp" alt="نشان شرکت زمرد ملل" width="48" height="48" style="width:48px;height:48px;border-radius:50%;border:2px solid #e5c377;vertical-align:middle;margin-left:12px;background:#fff">زمرد ملل · مدیریت جامع</div><div class="small">مدیریت سازمان · دفاتر مالی · ثبت عملیات با کنترل دسترسی</div></div><div><a href="https://zomorodmelal.ir/">بازگشت به سایت</a>';
     if($user)echo ' · <span class="small">'.esc($user['username']).' ('.esc($user['role']).')</span> · <a href="?page=logout">خروج</a>';
@@ -144,7 +146,17 @@ try {
         }
     }
     if(($_GET['page']??'')==='logout'){$_SESSION=[];session_destroy();header('Location: /business/',true,303);exit;}
-    $uid=actor();$user=$uid?q($db,'SELECT id,username,role,active FROM users WHERE id=?',[$uid])[0]??null:null;
+    $uid=actor();$user=$uid?q($db,'SELECT id,username,role,active,password_hash FROM users WHERE id=?',[$uid])[0]??null:null;
+    // A password rotation invalidates all previous sessions, including CLI resets.
+    // Existing sessions without a credential stamp must authenticate again.
+    if($user){
+        $stamp=hash('sha256',(string)$user['password_hash']);
+        if(!is_string($_SESSION['credential_stamp']??null) ||
+           !hash_equals($stamp,(string)$_SESSION['credential_stamp'])){
+            unset($_SESSION['uid'],$_SESSION['role'],$_SESSION['credential_stamp']);
+            $user=null;
+        }
+    }
     if(!$user||(int)$user['active']!==1){
         if($_SERVER['REQUEST_METHOD']==='POST'){
             verifyCsrf();$username=req('username');$pass=req('password');
@@ -154,7 +166,9 @@ try {
             if(!$acc||!password_verify($pass,$acc[0]['password_hash'])){
                 $_SESSION['failed_count']=$attempts+1;$_SESSION['failed_at']=time();bail('نام کاربری یا رمز عبور اشتباه است.',401);
             }
-            $_SESSION['uid']=(int)$acc[0]['id'];$_SESSION['role']=$acc[0]['role'];$_SESSION['failed_count']=0;session_regenerate_id(true);
+            $_SESSION['uid']=(int)$acc[0]['id'];$_SESSION['role']=$acc[0]['role'];
+            $_SESSION['credential_stamp']=hash('sha256',(string)$acc[0]['password_hash']);
+            $_SESSION['failed_count']=0;session_regenerate_id(true);
             header('Location: ?page=dashboard',true,303);exit;
         }
         layoutStart('login');echo '<section class="sign"><h1>ورود مدیر و حسابدار</h1><p>دسترسی فقط برای کاربران مجاز شرکت.</p>';formBegin('login');echo '<label>نام کاربری</label><input name="username" required autocomplete="username"><label>رمز عبور</label><input name="password" type="password" required autocomplete="current-password"><button>ورود امن</button></form></section>';layoutEnd();exit;
@@ -173,7 +187,9 @@ try {
             if(strlen($new)<16||strlen($new)>200||$new!==$confirmation||hash_equals($previous,$new)) bail('گذرواژه جدید باید دست‌کم ۱۶ نویسه، متفاوت با قبلی و مطابق تکرار آن باشد.');
             $hash=one($db,'SELECT password_hash FROM users WHERE id=? AND active=1',[actor()]);
             if(!is_string($hash)||!password_verify($previous,$hash)) bail('گذرواژه فعلی صحیح نیست.',403);
-            $db->prepare('UPDATE users SET password_hash=? WHERE id=?')->execute([password_hash($new,PASSWORD_DEFAULT),actor()]);
+            $newHash=password_hash($new,PASSWORD_DEFAULT);
+            $db->prepare('UPDATE users SET password_hash=? WHERE id=?')->execute([$newHash,actor()]);
+            $_SESSION['credential_stamp']=hash('sha256',$newHash);
             audit($db,'security','password-change');
             session_regenerate_id(true);
         } elseif($action==='account'){
@@ -253,6 +269,9 @@ try {
         } elseif(in_array($action,['flow_create','flow_transition'],true)){
             if(!function_exists('zmFlowHandle'))bail('گردش‌کار سازمانی در دسترس نیست.',503);
             zmFlowHandle(zmFlowDb($private),$action);
+        } elseif(in_array($action,['treasury_create','treasury_decision'],true)){
+            if(!function_exists('zmTreasuryUiHandle'))bail('پنل خزانه‌داری در دسترس نیست.',503);
+            zmTreasuryUiHandle(zmTreasuryDb($private),$action);
         } elseif(in_array($action,['industry_create','industry_advance'],true)){
             if(!function_exists('zmIndustryHandle'))bail('سامانه عملیاتی در دسترس نیست.',503);
             zmIndustryHandle(zmIndustryDb($private),$action);
@@ -262,7 +281,7 @@ try {
             if(!function_exists('zmPayrollUiHandle'))bail('کنترل حقوق در دسترس نیست.',503);
             zmPayrollUiHandle(zmPayrollDb($private),$action);
         } elseif($action==='user'){
-            $username=req('username');$pass=req('password');$newRole=req('role');if(!preg_match('/^[A-Za-z0-9_]{5,40}$/',$username)||strlen($pass)<14||!in_array($newRole,['admin','accountant','manager','viewer'],true))bail('کاربر، گذرواژه یا نقش نامعتبر است.');
+            $username=req('username');$pass=req('password');$newRole=req('role');if(!preg_match('/^[A-Za-z0-9_]{5,40}$/',$username)||strlen($pass)<16||!in_array($newRole,['admin','accountant','manager','viewer'],true))bail('کاربر، گذرواژه یا نقش نامعتبر است.');
             $db->prepare('INSERT INTO users(username,password_hash,role) VALUES(?,?,?)')->execute([$username,password_hash($pass,PASSWORD_DEFAULT),$newRole]);audit($db,'create','user',(int)$db->lastInsertId());
         } else bail('عملیات مجاز نیست.',403);
         $_SESSION['flash']='عملیات با موفقیت ثبت شد.';
@@ -285,6 +304,10 @@ try {
         authorize('view');
         if(!function_exists('zmFlowRender'))bail('اتوماسیون سازمانی در دسترس نیست.',503);
         zmFlowRender(zmFlowDb($private));
+    } elseif($page==='treasury'){
+        authorize('view');
+        if(!function_exists('zmTreasuryUiRender'))bail('پنل خزانه‌داری در دسترس نیست.',503);
+        zmTreasuryUiRender(zmTreasuryDb($private));
     } elseif($page==='industry_ops'){
         authorize('view');
         if(!function_exists('zmIndustryRender'))bail('سامانه صنعت در دسترس نیست.',503);
@@ -350,7 +373,7 @@ try {
         formBegin('password_change');
         echo '<label>گذرواژه فعلی</label><input type="password" name="previous_password" required autocomplete="current-password"><label>گذرواژه جدید (دست‌کم ۱۶ نویسه)</label><input type="password" name="new_password" required minlength="16" autocomplete="new-password"><label>تکرار گذرواژه جدید</label><input type="password" name="new_password_confirmation" required minlength="16" autocomplete="new-password"><button>ذخیره گذرواژه جدید</button></form></section>';
     } elseif($page==='users'){
-        authorize('users');echo '<section><h2>دسترسی کاربران</h2><div class="scroll"><table><tr><th>نام کاربری</th><th>سطح دسترسی</th><th>فعال</th></tr>';foreach(q($db,'SELECT username,role,active FROM users ORDER BY id') as $r)echo '<tr><td>'.esc($r['username']).'</td><td>'.esc($r['role']).'</td><td>'.($r['active']?'بله':'خیر').'</td></tr>';echo '</table></div></section><section><h2>ایجاد کاربر</h2>';formBegin('user');echo '<div class="form"><div><label>نام کاربری (انگلیسی)</label><input name="username" required></div><div><label>رمز دست‌کم ۱۴ نویسه</label><input name="password" type="password" required minlength="14"></div><div><label>نقش</label><select name="role"><option value="viewer">مشاهده‌گر</option><option value="manager">مدیر</option><option value="accountant">حسابدار</option><option value="admin">مدیر کل</option></select></div></div><button>ایجاد حساب کاربری</button></form></section>';
+        authorize('users');echo '<section><h2>دسترسی کاربران</h2><div class="scroll"><table><tr><th>نام کاربری</th><th>سطح دسترسی</th><th>فعال</th></tr>';foreach(q($db,'SELECT username,role,active FROM users ORDER BY id') as $r)echo '<tr><td>'.esc($r['username']).'</td><td>'.esc($r['role']).'</td><td>'.($r['active']?'بله':'خیر').'</td></tr>';echo '</table></div></section><section><h2>ایجاد کاربر</h2>';formBegin('user');echo '<div class="form"><div><label>نام کاربری (انگلیسی)</label><input name="username" required></div><div><label>رمز دست‌کم ۱۶ نویسه</label><input name="password" type="password" required minlength="16"></div><div><label>نقش</label><select name="role"><option value="viewer">مشاهده‌گر</option><option value="manager">مدیر</option><option value="accountant">حسابدار</option><option value="admin">مدیر کل</option></select></div></div><button>ایجاد حساب کاربری</button></form></section>';
     } else{http_response_code(404);echo '<p class="notice danger">صفحه موجود نیست.</p>';}
     layoutEnd();
 }catch(Throwable $e){

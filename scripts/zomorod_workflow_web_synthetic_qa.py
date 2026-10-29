@@ -23,7 +23,9 @@ with tempfile.TemporaryDirectory(prefix="zm-flow-web-qa-") as temporary:
     source = root / "content/zomorod-business"
     for filename in ("app.php", "insights.php", "command_center.php",
                      "command_quality.php", "command_planner.php",
-                     "workflow_desk.php", "payroll_control.php", "payroll_ui.php"):
+                     "workflow_desk.php", "payroll_control.php", "payroll_ui.php",
+                     "period_controls.php", "finance_audit.php",
+                     "industry_operations.php", "treasury_control.php", "treasury_ui.php"):
         shutil.copy2(source / filename, private / filename)
     shutil.copy2(source / "index.php", web / "index.php")
     sid = "zmflowoldtestsession"
