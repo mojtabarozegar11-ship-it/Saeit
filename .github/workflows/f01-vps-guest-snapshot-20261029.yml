@@ -11,6 +11,8 @@ on:
       - tests/test_f01_s01_release_preflight_20261029.py
       - scripts/f01_sku72_225_archive_qc.py
       - tests/test_f01_sku72_225_archive_qc.py
+      - scripts/f01_offhost_sqlite_backup_verify.py
+      - tests/test_f01_offhost_sqlite_backup_verify.py
 permissions:
   contents: read
 concurrency:
@@ -30,6 +32,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_vps_console_snapshot_readonly_20261029.py'
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_s01_release_preflight_20261029.py'
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_sku72_225_archive_qc.py'
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_offhost_sqlite_backup_verify.py'
       - name: Authenticate pinned VPS and collect non-mutating evidence
         shell: bash
         env:
