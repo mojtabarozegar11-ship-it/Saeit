@@ -16,9 +16,10 @@ const {chromium}=require('playwright');
    for(const key of ['Enter','Space']){
     const choice=await page.evaluate(()=>{
      const puzzle=window.ArrowMazeDebug.getPuzzle();
-     const piece=puzzle.faces.flatMap(f=>f.pieces).find(p=>window.ArrowCubeCore.canExit(puzzle,p,new Set(
-      puzzle.faces.flatMap(f=>f.pieces).filter(p=>!document.querySelector('[data-arrow-id="'+p.id+'"]')).map(p=>p.id)
-     )));
+     const removed=new Set(puzzle.faces.flatMap(f=>f.pieces)
+      .filter(p=>!document.querySelector('[data-arrow-id="'+p.id+'"]')).map(p=>p.id));
+     const piece=puzzle.faces.flatMap(f=>f.pieces).find(p=>
+      !removed.has(p.id) && window.ArrowCubeCore.canExit(puzzle,p,removed));
      return piece?.id??null;
     });
     assert.ok(choice,'at least one legal arrow');
