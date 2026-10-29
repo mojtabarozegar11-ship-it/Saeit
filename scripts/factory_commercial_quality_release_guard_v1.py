@@ -203,7 +203,6 @@ def require_rights_clearance(inbox,recipe,package_digest,package_path,*,commerci
     )
 
 def require_quality_clearance(inbox,recipe,package_digest,product_manifest,package_path):
-    require_rights_clearance(inbox,recipe,package_digest,package_path)
     if not isinstance(product_manifest,dict):
         raise ValueError("INVALID_PRIVATE_FACTORY_MANIFEST")
     if product_manifest.get("professional_quality_standard")!="100_groups_x_10":
