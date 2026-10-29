@@ -23,7 +23,8 @@ with tempfile.TemporaryDirectory(prefix="zm-flow-web-qa-") as temporary:
     source = root / "content/zomorod-business"
     for filename in ("app.php", "insights.php", "command_center.php",
                      "command_quality.php", "command_planner.php",
-                     "workflow_desk.php", "payroll_control.php", "payroll_ui.php"):
+                     "workflow_desk.php", "payroll_control.php", "payroll_ui.php",
+                     "treasury_control.php", "treasury_ui.php"):
         shutil.copy2(source / filename, private / filename)
     shutil.copy2(source / "index.php", web / "index.php")
     sid = "zmflowoldtestsession"
@@ -170,6 +171,41 @@ with tempfile.TemporaryDirectory(prefix="zm-flow-web-qa-") as temporary:
     assert "درخواست انجام نشد" not in accepted
     assert payroll_db.execute("SELECT state,reviewed_by FROM payroll_periods").fetchone() == ("approved",1)
     assert payroll_db.execute("SELECT COUNT(*) FROM payroll_events").fetchone()[0] == 3
+    # Test new private treasury screen through actual PHP sessions and CSRF.
+    treasury_screen = req("GET", "treasury")
+    assert "خزانه‌داری — درخواست‌های داخلی" in treasury_screen
+    treasury_csrf = csrf(treasury_screen)
+    tresp = req("POST", "treasury", {"action": "treasury_create",
+        "request_key": "d"*32, "reference": "SYN-REF",
+        "purpose": "Forged CSRF must be rejected", "direction": "payable",
+        "amount": "12.34", "currency": "IRR"})
+    assert "درخواست انجام نشد" in tresp
+    proposal = {"csrf": treasury_csrf, "action": "treasury_create",
+        "request_key": "d"*32, "reference": "<script>synthetic</script>",
+        "purpose": "Synthetic supplier review only", "direction": "payable",
+        "amount": "12.34", "currency": "IRR"}
+    result = req("POST", "treasury", proposal)
+    assert "درخواست انجام نشد" not in result
+    treasury_db = sqlite3.connect(str(private / "treasury-control.sqlite3"))
+    assert treasury_db.execute("SELECT status,amount_minor FROM treasury_requests").fetchone() == ("draft",1234)
+    req("POST", "treasury", proposal)
+    assert treasury_db.execute("SELECT COUNT(*) FROM treasury_requests").fetchone()[0] == 1
+    assert "&lt;script&gt;synthetic" in req("GET", "treasury")
+    req("POST", "treasury", {"csrf": treasury_csrf, "action": "treasury_decision",
+        "treasury_id": "1", "decision": "submit", "reason": "Review queue"})
+    self_approval = req("POST", "treasury", {"csrf": treasury_csrf,
+        "action": "treasury_decision", "treasury_id": "1",
+        "decision": "approve", "reason": "Not allowed"})
+    assert "درخواست انجام نشد" in self_approval
+    sid = reviewers[0]
+    other_csrf = csrf(req("GET", "treasury"))
+    ok = req("POST", "treasury", {"csrf": other_csrf,
+        "action": "treasury_decision", "treasury_id": "1",
+        "decision": "approve", "reason": "Independent synthetic approval"})
+    assert "درخواست انجام نشد" not in ok
+    assert treasury_db.execute("SELECT status,reviewed_by FROM treasury_requests").fetchone() == ("approved",2)
+    assert treasury_db.execute("SELECT COUNT(*) FROM treasury_events").fetchone()[0] == 3
+    assert treasury_db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     ledger = sqlite3.connect(f"file:{private/'management.sqlite3'}?mode=ro", uri=True)
     assert ledger.execute("SELECT COUNT(*) FROM journal_entries").fetchone()[0] == 0
     assert ledger.execute("SELECT COUNT(*) FROM invoices").fetchone()[0] == 0
@@ -180,3 +216,4 @@ with tempfile.TemporaryDirectory(prefix="zm-flow-web-qa-") as temporary:
     print("IDEMPOTENCY_AUDIT=PASS XSS_ESCAPING=PASS")
     print("ACCOUNTING_ENTRIES=ZERO SYNTHETIC_DATA_ONLY=YES")
     print("PAYROLL_AUTHENTICATED_CSRF_TWO_PERSON_WEB_QA=PASS")
+    print("TREASURY_AUTHENTICATED_CSRF_TWO_PERSON_WEB_QA=PASS")
