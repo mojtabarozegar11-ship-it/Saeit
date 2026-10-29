@@ -40,7 +40,7 @@ def academy(request):
         db_tracks = list(EducationTrack.objects.filter(active=True))
         if db_tracks:
             tracks = [{"key": x.key, "title": x.title, "meta": x.meta, "text": x.description} for x in db_tracks]
-    course_q = request.GET.get("q", "").strip()
+    course_q = request.GET.get("q", "").strip()[:120]  # Bound user-controlled DB search cost
     track_key = request.GET.get("track", "").strip()
     access = request.GET.get("access", "").strip()
     courses = []
