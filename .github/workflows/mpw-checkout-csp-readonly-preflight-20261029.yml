@@ -194,6 +194,37 @@ jobs:
           result["safe_to_publish"] = False
           print("S01_CHECKOUT_RELEASE_GATE=" + json.dumps(result, sort_keys=True))
           PY
+      - name: Exercise source-only restore in isolated off-host runner (no upload)
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$(mktemp -d "$RUNNER_TEMP/s01-restore-XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          stem="/home/zomorod2/.private_mojplaywin_main_agents/mpw-checkout-csp-preimage-f33d80b7e843a66c"
+          timeout 45s scp -q -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" "saeit-cpanel:$stem.bak" "$d/preimage.py"
+          timeout 45s scp -q -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" "saeit-cpanel:$stem.json" "$d/manifest.json"
+          python3 - "$d" <<'PY'
+          import hashlib, json, os, stat, sys
+          from pathlib import Path
+          root=Path(sys.argv[1]); source=root/"preimage.py"; manifest=root/"manifest.json"
+          expected="f33d80b7e843a66c9a55d8a8da46d5fb6049fb4c487f8f559c3471cfd42cdf74"
+          for p in (source, manifest):
+              assert p.is_file() and not p.is_symlink() and not (p.stat().st_mode & 0o077)
+          data=source.read_bytes(); record=json.loads(manifest.read_text("utf8"))
+          assert hashlib.sha256(data).hexdigest()==expected
+          assert record.get("source_sha256")==expected and record.get("bytes")==len(data)
+          assert record.get("release_permitted") is False
+          restored=root/"restored.py"; restored.write_bytes(data)
+          assert hashlib.sha256(restored.read_bytes()).hexdigest()==expected
+          compile(restored.read_bytes(), "<isolated-offhost-source-restore>", "exec")
+          print("S01_EPHEMERAL_OFFHOST_RESTORE="+json.dumps({
+              "source_only_restore_drill":True,"exact_sha_match":True,
+              "durable_offhost_backup_verified":False,
+              "passenger_db_authority_verified":False,"safe_to_publish":False,
+              "orders_created":0,"payments_created":0,
+          },sort_keys=True))
+          PY
       - name: Read only own Passenger process metadata with redacted output
         shell: bash
         run: |
