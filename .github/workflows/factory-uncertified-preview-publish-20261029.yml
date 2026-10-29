@@ -96,6 +96,7 @@ jobs:
                               h.update(chunk)
                       print("PREVIEW_ENTRY_SHA256=" + item.name + "|" + h.hexdigest())
           PY
+  publish:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[owner-authorized-uncertified-preview-20261029]')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
