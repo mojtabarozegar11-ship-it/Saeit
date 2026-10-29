@@ -22,7 +22,9 @@ const {chromium}=require('playwright');
       const x=rect.left+rect.width/2,y=rect.top+rect.height/2,inViewport=visible&&x>=0&&y>=0&&x<innerWidth&&y<innerHeight;
       const hit=inViewport?document.elementFromPoint(x,y):null,centerBlocked=!!(hit&&hit!==el&&!el.contains(hit));
       let href=null;if(el.tagName==='A'){try{const u=new URL(el.href);href=u.origin===location.origin?u.pathname:'[external]'}catch(_){href='[invalid]'}}
-      return {tag:el.tagName,id:(el.id||'').slice(0,80),name,href,disabled:!!el.disabled,ariaDisabled:el.getAttribute('aria-disabled'),visible,pointerEvents:style.pointerEvents,tabIndex:el.tabIndex,centerBlocked,centerChecked:inViewport};
+      const blockedBy=centerBlocked?{tag:hit.tagName,id:(hit.id||'').slice(0,60),className:typeof hit.className==='string'?hit.className.slice(0,80):''}:null;
+      const disabledReasons=[el.disabled?'native-disabled':null,el.getAttribute('aria-disabled')==='true'?'aria-disabled':null,style.pointerEvents==='none'?'pointer-events-none':null,el.closest('fieldset[disabled]')?'disabled-fieldset':null,el.closest('[inert]')?'inert-ancestor':null,!visible?'hidden':null,centerBlocked?'center-obstructed':null].filter(Boolean);
+      return {tag:el.tagName,id:(el.id||'').slice(0,80),name,href,disabled:!!el.disabled,ariaDisabled:el.getAttribute('aria-disabled'),visible,pointerEvents:style.pointerEvents,tabIndex:el.tabIndex,centerBlocked,centerChecked:inViewport,blockedBy,disabledReasons};
      }).filter(x=>/checkout|invoice|pay|buy|purchase|cart|فاکتور|پرداخت|خرید|سبد/i.test(x.name+' '+x.href)).slice(0,60));
      const record={device:device.name,path:slug,http:response?.status()||0,error,jsErrors:errors,controls};
      rows.push(record);
