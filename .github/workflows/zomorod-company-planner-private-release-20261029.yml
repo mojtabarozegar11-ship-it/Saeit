@@ -1,0 +1,178 @@
+name: Zomorod v3 operations planner guarded live release
+on:
+  push:
+    branches: [feature/zomorod-command-center-v3-operations-planner-20261029]
+    paths: [".github/workflows/zomorod-company-planner-private-release-20261029.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-company-private-operations-planner
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_sqlite, sqlite3, mbstring
+      - name: Test no-write planner, quality gate and base management workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/command_center.php
+          php -l content/zomorod-business/command_quality.php
+          php -l content/zomorod-business/command_planner.php
+          php scripts/zomorod_command_center_synthetic_qa.php
+          php scripts/zomorod_command_quality_synthetic_qa.php
+          php scripts/zomorod_command_planner_synthetic_qa.php
+      - name: Connect through pinned VPS to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_PRIVATE_RELAY=verified"
+
+
+
+      - name: Verify exact previous v2 module and protect existing private data
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          git fetch --no-tags --depth=1 origin ca49c9693dc47c8404d799bbfc419fe83e5295db
+          git show ca49c9693dc47c8404d799bbfc419fe83e5295db:content/zomorod-business/command_center.php > "$d/previous-v2.php"
+          fingerprint="$(sha256sum "$d/previous-v2.php" | awk '{print $1}')"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" "$fingerprint" <<'REMOTE'
+          set -euo pipefail
+          p="$HOME/.private/zomorod-business"
+          snapshot="$HOME/.backups/zomorod-business-planner/$1-$2"
+          fail(){ echo "PLANNER_PREFLIGHT_STOP=$1";exit 40; }
+          test -d "$p" && test ! -L "$p" || fail private_dir
+          test -f "$p/app.php" && test ! -L "$p/app.php" || fail app_missing
+          test -f "$p/command_center.php" && test ! -L "$p/command_center.php" || fail center_missing
+          test -f "$p/command_quality.php" && test ! -L "$p/command_quality.php" || fail quality_missing
+          test -f "$p/management.sqlite3" && test ! -L "$p/management.sqlite3" || fail ledger_missing
+          test ! -e "$p/command_planner.php" || fail already_installed
+          test ! -e "$snapshot" || fail backup_exists
+          test "$(sha256sum "$p/command_center.php" | awk '{print $1}')" = "$3" || fail unexpected_live_version
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin";then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php";fi
+          "$phpbin" -l "$p/app.php" >/dev/null || fail app_syntax
+          "$phpbin" -l "$p/command_center.php" >/dev/null || fail center_syntax
+          mkdir -p "$(dirname "$snapshot")"
+          mkdir -m 700 "$snapshot"
+          cp -p "$p/command_center.php" "$snapshot/command_center.php.before"
+          chmod 600 "$snapshot/command_center.php.before"
+          if test -f "$p/command-center.sqlite3" && test ! -L "$p/command-center.sqlite3";then
+            python3 - "$p/command-center.sqlite3" "$snapshot/command-center.sqlite3.before" <<'PY'
+          import sqlite3,sys,os
+          old=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
+          new=sqlite3.connect(sys.argv[2])
+          old.backup(new)
+          new.close();old.close()
+          os.chmod(sys.argv[2],0o600)
+          PY
+          fi
+          sha256sum "$HOME/public_html/index.html" "$HOME/public_html/.htaccess" > "$snapshot/public-checksums.sha256"
+          echo "OPERATIONS_PLANNER_PREFLIGHT=PASS"
+          REMOTE
+          snap="/home/zomorod2/.backups/zomorod-business-planner/$GITHUB_SHA-$GITHUB_RUN_ID"
+          tar -cf - -C content/zomorod-business command_center.php command_planner.php |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$snap'"
+      - name: Upgrade only the private planner and command center module with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";p="$HOME/.private/zomorod-business"
+          snap="$HOME/.backups/zomorod-business-planner/$1-$2"
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin";then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php";fi
+          test -f "$snap/command_center.php.before" && test -f "$snap/command_center.php" && test -f "$snap/command_planner.php"
+          "$phpbin" -l "$snap/command_center.php"
+          "$phpbin" -l "$snap/command_planner.php"
+          test ! -e "$p/command_planner.php"
+          install -m 600 "$snap/command_planner.php" "$p/command_planner.php.next-$sha"
+          install -m 600 "$snap/command_center.php" "$p/command_center.php.next-$sha"
+          module=0;center=0
+          rollback(){
+            if test "$center" = 1;then
+              cp -p "$snap/command_center.php.before" "$p/command_center.php.restore-$sha"
+              mv -f "$p/command_center.php.restore-$sha" "$p/command_center.php"
+            fi
+            if test "$module" = 1;then rm -f "$p/command_planner.php";fi
+            rm -f "$p/command_planner.php.next-$sha" "$p/command_center.php.next-$sha"
+            echo "OPERATIONS_PLANNER_ROLLBACK=APPLIED"
+          }
+          finish(){ status=$?;trap - EXIT;if test "$status" -ne 0;then rollback;fi;exit "$status"; }
+          trap finish EXIT
+          mv -f "$p/command_planner.php.next-$sha" "$p/command_planner.php";module=1
+          mv -f "$p/command_center.php.next-$sha" "$p/command_center.php";center=1
+          "$phpbin" -l "$p/command_center.php"
+          "$phpbin" -l "$p/command_quality.php"
+          "$phpbin" -l "$p/command_planner.php"
+          cmp -s "$p/command_planner.php" "$snap/command_planner.php"
+          cmp -s "$p/command_center.php" "$snap/command_center.php"
+          status="$(curl -sS -L --max-time 30 -o "$snap/anon.html" -w '%{http_code}' "https://zomorodmelal.ir/business/?page=command_center&check=$sha")"
+          test "$status" = 200
+          grep -Fq "ورود مدیر و حسابدار" "$snap/anon.html"
+          ! grep -Fq "برنامه‌ریز عملیاتی مدیرعامل" "$snap/anon.html"
+          sha256sum -c --status "$snap/public-checksums.sha256"
+          trap - EXIT
+          echo "OPERATIONS_PLANNER_PRIVATE_DEPLOY=SUCCESS"
+          echo "ACCOUNTING_DATABASE=UNCHANGED"
+          echo "PUBLIC_SITE=UNCHANGED"
+          echo "SCHEDULED_TASK=NOT_CREATED"
+          echo "AUTONOMOUS_EXECUTOR=DISABLED"
+          REMOTE
+      - name: Clear temporary relay files
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-business-tokenless"
