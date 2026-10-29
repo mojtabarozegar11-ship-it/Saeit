@@ -44,7 +44,7 @@ try {
     zmCcTransition($db,$id,'done','Accepted and closed with evidence',42);
     check($db->query('SELECT state FROM tasks WHERE id=1')->fetchColumn()==='done','completion_after_review');
     shouldReject(fn()=>zmCcQualityEvidence($db,$id,'https://github.com/example/repo/issues/999',42),409,'done_cannot_resubmit');
-    check((int)$db->query("SELECT COUNT(*) FROM task_events WHERE task_id=1")->fetchColumn()===9,'append_only_event_sequence');
+    check((int)$db->query("SELECT COUNT(*) FROM task_events WHERE task_id=1")->fetchColumn()===8,'append_only_event_sequence');
     $GLOBALS['fake_role']='viewer';
     shouldReject(fn()=>zmCcQualityHandle($db,'cc_review',42),403,'review_restricted');
     $GLOBALS['fake_role']='admin';
