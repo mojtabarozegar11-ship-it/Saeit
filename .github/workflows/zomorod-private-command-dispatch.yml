@@ -139,6 +139,14 @@ jobs:
           cp "$d/host.candidate" "$d/host.known"
           echo "CPANEL_HOST_KEY=verified"
           echo "PINNED_PRIVATE_RELAY=verified"
+          # Narrow a connectivity failure to the VPS hop or the downstream 30GB host.
+          # This is read-only and intentionally uses only one short VPS attempt.
+          if timeout 25s ssh -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=1 saeit-vps 'test "$(id -un)" = "githubops"' >/dev/null; then
+            echo 'VPS_SSH_HOP=AUTHENTICATED'
+          else
+            echo 'VPS_SSH_HOP=UNAVAILABLE'
+            exit 1
+          fi
           # Retry only a harmless identity command to establish one reusable authenticated SSH session.
           session_ready=0
           for attempt in 1 2 3 4 5; do
