@@ -205,17 +205,16 @@ def rollback(run):
     print("MPW_CSP_PATCH_ROLLBACK=PASS")
 
 def selftest():
-    source = (
-        "def _apply_two_book_strict_csp(response):\n"
-        "    scripts=[b'abc'] if response else []\n"
-        "    styles=[b'one',b'two']\n"
-        "    body=b'<meta charset=\\\"utf-8\\\">'\n"
-        "    if len(scripts) != 1 or len(styles) not in (1, 2) or b'<meta charset=\\\"utf-8\\\">' not in body:\n"
-        "        raise RuntimeError()\n"
-        "    source_hash=lambda s: repr(s)\n"
-        "    policy=(\\\"script-src 'self' \\\" + source_hash(scripts[0]) + \\\"; \\\")\n"
-        "    return policy\n"
-    )
+    source = '''def _apply_two_book_strict_csp(response):
+    scripts=[b'abc'] if response else []
+    styles=[b'one',b'two']
+    body=b'<meta charset="utf-8">'
+    if len(scripts) != 1 or len(styles) not in (1, 2) or b'<meta charset="utf-8">' not in body:
+        raise RuntimeError()
+    source_hash=lambda s: repr(s)
+    policy=("script-src 'self' " + source_hash(scripts[0]) + "; ")
+    return policy
+'''
     result, fn = build(source.encode("utf8"))
     assert NEW1 in result.decode("utf8") and NEW2 in result.decode("utf8")
     namespace = {}
