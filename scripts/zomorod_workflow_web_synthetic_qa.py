@@ -23,7 +23,7 @@ with tempfile.TemporaryDirectory(prefix="zm-flow-web-qa-") as temporary:
     source = root / "content/zomorod-business"
     for filename in ("app.php", "insights.php", "command_center.php",
                      "command_quality.php", "command_planner.php",
-                     "workflow_desk.php"):
+                     "workflow_desk.php", "payroll_control.php", "payroll_ui.php"):
         shutil.copy2(source / filename, private / filename)
     shutil.copy2(source / "index.php", web / "index.php")
     sid = "zmflowoldtestsession"
@@ -118,6 +118,7 @@ with tempfile.TemporaryDirectory(prefix="zm-flow-web-qa-") as temporary:
         "csrf": tok, "action": "user", "username": "synthetic_reviewer",
         "password": other_password, "role": "admin"
     })
+    first_admin_sid = sid
     sid = "zmflowreviewersession"
     second_login = req()
     second_csrf = csrf(second_login)
@@ -139,6 +140,36 @@ with tempfile.TemporaryDirectory(prefix="zm-flow-web-qa-") as temporary:
     assert "درخواست انجام نشد" not in approved
     assert flow_db.execute("SELECT state,reviewed_by FROM requests WHERE id=1").fetchone() == ("approved", 2)
     assert flow_db.execute("SELECT COUNT(*) FROM request_events").fetchone()[0] == 3
+    # Real authenticated route, CSRF and independent payroll approval.
+    payroll_screen = req("GET", "payroll")
+    assert "محاسبهٔ پیشنهادی حقوق" in payroll_screen
+    bad_csrf = req("POST", "payroll", {"action": "payroll_create",
+        "request_key": "c"*32, "period": "2026-10", "employee_0": "EMP001", "base_0": "125.50"})
+    assert "درخواست انجام نشد" in bad_csrf
+    tok_payroll = csrf(payroll_screen)
+    payload = {"csrf": tok_payroll, "action": "payroll_create",
+        "request_key": "c"*32, "period": "2026-10", "currency": "IRR",
+        "employee_0": "EMP001", "base_0": "125.50",
+        "addition_0": "15.25", "deduction_0": "10.00"}
+    response = req("POST", "payroll", payload)
+    assert "درخواست انجام نشد" not in response
+    payroll_db = sqlite3.connect(str(private / "payroll-control.sqlite3"))
+    assert payroll_db.execute("SELECT gross_total,net_total FROM payroll_periods").fetchone() == (14075,13075)
+    req("POST", "payroll", payload)
+    assert payroll_db.execute("SELECT COUNT(*) FROM payroll_periods").fetchone()[0] == 1
+    req("POST", "payroll", {"csrf": tok_payroll, "action": "payroll_decision",
+        "period_id": "1", "decision": "submit", "reason": "Synthetic submitted"})
+    denied_self = req("POST", "payroll", {"csrf": tok_payroll,
+        "action": "payroll_decision", "period_id": "1",
+        "decision": "approve", "reason": "Cannot self approve"})
+    assert "درخواست انجام نشد" in denied_self
+    sid = first_admin_sid
+    tok_owner = csrf(req("GET", "payroll"))
+    accepted = req("POST", "payroll", {"csrf": tok_owner, "action": "payroll_decision",
+        "period_id": "1", "decision": "approve", "reason": "Independent owner review"})
+    assert "درخواست انجام نشد" not in accepted
+    assert payroll_db.execute("SELECT state,reviewed_by FROM payroll_periods").fetchone() == ("approved",1)
+    assert payroll_db.execute("SELECT COUNT(*) FROM payroll_events").fetchone()[0] == 3
     ledger = sqlite3.connect(f"file:{private/'management.sqlite3'}?mode=ro", uri=True)
     assert ledger.execute("SELECT COUNT(*) FROM journal_entries").fetchone()[0] == 0
     assert ledger.execute("SELECT COUNT(*) FROM invoices").fetchone()[0] == 0
@@ -148,3 +179,4 @@ with tempfile.TemporaryDirectory(prefix="zm-flow-web-qa-") as temporary:
     print("CSRF_ROLE_CONTROLS=PASS SENSITIVE_TWO_PERSON_APPROVAL=PASS")
     print("IDEMPOTENCY_AUDIT=PASS XSS_ESCAPING=PASS")
     print("ACCOUNTING_ENTRIES=ZERO SYNTHETIC_DATA_ONLY=YES")
+    print("PAYROLL_AUTHENTICATED_CSRF_TWO_PERSON_WEB_QA=PASS")
