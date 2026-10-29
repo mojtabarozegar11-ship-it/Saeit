@@ -26,3 +26,7 @@
 **F-01 next:** Collect aggregate-only process state/parent/CPU evidence via the same pinned read-only workflow; establish actual root disk topology and verify independent off-host backup restoration before any reversible remediation. Provider ticket **540436** concerns paid RAM/CPU delivery and SSH stability; disk capacity is separate. No paid upgrade or destructive cleanup is authorized.
 
 **S-01 next:** Re-evaluate backup/rollback and effective Passenger DB only after F records a fresh safe write margin and working guest; S alone owns site release.
+
+## Second authenticated guest confirmation — 16:38:26 UTC
+
+[Pinned read-only process-pressure run #40913117141](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40913117141) completed successfully after SSH authentication on attempt 4/5. Nonroot available disk remained **0 bytes**. Load increased to **142.19 / 138.31 / 135.90** with **3 vCPU**; guest RAM still **4,030,372 KiB**. Of 482 scanned PIDs, 275 matched factory/master-agent names: 147 shell, 65 Python, 63 other executable categories; 60 runnable (R), 4 uninterruptible (D); one parent had up to **142** matching children. This indicates severe process fanout, but no parent command or actual worker health was verified. S release remains **NO-GO**. No remote writes, process termination, cron changes, or backup operations occurred.
