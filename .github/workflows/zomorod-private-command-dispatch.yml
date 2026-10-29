@@ -183,7 +183,7 @@ jobs:
             UserKnownHostsFile $d/host.known
             ProxyJump saeit-vps
             ControlMaster auto
-            ControlPath $d/control-%C
+            ControlPath $d/cpanel.sock
             ControlPersist 300
           Host saeit-cpanel-direct
             HostName 178.239.147.125
@@ -193,7 +193,7 @@ jobs:
             UserKnownHostsFile $d/host.known
             ProxyJump none
             ControlMaster auto
-            ControlPath $d/control-%C
+            ControlPath $d/direct.sock
             ControlPersist 300
           Host *
             StrictHostKeyChecking yes
