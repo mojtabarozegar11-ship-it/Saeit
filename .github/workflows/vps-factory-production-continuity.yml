@@ -13,7 +13,101 @@ concurrency:
   group: saeit-vps-factory-continuity
   cancel-in-progress: false
 jobs:
+  audit-readonly:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[factory-readonly-audit-20261029]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read current factory VPS disk, cron, process and database state
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-audit"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/factory-runtime"
+          test -d "$root" && test ! -L "$root"
+          free_bytes="$(df -B1 --output=avail "$root" | awk 'NR==2 {print $1}')"
+          inode_free="$(df -Pi "$root" | awk 'NR==2 {print $4}')"
+          [[ "$free_bytes" =~ ^[0-9]+$ && "$inode_free" =~ ^[0-9]+$ ]]
+          echo FACTORY_AUDIT_FREE_BYTES="$free_bytes"
+          echo FACTORY_AUDIT_INODES_FREE="$inode_free"
+          echo FACTORY_AUDIT_RESERVE_BYTES="$((512*1024*1024))"
+          current="$(mktemp /tmp/factory-audit-cron.XXXXXX)"
+          trap 'rm -f -- "$current"' EXIT
+          crontab -l > "$current" 2>/dev/null || : > "$current"
+          echo FACTORY_AUDIT_CRON_MASTER_TAGS="$(grep -Ec 'SAEIT_MASTER_AGENT_V1|SAEIT_FACTORY_EVERY_MINUTE_V1|SAEIT_FACTORY_LIFECYCLE_12_V1' "$current" || true)"
+          echo FACTORY_AUDIT_CRON_LEECH_TAGS="$(grep -Ec 'LEECH|leech' "$current" || true)"
+          echo FACTORY_AUDIT_CRON_OTHER_LINES="$(grep -Ec -v 'SAEIT_MASTER_AGENT_V1|SAEIT_FACTORY_EVERY_MINUTE_V1|SAEIT_FACTORY_LIFECYCLE_12_V1' "$current" || true)"
+          ops="$root/operations"
+          script="$ops/vps-only-loop.sh"
+          pidfile="$ops/vps-only-loop.pid"
+          pid="$(cat "$pidfile" 2>/dev/null || true)"
+          if [[ "$pid" =~ ^[0-9]+$ ]] && test -r "/proc/$pid/cmdline" && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -Fq -- "$script"; then
+            echo FACTORY_AUDIT_LOOP_STATUS=verified_running
+            echo FACTORY_AUDIT_LOOP_ELAPSED_SECONDS="$(ps -p "$pid" -o etimes= | tr -d ' ')"
+          else
+            echo FACTORY_AUDIT_LOOP_STATUS=not_verified_running
+          fi
+          log="$ops/vps-only-factory.log"
+          if test -f "$log" && test ! -L "$log"; then
+            echo FACTORY_AUDIT_LOOP_LOG_BYTES="$(stat -c %s "$log")"
+            echo FACTORY_AUDIT_LOOP_LOG_AGE_SECONDS="$(( $(date +%s) - $(stat -c %Y "$log") ))"
+            echo FACTORY_AUDIT_LOCK_ERRORS_LAST_500="$(tail -n 500 "$log" | grep -c -F 'database is locked' || true)"
+            echo FACTORY_AUDIT_TICK_FAILURES_LAST_500="$(tail -n 500 "$log" | grep -c -F 'TICK_EXIT_FAILURE' || true)"
+          else
+            echo FACTORY_AUDIT_LOOP_LOG_STATUS=missing_or_unsafe
+          fi
+          cd "$root/django-app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
+          "$root/.venv/bin/python" - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          from pathlib import Path
+          from django.db import connection
+          db=settings.DATABASES["default"]
+          engine=db["ENGINE"]
+          print("FACTORY_AUDIT_DB_ENGINE_KIND="+("sqlite" if engine.endswith("sqlite3") else "non_sqlite"))
+          if engine.endswith("sqlite3"):
+              source=Path(db["NAME"])
+              if source.is_symlink() or not source.is_file() or any(p.is_symlink() for p in source.parents):
+                  print("FACTORY_AUDIT_DB_FILE_STATUS=unsafe_or_missing")
+              else:
+                  print("FACTORY_AUDIT_DB_FILE_STATUS=present")
+                  print("FACTORY_AUDIT_DB_BYTES="+str(source.stat().st_size))
+                  with connection.cursor() as cursor:
+                      cursor.execute("PRAGMA journal_mode")
+                      print("FACTORY_AUDIT_SQLITE_JOURNAL_MODE="+str(cursor.fetchone()[0]))
+                      cursor.execute("PRAGMA busy_timeout")
+                      print("FACTORY_AUDIT_SQLITE_BUSY_TIMEOUT_MS="+str(cursor.fetchone()[0]))
+          from core.models import AgentTask, FactoryRun, Product
+          print("FACTORY_AUDIT_AGENT_TASK_ROWS="+str(AgentTask.objects.count()))
+          print("FACTORY_AUDIT_FACTORY_RUN_ROWS="+str(FactoryRun.objects.count()))
+          print("FACTORY_AUDIT_PRODUCT_ROWS="+str(Product.objects.count()))
+          PY
+          echo FACTORY_AUDIT_READ_ONLY=true
+          REMOTE
+
   ensure:
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[factory-readonly-audit-20261029]')
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
