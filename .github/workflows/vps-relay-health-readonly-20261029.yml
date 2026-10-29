@@ -53,6 +53,6 @@ jobs:
             echo "FACTORY_RUNTIME_FREE_INODES=$(df -Pi "$HOME/factory-runtime" | awk "NR==2 {print \$4}")"
           fi
           if command -v ss >/dev/null 2>&1; then
-            echo "VPS_PORT22_LISTENING=$(ss -lnt | awk '\$4 ~ /:22$/ {n++} END {print n+0}')"
+            echo "VPS_PORT22_LISTENING=$(ss -lnt | awk '$4 ~ /:22$/ {n++} END {print n+0}')"
           fi
           REMOTE
