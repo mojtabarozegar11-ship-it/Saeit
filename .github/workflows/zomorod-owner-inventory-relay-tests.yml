@@ -1,0 +1,38 @@
+name: Zomorod owner read-only inventory relay safety tests
+on:
+  push:
+    branches: ['fix/zomorod-owner-readonly-inventory-30gb-20261029']
+    paths:
+      - '.github/workflows/zomorod-v7-readonly-inventory.yml'
+      - '.github/workflows/zomorod-owner-inventory-relay-tests.yml'
+      - 'tests/test_zomorod_owner_inventory_30gb_readonly.py'
+  pull_request:
+    paths:
+      - '.github/workflows/zomorod-v7-readonly-inventory.yml'
+      - '.github/workflows/zomorod-owner-inventory-relay-tests.yml'
+      - 'tests/test_zomorod_owner_inventory_30gb_readonly.py'
+permissions:
+  contents: read
+jobs:
+  safe-static-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify read-only relay and syntax contracts without credentials
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import runpy
+          p = Path("tests/test_zomorod_owner_inventory_30gb_readonly.py")
+          ns = runpy.run_path(str(p))
+          names = sorted(x for x in ns if x.startswith("test_") and callable(ns[x]))
+          if len(names) != 4:
+              raise SystemExit("EXPECTED_FOUR_STATIC_TESTS")
+          for name in names:
+              ns[name]()
+              print(name + "=PASS")
+          PY
+          echo OWNER_INVENTORY_STATIC_QA=PASS
+          echo NO_REMOTE_SECRET_OR_PRODUCTION_WRITE=TRUE
