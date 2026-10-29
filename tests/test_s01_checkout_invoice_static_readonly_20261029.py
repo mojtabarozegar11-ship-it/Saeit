@@ -42,6 +42,29 @@ class InvoiceStaticReadOnlyTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 read_regular(root, "huge.py")
 
+    def test_intermediate_symlink_and_parent_traversal_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "invoice.py").write_text("SECRET = 'never-read'", encoding="utf-8")
+            (root / "mpw_commerce").symlink_to(outside, target_is_directory=True)
+            with self.assertRaises((OSError, RuntimeError)):
+                read_regular(root, "mpw_commerce/invoice.py")
+            with self.assertRaises(RuntimeError):
+                read_regular(root, "../outside/invoice.py")
+            with self.assertRaises(RuntimeError):
+                read_regular(root, "/etc/passwd")
+
+    def test_hardlinked_regular_file_is_rejected(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "first.py").write_text("safe = True", encoding="utf-8")
+            os.link(root / "first.py", root / "second.py")
+            with self.assertRaises(RuntimeError):
+                read_regular(root, "second.py")
+
     def test_missing_modules_remain_unknown_not_pass(self):
         with tempfile.TemporaryDirectory() as tmp:
             result = inspect_source(Path(tmp), require_wsg=False)
