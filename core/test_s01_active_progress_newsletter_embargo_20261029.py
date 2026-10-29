@@ -50,7 +50,7 @@ class NewsletterEmbargoTests(SimpleTestCase):
         with patch.object(newsletter_views, "NewsletterStory", model), \
              patch.object(newsletter_views, "missing_public_tables", return_value=False), \
              patch.object(newsletter_views, "render", return_value=HttpResponse("ok")), \
-             patch.object(newsletter_views.timezone, "now", return_value=now):
+             patch("django.utils.timezone.now", return_value=now):
             response = newsletter_views.newsletter_detail(
                 RequestFactory().get("/newsletter/test-story/"), "test-story"
             )
