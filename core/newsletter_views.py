@@ -46,7 +46,8 @@ def newsletter_home(request):
         ).select_related("source", "agent")[:50]
         sources = NewsletterSource.objects.filter(active=True)[:12]
         publications = (NewsletterPublication.objects.filter(
-            story__status="published", story__published_at__lte=timezone.now()
+            story__status="published", story__published_at__lte=timezone.now(),
+            status="published", published_at__lte=timezone.now(),
         ).select_related("story").order_by("-created_at")[:20])
         schedule = NewsletterSchedule.objects.filter(active=True).first()
     context = {
@@ -104,7 +105,11 @@ def newsletter_detail(request, slug):
         status="published", published_at__lte=timezone.now(),
         story_type=story.story_type,
     ).exclude(pk=story.pk).order_by("-published_at")[:6])
-    publications = story.publications.order_by("channel")
+    # Public article pages must not expose queued, failed or blocked
+    # distribution records (including internal error/status metadata).
+    publications = story.publications.filter(
+        status="published", published_at__lte=timezone.now()
+    ).order_by("channel")
     article_jsonld = safe_json_ld({
         "@context": "https://schema.org",
         "@type": "NewsArticle",
