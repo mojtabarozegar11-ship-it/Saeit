@@ -5,12 +5,14 @@ on:
     paths:
       - "content/zomorod-business/**"
       - "scripts/zomorod_workflow_desk_synthetic_qa.php"
+      - "scripts/zomorod_workflow_web_synthetic_qa.py"
       - "scripts/zomorod_transfer_bundle.py"
       - ".github/workflows/zomorod-erp-workflow-transfer-ci.yml"
   pull_request:
     paths:
       - "content/zomorod-business/**"
       - "scripts/zomorod_workflow_desk_synthetic_qa.php"
+      - "scripts/zomorod_workflow_web_synthetic_qa.py"
       - "scripts/zomorod_transfer_bundle.py"
 permissions:
   contents: read
@@ -38,6 +40,7 @@ jobs:
           php scripts/zomorod_command_quality_synthetic_qa.php
           php scripts/zomorod_command_planner_synthetic_qa.php
           php scripts/zomorod_workflow_desk_synthetic_qa.php
+          python3 scripts/zomorod_workflow_web_synthetic_qa.py
           python3 scripts/test_zomorod_company_private_bridge_v4.py
       - name: Create and independently verify engineering handoff archive
         shell: bash
