@@ -7,10 +7,17 @@ No customer data, command lines, paths, or credentials are emitted.
 import argparse
 import datetime as dt
 import json
+import math
 import sys
 
 RESERVE_BYTES = 5 * 1024**3 + 128 * 1024**2
 UTC = dt.timezone.utc
+
+def mapping(value):
+    return value if isinstance(value, dict) else {}
+
+def natural_int(value):
+    return type(value) is int and value >= 0
 
 def evaluate(snapshot, now=None):
     now = now or dt.datetime.now(UTC)
@@ -25,29 +32,29 @@ def evaluate(snapshot, now=None):
             reasons.append("SNAPSHOT_STALE_OR_FUTURE")
     except (ValueError, TypeError):
         reasons.append("SNAPSHOT_TIME_UNAVAILABLE")
-    root = (snapshot.get("filesystem") or {}).get("target_1") or {}
+    root = mapping(mapping(snapshot.get("filesystem")).get("target_1"))
     available = root.get("available_bytes")
     free = root.get("free_bytes")
-    if root.get("state") != "OBSERVED" or not isinstance(available, int) or available < 0:
+    if root.get("state") != "OBSERVED" or not natural_int(available):
         reasons.append("FILESYSTEM_UNOBSERVED")
         available = None
     elif available < RESERVE_BYTES:
         reasons.append("ORDINARY_USER_CAPACITY_BELOW_5GIB_RESERVE")
-    if not isinstance(free, int) or free < 0:
+    if not natural_int(free):
         free = None
     reserved_gap = free - available if free is not None and available is not None and free >= available else None
-    guest = snapshot.get("guest") or {}
+    guest = mapping(snapshot.get("guest"))
     cores, load = guest.get("cpu_count"), guest.get("loadavg")
-    if not isinstance(cores, int) or cores <= 0 or not isinstance(load, list) or not load or not isinstance(load[0], (int, float)):
+    if not natural_int(cores) or cores == 0 or not isinstance(load, list) or not load or type(load[0]) not in (int, float) or not math.isfinite(load[0]) or load[0] < 0:
         reasons.append("CPU_PRESSURE_UNOBSERVED")
     elif load[0] > cores * 2:
         reasons.append("LOAD_ABOVE_TWICE_CPU_COUNT")
-    memory = (guest.get("memory") or {}).get("MemTotal_kib")
-    if not isinstance(memory, int) or memory < 7 * 1024**2:
+    memory = mapping(guest.get("memory")).get("MemTotal_kib")
+    if not natural_int(memory) or memory < 7 * 1024**2:
         reasons.append("PAID_8GIB_RAM_NOT_OBSERVED")
-    pressure = snapshot.get("process_pressure") or {}
-    d = (pressure.get("all_process_states") or {}).get("D")
-    if not isinstance(d, int):
+    pressure = mapping(snapshot.get("process_pressure"))
+    d = mapping(pressure.get("all_process_states")).get("D")
+    if not natural_int(d):
         reasons.append("D_STATE_UNOBSERVED")
     elif d > 8:
         reasons.append("HIGH_UNINTERRUPTIBLE_SLEEP_COUNT")
