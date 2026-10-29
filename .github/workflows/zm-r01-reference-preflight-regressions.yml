@@ -5,6 +5,7 @@ on:
     paths:
       - research/quality_gates/zm_r01_preflight.py
       - research/quality_gates/test_zm_r01_reference_preflight.py
+      - research/quality_gates/test_zm_r01_gene_id_crosswalk.py
       - .github/workflows/zm-r01-reference-preflight-regressions.yml
   workflow_dispatch:
 permissions:
@@ -22,5 +23,6 @@ jobs:
           python-version: '3.11'
       - name: Verify syntax and run isolated negative parser tests (NO FASTQ, NO DEG)
         run: |
-          python -m py_compile research/quality_gates/zm_r01_preflight.py research/quality_gates/test_zm_r01_reference_preflight.py
+          python -m py_compile research/quality_gates/zm_r01_preflight.py research/quality_gates/test_zm_r01_reference_preflight.py research/quality_gates/test_zm_r01_gene_id_crosswalk.py
           python -m unittest discover -s research/quality_gates -p 'test_zm_r01_reference_preflight.py' -v
+          python -m unittest discover -s research/quality_gates -p 'test_zm_r01_gene_id_crosswalk.py' -v
