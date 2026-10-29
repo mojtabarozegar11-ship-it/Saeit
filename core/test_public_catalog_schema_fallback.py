@@ -529,3 +529,23 @@ class PublicCatalogHealthyPathTests(SimpleTestCase):
         self.assertEqual(public_filters["status"], "published")
         self.assertIn("story__published_at__lte", public_filters)
         self.assertIn("published_at__lte", public_filters)
+
+
+class PublicCatalogQueryBoundsTests(SimpleTestCase):
+    """Untrusted GET search values must not generate unbounded database scans."""
+
+    def test_academy_search_is_bounded_even_when_schema_is_unavailable(self):
+        with patch("core.academy_views.missing_public_tables", return_value=True), patch(
+            "core.academy_views.render", return_value=HttpResponse("academy")
+        ) as rendered:
+            response = academy(RequestFactory().get("/academy/", {"q": "x" * 20000}))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(rendered.call_args.args[2]["course_q"], "x" * 120)
+
+    def test_gallery_search_is_bounded_even_when_schema_is_unavailable(self):
+        with patch("core.company_content_views.missing_public_tables", return_value=True), patch(
+            "core.company_content_views.render", return_value=HttpResponse("gallery")
+        ) as rendered:
+            response = company_gallery(RequestFactory().get("/company-gallery/", {"q": "x" * 20000}))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(rendered.call_args.args[2]["query"], "x" * 120)
