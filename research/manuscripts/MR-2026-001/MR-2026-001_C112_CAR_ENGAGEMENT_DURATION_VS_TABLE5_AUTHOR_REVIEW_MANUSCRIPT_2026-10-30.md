@@ -1,4 +1,6 @@
-> **C112 source correction (30 October 2026):** The institutional Car (2012) 45/13/14 engagement-duration partition reconciles to 72 and is kept separate from the unresolved 74-count Table 5 classification. It is not objective adherence or water saving.\n\n**C110 source correction (30 October 2026):** Original-indexed Lorite (2012) ARIS-LIAS seasonal ratio is now explicitly separated from crop-specific EUR/m³ IWP and IWB monetary indicators. These are not kg/m³ productivity, compliance or net causal benefit. Car/Amini/Cvejić person-level discrepancies remain unresolved.
+> **C112 source correction (30 October 2026):** The institutional Car (2012) 45/13/14 engagement-duration partition reconciles to 72 and is kept separate from the unresolved 74-count Table 5 classification. It is not objective adherence or water saving.
+
+**C110 source correction (30 October 2026):** Original-indexed Lorite (2012) ARIS-LIAS seasonal ratio is now explicitly separated from crop-specific EUR/m³ IWP and IWB monetary indicators. These are not kg/m³ productivity, compliance or net causal benefit. Car/Amini/Cvejić person-level discrepancies remain unresolved.
 
 # From Irrigation Recommendations to Field Outcomes: An Evidence-Provenance Critical Narrative Review
 
