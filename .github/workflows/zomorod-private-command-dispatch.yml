@@ -162,9 +162,18 @@ jobs:
         run: |
           set -euo pipefail
           p="/home/zomorod2/.private/zomorod-business"
-          ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" saeit-cpanel "python3 -B '$p/company_ingress.py' show-public-key --db '$p/command-center.sqlite3' --hmac-key '$p/.company-bridge.key' --recipient-key '$p/.chat-command-rsa.key'" > "$RUNNER_TEMP/recipient-key.txt"
-          grep -Fq -- "-----BEGIN PUBLIC KEY-----" "$RUNNER_TEMP/recipient-key.txt"
-          grep -Fq -- "-----END PUBLIC KEY-----" "$RUNNER_TEMP/recipient-key.txt"
+          key_read_ok=0
+          for attempt in 1 2 3 4; do
+            if timeout 75s ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" -o ConnectTimeout=15 -o ConnectionAttempts=2 saeit-cpanel "python3 -B '$p/company_ingress.py' show-public-key --db '$p/command-center.sqlite3' --hmac-key '$p/.company-bridge.key' --recipient-key '$p/.chat-command-rsa.key'" > "$RUNNER_TEMP/recipient-key.txt"; then
+              if grep -Fq -- "-----BEGIN PUBLIC KEY-----" "$RUNNER_TEMP/recipient-key.txt" && grep -Fq -- "-----END PUBLIC KEY-----" "$RUNNER_TEMP/recipient-key.txt"; then
+                key_read_ok=1
+                break
+              fi
+            fi
+            echo "READ_ONLY_PUBLIC_KEY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 4; then sleep 6; fi
+          done
+          test "$key_read_ok" = 1 || { echo 'READ_ONLY_PUBLIC_KEY_UNAVAILABLE'; exit 1; }
           echo "CURRENT_RECIPIENT_PUBLIC_KEY_BEGIN"
           sed -n '/^-----BEGIN PUBLIC KEY-----$/,/^-----END PUBLIC KEY-----$/p' "$RUNNER_TEMP/recipient-key.txt"
           echo "CURRENT_RECIPIENT_PUBLIC_KEY_END"
