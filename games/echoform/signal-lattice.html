@@ -19,7 +19,7 @@ for(let i=0;i<16;i++){const b=document.createElement('button');b.type='button';b
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function setStatus(message){$('status').textContent=message}
 function update(){ $('round').textContent=round;$('best').textContent=best;$('progress').textContent=cursor+' / '+sequence.length;$('repeat').disabled=phase!=='input'||replays>=1;for(const b of tiles)b.disabled=phase!=='input'}
-function light(i,kind='active'){const b=tiles[i];b.classList.add(kind);setTimeout(()=>b.classList.remove(kind),340)}
+function light(i,kind='active'){const b=tiles[i];b.classList.add(kind);b.setAttribute('aria-pressed','true');if(kind==='active')setStatus('Observe signal '+(i+1)+' of '+sequence.length);setTimeout(()=>{b.classList.remove(kind);b.setAttribute('aria-pressed','false')},340)}
 async function playback(token){phase='show';cursor=0;update();setStatus('Watch the pattern…');await delay(500);for(const i of sequence){if(token!==session)return;light(i);await delay(520);if(token!==session)return}phase='input';update();setStatus('Your turn: repeat '+sequence.length+' signals in order.')}
 function next(){round++;sequence.push(Math.floor(Math.random()*16));replays=0;update();playback(session)}
 function start(){session++;sequence=[];round=0;cursor=0;phase='show';$('start').textContent='Restart game';next()}
