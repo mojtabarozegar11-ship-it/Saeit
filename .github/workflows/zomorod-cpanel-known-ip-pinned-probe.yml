@@ -1,0 +1,34 @@
+name: Zomorod authenticated cPanel IP pinned SSH diagnostic
+on:
+  push:
+    branches: [feature/zomorod-payroll-offline-controls-20261029]
+    paths: [.github/workflows/zomorod-cpanel-known-ip-pinned-probe.yml]
+permissions:
+  contents: read
+jobs:
+  check-known-ip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify previously documented cPanel service address without changes
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zomorod-known-ip"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          test -n "$HOST_KEY" || { echo "KNOWN_IP=NO_CREDENTIALS";exit 20; }
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null 2>&1 || { echo "KNOWN_IP=INVALID_CREDENTIALS";exit 21; }
+          timeout 17 ssh-keyscan -T 12 -p 1396 -t ed25519 178.239.147.125 > "$d/host.known" 2>/dev/null || { echo "KNOWN_IP=PORT_1396_UNREACHABLE";exit 22; }
+          test -s "$d/host.known" || { echo "KNOWN_IP=HOST_KEY_UNAVAILABLE";exit 23; }
+          actual="$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" || { echo "KNOWN_IP=HOST_IDENTITY_NOT_PINNED_STOP";exit 24; }
+          echo "KNOWN_IP_HOST_FINGERPRINT=VERIFIED"
+          timeout 20 ssh -i "$d/key" -p 1396 -o UserKnownHostsFile="$d/host.known" -o StrictHostKeyChecking=yes -o BatchMode=yes -o IdentitiesOnly=yes -o ForwardAgent=no -o ConnectTimeout=12 -o ConnectionAttempts=1 zomorod2@178.239.147.125 'test "$(id -un)" = "zomorod2" && test -d "$HOME/.private/zomorod-business"' || { echo "KNOWN_IP=AUTHENTICATION_OR_CONNECTIVITY_FAILED";exit 25; }
+          echo "KNOWN_IP_AUTHENTICATED=SUCCESS"
+          echo "WRITES=NONE"

@@ -1,0 +1,74 @@
+name: Zomorod offline payroll security and arithmetic PHP SQLite CI
+on:
+  push:
+    branches: [feature/zomorod-payroll-offline-controls-20261029]
+    paths:
+      - "content/zomorod-business/payroll_control.php"
+      - "content/zomorod-business/payroll_ui.php"
+      - "content/zomorod-business/app.php"
+      - "scripts/zomorod_payroll_control_synthetic_qa.php"
+      - "scripts/zomorod_workflow_web_synthetic_qa.py"
+      - ".github/workflows/zomorod-payroll-offline-qa.yml"
+  pull_request:
+    paths:
+      - "content/zomorod-business/payroll_control.php"
+      - "content/zomorod-business/payroll_ui.php"
+      - "content/zomorod-business/app.php"
+      - "scripts/zomorod_payroll_control_synthetic_qa.php"
+      - "scripts/zomorod_workflow_web_synthetic_qa.py"
+permissions:
+  contents: read
+jobs:
+  independent-offline-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2','8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, sqlite3, mbstring
+      - name: Run isolated payroll and prior ERP regressions with PDO SQLite
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -r 'if(!extension_loaded("pdo_sqlite")) exit(2);'
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/payroll_control.php
+          php -l content/zomorod-business/payroll_ui.php
+          php -l scripts/zomorod_payroll_control_synthetic_qa.php
+          php scripts/zomorod_payroll_control_synthetic_qa.php
+          php scripts/zomorod_command_center_synthetic_qa.php
+          php scripts/zomorod_command_quality_synthetic_qa.php
+          php scripts/zomorod_command_planner_synthetic_qa.php
+          php scripts/zomorod_workflow_desk_synthetic_qa.php
+          python3 scripts/zomorod_workflow_web_synthetic_qa.py
+          echo "ISOLATED_PAYROLL_AND_BASELINE_QA=PASS"
+          echo "NO_REAL_PAYMENT_OR_PRODUCTION_DATA=YES"
+      - name: Create verifiable source-only payroll module handoff
+        if: matrix.php == '8.3'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/payroll-source
+          cp content/zomorod-business/payroll_control.php dist/payroll-source/
+          cp content/zomorod-business/payroll_ui.php dist/payroll-source/
+          cp scripts/zomorod_payroll_control_synthetic_qa.php dist/payroll-source/
+          cp docs/zomorod-payroll-offline-handoff.md dist/payroll-source/
+          (cd dist/payroll-source && sha256sum * > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tar -C dist -czf dist/zomorod-payroll-offline-handoff.tar.gz payroll-source
+          tar -tzf dist/zomorod-payroll-offline-handoff.tar.gz | grep -F 'payroll-source/SHA256SUMS'
+          echo "TRANSFER_BUNDLE=VERIFIED_SOURCE_ONLY"
+          echo "PRODUCTION_DEPLOYABLE=NO"
+      - name: Upload private-code module handoff without secrets
+        if: matrix.php == '8.3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-payroll-offline-source
+          path: dist/zomorod-payroll-offline-handoff.tar.gz
+          if-no-files-found: error
+          retention-days: 14
