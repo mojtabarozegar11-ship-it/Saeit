@@ -22,7 +22,7 @@ python3 -B scripts/f01_vps_console_snapshot_readonly_20261029.py \
   --lock /VERIFIED/PRIVATE/LOCK/PATH
 ```
 
-Replace the three **placeholder paths** only after verifying them privately. The script writes **only to stdout**, never opens SSH or creates files. It returns a timestamped JSON snapshot with guest memory, filesystem, lsblk, redacted cron/worker counts and bounded metadata for queue/locks/SQLite/backup. Do not publish full private paths, raw customer data or secrets. It does not run SQLite integrity checks, verify backup restoration or establish worker health; `deployment_authorized` remains false.
+Replace the three **placeholder paths** only after verifying them privately. The script writes **only to stdout**, never opens SSH or creates files. It returns a timestamped JSON snapshot with guest memory, filesystem, lsblk, redacted cron/worker counts and bounded metadata for queue/locks/SQLite/backup. Explicit path keys are redacted to target_1, target_2, etc.; do not publish the raw diagnostic JSON without separate privacy review. Do not publish full private paths, raw customer data or secrets. It does not run SQLite integrity checks, verify backup restoration or establish worker health; `deployment_authorized` remains false.
 
 ## Decision gate
 
