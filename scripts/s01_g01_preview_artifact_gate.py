@@ -13,6 +13,11 @@ import stat
 from pathlib import PurePosixPath
 from zipfile import ZipFile
 
+# The CLI must refuse oversized archives before read_bytes() allocates them.
+# These are offline preview limits, not production game asset limits.
+MAX_OUTER_BYTES = 64_000_000
+MAX_INNER_BYTES = 64_000_000
+
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
@@ -48,6 +53,8 @@ def checked_entries(archive, expected):
 
 
 def verify(outer_bytes, expected_revision, expected_game_blob):
+    if len(outer_bytes) > MAX_OUTER_BYTES:
+        raise ValueError("outer preview archive exceeds input budget")
     if not re.fullmatch(r"[0-9a-f]{40}", expected_revision):
         raise ValueError("expected CI revision must be a full SHA-1")
     if not re.fullmatch(r"[0-9a-f]{40}", expected_game_blob):
@@ -55,6 +62,8 @@ def verify(outer_bytes, expected_revision, expected_game_blob):
     with ZipFile(io.BytesIO(outer_bytes)) as outer:
         checked_entries(outer, {"ramadan-war-preview.zip"})
         inner_bytes = outer.read("ramadan-war-preview.zip")
+        if len(inner_bytes) > MAX_INNER_BYTES:
+            raise ValueError("inner preview archive exceeds input budget")
     with ZipFile(io.BytesIO(inner_bytes)) as inner:
         # Validate the entire nested ZIP's metadata and CRC before reading
         # even its manifest; untrusted manifest bytes cannot bypass limits.
@@ -108,7 +117,10 @@ if __name__ == "__main__":
     parser.add_argument("--expected-game-blob", required=True)
     args = parser.parse_args()
     from pathlib import Path
+    artifact = Path(args.artifact_zip)
+    if not artifact.is_file() or artifact.is_symlink() or artifact.stat().st_size > MAX_OUTER_BYTES:
+        parser.error("missing, symlinked or oversized preview artifact")
     print(json.dumps(verify(
-        Path(args.artifact_zip).read_bytes(),
+        artifact.read_bytes(),
         args.expected_revision, args.expected_game_blob,
     ), sort_keys=True))
