@@ -53,8 +53,26 @@ jobs:
           chmod 600 "$dir/"*.key
           ssh-keygen -y -P "" -f "$dir/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$dir/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$dir/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$dir/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo "VPS_HOSTKEY_LOOKUP=starting"
+          available=0
+          for attempt in 1 2 3; do
+            if ssh-keyscan -T 7 -t rsa 178.239.147.150 > "$dir/vps.candidate" 2>/dev/null && test -s "$dir/vps.candidate"; then
+              available=1
+              break
+            fi
+            echo "VPS_HOSTKEY_ATTEMPT=$attempt unavailable"
+            sleep 2
+          done
+          if test "$available" != 1; then
+            echo "::error::VPS_SSH_HOSTKEY_UNREACHABLE; no remote connection attempted"
+            exit 1
+          fi
+          if test "$(ssh-keygen -lf "$dir/vps.candidate" -E sha256 | awk '{print $2}' | sort -u)" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "::error::VPS_HOSTKEY_FINGERPRINT_MISMATCH"
+            exit 1
+          fi
+          cp "$dir/vps.candidate" "$dir/vps.known"
+          echo "VPS_PINNED_HOSTKEY=verified"
           cat > "$dir/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
@@ -79,8 +97,25 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$dir/config"
-          ssh -F "$dir/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$dir/host.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$dir/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "CPANEL_HOSTKEY_LOOKUP=starting"
+          available=0
+          for attempt in 1 2 3; do
+            if ssh -F "$dir/config" saeit-vps 'timeout 14s ssh-keyscan -T 7 -p 1396 -t ed25519 zohal.pws-dns.net' > "$dir/host.candidate" 2>/dev/null && test -s "$dir/host.candidate"; then
+              available=1
+              break
+            fi
+            echo "CPANEL_HOSTKEY_ATTEMPT=$attempt unavailable"
+            sleep 2
+          done
+          if test "$available" != 1; then
+            echo "::error::CPANEL_SSH_HOSTKEY_UNREACHABLE"
+            exit 1
+          fi
+          if test "$(ssh-keygen -lf "$dir/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "::error::CPANEL_HOSTKEY_FINGERPRINT_MISMATCH"
+            exit 1
+          fi
+          cp "$dir/host.candidate" "$dir/host.known"
           echo "PINNED_CPANEL_RELAY=verified"
       - name: Inspect deployed Zomorod code, effective database and Python without writing
         shell: bash
