@@ -82,8 +82,23 @@ jobs:
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          # Bounded retries cover a transient handshake failure, never a
+          # fingerprint mismatch. Do not fall back to insecure host checking.
+          for attempt in 1 2; do
+            if timeout 8s ssh-keyscan -T 6 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null && test -s "$d/vps.known"; then
+              break
+            fi
+            if [ "$attempt" -eq 1 ]; then sleep 1; fi
+          done
+          if [ ! -s "$d/vps.known" ]; then
+            echo 'S01_VPS_HOSTKEY_SCAN=BLOCKED_NETWORK_OR_PORT22'
+            exit 1
+          fi
+          if [ "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]; then
+            echo 'S01_VPS_HOSTKEY_SCAN=BLOCKED_FINGERPRINT_MISMATCH'
+            exit 1
+          fi
+          echo 'S01_VPS_HOSTKEY_SCAN=PINNED_MATCH'
           cat > "$d/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
