@@ -93,6 +93,26 @@ def education(request):
 
 @login_required
 def education_dashboard(request):
+    # Dashboard joins progress, certificates, assessment attempts and bookmarks.
+    # Guard every dependency before a query: missing tables must not look like
+    # a deleted paid enrollment or an unexplained HTTP 500.
+    if missing_public_tables(
+        EducationEnrollment, EducationCourse, EducationTrack, EducationLesson,
+        EducationProgress, EducationCertificate, EducationAttempt,
+        EducationAssessment, EducationBookmark,
+    ):
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>پنل آموزش موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>پنل آموزش موقتاً در دسترس نیست</h1>'
+            '<p role="status">سوابق ثبت‌نام و پیشرفت شما حذف نشده‌اند؛ '
+            'نمایش آن‌ها پس از بازیابی سامانه امکان‌پذیر است.</p>'
+            '<p><a href="/academy/">بازگشت به آموزشگاه</a></p>'
+            '</main></body></html>',
+            status=503, content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
     enrollments = list(
         EducationEnrollment.objects.filter(user=request.user)
         .select_related("course", "course__track")
