@@ -309,11 +309,19 @@ jobs:
               echo FACTORY_AUTOSTART_BLOCKED_RECOVERY_GATE
               exit 0
             fi
+            cd "$base/django-app"
+            export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+            export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
+            db_bytes="$("$base/.venv/bin/python" -B -c 'import os; os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings"); import django; django.setup(); from django.conf import settings; from pathlib import Path; db=settings.DATABASES["default"]; assert db["ENGINE"].endswith("sqlite3"), "RECOVERY_DB_BACKEND_UNSUPPORTED"; source=Path(db["NAME"]); assert source.is_file() and not source.is_symlink() and not any(parent.is_symlink() for parent in source.parents), "RECOVERY_DB_PATH_UNSAFE"; print(source.stat().st_size)')"
+            [[ "$db_bytes" =~ ^[0-9]+$ ]]
             free_bytes="$(df -B1 --output=avail "$base" | awk 'NR==2 {print $1}')"
             [[ "$free_bytes" =~ ^[0-9]+$ ]]
+            required_bytes="$((5*1024*1024*1024 + db_bytes + 128*1024*1024))"
             echo "FACTORY_RECOVERY_FREE_BYTES=$free_bytes"
-            if (( free_bytes < 536870912 )); then
-              echo FACTORY_AUTOSTART_BLOCKED_LOW_DISK
+            echo "FACTORY_RECOVERY_DB_BYTES=$db_bytes"
+            echo "FACTORY_RECOVERY_REQUIRED_BYTES=$required_bytes"
+            if (( free_bytes < required_bytes )); then
+              echo FACTORY_AUTOSTART_BLOCKED_CAPACITY
               exit 1
             fi
             nohup "$script" 9>&- </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
