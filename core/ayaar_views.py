@@ -95,6 +95,7 @@ def _api(request):
                 "idempotent_intake": True,
                 "evidence_integrity_check": True,
                 "staff_evidence_snapshot": True,
+                "fail_closed_signed_reports": True,
                 "independent_certification_enabled": False,
                 "staff": bool(request.user.is_authenticated and request.user.is_staff),
             })
@@ -139,7 +140,7 @@ def _api(request):
             result = {"cases": cases.staff_list()}
         elif action == "staff_case":
             _require_staff(request)
-            result = cases.staff_case(payload.get("case_id", ""))
+            result = cases.staff_case(payload.get("case_id", ""), settings.SECRET_KEY)
         elif action == "staff_status":
             actor = _require_staff(request)
             result = cases.set_status(
