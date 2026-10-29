@@ -40,7 +40,13 @@ for(const f of ['studio_raha/index.html','taniya_studio/index.html']){
   assert(svg.includes('fill="#0088ff"'),'custom icing exported');
   assert(svg.includes('🌼'),'chosen topping exported');
   assert.equal((svg.match(/fill="#ffa322"/g)||[]).length,2,'two candles exported');
+  await page.locator('#close').click();
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.locator('.play[data-game="Cake Maker"]').click();
+  assert.equal(await page.locator('#icing').inputValue(),'#0088ff','cake icing restored after reload');
+  assert.match(await page.locator('#cakepreview').textContent(),/🌼.*🕯️🕯️/,'topping and candles restored');
   await page.locator('[data-action="cake-reset"]').click();
+  assert.equal(await page.evaluate(()=>localStorage.getItem('taniyaCakeDesign')),null,'reset clears saved cake');
   assert(!String(await page.locator('#cakepreview').textContent()).includes('🕯️'),'reset clears candles');
   assert.deepEqual(errors,[],'Taniya page errors');await ctx.close();
   console.log('G-01 R14 browser QA: runner desktop/mobile, keyboard, cake custom export/reset PASS');
