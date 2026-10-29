@@ -35,5 +35,47 @@ class CheckoutZeroScriptCSPTests(unittest.TestCase):
                 module.publish("40808335828")
 
 
+    def test_publish_requires_independent_offhost_restore_before_guard(self):
+        with patch.dict(os.environ, {
+            "MPW_CSP_RELEASE_APPROVED": "YES",
+            "MPW_CSP_OFFHOST_RESTORE_VERIFIED": "",
+            "MPW_CSP_PASSENGER_DB_AUTHORITY_VERIFIED": "YES",
+        }):
+            with patch.object(module, "guard", side_effect=AssertionError("guard must not run")):
+                with self.assertRaisesRegex(RuntimeError, "off-host restore not verified"):
+                    module.publish("40808335828")
+
+    def test_publish_requires_passenger_db_authority_before_guard(self):
+        with patch.dict(os.environ, {
+            "MPW_CSP_RELEASE_APPROVED": "YES",
+            "MPW_CSP_OFFHOST_RESTORE_VERIFIED": "YES",
+            "MPW_CSP_PASSENGER_DB_AUTHORITY_VERIFIED": "",
+        }):
+            with patch.object(module, "guard", side_effect=AssertionError("guard must not run")):
+                with self.assertRaisesRegex(RuntimeError, "Passenger database authority not verified"):
+                    module.publish("40808335828")
+
+    def test_rollback_requires_authorization_before_any_file_access(self):
+        with patch.dict(os.environ, {"MPW_CSP_RELEASE_APPROVED": ""}):
+            with patch.object(module, "guard", side_effect=AssertionError("guard must not run")):
+                with self.assertRaisesRegex(RuntimeError, "rollback blocked without explicit release gate"):
+                    module.rollback("40808335828")
+
+    def test_rollback_serializes_with_publish_lock(self):
+        with patch.dict(os.environ, {"MPW_CSP_RELEASE_APPROVED": "YES"}):
+            from contextlib import contextmanager
+            calls = []
+            @contextmanager
+            def lock():
+                calls.append("lock-enter")
+                yield
+                calls.append("lock-exit")
+            with patch.object(module, "guard", side_effect=lambda: calls.append("guard")), \
+                 patch.object(module, "release_lock", side_effect=lock), \
+                 patch.object(module, "_rollback_locked", side_effect=lambda run: calls.append("rollback")):
+                module.rollback("40808335828")
+            self.assertEqual(calls, ["guard", "lock-enter", "rollback", "lock-exit"])
+
+
 if __name__ == "__main__":
     unittest.main()
