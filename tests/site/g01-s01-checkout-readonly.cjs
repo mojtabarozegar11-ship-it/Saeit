@@ -20,7 +20,7 @@ const path=require('node:path');
    const response=await page.goto('https://mojplaywin.com'+slug,{waitUntil:'domcontentloaded',timeout:40000});
    const result=await page.evaluate(()=>({title:document.title,landmarks:document.querySelectorAll('main,[role=main]').length,links:[...document.querySelectorAll('a[href]')].length,controls:[...document.querySelectorAll('button,input[type=submit],a[href]')].map(e=>({label:(e.getAttribute('aria-label')||e.getAttribute('title')||e.textContent||e.querySelector('img')?.alt||'').trim().slice(0,90),disabled:e.disabled===true,href:e.tagName==='A'?e.getAttribute('href'):null})).filter(e=>!e.label).slice(0,25)})));
    result.path=slug;result.http=response?.status()||0;result.pageErrors=errors;
-   await page.screenshot({path:path.join(out,'g01-s01-'+slug.replace(/\\W+/g,'-')+'.png'),fullPage:true,animations:'disabled'});
+   await page.screenshot({path:path.join(out,'g01-s01-'+slug.replace(/[^a-z0-9]+/gi,'-')+'.png'),fullPage:true,animations:'disabled'});
    results.push(result);await page.close();
   }
   fs.writeFileSync(path.join(out,'g01-s01-checkout-readonly.json'),JSON.stringify({checkedAt:new Date().toISOString(),readOnly:true,results},null,2));
