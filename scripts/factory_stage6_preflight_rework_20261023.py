@@ -239,8 +239,11 @@ def execute(root, lib, stage5, batch=300, only_order_id=None, excluded_orders=No
             try:
                 # Owner SKU879 is out of autonomous production, including legacy
                 # stage-06 packets. Read identity only; preserve all old bytes.
-                legacy = lib.read(area / "stage-02" / "inbox" / name)
-                if lib.owner_held_sku879(legacy.get("work_order")):
+                # Verify the complete Stage-1/2 hash-linked chain before
+                # classifying any legacy packet as owner-held. A forged
+                # source_product_id must never silently bypass integrity QA.
+                _, _, original_order, _ = lib.verified_stage2(area, name)
+                if lib.owner_held_sku879(original_order):
                     held += 1
                     continue
                 created += int(preflight(area, name, lib, stage5))
