@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#10172b">
+<title>ECHOFORM — Signal Lattice | Playable mechanic</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#0a1020;color:#f3f6ff}*{box-sizing:border-box}body{margin:0;min-height:100dvh;display:grid;place-items:center;background:radial-gradient(circle at 20% 0%,#25355b 0%,transparent 50%),#0a1020}main{width:min(95vw,600px);padding:24px 16px 34px}h1{font-size:clamp(1.7rem,5vw,2.7rem);margin:0;letter-spacing:.1em}p{line-height:1.5;color:#b7c6e4}.eyebrow{font-size:.75rem;letter-spacing:.2em;color:#8de1ed;text-transform:uppercase}.stats{display:flex;justify-content:space-between;gap:12px;margin:18px 0}.stats div{background:#17213a;border:1px solid #3d5078;border-radius:14px;padding:10px 16px;flex:1}.stats strong{display:block;font-size:1.35rem;font-variant-numeric:tabular-nums}.stats span{font-size:.75rem;color:#b7c6e4}.board{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;aspect-ratio:1;background:#141e35;border:1px solid #435476;border-radius:22px;padding:12px;box-shadow:0 18px 50px #0006}.tile{border:2px solid #52648b;border-radius:14px;background:linear-gradient(145deg,#2d4265,#16253f);color:#d9faff;font-size:1.25rem;min-width:0;touch-action:manipulation;transition:background .15s,transform .15s}.tile:focus-visible,.action:focus-visible{outline:3px solid #ffe69b;outline-offset:3px}.tile.active{background:#5be1df;color:#102039;border-color:#c8fffb;transform:scale(.96)}.tile.correct{background:#4c8c79}.tile.wrong{background:#ad506a}.tile:disabled{cursor:default;opacity:.65}.actions{display:flex;gap:10px;margin:18px 0}.action{flex:1;padding:14px;border-radius:12px;background:#c5f0ee;color:#0a192b;font-weight:750;border:0;font-size:1rem;cursor:pointer}.action.secondary{background:#273857;color:#e5eeff;border:1px solid #5b7197}.status{min-height:3em;font-size:1rem;color:#e6f0ff}footer{font-size:.77rem;color:#9eafca}button{font:inherit}@media(prefers-reduced-motion:reduce){.tile{transition:none}}@media(max-width:380px){main{padding:14px 10px}.board{gap:6px;padding:8px}.tile{border-radius:10px}}
+</style></head><body><main>
+<div class="eyebrow">ECHOFORM · Independent playable mechanic · v0.1</div><h1>Signal Lattice</h1><p>Remember the glowing sequence, then reproduce it. Each round adds one signal. Works offline on touch screens and keyboards.</p>
+<div class="stats"><div><strong id="round">0</strong><span>ROUND</span></div><div><strong id="best">0</strong><span>BEST ROUND</span></div><div><strong id="progress">0 / 0</strong><span>INPUT</span></div></div>
+<div id="board" class="board" role="group" aria-label="Signal grid with sixteen numbered tiles"></div>
+<div class="actions"><button class="action" id="start" type="button">Start game</button><button class="action secondary" id="repeat" type="button" disabled>Replay pattern</button></div>
+<div class="status" id="status" role="status" aria-live="polite">Press Start game. During playback, observe; during input, tap the tiles in order.</div>
+<footer>Keyboard: 1–9, A–G for tiles 1–16. No wallet, payment, network requests or account required. Best round stays only on this device.</footer>
+</main><script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id),board=$('board'),tiles=[],KEY='echoform-signal-lattice-best-v1';
+let sequence=[],cursor=0,round=0,best=0,phase='idle',session=0,replays=0;
+try{best=Math.max(0,Math.min(999,Number(localStorage.getItem(KEY))||0))}catch{}$('best').textContent=best;
+for(let i=0;i<16;i++){const b=document.createElement('button');b.type='button';b.className='tile';b.textContent=i+1;b.setAttribute('aria-label','Signal '+(i+1));b.disabled=true;b.addEventListener('click',()=>choose(i));board.appendChild(b);tiles.push(b)}
+const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+function setStatus(message){$('status').textContent=message}
+function update(){ $('round').textContent=round;$('best').textContent=best;$('progress').textContent=cursor+' / '+sequence.length;$('repeat').disabled=phase!=='input'||replays>=1;for(const b of tiles)b.disabled=phase!=='input'}
+function light(i,kind='active'){const b=tiles[i];b.classList.add(kind);setTimeout(()=>b.classList.remove(kind),340)}
+async function playback(token){phase='show';cursor=0;update();setStatus('Watch the pattern…');await delay(500);for(const i of sequence){if(token!==session)return;light(i);await delay(520);if(token!==session)return}phase='input';update();setStatus('Your turn: repeat '+sequence.length+' signals in order.')}
+function next(){round++;sequence.push(Math.floor(Math.random()*16));replays=0;update();playback(session)}
+function start(){session++;sequence=[];round=0;cursor=0;phase='show';$('start').textContent='Restart game';next()}
+function finish(){phase='over';update();setStatus('Sequence broken. You reached round '+round+'. Press Restart game to try again.')}
+function choose(i){if(phase!=='input')return;if(sequence[cursor]!==i){light(i,'wrong');finish();return}light(i,'correct');cursor++;update();if(cursor!==sequence.length)return;phase='show';if(round>best){best=round;try{localStorage.setItem(KEY,String(best))}catch{}}update();setStatus('Pattern complete! Next round…');const token=session;setTimeout(()=>{if(token===session&&phase==='show')next()},800)}
+$('start').addEventListener('click',start);
+$('repeat').addEventListener('click',()=>{if(phase!=='input'||replays>=1)return;replays++;playback(session)});
+document.addEventListener('keydown',e=>{if(e.ctrlKey||e.altKey||e.metaKey||e.isComposing||e.repeat||e.target instanceof HTMLElement&&e.target.closest('button,input,textarea,select'))return;const keys='123456789abcdefg';const i=keys.indexOf(e.key.toLowerCase());if(i>=0&&i<16&&phase==='input'){e.preventDefault();choose(i)}});
+window.addEventListener('blur',()=>{if(phase==='input'){phase='paused';update();setStatus('Paused while the window is inactive. Press Replay pattern to continue.');$('repeat').disabled=false}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&phase==='input'){phase='paused';update();setStatus('Paused while hidden. Replay the pattern when you return.');$('repeat').disabled=false}});
+$('repeat').addEventListener('click',()=>{if(phase==='paused'){replays=1;playback(session)}});
+update();
+})();
+</script></body></html>
