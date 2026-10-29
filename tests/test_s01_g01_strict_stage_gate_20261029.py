@@ -75,6 +75,14 @@ class StageGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "CASEFOLD_MEMBER_COLLISION"):
             gate.verify(self.path)
 
+    def test_nonportable_compression_is_rejected_before_release(self):
+        self.build()
+        with zipfile.ZipFile(self.path, "a") as archive:
+            archive.writestr("ramadan-war/unsupported-compression.bin", b"test",
+                             compress_type=zipfile.ZIP_BZIP2)
+        with self.assertRaisesRegex(ValueError, "UNSUPPORTED_ZIP_COMPRESSION"):
+            gate.verify(self.path)
+
     def test_explicit_dot_segment_alias_is_rejected(self):
         self.build()
         with zipfile.ZipFile(self.path, "a") as archive:
