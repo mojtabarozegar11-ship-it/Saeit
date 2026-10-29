@@ -20,7 +20,7 @@ class AcademyProgressTests(SimpleTestCase):
         )
         self.assertEqual(academy_views.education_dashboard_progress(enrollment), (3, 2, 67))
         lessons.filter.assert_called_once_with(active=True)
-        progress.filter.assert_called_once_with(completed=True, lesson__active=True)
+        progress.filter.assert_called_once_with(completed=True, lesson__active=True, lesson__course=enrollment.course)
 
     def test_completion_percentage_capped_and_empty_course_safe(self):
         lessons, progress = MagicMock(), MagicMock()
@@ -121,7 +121,7 @@ class AcademyCompletionArchivedLessonsTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(__import__("json").loads(response.content)["course_completed"])
         enrollment.progress.filter.assert_called_once_with(
-            completed=True, lesson__active=True
+            completed=True, lesson__active=True, lesson__course=course
         )
         enrollment.save.assert_not_called()
         progress.save.assert_called_once()
@@ -185,6 +185,31 @@ class CompanyFeedEmbargoTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(render_mock.call_args.args[2]["links"], [old_link, public_article])
 
+
+
+class AcademyAssessmentSchemaOutageTests(SimpleTestCase):
+    def test_assessment_get_fails_closed_without_question_schema(self):
+        request = RequestFactory().get("/academy/course/example/assessment/3/")
+        request.user = SimpleNamespace(is_authenticated=True)
+        with patch.object(academy_views, "missing_public_tables", return_value=True), \
+             patch.object(academy_views, "get_object_or_404",
+                          side_effect=AssertionError("must not query missing schema")):
+            response = academy_views.education_assessment(request, "example", 3)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+
+    def test_assessment_post_fails_closed_before_creating_attempt(self):
+        request = RequestFactory().post("/academy/course/example/assessment/3/submit/")
+        request.user = SimpleNamespace(is_authenticated=True)
+        with patch.object(academy_views, "missing_public_tables", return_value=True), \
+             patch.object(academy_views, "get_object_or_404",
+                          side_effect=AssertionError("must not query missing schema")), \
+             patch.object(academy_views.EducationAttempt.objects, "create",
+                          side_effect=AssertionError("must not mutate missing schema")):
+            response = academy_views.education_assessment_submit(request, "example", 3)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
 
 if __name__ == "__main__":
     import unittest
