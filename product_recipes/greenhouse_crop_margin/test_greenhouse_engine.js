@@ -53,7 +53,7 @@ test("Unreachable economics are represented as null thresholds", () => {
   assert.equal(r.cycle.saleableKg,0);
 });
 test("Break-even cannot be attained with negative per-unit contribution", () => {
-  const r=E.calculate({...sample,priceKg:0.10});
+  const r=E.calculate({...sample,priceKg:0.10,priceMin:0});
   assert.equal(r.breakEven.grossYieldKgM2,null);
 });
 test("Risk simulation is deterministic, bounded and explicitly uncalibrated", () => {
