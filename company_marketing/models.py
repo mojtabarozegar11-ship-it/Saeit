@@ -45,6 +45,18 @@ class Campaign(models.Model):
             raise ValidationError({"budget_ceiling_irr": "بودجه منفی مجاز نیست."})
 
     def save(self, *args, **kwargs):
+        # Enforce the campaign lifecycle for all writers, including admin and
+        # background jobs; closed campaigns must not be silently resurrected.
+        if self.pk:
+            previous = type(self).objects.get(pk=self.pk)
+            transitions = {
+                "draft": ("active", "closed"),
+                "active": ("paused", "closed"),
+                "paused": ("active", "closed"),
+                "closed": (),
+            }
+            if self.status != previous.status and self.status not in transitions.get(previous.status, ()):
+                raise ValidationError("تغییر وضعیت کمپین خارج از گردش‌کار مجاز است.")
         self.full_clean()
         return super().save(*args, **kwargs)
 

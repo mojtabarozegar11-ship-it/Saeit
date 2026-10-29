@@ -36,7 +36,7 @@ class CampaignAdmin(UnitScopedAdmin):
     list_display = ("code", "title", "unit", "status", "starts_on", "ends_on", "budget_ceiling_irr")
     list_filter = ("status",)
     search_fields = ("title", "code")
-    readonly_fields = ("unit", "code", "owner", "created_at")
+    readonly_fields = ("unit", "code", "owner", "status", "created_at")
 
     def has_add_permission(self, request):
         return False  # Create with the validated office form.

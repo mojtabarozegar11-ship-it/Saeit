@@ -241,8 +241,10 @@ class MarketingTests(TestCase):
         self.assertTrue(account.verified_at)
 
     def test_campaign_start_and_pause_are_post_only(self):
-        self.campaign.status = "draft"
-        self.campaign.save()
+        self.campaign = Campaign.objects.create(
+            unit=self.unit, code="campaign-in-draft", title="کمپین در انتظار",
+            objective="workflow verification", owner=self.owner
+        )
         url = "/company/office/marketing/campaigns/%s/state/" % self.campaign.pk
         self.assertEqual(self.client.get(url, secure=True).status_code, 405)
         self.assertEqual(self.client.post(url, secure=True, data={"status": "active"}).status_code, 302)
@@ -305,3 +307,14 @@ class MarketingTests(TestCase):
         pending.destination = "-222"
         pending.save()
         self.assertEqual(ChannelAccount.objects.get(pk=pending.pk).destination, "-222")
+
+    def test_closed_campaign_cannot_be_reactivated_by_direct_save(self):
+        from .admin import CampaignAdmin
+        self.assertIn("status", CampaignAdmin.readonly_fields)
+        self.campaign.status = "closed"
+        self.campaign.save()
+        self.campaign.status = "active"
+        with self.assertRaises(ValidationError):
+            self.campaign.save()
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.status, "closed")
