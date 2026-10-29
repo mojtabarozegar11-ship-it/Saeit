@@ -230,7 +230,7 @@ try {
             if(!function_exists('zmStoreDb'))bail('مدیریت فروشگاه آماده نیست.',503);
             zmStoreHandle(zmStoreDb($private),$action);
             audit($db,'store',$action);
-        } elseif(in_array($action,['cc_create','cc_scan','cc_transition'],true)){
+        } elseif(in_array($action,['cc_create','cc_scan','cc_transition','cc_plan','cc_evidence','cc_review'],true)){
             if(!function_exists('zmCcHandle')) bail('مرکز فرمان در دسترس نیست.',503);
             zmCcHandle($db,zmCcDb($private),$action);
         } elseif($action==='user'){
