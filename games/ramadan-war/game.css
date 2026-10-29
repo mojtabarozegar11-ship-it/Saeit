@@ -33,3 +33,6 @@
 }
 .reload { position:absolute;left:104px;top:calc(env(safe-area-inset-top) + 9px);width:44px;height:38px;font-size:21px;line-height:1;z-index:6;pointer-events:auto; }
 .reload:disabled { opacity:.55;cursor:not-allowed; }
+
+/* R24: persistent at-risk campaign warning on the home screen. */
+.save-warning:not([hidden]){display:block;margin:12px 0;padding:12px 14px;border:2px solid #f5bf63;border-radius:12px;background:#412515;color:#fff2d5;font-size:13px;line-height:1.7;text-align:right}
