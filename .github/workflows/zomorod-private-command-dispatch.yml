@@ -9,6 +9,7 @@ on:
         options:
           - show_public_key
           - accept
+          - check_receipt_window
       sealed_envelope:
         description: Encrypted one-use command envelope (required for accept)
         required: false
@@ -42,7 +43,7 @@ jobs:
           from pathlib import Path
           event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           inputs = event.get("inputs", {})
-          if inputs.get("operation") not in ("show_public_key", "accept"):
+          if inputs.get("operation") not in ("show_public_key", "accept", "check_receipt_window"):
               raise SystemExit("OPERATION_REJECTED")
           if inputs["operation"] == "accept":
               try:
@@ -58,8 +59,10 @@ jobs:
               if not valid:
                   raise SystemExit("SEALED_COMMAND_REJECTED")
               print("SEALED_COMMAND_ENVELOPE=VALID")
-          else:
+          elif inputs["operation"] == "show_public_key":
               print("PUBLIC_KEY_REQUEST=AUTHORIZED")
+          else:
+              print("RECEIPT_CHECK=AUTHORIZED")
           PY
       - name: Establish pinned private SSH relay
         shell: bash
@@ -163,6 +166,36 @@ jobs:
           echo "CURRENT_RECIPIENT_PUBLIC_KEY_BEGIN"
           sed -n '/^-----BEGIN PUBLIC KEY-----$/,/^-----END PUBLIC KEY-----$/p' "$RUNNER_TEMP/recipient-key.txt"
           echo "CURRENT_RECIPIENT_PUBLIC_KEY_END"
+      - name: Reconcile the prior receipt window without reading task contents
+        if: inputs.operation == 'check_receipt_window'
+        shell: bash
+        run: |
+          set -euo pipefail
+          p="/home/zomorod2/.private/zomorod-business/command-center.sqlite3"
+          ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" saeit-cpanel "python3 -B - '$p'" <<'PY'
+          import sqlite3
+          import sys
+          from pathlib import Path
+
+          uri = Path(sys.argv[1]).as_uri() + "?mode=ro"
+          start, end = 1793268780, 1793268790
+          try:
+              with sqlite3.connect(uri, uri=True, timeout=5) as db:
+                  exists = db.execute(
+                      "SELECT 1 FROM sqlite_master WHERE type='table' AND name='bridge_receipts'"
+                  ).fetchone()
+                  if not exists:
+                      print("PRIVATE_RECEIPT_WINDOW=EMPTY")
+                  else:
+                      count = db.execute(
+                          "SELECT COUNT(*) FROM bridge_receipts WHERE accepted_at BETWEEN ? AND ?",
+                          (start, end),
+                      ).fetchone()[0]
+                      print("PRIVATE_RECEIPT_WINDOW=" + ("NONEMPTY" if count else "EMPTY"))
+          except sqlite3.Error:
+              print("PRIVATE_RECEIPT_WINDOW=UNAVAILABLE")
+              raise SystemExit(2)
+          PY
       - name: Decrypt, authenticate, sign and queue the command privately
         if: inputs.operation == 'accept'
         shell: bash
