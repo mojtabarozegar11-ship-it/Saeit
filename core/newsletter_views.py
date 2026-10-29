@@ -45,7 +45,9 @@ def newsletter_home(request):
             status="published", published_at__lte=timezone.now()
         ).select_related("source", "agent")[:50]
         sources = NewsletterSource.objects.filter(active=True)[:12]
-        publications = NewsletterPublication.objects.select_related("story").order_by("-created_at")[:20]
+        publications = (NewsletterPublication.objects.filter(
+            story__status="published", story__published_at__lte=timezone.now()
+        ).select_related("story").order_by("-created_at")[:20])
         schedule = NewsletterSchedule.objects.filter(active=True).first()
     context = {
         "catalog_temporarily_unavailable": catalog_unavailable,
