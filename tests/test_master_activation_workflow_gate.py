@@ -66,6 +66,9 @@ class MasterWorkflowReleaseGateTests(unittest.TestCase):
                       "MASTER_STAGE_LINKED_TARGET_REJECTED", "os.replace(temporary,target)"):
             self.assertIn(token, s)
         self.assertNotIn("target.write_bytes(", s)
+        self.assertIn("any(part.is_symlink() for part in (root, *root.parents))", s)
+        self.assertLess(s.index("MASTER_STAGE_ROOT_UNSAFE"),
+                        s.index("fd=os.open(temporary,"))
 
     def test_ssh_pinning_and_single_writer_unchanged(self):
         s = self.text
