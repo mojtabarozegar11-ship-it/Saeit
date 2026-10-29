@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - scripts/s01_public_checkout_controls_readonly_20261029.cjs
+      - scripts/s01_checkout_route_verdict_20261029.cjs
+      - tests/s01_checkout_route_verdict_20261029.test.cjs
       - scripts/s01_g01_strict_stage_gate_20261029.py
       - tests/test_s01_g01_strict_stage_gate_20261029.py
       - .github/workflows/s01-public-checkout-controls-readonly-20261029.yml
@@ -22,6 +24,8 @@ jobs:
         with: {node-version: '22'}
       - name: Validate bounded read-only source
         run: node --check scripts/s01_public_checkout_controls_readonly_20261029.cjs
+      - name: Reject unexpected checkout navigation in synthetic tests
+        run: node --test tests/s01_checkout_route_verdict_20261029.test.cjs
       - name: Verify independent G-01 stage gate against synthetic archives
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_s01_g01_strict_stage_gate_20261029.py' -v
       - name: Install isolated browser runtime
