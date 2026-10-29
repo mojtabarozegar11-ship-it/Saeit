@@ -46,16 +46,22 @@ const assert=require('node:assert/strict');
     await page.locator('#newGame').click();
     assert.equal(await page.evaluate(()=>localStorage.getItem('rwNativeCampaign')),before,
       'cancelling new game must preserve campaign');
-    // A schema-valid but unrecoverable arena must never overwrite the original
-    // campaign through a pending 5-second autosave or pagehide.
+    // A schema-valid but unplayable disk arena must not destroy a live,
+    // previously paused in-memory campaign. R15 intentionally resumes that
+    // playable memory and may replace the stranded disk snapshot on autosave.
     const stranded=JSON.parse(before);
     stranded.enemies=Array.from({length:7},()=>({x:3.5,y:3.5,type:0,hp:39,max:39,life:1.5}));
     const strandedRaw=JSON.stringify(stranded);
     await page.evaluate(raw=>localStorage.setItem('rwNativeCampaign',raw),strandedRaw);
     await page.locator('#start').click();
+    await page.waitForFunction(()=>window.RamadanWarDebug.getState()?.mode==='game');
     await page.waitForTimeout(5200);
-    assert.equal(await page.evaluate(()=>localStorage.getItem('rwNativeCampaign')),strandedRaw,
-      'failed resume must preserve the original stored campaign');
+    const recovered=JSON.parse(await page.evaluate(()=>localStorage.getItem('rwNativeCampaign')));
+    assert.equal(recovered.hero,JSON.parse(before).hero,'recover original hero');
+    assert.equal(recovered.mission,JSON.parse(before).mission,'recover original mission');
+    assert.notDeepEqual(recovered.enemies,stranded.enemies,
+      'autosave must not resurrect an unplayable disk arena');
+    assert(recovered.hp>0&&recovered.hp<=recovered.maxHp,'autosave must contain a playable player');
     await page.evaluate(()=>localStorage.setItem('rwNativeCampaign','corrupted but retained'));
     page.once('dialog',dialog=>dialog.accept());
     await page.locator('#importSaveFile').setInputFiles({name:'campaign.json',
