@@ -75,10 +75,22 @@ def _read_only_checkout_sql(execute, sql, params, many, context):
     # A SELECT prefix is not a sufficient read-only guarantee: some database
     # drivers accept multiple statements, and SELECT ... FOR UPDATE/INTO can
     # acquire locks or create server-side files. Fail closed on these shapes.
+    # This is a conservative acceptance-test sandbox, not a SQL parser.
+    # Reject comments, SELECT INTO, locking reads and side-effect functions:
+    # even a syntactically SELECT-only statement can change session/server
+    # state or stall the worker. A false positive blocks proof, not checkout.
+    forbidden = (
+        r"/\*|\*/|--|#"
+        r"|\bINTO\b"
+        r"|\bFOR\s+(?:UPDATE|SHARE)\b"
+        r"|\bLOCK\s+IN\s+SHARE\s+MODE\b"
+        r"|\b(?:GET_LOCK|RELEASE_LOCK|IS_FREE_LOCK|SLEEP|BENCHMARK|"
+        r"LOAD_FILE|PG_SLEEP|NEXTVAL|SETVAL|DBLINK_EXEC)\s*\("
+    )
     if (many or not isinstance(sql, str)
             or not re.match(r"^\s*SELECT\b", sql, re.IGNORECASE)
             or ";" in sql
-            or re.search(r"\bFOR\s+UPDATE\b|\bLOCK\s+IN\s+SHARE\s+MODE\b|\bINTO\s+(?:OUTFILE|DUMPFILE)\b", sql, re.IGNORECASE)):
+            or re.search(forbidden, sql, re.IGNORECASE)):
         fail("Checkout proof refused non-SELECT or side-effect SQL operation")
     return execute(sql, params, many, context)
 
