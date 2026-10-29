@@ -162,33 +162,51 @@ jobs:
               "backup_or_restore_proven": False,
               "restart_authorized": False,
           }
-          # Use the documented StatsBar result.data[].count/max structure.
-          # The account quota, not host filesystem free, limits safe backup size.
+          # Read account-specific disk statistics; never print the raw API response.
+          base["statsbar_status"] = "UNAVAILABLE"
+          base["statsbar_row_ids"] = []
           try:
-              tool = "/usr/local/cpanel/bin/uapi"
-              p = subprocess.run([tool,"--output=json","--user=zomorod2",
+              p = subprocess.run(["/usr/local/cpanel/bin/uapi","--output=json",
                                   "StatsBar","get_stats","display=diskusage"],
                                   stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
-                                  timeout=15,check=False,text=True)
+                                  timeout=18,check=False,text=True)
+              base["statsbar_status"] = ("CLI_OK" if p.returncode == 0 else "CLI_NONZERO")
               if p.returncode == 0 and len(p.stdout) < 200000:
-                  response = json.loads(p.stdout)
-                  data = response.get("result",{}).get("data",response.get("data"))
+                  d = json.loads(p.stdout)
+                  base["statsbar_top_keys"] = sorted(k for k in d if k in ("data","result","status","errors"))
+                  data = d.get("result",{}).get("data",d.get("data")) if isinstance(d.get("result"),dict) else d.get("data")
+                  base["statsbar_data_type"] = type(data).__name__
                   if isinstance(data,list):
-                      for row in data:
-                          if isinstance(row,dict) and row.get("id") == "diskusage":
-                              used = str(row.get("count","")).strip()
-                              limit = str(row.get("max","")).strip()
-                              numeric = r"[0-9]+(?:[.][0-9]+)?[ ]*(?:B|KB|MB|GB|TB|PB)"
-                              if re.fullmatch(numeric,used,re.I):
-                                  base["account_used"] = used
-                              if re.fullmatch(numeric,limit,re.I):
-                                  base["account_quota"] = limit
-                                  base["account_limit_source"] = "CPANEL_UAPI_STATS"
-                              elif limit.lower() == "unlimited":
-                                  base["account_quota"] = "UNLIMITED_REPORTED"
-              # Never log raw response: it may contain other account metadata.
-          except (OSError, ValueError, subprocess.TimeoutExpired, TypeError):
-              pass
+                      for row in data[:30]:
+                          if not isinstance(row,dict): continue
+                          name = str(row.get("id",row.get("name",""))).lower()
+                          if re.fullmatch(r"[a-z0-9_]{1,40}",name):
+                              base["statsbar_row_ids"].append(name)
+                          if name != "diskusage": continue
+                          base["diskusage_field_types"] = {k:type(row[k]).__name__ for k in ("count","max","units","_count","_max") if k in row}
+                          numeric = r"[0-9]+(?:[.][0-9]+)?"
+                          used = str(row.get("count",row.get("_count",""))).strip()
+                          limit = str(row.get("max",row.get("_max",""))).strip()
+                          unit = str(row.get("units","")).strip()
+                          if re.fullmatch(numeric,used) and re.fullmatch(r"(?:B|KB|MB|GB|TB)",unit,re.I):
+                              base["account_used"] = used+" "+unit
+                          if re.fullmatch(numeric,limit) and re.fullmatch(r"(?:B|KB|MB|GB|TB)",unit,re.I):
+                              base["account_quota"] = limit+" "+unit
+                              base["account_limit_source"] = "CPANEL_UAPI_STATS"
+          except (OSError,ValueError,TypeError,subprocess.TimeoutExpired):
+              base["statsbar_status"] = "ERROR_OR_TIMEOUT"
+          # Secondary quota command, read-only, no path traversal or file scan.
+          try:
+              q = subprocess.run(["quota","-u","-s","zomorod2"],
+                                 stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+                                 check=False,timeout=5,text=True)
+              base["quota_cli_available"] = True
+              base["quota_cli_success"] = q.returncode == 0
+              # quota output depends on filesystem and does not necessarily
+              # include the entire cPanel hosting-account usage; never infer
+              # a safe free quota from it without authoritative confirmation.
+          except (OSError,subprocess.TimeoutExpired):
+              base["quota_cli_available"] = False
           print("CPANEL_CAPACITY_EVIDENCE="+json.dumps(base,sort_keys=True))
           PY
       - name: Remove ephemeral private relay credentials
