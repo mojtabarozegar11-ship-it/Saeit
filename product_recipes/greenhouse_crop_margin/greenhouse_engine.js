@@ -150,8 +150,8 @@
     var factor = p.areaM2 * (1 - p.rejectionPct / 100) * unitContribution;
     var breakEvenYield = requiredBase === 0 ? 0 : factor > 0 ? requiredBase / factor : null;
     return {
-      pricePerKg: breakEvenPrice === null ? null : Math.ceil((breakEvenPrice - 1e-11) * 100) / 100,
-      grossYieldKgM2: breakEvenYield === null ? null : Math.ceil((breakEvenYield - 1e-11) * 1000) / 1000,
+      pricePerKg: breakEvenPrice === null ? null : Math.ceil(breakEvenPrice * 100) / 100,
+      grossYieldKgM2: breakEvenYield === null ? null : Math.ceil(breakEvenYield * 1000) / 1000,
       limitation: "Break-even thresholds assume unchanged crop, rejected fraction, entered resource costs and per-kg service costs."
     };
   }
