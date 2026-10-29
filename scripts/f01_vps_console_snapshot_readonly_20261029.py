@@ -148,7 +148,7 @@ def sqlite(path):
         return {"state": "PRESENT", "is_file": True, "is_dir": False,
                 "bytes": metadata.st_size,
                 "mtime_utc": dt.datetime.fromtimestamp(metadata.st_mtime, UTC).isoformat(),
-                "sqlite_header_valid": header == b"SQLite format 3\\0",
+                "sqlite_header_valid": header == b"SQLite format 3\0",
                 "integrity_check": "NOT_RUN"}
     except FileNotFoundError:
         return {"state": "MISSING"}
