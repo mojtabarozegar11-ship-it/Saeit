@@ -122,7 +122,7 @@ jobs:
               await page.locator('#age-confirm').click();
 
               // First-party discovery: focus mode and saved games must preserve all 62 titles.
-              assert.equal(await page.locator('[data-arena-focus]').count(),62);
+              assert.equal(await page.locator('[data-arena-focus]').count(),62,'Focus buttons missing; page errors: '+errors.join(' | '));
               assert.equal(await page.locator('[data-arena-favourite]').count(),62);
               await page.locator('#game-grid article').first().locator('[data-arena-favourite]').click();
               assert.equal(await page.locator('#game-grid article').first().locator('[data-arena-favourite]').getAttribute('aria-pressed'),'true');
