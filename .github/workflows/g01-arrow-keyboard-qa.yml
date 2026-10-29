@@ -1,0 +1,37 @@
+name: G-01 Arrow Escape keyboard browser QA
+on:
+  push:
+    branches:
+      - games/g01-arrow-keyboard-accessibility-20261029
+    paths:
+      - games/arrow-escape/**
+      - tests/game/g01-arrow-keyboard-smoke.cjs
+      - .github/workflows/g01-arrow-keyboard-qa.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  keyboard-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated Chromium browser
+        run: |
+          mkdir -p "$RUNNER_TEMP/g01-playwright"
+          npm install --prefix "$RUNNER_TEMP/g01-playwright" --no-save --ignore-scripts playwright@1.56.1
+          "$RUNNER_TEMP/g01-playwright/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Static JavaScript syntax
+        run: node --check games/arrow-escape/app.js && node --check tests/game/g01-arrow-keyboard-smoke.cjs
+      - name: Keyboard real-browser gameplay
+        env:
+          NODE_PATH: ${{ runner.temp }}/g01-playwright/node_modules
+        run: |
+          python3 -m http.server 8766 --bind 127.0.0.1 >/tmp/g01-arrow-server.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 20); do curl --silent --fail http://127.0.0.1:8766/games/arrow-escape/ >/dev/null && break; sleep .2; done
+          node tests/game/g01-arrow-keyboard-smoke.cjs
