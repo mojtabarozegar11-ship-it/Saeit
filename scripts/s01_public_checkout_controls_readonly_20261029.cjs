@@ -60,7 +60,7 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
       checkedAt:new Date().toISOString(),ordersCreated:0,paymentsCreated:0,rows};
     fs.writeFileSync('s01-public-checkout-controls.json',JSON.stringify(report,null,2));
     console.log(JSON.stringify({schema:report.schema,rows:rows.map(x=>({
-      device:x.device.name,path:x.path,http:x.http,controls:x.controls.length,
+      device:x.device,path:x.path,http:x.http,controls:x.controls.length,
       disabled:x.controls.filter(c=>c.reasons.length).length,
       jsErrors:x.jsErrors.length,error:x.error
     }))}));
