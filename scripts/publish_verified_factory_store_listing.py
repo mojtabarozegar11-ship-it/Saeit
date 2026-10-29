@@ -87,6 +87,13 @@ def verify_sources(inbox, docroot):
         raise ValueError("FACTORY_PRIVATE_RECIPE_MANIFEST_INVALID")
     quality=loaded("factory_premium_commercial_guard",
                    "factory_commercial_quality_release_guard_v1.py")
+    quality.require_rights_clearance(
+        inbox, product["recipe"], artifact_sha, artifact_path,
+        commercial_distribution=True,
+    )
+    quality.require_rights_clearance(
+        inbox,RECIPE,digest,package,commercial_distribution=True
+    )
     clearance=quality.require_quality_clearance(
         inbox,RECIPE,digest,source_manifest,package
     )
