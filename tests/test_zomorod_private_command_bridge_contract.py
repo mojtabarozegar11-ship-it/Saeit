@@ -7,6 +7,7 @@ exercise that private component or submit a real command.
 
 import ast
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -64,10 +65,16 @@ def test_embedded_event_scripts_are_valid_python():
         ast.parse(script)
 
 
-def test_dispatch_is_manual_owner_main_only():
+def test_dispatch_is_owner_main_only_for_manual_or_exact_issue_comment():
     source = _source()
     triggers = source.split("permissions:", 1)[0]
     assert "  workflow_dispatch:\n" in triggers
+    assert "  issue_comment:\n    types: [created]\n" in triggers
+    assert "github.event.issue.number == 1514" in source
+    assert "github.event.comment.author_association == 'OWNER'" in source
+    assert "github.event.comment.user.login == 'mojtabarozegar11-ship-it'" in source
+    assert "github.event.comment.body == 'ZMR-PUBLIC-KEY-V1'" in source
+    assert "startsWith(github.event.comment.body, 'ZMR-SEALED-COMMAND-V1')" in source
     for forbidden in (
         "\n  push:", "\n  pull_request:", "\n  schedule:",
         "\n  repository_dispatch:", "\n  workflow_run:",
@@ -98,6 +105,44 @@ def test_ssh_is_pinned_to_current_relay_and_new_host():
     assert "zohal.pws-dns.net" not in source
 
 
+def _run_gate(event, event_name, tmp_path):
+    script = _inline_event_scripts()[0]
+    event_path = tmp_path / "workflow-event.json"
+    event_path.write_text(json.dumps(event), encoding="utf-8")
+    output_path = tmp_path / "github-output.txt"
+    env = os.environ.copy()
+    env.update({
+        "GITHUB_EVENT_NAME": event_name,
+        "GITHUB_OUTPUT": str(output_path),
+        "RUNNER_TEMP": str(tmp_path),
+    })
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(event_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=5,
+        env=env,
+    )
+    return result, output_path, tmp_path / "zomorod-sealed-command.txt"
+
+
+def _owner_comment(body, *, issue_number=1514, user="mojtabarozegar11-ship-it",
+                   association="OWNER", action="created", pr=False):
+    issue = {"number": issue_number}
+    if pr:
+        issue["pull_request"] = {"url": "https://example.invalid/pr"}
+    return {
+        "action": action,
+        "issue": issue,
+        "comment": {
+            "body": body,
+            "user": {"login": user},
+            "author_association": association,
+        },
+    }
+
+
 @pytest.mark.parametrize(
     ("operation", "envelope", "allowed"),
     [
@@ -109,40 +154,70 @@ def test_ssh_is_pinned_to_current_relay_and_new_host():
         ("accept", "[]", False),
         ("accept", "{}", False),
         ("accept", json.dumps({**VALID_ENVELOPE, "v": 2}), False),
-        (
-            "accept",
-            json.dumps({**VALID_ENVELOPE, "alg": "none"}),
-            False,
-        ),
-        (
-            "accept",
-            json.dumps({**VALID_ENVELOPE, "unexpected": "x"}),
-            False,
-        ),
+        ("accept", json.dumps({**VALID_ENVELOPE, "alg": "none"}), False),
+        ("accept", json.dumps({**VALID_ENVELOPE, "unexpected": "x"}), False),
         ("accept", "x" * 24001, False),
         ("unexpected", None, False),
     ],
 )
-def test_runner_input_gate_rejects_bad_envelopes(
+def test_manual_input_gate_rejects_bad_envelopes(
     operation, envelope, allowed, tmp_path
 ):
-    # This checks *structural* input validation, not cryptographic validity.
-    validation = _inline_event_scripts()[0]
-    event = {"inputs": {"operation": operation}}
+    # Runner-side *structure* only, never decryption or private queue mutation.
+    inputs = {"operation": operation}
     if envelope is not None:
-        event["inputs"]["sealed_envelope"] = envelope
-    event_path = tmp_path / "workflow-event.json"
-    event_path.write_text(json.dumps(event), encoding="utf-8")
-    result = subprocess.run(
-        [sys.executable, "-c", validation, str(event_path)],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=5,
+        inputs["sealed_envelope"] = envelope
+    result, outputs, encrypted = _run_gate(
+        {"inputs": inputs}, "workflow_dispatch", tmp_path
     )
-    assert (result.returncode == 0) is allowed, (
-        operation, envelope and envelope[:60], result.stdout, result.stderr
-    )
+    assert (result.returncode == 0) is allowed, (operation, result.stderr)
+    if allowed:
+        assert f"operation={operation}\n" in outputs.read_text(encoding="utf-8")
+        assert encrypted.exists() is (operation == "accept")
+    else:
+        assert not encrypted.exists()
+
+
+@pytest.mark.parametrize(
+    ("event", "allowed", "operation"),
+    [
+        (_owner_comment("ZMR-PUBLIC-KEY-V1"), True, "show_public_key"),
+        (_owner_comment("ZMR-SEALED-COMMAND-V1\n" + json.dumps(VALID_ENVELOPE)), True, "accept"),
+        (_owner_comment("ZMR-PUBLIC-KEY-V1", issue_number=1515), False, None),
+        (_owner_comment("ZMR-PUBLIC-KEY-V1", user="another-user"), False, None),
+        (_owner_comment("ZMR-PUBLIC-KEY-V1", association="CONTRIBUTOR"), False, None),
+        (_owner_comment("ZMR-PUBLIC-KEY-V1", action="edited"), False, None),
+        (_owner_comment("ZMR-PUBLIC-KEY-V1", pr=True), False, None),
+        (_owner_comment(" ZMR-PUBLIC-KEY-V1"), False, None),
+        (_owner_comment("ZMR-PUBLIC-KEY-V1\nextra"), False, None),
+        (_owner_comment("ZMR-SEALED-COMMAND-V1\n{}"), False, None),
+        (_owner_comment("ZMR-SEALED-COMMAND-V1\nnot-json"), False, None),
+        (_owner_comment("ZMR-SEALED-COMMAND-V1" + json.dumps(VALID_ENVELOPE)), False, None),
+        (_owner_comment("ZMR-SEALED-COMMAND-V1\n" + "x" * 24001), False, None),
+    ],
+)
+def test_comment_gate_accepts_only_owner_and_bounded_encrypted_envelope(
+    event, allowed, operation, tmp_path
+):
+    result, outputs, encrypted = _run_gate(event, "issue_comment", tmp_path)
+    assert (result.returncode == 0) is allowed, result.stderr
+    if allowed:
+        assert f"operation={operation}\n" in outputs.read_text(encoding="utf-8")
+        if operation == "accept":
+            raw = event["comment"]["body"].split("\n", 1)[1]
+            assert encrypted.read_text(encoding="utf-8") == raw
+            assert (encrypted.stat().st_mode & 0o777) == 0o600
+            assert raw not in result.stdout + result.stderr
+        else:
+            assert not encrypted.exists()
+    else:
+        assert not encrypted.exists()
+
+
+def test_unexpected_event_type_is_rejected(tmp_path):
+    event = _owner_comment("ZMR-PUBLIC-KEY-V1")
+    result, _, _ = _run_gate(event, "push", tmp_path)
+    assert result.returncode != 0
 
 
 def test_queue_receipt_is_required_and_execution_is_not_claimed():
@@ -150,7 +225,7 @@ def test_queue_receipt_is_required_and_execution_is_not_claimed():
     assert 'grep -Fq "COMMAND_RECEIPT=ACCEPTED"' in source
     assert 'grep -Fq "COMMAND_QUEUE=UPDATED"' in source
     assert 'echo "COMPANY_WORK_EXECUTION=NOT_PERFORMED"' in source
-    assert "if: inputs.operation == 'accept'" in source
-    assert "if: inputs.operation == 'show_public_key'" in source
+    assert "if: steps.gate.outputs.operation == 'accept'" in source
+    assert "if: steps.gate.outputs.operation == 'show_public_key'" in source
     assert "if: always()" in source
     assert 'rm -rf "$RUNNER_TEMP/zomorod-command-channel"' in source
