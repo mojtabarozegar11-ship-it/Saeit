@@ -146,6 +146,27 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             mod.parse_proc_stat("42 (bad) S 1")
 
+    def test_coarse_age_buckets_and_clock_fail_closed(self):
+        self.assertEqual(mod.process_age_bucket(9950, 100.0, 100), "lt_1m")
+        self.assertEqual(mod.process_age_bucket(9000, 100.0, 100), "lt_1m")
+        self.assertEqual(mod.process_age_bucket(1000, 100.0, 100), "1m_to_1h")
+        self.assertEqual(mod.process_age_bucket(100, 5000.0, 100), "1h_to_1d")
+        self.assertEqual(mod.process_age_bucket(100, 90000.0, 100), "gte_1d")
+        self.assertEqual(mod.process_age_bucket(20000, 100.0, 100), "unknown")
+        self.assertEqual(mod.process_age_bucket(10, None, 100), "unknown")
+        self.assertEqual(mod.process_age_bucket(10, 100.0, 0), "unknown")
+
+    def test_orphan_age_buckets_are_aggregate_and_non_authorizing(self):
+        p = mod.process_pressure()
+        self.assertEqual(p["state"], "OBSERVED")
+        self.assertFalse(p["worker_health_verified"])
+        self.assertTrue(p["pid_command_and_paths_redacted"])
+        buckets = ("lt_1m", "1m_to_1h", "1h_to_1d", "gte_1d", "unknown")
+        self.assertTrue(set(p["factory_age_buckets"]).issubset(buckets))
+        self.assertTrue(set(p["init_parent_factory_age_buckets"]).issubset(buckets))
+        self.assertEqual(sum(p["factory_age_buckets"].values()), p["factory_name_matches"])
+        self.assertLessEqual(sum(p["init_parent_factory_age_buckets"].values()), p["factory_name_matches"])
+
     def test_process_pressure_is_redacted_and_not_worker_health_proof(self):
         observed = mod.process_pressure()
         self.assertEqual(observed["state"], "OBSERVED")
