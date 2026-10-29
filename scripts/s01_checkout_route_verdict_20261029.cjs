@@ -5,7 +5,9 @@ function classifyNavigation(path, http, finalPath, error) {
   const authRequired = authGated && finalPath === '/accounts/login/';
   const expectedDestination = finalPath === path || authRequired;
   const unexpectedRedirect = !expectedDestination;
-  const observedSafe = http >= 200 && http < 400 && !error && expectedDestination;
+  // Redirect-only, malformed or missing responses are not successful page observations.
+  // page.goto normally returns the final response, but classify defensively.
+  const observedSafe = Number.isInteger(http) && http >= 200 && http < 300 && !error && expectedDestination;
   return {authRequired, unexpectedRedirect, observedSafe};
 }
 module.exports = {classifyNavigation};
