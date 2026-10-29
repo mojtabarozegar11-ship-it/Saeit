@@ -207,8 +207,8 @@ footer{padding:24px 8px 30px;color:#557060;font-size:.86rem}#status{min-height:2
     var factor = p.areaM2 * (1 - p.rejectionPct / 100) * unitContribution;
     var breakEvenYield = requiredBase === 0 ? 0 : factor > 0 ? requiredBase / factor : null;
     return {
-      pricePerKg: breakEvenPrice === null ? null : Math.ceil((breakEvenPrice - 1e-11) * 100) / 100,
-      grossYieldKgM2: breakEvenYield === null ? null : Math.ceil((breakEvenYield - 1e-11) * 1000) / 1000,
+      pricePerKg: breakEvenPrice === null ? null : Math.ceil(breakEvenPrice * 100) / 100,
+      grossYieldKgM2: breakEvenYield === null ? null : Math.ceil(breakEvenYield * 1000) / 1000,
       limitation: "Break-even thresholds assume unchanged crop, rejected fraction, entered resource costs and per-kg service costs."
     };
   }
@@ -344,7 +344,7 @@ function render(result){
   ["Net margin / m² / cycle",money(cy.cycleMargin/p.areaM2,c)],
   ["Break-even selling price/kg",money(result.breakEven.pricePerKg,c)],
   ["Minimum gross yield kg/m²",num(result.breakEven.grossYieldKgM2,3)],
-  ["5+ year investment NPV",money(fin.npv,c),fin.npv<0],
+  ["Investment NPV (selected horizon)",money(fin.npv,c),fin.npv<0],
   ["Simple total investment ROI",fin.roiPct===null?"Not applicable":num(fin.roiPct)+"%"],
   ["Cash payback",fin.paybackYears===null?"Not reached":num(fin.paybackYears)+" years"]
  ].forEach(function(m){metric(id("metrics"),m[0],m[1],m[2]);});
@@ -367,7 +367,7 @@ function calculate(){
  try{var inputs=read(),out=E.calculate(inputs);last=out;lastInputs=inputs;render(out);status("Calculated successfully. All figures use your entered assumptions.");return out;}
  catch(err){status("Check your inputs: "+err.message,true);return null;}
 }
-function csvSafe(value){var s=String(value);if(/^[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}
+function csvSafe(value){var s=String(value);if(typeof value==="string"&&/^[=+\-@\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';}
 function download(name,body,mime){var b=new Blob([body],{type:mime}),url=URL.createObjectURL(b),a=make("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);}
 function csvReport(out){
  var c=out.inputs.currency,rows=[["Metric","Value","Unit"]];
