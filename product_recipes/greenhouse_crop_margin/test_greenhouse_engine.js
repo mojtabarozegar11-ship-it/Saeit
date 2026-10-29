@@ -87,7 +87,8 @@ test("Reject missing fields and object abuse",()=>{
 test("Economic invariants hold over independent user cases",()=>{
   for(let i=1;i<=128;i++){
     const p={...sample,areaM2:100+i,yieldKgM2:3+i/10,
-      priceKg:1+i/100,fixedAnnual:1000+i*2,rejectionPct:(i%20)};
+      priceKg:1+i/100,fixedAnnual:1000+i*2,rejectionPct:(i%20),
+      yieldMin:0,yieldMax:100,priceMin:0,priceMax:100};
     const a=E.calculate(p),morePrice=E.calculate({...p,priceKg:p.priceKg+1}),
       moreCost=E.calculate({...p,fixedAnnual:p.fixedAnnual+100}),
       moreReject=E.calculate({...p,rejectionPct:p.rejectionPct+1});
