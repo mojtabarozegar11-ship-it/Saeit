@@ -95,4 +95,3 @@ jobs:
           rc=0
           python3 scripts/f01_capacity_release_no_go_20261030.py "$d/snapshot.json" || rc=$?
           test "$rc" = 2
-          PY
