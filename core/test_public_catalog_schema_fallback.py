@@ -53,6 +53,23 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
         self.assertEqual(context["courses"], [])
         self.assertEqual(len(context["tracks"]), 8)
 
+    def test_academy_active_track_registry_is_bounded_and_ordered(self):
+        from core.academy_views import EducationTrack, EducationCourse
+        track = SimpleNamespace(key="agri", title="Agriculture", meta="", description="")
+        tracks = MagicMock()
+        tracks.order_by.return_value.__getitem__.return_value = [track]
+        courses = MagicMock()
+        courses.select_related.return_value.order_by.return_value.__getitem__.return_value = []
+        with patch("core.academy_views.missing_public_tables", return_value=False), \\
+             patch.object(EducationTrack.objects, "filter", return_value=tracks), \\
+             patch.object(EducationCourse.objects, "filter", return_value=courses), \\
+             patch("core.academy_views.render", return_value=HttpResponse("academy")) as rendered:
+            response = academy(self.requests.get("/academy/"))
+        self.assertEqual(response.status_code, 200)
+        tracks.order_by.assert_called_once_with("sort_order", "pk")
+        tracks.order_by.return_value.__getitem__.assert_called_once_with(slice(None, 100))
+        self.assertEqual(rendered.call_args.args[2]["tracks"][0]["key"], "agri")
+
     def test_gallery_skips_missing_table_and_keeps_query_filters(self):
         with patch("core.company_content_views.missing_public_tables", return_value=True), patch(
             "core.company_content_views.render", return_value=HttpResponse("gallery")
