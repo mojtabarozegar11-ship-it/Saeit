@@ -90,5 +90,27 @@ class PrivatePreimageTests(unittest.TestCase):
             self.run_snapshot()
 
 
+
+class SafeBlockedSnapshotDiagnosticsTests(unittest.TestCase):
+    def test_known_blocker_is_specific_but_private(self):
+        self.assertEqual(
+            mod.safe_failure_code(RuntimeError("checkout preimage SHA drift")),
+            "SOURCE_SHA_DRIFT",
+        )
+        self.assertEqual(
+            mod.safe_failure_code(RuntimeError("snapshot manifest mismatch")),
+            "EXISTING_MANIFEST_MISMATCH",
+        )
+        self.assertEqual(mod.safe_failure_code(BlockingIOError()), "LOCK_BUSY")
+
+    def test_untrusted_exception_text_is_never_returned(self):
+        secret = "private customer record"
+        self.assertEqual(
+            mod.safe_failure_code(RuntimeError(secret)), "RUNTIME_GUARD_BLOCKED"
+        )
+        self.assertNotIn(secret, mod.safe_failure_code(OSError(secret)))
+
+
+
 if __name__ == "__main__":
     unittest.main()
