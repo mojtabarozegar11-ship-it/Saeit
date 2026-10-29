@@ -134,6 +134,25 @@ class SnapshotTests(unittest.TestCase):
             result = mod.queue(alias / "queue")
             self.assertEqual(result["state"], "SYMLINK_NOT_FOLLOWED")
 
+
+    def test_proc_stat_parser_handles_parentheses_and_rejects_short_input(self):
+        fields = ["S", "1"] + ["0"] * 18
+        fields[11], fields[12], fields[17] = "100", "50", "7"
+        parsed = mod.parse_proc_stat("42 (worker (nested) name) " + " ".join(fields))
+        self.assertEqual(parsed["state"], "S")
+        self.assertEqual(parsed["ppid"], 1)
+        self.assertEqual(parsed["cpu_ticks"], 150)
+        self.assertEqual(parsed["threads"], 7)
+        with self.assertRaises(ValueError):
+            mod.parse_proc_stat("42 (bad) S 1")
+
+    def test_process_pressure_is_redacted_and_not_worker_health_proof(self):
+        observed = mod.process_pressure()
+        self.assertEqual(observed["state"], "OBSERVED")
+        self.assertTrue(observed["pid_command_and_paths_redacted"])
+        self.assertFalse(observed["worker_health_verified"])
+        self.assertNotIn("cmdline", str(observed).lower())
+
     def test_missing_command(self):
         self.assertEqual(mod.command(["/no-such-f01-command"])["state"], "UNAVAILABLE")
 
