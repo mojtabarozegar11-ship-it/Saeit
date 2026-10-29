@@ -7,7 +7,7 @@ const assert=require('node:assert/strict');
  const browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--enable-webgl','--enable-unsafe-swiftshader']});
  try{
   for(const v of [{name:'desktop',width:1200,height:800,mobile:false},{name:'mobile',width:390,height:844,mobile:true}]){
-   const context=await browser.newContext({viewport:{width:v.width,height:v.height},isMobile:v.mobile,hasTouch:v.mobile});
+   const context=await browser.newContext({viewport:{width:v.width,height:v.height},isMobile:v.mobile,hasTouch:v.mobile,acceptDownloads:true});
    try{
     const page=await context.newPage(),errors=[];
     page.on('pageerror',e=>errors.push(e.message));
