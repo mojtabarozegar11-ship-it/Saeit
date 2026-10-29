@@ -65,9 +65,22 @@ def build(original):
     compile(updated, str(TARGET), "exec")
     return updated.encode("utf8"), source_fn
 
+def _read_only_checkout_sql(execute, sql, params, many, context):
+    """Reject every non-SELECT statement during the synthetic buyer GET proof.
+
+    This is a safety guard, not an invoice-idempotency or live-payment test.
+    In particular, no UPDATE, INSERT, DELETE, PRAGMA or transaction control is
+    authorized by this probe. Fail closed if the view starts writing.
+    """
+    if not isinstance(sql, str) or not re.match(r"^\\s*SELECT\\b", sql, re.IGNORECASE):
+        fail("Checkout proof refused non-SELECT database operation")
+    return execute(sql, params, many, context)
+
+
 def proof(handler):
     import importlib
     import django
+    from django.db import connection
     from django.test import RequestFactory
     from types import SimpleNamespace
     from unittest.mock import patch
@@ -78,29 +91,36 @@ def proof(handler):
     django.setup()
     module = importlib.import_module("mpw_commerce.product_checkout_page")
     from core.models import Product
-    for pk in (72, 225):
-        req = RequestFactory().get(
-            f"/store/product/{pk}/checkout/", secure=True, HTTP_HOST="mojplaywin.com"
-        )
-        req.user = SimpleNamespace(
-            is_authenticated=True, is_active=True, pk=-1000, username="scoped-checkout-audit"
-        )
-        product = Product.objects.select_related("knowledge_article").get(pk=pk)
-        if module.approved_for_checkout(req, product) is not True:
-            fail(f"Product {pk} is not approved for live checkout")
-        with patch.object(module, "_apply_two_book_strict_csp", handler):
-            response = module.product_checkout_page(req, pk)
-        body = response.content
-        marker = b'<meta http-equiv="Content-Security-Policy" content="'
-        if (response.status_code != 200 or body.count(marker) != 1
-                or body.count(b"'sha256-") != 2
-                or b"unsafe-inline" in body or b"unsafe-eval" in body):
-            fail(f"Buyer checkout CSP proof failed for product {pk}")
-        print("MPW_CHECKOUT_CSP_PROOF=" + json.dumps({
-            "product": pk, "http": 200, "inline_script_hashes": 0,
-            "style_hashes": 2, "customer_orders_created": 0,
-            "real_payment": False
-        }))
+    with connection.execute_wrapper(_read_only_checkout_sql):
+        for pk in (72, 225, 879):
+            req = RequestFactory().get(
+                f"/store/product/{pk}/checkout/", secure=True, HTTP_HOST="mojplaywin.com"
+            )
+            req.user = SimpleNamespace(
+                is_authenticated=True, is_active=True, pk=-1000, username="scoped-checkout-audit"
+            )
+            product = Product.objects.select_related("knowledge_article").get(pk=pk)
+            approved = module.approved_for_checkout(req, product) is True
+            if not approved:
+                if pk in (72, 225):
+                    fail(f"Product {pk} is not approved for live checkout")
+                print("MPW_CHECKOUT_RIGHTS_STATUS=" + json.dumps({
+                    "product": pk, "approved": False, "no_sale_attempted": True
+                }))
+                continue
+            with patch.object(module, "_apply_two_book_strict_csp", handler):
+                response = module.product_checkout_page(req, pk)
+            body = response.content
+            marker = b'<meta http-equiv="Content-Security-Policy" content="'
+            if (response.status_code != 200 or body.count(marker) != 1
+                    or body.count(b"'sha256-") != 2
+                    or b"unsafe-inline" in body or b"unsafe-eval" in body):
+                fail(f"Buyer checkout CSP proof failed for product {pk}")
+            print("MPW_CHECKOUT_CSP_PROOF=" + json.dumps({
+                "product": pk, "http": 200, "inline_script_hashes": 0,
+                "style_hashes": 2, "sql_write_attempts_allowed": 0,
+                "real_payment": False
+            }))
 
 def preview():
     guard()
