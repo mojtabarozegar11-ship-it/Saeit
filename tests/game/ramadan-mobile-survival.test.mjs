@@ -67,3 +67,11 @@ test('survival best records only cleared waves, never the first unplayed wave',(
  api.recordSurvivalBest();assert.equal(api.readSurvivalBest(),1);
  context.world.mission=7;api.recordSurvivalBest();assert.equal(api.readSurvivalBest(),2);
 });
+
+test('pause backup uses current campaign and leaves survival slot separate',()=>{
+ const src=sourceBetween('function exportCampaignBackup(){',"\n$('#exportSave').onclick=");
+ assert(src.includes('world&&!world.endless?JSON.stringify('));
+ assert(src.includes('boundedCampaignPickups(world.pickups)'));
+ assert(src.includes(':storageRead(saveKey)'));
+ assert(game.includes('best:0,x:2.5'));
+});
