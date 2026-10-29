@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 2
       - name: Authenticate the GitHub owner and accept one opaque ciphertext file
         id: envelope
         shell: bash
@@ -32,6 +32,7 @@ jobs:
           import json
           import re
           import sys
+          import subprocess
           from pathlib import Path
 
           event = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
@@ -42,14 +43,14 @@ jobs:
           if len(commits) != 1 or commits[0].get("id") != sys.argv[3]:
               raise SystemExit("COMMAND_COMMIT_SHAPE_REJECTED")
           commit = commits[0]
-          added = commit.get("added") or []
-          modified = commit.get("modified") or []
-          removed = commit.get("removed") or []
-          changed = set(added + modified + removed)
-          if len(changed) != 1:
+          diff = subprocess.run(
+              ["git", "diff-tree", "--no-commit-id", "--name-status", "-r", sys.argv[3]],
+              check=True, capture_output=True, text=True
+          ).stdout.splitlines()
+          if len(diff) != 1 or "\\t" not in diff[0]:
               raise SystemExit("COMMAND_FILE_CHANGE_REJECTED")
-          path = next(iter(changed))
-          if path in removed or not (path in added or path in modified):
+          status, path = diff[0].split("\\t", 1)
+          if status not in ("A", "M"):
               raise SystemExit("COMMAND_FILE_CHANGE_REJECTED")
           if not re.fullmatch(r"\.company_commands/inbox/[0-9a-f]{32}\.json", path):
               raise SystemExit("COMMAND_PATH_REJECTED")
