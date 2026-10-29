@@ -29,7 +29,7 @@ jobs:
           file module/*.so
           ldd module/pdo_sqlite.so
           ldd module/sqlite3.so
-          sha256sum module/*.so > module/SHA256SUMS
+          (cd module && sha256sum ./*.so > SHA256SUMS)
           (cd module && sha256sum -c SHA256SUMS)
           echo "PHP_SQLITE_EXTENSION_ARTIFACT=BUILT"
           echo "COMPANY_DATA=NOT_ACCESSED"
