@@ -23,6 +23,7 @@ $private = $home.'/.private/zomorod-business';
 if(is_file($private.'/site_agents.php')) require_once $private.'/site_agents.php';
 if(is_file($private.'/site_store.php')) require_once $private.'/site_store.php';
 if(is_file($private.'/command_center.php')) require_once $private.'/command_center.php';
+if(is_file($private.'/workflow_desk.php')) require_once $private.'/workflow_desk.php';
 function esc(mixed $s): string {return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');}
 function req(string $k, string $default=''): string {return trim((string)($_POST[$k]??$default));}
 function bail(string $m, int $code=422): never {http_response_code($code); throw new RuntimeException($m);}
@@ -81,7 +82,7 @@ function record(PDO $db,string $number,string $date,string $note,string $cur,arr
 }
 function uniqueNo(string $prefix):string {return $prefix.'-'.gmdate('YmdHis').'-'.strtoupper(substr(bin2hex(random_bytes(5)),0,8));}
 function layoutStart(string $page,?array $user=null):void {
-    $nav=['dashboard'=>'داشبورد','insights'=>'گزارش مدیریتی','command_center'=>'مرکز فرمان هوشمند','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','documents'=>'مکاتبات','projects'=>'پروژه‌ها','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
+    $nav=['dashboard'=>'داشبورد','insights'=>'گزارش مدیریتی','command_center'=>'مرکز فرمان هوشمند','workflow_desk'=>'اتوماسیون و کارتابل','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','documents'=>'مکاتبات','projects'=>'پروژه‌ها','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
     $navHtml='';foreach($nav as $key=>$label){if($key==='users'&&role()!=='admin')continue;$navHtml.='<a class="'.($page===$key?'sel':'').'" href="?page='.esc($key).'">'.esc($label).'</a>';}
     echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.esc(APP_TITLE).'</title><link rel="icon" type="image/webp" href="/static/site/zomorod-v7/company-logo.webp"><style>\n    :root{font-family:Tahoma,Arial,sans-serif;color:#e9e7d9;background:#0c1811}*{box-sizing:border-box}body{margin:0;background:#203b23;min-height:100vh}a{color:#d9bc72;text-decoration:none}header{padding:20px 4%;background:#1a341e;border-bottom:3px double #e5c374;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:21px;color:#edcd79;font-weight:bold}.small{font-size:12px;color:#b9c0ae}nav{display:flex;overflow:auto;gap:8px;padding:16px 4%;background:#1a341e;scrollbar-width:thin}nav a{white-space:nowrap;padding:11px 13px;background:#284c30;border:1px solid #e1c47f;border-radius:12px}nav .sel{color:#081509;background:#d8ba6e;border-color:#f3d590}main{max-width:1260px;margin:auto;padding:26px 20px 70px}h1,h2,h3{color:#edcf88}h1{font-size:clamp(23px,3vw,32px)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:15px;margin:18px 0}.card,section{background:#18291e;border:1px solid #546545;border-radius:18px;padding:20px;margin:16px 0;box-shadow:0 8px 28px #0002}.metric{font-size:28px;color:#f1d68e;font-weight:bold}table{border-collapse:collapse;width:100%;min-width:580px}th,td{padding:12px;text-align:right;border-bottom:1px solid #405243}th{color:#e4cb83}.scroll{overflow:auto}label{display:block;color:#d1dcbf;margin:9px 0 5px}input,textarea,select{font:inherit;color:#f3eedc;background:#0c1a12;border:1px solid #647153;border-radius:9px;padding:11px;width:100%;max-width:440px}textarea{min-height:88px}button{background:linear-gradient(120deg,#a98741,#f3d584);border:1px solid #f8dd9a;color:#15200e;padding:12px 19px;border-radius:12px;cursor:pointer;font-weight:bold;margin-top:13px}button:hover{filter:brightness(1.1)}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 18px}.form .full{grid-column:1/-1}.notice{border:1px solid #b99550;background:#354027;padding:15px;border-radius:12px}.danger{background:#4d1e20;border-color:#c26b6b}.muted{color:#bec8b6}.account-line{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}.sign{max-width:540px;margin:70px auto;padding:30px}footer{padding:24px 4%;border-top:1px solid #52613b;text-align:center;color:#bdc7ae;font-size:12px}.tags{display:flex;flex-wrap:wrap;gap:8px}.tags span{border:1px solid #6b7050;border-radius:15px;padding:4px 10px}@media(max-width:650px){.account-line{grid-template-columns:1fr 1fr}.account-line select{grid-column:1/-1}main{padding:14px 12px}header{padding:15px}}\n    </style></head><body><header><div><div class="brand"><img src="/static/site/zomorod-v7/company-logo.webp" alt="نشان شرکت زمرد ملل" width="48" height="48" style="width:48px;height:48px;border-radius:50%;border:2px solid #e5c377;vertical-align:middle;margin-left:12px;background:#fff">زمرد ملل · مدیریت جامع</div><div class="small">مدیریت سازمان · دفاتر مالی · ثبت عملیات با کنترل دسترسی</div></div><div><a href="https://zomorodmelal.ir/">بازگشت به سایت</a>';
     if($user)echo ' · <span class="small">'.esc($user['username']).' ('.esc($user['role']).')</span> · <a href="?page=logout">خروج</a>';
@@ -233,6 +234,9 @@ try {
         } elseif(in_array($action,['cc_create','cc_scan','cc_transition','cc_plan','cc_evidence','cc_review'],true)){
             if(!function_exists('zmCcHandle')) bail('مرکز فرمان در دسترس نیست.',503);
             zmCcHandle($db,zmCcDb($private),$action);
+        } elseif(in_array($action,['flow_create','flow_transition'],true)){
+            if(!function_exists('zmFlowHandle'))bail('گردش‌کار سازمانی در دسترس نیست.',503);
+            zmFlowHandle(zmFlowDb($private),$action);
         } elseif($action==='user'){
             $username=req('username');$pass=req('password');$newRole=req('role');if(!preg_match('/^[A-Za-z0-9_]{5,40}$/',$username)||strlen($pass)<14||!in_array($newRole,['admin','accountant','manager','viewer'],true))bail('کاربر، گذرواژه یا نقش نامعتبر است.');
             $db->prepare('INSERT INTO users(username,password_hash,role) VALUES(?,?,?)')->execute([$username,password_hash($pass,PASSWORD_DEFAULT),$newRole]);audit($db,'create','user',(int)$db->lastInsertId());
@@ -253,6 +257,10 @@ try {
         authorize('users');
         if(!function_exists('zmCcRender')) bail('مرکز فرمان در دسترس نیست.',503);
         zmCcRender(zmCcDb($private));
+    } elseif($page==='workflow_desk'){
+        authorize('view');
+        if(!function_exists('zmFlowRender'))bail('اتوماسیون سازمانی در دسترس نیست.',503);
+        zmFlowRender(zmFlowDb($private));
     } elseif($page==='agent_center'){
         authorize('view');
         if(!function_exists('zmAgentDb'))bail('موتور ایجنت در دسترس نیست.',503);

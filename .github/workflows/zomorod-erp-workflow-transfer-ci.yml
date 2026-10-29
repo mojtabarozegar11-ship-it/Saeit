@@ -1,0 +1,60 @@
+name: Zomorod ERP workflow and development transfer package validation
+on:
+  push:
+    branches: [feature/zomorod-erp-workflow-transfer-v1-20261029]
+    paths:
+      - "content/zomorod-business/**"
+      - "scripts/zomorod_workflow_desk_synthetic_qa.php"
+      - "scripts/zomorod_workflow_web_synthetic_qa.py"
+      - "scripts/zomorod_transfer_bundle.py"
+      - ".github/workflows/zomorod-erp-workflow-transfer-ci.yml"
+  pull_request:
+    paths:
+      - "content/zomorod-business/**"
+      - "scripts/zomorod_workflow_desk_synthetic_qa.php"
+      - "scripts/zomorod_workflow_web_synthetic_qa.py"
+      - "scripts/zomorod_transfer_bundle.py"
+permissions:
+  contents: read
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_sqlite, sqlite3, mbstring
+      - name: Validate all isolated modules and regression suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/workflow_desk.php
+          php -l content/zomorod-business/insights.php
+          php -l content/zomorod-business/command_center.php
+          php -l content/zomorod-business/command_quality.php
+          php -l content/zomorod-business/command_planner.php
+          php scripts/zomorod_command_center_synthetic_qa.php
+          php scripts/zomorod_command_quality_synthetic_qa.php
+          php scripts/zomorod_command_planner_synthetic_qa.php
+          php scripts/zomorod_workflow_desk_synthetic_qa.php
+          python3 scripts/zomorod_workflow_web_synthetic_qa.py
+          python3 scripts/test_zomorod_company_private_bridge_v4.py
+      - name: Create and independently verify engineering handoff archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_transfer_bundle.py
+          python3 scripts/zomorod_transfer_bundle.py --output dist/zomorod-erp-development-handoff.tar.gz
+          python3 scripts/zomorod_transfer_bundle.py --verify dist/zomorod-erp-development-handoff.tar.gz
+          tar -tzf dist/zomorod-erp-development-handoff.tar.gz | grep -F 'zomorod-erp-dev/MANIFEST.json'
+          echo 'COMPLETE_ERP_PRODUCTION_READY=NO'
+      - name: Publish source-only development transfer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-erp-dev-handoff
+          path: dist/zomorod-erp-development-handoff.tar.gz
+          if-no-files-found: error
+          retention-days: 14
