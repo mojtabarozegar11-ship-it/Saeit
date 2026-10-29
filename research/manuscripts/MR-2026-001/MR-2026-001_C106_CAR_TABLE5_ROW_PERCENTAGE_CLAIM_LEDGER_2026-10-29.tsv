@@ -1,0 +1,11 @@
+id	source_locator	observation	inference	limitation	status
+CAR_T5_PERCENT	Car et al 2012 p140 Table5	26/36; 7/9.7; 3/4.2; 6/8.3; 15/21; 17/24; printed total72	Each printed percentage matches count divided by 72 at shown precision	Counts sum74 not72	ARITHMETIC_RESOLVED_CLASSIFICATION_BLOCKED
+CAR_T5_SUM	Car et al 2012 p140 Table5	Six category counts sum74; printed total72; percentages sum103.2	Source table internally inconsistent	No corrected row count without author data	BLOCKED
+CAR_T5_68	Car et al 2012 p139 section3.4	Groups1-3 called68%; printed counts26+7+3=36	36/72=50%; 68% not derived from printed categories	No objective adherence estimate	BLOCKED
+CAR_T5_LABELS	Car et al 2012 p139-140 section3.4	Group4/5 names in numbered prose differ from Table5 labels	Crosswalk uncertain	Do not silently relabel individual irrigators	BLOCKED
+CAR_UNE	UNE 2012 institutional abstract	72 irrigators:45 full;13 half;14 never submitted	Duration roster differs from Table5 never sent17	Do not replace 17 with14 as single-row fix	BLOCKED
+CAR_T6	Car et al 2012 p141 Table6	Category sum41 while prose says40 respondents	Printed percentage denominator41	Unique respondent count unresolved	BLOCKED
+
+Source DOI: https://doi.org/10.1016/j.compag.2012.03.003
+UNE catalog: https://rune.une.edu.au/entities/publication/68f9d1ef-6e62-415a-b831-0beb96df9853
+Full text: https://www.researchgate.net/publication/257018309
