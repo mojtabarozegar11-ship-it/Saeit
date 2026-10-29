@@ -29,7 +29,7 @@ class AcademyProgressTests(SimpleTestCase):
         enrollment = SimpleNamespace(
             course=SimpleNamespace(lessons=lessons), progress=progress
         )
-        self.assertEqual(academy_views.education_dashboard_progress(enrollment)[2], 100)
+        self.assertEqual(academy_views.education_dashboard_progress(enrollment), (3, 3, 100))
         lessons.filter.return_value.count.return_value = 0
         progress.filter.return_value.count.return_value = 0
         self.assertEqual(academy_views.education_dashboard_progress(enrollment), (0, 0, 0))
@@ -158,14 +158,23 @@ class CompanyFeedEmbargoTests(SimpleTestCase):
         old = SimpleNamespace(status="published", published_at=now)
         future = SimpleNamespace(status="published", published_at=datetime(2026, 10, 30, tzinfo=timezone.utc))
         draft = SimpleNamespace(status="draft", published_at=now)
-        old_link = SimpleNamespace(newsletter_story=old, knowledge_article=None)
-        future_link = SimpleNamespace(newsletter_story=future, knowledge_article=None)
-        draft_link = SimpleNamespace(newsletter_story=draft, knowledge_article=None)
+        old_link = SimpleNamespace(content_type="newsletter", newsletter_story=old, knowledge_article=None)
+        future_link = SimpleNamespace(content_type="newsletter", newsletter_story=future, knowledge_article=None)
+        draft_link = SimpleNamespace(content_type="newsletter", newsletter_story=draft, knowledge_article=None)
         public_article = SimpleNamespace(
-            newsletter_story=None, knowledge_article=SimpleNamespace(published=True)
+            content_type="knowledge", newsletter_story=None,
+            knowledge_article=SimpleNamespace(published=True)
+        )
+        # A malformed cross-link must not use an unrelated published article
+        # to expose a draft story declared as newsletter content.
+        mismatched_link = SimpleNamespace(
+            content_type="newsletter", newsletter_story=draft,
+            knowledge_article=SimpleNamespace(published=True)
         )
         links = MagicMock()
-        links.select_related.return_value = [future_link, draft_link, old_link, public_article]
+        links.select_related.return_value = [
+            future_link, draft_link, mismatched_link, old_link, public_article
+        ]
         with patch.object(company_content_views, "missing_public_tables", return_value=False), \
              patch.object(company_content_views.CompanyContentLink.objects, "filter", return_value=links), \
              patch.object(company_content_views.timezone, "now", return_value=now), \
