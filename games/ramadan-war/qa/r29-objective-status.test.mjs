@@ -4,9 +4,9 @@ import {readFileSync} from 'node:fs';
 import {canInteractAt} from '../objective-navigation.mjs';
 const game=readFileSync(new URL('../game.js',import.meta.url),'utf8');
 test('recovery pickup proximity suppresses arrow and reports automatic collection',()=>{
- assert.match(game,"const nearIntel=p.kind==='recover'&&Math.hypot(world.x-site[0],world.y-site[1])<.78");
- assert.match(game,"const waypoint=(inInteractRange||inDefenseZone||nearIntel)?null:objectiveWaypoint");
- assert.match(game,"nearIntel?'بستهٔ اطلاعاتی در حال جمع‌آوری است'");
+ assert.ok(game.includes("const nearIntel=p.kind==='recover'&&Math.hypot(world.x-site[0],world.y-site[1])<.78"));
+ assert.ok(game.includes("const waypoint=(inInteractRange||inDefenseZone||nearIntel)?null:objectiveWaypoint"));
+ assert.ok(game.includes("nearIntel?'بستهٔ اطلاعاتی در حال جمع‌آوری است'"));
 });
 test('boss is not called complete before spawning',()=>{assert.ok(game.includes("p.kind==='boss'&&!o.bossDefeated?'فرمانده هنوز ظاهر نشده است'"))});
 test('missing recovery pickup is not falsely called complete',()=>{assert.ok(game.includes("p.kind==='recover'&&o.done<p.sites.length?'بستهٔ اطلاعاتی پیدا نشد"))});
