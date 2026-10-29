@@ -26,8 +26,8 @@ def verify(path):
         seen_casefold = set()
         for m in z.infolist():
             parts = pathlib.PurePosixPath(m.filename).parts
-            if (len(parts) != 2 or parts[0] != "ramadan-war" or
-                    parts[1] in (".", "..") or "\\" in m.filename or
+            if (len(parts) < 2 or parts[0] != "ramadan-war" or
+                    any(part in (".", "..") for part in parts[1:]) or "\\" in m.filename or
                     any(ord(ch) < 32 for ch in m.filename)):
                 raise ValueError("unsafe archive path")
             folded = m.filename.casefold()
