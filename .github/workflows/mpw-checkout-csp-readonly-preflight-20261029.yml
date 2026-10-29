@@ -82,23 +82,10 @@ jobs:
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          # Bounded retries cover a transient handshake failure, never a
-          # fingerprint mismatch. Do not fall back to insecure host checking.
-          for attempt in 1 2; do
-            if timeout 8s ssh-keyscan -T 6 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null && test -s "$d/vps.known"; then
-              break
-            fi
-            if [ "$attempt" -eq 1 ]; then sleep 1; fi
-          done
-          if [ ! -s "$d/vps.known" ]; then
-            echo 'S01_VPS_HOSTKEY_SCAN=BLOCKED_NETWORK_OR_PORT22'
-            exit 1
-          fi
-          if [ "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]; then
-            echo 'S01_VPS_HOSTKEY_SCAN=BLOCKED_FINGERPRINT_MISMATCH'
-            exit 1
-          fi
-          echo 'S01_VPS_HOSTKEY_SCAN=PINNED_MATCH'
+          # Previously observed public host key, pinned and revalidated before auth.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" || { echo 'S01_VPS_HOST_PIN=BLOCKED'; exit 1; }
+          echo 'S01_VPS_HOST_PIN=VERIFIED'
           cat > "$d/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
@@ -107,12 +94,15 @@ jobs:
             IdentityFile $d/vps.key
             UserKnownHostsFile $d/vps.known
           Host saeit-cpanel
-            HostName zohal.pws-dns.net
+            HostName 178.239.147.125
             User zomorod2
             Port 1396
             IdentityFile $d/host.key
             UserKnownHostsFile $d/host.known
             ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/control-%C
+            ControlPersist 300
           Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
@@ -123,29 +113,22 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$d/config"
-          # Classify the VPS hop before probing the cPanel host. Never print
-          # stderr, key material, remote paths, or host configuration.
-          if timeout 18s ssh -T -F "$d/config" saeit-vps 'true' >/dev/null 2>"$d/vps-error"; then
-            echo 'S01_VPS_SSH_AUTH=PASS'
-          else
-            status=UNCLASSIFIED
-            if grep -Eiq 'Permission denied|publickey' "$d/vps-error"; then
-              status=AUTH_DENIED
-            elif grep -Eiq 'Connection timed out|Operation timed out' "$d/vps-error"; then
-              status=CONNECT_TIMEOUT
-            elif grep -Eiq 'Connection refused' "$d/vps-error"; then
-              status=CONNECTION_REFUSED
-            elif grep -Eiq 'Host key verification failed|REMOTE HOST IDENTIFICATION' "$d/vps-error"; then
-              status=HOST_KEY_FAILURE
-            elif grep -Eiq 'No space left on device' "$d/vps-error"; then
-              status=REMOTE_DISK_FULL
+          # Public 30GB cPanel host key, pinned before any authenticated session.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" || { echo 'S01_CPANEL_HOST_PIN=BLOCKED'; exit 1; }
+          echo 'S01_CPANEL_HOST_PIN=VERIFIED'
+          # Reuse a single authenticated session. Retry only harmless identity reads.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 65s ssh -T -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>&1; then
+              session_ready=1
+              break
             fi
-            echo "S01_VPS_SSH_AUTH=BLOCKED_${status}"
-            exit 1
-          fi
-          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          mv "$d/host.candidate" "$d/host.known"
+            echo "S01_PINNED_IDENTITY_RETRY=$attempt"
+            if [ "$attempt" -lt 5 ]; then sleep 6; fi
+          done
+          test "$session_ready" = 1 || { echo 'S01_PINNED_SESSION=BLOCKED'; exit 1; }
+          echo 'S01_PINNED_SESSION=VERIFIED'
       - name: Inspect cPanel checkout source and rollback capacity without writes
         shell: bash
         run: |
@@ -335,6 +318,7 @@ jobs:
         run: |
           d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
           if [ -d "$d" ]; then
+            if [ -f "$d/config" ]; then ssh -F "$d/config" -O exit saeit-cpanel >/dev/null 2>&1 || true; fi
             rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/vps-error" "$d/config"
             rmdir "$d"
           fi
