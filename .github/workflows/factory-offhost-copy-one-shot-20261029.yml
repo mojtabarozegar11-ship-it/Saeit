@@ -88,7 +88,13 @@ jobs:
               outcome=c.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()
               if not outcome or outcome[0]<10:raise SystemExit("SOURCE_SQLITE_SCHEMA_READ_FAILED")
           finally:c.close()
-          with open(p,"rb") as f:h=hashlib.file_digest(f,"sha256").hexdigest()
+          hasher=hashlib.sha256()
+          with open(p,"rb") as f:
+              while True:
+                  chunk=f.read(1024*1024)
+                  if not chunk:break
+                  hasher.update(chunk)
+          h=hasher.hexdigest()
           s2=os.lstat(p)
           if s2.st_size!=s.st_size or s2.st_mtime_ns!=s.st_mtime_ns:
               raise SystemExit("SOURCE_CHANGED_DURING_HASH")
