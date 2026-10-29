@@ -19,6 +19,7 @@ IMPORTS = re.compile(
 REQUIRED = {
     "upgrade-policy.mjs", "moj1-commerce-policy.mjs", "input-guard.mjs",
     "missile-targets.mjs", "enemy-action-policy.mjs", "save-validation.mjs",
+    "campaign-backup.mjs",
 }
 
 
