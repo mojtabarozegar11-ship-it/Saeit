@@ -21,10 +21,10 @@ jobs:
         id: envelope
         shell: bash
         env:
-          EVENT_PATH: \${{ github.event_path }}
+          EVENT_PATH: ${{ github.event_path }}
           EXPECTED_ACTOR: mojtabarozegar11-ship-it
-          ACTOR: \${{ github.actor }}
-          SHA: \${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           test "$ACTOR" = "$EXPECTED_ACTOR"
@@ -55,8 +55,8 @@ jobs:
       - name: Establish pinned private SSH relay
         shell: bash
         env:
-          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          HOST_KEY: \${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           umask 077
@@ -103,7 +103,7 @@ jobs:
       - name: Decrypt, authenticate, sign and queue one task privately
         shell: bash
         env:
-          COMMAND_FILE: \${{ steps.envelope.outputs.file }}
+          COMMAND_FILE: ${{ steps.envelope.outputs.file }}
         run: |
           set -euo pipefail
           test -n "$COMMAND_FILE"
