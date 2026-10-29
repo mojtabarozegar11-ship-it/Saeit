@@ -116,8 +116,11 @@ jobs:
           echo "PRIVATE_COMMAND_RECEIPT=ACCEPTED"
           echo "PRIVATE_TASK_QUEUE=UPDATED"
           echo "COMPANY_WORK_EXECUTION=NOT_PERFORMED"
+          ssh -F "$d/config" saeit-cpanel "python3 -B '$p/company_ingress.py' show-public-key --db '$p/command-center.sqlite3' --hmac-key '$p/.company-bridge.key' --recipient-key '$p/.chat-command-rsa.key'" > "$d/recipient-key.txt"
+          grep -Fq -- "-----BEGIN PUBLIC KEY-----" "$d/recipient-key.txt"
+          grep -Fq -- "-----END PUBLIC KEY-----" "$d/recipient-key.txt"
           echo "ROTATED_RECIPIENT_PUBLIC_KEY_BEGIN"
-          sed -n '/^COMMAND_PUBLIC_KEY_BEGIN$/,/^COMMAND_PUBLIC_KEY_END$/p' "$d/receipt.txt"
+          sed -n '/^-----BEGIN PUBLIC KEY-----$/,/^-----END PUBLIC KEY-----$/p' "$d/recipient-key.txt"
           echo "ROTATED_RECIPIENT_PUBLIC_KEY_END"
       - name: Remove temporary relay credentials and receipts
         if: always()
