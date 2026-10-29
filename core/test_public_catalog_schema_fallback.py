@@ -99,6 +99,30 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
         self.assertIn(Agent, guard_mock.call_args.args)
 
 
+    def test_persian_author_profile_is_byte_identical_and_rejects_symlinks(self):
+        from pathlib import Path
+        import tempfile
+        from django.test import override_settings
+        from core.seo_views import persian_author_profile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            directory = base / "public/authors/mojtaba-rozegar"
+            directory.mkdir(parents=True)
+            page = directory / "index.html"
+            original = b"<!doctype html><html lang='fa'><body>Profile</body></html>"
+            page.write_bytes(original)
+            with override_settings(BASE_DIR=base):
+                response = persian_author_profile(self.requests.get("/authors/mojtaba-rozegar/"))
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.content, original)
+                page.unlink()
+                target = base / "private.html"
+                target.write_bytes(b"private")
+                page.symlink_to(target)
+                response = persian_author_profile(self.requests.get("/authors/mojtaba-rozegar/"))
+                self.assertEqual(response.status_code, 404)
+
     def test_company_feed_missing_schema_returns_retryable_503_without_query(self):
         with patch("core.company_content_views.missing_public_tables", return_value=True) as guard, patch(
             "core.company_content_views.CompanyContentLink.objects.filter"
