@@ -569,7 +569,7 @@ for(const [id,setHeld] of [['boostBtn',value=>{boostHeld=value}],['gunBtn',value
 }
 // Minimal reproducible QA hooks; do not expose mutators into the storefront.
 const airQa={snapshot:()=>({running:run,paused,playerHp:player.hp,shield:player.shield,score,kills,missiles:ammo,mission,enemies:enemies.length,webgl:!!gl,fps:frames})};
-if(['localhost','127.0.0.1'].includes(location.hostname))Object.assign(airQa,{start:begin,renderOnce:()=>render(sceneTime)});
+if(typeof location!=='undefined'&&['localhost','127.0.0.1'].includes(location.hostname))Object.assign(airQa,{start:begin,renderOnce:()=>render(sceneTime)});
 window.__AIR_SUPREMACY_QA__=Object.freeze(airQa);
 refreshHangar();spawnScenery();last=performance.now();requestAnimationFrame(loop);
 })();
