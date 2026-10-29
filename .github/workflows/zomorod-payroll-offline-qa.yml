@@ -4,12 +4,18 @@ on:
     branches: [feature/zomorod-payroll-offline-controls-20261029]
     paths:
       - "content/zomorod-business/payroll_control.php"
+      - "content/zomorod-business/payroll_ui.php"
+      - "content/zomorod-business/app.php"
       - "scripts/zomorod_payroll_control_synthetic_qa.php"
+      - "scripts/zomorod_workflow_web_synthetic_qa.py"
       - ".github/workflows/zomorod-payroll-offline-qa.yml"
   pull_request:
     paths:
       - "content/zomorod-business/payroll_control.php"
+      - "content/zomorod-business/payroll_ui.php"
+      - "content/zomorod-business/app.php"
       - "scripts/zomorod_payroll_control_synthetic_qa.php"
+      - "scripts/zomorod_workflow_web_synthetic_qa.py"
 permissions:
   contents: read
 jobs:
@@ -31,7 +37,9 @@ jobs:
         run: |
           set -euo pipefail
           php -r 'if(!extension_loaded("pdo_sqlite")) exit(2);'
+          php -l content/zomorod-business/app.php
           php -l content/zomorod-business/payroll_control.php
+          php -l content/zomorod-business/payroll_ui.php
           php -l scripts/zomorod_payroll_control_synthetic_qa.php
           php scripts/zomorod_payroll_control_synthetic_qa.php
           php scripts/zomorod_command_center_synthetic_qa.php
