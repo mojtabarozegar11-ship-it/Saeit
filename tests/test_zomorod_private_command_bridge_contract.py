@@ -51,6 +51,9 @@ def _inline_event_scripts():
             ) == indent:
                 scripts.append("\n".join(collected) + "\n")
                 break
+            if not next_line.strip():
+                collected.append("")
+                continue
             assert next_line.startswith(" " * indent)
             collected.append(next_line[indent:])
         else:
