@@ -1,17 +1,18 @@
 name: Synthetic QA for Zomorod business accounting
 on:
   push:
-    branches: [main]
+    branches: [main, feature/zomorod-business-executive-overview-20261029]
     paths:
       - ".github/workflows/zomorod-business-synthetic-qa.yml"
       - "content/zomorod-business/app.php"
       - "content/zomorod-business/insights.php"
       - "scripts/zomorod_business_synthetic_qa.py"
   pull_request:
-    branches: [main]
+    branches: [main, fix/zomorod-owner-without-public-setup-token-20261028]
     paths:
       - ".github/workflows/zomorod-business-synthetic-qa.yml"
       - "content/zomorod-business/app.php"
+      - "content/zomorod-business/insights.php"
       - "content/zomorod-business/index.php"
       - "scripts/zomorod_business_synthetic_qa.py"
 permissions:
