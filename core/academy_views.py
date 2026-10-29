@@ -228,6 +228,11 @@ def education_enroll(request, slug):
         course=course, user=request.user,
         defaults={"source": source},
     )
+    # The unique (course, user) record may already be cancelled. Returning
+    # ok=True here falsely promises access, while the lesson reader rejects
+    # cancelled enrollments. Never silently reinstate a revoked enrollment.
+    if not created and enrollment.status not in ("active", "completed"):
+        return JsonResponse({"ok": False, "error": "enrollment_not_active"}, status=409)
     return JsonResponse({"ok": True, "created": created, "enrollment_id": enrollment.pk})
 
 
