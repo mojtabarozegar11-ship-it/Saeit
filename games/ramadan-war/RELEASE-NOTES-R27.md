@@ -7,7 +7,7 @@
 2. When a route is blocked, the misleading arrow is hidden and aria-hidden; the HUD explicitly states the route is blocked. Completed objectives also clear the stale arrow.
 
 ## Evidence and safety
-- R27 offline ZIP: 56 files; SHA-256 `0513a773d94b664deb23aa2a7ed4c0be1c0e240fb80df44f7beee448b538db6e`; 53/53 local Node tests passed, JS syntax passed, archive extraction and per-file manifest verified.
+- R27 offline ZIP: 57 files; SHA-256 `f5c155b740aa5bf36ddaacf97abf9eb5a7327beb328201846cdedc9b108160cb`; 53/53 local Node tests passed, JS syntax passed, archive extraction and per-file manifest verified.
 - Prior R26 exact-head [CI #40944053871](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40944053871) succeeded including desktop/mobile Chromium. This does **not** establish R27 browser success.
 - R27 browser QA local Chromium blocked by ERR_BLOCKED_BY_ADMINISTRATOR; exact-head GitHub CI must pass before release review.
 - S-01 must independently verify off-host restore, disk capacity, pinned relay, rollback and live route. MOJ1 disabled. No public release or site layout changes.
