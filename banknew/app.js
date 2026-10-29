@@ -297,3 +297,193 @@ if (typeof document !== 'undefined') {
     });
   }
 }
+
+
+/* Savings-circle planning is local-only and carries no payment authority. */
+function circleAmount(value) {
+  if (typeof value !== 'string' || !/^(0|[1-9]\d{0,8})(\.\d{1,2})?$/.test(value)) {
+    throw Error('Enter a positive monthly contribution with up to two decimals.');
+  }
+  const [whole, fraction = ''] = value.split('.');
+  const cents = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
+  if (cents <= 0n) throw Error('Monthly contribution must be greater than zero.');
+  return cents;
+}
+
+function circleMembers(names) {
+  if (!Array.isArray(names) || names.length < 5 || names.length > 20) {
+    throw Error('A circle needs 5 to 20 members.');
+  }
+  const cleaned = names.map(raw => {
+    if (typeof raw !== 'string') throw Error('Use member aliases only.');
+    const name = raw.normalize('NFKC').trim().replace(/\s+/g, ' ');
+    if (!/^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,39}$/u.test(name)) {
+      throw Error('Each alias must be 1–40 letters/numbers or basic punctuation.');
+    }
+    return name;
+  });
+  if (new Set(cleaned.map(n => n.toLocaleLowerCase())).size !== cleaned.length) {
+    throw Error('Use distinct member aliases.');
+  }
+  return cleaned;
+}
+
+function circleOrder(names, cryptoSource) {
+  if (!cryptoSource || typeof cryptoSource.getRandomValues !== 'function') {
+    throw Error('A secure browser random generator is required for the draw.');
+  }
+  const ordered = names.slice();
+  for (let i = ordered.length - 1; i > 0; i--) {
+    const range = i + 1;
+    const limit = Math.floor(4294967296 / range) * range;
+    let value;
+    do {
+      const sample = new Uint32Array(1);
+      cryptoSource.getRandomValues(sample);
+      value = sample[0];
+    } while (value >= limit);
+    const j = value % range;
+    [ordered[i], ordered[j]] = [ordered[j], ordered[i]];
+  }
+  return ordered;
+}
+
+function makeCirclePlan({ name, members, monthly, start }, cryptoSource) {
+  const title = String(name || '').trim().replace(/\s+/g, ' ');
+  if (title.length < 2 || title.length > 70 || /[\r\n\t]/.test(title)) {
+    throw Error('Circle name must contain 2 to 70 characters.');
+  }
+  const list = circleMembers(members);
+  const contribution = circleAmount(monthly);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(start)) throw Error('Choose a valid starting month.');
+  const year = Number(start.slice(0, 4));
+  if (year < 2026 || year > 2100) throw Error('Starting month is outside the supported range.');
+  const order = circleOrder(list, cryptoSource);
+  const firstMonth = Number(start.slice(5, 7)) - 1;
+  const schedule = order.map((recipient, index) => {
+    const absolute = year * 12 + firstMonth + index;
+    return {
+      month: String(Math.floor(absolute / 12)).padStart(4, '0') + '-' +
+        String((absolute % 12) + 1).padStart(2, '0'),
+      recipient,
+      expectedPool: contribution * BigInt(list.length)
+    };
+  });
+  return { name: title, members: list.slice(), monthly: contribution, schedule };
+}
+
+function circleCSV(plan) {
+  if (!plan || !Array.isArray(plan.schedule)) throw Error('No completed plan to export.');
+  const safe = value => {
+    let raw = String(value);
+    if (/^[=+\-@\t\r\n]/.test(raw)) raw = "'" + raw;
+    return '"' + raw.replace(/"/g, '""') + '"';
+  };
+  const rows = [['Circle','Month','Recipient alias','Monthly contribution (USD equivalent)','Expected group total (USD equivalent)'].map(safe).join(',')];
+  for (const row of plan.schedule) {
+    rows.push([plan.name,row.month,row.recipient,money(plan.monthly),money(row.expectedPool)].map(safe).join(','));
+  }
+  return rows.join('\r\n') + '\r\n';
+}
+
+if (typeof module !== 'undefined') {
+  Object.assign(module.exports, { circleAmount, circleMembers, circleOrder, makeCirclePlan, circleCSV });
+}
+
+if (typeof document !== 'undefined' && document.getElementById('circle-add')) {
+  const $ = id => document.getElementById(id);
+  const members = [];
+  let plan = null;
+  $('circle-month').value = new Date().toISOString().slice(0, 7);
+  const status = message => { $('circle-status').textContent = message; };
+  const resetDraw = () => {
+    plan = null;
+    $('circle-plan-summary').textContent = 'Add 5–20 members, then draw an illustrative monthly schedule.';
+    $('circle-schedule').replaceChildren();
+    $('circle-download').hidden = true;
+  };
+  function renderMembers() {
+    const list = $('circle-member-list');
+    list.replaceChildren();
+    members.forEach((member, index) => {
+      const item = document.createElement('li');
+      const label = document.createElement('span');
+      label.textContent = member + ' ';
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'secondary';
+      remove.textContent = 'Remove';
+      remove.setAttribute('aria-label', 'Remove ' + member);
+      remove.addEventListener('click', () => {
+        members.splice(index, 1);
+        renderMembers();
+        resetDraw();
+        status('Member removed. Draw the schedule again.');
+      });
+      item.append(label, remove);
+      list.appendChild(item);
+    });
+    $('circle-count').textContent = members.length + ' / 20 members';
+  }
+  $('circle-add').addEventListener('click', () => {
+    try {
+      if (members.length >= 20) throw Error('A circle supports at most 20 members.');
+      const entered = $('circle-member').value;
+      const alias = entered.normalize('NFKC').trim().replace(/\s+/g, ' ');
+      if (!/^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,39}$/u.test(alias)) throw Error('Enter a valid alias (1–40 characters).');
+      if (members.some(value => value.toLocaleLowerCase() === alias.toLocaleLowerCase())) throw Error('Alias already exists.');
+      members.push(alias);
+      $('circle-member').value = '';
+      renderMembers();
+      resetDraw();
+      status('Member added to this browser-only planning session.');
+    } catch (error) { status(error.message); }
+  });
+  for (const field of ['circle-name','circle-monthly','circle-month']) {
+    $(field).addEventListener('input', () => { resetDraw(); status('Details changed. Generate the schedule again.'); });
+  }
+  $('circle-draw').addEventListener('click', () => {
+    try {
+      plan = makeCirclePlan({
+        name: $('circle-name').value, members, monthly: $('circle-monthly').value,
+        start: $('circle-month').value
+      }, window.crypto);
+      const list = $('circle-schedule');
+      list.replaceChildren();
+      plan.schedule.forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = item.month + ' — ' + item.recipient + ' — expected pool ' + money(item.expectedPool);
+        list.appendChild(li);
+      });
+      $('circle-plan-summary').textContent =
+        plan.members.length + ' members · ' + money(plan.monthly) + ' per member / month · ' +
+        money(plan.schedule[0].expectedPool) + ' illustrative monthly pool · ' +
+        plan.schedule.length + ' monthly turns.';
+      $('circle-download').hidden = false;
+      status('Illustrative turn order generated locally. No payment or loan was created.');
+    } catch (error) { resetDraw(); status(error.message); }
+  });
+  $('circle-download').addEventListener('click', () => {
+    if (!plan) return;
+    const blob = new Blob([circleCSV(plan)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'mojpay-circle-schedule.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    status('Plan downloaded. This site does not store or transmit member aliases.');
+  });
+  $('circle-clear').addEventListener('click', () => {
+    members.splice(0);
+    $('circle-name').value = '';
+    $('circle-member').value = '';
+    $('circle-monthly').value = '100.00';
+    renderMembers();
+    resetDraw();
+    status('Circle plan and aliases cleared from this page.');
+  });
+  renderMembers();
+}
