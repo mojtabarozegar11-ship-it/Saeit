@@ -43,7 +43,7 @@ test('accepted gunshots persist earned points and consumed ammo without waiting 
 
 
 test('actual save() wiring leaves an existing campaign slot untouched in endless mode',()=>{
- const start=game.indexOf('let saveWarningShown=false;function save(){');
+ const start=game.indexOf('let saveWarningShown=false');
  const end=game.indexOf('\nfunction restore()',start);
  assert.ok(start>0 && end>start,'save implementation must exist');
  const source=game.slice(start,end);
