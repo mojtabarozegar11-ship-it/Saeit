@@ -51,3 +51,19 @@ test('low-frame-rate catch-up advances real gameplay time with bounded physics s
  assert(Math.abs(deltas.reduce((a,b)=>a+b,0)-.2)<1e-8);
  assert.equal(renders,1);
 });
+
+test('survival best records only cleared waves, never the first unplayed wave',()=>{
+ const newWorldSource=sourceBetween('function newWorld(endless=false){','\\nlet saveWarningShown=');
+ assert(!newWorldSource.includes('recordSurvivalBest()'), 'starting survival must not award a record');
+ const tickSource=sourceBetween('function tick(dt){','\\nfunction prepareMission(){');
+ const completion='if(world.endless){recordSurvivalBest();world.mission++;';
+ assert(tickSource.includes(completion), 'record completed wave before advancing to next');
+ assert(game.includes('بیشترین موج تکمیل‌شده: '));
+ const state={};
+ const src=sourceBetween('const survivalWave=',"let soundEnabled=");
+ const context={storageRead:key=>state[key]??null,storageWrite:(key,value)=>{state[key]=value;return true},world:{endless:true,mission:6}};
+ const api=vm.runInNewContext(src+'\\n({recordSurvivalBest,readSurvivalBest})',context);
+ assert.equal(api.readSurvivalBest(),0);
+ api.recordSurvivalBest();assert.equal(api.readSurvivalBest(),1);
+ context.world.mission=7;api.recordSurvivalBest();assert.equal(api.readSurvivalBest(),2);
+});
