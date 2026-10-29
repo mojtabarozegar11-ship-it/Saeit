@@ -16,10 +16,13 @@ class ProviderNotReady(Exception):
 
 
 def enqueue(message):
-    """Validate and save one message; internal messages are available immediately."""
+    """Freeze one new recipient and consent snapshot before queueing."""
+    if message.pk:
+        raise ValidationError("پیام ثبت‌شده را دوباره در صف قرار ندهید.")
     message.status = "internal" if message.channel == "internal" else "queued"
     if not message.scheduled_at:
         message.scheduled_at = timezone.now()
+    message.recipient_fingerprint = message.destination_fingerprint()
     message.full_clean()
     with transaction.atomic():
         message.save()

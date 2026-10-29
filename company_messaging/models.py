@@ -1,5 +1,6 @@
 """Private, multi-unit communication records. No automatic external sends on save."""
 import uuid
+from django.utils.crypto import salted_hmac
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -72,6 +73,7 @@ class Message(models.Model):
     read_at = models.DateTimeField(null=True, blank=True, editable=False)
     attempts = models.PositiveSmallIntegerField(default=0, editable=False)
     external_reference = models.CharField(max_length=128, blank=True, editable=False)
+    recipient_fingerprint = models.CharField(max_length=64, blank=True, default="", editable=False)
     error_code = models.CharField(max_length=48, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -88,6 +90,35 @@ class Message(models.Model):
 
     def __str__(self):
         return "%s / %s" % (self.pk, self.get_channel_display())
+
+    def destination_fingerprint(self):
+        """Private keyed fingerprint of the consent and destination at queue time."""
+        if self.channel == "internal" or not self.contact_id:
+            return ""
+        contact = self.contact
+        destination = {
+            "email": contact.email, "sms": contact.phone_e164,
+            "telegram": contact.telegram_chat_id, "bale": contact.bale_chat_id,
+            "eitaa": contact.eitaa_chat_id, "rubika": contact.rubika_chat_id,
+            "whatsapp": contact.phone_e164,
+        }.get(self.channel, "")
+        consent = getattr(contact, self.channel + "_consent_at", None)
+        payload = "\x00".join((
+            self.channel, destination or "",
+            consent.isoformat() if consent else "",
+            contact.consent_evidence or "",
+        ))
+        return salted_hmac("company_messaging.recipient_lock", payload,
+                           algorithm="sha256").hexdigest()
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            previous = type(self).objects.get(pk=self.pk)
+            locked = ("unit_id", "sender_id", "contact_id", "recipient_user_id",
+                      "channel", "subject", "body", "scheduled_at", "recipient_fingerprint")
+            if any(getattr(self, field) != getattr(previous, field) for field in locked):
+                raise ValidationError("پیام در صف ثابت است؛ برای محتوا یا گیرنده جدید پیام تازه بسازید.")
+        return super().save(*args, **kwargs)
 
     def clean(self):
         if not self.body or not self.body.strip():
@@ -117,6 +148,9 @@ class Message(models.Model):
             }.get(self.channel)
             if not consent or not contact.consent_evidence or not address:
                 raise ValidationError("نشانی و رضایت مستند این کانال لازم است.")
+            if self.pk and self.status in ("queued", "sending"):
+                if not self.recipient_fingerprint or self.recipient_fingerprint != self.destination_fingerprint():
+                    raise ValidationError("نشانی یا رضایت مخاطب پس از ثبت صف تغییر کرده است.")
 
 
 class MessageEvent(models.Model):

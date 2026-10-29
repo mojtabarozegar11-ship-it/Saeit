@@ -190,3 +190,57 @@ class MessagingTests(TestCase):
             upstream.assert_called_once()
         valid.refresh_from_db()
         self.assertEqual(valid.external_reference, "wamid.offline-99")
+
+    def test_queued_email_is_blocked_when_contact_address_changes(self):
+        msg = self.external()
+        original_fingerprint = msg.recipient_fingerprint
+        self.assertEqual(len(original_fingerprint), 64)
+        contact = msg.contact
+        contact.email = "changed@example.org"
+        contact.save()
+        with patch("company_messaging.services._deliver") as deliver:
+            self.assertEqual(dispatch_one(msg.pk), "blocked")
+            deliver.assert_not_called()
+        msg.refresh_from_db()
+        self.assertEqual(msg.recipient_fingerprint, original_fingerprint)
+        self.assertEqual(msg.error_code, "recipient_or_consent_invalid")
+
+    def test_queued_message_is_blocked_when_consent_provenance_changes(self):
+        msg = self.external()
+        contact = msg.contact
+        contact.consent_evidence = "changed-opt-in-proof-99"
+        contact.save()
+        with patch("company_messaging.services._deliver") as deliver:
+            self.assertEqual(dispatch_one(msg.pk), "blocked")
+            deliver.assert_not_called()
+
+    def test_missing_legacy_queue_snapshot_fails_closed(self):
+        msg = self.external()
+        Message.objects.filter(pk=msg.pk).update(recipient_fingerprint="")
+        with patch("company_messaging.services._deliver") as deliver:
+            self.assertEqual(dispatch_one(msg.pk), "blocked")
+            deliver.assert_not_called()
+
+    def test_queued_body_and_destination_fingerprint_are_immutable(self):
+        msg = self.external()
+        msg.body = "unauthorized body replacement"
+        with self.assertRaises(ValidationError):
+            msg.save()
+        msg.refresh_from_db()
+        msg.recipient_fingerprint = "0" * 64
+        with self.assertRaises(ValidationError):
+            msg.save()
+        msg.refresh_from_db()
+        self.assertNotEqual(msg.body, "unauthorized body replacement")
+        with self.assertRaises(ValidationError):
+            enqueue(msg)
+
+    def test_unchanged_destination_snapshot_allows_single_handoff(self):
+        msg = self.external()
+        with patch("company_messaging.services._deliver", return_value="accepted-reference") as deliver:
+            self.assertEqual(dispatch_one(msg.pk), "accepted")
+            self.assertEqual(dispatch_one(msg.pk), "not_due")
+            deliver.assert_called_once()
+        msg.refresh_from_db()
+        self.assertEqual(len(msg.recipient_fingerprint), 64)
+        self.assertEqual(msg.external_reference, "accepted-reference")
