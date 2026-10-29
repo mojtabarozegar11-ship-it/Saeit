@@ -21,6 +21,14 @@ class CheckoutZeroScriptCSPTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Expected strict CSP implementation"):
             module.build(b"def unrelated_checkout(): pass\n")
 
+    def test_source_drift_rejected_before_any_release_write(self):
+        with self.assertRaisesRegex(RuntimeError, "source SHA drift"):
+            module.release_preconditions(b"not-the-pinned-checkout-source")
+
+    def test_release_uses_private_directory_advisory_lock(self):
+        self.assertTrue(callable(module.release_lock))
+        self.assertGreaterEqual(module.MIN_RELEASE_HEADROOM, 20 * 1024 * 1024)
+
     def test_publish_requires_explicit_release_gate_before_any_file_access(self):
         with patch.dict(os.environ, {"MPW_CSP_RELEASE_APPROVED": ""}):
             with self.assertRaisesRegex(RuntimeError, "blocked without explicit release gate"):
