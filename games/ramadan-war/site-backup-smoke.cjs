@@ -37,7 +37,7 @@ const assert=require('node:assert/strict');
     page.once('dialog',dialog=>dialog.accept());
     await page.locator('#importSaveFile').setInputFiles({name:'campaign.json',
       mimeType:'application/json',buffer:bytes});
-    await page.waitForFunction(()=>{try{return JSON.parse(localStorage.getItem('rwNativeCampaign')).hero===0}catch{return false}},{timeout:10000});
+    await page.waitForFunction(()=>{try{return JSON.parse(localStorage.getItem('rwNativeCampaign')).hero===0}catch{return false}},null,{timeout:10000});
     assert.equal(await page.locator('#start').innerText(),'ادامهٔ نبرد');
     assert.deepEqual(errors,[]);
     console.log('RAMADAN_CAMPAIGN_BACKUP_'+config.name.toUpperCase()+'=PASS');
