@@ -1,0 +1,36 @@
+name: Zomorod command center isolated synthetic QA
+on:
+  push:
+    branches:
+      - feature/zomorod-business-command-center-v1-20261029
+    paths:
+      - ".github/workflows/zomorod-command-center-test-20261029.yml"
+      - "content/zomorod-business/command_center.php"
+      - "content/zomorod-business/app.php"
+      - "scripts/zomorod_command_center_synthetic_qa.php"
+  pull_request:
+    paths:
+      - "content/zomorod-business/command_center.php"
+      - "content/zomorod-business/app.php"
+      - "scripts/zomorod_command_center_synthetic_qa.php"
+permissions:
+  contents: read
+jobs:
+  command-center:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: pdo_sqlite, sqlite3, mbstring
+      - name: Static PHP syntax and isolated control-plane behavior tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -m | grep -qi pdo_sqlite
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/command_center.php
+          php -l scripts/zomorod_command_center_synthetic_qa.php
+          php scripts/zomorod_command_center_synthetic_qa.php
