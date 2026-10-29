@@ -100,6 +100,33 @@ jobs:
           result['local_preflight']=('PASS' if all(result.get(x,False) for x in required) else 'BLOCKED')
           print('S01_CSP_READONLY_PREFLIGHT='+json.dumps(result,sort_keys=True))
           PY
+      - name: Capture non-transactional public HTTP and sitemap status
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, urllib.error, urllib.request
+          targets={
+              'mpw':['/','/store/','/store/product/72/','/store/product/225/','/store/product/879/','/sitemap.xml','/robots.txt'],
+              'zm':['/','/academy/','/company-gallery/','/newsletter/','/research/','/sitemap.xml','/robots.txt']
+          }
+          domains={'mpw':'mojplaywin.com','zm':'zomorodmelal.ir'}
+          for site,paths in targets.items():
+              for path in paths:
+                  req=urllib.request.Request('https://'+domains[site]+path,
+                      headers={'User-Agent':'S01SafeReadOnly/20261029','Cache-Control':'no-cache'})
+                  try:
+                      with urllib.request.urlopen(req,timeout=14) as response:
+                          status=response.status
+                          final=response.geturl()
+                  except urllib.error.HTTPError as exc:
+                      status=exc.code
+                      final=exc.geturl()
+                  except Exception as exc:
+                      status='NETWORK_ERROR:'+type(exc).__name__
+                      final=None
+                  print('S01_PUBLIC_HTTP='+json.dumps({'site':site,'path':path,'status':status,
+                      'redirected':bool(final and final.rstrip('/')!=('https://'+domains[site]+path).rstrip('/'))},sort_keys=True))
+          PY
       - name: Delete runner-only SSH material
         if: always()
         run: |
