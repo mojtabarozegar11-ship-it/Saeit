@@ -128,6 +128,8 @@ function zmPayrollCreate(PDO $db,string $key,string $period,string $currency,arr
 function zmPayrollDecision(PDO $db,int $id,string $decision,int $actor,string $role,string $reason):void {
     if($id<1||$actor<1||!in_array($decision,['submit','approve','reject','cancel'],true))
         zmPayrollReject('درخواست نامعتبر است.');
+    if(!in_array($role,['admin','manager','accountant'],true))
+        zmPayrollReject('نقش مجاز برای پرونده حقوق لازم است.',403);
     $reason=trim($reason);
     if($reason===''||mbSafeLen($reason)>900)zmPayrollReject('مبنای تصمیم باید ثبت شود.');
     $db->beginTransaction();
