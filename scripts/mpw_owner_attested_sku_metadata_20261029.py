@@ -107,7 +107,7 @@ def apply(run):
                     p.metadata=meta
                     p.save(update_fields=["metadata"])
         except BaseException:
-            rollback(run)
+            # The enclosing database transaction restores every row atomically.
             raise
     print("MPW_OWNER_RIGHTS_METADATA=APPLIED_PRIVATE_ATTESTATION; SKUS=72,225,879; ORDERS=0; PAYMENTS=0; BACKUP="+str(backup))
 
