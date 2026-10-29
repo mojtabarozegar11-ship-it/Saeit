@@ -1,0 +1,204 @@
+name: Zomorod company quality gates guarded private release
+on:
+  push:
+    branches: [feature/zomorod-command-center-v2-quality-gates-20261029]
+    paths: [".github/workflows/zomorod-company-quality-gates-release-20261029.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-company-private-quality-gates
+  cancel-in-progress: false
+jobs:
+  guarded-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite, sqlite3, mbstring
+      - name: Execute complete synthetic acceptance and legacy regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/command_center.php
+          php -l content/zomorod-business/command_quality.php
+          php scripts/zomorod_command_center_synthetic_qa.php
+          php scripts/zomorod_command_quality_synthetic_qa.php
+      - name: Connect through pinned VPS to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_PRIVATE_RELAY=verified"
+
+
+      - name: Verify exact live version and snapshot private control files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          git show 1b3a66a9753477083982a9c0a2932b7b3328ac2b:content/zomorod-business/command_center.php > "$d/v1-command-center.php"
+          expected="$(sha256sum "$d/v1-command-center.php" | cut -d ' ' -f1)"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" "$expected" <<'REMOTE'
+          set -euo pipefail
+          p="$HOME/.private/zomorod-business"
+          backup="$HOME/.backups/zomorod-business-quality-gates/$1-$2"
+          expected="$3"
+          fail(){ echo "QUALITY_GATES_PRECHECK_BLOCKED=$1"; exit 35; }
+          test -d "$p" && test ! -L "$p" || fail no_private_dir
+          test -f "$p/app.php" && test ! -L "$p/app.php" || fail missing_app
+          test -f "$p/command_center.php" && test ! -L "$p/command_center.php" || fail missing_command_center
+          test ! -e "$p/command_quality.php" || fail duplicate_quality_module
+          test -f "$p/management.sqlite3" && test ! -L "$p/management.sqlite3" || fail missing_ledger
+          test ! -e "$backup" || fail existing_backup
+          test "$(sha256sum "$p/command_center.php" | cut -d ' ' -f1)" = "$expected" || fail changed_current_module
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin"; then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php"; fi
+          "$phpbin" -l "$p/app.php" >/dev/null || fail invalid_app
+          "$phpbin" -l "$p/command_center.php" >/dev/null || fail invalid_module
+          python3 - "$p/app.php" <<'PY'
+          import pathlib,sys
+          src=pathlib.Path(sys.argv[1]).read_bytes()
+          old=b"in_array($action,['cc_create','cc_scan','cc_transition'],true)"
+          if src.count(old)!=1 or b"cc_evidence" in src or b"command_quality.php" in src:
+              raise SystemExit("QUALITY_GATES_PRECHECK=LIVE_ROUTE_CHANGED")
+          print("QUALITY_GATES_PREFLIGHT=PASS")
+          PY
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          cp -p "$p/app.php" "$backup/app.php.before"
+          cp -p "$p/command_center.php" "$backup/command_center.php.before"
+          chmod 600 "$backup/app.php.before" "$backup/command_center.php.before"
+          if test -f "$p/command-center.sqlite3" && test ! -L "$p/command-center.sqlite3"; then
+            python3 - "$p/command-center.sqlite3" "$backup/command-center.sqlite3.before" <<'PY'
+          import sqlite3,sys,os
+          origin=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
+          dest=sqlite3.connect(sys.argv[2])
+          origin.backup(dest)
+          dest.close();origin.close()
+          os.chmod(sys.argv[2],0o600)
+          PY
+          fi
+          sha256sum "$HOME/public_html/index.html" "$HOME/public_html/.htaccess" > "$backup/public-checksums.sha256"
+          echo "PRIVATE_V1_HASH=VERIFIED"
+          REMOTE
+          backup="/home/zomorod2/.backups/zomorod-business-quality-gates/$GITHUB_SHA-$GITHUB_RUN_ID"
+          tar -cf - -C content/zomorod-business command_quality.php command_center.php |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$backup'"
+      - name: Surgical private upgrade with rollback and access checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          p="$HOME/.private/zomorod-business"
+          backup="$HOME/.backups/zomorod-business-quality-gates/$1-$2"
+          sha="$1"
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin"; then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php"; fi
+          test -f "$backup/app.php.before" && test -f "$backup/command_center.php.before"
+          test -f "$backup/command_quality.php" && test -f "$backup/command_center.php"
+          "$phpbin" -l "$backup/command_quality.php"
+          "$phpbin" -l "$backup/command_center.php"
+          python3 - "$backup/app.php.before" "$backup/app.php.candidate" <<'PY'
+          import pathlib,sys
+          src=pathlib.Path(sys.argv[1]).read_bytes()
+          old=b"in_array($action,['cc_create','cc_scan','cc_transition'],true)"
+          new=b"in_array($action,['cc_create','cc_scan','cc_transition','cc_plan','cc_evidence','cc_review'],true)"
+          if src.count(old)!=1 or b"command_quality.php" in src:
+              raise SystemExit("QUALITY_GATES_PATCH=UNEXPECTED_LIVE_CODE")
+          candidate=src.replace(old,new)
+          if candidate.count(new)!=1:raise SystemExit("QUALITY_GATES_PATCH=FAILED")
+          pathlib.Path(sys.argv[2]).write_bytes(candidate)
+          PY
+          chmod 600 "$backup/app.php.candidate"
+          "$phpbin" -l "$backup/app.php.candidate"
+          install -m 600 "$backup/command_quality.php" "$p/command_quality.php.next-$sha"
+          install -m 600 "$backup/command_center.php" "$p/command_center.php.next-$sha"
+          install -m 600 "$backup/app.php.candidate" "$p/app.php.next-$sha"
+          q=0;c=0;a=0
+          rollback(){
+            if test "$a" = 1; then
+              cp -p "$backup/app.php.before" "$p/app.php.rollback-$sha"
+              mv -f "$p/app.php.rollback-$sha" "$p/app.php"
+            fi
+            if test "$c" = 1; then
+              cp -p "$backup/command_center.php.before" "$p/command_center.php.rollback-$sha"
+              mv -f "$p/command_center.php.rollback-$sha" "$p/command_center.php"
+            fi
+            if test "$q" = 1; then rm -f "$p/command_quality.php"; fi
+            rm -f "$p/command_quality.php.next-$sha" "$p/command_center.php.next-$sha" "$p/app.php.next-$sha"
+            echo "QUALITY_GATES_ROLLBACK=APPLIED"
+          }
+          finish(){ result=$?;trap - EXIT;if test "$result" -ne 0;then rollback;fi;exit "$result"; }
+          trap finish EXIT
+          mv -f "$p/command_quality.php.next-$sha" "$p/command_quality.php";q=1
+          mv -f "$p/command_center.php.next-$sha" "$p/command_center.php";c=1
+          mv -f "$p/app.php.next-$sha" "$p/app.php";a=1
+          "$phpbin" -l "$p/app.php"
+          "$phpbin" -l "$p/command_quality.php"
+          "$phpbin" -l "$p/command_center.php"
+          cmp -s "$p/command_center.php" "$backup/command_center.php"
+          cmp -s "$p/command_quality.php" "$backup/command_quality.php"
+          status="$(curl -sS -L --max-time 30 -o "$backup/public-anon.html" -w '%{http_code}' "https://zomorodmelal.ir/business/?page=command_center&verify=$sha")"
+          test "$status" = 200
+          grep -Fq "ورود مدیر و حسابدار" "$backup/public-anon.html"
+          ! grep -Fq "صف وظایف ماندگار" "$backup/public-anon.html"
+          sha256sum -c --status "$backup/public-checksums.sha256"
+          trap - EXIT
+          echo "ZOMOROD_QUALITY_GATES=DEPLOY_SUCCESS"
+          echo "BUSINESS_LEDGER=UNTOUCHED"
+          echo "PUBLIC_SITE=UNCHANGED"
+          echo "AUTOMATION_SCHEDULE=NOT_CREATED"
+          echo "OUTBOUND_EXECUTION=NOT_ENABLED"
+          REMOTE
+      - name: Clean temporary relay keys
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-business-tokenless"
