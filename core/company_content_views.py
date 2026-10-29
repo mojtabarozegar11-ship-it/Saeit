@@ -22,7 +22,7 @@ def safe_gallery_target_path(path):
         decoded = parsed.path
         # Multiple URL decoding stages can turn /%252fhost into //host.
         # Fail closed without changing the displayed gallery or the stored URL.
-        for _ in range(3):
+        for _ in range(8):
             decoded_next = unquote(decoded)
             if decoded_next == decoded:
                 break
@@ -31,6 +31,10 @@ def safe_gallery_target_path(path):
                 return ""
             if any(ord(ch) < 32 or ord(ch) == 127 for ch in decoded):
                 return ""
+        else:
+            # Do not accept arbitrarily nested percent encoding: a downstream
+            # proxy could decode more layers than this application inspected.
+            return ""
         if decoded.startswith("//") or any(segment in (".", "..") for segment in decoded.split("/")):
             return ""
     except ValueError:
