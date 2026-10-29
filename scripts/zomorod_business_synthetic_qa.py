@@ -6,7 +6,8 @@ assert re.fullmatch(r'[a-f0-9]{40}',sha)
 home=pathlib.Path.home()
 source=home/'.private/zomorod-business/app.php'
 entry=home/'public_html/business/index.php'
-assert source.is_file() and entry.is_file()
+insights_source=home/'.private/zomorod-business/insights.php'
+assert source.is_file() and entry.is_file() and insights_source.is_file()
 base=home/'.backups/zomorod-business-smoke'/sha
 assert not base.exists()
 private=base/'synthetic/.private/zomorod-business'
@@ -16,6 +17,7 @@ web.mkdir(parents=True)
 sessions=base/'sessions'
 sessions.mkdir(mode=0o700)
 shutil.copy2(source,private/'app.php')
+shutil.copy2(insights_source,private/'insights.php')
 shutil.copy2(entry,web/'index.php')
 assert source.read_bytes()==(private/'app.php').read_bytes()
 php=shutil.which('php') or '/opt/cpanel/ea-php82/root/usr/bin/php'
@@ -23,10 +25,10 @@ assert pathlib.Path(php).is_file()
 assert subprocess.run([php,'-r','exit(extension_loaded("pdo_sqlite")?0:1);']).returncode==0
 sid='zmtest'+sha[:12]
 code="session_id(getenv('SID'));$_SERVER['REQUEST_METHOD']=getenv('REQ_METHOD');$_GET=json_decode(getenv('QUERY_JSON'),true);$_POST=json_decode(getenv('POST_JSON'),true);register_shutdown_function(function(){file_put_contents(getenv('SID_RESULT'),session_id());});require getenv('INDEX');"
-def request(method='GET',page=None,post=None):
+def request(method='GET',page=None,post=None,extra_query=None):
     global sid
     env=os.environ.copy()
-    env.update({'SID':sid,'SID_RESULT':str(base/'sid.result'),'INDEX':str(web/'index.php'),'REQ_METHOD':method,'QUERY_JSON':json.dumps({'page':page} if page else {}),'POST_JSON':json.dumps(post or {})})
+    env.update({'SID':sid,'SID_RESULT':str(base/'sid.result'),'INDEX':str(web/'index.php'),'REQ_METHOD':method,'QUERY_JSON':json.dumps(({'page':page} if page else {}) | (extra_query or {})),'POST_JSON':json.dumps(post or {})})
     result=subprocess.run([php,'-d','session.save_path='+str(sessions),'-r',code],env=env,capture_output=True,text=True,timeout=25)
     assert result.returncode==0,('PHP test failed',result.stderr[-400:])
     sid=(base/'sid.result').read_text().strip()
@@ -36,6 +38,8 @@ def request(method='GET',page=None,post=None):
 (private/'setup.token').write_text('synthetic-obsolete-token')
 initial=request()
 assert 'ورود مدیر و حسابدار' in initial
+pre_auth=request('GET','insights')
+assert 'ورود مدیر و حسابدار' in pre_auth and 'مرکز گزارش و کنترل مدیریتی' not in pre_auth
 assert 'توکن فعال‌سازی' not in initial
 assert not (private/'setup.token').exists()
 receipt=private/'owner-first-login.txt'
@@ -55,10 +59,20 @@ changed=request('POST','security',{'csrf':csrf,'action':'password_change','previ
 assert not 'درخواست انجام نشد' in changed
 dashboard=request('GET','dashboard')
 assert 'اسناد حسابداری' in dashboard
+assert 'گزارش مدیریتی' in dashboard
 request('POST','parties',{'csrf':csrf,'action':'party','name':'Synthetic Counterparty','kind':'customer'})
 request('POST','invoices',{'csrf':csrf,'action':'invoice','kind':'sale','party':'1','invoice_no':'SMOKE-INV-1','amount':'125.50','currency':'USD','date':'2026-10-18','due_date':'2026-10-18','description':'Synthetic invoice'})
 request('POST','payments',{'csrf':csrf,'action':'payment','invoice_id':'1','amount':'25.50','date':'2026-10-18'})
 request('POST','journal',{'csrf':csrf,'action':'journal','currency':'USD','date':'2026-10-18','doc_no':'SMOKE-JV-1','note':'Balanced dummy','account_0':'1010','debit_0':'50.00','account_1':'3000','credit_1':'50.00'})
+report=request('GET','insights',extra_query={'from':'2026-10-01','to':'2026-10-31'})
+assert 'مرکز گزارش و کنترل مدیریتی' in report
+assert 'SMOKE-INV-1' in report and 'Synthetic Counterparty' in report
+assert 'مطالبات و بدهی‌های سررسیدگذشته' in report
+assert '100.00' in report and 'USD' in report
+no_result=request('GET','insights',extra_query={'from':'2026-10-01','to':'2026-10-31','term':'no_such_invoice'})
+assert 'نتیجه‌ای پیدا نشد' in no_result and 'SMOKE-INV-1' not in no_result
+invalid=request('GET','insights',extra_query={'from':'2026-10-31','to':'2026-10-01'})
+assert 'درخواست انجام نشد' in invalid
 bad=request('POST','journal',{'csrf':csrf,'action':'journal','currency':'USD','date':'2026-10-18','doc_no':'SMOKE-BAD','note':'Invalid dummy','account_0':'1010','debit_0':'80.00','account_1':'3000','credit_1':'50.00'})
 assert 'درخواست انجام نشد' in bad
 db=sqlite3.connect('file:'+str(private/'management.sqlite3')+'?mode=ro',uri=True)
@@ -76,6 +90,8 @@ assert db.execute('SELECT length(password_hash) FROM users').fetchone()[0]>40
 print('ZOMOROD_ACCOUNTING_SYNTHETIC_QA=PASS')
 print('TEST_USERS=1 PARTIES=1 INVOICES=1 PAYMENTS=1 JOURNALS=3')
 print('BALANCED_ENTRIES=3')
+print('INSIGHTS_READ_ONLY_REPORT=PASS')
+print('INSIGHTS_AUTH_FILTERS_VALIDATION=PASS')
 print('PASSWORD_CHANGE_TEST=PASS')
 print('UNBALANCED_ENTRY_REJECTED=yes')
 print('PRODUCTION_DATABASE_TOUCHED=no')
