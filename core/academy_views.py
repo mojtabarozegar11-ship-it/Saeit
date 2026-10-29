@@ -91,6 +91,18 @@ def education(request):
     return academy(request)
 
 
+def education_dashboard_progress(enrollment):
+    """Count only currently active course lessons; never show >100% completion.
+
+    Historical progress on archived lessons is retained in the database but
+    excluded from the active-course completion denominator and numerator.
+    """
+    total = enrollment.course.lessons.filter(active=True).count()
+    done = enrollment.progress.filter(completed=True, lesson__active=True).count()
+    percent = min(100, round(done * 100 / total)) if total else 0
+    return total, done, percent
+
+
 @login_required
 def education_dashboard(request):
     # Dashboard joins progress, certificates, assessment attempts and bookmarks.
@@ -121,9 +133,7 @@ def education_dashboard(request):
     )
     cards = []
     for enrollment in enrollments:
-        total = enrollment.course.lessons.filter(active=True).count()
-        done = enrollment.progress.filter(completed=True).count()
-        percent = round(done * 100 / total) if total else 0
+        total, done, percent = education_dashboard_progress(enrollment)
         cards.append({"enrollment": enrollment, "total": total, "done": done, "percent": percent})
     certificates = EducationCertificate.objects.filter(enrollment__user=request.user).select_related("enrollment__course")
     attempts = EducationAttempt.objects.filter(user=request.user).select_related("assessment", "assessment__course").order_by("-submitted_at")[:20]
