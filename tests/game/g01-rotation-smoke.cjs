@@ -55,7 +55,7 @@ async function run(){
     crown.on('pageerror',e=>crownErrors.push(e.message));
     await crown.route('**/games/crown-defender/index.html',route=>{
      let html=fs.readFileSync(path.join(root,'games/crown-defender/index.html'),'utf8');
-     const anchor='window.__mpwCrownDefenderTest={';
+     const anchor='const crownQa={getState:';
      assert(html.includes(anchor));
      html=html.replace(anchor,'window.__g01CrownInput=()=>({keyCount:keys.size,heldCount:Object.values(held).filter(Boolean).length,state});'+anchor);
      route.fulfill({status:200,contentType:'text/html',body:html});
