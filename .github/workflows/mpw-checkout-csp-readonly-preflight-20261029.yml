@@ -199,8 +199,8 @@ jobs:
         run: |
           set -euo pipefail
           script64="$(base64 -w0 scripts/s01_passenger_runtime_readonly_20261029.py)"
-          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \\
-            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;exec(compile(base64.b64decode(sys.argv[1]),\\\"s01_passenger_probe\\\",\\\"exec\\\"))' '$script64'"
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;exec(compile(base64.b64decode(sys.argv[1]),\"s01_passenger_probe\",\"exec\"))' '$script64'"
           echo "S01_PASSENGER_DB_AUTHORITY=NOT_VERIFIED_BY_PROCESS_METADATA"
       - name: Capture non-transactional public HTTP and sitemap status
         shell: bash
