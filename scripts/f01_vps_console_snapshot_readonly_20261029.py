@@ -200,10 +200,30 @@ def process_age_bucket(start_ticks, uptime_seconds, clock_ticks):
     return "gte_1d"
 
 
+def classify_wait_channel(raw):
+    """Map kernel wait symbols to fixed coarse categories; never emit raw symbol."""
+    value = raw.strip().lower()
+    if not value or value == "0":
+        return "unavailable"
+    if any(token in value for token in (
+            "io_schedule", "blk_", "ext4", "jbd2", "folio", "page_bit",
+            "balance_dirty", "submit_bio", "nfs", "fuse", "xfs", "btrfs")):
+        return "storage_io"
+    if any(token in value for token in ("rwsem", "mutex", "futex", "lock")):
+        return "lock_wait"
+    if any(token in value for token in ("pipe", "poll", "socket", "tcp_", "sk_wait")):
+        return "ipc_network"
+    if any(token in value for token in ("hrtimer", "schedule_timeout", "nanosleep")):
+        return "timer_sleep"
+    return "other"
+
+
 def process_pressure():
     """Aggregate process storm evidence; never emit PID, command line or private path."""
     states, factory_states, executable_types, parents = {}, {}, {}, {}
     parent_child_states = {}
+    d_wait_classes, factory_d_wait_classes = {}, {}
+    init_parent_executable_categories = {}
     age_buckets, init_orphan_age_buckets = {}, {}
     try:
         uptime_seconds = float(Path("/proc/uptime").read_text().split()[0])
@@ -228,9 +248,21 @@ def process_pressure():
                 continue
             state = meta["state"][:1]
             states[state] = states.get(state, 0) + 1
+            # Only D-state tasks have a relevant wait channel. Kernel symbols
+            # are reduced to fixed categories and never printed or stored raw.
+            wait_class = None
+            if state == "D":
+                try:
+                    with open("/proc/" + entry.name + "/wchan", encoding="ascii") as handle:
+                        wait_class = classify_wait_channel(handle.read(128))
+                except (OSError, UnicodeError):
+                    wait_class = "unavailable"
+                d_wait_classes[wait_class] = d_wait_classes.get(wait_class, 0) + 1
             if b"factory" not in cmd and b"master-agent" not in cmd:
                 continue
             factory += 1
+            if state == "D":
+                factory_d_wait_classes[wait_class] = factory_d_wait_classes.get(wait_class, 0) + 1
             factory_states[state] = factory_states.get(state, 0) + 1
             factory_threads += meta["threads"]
             factory_cpu_ticks += meta["cpu_ticks"]
@@ -259,6 +291,8 @@ def process_pressure():
             else:
                 kind = "other"
             executable_types[kind] = executable_types.get(kind, 0) + 1
+            if parent == 1:
+                init_parent_executable_categories[kind] = init_parent_executable_categories.get(kind, 0) + 1
         dominant = max(parents, key=parents.get) if parents else None
         origin = dominant_parent_origin(dominant) if dominant is not None else {"state": "NONE", "lineage": [], "depth_observed": 0, "pid_argv_and_paths_redacted": True}
         return {"state": "OBSERVED", "pids_scanned": min(scanned, limit),
@@ -274,6 +308,10 @@ def process_pressure():
                 "dominant_parent_child_states": parent_child_states.get(dominant, {}),
                 "dominant_parent_origin": origin,
                 "factory_executable_categories": executable_types,
+                "init_parent_executable_categories": init_parent_executable_categories,
+                "d_state_wait_categories": d_wait_classes,
+                "factory_d_state_wait_categories": factory_d_wait_classes,
+                "wait_channels_coarse_and_redacted": True,
                 "pid_command_and_paths_redacted": True,
                 "worker_health_verified": False}
     except OSError as exc:
