@@ -1,0 +1,39 @@
+name: Zomorod private ERP PHP SQLite baseline smoke CI
+on:
+  push:
+    branches: [feature/zomorod-erp-php-sqlite-remote-qa-20261029]
+    paths: [.github/workflows/zomorod-erp-php-sqlite-qa-smoke.yml]
+permissions:
+  contents: read
+jobs:
+  synthetic-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, sqlite3, mbstring
+      - name: Verify PDO_SQLite engine and isolated ERP V1 baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -r 'if (!extension_loaded("pdo_sqlite")) { fwrite(STDERR, "SQLITE_MISSING\n"); exit(1); }'
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/command_center.php
+          php -l content/zomorod-business/command_quality.php
+          php -l content/zomorod-business/command_planner.php
+          php -l content/zomorod-business/workflow_desk.php
+          php scripts/zomorod_command_center_synthetic_qa.php
+          php scripts/zomorod_command_quality_synthetic_qa.php
+          php scripts/zomorod_command_planner_synthetic_qa.php
+          php scripts/zomorod_workflow_desk_synthetic_qa.php
+          python3 scripts/zomorod_workflow_web_synthetic_qa.py
+          echo "BASELINE_PHP_SQLITE_SUITES=PASS"
+          echo "V5_OFFLINE_PACKAGE_SUITES=NOT_PRESENT_IN_THIS_BRANCH"
+          echo "LIVE_SITE=UNTOUCHED"
