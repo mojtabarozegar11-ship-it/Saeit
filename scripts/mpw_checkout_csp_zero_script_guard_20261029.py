@@ -7,6 +7,8 @@ Preview is read-only; publish requires explicit separate release gate.
 Never touches orders, payments, wallets, DB, sibling sites or WSGI.
 """
 import ast
+import fcntl
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -17,6 +19,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+EXPECTED_SOURCE_SHA256 = "f33d80b7e843a66c9a55d8a8da46d5fb6049fb4c487f8f559c3471cfd42cdf74"
+MIN_RELEASE_HEADROOM = 20 * 1024 * 1024
 APP = Path("/home/zomorod2/Saeit-staging")
 TARGET = APP / "mpw_commerce/product_checkout_page.py"
 WSGI = Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py")
@@ -130,11 +134,37 @@ def atomic(data):
         if os.path.exists(name):
             os.unlink(name)
 
+def release_preconditions(original):
+    if sha(original) != EXPECTED_SOURCE_SHA256:
+        fail("Production checkout source SHA drift; release refused")
+    for folder in (TARGET.parent, BACKUPS):
+        fs = os.statvfs(folder)
+        if fs.f_bavail * fs.f_frsize < MIN_RELEASE_HEADROOM:
+            fail("Insufficient local release/rollback headroom")
+
+@contextmanager
+def release_lock():
+    # Linux advisory lock on the existing private directory: no lockfile write.
+    fd = os.open(BACKUPS, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            fail("Concurrent MojPlayWin checkout release lock held")
+        yield
+    finally:
+        os.close(fd)
+
 def publish(run):
     if os.environ.get("MPW_CSP_RELEASE_APPROVED") != "YES":
         fail("Production source write blocked without explicit release gate")
     guard()
+    with release_lock():
+        return _publish_locked(run)
+
+def _publish_locked(run):
     original = TARGET.read_bytes()
+    release_preconditions(original)
     updated, function_source = build(original)
     namespace = {}
     exec(compile(function_source, str(TARGET), "exec"), namespace)
@@ -147,6 +177,8 @@ def publish(run):
         out.write(original)
         out.flush()
         os.fsync(out.fileno())
+    if sha(backup.read_bytes()) != sha(original):
+        fail("Immutable rollback preimage readback mismatch")
     payload = {"run": run, "old": sha(original), "new": sha(updated), "scope": "mpw_commerce/product_checkout_page.py"}
     with manifest.open("x", encoding="utf8") as out:
         os.fchmod(out.fileno(), 0o600)
