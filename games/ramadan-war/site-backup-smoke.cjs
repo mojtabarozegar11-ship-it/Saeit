@@ -46,9 +46,8 @@ const assert=require('node:assert/strict');
     await page.locator('#newGame').click();
     assert.equal(await page.evaluate(()=>localStorage.getItem('rwNativeCampaign')),before,
       'cancelling new game must preserve campaign');
-    // A schema-valid but unplayable disk arena must not destroy a live,
-    // previously paused in-memory campaign. R15 intentionally resumes that
-    // playable memory and may replace the stranded disk snapshot on autosave.
+    // A changed durable snapshot must not be overwritten by stale autosave.
+    // The live in-memory campaign must remain playable and manually exportable.
     const stranded=JSON.parse(before);
     stranded.enemies=Array.from({length:7},()=>({x:3.5,y:3.5,type:0,hp:39,max:39,life:1.5}));
     const strandedRaw=JSON.stringify(stranded);
@@ -56,16 +55,22 @@ const assert=require('node:assert/strict');
     await page.locator('#start').click();
     await page.waitForFunction(()=>window.RamadanWarDebug.getState()?.mode==='game');
     await page.waitForTimeout(5200);
-    const recovered=JSON.parse(await page.evaluate(()=>localStorage.getItem('rwNativeCampaign')));
-    assert.equal(recovered.hero,JSON.parse(before).hero,'recover original hero');
-    assert.equal(recovered.mission,JSON.parse(before).mission,'recover original mission');
-    assert.notDeepEqual(recovered.enemies,stranded.enemies,
-      'autosave must not resurrect an unplayable disk arena');
-    assert(recovered.hp>0&&recovered.hp<=recovered.maxHp,'autosave must contain a playable player');
-    await page.evaluate(()=>localStorage.setItem('rwNativeCampaign','corrupted but retained'));
+    const diskAfter=JSON.parse(await page.evaluate(()=>localStorage.getItem('rwNativeCampaign')));
+    assert.deepEqual(diskAfter.enemies,stranded.enemies,'stale tab must not overwrite changed disk save');
+    const live=await page.evaluate(()=>window.RamadanWarDebug.getState());
+    assert(live.hp>0&&live.mode==='game','in-memory campaign remains playable');
+    await page.locator('#pause').click();
+    const [memoryDownload]=await Promise.all([page.waitForEvent('download'),page.locator('#exportPauseSave').click()]);
+    const memoryBytes=await fs.readFile(await memoryDownload.path());
+    const memoryBackup=JSON.parse(memoryBytes.toString('utf8'));
+    assert.equal(memoryBackup.format,'ramadan-war-campaign-v1');
+    assert.notDeepEqual(memoryBackup.campaign.enemies,stranded.enemies,'backup exports live memory, not stale disk');
+    page.once('dialog',dialog=>dialog.accept());
+    await page.reload({waitUntil:'domcontentloaded'});
+    await page.waitForFunction(()=>window.RamadanWarDebug?.start);
     page.once('dialog',dialog=>dialog.accept());
     await page.locator('#importSaveFile').setInputFiles({name:'campaign.json',
-      mimeType:'application/json',buffer:bytes});
+      mimeType:'application/json',buffer:memoryBytes});
     await page.waitForFunction(()=>{try{return JSON.parse(localStorage.getItem('rwNativeCampaign')).hero===0}catch{return false}},null,{timeout:10000});
     assert.equal(await page.locator('#start').innerText(),'ادامهٔ نبرد');
     assert.deepEqual(errors,[]);
