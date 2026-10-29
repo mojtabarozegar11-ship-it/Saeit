@@ -304,7 +304,7 @@ def education_lesson_complete(request, slug, lesson_id):
     progress.completed_at = timezone.now()
     progress.save()
     total = lesson.course.lessons.filter(active=True).count()
-    done = enrollment.progress.filter(completed=True).count()
+    done = enrollment.progress.filter(completed=True, lesson__active=True).count()
     if total and done >= total:
         enrollment.status = "completed"
         enrollment.completed_at = timezone.now()
