@@ -36,7 +36,7 @@ jobs:
       - name: Capture non-transactional public HTTP and sitemap status
         shell: bash
         run: |
-          python3 - <<'PY'
+          python3 - <<'PY' | tee "$RUNNER_TEMP/s01-public-http.jsonl"
           import json, urllib.error, urllib.request
           targets={
               'mpw':['/','/store/','/store/product/72/','/store/product/225/','/store/product/879/','/sitemap.xml','/robots.txt'],
@@ -60,6 +60,14 @@ jobs:
                   print('S01_PUBLIC_HTTP='+json.dumps({'site':site,'path':path,'status':status,
                       'redirected':bool(final and final.rstrip('/')!=('https://'+domains[site]+path).rstrip('/'))},sort_keys=True))
           PY
+      - name: Preserve public-only availability evidence independently of VPS
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s01-public-http-no-customer-data
+          path: ${{ runner.temp }}/s01-public-http.jsonl
+          if-no-files-found: warn
+          retention-days: 7
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -100,6 +108,26 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$d/config"
+          # Classify the VPS hop before probing the cPanel host. Never print
+          # stderr, key material, remote paths, or host configuration.
+          if timeout 18s ssh -T -F "$d/config" saeit-vps 'true' >/dev/null 2>"$d/vps-error"; then
+            echo 'S01_VPS_SSH_AUTH=PASS'
+          else
+            status=UNCLASSIFIED
+            if grep -Eiq 'Permission denied|publickey' "$d/vps-error"; then
+              status=AUTH_DENIED
+            elif grep -Eiq 'Connection timed out|Operation timed out' "$d/vps-error"; then
+              status=CONNECT_TIMEOUT
+            elif grep -Eiq 'Connection refused' "$d/vps-error"; then
+              status=CONNECTION_REFUSED
+            elif grep -Eiq 'Host key verification failed|REMOTE HOST IDENTIFICATION' "$d/vps-error"; then
+              status=HOST_KEY_FAILURE
+            elif grep -Eiq 'No space left on device' "$d/vps-error"; then
+              status=REMOTE_DISK_FULL
+            fi
+            echo "S01_VPS_SSH_AUTH=BLOCKED_${status}"
+            exit 1
+          fi
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
@@ -278,6 +306,6 @@ jobs:
         run: |
           d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
           if [ -d "$d" ]; then
-            rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"
+            rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/vps-error" "$d/config"
             rmdir "$d"
           fi
