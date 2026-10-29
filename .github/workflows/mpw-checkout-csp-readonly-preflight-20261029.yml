@@ -141,11 +141,27 @@ jobs:
                       capture_output=True, text=True, timeout=12, check=False
                   )
                   if probe.returncode == 0:
+                      import math
                       data = json.loads(probe.stdout)
-                      status = data.get("result", {}).get("status")
+                      response = data.get("result", {})
+                      info = response.get("data") or {}
+                      status = response.get("status")
                       result["cpanel_quota_uapi"] = (
                           "responded" if status == 1 else "unsupported_or_failed"
                       )
+                      if status == 1 and isinstance(info, dict):
+                          try:
+                              limit = float(info["megabyte_limit"])
+                              remaining = float(info["megabytes_remain"])
+                              used = float(info["megabytes_used"])
+                              # cPanel reports decimal MB. Require >=25 MB for
+                              # a conservative >=20 MiB source+backup reserve.
+                              result["account_quota_headroom_verified"] = (
+                                  all(math.isfinite(x) for x in (limit, remaining, used))
+                                  and limit > 0 and used >= 0 and remaining >= 25
+                              )
+                          except (KeyError, TypeError, ValueError):
+                              pass
               except (OSError, ValueError, subprocess.TimeoutExpired):
                   result["cpanel_quota_uapi"] = "unavailable"
           # Static WSGI text is NOT equivalent to the live Passenger process
