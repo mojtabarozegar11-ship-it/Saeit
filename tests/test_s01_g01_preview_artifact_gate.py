@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -60,6 +61,13 @@ class ArtifactGateTests(unittest.TestCase):
         self.assertEqual(result["result"], "PASS_INTERNAL_PREVIEW_ONLY")
         self.assertFalse(result["live_deployed"])
         self.assertFalse(result["payment_enabled"])
+
+    def test_nested_archive_checked_before_manifest_read(self):
+        with patch.object(gate, "checked_entries", wraps=gate.checked_entries) as checks:
+            gate.verify(fixture(), REV, gate.git_blob(GAME))
+        self.assertEqual(checks.call_count, 3)
+        self.assertIsNone(checks.call_args_list[1].args[1])
+        self.assertIsNotNone(checks.call_args_list[2].args[1])
 
     def test_modified_payload_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "manifest digest/length mismatch"):
