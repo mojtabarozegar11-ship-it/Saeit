@@ -43,9 +43,14 @@ jobs:
               raise SystemExit("COMMAND_COMMIT_SHAPE_REJECTED")
           commit = commits[0]
           added = commit.get("added") or []
-          if len(added) != 1 or commit.get("modified") or commit.get("removed"):
+          modified = commit.get("modified") or []
+          removed = commit.get("removed") or []
+          changed = set(added + modified + removed)
+          if len(changed) != 1:
               raise SystemExit("COMMAND_FILE_CHANGE_REJECTED")
-          path = added[0]
+          path = next(iter(changed))
+          if path in removed or not (path in added or path in modified):
+              raise SystemExit("COMMAND_FILE_CHANGE_REJECTED")
           if not re.fullmatch(r"\.company_commands/inbox/[0-9a-f]{32}\.json", path):
               raise SystemExit("COMMAND_PATH_REJECTED")
           print("file=" + path)
