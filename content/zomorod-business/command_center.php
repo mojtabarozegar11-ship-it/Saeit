@@ -5,6 +5,7 @@ declare(strict_types=1);
  * This file MUST remain outside public_html. It never sends money,
  * writes to the accounting DB, executes shell commands, or schedules jobs.
  */
+require_once __DIR__.'/command_quality.php';
 function zmCcDb(string $private): PDO {
     if (!is_dir($private) || is_link($private)) throw new RuntimeException('Private company storage unavailable');
     $file = $private.'/command-center.sqlite3';
@@ -43,6 +44,7 @@ function zmCcDb(string $private): PDO {
     )");
     $db->exec("CREATE INDEX IF NOT EXISTS task_events_by_task ON task_events(task_id,id)");
     $db->exec("CREATE INDEX IF NOT EXISTS tasks_queue ON tasks(state,priority,id)");
+    zmCcQualitySchema($db);
     return $db;
 }
 function zmCcRequireAdmin(): void {
@@ -129,6 +131,7 @@ function zmCcTransition(PDO $control, int $id, string $state, string $note, int 
             'cancelled'=>[],
         ];
         if (!in_array($state,$transitions[$previous]??[],true)) bail('تغییر وضعیت مجاز نیست.',409);
+        if ($state==='done') zmCcQualityCompletionGate($control,$id);
         $control->prepare('UPDATE tasks SET state=?,closing_note=?,updated_at=CURRENT_TIMESTAMP WHERE id=?')
             ->execute([$state,$note,$id]);
         $control->prepare('INSERT INTO task_events(task_id,actor_id,kind,note) VALUES(?,?,?,?)')
@@ -149,6 +152,8 @@ function zmCcHandle(PDO $company, PDO $control, string $action): void {
         $_SESSION['cc_result']='موارد بررسی‌شده: '.$result['inspected'].' | وظایف جدید: '.$result['created'];
     } elseif ($action==='cc_transition') {
         zmCcTransition($control,(int)req('task_id'),req('state'),req('note'),$uid);
+    } elseif (in_array($action,['cc_plan','cc_evidence','cc_review'],true)) {
+        zmCcQualityHandle($control,$action,$uid);
     } else {
         bail('عملیات مرکز فرمان ناشناخته است.',403);
     }
@@ -178,7 +183,9 @@ function zmCcRender(PDO $control): void {
     $tasks=q($control,"SELECT * FROM tasks ORDER BY CASE state WHEN 'queued' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'blocked' THEN 2 ELSE 3 END,
         CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,id DESC LIMIT 80");
     foreach($tasks as $t){
-        echo '<tr><td>'.(int)$t['id'].'</td><td><strong>'.esc($t['title']).'</strong><p class="muted">'.esc($t['detail']).'</p></td><td>'.esc($streams[$t['workstream']]??$t['workstream']).'</td><td>'.esc($t['priority']).'</td><td>'.esc($states[$t['state']]??$t['state']).'</td><td>'.esc($t['created_at']).'</td><td>';
+        echo '<tr><td>'.(int)$t['id'].'</td><td><strong>'.esc($t['title']).'</strong><p class="muted">'.esc($t['detail']).'</p>';
+        zmCcQualityWidgets($control,(int)$t['id'],$t);
+        echo '</td><td>'.esc($streams[$t['workstream']]??$t['workstream']).'</td><td>'.esc($t['priority']).'</td><td>'.esc($states[$t['state']]??$t['state']).'</td><td>'.esc($t['created_at']).'</td><td>';
         if(in_array($t['state'],['queued','in_progress','blocked'],true)){
             formBegin('cc_transition');
             echo '<input type="hidden" name="task_id" value="'.(int)$t['id'].'">';
