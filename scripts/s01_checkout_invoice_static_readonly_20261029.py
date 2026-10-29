@@ -91,6 +91,8 @@ def inspect_source(root=APP, require_wsg=True):
         "invoice_idempotency_verified": False, "buyer_delivery_verified": False,
         "customer_data_accessed": False, "orders_created": 0, "payments_created": 0,
         "source_modified": False, "modules": [],
+        "source_contract_complete": False, "missing_contract_functions": [],
+        "safe_to_publish": False,
     }
     for rel, names in SELECTED.items():
         record = {"module": rel, "exists": False, "functions": []}
@@ -112,6 +114,20 @@ def inspect_source(root=APP, require_wsg=True):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names:
                 record["functions"].append({"name": node.name, **function_signals(node)})
         result["modules"].append(record)
+    # A parseable file is not enough: all expected entrypoints must exist.
+    # Absence is an explicit release blocker, not a silently green source map.
+    found = {
+        record["module"]: {fn["name"] for fn in record["functions"]}
+        for record in result["modules"]
+    }
+    result["missing_contract_functions"] = sorted(
+        module + ":" + name
+        for module, names in SELECTED.items()
+        for name in names - found.get(module, set())
+    )
+    result["source_contract_complete"] = not result["missing_contract_functions"]
+    # AST structure cannot prove buyer entitlement, idempotency or delivery.
+    result["safe_to_publish"] = False
     return result
 
 if __name__ == "__main__":
