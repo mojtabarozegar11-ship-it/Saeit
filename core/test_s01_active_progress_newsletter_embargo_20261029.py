@@ -35,6 +35,31 @@ class AcademyProgressTests(SimpleTestCase):
         self.assertEqual(academy_views.education_dashboard_progress(enrollment), (0, 0, 0))
 
 
+class AcademyCertificateOutageTests(SimpleTestCase):
+    def test_certificate_verification_returns_retryable_503_not_false_404(self):
+        with patch.object(academy_views, "missing_public_tables", return_value=True), \
+             patch.object(academy_views, "get_object_or_404",
+                          side_effect=AssertionError("must not query certificate")):
+            response = academy_views.education_certificate(
+                RequestFactory().get("/academy/certificate/EDU-TEST/"), "EDU-TEST"
+            )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+
+    def test_certificate_issue_returns_503_before_mutation(self):
+        request = RequestFactory().post("/academy/course/test/certificate/")
+        request.user = SimpleNamespace(is_authenticated=True)
+        with patch.object(academy_views, "missing_public_tables", return_value=True), \
+             patch.object(academy_views, "get_object_or_404",
+                          side_effect=AssertionError("must not query enrollment")), \
+             patch.object(academy_views.EducationCertificate.objects, "get_or_create",
+                          side_effect=AssertionError("must not issue certificate")):
+            response = academy_views.education_issue_certificate(request, "test")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+
+
 class NewsletterEmbargoTests(SimpleTestCase):
     def test_related_links_apply_published_at_visibility_and_order(self):
         now = datetime(2026, 10, 29, tzinfo=timezone.utc)
@@ -55,6 +80,10 @@ class NewsletterEmbargoTests(SimpleTestCase):
                 RequestFactory().get("/newsletter/test-story/"), "test-story"
             )
         self.assertEqual(response.status_code, 200)
+        story.publications.filter.assert_called_once_with(
+            status="published", published_at__lte=now
+        )
+        story.publications.filter.return_value.order_by.assert_called_once_with("channel")
         manager.filter.assert_called_once_with(
             status="published", published_at__lte=now, story_type="research"
         )
@@ -115,7 +144,8 @@ class NewsletterPublicationsPrivacyTests(SimpleTestCase):
             )
         self.assertEqual(response.status_code, 200)
         publication_manager.filter.assert_called_once_with(
-            story__status="published", story__published_at__lte=now
+            story__status="published", story__published_at__lte=now,
+            status="published", published_at__lte=now,
         )
         publication_manager.filter.return_value.select_related.assert_called_once_with("story")
         publication_manager.filter.return_value.select_related.return_value.order_by.assert_called_once_with("-created_at")
