@@ -20,6 +20,7 @@ class ClassifierTests(unittest.TestCase):
     def test_mux(self): self.assertEqual(classify("mux_client_request_session: read from master failed"), "CONTROL_SOCKET_FAILURE")
     def test_remote_identity(self): self.assertEqual(classify("debug1: Sending command: test\ndebug1: Exit status 1"), "REMOTE_IDENTITY_CHECK_REJECTED")
     def test_debug_success(self): self.assertEqual(classify("debug1: Authenticated to example\ndebug1: Exit status 0"), "REMOTE_COMMAND_SUCCEEDED")
+    def test_proxy_auth_not_target(self): self.assertEqual(classify("debug1: Authenticated to intermediate-hop using publickey."), "INTERMEDIATE_HOP_AUTHENTICATED_ONLY")
     def test_secret_with_known_failure(self): self.assertEqual(classify("private-key-material Permission denied"), "AUTH_REJECTED")
 
 class PhaseTests(unittest.TestCase):
