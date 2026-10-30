@@ -71,6 +71,11 @@ def _site_search_with_schema(request):
 
 def site_search(request):
     """Fail closed on incomplete or unavailable search schema; never claim zero results."""
+    # An empty search is not a catalog query. Preserve the search form even
+    # when the database is down, without falsely reporting zero matches.
+    query = " ".join(str(request.GET.get("q", "")).split())[:120]
+    if not query:
+        return render(request, "core/search.html", {"q": "", "results": []})
     if missing_public_tables(
         NewsletterStory, KnowledgeArticle, KnowledgeBook, KnowledgeDomain, Product,
     ):
