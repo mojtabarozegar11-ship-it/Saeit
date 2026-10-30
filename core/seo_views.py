@@ -208,6 +208,9 @@ def _read_author_html(base_dir):
                     or after.st_size != before.st_size
                     or after.st_mtime_ns != before.st_mtime_ns):
                 raise ValueError("public profile changed during read")
+            # Declared response charset is UTF-8. Reject damaged bytes rather
+            # than returning a 200 with replacement glyphs in the public CV.
+            body.decode("utf-8", "strict")
             return body
         finally:
             os.close(file_fd)
