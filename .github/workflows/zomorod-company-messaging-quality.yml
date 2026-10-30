@@ -3,6 +3,7 @@ on:
   pull_request:
     branches:
       - main
+      - feature/zomorod-messaging-main-integration-20261030
     paths:
       - "company_messaging/**"
       - "company_marketing/**"

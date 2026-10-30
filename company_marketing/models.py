@@ -210,6 +210,10 @@ class Lead(models.Model):
             raise ValidationError("کمپین متعلق به واحد دیگر است.")
         if min(self.estimated_value_irr or 0, self.verified_sale_irr or 0) < 0:
             raise ValidationError("مقادیر منفی مجاز نیست.")
+        # Any nonzero verified sale amount is a commercial claim, even while
+        # a lead remains in a non-won stage. Never count it without evidence.
+        if (self.verified_sale_irr or 0) > 0 and not self.sale_evidence_reference.strip():
+            raise ValidationError("مبلغ فروش تأییدشده بدون سند قابل ثبت نیست.")
         if self.stage == "won" and (not self.sale_evidence_reference.strip()
                                     or self.verified_sale_irr <= 0):
             raise ValidationError("فروش واقعی بدون سند و مبلغ تأییدشده ثبت نمی‌شود.")
@@ -234,6 +238,8 @@ class PerformanceMetric(models.Model):
         ordering = ("-recorded_on",)
 
     def clean(self):
+        if self.recorded_on and self.recorded_on > timezone.localdate():
+            raise ValidationError({"recorded_on": "آمار عملکرد برای تاریخ آینده قابل تأیید نیست."})
         if self.cost_irr is None or self.cost_irr < 0:
             raise ValidationError("هزینه منفی مجاز نیست.")
         if not self.evidence_reference.strip():
