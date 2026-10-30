@@ -244,12 +244,15 @@ jobs:
                                 if line.strip() and not line.lstrip().startswith("#") and target.search(line))
                            if post_cron is not None and post_cron.returncode == 0 else -1)
           running_units = 0
+          post_inventory_errors = []
           for scope_args, scope in [
               (["systemctl", "list-units", "--all", "--no-legend", "--no-pager"], "system"),
               (["systemctl", "--user", "list-units", "--all", "--no-legend", "--no-pager"], "user"),
           ]:
               p = run(scope_args)
               if p is None or p.returncode != 0:
+                  if scope == "system":
+                      post_inventory_errors.append("system")
                   continue
               for line in p.stdout.splitlines():
                   fields = line.split()
@@ -269,10 +272,11 @@ jobs:
           print("FACTORY_HOLD_PROCESS_SIGNAL_ERRORS=" + str(len(process_errors)))
           print("FACTORY_HOLD_RELATED_CRON_REMAINING=" + str(cron_remaining))
           print("FACTORY_HOLD_RELATED_ACTIVE_UNITS=" + str(running_units))
+          print("FACTORY_HOLD_POST_SYSTEMD_INVENTORY_ERRORS=" + str(len(post_inventory_errors)))
           print("FACTORY_HOLD_SUPERVISOR_CONTROL=" + ("readable" if supervisor_readable else "unavailable_or_not_installed"))
           print("FACTORY_HOLD_SUPERVISOR_RELATED_RUNNING=" + str(supervisor_running))
           print("FACTORY_HOLD_CONFIG_SNAPSHOT=stored_private_mode_0600")
-          if remaining or cron_remaining != 0 or running_units or supervisor_errors or supervisor_running not in (0, -1) or systemd_errors or inventory_errors or process_errors:
+          if remaining or cron_remaining != 0 or running_units or supervisor_errors or supervisor_running not in (0, -1) or systemd_errors or inventory_errors or process_errors or post_inventory_errors:
               raise SystemExit("FACTORY_FULL_HOLD=NOT_VERIFIED")
           print("FACTORY_FULL_HOLD=VERIFIED")
           PY
