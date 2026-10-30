@@ -214,7 +214,12 @@ def _read_author_html(base_dir):
             # A truncated or overwritten profile must not be indexed as a
             # successful HTML biography merely because its bytes are UTF-8.
             if not ((document.startswith("<!doctype html") or document.startswith("<html"))
-                    and "<html" in document and "</html>" in document):
+                    and "<html" in document and document.rstrip().endswith("</html>")
+                    and "<head" in document and "</head>" in document
+                    and "<title" in document and "</title>" in document
+                    and "<body" in document and "</body>" in document):
+                # This is a structural integrity check, not an HTML sanitizer.
+                # A truncated static CV must not receive a cacheable HTTP 200.
                 raise ValueError("incomplete public profile HTML")
             return body
         finally:
