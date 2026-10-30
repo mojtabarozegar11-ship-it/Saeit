@@ -26,6 +26,8 @@
     {% if perms.enterprise_portal.view_inventoryitem %}<a href="{% url 'enterprise_portal:inventory' %}">▣ &nbsp; انبار و تولید</a>{% endif %}
     {% if perms.enterprise_portal.view_worktask %}<a href="{% url 'enterprise_portal:tasks' %}">✓ &nbsp; کارها و پیگیری</a>{% endif %}
     {% if perms.enterprise_portal.view_officeletter %}<a href="{% url 'enterprise_portal:letters' %}">✉ &nbsp; دبیرخانه</a>{% endif %}
+    {% if perms.company_messaging.view_message %}<a href="{% url 'company_messaging:inbox' %}">✉ &nbsp; مرکز ارسال و دریافت پیام</a>{% endif %}
+    {% if perms.company_marketing.view_campaign %}<a href="{% url 'company_marketing:dashboard' %}">◈ &nbsp; بازاریابی و انتشار تبلیغات</a>{% endif %}
     {% if perms.enterprise_portal.view_commercialdocument %}<a href="{% url 'admin:enterprise_portal_commercialdocument_changelist' %}">◉ &nbsp; قرارداد و بازرگانی</a>{% endif %}
     {% if perms.enterprise_portal.view_managementproject %}<a href="{% url 'admin:enterprise_portal_managementproject_changelist' %}">◇ &nbsp; برنامه‌های مدیریت</a>{% endif %}
   </nav>
