@@ -129,7 +129,7 @@ def verified_author_redirect_state(blob: bytes) -> bytes:
     matched = [
         line.rstrip(b"\r\n")
         for line in blob.splitlines(keepends=True)
-        if b"/authors/mojtaba-rozegar" in line
+        if b"authors/mojtaba-rozegar" in line
     ]
     if not matched:
         return blob
