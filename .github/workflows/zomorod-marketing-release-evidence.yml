@@ -422,6 +422,39 @@ jobs:
           print("DATABASE_OWNERSHIP_OR_RESTORE_PROVEN=false")
           PY
           REMOTE
+      - name: Audit existing private business database independently without records
+        shell: bash
+        env:
+          COMMAND_HOST: \${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 55s ssh -F "$dir/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import sqlite3,urllib.parse
+          root=Path.home()/".private/zomorod-business"
+          p=root/"management.sqlite3"
+          print("LEGACY_PRIVATE_BUSINESS_DIR="+str(root.is_dir() and not root.is_symlink()).lower())
+          print("LEGACY_PRIVATE_BUSINESS_DB_PRESENT="+str(p.is_file() and not p.is_symlink()).lower())
+          if p.is_file() and not p.is_symlink():
+              print("LEGACY_PRIVATE_BUSINESS_DB_BYTES="+str(p.stat().st_size))
+              try:
+                  uri="file:"+urllib.parse.quote(str(p))+"?mode=ro"
+                  with sqlite3.connect(uri,uri=True,timeout=4) as conn:
+                      print("LEGACY_PRIVATE_BUSINESS_DB_INTEGRITY="+str(conn.execute("PRAGMA quick_check").fetchone()[0]))
+                      tables={x[0] for x in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+                      print("LEGACY_PRIVATE_BUSINESS_TABLE_COUNT="+str(len(tables)))
+                      for t in ("users","journal_entries","journal_lines","invoices"):
+                          if t in tables:
+                              print("LEGACY_PRIVATE_BUSINESS_"+t.upper()+"_COUNT="+str(conn.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]))
+              except (sqlite3.Error,OSError):
+                  print("LEGACY_PRIVATE_BUSINESS_DB_READ=error")
+          print("PRIVATE_BUSINESS_DATA_UNCHANGED=true")
+          PY
+          REMOTE
       - name: Require restore proof and provider rights before any deployment
         run: |
           echo "RESTORE_VERIFIED=not-established-by-this-readonly-probe"
