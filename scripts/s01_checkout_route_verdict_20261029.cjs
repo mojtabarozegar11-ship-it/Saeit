@@ -74,7 +74,15 @@ function redactObservedHref(href) {
   try {
     const url = new URL(href, 'https://mojplaywin.com');
     if (url.origin !== 'https://mojplaywin.com') return '[external]';
-    return url.pathname + (url.search ? '?[redacted]' : '') +
+    // A redirect or control path can itself contain a bearer token. Persist
+    // only known public checkout navigation shapes; redact unknown paths.
+    const safePath = url.pathname;
+    const known = safePath === '/store/' ||
+      /^\\/store\\/product\\/(?:72|225|879)\\/(?:checkout\\/)?$/.test(safePath) ||
+      /^\\/accounts\\/(?:login|register)\\/$/.test(safePath) ||
+      safePath === '/commerce/trx-easy/purchases/';
+    if (!known) return '[redacted-path]';
+    return safePath + (url.search ? '?[redacted]' : '') +
       (url.hash ? '#[redacted]' : '');
   } catch (_) { return '[invalid]'; }
 }
