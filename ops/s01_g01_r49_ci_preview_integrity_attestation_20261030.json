@@ -1,0 +1,24 @@
+{
+  "scope": "S01_TO_G01_R49_CI_ARTIFACT_INTEGRITY_READONLY",
+  "source_run": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41111136308",
+  "artifact_id": 13002674936,
+  "github_artifact_zip_sha256": "e76ff19d6c0132c0ae084bb48f6c1e71070ce7a7fabbfec47262111854053970",
+  "downloaded_artifact_zip_sha256": "e76ff19d6c0132c0ae084bb48f6c1e71070ce7a7fabbfec47262111854053970",
+  "inner_preview_zip_sha256": "d0b5e94104e3c5d7bfcbfc9cd1b0f2a61f19302fbdebb433bd5c0237849d1b3a",
+  "inner_preview_entries": 37,
+  "manifest_declared_entries": 35,
+  "manifest_sha256_and_sizes_verified": 35,
+  "manifest_mismatches": 0,
+  "unmanifested_auxiliary_files": [
+    "ramadan-war/PLAY-README.txt"
+  ],
+  "both_zip_crc_pass": true,
+  "unsafe_entries": 0,
+  "manifest_source_revision": "34474028b396fe51452d02f2903477529f1e8e93",
+  "source_revision_kind": "pull_request synthetic merge ref, not branch head",
+  "manifest_payment_status": "disabled",
+  "same_as_private_103_entry_bundle": false,
+  "site_deployed": false,
+  "release_authorized": false,
+  "factory_touched": false
+}
