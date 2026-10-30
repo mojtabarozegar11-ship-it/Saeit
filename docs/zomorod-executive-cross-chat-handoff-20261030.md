@@ -72,3 +72,15 @@ Five existing hourly tracks remain research/profile, books, sites/subsites, game
 - Messaging/marketing: https://github.com/mojtabarozegar11-ship-it/Saeit/pull/1577
 - Factory quota probe: https://github.com/mojtabarozegar11-ship-it/Saeit/pull/1613
 - Permanent evidence ledger: https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514
+
+## F — Direct V7 archived-to-repo comparison performed during this handoff
+Source: actual saved **zomorod-erp-offline-v7.zip** from Library, against exact head of draft #1607 (051496cf17ae4de18559ad2c0288ec269969d404); performed read-only on 2026-10-30.
+
+- The **latest saved V7 archive** has 48 members; ZIP decompression succeeded and its 47 SHA-256 manifest entries **all matched**. This proves file integrity, **not runtime readiness**.
+- Its embedded OFFLINE_QA_REPORT.json explicitly says **BLOCKED_MISSING_PDO_SQLITE_EXTENSION**, full offline DB tests **false**, full ERP readiness **false**. This report is **not** the separate Library report named zomorod-erp-v7-offline-qa-40of40.json, which records 40/40 success on its own test subject/environment. Do not label the newer ZIP itself 40/40 PHP/SQLite verified.
+- Nine common source files compared by exact text. Six matched exactly: command_center.php, finance_audit.php, payroll_control.php, payroll_ui.php, period_controls.php, workflow_desk.php.
+- Three differed: **app.php** (integrated draft #1607 adds treasury integration and session/credential handling), **industry_operations.php** (different SQL trigger/initial-state guards; semantic equivalence needs regression review), and **scripts/run_all_offline_qa.py** (candidate branch adds treasury and owner credential suites). Therefore **neither archive nor branch can be copied blindly to production**.
+- The archive does **not** contain treasury_control.php or treasury_ui.php; #1607 does. The archive alone cannot be designated the integrated release candidate.
+- Branch #1607's exact-head PHP 8.2/8.3 and credential-security GitHub checks were observed green; deployment remains unproved.
+
+Next engineering action: review differences in SQL guards, preserve stricter independent constraints, run exact-candidate and live-only compatibility checks with a staged backup/restore. **NO_GO for production as of this checkpoint.**
