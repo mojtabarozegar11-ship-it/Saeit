@@ -1,0 +1,49 @@
+{
+  "capture_note": "Browser-extracted official WDI API JSON; not an HTTP byte-identical raw response; source URI and WDI lastupdated retained.",
+  "source_url": "https://api.worldbank.org/v2/country/IND/indicator/NV.AGR.TOTL.ZS?format=json&date=2023%3A2024",
+  "accessed_date": "2026-10-31",
+  "payload": [
+    {
+      "page": 1,
+      "pages": 1,
+      "per_page": 50,
+      "total": 2,
+      "sourceid": "2",
+      "lastupdated": "2026-10-08"
+    },
+    [
+      {
+        "indicator": {
+          "id": "NV.AGR.TOTL.ZS",
+          "value": "Agriculture, forestry, and fishing, value added (% of GDP)"
+        },
+        "country": {
+          "id": "IN",
+          "value": "India"
+        },
+        "countryiso3code": "IND",
+        "date": "2024",
+        "value": 17.5735799524173,
+        "unit": "",
+        "obs_status": "",
+        "decimal": 1
+      },
+      {
+        "indicator": {
+          "id": "NV.AGR.TOTL.ZS",
+          "value": "Agriculture, forestry, and fishing, value added (% of GDP)"
+        },
+        "country": {
+          "id": "IN",
+          "value": "India"
+        },
+        "countryiso3code": "IND",
+        "date": "2023",
+        "value": 17.6565389328245,
+        "unit": "",
+        "obs_status": "",
+        "decimal": 1
+      }
+    ]
+  ]
+}
