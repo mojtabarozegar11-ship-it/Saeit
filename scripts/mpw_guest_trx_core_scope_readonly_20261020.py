@@ -13,6 +13,10 @@ from django.urls import resolve
 from core.models import Product
 from mpw_commerce.invoicing import RECEIVERS
 from django.db import connection
+# Emit only a sanitized runtime/database label; never print database host, user, or password.
+_db_name=str(connection.settings_dict.get("NAME") or "")
+_db_safe=_db_name if re.fullmatch(r"[A-Za-z0-9_.-]{1,80}",_db_name) else None
+print("MPW_AUDIT_SCOPE="+json.dumps({"runtime_root":str(base),"database_vendor":connection.vendor,"database_name":_db_safe,"writes":0},ensure_ascii=False))
 for k,v in RECEIVERS.items():
     addr=v[1]
     print("GUEST_WALLET="+json.dumps({"asset":k,"network":v[0],"configured":bool(addr),"address_hash_prefix":hashlib.sha256(str(addr).encode()).hexdigest()[:12],"atomic_decimals":v[2]}))
