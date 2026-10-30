@@ -32,6 +32,10 @@ def classify(stderr: str) -> str:
         return "REMOTE_IDENTITY_CHECK_REJECTED"
     if "authenticated to " in text and "exit status 0" in text:
         return "REMOTE_COMMAND_SUCCEEDED"
+    # ProxyJump can authenticate the VPS while cPanel never opens a session.
+    # Never mistake a successful intermediate hop for the target login.
+    if "authenticated to " in text and "sending command:" not in text and "exit status " not in text:
+        return "INTERMEDIATE_HOP_AUTHENTICATED_ONLY"
     return "UNKNOWN_SAFE_FAILURE"
 
 def phase(stderr: str) -> str:
