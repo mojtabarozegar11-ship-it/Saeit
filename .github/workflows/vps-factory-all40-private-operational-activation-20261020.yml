@@ -27,8 +27,9 @@ jobs:
           python3 -m unittest discover -s tests -p test_factory_all40_private_activation.py -v
           echo FACTORY_40_PRIVATE_SERVICE_INTAKE_AND_DENY_GATE_TESTS=PASS
   release:
+    # Owner pause: do not activate factory VPS before offhost restore receipt.
+    if: ${{ false }}
     needs: test
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
