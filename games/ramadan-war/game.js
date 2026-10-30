@@ -232,6 +232,7 @@ $('#applyBackupCode').onclick=()=>{
  const imported=readCampaignBackup(code);
  if(!imported){$('#backupCodeHint').textContent='کد پشتیبان معتبر نیست؛ پیشرفت فعلی دست‌نخورده باقی ماند.';return}
  applyImportedCampaign(imported);
+ if(screen==='backupCodePanel')$('#backupCodeHint').textContent='بازیابی تأیید نشد؛ پیشرفت فعلی را بررسی کنید و بدون بستن این صفحه از آن پشتیبان بگیرید.';
 };
 async function copyCampaignBackup(){
  // Explicit user action; never auto-copy private progress or send it over the network.
