@@ -356,6 +356,13 @@ test('valid player position is not moved and an unavailable fallback fails close
   assert.equal(blocked.x,4.5,'do not move to an obstructed fallback');
 });
 
+test('corrupted non-finite coordinates never become a valid fallback spawn', () => {
+  const corrupt={...fresh(),x:NaN,y:Infinity,score:2300};
+  const original={...corrupt};
+  assert.equal(restorePlayerPosition(corrupt,()=>false,()=>true),null);
+  assert.deepEqual(corrupt,original,'corrupted checkpoint must not be rewritten');
+});
+
 test('campaign restore repairs obstructed player location before engine build', () => {
   const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
   const playerGuard=client.indexOf("if(restorePlayerPosition(world,");
