@@ -37,8 +37,11 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test -s "$d/known"
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          source_bytes="$(timeout 180s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'test "$(id -un)" = githubops; du -sb /home/githubops/factory-runtime | cut -f1')"
+          echo "FACTORY_BACKUP_SOURCE_BYTES=$source_bytes"
+          echo "FACTORY_BACKUP_RUNNER_FREE_BYTES=$(df -B1 "$RUNNER_TEMP" | awk 'NR==2 {print $4}')"
           archive="$d/factory-runtime.tar.gz"
-          timeout 900s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'set -euo pipefail; test "$(id -un)" = githubops; test -d /home/githubops/factory-runtime; tar --numeric-owner --xattrs --acls --one-file-system -czf - -C /home/githubops factory-runtime' > "$archive"
+          timeout 7200s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'set -euo pipefail; test "$(id -un)" = githubops; test -d /home/githubops/factory-runtime; tar --numeric-owner --xattrs --acls --one-file-system -czf - -C /home/githubops factory-runtime' > "$archive"
           test -s "$archive"
           tar -tzf "$archive" >/dev/null
           archive_bytes="$(stat -c %s "$archive")"
