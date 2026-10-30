@@ -49,16 +49,24 @@ class AuthorStaticIntegrityTests(SimpleTestCase):
         moved = self.root / "real-public"
         original.rename(moved)
         original.symlink_to(moved, target_is_directory=True)
-        self.assertEqual(self.response().status_code, 404)
+        response = self.response()
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response["Cache-Control"], "no-store")
 
     def test_hardlinked_public_profile_is_not_served(self):
         self.page.write_text("safe", encoding="utf-8")
         os.link(self.page, self.root / "alias.html")
-        self.assertEqual(self.response().status_code, 503)
+        response = self.response()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertEqual(response["Retry-After"], "300")
 
     def test_oversized_profile_is_not_served(self):
         self.page.write_bytes(b"x" * 1_000_001)
-        self.assertEqual(self.response().status_code, 503)
+        response = self.response()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertEqual(response["Retry-After"], "300")
 
 
 class SearchOutageTests(SimpleTestCase):
@@ -138,6 +146,24 @@ class PublishedKnowledgeVisibilityTests(TestCase):
         book_urls = [row["url"] for row in rows if row["type"] == "کتاب"]
         self.assertIn("/knowledge/book/s01%26book/", book_urls)
         self.assertNotIn("/knowledge/book/s01&book/", book_urls)
+
+    def test_search_equal_score_results_have_stable_title_order(self):
+        from core.knowledge_agent_models import KnowledgeAgentPlan, KnowledgeBook
+        from django.http import HttpResponse
+        plan = KnowledgeAgentPlan.objects.get(code="s01-visibility-plan")
+        for title, code in (("s01-sort Zebra", "s01-sort-z"),
+                            ("s01-sort Alpha", "s01-sort-a")):
+            KnowledgeBook.objects.create(
+                plan=plan, code=code, title=title,
+                domain="synthetic", objective="synthetic", status="published",
+            )
+        with patch.object(seo_views, "render", return_value=HttpResponse("ok")) as renderer:
+            seo_views._site_search_with_schema(
+                RequestFactory().get("/search/?q=s01-sort")
+            )
+        rows = renderer.call_args.args[2]["results"]
+        names = [row["title"] for row in rows if row["type"] == "کتاب"]
+        self.assertEqual(names, ["s01-sort Alpha", "s01-sort Zebra"])
 
     def test_sitemap_excludes_drafts_and_encodes_dynamic_codes(self):
         response = seo_views.sitemap_xml(RequestFactory().get("/sitemap.xml"))
