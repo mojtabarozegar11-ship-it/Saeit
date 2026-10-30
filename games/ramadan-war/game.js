@@ -263,21 +263,28 @@ $('#applyBackupCode').onclick=()=>{
 };
 async function copyCampaignBackup(){
  // Explicit user action; never auto-copy private progress or send it over the network.
+ const originScreen=screen;
  const current=world&&!world.endless?JSON.stringify({...world,pickups:boundedCampaignPickups(world.pickups)}):storageRead(saveKey);
  const backup=makeCampaignBackup(current);
  if(!backup){toast('پیشرفت معتبر برای کپی پشتیبان پیدا نشد');return}
  const copied=await copyCampaignBackupToClipboard(backup,navigator,document);
+ // Permission prompts may complete after navigating or hiding this tab.
+ if(screen!==originScreen||document.hidden)return;
  if(copied)toast('کد پشتیبان کپی شد؛ آن را در یک فایل متنی امن نگه دارید');
  else openBackupCode('export',backup);
 }
 $('#copySave').onclick=copyCampaignBackup;$('#copyPauseSave').onclick=copyCampaignBackup;
 $('#exportSave').onclick=exportCampaignBackup;$('#exportPauseSave').onclick=exportCampaignBackup;$('#resultExport').onclick=exportCampaignBackup;$('#resultRetryClear').onclick=()=>{const ok=save();if(ok){$('#resultRetryClear').hidden=true;$('#resultSaveStatus').textContent='ذخیرهٔ پایان‌یافته پاکسازی و تأیید شد.'}else $('#resultSaveStatus').textContent='پاکسازی ذخیره ناموفق بود؛ ذخیرهٔ قدیمی هنوز ممکن است موجود باشد.'};$('#retrySave').onclick=()=>{save();updatePauseSaveStatus();if(saveStatus==='saved')toast('پیشرفت کارزار اکنون ذخیره شد')};
 $('#importSave').onclick=()=>$('#importSaveFile').click();$('#importPauseSave').onclick=()=>$('#importSaveFile').click();
+let backupFileReadToken=0;
 $('#importSaveFile').onchange=async e=>{
+ const token=++backupFileReadToken,originScreen=screen;
  const input=e.currentTarget,file=input.files?.[0];input.value='';
  if(!file)return;
  if(file.size>MAX_CAMPAIGN_BACKUP_BYTES){toast('حجم فایل پشتیبان بیش از حد مجاز است');return}
  let imported=null;try{imported=readCampaignBackup(await file.text())}catch(_){imported=null}
+ // Ignore stale asynchronous reads after a second selection or navigation.
+ if(token!==backupFileReadToken||screen!==originScreen)return;
  if(!imported){toast('فایل پشتیبان معتبر نیست؛ پیشرفت فعلی محفوظ ماند');return}
  applyImportedCampaign(imported);
 };
