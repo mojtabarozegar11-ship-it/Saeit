@@ -66,7 +66,7 @@ class SearchOutageTests(SimpleTestCase):
         self.request = RequestFactory().get("/search/?q=agriculture")
 
     def test_missing_search_schema_returns_retryable_nonempty_503(self):
-        with patch.object(seo_views, "missing_public_tables", return_value=True), \\
+        with patch.object(seo_views, "missing_public_tables", return_value=True), \
              patch.object(seo_views, "_site_search_with_schema") as query:
             response = seo_views.site_search(self.request)
         query.assert_not_called()
@@ -78,7 +78,7 @@ class SearchOutageTests(SimpleTestCase):
 
     def test_database_failure_after_schema_check_fails_closed(self):
         from django.db import DatabaseError
-        with patch.object(seo_views, "missing_public_tables", return_value=False), \\
+        with patch.object(seo_views, "missing_public_tables", return_value=False), \
              patch.object(seo_views, "_site_search_with_schema", side_effect=DatabaseError):
             response = seo_views.site_search(self.request)
         self.assertEqual(response.status_code, 503)
@@ -86,7 +86,7 @@ class SearchOutageTests(SimpleTestCase):
     def test_healthy_search_uses_original_renderer(self):
         from django.http import HttpResponse
         expected = HttpResponse("search is ready")
-        with patch.object(seo_views, "missing_public_tables", return_value=False), \\
+        with patch.object(seo_views, "missing_public_tables", return_value=False), \
              patch.object(seo_views, "_site_search_with_schema", return_value=expected):
             response = seo_views.site_search(self.request)
         self.assertIs(response, expected)
