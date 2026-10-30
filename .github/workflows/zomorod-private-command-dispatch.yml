@@ -288,6 +288,7 @@ jobs:
               ("BACKUPS", "Backup", "list_backups"),
           )
           for label, module, operation in operations:
+              quota_result = None
               try:
                   process = subprocess.run(
                       [command, "--output=json", module, operation],
@@ -304,9 +305,31 @@ jobs:
                           verified = (document.get("status") in (1, True, "1")
                                       if isinstance(document, dict) else False)
                       status = "OK" if verified else "UNAVAILABLE"
+                      if label == "QUOTA" and verified and isinstance(result, dict):
+                          quota_result = result.get("data")
               except (OSError, ValueError, subprocess.TimeoutExpired):
                   status = "UNAVAILABLE"
               print("CPANEL_" + label + "_READONLY=" + status)
+              if label == "QUOTA":
+                  # Only bounded numeric local-node data; never log raw UAPI response.
+                  def safe_bytes(raw):
+                      if type(raw) is int:
+                          return raw if 0 <= raw <= 10**15 else None
+                      if isinstance(raw, str) and raw.isascii() and raw.isdigit():
+                          parsed = int(raw)
+                          return parsed if 0 <= parsed <= 10**15 else None
+                      return None
+
+                  detail = quota_result if isinstance(quota_result, dict) else {}
+                  limit = safe_bytes(detail.get("byte_limit"))
+                  used = safe_bytes(detail.get("bytes_used"))
+                  if limit is not None and limit > 0 and used is not None:
+                      print("CPANEL_LOCAL_QUOTA_DATA=VERIFIED")
+                      print("CPANEL_LOCAL_QUOTA_LIMIT_GIB_FLOOR=" + str(limit // 1073741824))
+                      print("CPANEL_LOCAL_QUOTA_USED_GIB_FLOOR=" + str(used // 1073741824))
+                      print("CPANEL_LOCAL_QUOTA_HEADROOM_GIB_FLOOR=" + str(max(0, limit - used) // 1073741824))
+                  else:
+                      print("CPANEL_LOCAL_QUOTA_DATA=UNVERIFIED")
           print("CPANEL_SITE_MUTATIONS=NONE")
           print("CPANEL_FACTORY_OPERATIONS=NONE")
           CPANEL_READONLY_PY
