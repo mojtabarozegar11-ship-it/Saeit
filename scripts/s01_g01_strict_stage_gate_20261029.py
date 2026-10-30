@@ -6,6 +6,7 @@ from pathlib import Path
 from pathlib import PurePosixPath
 import re
 import stat
+import unicodedata
 import sys
 import zipfile
 
@@ -34,8 +35,8 @@ def verify(package):
             raise ValueError("INVALID_MEMBER_SET")
         # Web and extraction targets may be case-insensitive. Never allow two
         # different archive members to overwrite the same runtime asset.
-        if len(set(name.casefold() for name in names)) != len(names):
-            raise ValueError("CASEFOLD_MEMBER_COLLISION")
+        if len(set(unicodedata.normalize("NFC", name).casefold() for name in names)) != len(names):
+            raise ValueError("NORMALIZED_MEMBER_COLLISION")
         if sum(item.file_size for item in members) > MAX_UNCOMPRESSED:
             raise ValueError("UNCOMPRESSED_SIZE_LIMIT")
         # A file that is also a parent directory can overwrite or obstruct
@@ -73,7 +74,15 @@ def verify(package):
             raise ValueError("MISSING_REQUIRED_RUNTIME")
         if archive.getinfo(PREFIX + "preview-manifest.json").file_size > MAX_MANIFEST_BYTES:
             raise ValueError("OVERSIZED_MANIFEST")
-        manifest = json.loads(archive.read(PREFIX + "preview-manifest.json"))
+        def unique_json_object(pairs):
+            record = {}
+            for key, value in pairs:
+                if key in record:
+                    raise ValueError("DUPLICATE_MANIFEST_KEY")
+                record[key] = value
+            return record
+        manifest = json.loads(archive.read(PREFIX + "preview-manifest.json"),
+                              object_pairs_hook=unique_json_object)
         if not isinstance(manifest, dict) or not re.fullmatch(
             r"G01-R[0-9]+(?:[._-][A-Za-z0-9]+)*", str(manifest.get("version", ""))
         ):
