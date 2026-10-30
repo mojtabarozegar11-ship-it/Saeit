@@ -1,5 +1,6 @@
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponse, JsonResponse
+from django.db import DatabaseError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from uuid import uuid4
@@ -20,7 +21,7 @@ def unavailable_enrollment_response():
     return mark_public_data_unavailable(response)
 
 
-def academy(request):
+def _academy_with_schema(request):
     # Data-first curriculum registry. Future Master Agent updates must follow
     # the project's owner-approval governance policy.
     tracks = [
@@ -86,6 +87,25 @@ def academy(request):
         "paid_features": paid_features,
     })
     return mark_public_data_unavailable(response) if catalog_unavailable else response
+
+
+def academy(request):
+    """Preserve healthy academy UI; show a retryable outage on a DB failure."""
+    try:
+        return _academy_with_schema(request)
+    except DatabaseError:
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>آموزشگاه موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>آموزشگاه موقتاً در دسترس نیست</h1>'
+            '<p role="status">دریافت دوره‌ها موقتاً امکان‌پذیر نیست؛ '
+            'ثبت‌نام یا پرداختی انجام نشده است.</p>'
+            '<p><a href="/">بازگشت به صفحه اصلی</a></p>'
+            '</main></body></html>',
+            status=503, content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
 
 
 def education(request):
