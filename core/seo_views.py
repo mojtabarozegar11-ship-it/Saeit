@@ -183,7 +183,10 @@ def _read_author_html(base_dir):
                 body = stream.read(1_000_001)
             after = os.fstat(file_fd)
             if (len(body) != before.st_size or len(body) > 1_000_000
+                    or after.st_dev != before.st_dev
                     or after.st_ino != before.st_ino
+                    or after.st_mode != before.st_mode
+                    or after.st_nlink != before.st_nlink
                     or after.st_size != before.st_size
                     or after.st_mtime_ns != before.st_mtime_ns):
                 raise ValueError("public profile changed during read")
