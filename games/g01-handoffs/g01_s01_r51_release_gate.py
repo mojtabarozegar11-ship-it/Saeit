@@ -26,17 +26,20 @@ def check_archive(path):
         if problems:return problems
         if z.testzip() is not None:problems.append('ZIP CRC mismatch')
         manifest=json.loads(z.read(ROOT+'preview-manifest.json'))
+        if not isinstance(manifest,dict):return ['invalid manifest object']
         if manifest.get('payment_status')!='disabled':problems.append('payment status not disabled')
         if manifest.get('release')!='R51':problems.append('unexpected release')
         if manifest.get('format')!='ramadan-war-offline-preview-v1':problems.append('unexpected manifest format')
         assets=manifest.get('files',{})
-        if not isinstance(assets,dict) or len(assets)<20:problems.append('runtime manifest incomplete')
+        if not isinstance(assets,dict):return problems+['runtime manifest files must be object']
+        if len(assets)<20:problems.append('runtime manifest incomplete')
         for rel,meta in assets.items():
+            if not isinstance(meta,dict):problems.append('invalid runtime asset metadata');continue
             if not isinstance(rel,str) or '..' in PurePosixPath(rel).parts or rel.startswith('/'):
                 problems.append('unsafe runtime asset');continue
             if rel not in names:problems.append('missing runtime asset '+rel);continue
             data=z.read(ROOT+rel)
-            if len(data)!=meta.get('bytes') or hashlib.sha256(data).hexdigest()!=meta.get('sha256'):
+            if not isinstance(meta.get('bytes'),int) or not isinstance(meta.get('sha256'),str) or len(data)!=meta.get('bytes') or hashlib.sha256(data).hexdigest()!=meta.get('sha256'):
                 problems.append('runtime asset hash mismatch '+rel)
         policy=z.read(ROOT+'moj1-commerce-policy.mjs').decode('utf-8')
         for guard in ['checkoutEnabled:false','ownerApproved:false','verifiedBackend:false','contractAddress:null']:

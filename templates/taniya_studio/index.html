@@ -96,9 +96,10 @@ Total output lines: 1
     function mountCake(){
       // Only local, non-personal design state; tolerate disabled/private storage.
       let draft=null;try{draft=JSON.parse(sessionStorage.getItem('taniyaCakeDraftR51')||'null')}catch{}
-      let icing=typeof draft?.icing==='string'&&/^#[0-9a-fA-F]{6}$/.test(draft.icing)?draft.icing:'#ff79b8';
-      let topping=['🍓','🌼','🍬'].includes(draft?.topping)?draft.topping:'🍓';
-      let candles=Number.isInteger(draft?.candles)?Math.max(0,Math.min(12,draft.candles)):0;
+      let icing='#ff79b8',topping='🍓',candles=0;
+      if(typeof draft?.icing==='string'&&/^#[0-9a-fA-F]{6}$/.test(draft.icing))icing=draft.icing;
+      if(['🍓','🌼','🍬'].includes(draft?.topping))topping=draft.topping;
+      if(Number.isInteger(draft?.candles))candles=Math.max(0,Math.min(12,draft.candles));
       function rememberCake(){try{sessionStorage.setItem('taniyaCakeDraftR51',JSON.stringify({icing,topping,candles}))}catch{}}
       const toppingNames={'🍓':'Berries','🌼':'Flowers','🍬':'Sweets'};
       function exportCake(){
@@ -121,7 +122,7 @@ Total output lines: 1
         $('#icing',gamebody).oninput=e=>{icing=e.target.value;$('#cakepreview',gamebody).style.filter='drop-shadow(0 0 14px '+icing+')';$('#cakepreview',gamebody).style.borderBottom='12px solid '+icing;rememberCake()};
         gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{topping=b.dataset.top;rememberCake();draw();gamebody.querySelector('[data-top="'+topping+'"]')?.focus({preventScroll:true})});
         gamebody.querySelector('[data-cake-action="candle"]').onclick=()=>{candles=Math.min(12,candles+1);rememberCake();draw();gamebody.querySelector('[data-cake-action="'+(candles===12?'undo':'candle')+'"]')?.focus({preventScroll:true})};
-        gamebody.querySelector('[data-cake-action="undo"]').onclick=()=>{candles=Math.max(0,candles-1);rememberCake();draw();gamebody.querySelector('[data-cake-action="'+(candles===0?'candle':'undo')+'"]')?.focus({preventScroll:true})};
+        gamebody.querySelector('[data-cake-action="undo"]').onclick=()=>{candles=Math.max(0,candles-1);draw();rememberCake();gamebody.querySelector('[data-cake-action="'+(candles===0?'candle':'undo')+'"]')?.focus({preventScroll:true})};
         gamebody.querySelector('[data-cake-action="download"]').onclick=exportCake;
         gamebody.querySelector('[data-cake-action="reset"]').onclick=()=>{try{sessionStorage.removeItem('taniyaCakeDraftR51')}catch{}mountCake()};
       }

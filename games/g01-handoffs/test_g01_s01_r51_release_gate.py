@@ -46,4 +46,15 @@ class ReleaseGateTests(unittest.TestCase):
  def test_uncompressed_limit(self):
   t,p=self.archive(lambda a:a.__setitem__('huge.bin',b'x'*(81*1024*1024)));self.addCleanup(t.cleanup)
   self.assertTrue(any('uncompressed limit' in s for s in gate.check_archive(p)))
+ def test_manifest_files_list_fails_closed(self):
+  t,p=self.archive(lambda a:a.__setitem__('preview-manifest.json',b'{"format":"ramadan-war-offline-preview-v1","release":"R51","payment_status":"disabled","files":[]}'));self.addCleanup(t.cleanup)
+  self.assertTrue(any('files must be object' in x for x in gate.check_archive(p)))
+ def test_manifest_top_level_array_fails_closed(self):
+  t,p=self.archive(lambda a:a.__setitem__('preview-manifest.json',b'[]'));self.addCleanup(t.cleanup)
+  self.assertTrue(any('manifest object' in x for x in gate.check_archive(p)))
+ def test_manifest_invalid_asset_metadata_fails_closed(self):
+  def corrupt(a):
+   m=json.loads(a['preview-manifest.json']);m['files']['game.js']=None;a['preview-manifest.json']=json.dumps(m).encode()
+  t,p=self.archive(corrupt);self.addCleanup(t.cleanup)
+  self.assertTrue(any('invalid runtime asset metadata' in x for x in gate.check_archive(p)))
 if __name__=='__main__':unittest.main()
