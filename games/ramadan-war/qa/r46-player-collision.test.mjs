@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {playerSpaceClear,movePlayerWithCollision} from '../player-collision.mjs';
+import {playerSpaceClear,movePlayerWithCollision} from '../input-guard.mjs';
 import {readFileSync} from 'node:fs';
 const walls=(x,y)=>x<0||y<0||x>=6||y>=6||x===0||y===0||x===5||y===5||x===3&&y===2;
 
@@ -33,7 +33,7 @@ test('outer map edges are solid to the full player footprint',()=>{
 });
 test('game runtime uses shared radius-aware movement for both control schemes',()=>{
  const game=readFileSync(new URL('../game.js',import.meta.url),'utf8');
- assert.match(game,/import \{movePlayerWithCollision\} from '\.\/player-collision\.mjs'/);
+ assert.match(game,/shouldFireCanvasClick, movePlayerWithCollision\} from '\.\/input-guard\.mjs'/);
  assert.match(game,/function move\(dx,dy\)\{movePlayerWithCollision\(world,dx,dy/);
  assert.match(game,/const movement=resolveMovementAxes\(joyF,joyS,keys\)/);
 });
