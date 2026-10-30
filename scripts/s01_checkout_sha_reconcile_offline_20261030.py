@@ -22,18 +22,37 @@ def assess(root, expected_sha256, approved_root=None):
     # Optional approved reference must itself match the release pin. An
     # unverified comparison copy cannot legitimize a changed cPanel file.
     approved_sha = None
+    approved_data = None
     if approved_root is not None:
         approved_data = read_regular(Path(approved_root), CHECKOUT_REL)
         approved_sha = hashlib.sha256(approved_data).hexdigest()
     data = read_regular(Path(root), CHECKOUT_REL)
     observed = hashlib.sha256(data).hexdigest()
     approved_valid = approved_sha is None or approved_sha == expected_sha256
+    # Compare bytes ONLY when the separate approved reference matches the
+    # pre-existing pin. This never repins a changed production source and
+    # never prints source content, credentials, excerpts or a unified diff.
+    comparison = None
+    if approved_data is not None and approved_valid:
+        offset = next((i for i, (a, b) in enumerate(zip(approved_data, data))
+                       if a != b), min(len(approved_data), len(data)))
+        identical = approved_data == data
+        comparison = {
+            "byte_identical": identical,
+            "first_difference_offset": None if identical else offset,
+            "approved_source_bytes": len(approved_data),
+            "difference_kind": ("IDENTICAL" if identical else
+                                "APPROVED_PREFIX" if offset == len(approved_data) else
+                                "OBSERVED_PREFIX" if offset == len(data) else
+                                "BYTE_MISMATCH"),
+        }
     return {
         "scope": "S01_OFFLINE_CHECKOUT_PREIMAGE_SHA_ONLY",
         "status": ("APPROVED_COPY_SHA_MISMATCH" if not approved_valid else
                    "MATCH" if observed == expected_sha256 else "SOURCE_SHA_DRIFT"),
         "approved_copy_verified": approved_sha == expected_sha256 if approved_sha else False,
         "approved_sha256": approved_sha,
+        "approved_reference_comparison": comparison,
         "expected_sha256": expected_sha256,
         "observed_sha256": observed,
         "source_bytes": len(data),
