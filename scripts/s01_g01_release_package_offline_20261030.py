@@ -13,6 +13,8 @@ import os
 from pathlib import Path, PurePosixPath
 import stat
 import zipfile
+from html.parser import HTMLParser
+from urllib.parse import unquote, urlsplit
 
 MAX_FILE = 40 * 1024 * 1024
 MAX_TOTAL = 256 * 1024 * 1024
@@ -74,6 +76,47 @@ def assets_from_deploy(source):
     return names
 
 
+class _EntrypointReferences(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.refs = []
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag == "base":
+            raise ValueError("base URL forbidden in offline game package")
+        if tag in ("script", "img") and values.get("src"):
+            self.refs.append(values["src"])
+        if tag == "link" and "stylesheet" in (values.get("rel") or "").lower():
+            self.refs.append(values.get("href", ""))
+
+
+def validate_entrypoint_references(html, asset_names):
+    """Fail closed on missing/off-origin HTML dependencies before private ZIP."""
+    parser = _EntrypointReferences()
+    parser.feed(html.decode("utf-8"))
+    found = set()
+    for raw in parser.refs:
+        if not raw or raw.startswith("//") or "\\" in raw:
+            raise ValueError("unsafe game entrypoint dependency")
+        url = urlsplit(raw)
+        if url.scheme or url.netloc or url.fragment:
+            raise ValueError("remote or fragment game dependency")
+        name = unquote(url.path)
+        if "%" in name or not name.startswith("./"):
+            raise ValueError("ambiguous or nonlocal game dependency")
+        rel = name[2:]
+        path = PurePosixPath(rel)
+        if (path.is_absolute() or str(path) != rel or
+                any(part in ("", ".", "..") for part in path.parts) or
+                rel not in asset_names):
+            raise ValueError("missing or escaping game dependency")
+        found.add(rel)
+    if not {"game.js", "game.css"}.issubset(found):
+        raise ValueError("game entrypoint missing required script or stylesheet")
+    return len(found)
+
+
 def build(source_dir, output_zip):
     root = Path(source_dir)
     if root.is_symlink() or not root.is_dir():
@@ -87,6 +130,7 @@ def build(source_dir, output_zip):
         if total > MAX_TOTAL:
             raise ValueError("release exceeds private package limit")
         files[name] = data
+    validate_entrypoint_references(files["index.html"], set(files))
     if files[".htaccess"] != b"PassengerEnabled off\nDirectoryIndex index.html\n":
         raise ValueError("game route configuration changed")
     if (b"./tactical-map.mjs" not in files["game.js"]
