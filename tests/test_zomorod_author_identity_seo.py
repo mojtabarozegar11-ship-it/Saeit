@@ -145,6 +145,27 @@ class PersianAuthorSeoTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             verified_author_redirect_state(b"Redirect 301 /authors/mojtaba-rozegar /unexpected\n")
 
+    def test_audited_author_static_rewrite_is_preserved_exactly(self):
+        from scripts.zomorod_author_profile_route_release_20261023 import (
+            STATIC_AUTHOR_REWRITE,
+        )
+        self.assertEqual(
+            STATIC_AUTHOR_REWRITE,
+            b"RewriteRule ^authors/mojtaba-rozegar/?$ "
+            b"/authors/mojtaba-rozegar/index.html [L,NC]",
+        )
+        other = b'PassengerAppRoot "/home/zomorod2/Saeit"\n'
+        self.assertEqual(
+            verified_author_redirect_state(other + STATIC_AUTHOR_REWRITE + b"\n"),
+            other + STATIC_AUTHOR_REWRITE + b"\n",
+        )
+        with self.assertRaises(ValueError):
+            verified_author_redirect_state(STATIC_AUTHOR_REWRITE + b"\n" + STATIC_AUTHOR_REWRITE)
+        with self.assertRaises(ValueError):
+            verified_author_redirect_state(
+                b"RewriteRule ^authors/mojtaba-rozegar/?$ /elsewhere [L]\n"
+            )
+
     def test_only_one_canonical_persian_url_is_added_to_sitemap(self):
         original = (
             b'<?xml version="1.0" encoding="utf-8"?>\n'
