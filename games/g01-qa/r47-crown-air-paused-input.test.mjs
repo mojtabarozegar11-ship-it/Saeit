@@ -5,7 +5,7 @@ import {Script} from 'node:vm';
 
 function inlineScript(path) {
   const html=readFileSync(new URL(path,import.meta.url),'utf8');
-  const scripts=[...html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)];
+  const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
   assert.equal(scripts.length,1);
   new Script(scripts[0][1],{filename:path});
   return scripts[0][1];
