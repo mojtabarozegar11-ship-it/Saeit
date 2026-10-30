@@ -217,11 +217,15 @@ export function reconcileBossEncounter(state) {
 // A legacy or manipulated save may pass numeric position validation while
 // placing the hero inside a solid wall. Recover to the known passable spawn
 // without touching score, objectives, inventory or earned campaign progress.
-export function restorePlayerPosition(state, isBlocked) {
-  if (!state || typeof isBlocked !== 'function') return false;
-  if (Number.isFinite(state.x) && Number.isFinite(state.y) &&
-      !isBlocked(state.x | 0, state.y | 0)) return false;
-  if (isBlocked(2, 7)) return false;
+export function restorePlayerPosition(state, isBlocked, isFootprintClear = null) {
+  if (!state || typeof isBlocked !== 'function') return null;
+  const clear = typeof isFootprintClear === 'function' ? isFootprintClear :
+    (x, y) => !isBlocked(Math.floor(x), Math.floor(y));
+  // A centre can be in a floor tile while the player's radius overlaps a wall.
+  // Recheck the entire footprint on every restore, including legacy saves.
+  if (Number.isFinite(state.x) && Number.isFinite(state.y) && clear(state.x, state.y)) return false;
+  // Do not resume inside a wall if the fallback itself is unsafe.
+  if (!clear(2.5, 7.5)) return null;
   state.x = 2.5;
   state.y = 7.5;
   return true;
