@@ -63,9 +63,14 @@ class PrivatePreimageTests(unittest.TestCase):
         self.assertEqual(backup.stat().st_mtime_ns, before)
 
     def test_rejects_drift_without_creating_backup(self):
-        self.source.write_bytes(b"changed source")
-        with self.assertRaisesRegex(RuntimeError, "SHA drift"):
+        changed = b"changed source"
+        self.source.write_bytes(changed)
+        with self.assertRaises(mod.SourceDriftError) as caught:
             self.run_snapshot()
+        self.assertEqual(caught.exception.observed_sha256,
+                         hashlib.sha256(changed).hexdigest())
+        self.assertEqual(mod.safe_failure_code(caught.exception), "SOURCE_SHA_DRIFT")
+        self.assertNotIn("changed source", str(caught.exception))
         self.assertFalse(self.paths()[0].exists())
 
     def test_partial_snapshot_fails_closed_without_overwrite(self):
