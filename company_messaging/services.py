@@ -76,9 +76,13 @@ def _deliver(msg):
                            "protect_content": True}).encode()
         result = _http_post("https://api.telegram.org/bot%s/sendMessage" % token, data,
                             {"Content-Type": "application/json"})
-        if not result.get("ok"):
+        if result.get("ok") is not True:
             raise RuntimeError("telegram_rejected")
-        return str(result.get("result", {}).get("message_id", ""))[:128]
+        receipt = result.get("result")
+        message_id = receipt.get("message_id") if isinstance(receipt, dict) else None
+        if not message_id:
+            raise RuntimeError("telegram_missing_message_id")
+        return str(message_id)[:128]
     if msg.channel in ("bale", "eitaa", "rubika"):
         from .domestic_providers import send_bot_message
         destination = getattr(contact, msg.channel + "_chat_id")
