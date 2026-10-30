@@ -115,6 +115,17 @@ class SearchOutageTests(SimpleTestCase):
             response = seo_views.site_search(self.request)
         self.assertEqual(response.status_code, 503)
 
+    def test_whitespace_only_search_does_not_query_catalog(self):
+        from django.http import HttpResponse
+        with patch.object(seo_views, "render", return_value=HttpResponse("ok")) as renderer:
+            response = seo_views._site_search_with_schema(
+                RequestFactory().get("/search/", {"q": "  \u00a0  \t  "})
+            )
+        self.assertEqual(response.status_code, 200)
+        context = renderer.call_args.args[2]
+        self.assertEqual(context["q"], "")
+        self.assertEqual(context["results"], [])
+
     def test_healthy_search_uses_original_renderer(self):
         from django.http import HttpResponse
         expected = HttpResponse("search is ready")
