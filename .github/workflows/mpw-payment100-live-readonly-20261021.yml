@@ -6,6 +6,7 @@ on:
       - scripts/mpw_payment_100_live_baseline_readonly_20261021.py
       - .github/workflows/mpw-payment100-live-readonly-20261021.yml
       - scripts/mpw_payment_779_gate_readonly_20261021.py
+      - scripts/mpw_guest_trx_core_scope_readonly_20261020.py
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
@@ -74,6 +75,10 @@ jobs:
         run: |
           set -euo pipefail
           timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-gateway100-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_payment_779_gate_readonly_20261021.py
+      - name: Read-only buyer funnel, invoice and payment status audit
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-gateway100-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" < scripts/mpw_guest_trx_core_scope_readonly_20261020.py
       - name: Remove private SSH relay material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-gateway100-ssh"
