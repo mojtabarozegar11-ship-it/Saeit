@@ -134,6 +134,34 @@ class MessagingTests(TestCase):
         self.assertContains(response, "مخاطب")
 
     @override_settings(
+        COMPANY_MESSAGING_TELEGRAM_ENABLED=True,
+        COMPANY_TELEGRAM_BOT_TOKEN="offline-only-token",
+    )
+    def test_telegram_requires_positive_upstream_message_id(self):
+        contact = Contact.objects.create(
+            unit=self.unit, name="Telegram opt-in", telegram_chat_id="offline-chat-id",
+            telegram_consent_at=timezone.now(), consent_evidence="confirmed-optin-ticket-telegram",
+        )
+        missing = enqueue(Message(unit=self.unit, channel="telegram", sender=self.owner,
+                                  contact=contact, body="پیام بدون شناسه"))
+        with patch("company_messaging.services._http_post",
+                   return_value={"ok": True, "result": {}}) as upstream:
+            self.assertEqual(dispatch_one(missing.pk), "uncertain")
+            self.assertEqual(dispatch_one(missing.pk), "not_due")
+            upstream.assert_called_once()
+        missing.refresh_from_db()
+        self.assertEqual(missing.attempts, 1)
+        self.assertFalse(missing.external_reference)
+        valid = enqueue(Message(unit=self.unit, channel="telegram", sender=self.owner,
+                                contact=contact, body="پیام دارای شناسه"))
+        with patch("company_messaging.services._http_post",
+                   return_value={"ok": True, "result": {"message_id": 712}}) as upstream:
+            self.assertEqual(dispatch_one(valid.pk), "accepted")
+            upstream.assert_called_once()
+        valid.refresh_from_db()
+        self.assertEqual(valid.external_reference, "712")
+
+    @override_settings(
         COMPANY_MESSAGING_SMS_ENABLED=True,
         COMPANY_SMS_KAVENEGAR_KEY="offline-only-key",
         COMPANY_SMS_KAVENEGAR_SENDER="100010",
