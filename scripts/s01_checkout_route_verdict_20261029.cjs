@@ -63,4 +63,19 @@ function isDirectCheckoutHref(href) {
     parts[2] === 'product' && /^[0-9]+$/.test(parts[3]) &&
     parts[4] === 'checkout' && parts[5] === '';
 }
-module.exports = {classifyNavigation, assessAnonymousRouteRows, isDirectCheckoutHref};
+// Public CI artifacts must not persist redirect tokens, signed query values,
+// URL fragments or arbitrary external URLs observed in anonymous page controls.
+// Call this only AFTER classifying the raw in-memory CTA for exact SKU matching.
+function redactObservedHref(href) {
+  if (href === null) return null;
+  if (href === '[external]' || href === '[invalid]') return href;
+  if (typeof href !== 'string' || !href.startsWith('/') || href.startsWith('//'))
+    return '[invalid]';
+  try {
+    const url = new URL(href, 'https://mojplaywin.com');
+    if (url.origin !== 'https://mojplaywin.com') return '[external]';
+    return url.pathname + (url.search ? '?[redacted]' : '') +
+      (url.hash ? '#[redacted]' : '');
+  } catch (_) { return '[invalid]'; }
+}
+module.exports = {classifyNavigation, assessAnonymousRouteRows, isDirectCheckoutHref, redactObservedHref};
