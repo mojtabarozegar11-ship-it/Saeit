@@ -77,6 +77,7 @@ def test_dispatch_is_owner_main_only_for_manual_or_exact_issue_comment():
     assert "github.event.comment.author_association == 'OWNER'" in source
     assert "github.event.comment.user.login == 'mojtabarozegar11-ship-it'" in source
     assert "github.event.comment.body == 'ZMR-PUBLIC-KEY-V1'" in source
+    assert "github.event.comment.body == 'ZMR-CPANEL-READONLY-V1'" in source
     assert "startsWith(github.event.comment.body, 'ZMR-SEALED-COMMAND-V1')" in source
     for forbidden in (
         "\n  push:", "\n  pull_request:", "\n  schedule:",
@@ -155,6 +156,7 @@ def _owner_comment(body, *, issue_number=1600, user="mojtabarozegar11-ship-it",
     ("operation", "envelope", "allowed"),
     [
         ("show_public_key", None, True),
+        ("cpanel_readonly", None, True),
         ("accept", json.dumps(VALID_ENVELOPE), True),
         ("accept", None, False),
         ("accept", "", False),
@@ -190,6 +192,7 @@ def test_manual_input_gate_rejects_bad_envelopes(
     ("event", "allowed", "operation"),
     [
         (_owner_comment("ZMR-PUBLIC-KEY-V1"), True, "show_public_key"),
+        (_owner_comment("ZMR-CPANEL-READONLY-V1"), True, "cpanel_readonly"),
         (_owner_comment("ZMR-SEALED-COMMAND-V1\n" + json.dumps(VALID_ENVELOPE)), True, "accept"),
         (_owner_comment("ZMR-PUBLIC-KEY-V1", issue_number=1601), False, None),
         (_owner_comment("ZMR-PUBLIC-KEY-V1", user="another-user"), False, None),
@@ -220,6 +223,32 @@ def test_comment_gate_accepts_only_owner_and_bounded_encrypted_envelope(
             assert not encrypted.exists()
     else:
         assert not encrypted.exists()
+
+
+def test_cpanel_readonly_command_is_exact_and_never_receives_plaintext(tmp_path):
+    for body in ("ZMR-CPANEL-READONLY-V1", "ZMR-CPANEL-READONLY-V1\\nsecret", "ZMR-CPANEL-READONLY-V2"):
+        result, output, encrypted = _run_gate(_owner_comment(body), "issue_comment", tmp_path)
+        if body == "ZMR-CPANEL-READONLY-V1":
+            assert result.returncode == 0
+            assert "operation=cpanel_readonly" in output.read_text(encoding="utf-8")
+            assert not encrypted.exists()
+        else:
+            assert result.returncode != 0
+            assert not encrypted.exists()
+
+
+def test_readonly_remote_commands_are_bounded_and_do_not_mutate():
+    source = _source()
+    step = source.split("- name: Read only cPanel inventory for the authenticated chat owner", 1)[1].split("- name: Read the current recipient public key", 1)[0]
+    assert "if: steps.gate.outputs.operation == 'cpanel_readonly'" in step
+    assert "pwd.getpwuid(os.geteuid()).pw_name != \\"zomorod2\\"" in step
+    for command in ("list_domains", "list_applications", "get_local_quota_info", "list_backups"):
+        assert command in step
+    assert "subprocess.run(" in step
+    assert "[command, \\"--output=json\\", module, operation]" in step
+    assert "shell=True" not in step
+    assert "CPANEL_SITE_MUTATIONS=NONE" in step
+    assert "CPANEL_FACTORY_OPERATIONS=NONE" in step
 
 
 def test_unexpected_event_type_is_rejected(tmp_path):
@@ -276,8 +305,8 @@ def test_emergency_direct_cpanel_path_never_lowers_identity_or_host_key_pins():
     assert "PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED" in source
     assert "PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE" in source
     assert 'printf \'command_host=%s\\n\' "$command_host" >> "$GITHUB_OUTPUT"' in source
-    assert source.count('case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct)') == 2
-    assert source.count('COMMAND_HOST: ${{ steps.link.outputs.command_host }}') == 2
+    assert source.count('case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct)') == 3
+    assert source.count('COMMAND_HOST: ${{ steps.link.outputs.command_host }}') == 3
     assert 'ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" "$COMMAND_HOST"' in source
     assert 'ssh -F "$d/config" "$COMMAND_HOST"' in source
     assert "UserKnownHostsFile /dev/null" not in source
