@@ -47,14 +47,14 @@ class OfficeSecurityTests(TestCase):
 
     def test_new_route_is_before_company_slug_and_does_not_replace_company(self):
         self.assertEqual(resolve("/company/office/").url_name, "dashboard")
-        self.assertEqual(resolve("/company/office/login/").url_name, "login")
+        self.assertEqual(resolve("/company/office/secure-login/").url_name, "login")
         self.assertEqual(resolve("/company/").url_name, "company")
         self.assertEqual(resolve("/ghanadi/").url_name, "ghanadi")
         self.assertEqual(resolve("/amozeshgah/").url_name, "education")
         self.assertEqual(resolve("/farnaz/").url_name, "farnaz_home" if False else resolve("/farnaz/").url_name)
 
     def test_login_get_is_private_noindex_and_not_cached(self):
-        response = self.client.get("/company/office/login/", secure=True)
+        response = self.client.get("/company/office/secure-login/", secure=True)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "نام کاربری")
         self.assertContains(response, "رمز عبور")
@@ -64,17 +64,17 @@ class OfficeSecurityTests(TestCase):
         self.assertNotContains(response, "TestPasswordOnly!123")
 
     def test_plain_http_cannot_login_or_access_workspace(self):
-        self.assertEqual(self.client.get("/company/office/login/").status_code, 403)
+        self.assertEqual(self.client.get("/company/office/secure-login/").status_code, 403)
         self.assertEqual(self.client.get("/company/office/").status_code, 403)
 
     def test_anonymous_user_redirected_to_local_login(self):
         response = self.client.get("/company/office/", secure=True)
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/company/office/login/?next=", response["Location"])
+        self.assertIn("/company/office/secure-login/?next=", response["Location"])
         self.assertEqual(self.client.get("/company/office/finance/", secure=True).status_code, 302)
 
     def test_nonstaff_credentials_cannot_log_into_private_office(self):
-        response = self.client.post("/company/office/login/", {
+        response = self.client.post("/company/office/secure-login/", {
             "username": self.member.username, "password": "TestPasswordOnly!123",
         }, secure=True)
         self.assertEqual(response.status_code, 200)
@@ -83,14 +83,14 @@ class OfficeSecurityTests(TestCase):
     def test_staff_without_company_access_cannot_log_into_private_office(self):
         other = User.objects.create_user(username="staff-only", is_staff=True,
                                          password="TestPasswordOnly!123")
-        response = self.client.post("/company/office/login/", {
+        response = self.client.post("/company/office/secure-login/", {
             "username": other.username, "password": "TestPasswordOnly!123",
         }, secure=True)
         self.assertEqual(response.status_code, 200)
         self.assertFalse("_auth_user_id" in self.client.session)
 
     def test_authorized_login_and_post_only_logout(self):
-        response = self.client.post("/company/office/login/", {
+        response = self.client.post("/company/office/secure-login/", {
             "username": self.viewer.username, "password": "TestPasswordOnly!123",
         }, secure=True)
         self.assertEqual(response.status_code, 302)
@@ -103,7 +103,7 @@ class OfficeSecurityTests(TestCase):
         self.assertEqual(self.client.post("/company/office/logout/", secure=True).status_code, 302)
 
     def test_five_failed_private_logins_block_even_a_correct_password(self):
-        url = "/company/office/login/"
+        url = "/company/office/secure-login/"
         for attempt in range(5):
             response = self.client.post(url, {
                 "username": self.viewer.username,
@@ -121,7 +121,7 @@ class OfficeSecurityTests(TestCase):
         self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_login_lockout_is_expiring_and_records_no_plain_identifiers(self):
-        url = "/company/office/login/"
+        url = "/company/office/secure-login/"
         self.client.post(url, {
             "username": self.viewer.username,
             "password": "wrong-password",
@@ -142,7 +142,7 @@ class OfficeSecurityTests(TestCase):
         self.assertFalse(OfficeLoginFailure.objects.exists())
 
     def test_successful_private_login_has_short_session_lifetime(self):
-        response = self.client.post("/company/office/login/", {
+        response = self.client.post("/company/office/secure-login/", {
             "username": self.viewer.username,
             "password": "TestPasswordOnly!123",
         }, secure=True)
@@ -152,7 +152,7 @@ class OfficeSecurityTests(TestCase):
         self.assertLessEqual(lifetime, 1800)
 
     def test_login_rate_limits_are_scoped_by_client_and_account(self):
-        url = "/company/office/login/"
+        url = "/company/office/secure-login/"
         for _ in range(5):
             self.client.post(url, {
                 "username": self.viewer.username,
@@ -183,7 +183,7 @@ class OfficeSecurityTests(TestCase):
 
     def test_form_requires_csrf_when_enabled(self):
         client = Client(enforce_csrf_checks=True)
-        response = client.post("/company/office/login/", {
+        response = client.post("/company/office/secure-login/", {
             "username": self.viewer.username, "password": "TestPasswordOnly!123",
         }, secure=True)
         self.assertEqual(response.status_code, 403)
