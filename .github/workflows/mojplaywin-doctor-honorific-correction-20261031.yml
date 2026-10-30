@@ -117,7 +117,36 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
 
+      - name: Inspect exact live source candidates without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-doctor-ssh"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel "python3 -" <<'PY'
+          from pathlib import Path
+          checks=(
+             "/home/zomorod2/mojplaywin.com/design-preview-20261017/professor-mojtaba-roozegar-20261018.html",
+             "/home/zomorod2/Saeit/core/templates/mojplaywin/leadership_executive_cv_20261018.html",
+             "/home/zomorod2/mojplaywin.com/.htaccess",
+             "/home/zomorod2/Saeit/core/templates/mojplaywin/site_base.html",
+          )
+          for name in checks:
+              path=Path(name)
+              if not path.is_file() or path.is_symlink():
+                  print("DOCTOR_SOURCE_INSPECT",name,"missing_or_symlink")
+                  continue
+              value=path.read_text("utf-8",errors="replace")
+              print("DOCTOR_SOURCE_INSPECT",name,
+                    "size",len(value),
+                    "professor_full",value.count("Professor Mojtaba Roozegar"),
+                    "doctor_full",value.count("Dr. Mojtaba Roozegar"),
+                    "marker",int("MOJPLAYWIN_PROFESSOR_MOJTabA_ROOZEGAR_PROFILE_20261018" in value),
+                    "gallery",value.count('class="mpw-sport-white-card '),
+                    "route_rewrite",int("MPW_EXACT_LEADERSHIP_ROOZEGAR_20261018" in value))
+          PY
+
       - name: Atomically patch the single live static biography with private backup
+        if: false
         id: install
         shell: bash
         run: |
@@ -128,6 +157,7 @@ jobs:
             < scripts/mojplaywin_doctor_honorific_live_fix_20261031.py
 
       - name: Verify live Doctor title, search metadata and unaffected pages
+        if: steps.install.outcome == 'success'
         id: verify
         shell: bash
         run: |
