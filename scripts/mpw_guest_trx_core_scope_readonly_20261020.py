@@ -2,7 +2,9 @@
 """Restricted read-only merchant guest TRX implementation inventory. No credentials or wallets in output."""
 import os,sys,json,ast,inspect,hashlib,re
 from pathlib import Path
-base=Path("/home/zomorod2/Saeit-staging")
+base=Path(os.environ.get("MPW_AUDIT_BASE","/home/zomorod2/Saeit-staging"))
+if base not in (Path("/home/zomorod2/Saeit-staging"), Path("/home/zomorod2/Saeit")):
+    raise SystemExit("MPW_AUDIT_BASE is outside the audited Saeit roots")
 root=Path("/home/zomorod2/mojplaywin.com")
 os.chdir(base);sys.path.insert(0,str(base));os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
 import django;django.setup()
