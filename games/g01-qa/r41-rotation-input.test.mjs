@@ -11,7 +11,7 @@ test('Air Supremacy releases all held touch inputs on finish, not only pause',()
  const messages=[];const profile={credits:0,bestScore:0,wins:0};
  const elements=new Map();
  const $=id=>{if(!elements.has(id))elements.set(id,{classList:{add(){},remove(){}},setAttribute(){},textContent:'',innerHTML:''});return elements.get(id)};
- const ctx={run:true,paused:false,firing:true,key:new Set(['Space']),togglePause:v=>messages.push(v),score:50,kills:2,mission:1,MAX_MISSION:12,creditsEarned:5,profile,refreshHangar(){},$};
+ const ctx={run:true,paused:false,firing:true,key:new Set(['Space']),togglePause:v=>messages.push(v),score:50,kills:2,mission:1,MAX_MISSION:12,creditsEarned:5,profile,persistProfile(){},refreshHangar(){},$};
  vm.runInNewContext(code+'\nglobalThis.finishSortie=finish;',ctx);
  ctx.finishSortie(false);
  assert.deepEqual(messages,[true]);assert.equal(ctx.run,false);assert.equal(ctx.firing,false);
