@@ -54,4 +54,13 @@ function assessAnonymousRouteRows(rows, expectedPaths, expectedDevices) {
   for (const key of expected) if (!seen.has(key)) failures.push('MISSING_ROW:' + key);
   return {complete:failures.length === 0, failures};
 }
-module.exports = {classifyNavigation, assessAnonymousRouteRows};
+// Registration links may include ?next=/store/product/<sku>/checkout/.
+// They are NOT direct checkout CTAs and must not be counted as cross-SKU links.
+function isDirectCheckoutHref(href) {
+  if (typeof href !== 'string' || href.includes('?') || href.includes('#')) return false;
+  const parts = href.split('/');
+  return parts.length === 6 && parts[0] === '' && parts[1] === 'store' &&
+    parts[2] === 'product' && /^[0-9]+$/.test(parts[3]) &&
+    parts[4] === 'checkout' && parts[5] === '';
+}
+module.exports = {classifyNavigation, assessAnonymousRouteRows, isDirectCheckoutHref};
