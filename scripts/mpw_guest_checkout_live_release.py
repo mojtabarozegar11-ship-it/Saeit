@@ -45,10 +45,20 @@ def source_from(path):
 def plan(src):
  old={k:p.read_bytes() for k,p in TARGETS.items() if k!='guest'}
  if any(MARKERS[k] in old[k].decode('utf8','replace') for k in MARKERS):
-  if all(MARKERS[k] in old[k].decode('utf8','replace') for k in MARKERS) and TARGETS['guest'].is_file():
-   installed=TARGETS['guest'].read_bytes()
-   if installed==src: return old,old,False
-  fail('PARTIAL_OR_DIFFERENT_GUEST_RELEASE')
+  if not all(MARKERS[k] in old[k].decode('utf8','replace') for k in MARKERS):
+   fail('PARTIAL_GUEST_RELEASE')
+  for key in ('pages','web'):
+   body=old[key].decode('utf8')
+   if body.count(MARKERS[key])!=1 or IMPORT.format(kind='public' if key=='pages' else 'commercial') not in body:
+    fail('GUEST_HOOK_DRIFT:'+key)
+  live=TARGETS['guest']
+  if live.is_symlink() or not live.is_file(): fail('GUEST_MODULE_MISSING')
+  installed=source_from(live)
+  if installed==src: return old,old,False
+  # Restrict the first upgrade to the exact version installed in successful run 41109493749.
+  if digest(installed)!='0db371611ef61b052e368505297af0808cb0108e56c5d99a9f11f66338da19ba':
+   fail('UNRECOGNIZED_GUEST_UPGRADE_BASE')
+  return old,old,True
  new={}
  for key,raw in old.items():
   text=raw.decode('utf8')
@@ -108,21 +118,28 @@ def publish(run,src_path):
  manifest={'run':run,'before':before,'after':after,'guest_before':digest(TARGETS['guest'].read_bytes()) if TARGETS['guest'].exists() else None,'guest_after':digest(src)}
  with (d/'manifest.json').open('x') as f: os.fchmod(f.fileno(),0o600);json.dump(manifest,f,sort_keys=True);f.flush();os.fsync(f.fileno())
  changed=[]
+ upgrading=manifest['guest_before'] is not None
  try:
-  if TARGETS['guest'].exists(): fail('GUEST_MODULE_COLLISION')
-  atomic(TARGETS['guest'],src); changed.append('guest')
-  for key in ('web','pages'):
-   atomic(TARGETS[key],new[key],expected=before[key]);changed.append(key)
+  if upgrading:
+   atomic(TARGETS['guest'],src,expected=manifest['guest_before']);changed.append('guest')
+  else:
+   atomic(TARGETS['guest'],src);changed.append('guest')
+   for key in ('web','pages'):
+    atomic(TARGETS[key],new[key],expected=before[key]);changed.append(key)
   restart()
  except BaseException:
   for key in reversed(changed):
    path=TARGETS[key]
-   if key=='guest':
-    if path.is_file() and digest(path.read_bytes())==manifest['guest_after']: path.unlink()
-   elif path.is_file() and digest(path.read_bytes())==after[key]: atomic(path,old[key])
+   if key=='guest' and path.is_file() and digest(path.read_bytes())==manifest['guest_after']:
+    if upgrading:
+     atomic(path,(d/'guest.py.bak').read_bytes(),expected=manifest['guest_after'])
+    else: path.unlink()
+   elif key!='guest' and path.is_file() and digest(path.read_bytes())==after[key]:
+    atomic(path,old[key],expected=after[key])
   restart()
   raise
- print('MPW_GUEST_RELEASE=APPLIED;FILES=3;ORDERS_CREATED=0;PAYMENTS_CREATED=0')
+ print('MPW_GUEST_RELEASE=APPLIED;MODE='+('UPGRADE' if upgrading else 'INSTALL')+
+       ';FILES='+('1' if upgrading else '3')+';ORDERS_CREATED=0;PAYMENTS_CREATED=0')
 
 def preview(src_path):
  guard();src=source_from(src_path);old,new,needed=plan(src)
@@ -163,10 +180,19 @@ def rollback(run):
  for key in ('web','pages'):
   if digest(TARGETS[key].read_bytes())!=meta['after'][key]: fail('ROLLBACK_DRIFT:'+key)
  if digest(TARGETS['guest'].read_bytes())!=meta['guest_after']: fail('ROLLBACK_DRIFT:guest')
- for key in ('web','pages'): atomic(TARGETS[key],(d/(key+'.bak')).read_bytes())
- TARGETS['guest'].unlink()
+ for key in ('web','pages'):
+  if meta['after'][key]!=meta['before'][key]:
+   backup=(d/(key+'.bak')).read_bytes()
+   if digest(backup)!=meta['before'][key]: fail('ROLLBACK_BACKUP_HASH_MISMATCH:'+key)
+   atomic(TARGETS[key],backup,expected=meta['after'][key])
+ if meta.get('guest_before'):
+  backup=(d/'guest.py.bak').read_bytes()
+  if digest(backup)!=meta['guest_before']: fail('ROLLBACK_BACKUP_HASH_MISMATCH:guest')
+  atomic(TARGETS['guest'],backup,expected=meta['guest_after'])
+ else:
+  TARGETS['guest'].unlink()
  restart()
- print('MPW_GUEST_RELEASE=ROLLED_BACK;FILES=3')
+ print('MPW_GUEST_RELEASE=ROLLED_BACK;MODE='+('UPGRADE' if meta.get('guest_before') else 'INSTALL'))
 
 if __name__=='__main__':
  if len(sys.argv)==3 and sys.argv[1]=='preview': preview(sys.argv[2])
