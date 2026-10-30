@@ -10,6 +10,16 @@ from core import seo_views, company_content_views
 
 
 class NullableSearchSummaryTests(SimpleTestCase):
+    def test_empty_search_remains_usable_without_database_access(self):
+        for value in ("", "   ", " \\t\\n "):
+            request = RequestFactory().get("/search/", {"q": value})
+            with patch.object(seo_views, "missing_public_tables") as introspect, \\
+                 patch.object(seo_views, "render", return_value=HttpResponse("search form")) as renderer:
+                response = seo_views.site_search(request)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(renderer.call_args.args[2], {"q": "", "results": []})
+            introspect.assert_not_called()
+
     def test_null_legacy_article_content_is_not_a_public_500(self):
         article = SimpleNamespace(title="synthetic-nullable", content=None, slug="sample")
         with patch.object(seo_views, "NewsletterStory") as stories, \
@@ -91,3 +101,6 @@ class AdvertisedAuthorAvailabilityTests(SimpleTestCase):
         self.assertEqual(response["Retry-After"], "300")
         self.assertEqual(response["Cache-Control"], "private, no-store")
         self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
+        self.assertIn("معرفی پژوهشگر موقتاً در دسترس نیست", response.content.decode("utf-8"))
+        self.assertIn('role="status"', response.content.decode("utf-8"))
+        self.assertIn("/company/", response.content.decode("utf-8"))
