@@ -25,12 +25,14 @@ def owner_id(root=None):
         try:
             before = os.fstat(fd)
             if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                    or before.st_mode & 0o022  # reject group/world-writable owner binding
                     or not 1 <= before.st_size <= 19):
                 return None
             raw = os.read(fd, 20)
             after = os.fstat(fd)
             if (len(raw) != before.st_size or after.st_size != before.st_size
-                    or after.st_ino != before.st_ino
+                    or after.st_ino != before.st_ino or after.st_dev != before.st_dev
+                    or after.st_mode != before.st_mode
                     or after.st_mtime_ns != before.st_mtime_ns):
                 return None
         finally:
