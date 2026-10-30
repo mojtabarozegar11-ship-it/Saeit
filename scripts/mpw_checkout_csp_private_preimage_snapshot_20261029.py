@@ -22,6 +22,14 @@ MAX_SOURCE = 100_000
 STEM = "mpw-checkout-csp-preimage-" + EXPECTED_SHA256[:16]
 
 
+class SourceDriftError(RuntimeError):
+    """Safe hash-only evidence; never exposes source content or file paths."""
+
+    def __init__(self, observed_sha256):
+        super().__init__("checkout preimage SHA drift")
+        self.observed_sha256 = observed_sha256
+
+
 def require_regular(path):
     info = path.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
@@ -85,8 +93,9 @@ def snapshot(root=ROOT, expected_owner="zomorod2"):
     if source.stat().st_size > MAX_SOURCE:
         raise RuntimeError("checkout source unexpectedly large")
     original = source.read_bytes()
-    if digest(original) != EXPECTED_SHA256:
-        raise RuntimeError("checkout preimage SHA drift")
+    observed_sha256 = digest(original)
+    if observed_sha256 != EXPECTED_SHA256:
+        raise SourceDriftError(observed_sha256)
     fs = os.statvfs(private)
     if fs.f_bavail * fs.f_frsize < MIN_FREE:
         raise RuntimeError("local backup filesystem lacks headroom")
@@ -171,9 +180,13 @@ if __name__ == "__main__":
     try:
         print("S01_PRIVATE_PREIMAGE=" + json.dumps(snapshot(), sort_keys=True))
     except (OSError, ValueError, RuntimeError, KeyError, json.JSONDecodeError) as exc:
-        print("S01_PRIVATE_PREIMAGE=" + json.dumps({
+        blocked = {
             "status": "BLOCKED_NO_SOURCE_CHANGE",
             "reason_code": safe_failure_code(exc),
             "release_permitted": False,
-        }, sort_keys=True))
+        }
+        if isinstance(exc, SourceDriftError):
+            blocked["observed_source_sha256"] = exc.observed_sha256
+            blocked["expected_source_sha256"] = EXPECTED_SHA256
+        print("S01_PRIVATE_PREIMAGE=" + json.dumps(blocked, sort_keys=True))
         raise SystemExit(1)
