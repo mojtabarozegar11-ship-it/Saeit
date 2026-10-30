@@ -1,0 +1,160 @@
+name: Scoped MPW Google Search Console TXT verification
+on:
+  pull_request:
+    paths:
+      - .github/workflows/mpw-gsc-domain-txt-20261030.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-gsc-domain-txt-20261030.yml
+permissions:
+  contents: read
+concurrency:
+  group: mpw-gsc-apex-txt-once
+  cancel-in-progress: false
+jobs:
+  source-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Enforce intended scope and no deletion
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path(".github/workflows/mpw-gsc-domain-txt-20261030.yml").read_text()
+          assert "domain=mojplaywin.com" in text
+          assert "ZoneEdit add_zone_record" in text
+          assert "ZoneEdit list_zone_records" in text
+          assert "ZoneEdit remove_zone_record" not in text
+          assert "ZoneEdit edit_zone_record" not in text
+          assert "DomainInfo list_domains" in text
+          print("SOURCE_SCOPE=PASS")
+          PY
+  append-single-txt:
+    needs: source-check
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      GOOGLE_TOKEN: "google-site-verification=Ohs-EoudyKpuUQwxEZogMAPkJ9QhQeMKvaF-yXFXwCg"
+    steps:
+      - name: Establish pinned no-agent-forwarding GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-gsc-dns-ssh"
+          install -d -m 700 "$d"
+          for variable in VPS_KEY HOST_KEY; do
+            file="$d/$variable.key"
+            printf '%s' "${!variable}" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$file"
+            chmod 600 "$file"
+            ssh-keygen -y -P '' -f "$file" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          {
+            echo 'Host saeit-vps'
+            echo '  HostName 178.239.147.150'
+            echo '  User githubops'
+            echo "  IdentityFile $d/VPS_KEY.key"
+            echo "  UserKnownHostsFile $d/vps.known"
+            echo 'Host saeit-cpanel'
+            echo '  HostName zohal.pws-dns.net'
+            echo '  User zomorod2'
+            echo '  Port 1396'
+            echo "  IdentityFile $d/HOST_KEY.key"
+            echo "  UserKnownHostsFile $d/host.known"
+            echo '  ProxyJump saeit-vps'
+            echo 'Host *'
+            echo '  StrictHostKeyChecking yes'
+            echo '  IdentitiesOnly yes'
+            echo '  BatchMode yes'
+            echo '  ConnectTimeout 15'
+            echo '  ForwardAgent no'
+            echo '  RequestTTY no'
+          } > "$d/config"
+          chmod 600 "$d/config"
+      - name: Verify domain ownership in cPanel and inspect exact zone without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-gsc-dns-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json DomainInfo list_domains' > "$RUNNER_TEMP/mpw-domains.json"
+          python3 - "$RUNNER_TEMP/mpw-domains.json" <<'PY'
+          import json, sys
+          p=json.load(open(sys.argv[1]))
+          r=p.get("result") or {}
+          assert str(r.get("status"))=="1", "DomainInfo query unavailable; abort"
+          def has_target(value):
+              if isinstance(value,str):
+                  return value.strip().rstrip(".").lower()=="mojplaywin.com"
+              if isinstance(value,list):
+                  return any(has_target(v) for v in value)
+              if isinstance(value,dict):
+                  return any(has_target(v) for v in value.values())
+              return False
+          assert has_target(r.get("data")), "Target domain is not assigned to this account; abort"
+          print("CPANEL_DOMAIN_OWNERSHIP=CONFIRMED")
+          PY
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json ZoneEdit list_zone_records domain=mojplaywin.com' > "$RUNNER_TEMP/mpw-zone-before.json"
+          state="$(python3 - "$RUNNER_TEMP/mpw-zone-before.json" "$GOOGLE_TOKEN" <<'PY'
+          import json,sys,re
+          p=json.load(open(sys.argv[1])); r=p.get("result") or {}
+          assert str(r.get("status"))=="1", "DNS zone cannot be read; abort"
+          data=r.get("data")
+          assert isinstance(data,list) and data, "Unrecognized or empty zone data; abort"
+          token=sys.argv[2]
+          assert re.fullmatch(r"google-site-verification=[A-Za-z0-9_-]{40,80}",token), "Invalid token"
+          def present(row):
+              return isinstance(row,dict) and str(row.get("type","")).upper()=="TXT" and str(row.get("name",row.get("dname",""))).strip().rstrip(".").lower()=="mojplaywin.com" and token in json.dumps(row,ensure_ascii=False)
+          print("PRESENT" if any(present(x) for x in data) else "MISSING")
+          PY
+          )"
+          test "$state" = PRESENT || test "$state" = MISSING
+          printf '%s\n' "EXACT_TXT_BEFORE=$state"
+          printf '%s' "$state" > "$RUNNER_TEMP/mpw-txt-state"
+      - name: Add only missing apex verification TXT and confirm UAPI success
+        shell: bash
+        run: |
+          set -euo pipefail
+          state="$(<"$RUNNER_TEMP/mpw-txt-state")"
+          if test "$state" = PRESENT; then
+            echo "TXT_ADD=ALREADY_PRESENT"
+            exit 0
+          fi
+          test "$state" = MISSING
+          d="$RUNNER_TEMP/mpw-gsc-dns-ssh"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "uapi --output=json ZoneEdit add_zone_record domain=mojplaywin.com name=mojplaywin.com. type=TXT txtdata='$GOOGLE_TOKEN' ttl=14400" > "$RUNNER_TEMP/mpw-zone-add.json"
+          python3 - "$RUNNER_TEMP/mpw-zone-add.json" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1])); r=p.get("result") or {}
+          assert str(r.get("status"))=="1", "cPanel did not accept TXT addition"
+          print("TXT_ADD=UAPI_ACCEPTED")
+          PY
+      - name: Re-read authoritative cPanel zone, requiring exact record
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-gsc-dns-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json ZoneEdit list_zone_records domain=mojplaywin.com' > "$RUNNER_TEMP/mpw-zone-after.json"
+          python3 - "$RUNNER_TEMP/mpw-zone-after.json" "$GOOGLE_TOKEN" <<'PY'
+          import json,sys
+          p=json.load(open(sys.argv[1])); r=p.get("result") or {}
+          assert str(r.get("status"))=="1", "Post-write DNS zone query failed"
+          data=r.get("data")
+          assert isinstance(data,list), "Unrecognized DNS data"
+          token=sys.argv[2]
+          matched=[row for row in data if isinstance(row,dict) and str(row.get("type","")).upper()=="TXT" and str(row.get("name",row.get("dname",""))).strip().rstrip(".").lower()=="mojplaywin.com" and token in json.dumps(row,ensure_ascii=False)]
+          assert len(matched)==1, "Expected exactly one matching TXT; investigate without further mutation"
+          print("EXACT_APEX_GOOGLE_TXT=CONFIRMED")
+          PY
