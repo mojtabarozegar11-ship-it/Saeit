@@ -1,6 +1,6 @@
 # From Irrigation Recommendations to Field Outcomes: An Evidence-Provenance Critical Narrative Review
 
-**C123 condensed author-review version, 30 October 2026:** Repeated source-audit passages consolidated without inventing roster corrections; not approved, submitted or published.\n\n**Article type:** Critical narrative review of eight purposively selected studies. The reporting protocol is proposed and unvalidated; this is not a systematic review, a causal trial, or a meta-analysis. Source discrepancies are stated rather than silently repaired.
+**Article type:** Critical narrative review of eight purposively selected studies. The reporting protocol is proposed and unvalidated; this is not a systematic review, a causal trial, or a meta-analysis. Source discrepancies are stated rather than silently repaired.
 
 ## Abstract
 
