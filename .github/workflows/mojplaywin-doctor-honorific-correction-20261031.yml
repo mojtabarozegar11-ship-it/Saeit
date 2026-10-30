@@ -179,7 +179,6 @@ jobs:
           PY
 
       - name: Atomically patch the single live static biography with private backup
-        if: false
         id: install
         shell: bash
         run: |
