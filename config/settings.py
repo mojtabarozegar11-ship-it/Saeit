@@ -94,6 +94,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 APP_VERSION = env("APP_VERSION", default="0.1.0")
 PAYMENT_WEBHOOK_SECRET = env("PAYMENT_WEBHOOK_SECRET", default="")
 
+# No automated enterprise analysis until independently authorized.
+ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED = env.bool("ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED", default=False)
+
 # Company international trade mailbox. Credentials remain in environment/.env only.
 COMPANY_TRADE_EMAIL = env("COMPANY_TRADE_EMAIL", default="")
 TRADE_EMAIL_ENABLED = env.bool("TRADE_EMAIL_ENABLED", default=False)
@@ -128,3 +131,27 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+# Zomorod company communication: disabled until SMTP/provider contracts,
+# opt-in evidence, HTTPS security and the private worker release gate pass.
+COMPANY_MESSAGING_SEND_ENABLED = env.bool("COMPANY_MESSAGING_SEND_ENABLED", default=False)
+COMPANY_SMS_KAVENEGAR_KEY = env("COMPANY_SMS_KAVENEGAR_KEY", default="")
+COMPANY_SMS_KAVENEGAR_SENDER = env("COMPANY_SMS_KAVENEGAR_SENDER", default="")
+COMPANY_TELEGRAM_BOT_TOKEN = env("COMPANY_TELEGRAM_BOT_TOKEN", default="")
+COMPANY_WHATSAPP_ACCESS_TOKEN = env("COMPANY_WHATSAPP_ACCESS_TOKEN", default="")
+COMPANY_WHATSAPP_PHONE_ID = env("COMPANY_WHATSAPP_PHONE_ID", default="")
+COMPANY_WHATSAPP_TEMPLATE_NAME = env("COMPANY_WHATSAPP_TEMPLATE_NAME", default="")
+COMPANY_WHATSAPP_TEMPLATE_LANGUAGE = env("COMPANY_WHATSAPP_TEMPLATE_LANGUAGE", default="fa")
+COMPANY_MESSAGING_EMAIL_ENABLED = env.bool("COMPANY_MESSAGING_EMAIL_ENABLED", default=False)
+COMPANY_MESSAGING_SMS_ENABLED = env.bool("COMPANY_MESSAGING_SMS_ENABLED", default=False)
+COMPANY_MESSAGING_TELEGRAM_ENABLED = env.bool("COMPANY_MESSAGING_TELEGRAM_ENABLED", default=False)
+COMPANY_MESSAGING_WHATSAPP_ENABLED = env.bool("COMPANY_MESSAGING_WHATSAPP_ENABLED", default=False)
+
+# Domestic official bot connections. Off unless each account has been paired and verified.
+COMPANY_MESSAGING_BALE_ENABLED = env.bool("COMPANY_MESSAGING_BALE_ENABLED", default=False)
+COMPANY_MESSAGING_EITAA_ENABLED = env.bool("COMPANY_MESSAGING_EITAA_ENABLED", default=False)
+COMPANY_MESSAGING_RUBIKA_ENABLED = env.bool("COMPANY_MESSAGING_RUBIKA_ENABLED", default=False)
+COMPANY_BALE_BOT_TOKEN = env("COMPANY_BALE_BOT_TOKEN", default="")
+COMPANY_EITAA_APP_TOKEN = env("COMPANY_EITAA_APP_TOKEN", default="")
+COMPANY_RUBIKA_BOT_TOKEN = env("COMPANY_RUBIKA_BOT_TOKEN", default="")
+COMPANY_MARKETING_PUBLISH_ENABLED = env.bool("COMPANY_MARKETING_PUBLISH_ENABLED", default=False)
