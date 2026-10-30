@@ -110,7 +110,8 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
             directory = base / "public/authors/mojtaba-rozegar"
             directory.mkdir(parents=True)
             page = directory / "index.html"
-            original = b"<!doctype html><html lang='fa'><body>Profile</body></html>"
+            original = (b"<!doctype html><html lang='fa'><head><title>Profile</title>"
+                        b"</head><body>Profile</body></html>")
             page.write_bytes(original)
             with override_settings(BASE_DIR=base):
                 response = persian_author_profile(self.requests.get("/authors/mojtaba-rozegar/"))
