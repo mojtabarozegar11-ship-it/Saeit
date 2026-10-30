@@ -36,3 +36,10 @@
 
 /* R24: persistent at-risk campaign warning on the home screen. */
 .save-warning:not([hidden]){display:block;margin:12px 0;padding:12px 14px;border:2px solid #f5bf63;border-radius:12px;background:#412515;color:#fff2d5;font-size:13px;line-height:1.7;text-align:right}
+
+/* G-01 R32: optional radar is closed by default on mobile. */
+#tacticalMap:not([hidden]){display:block;position:absolute;left:10px;top:calc(env(safe-area-inset-top) + 56px);width:clamp(112px,29vw,160px);height:clamp(112px,29vw,160px);border:2px solid #84f2cb;border-radius:12px;background:#0c272d;box-shadow:0 5px 16px #000b;z-index:5;pointer-events:none}
+.map-toggle{position:absolute;left:156px;top:calc(env(safe-area-inset-top) + 9px);width:40px;height:38px;font-size:22px;z-index:6;pointer-events:auto}
+#objectiveDirection{display:inline-block;color:#fff0b5;font-size:10px;white-space:nowrap}
+@media(max-width:390px){#tacticalMap:not([hidden]){width:112px;height:112px}#objectiveDirection{font-size:9px}}
+@media(orientation:landscape) and (max-height:600px){#tacticalMap:not([hidden]){top:calc(env(safe-area-inset-top) + 52px);width:112px;height:112px}}
