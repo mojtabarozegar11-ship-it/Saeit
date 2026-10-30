@@ -107,14 +107,14 @@ jobs:
           # A single successful, pinned two-hop identity test proves both hops
           # and keeps the authenticated cPanel control session for subsequent steps.
           session_ready=0
-          for attempt in 1 2; do
+          for attempt in 1 2 3 4 5; do
             if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
               session_ready=1
               echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
               break
             fi
             echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
-            if test "$attempt" -lt 2; then sleep 12; fi
+            if test "$attempt" -lt 5; then sleep 12; fi
           done
           if test "$session_ready" = 1; then
             command_host=saeit-cpanel
