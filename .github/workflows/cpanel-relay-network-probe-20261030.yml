@@ -1,0 +1,40 @@
+name: cPanel relay TCP and SSH banner diagnostic (read-only)
+on:
+  push:
+    branches:
+      - diag/cpanel-ssh-banner-20261030
+    paths:
+      - .github/workflows/cpanel-relay-network-probe-20261030.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tcp-ssh-probe:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/diag/cpanel-ssh-banner-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Check two pinned endpoints without secrets or authentication
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import socket
+          endpoints = (("VPS_RELAY", "178.239.147.150", 22), ("CPANEL", "178.239.147.125", 1396))
+          for label, host, port in endpoints:
+              try:
+                  with socket.create_connection((host, port), timeout=5) as s:
+                      print(f"{label} TCP=OPEN", flush=True)
+                      s.settimeout(5)
+                      try:
+                          data = s.recv(256)
+                          status = "SSH_BANNER" if data.startswith(b"SSH-") else "NON_SSH_OR_EMPTY"
+                          print(f"{label} BANNER={status}", flush=True)
+                      except socket.timeout:
+                          print(f"{label} BANNER=TIMEOUT", flush=True)
+              except socket.timeout:
+                  print(f"{label} TCP=TIMEOUT", flush=True)
+              except OSError as e:
+                  print(f"{label} TCP=ERROR_{type(e).__name__}", flush=True)
+          PY
