@@ -145,6 +145,39 @@ jobs:
                     "route_rewrite",int("MPW_EXACT_LEADERSHIP_ROOZEGAR_20261018" in value))
           PY
 
+      - name: Compare public and static HTTP routing without changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,urllib.request
+          for url in ('https://mojplaywin.com/about/mojtaba-rozegar/',
+                      'https://mojplaywin.com/design-preview-20261017/professor-mojtaba-roozegar-20261018.html'):
+              req=urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'MojPlayWinDoctorRouteInventory/1.0'})
+              with urllib.request.urlopen(req,timeout=25) as response:
+                  data=response.read(300000)
+                  headers=response.headers
+                  print('DOCTOR_HTTP_INSPECT',url,'status',response.status,'bytes',len(data),
+                        'sha256',hashlib.sha256(data).hexdigest(),'title_count',data.count(b'Professor Mojtaba Roozegar'))
+                  for name in ('Cache-Control','Age','ETag','Last-Modified','X-LiteSpeed-Cache','CF-Cache-Status','Server','Content-Type'):
+                      if headers.get(name):print('DOCTOR_HTTP_HEADER',name,headers.get(name)[:120])
+          PY
+          d="$RUNNER_TEMP/mojplaywin-doctor-ssh"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel "python3 -" <<'PY'
+          from pathlib import Path
+          path=Path('/home/zomorod2/mojplaywin.com/.htaccess')
+          lines=path.read_text('utf-8',errors='replace').splitlines()
+          hits=[i for i,line in enumerate(lines) if 'MPW_EXACT_LEADERSHIP_ROOZEGAR_20261018' in line]
+          print('DOCTOR_REWRITE_MARKERS',hits,'total_lines',len(lines))
+          for i in hits:
+              for j in range(max(0,i-8),min(len(lines),i+6)):
+                  line=lines[j].strip()
+                  if line.startswith(('Rewrite','Passenger')) or 'MPW_EXACT_LEADERSHIP' in line or not line:
+                      print('DOCTOR_REWRITE_CONTEXT',j+1,line[:170])
+                  else:
+                      print('DOCTOR_REWRITE_CONTEXT',j+1,'non-rewrite directive')
+          PY
+
       - name: Atomically patch the single live static biography with private backup
         if: false
         id: install
