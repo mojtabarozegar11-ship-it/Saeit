@@ -70,6 +70,7 @@ jobs:
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-controls-smoke.cjs
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-r27-objective-smoke.cjs
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-r28-objective-smoke.cjs
+          GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-r36-map-rocket-smoke.cjs
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-memory-smoke.cjs
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-result-smoke.cjs
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-restore-fallback-smoke.cjs

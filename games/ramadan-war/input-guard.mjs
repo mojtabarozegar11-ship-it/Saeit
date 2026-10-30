@@ -10,7 +10,8 @@ const COMMANDS = Object.freeze({
   KeyE: 'drone',
   KeyF: 'special',
   KeyR: 'reload',
-  KeyG: 'interact'
+  KeyG: 'interact',
+  KeyM: 'map'
 });
 
 export function keyboardAction(code, screen, target, repeat = false) {
