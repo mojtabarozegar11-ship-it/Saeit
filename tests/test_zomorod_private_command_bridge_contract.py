@@ -241,11 +241,11 @@ def test_readonly_remote_commands_are_bounded_and_do_not_mutate():
     source = _source()
     step = source.split("- name: Read only cPanel inventory for the authenticated chat owner", 1)[1].split("- name: Read the current recipient public key", 1)[0]
     assert "if: steps.gate.outputs.operation == 'cpanel_readonly'" in step
-    assert "pwd.getpwuid(os.geteuid()).pw_name != \\"zomorod2\\"" in step
+    assert 'pwd.getpwuid(os.geteuid()).pw_name != "zomorod2"' in step
     for command in ("list_domains", "list_applications", "get_local_quota_info", "list_backups"):
         assert command in step
     assert "subprocess.run(" in step
-    assert "[command, \\"--output=json\\", module, operation]" in step
+    assert '[command, "--output=json", module, operation]' in step
     assert "shell=True" not in step
     assert "CPANEL_SITE_MUTATIONS=NONE" in step
     assert "CPANEL_FACTORY_OPERATIONS=NONE" in step
