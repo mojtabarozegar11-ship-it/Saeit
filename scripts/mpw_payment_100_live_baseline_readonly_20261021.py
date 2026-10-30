@@ -88,9 +88,12 @@ print('MPW_PAYMENT_100_LIVE_BASELINE='+json.dumps({
  "checkout_scope":"cryptocurrency_only",
  "fiat_card_onramp":"deferred_out_of_scope",
  "live_paid_end_to_end_verified_by_this_probe":False,
- "gateway_acceptance":"BLOCKED_NOT_100",
+ "payment_flow_assessment":"NOT_TESTED_BY_READ_ONLY_PROBE",
+ "gateway_acceptance":"NOT_ASSESSED_READ_ONLY",
+ "probe_scope":"route_resolution_login_csrf_template_signatures_and_runtime_boolean_flags",
+ "not_assessed":["product_level_sale_eligibility","rendered_buy_button","invoice_creation","real_chain_payment_finality","ledger_settlement","private_file_fulfillment","buyer_email_delivery"],
  "writes":0,"private_data_emitted":False,
 },sort_keys=True))
 if any(not v.get('resolves') for v in route_report.values()):
  raise SystemExit('MPW_PAYMENT_BASELINE_ROUTES_FAILED')
-print('MPW_PAYMENT_100_BASELINE_READONLY=PASS; COMMERCIAL_ACCEPTANCE=BLOCKED')
+print('MPW_PAYMENT_100_BASELINE_READONLY=PASS; COMMERCIAL_ACCEPTANCE=NOT_ASSESSED_READ_ONLY')
