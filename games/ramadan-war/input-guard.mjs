@@ -128,12 +128,19 @@ const MAX_SUBSTEP = 0.16;
 
 export function playerSpaceClear(x, y, wall, radius = PLAYER_RADIUS) {
   if (!Number.isFinite(x) || !Number.isFinite(y) ||
-      !Number.isFinite(radius) || radius <= 0 || typeof wall !== 'function') return false;
-  // Four footprint corners prevent diagonal clipping through blocked tiles.
-  return !wall(Math.floor(x-radius), Math.floor(y-radius)) &&
-         !wall(Math.floor(x-radius), Math.floor(y+radius)) &&
-         !wall(Math.floor(x+radius), Math.floor(y-radius)) &&
-         !wall(Math.floor(x+radius), Math.floor(y+radius));
+      !Number.isFinite(radius) || radius <= 0 || radius > 1 ||
+      typeof wall !== 'function') return false;
+  // Test the actual circular footprint against every nearby solid tile.
+  // A four-corner square test wrongly blocks safe diagonal passage past corners.
+  for (let ty = Math.floor(y - radius); ty <= Math.floor(y + radius); ty++) {
+    for (let tx = Math.floor(x - radius); tx <= Math.floor(x + radius); tx++) {
+      if (!wall(tx, ty)) continue;
+      const nearX = Math.max(tx, Math.min(x, tx + 1));
+      const nearY = Math.max(ty, Math.min(y, ty + 1));
+      if ((x - nearX) ** 2 + (y - nearY) ** 2 < radius ** 2) return false;
+    }
+  }
+  return true;
 }
 
 export function movePlayerWithCollision(player, dx, dy, wall) {
