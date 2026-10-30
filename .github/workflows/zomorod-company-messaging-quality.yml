@@ -3,6 +3,7 @@ on:
   pull_request:
     branches:
       - main
+      - feature/zomorod-messaging-main-integration-20261030
     paths:
       - "company_messaging/**"
       - "company_marketing/**"
@@ -10,6 +11,8 @@ on:
       - "config/settings.py"
       - "config/urls.py"
       - ".github/workflows/zomorod-company-messaging-quality.yml"
+      - ".github/workflows/zomorod-messaging-private-staging.yml"
+      - "tests/test_s01_zm_private_relay_only.py"
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,6 +40,8 @@ jobs:
         run: python manage.py test company_messaging company_marketing --verbosity 2
       - name: Parent ERP and ecosystem regression tests
         run: python manage.py test enterprise_portal ecosystem_hub --verbosity 1
+      - name: Enforce pinned relay-only private staging
+        run: python -m unittest discover -s tests -p "test_s01_zm_private_relay_only.py" -v
       - name: No public route removal
         run: |
           python - <<'PY'
