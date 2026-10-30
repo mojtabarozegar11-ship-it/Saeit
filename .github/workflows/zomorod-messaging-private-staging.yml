@@ -251,7 +251,13 @@ jobs:
           assert resolve("/company/office/messages/").url_name is not None
           assert resolve("/company/office/marketing/").url_name is not None
           login="/company/office/secure-login/"
-          response=Client().get(login,secure=True)
+          from django.test.utils import override_settings
+          staging_storage={
+              "default": settings.STORAGES["default"],
+              "staticfiles": {"BACKEND":"django.contrib.staticfiles.storage.StaticFilesStorage"},
+          }
+          with override_settings(STORAGES=staging_storage):
+              response=Client().get(login,secure=True)
           assert response.status_code==200, response.status_code
           print("STAGING_SCHEMA_INTEGRITY=passed")
           print("STAGING_AUTH_LOGIN_HTTP=200")
