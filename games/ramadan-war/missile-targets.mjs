@@ -38,3 +38,12 @@ export function missilePathBlocked(missile, dt, isWall) {
   }
   return false;
 }
+
+// Only cover-impact explosions require unobstructed blast propagation.
+// Normal airbursts keep their existing area-of-effect behavior.
+export function blastDamageFactor(x,y,tx,ty,isBlocked,coverOnly=false) {
+  if (![x,y,tx,ty].every(Number.isFinite) || typeof isBlocked !== 'function') return 0;
+  const d=Math.hypot(tx-x,ty-y);
+  if (d>=2.3 || (coverOnly && isBlocked(x,y,tx,ty))) return 0;
+  return Math.max(0,1-d/3);
+}
