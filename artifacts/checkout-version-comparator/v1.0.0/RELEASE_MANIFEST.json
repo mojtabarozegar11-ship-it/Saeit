@@ -1,0 +1,15 @@
+{
+  "artifact_name": "checkout-version-comparator-v1.0.0.zip",
+  "artifact_kind": "standalone-safe-reconstruction",
+  "version_id": "checkout-version-comparator@1.0.0",
+  "schema": "checkout-version-compare.v1",
+  "sha256": "9d6e2d434ca071ccb3c8cebddecfa9390876dbe70edf74a08d8e880d14847128",
+  "test_result": "7/7 passed",
+  "test_scope": "temporary synthetic Git repositories",
+  "limitations": [
+    "This is a newly reconstructed equivalent, not proof that the previously reported artifact was recovered.",
+    "It compares local Git source trees and does not verify production checkout, payment success, or deployment readiness."
+  ],
+  "deployment_performed": false,
+  "public_release_performed": false
+}

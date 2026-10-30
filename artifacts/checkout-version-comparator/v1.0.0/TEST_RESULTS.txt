@@ -1,0 +1,5 @@
+Checkout Version Comparator 1.0.0
+Test command: python3 -m unittest -v
+Result: 7 tests passed, 0 failed.
+Test repository: temporary synthetic Git repositories only.
+No production website, payment flow, or deployment was accessed or changed.
