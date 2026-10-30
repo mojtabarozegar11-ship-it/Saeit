@@ -43,6 +43,32 @@ class NewsletterAuthorshipTests(SimpleTestCase):
         self.assertIn(r"\u003c", serialized)
 
 
+class NewsletterDetailOutageTests(SimpleTestCase):
+    def setUp(self):
+        self.request = RequestFactory().get("/newsletter/sample/")
+
+    def test_missing_schema_is_not_misreported_as_deleted(self):
+        with patch.object(newsletter_views, "missing_public_tables", return_value=True):
+            response = newsletter_views.newsletter_detail(self.request, "sample")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertIn("حذف", response.content.decode("utf-8"))
+
+    def test_db_failure_after_introspection_is_retryable(self):
+        from django.db import DatabaseError
+        with patch.object(newsletter_views, "_newsletter_detail_with_schema", side_effect=DatabaseError):
+            response = newsletter_views.newsletter_detail(self.request, "sample")
+        self.assertEqual(response.status_code, 503)
+
+    def test_healthy_newsletter_detail_response_is_unchanged(self):
+        from django.http import HttpResponse
+        expected = HttpResponse("healthy article")
+        with patch.object(newsletter_views, "_newsletter_detail_with_schema", return_value=expected):
+            response = newsletter_views.newsletter_detail(self.request, "sample")
+        self.assertIs(response, expected)
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()
