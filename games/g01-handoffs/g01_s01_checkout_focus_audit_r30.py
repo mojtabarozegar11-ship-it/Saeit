@@ -64,8 +64,16 @@ def audit(html,origin):
                     issues.append(f'CTA_{i}_EXTERNAL_NAVIGATION')
             if a.get('target')=='_blank' and 'noopener' not in (a.get('rel') or '').split():
                 issues.append(f'CTA_{i}_NEW_TAB_WITHOUT_NOOPENER')
-        elif a.get('type','submit').lower()=='submit':
-            issues.append(f'CTA_{i}_SUBMIT_REQUIRES_AUTHORIZED_STAGING_ONLY')
+        else:
+            # A submit control may override its form destination with formaction.
+            # Reject external, insecure or script destinations in a read-only audit.
+            if 'formaction' in a:
+                action=(a.get('formaction') or '').strip()
+                dest=urlsplit(urljoin(origin,action))
+                if not action or (dest.scheme,dest.netloc)!=(origin_parts.scheme,origin_parts.netloc):
+                    issues.append(f'CTA_{i}_FORM_ACTION_OFF_ORIGIN')
+            if a.get('type','submit').lower()=='submit':
+                issues.append(f'CTA_{i}_SUBMIT_REQUIRES_AUTHORIZED_STAGING_ONLY')
     if p.duplicate_ids:issues.append('DUPLICATE_HTML_IDS')
     if not checkout_count:issues.append('NO_CHECKOUT_CTA_IN_SNAPSHOT')
     return {'status':'REVIEW_REQUIRED' if issues else 'STATIC_SNAPSHOT_PASS',
