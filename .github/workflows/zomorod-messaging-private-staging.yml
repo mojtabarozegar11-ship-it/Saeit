@@ -84,16 +84,6 @@ jobs:
             ControlMaster auto
             ControlPath $d/cpanel.sock
             ControlPersist 300
-          Host saeit-cpanel-direct
-            HostName 178.239.147.125
-            User zomorod2
-            Port 1396
-            IdentityFile $d/host.key
-            UserKnownHostsFile $d/host.known
-            ProxyJump none
-            ControlMaster auto
-            ControlPath $d/direct.sock
-            ControlPersist 300
           Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
@@ -140,16 +130,10 @@ jobs:
             command_host=saeit-cpanel
             echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
           else
+            # The authorized transport is exclusively GitHub Actions -> VPS
+            # -> pinned cPanel. Do not silently switch to direct cPanel.
             echo 'PINNED_30GB_RELAY_UNAVAILABLE'
-            # Emergency fallback is the same fingerprint-pinned cPanel host and
-            # same private user; no host-key bypass or public ingress endpoint.
-            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
-              command_host=saeit-cpanel-direct
-              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
-            else
-              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
-              exit 1
-            fi
+            exit 1
           fi
           printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
       - name: Transfer immutable private staging package only
@@ -161,7 +145,7 @@ jobs:
           set -euo pipefail
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           dir="$RUNNER_TEMP/zm-marketing-ro"
-          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          case "$COMMAND_HOST" in saeit-cpanel) ;; *) exit 1 ;; esac
           base="/home/zomorod2/.private/zomorod-messaging-release-stages"
           target="$base/$SOURCE_SHA"
           archive="$RUNNER_TEMP/zm-msg-package.tar"
@@ -204,7 +188,7 @@ jobs:
           set -euo pipefail
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           d="$RUNNER_TEMP/zm-marketing-ro"
-          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          case "$COMMAND_HOST" in saeit-cpanel) ;; *) exit 1 ;; esac
           timeout 210s ssh -F "$d/config" "$COMMAND_HOST" bash -se -- "$SOURCE_SHA" <<'REMOTE'
           set -euo pipefail
           umask 077
