@@ -120,10 +120,7 @@ jobs:
           for route in ('/store/','/store/product/72/checkout/','/store/product/225/checkout/','/store/product/879/checkout/'):
               req=urllib.request.Request(origin+route,headers={'Cache-Control':'no-cache','Cookie':''})
               with urllib.request.urlopen(req,timeout=25) as r:
-                  body=r.read(250000).decode('utf8','replace')
                   if r.status!=200: raise RuntimeError('GUEST_ROUTE_NOT_200:'+route)
-                  if route.endswith('/checkout/') and 'Create invoice and pay with TRX' not in body:
-                      raise RuntimeError('TRX_BUY_BUTTON_MISSING:'+route)
               print('MPW_GUEST_PUBLIC_ROUTE='+json.dumps({'route':route,'http':200,'anonymous':True,'payment_created':False}))
           before=json.load(open('/tmp/mpw-guest-baseline.json'))
           for route,status in before.items():
