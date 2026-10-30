@@ -59,6 +59,9 @@ def plan(src):
   if digest(installed)!='0db371611ef61b052e368505297af0808cb0108e56c5d99a9f11f66338da19ba':
    fail('UNRECOGNIZED_GUEST_UPGRADE_BASE')
   return old,old,True
+ # A module without both verified caller hooks is never safe to overwrite.
+ if TARGETS['guest'].exists() or TARGETS['guest'].is_symlink():
+  fail('GUEST_MODULE_COLLISION')
  new={}
  for key,raw in old.items():
   text=raw.decode('utf8')
@@ -123,6 +126,8 @@ def publish(run,src_path):
   if upgrading:
    atomic(TARGETS['guest'],src,expected=manifest['guest_before']);changed.append('guest')
   else:
+   if TARGETS['guest'].exists() or TARGETS['guest'].is_symlink():
+    fail('GUEST_MODULE_COLLISION')
    atomic(TARGETS['guest'],src);changed.append('guest')
    for key in ('web','pages'):
     atomic(TARGETS[key],new[key],expected=before[key]);changed.append(key)
