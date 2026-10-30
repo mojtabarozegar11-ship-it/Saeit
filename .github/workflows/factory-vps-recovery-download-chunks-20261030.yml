@@ -33,7 +33,7 @@ jobs:
           bundle="${RUNNER_TEMP}/factory-vps-recovery-bundle.tar"
           split_prefix="${RUNNER_TEMP}/factory-vps-recovery-chunk-"
           tar --format=ustar -cf "$bundle" -C "$source_dir" .
-          split -b 400000000 -d -a 3 --numeric-suffixes=1 "$bundle" "$split_prefix"
+          split -b 80000000 -d -a 3 --numeric-suffixes=1 "$bundle" "$split_prefix"
           python3 - "$bundle" "$RUNNER_TEMP" <<'PY'
           import hashlib,json,pathlib,sys
           bundle=pathlib.Path(sys.argv[1]); root=pathlib.Path(sys.argv[2])
@@ -44,7 +44,7 @@ jobs:
                   for block in iter(lambda:f.read(1024*1024),b""):
                       h.update(block)
               chunks.append({"file":p.name,"bytes":p.stat().st_size,"sha256":h.hexdigest()})
-          if not chunks or max(x["bytes"] for x in chunks) > 400000000:
+          if not chunks or max(x["bytes"] for x in chunks) > 80000000:
               raise SystemExit("invalid transport chunk set")
           h=hashlib.sha256()
           with bundle.open("rb") as f:
@@ -53,17 +53,17 @@ jobs:
           manifest={"schema":"f01.recovery-transport-manifest.v1",
                     "source_run_id":41096358597,"bundle":"factory-vps-recovery-bundle.tar",
                     "bundle_bytes":bundle.stat().st_size,"bundle_sha256":h.hexdigest(),
-                    "chunk_size_limit":400000000,"chunks":chunks}
+                    "chunk_size_limit":80000000,"chunks":chunks}
           (root/"factory-vps-recovery-manifest.json").write_text(
               json.dumps(manifest,sort_keys=True,indent=2)+"\n",encoding="utf-8")
           for item in chunks:
               p=root/item["file"]
               target=root/p.name
               if p != target: p.replace(target)
-          if len(chunks) != 11:
+          if len(chunks) != 51:
               raise SystemExit(f"expected 11 chunks for the recorded 4 GB artifact; got {len(chunks)}")
           PY
-          for n in 001 002 003 004 005 006 007 008 009 010 011; do
+          for n in 001 002 003 004 005 006 007 008 009 010 011 012 013 014 015 016 017 018 019 020 021 022 023 024 025 026 027 028 029 030 031 032 033 034 035 036 037 038 039 040 041 042 043 044 045 046 047 048 049 050 051; do
             test -s "${RUNNER_TEMP}/factory-vps-recovery-chunk-$n"
           done
       - name: Upload recovery transport manifest
@@ -158,6 +158,326 @@ jobs:
         with:
           name: factory-vps-recovery-chunk-011
           path: ${{ runner.temp }}/factory-vps-recovery-chunk-011
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 012
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-012
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-012
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 013
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-013
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-013
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 014
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-014
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-014
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 015
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-015
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-015
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 016
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-016
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-016
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 017
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-017
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-017
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 018
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-018
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-018
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 019
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-019
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-019
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 020
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-020
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-020
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 021
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-021
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-021
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 022
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-022
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-022
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 023
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-023
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-023
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 024
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-024
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-024
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 025
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-025
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-025
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 026
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-026
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-026
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 027
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-027
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-027
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 028
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-028
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-028
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 029
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-029
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-029
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 030
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-030
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-030
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 031
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-031
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-031
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 032
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-032
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-032
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 033
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-033
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-033
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 034
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-034
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-034
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 035
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-035
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-035
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 036
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-036
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-036
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 037
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-037
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-037
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 038
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-038
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-038
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 039
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-039
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-039
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 040
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-040
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-040
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 041
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-041
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-041
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 042
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-042
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-042
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 043
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-043
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-043
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 044
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-044
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-044
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 045
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-045
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-045
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 046
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-046
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-046
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 047
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-047
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-047
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 048
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-048
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-048
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 049
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-049
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-049
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 050
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-050
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-050
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 051
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-051
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-051
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
