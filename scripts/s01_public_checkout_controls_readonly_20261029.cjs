@@ -88,7 +88,11 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
           // Keep raw hrefs only in memory for exact-SKU classification. The
           // persistent CI artifact receives redacted hrefs, never query tokens.
           const safeControls=controls.map(c=>({...c,href:redactObservedHref(c.href)}));
-          rows.push({device:device.name,path,http,finalPath,error,jsErrors,controls:safeControls,
+          // Keep raw finalPath only for in-memory classification. Persisting
+          // arbitrary redirect paths could leak path-embedded access tokens.
+          const publicFinalPath=finalPath==='[external-redirect]'?finalPath:
+            redactObservedHref(finalPath);
+          rows.push({device:device.name,path,http,finalPath:publicFinalPath,error,jsErrors,controls:safeControls,
             ...verdict,authenticatedBuyerFlowVerified:false,
             checkoutLinks:controls.filter(c=>validCheckoutHref(c.href)&&c.reasons.length===0).length,
             mismatchedCheckoutLinks:productId?controls.filter(c=>isDirectCheckoutHref(c.href)&&!validCheckoutHref(c.href)).length:0,
