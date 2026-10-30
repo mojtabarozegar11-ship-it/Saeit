@@ -43,3 +43,8 @@
 #objectiveDirection{display:inline-block;color:#fff0b5;font-size:10px;white-space:nowrap}
 @media(max-width:390px){#tacticalMap:not([hidden]){width:112px;height:112px}#objectiveDirection{font-size:9px}}
 @media(orientation:landscape) and (max-height:600px){#tacticalMap:not([hidden]){top:calc(env(safe-area-inset-top) + 52px);width:112px;height:112px}}
+
+/* R41: private manual campaign recovery, touch-selectable on restricted mobile browsers. */
+#backupCodePanel label{display:block;text-align:right;margin:10px 0;color:var(--mint);font-size:12px}
+#backupCodeText{display:block;width:100%;min-height:160px;max-height:38vh;resize:vertical;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:12px;background:#07191e;color:var(--ink);font:12px/1.5 ui-monospace,monospace;direction:ltr;text-align:left;touch-action:pan-y;user-select:text;-webkit-user-select:text}
+#backupCodeText:focus-visible{outline:2px solid var(--gold)}
