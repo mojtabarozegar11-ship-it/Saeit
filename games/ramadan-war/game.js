@@ -2,7 +2,7 @@ import {createEngine} from './engine3d.js';
 import {chooseNearestTarget} from './target-selection.mjs';
 import {canApplyEarnedUpgrade,applyEarnedUpgrade} from './upgrade-policy.mjs';
 import {MOJ1_COMMERCE} from './moj1-commerce-policy.mjs';
-import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isPrimaryGameplayPress, isModifiedOrComposingKey, shouldReleaseHeldKeysOnFocus, isFireHeld, joystickAxes, normalizeMovementAxes, resolveMovementAxes, canCaptureGameplayPointer, isOwnedGameplayPointer, recordPointerGestureMovement, playerSpaceClear, shouldFireCanvasClick, movePlayerWithCollision} from './input-guard.mjs';
+import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isPrimaryGameplayPress, isModifiedOrComposingKey, shouldReleaseHeldKeysOnFocus, isFireHeld, joystickAxes, normalizeMovementAxes, resolveMovementAxes, canCaptureGameplayPointer, isOwnedGameplayPointer, recordPointerGestureMovement, boundedAimMotion, playerSpaceClear, shouldFireCanvasClick, movePlayerWithCollision} from './input-guard.mjs';
 import {removeEnemyAndRetargetMissiles,missilePathBlocked,missileMotionValid,blastDamageFactor} from './missile-targets.mjs';
 import {canEnemyAct,restoreEnemyRuntime,advanceHostileProjectile,shouldCleanupEnemy,activateTimeStop,advanceTimeStop} from './enemy-action-policy.mjs';
 import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, restoreEnemyPositions, parseCampaignSave, resumeCampaignScreen, readHeroChoice, campaignSaveDisposition, storageRead, storageWrite, storageRemove} from './save-validation.mjs';
@@ -85,7 +85,7 @@ function missionObjectiveComplete(){if(world.endless)return world.missionKills>=
  return o.done>=p.sites.length;
 }
 
-function resize(){dpr=Math.min(devicePixelRatio||1,1.35);W=gameRoot.clientWidth;H=gameRoot.clientHeight;engine.setSize(W,H,dpr)}addEventListener('resize',resize);resize();
+function resize(){const rawDpr=Number(devicePixelRatio);dpr=Number.isFinite(rawDpr)?clamp(rawDpr,1,1.35):1;W=Math.max(1,gameRoot.clientWidth||0);H=Math.max(1,gameRoot.clientHeight||0);engine.setSize(W,H,dpr)}addEventListener('resize',resize);resize();
 function tile(col,row,m=world?.mission||0){if(col<0||row<0||col>=16||row>=16||col===0||row===0||col===15||row===15)return 1;if(m%3===1&&col===7&&row>=3&&row<=10&&row!==6)return 1;if(m%3===2&&row===8&&col>=3&&col<=11&&col!==8)return 1;if([[3,3],[12,3],[3,11],[5,7],[10,6],[5,4],[12,5],[4,10],[12,10]].some(([x,y])=>col===x&&row===y))return 1;if(col===4&&row===6||col===11&&row===7)return 1;if(m%2===1&&(col===10&&row===4||col===5&&row===11))return 1;return 0}
 function newWorld(endless=false){world={hero,mission:0,lives:100,kills:0,missionKills:0,shots:0,ammo:8,magazine:8,reloadTimer:0,combo:0,comboTimer:0,score:0,rocketHits:0,drones:3,rockets:12,points:0,power:0,armor:0,best:0,x:2.5,y:7.5,angle:0,hp:100+(hero%5)*3,maxHp:100+(hero%5)*3,time:0,shotTimer:0,rocketTimer:0,droneTimer:0,enemyTimer:.8,skillTimer:0,shield:3,strikeTimer:0,strikeX:0,strikeY:0,muzzle:0,hitFlash:0,explosionTimer:0,victory:false,gameOver:false,endless,missionPassed:false,hit:false,skillFired:false,freeze:0,enemies:[],hostile:[],missiles:[],pickups:[]};prepareObjective();if(endless){world.mission=6;world.endless=true;world.objective=null;world.best=readSurvivalBest()}screen='play';scoped=false;$('#game').classList.remove('scope-mode');$('#scope').classList.remove('active');$('#scope').setAttribute('aria-pressed','false');engine.scope(false);engine.build(world,tile);save();showScreen('game');last=performance.now();scheduleFrame()}
 let saveWarningShown=false,saveStatus='not-saved',foreignSaveDetected=false,lastSavedSnapshot=undefined;function save(){// Never let an idle menu autosave overwrite an invalid or imported campaign.
@@ -312,15 +312,18 @@ const stick=$('#stick'),knob=$('#knob');function stickMove(e){let r=stick.getBou
 // A desktop mouse drag is also an aim gesture, not a click-to-fire action.
 let aimY=0,aimGesture=null;
 canvas.addEventListener('pointerdown',e=>{
- if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer(aimId,e.pointerId,screen))return;
+ if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer(aimId,e.pointerId,screen)||
+    !Number.isFinite(e.clientX)||!Number.isFinite(e.clientY))return;
  aimId=e.pointerId;aimLast=e.clientX;aimY=e.clientY;
  aimGesture={pointerId:e.pointerId,pointerType:e.pointerType,startX:e.clientX,startY:e.clientY,moved:0,finished:false,cancelled:false};
  try{canvas.setPointerCapture(e.pointerId)}catch(_){aimId=null;aimGesture=null}
 });
 canvas.addEventListener('pointermove',e=>{
  if(aimId!==e.pointerId||!world)return;
+ const delta=boundedAimMotion(e.clientX,e.clientY,aimLast,aimY);
+ if(!delta){if(aimGesture)aimGesture.cancelled=true;return}
  recordPointerGestureMovement(aimGesture,e);
- let dx=e.clientX-aimLast,dy=e.clientY-aimY;world.angle-=dx*(W<700?.008:.0045)*aimMultiplier(aimSensitivity);engine.look(0,dy*aimMultiplier(aimSensitivity),W);aimLast=e.clientX;aimY=e.clientY
+ world.angle-=delta.dx*(W<700?.008:.0045)*aimMultiplier(aimSensitivity);engine.look(0,delta.dy*aimMultiplier(aimSensitivity),W);aimLast=e.clientX;aimY=e.clientY
 });
 canvas.addEventListener('pointerup',e=>{if(e.pointerId!==aimId)return;recordPointerGestureMovement(aimGesture,e);aimId=null;if(aimGesture)aimGesture.finished=true});
 canvas.addEventListener('pointercancel',e=>{if(e.pointerId!==aimId)return;aimId=null;if(aimGesture)aimGesture.cancelled=true});
