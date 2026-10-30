@@ -4,7 +4,7 @@ Checked 2026-10-30 against GitHub-fetched **C121** journal-facing manuscript and
 
 | Check | Actual result |
 |---|---|
-| Manuscript length | 122659 characters; ~15120 whitespace-delimited words (approximate; editorial recheck) |
+| Manuscript length | 122717 characters; 15116 whitespace-delimited words (approximate) |
 | Required major sections | PRESENT (9 headings) |
 | Internal Cxx version tokens | 0 |
 | Relative links to internal MR evidence files | 0 after C121 copy-edit and verified readback |
