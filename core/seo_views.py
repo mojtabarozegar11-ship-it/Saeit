@@ -37,7 +37,7 @@ def _score(q, *fields):
     return score
 
 
-def site_search(request):
+def _site_search_with_schema(request):
     q = str(request.GET.get("q", "")).strip()[:120]
     results = []
     if q:
@@ -63,6 +63,34 @@ def site_search(request):
             results.append((100, {"type": "شرکت", "title": "شرکت کشت و صنعت زمرد ملل", "summary": "مجتبی روزگار — محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل", "url": "/company/"}))
     results.sort(key=lambda item: item[0], reverse=True)
     return render(request, "core/search.html", {"q": q, "results": [item[1] for item in results[:50]]})
+
+
+def site_search(request):
+    """Fail closed on incomplete or unavailable search schema; never claim zero results."""
+    if missing_public_tables(
+        NewsletterStory, KnowledgeArticle, KnowledgeBook, KnowledgeDomain, Product,
+    ):
+        return _unavailable_search()
+    try:
+        return _site_search_with_schema(request)
+    except DatabaseError:
+        # The schema may change or the DB may disconnect after introspection.
+        return _unavailable_search()
+
+
+def _unavailable_search():
+    response = HttpResponse(
+        '<!doctype html><html lang="fa" dir="rtl"><head>'
+        '<meta charset="utf-8"><title>جست‌وجو موقتاً در دسترس نیست</title>'
+        '</head><body><main><h1>جست‌وجو موقتاً در دسترس نیست</h1>'
+        '<p role="status">نتایج جست‌وجو در حال حاضر قابل بازیابی نیستند؛ '
+        'این وضعیت به معنای نبود اطلاعات نیست.</p>'
+        '<p><a href="/">بازگشت به صفحه اصلی</a></p>'
+        '</main></body></html>',
+        status=503, content_type="text/html; charset=utf-8",
+    )
+    response["Retry-After"] = "300"
+    return mark_public_data_unavailable(response)
 
 
 @require_GET
