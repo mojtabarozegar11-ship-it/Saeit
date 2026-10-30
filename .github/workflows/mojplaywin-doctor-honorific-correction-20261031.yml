@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/mojplaywin-doctor-honorific-correction-20261031.yml"
+      - "scripts/mojplaywin_doctor_honorific_live_fix_20261031.py"
 permissions:
   contents: read
 concurrency:
