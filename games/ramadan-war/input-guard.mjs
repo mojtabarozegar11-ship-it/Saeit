@@ -2,7 +2,7 @@
 // Menu buttons must retain native Enter/Space behavior for keyboard and assistive users.
 export function isInteractiveTarget(target) {
   return Boolean(target && typeof target.closest === 'function' &&
-    target.closest('button, a, input, textarea, select, summary, [contenteditable], [role="button"], [role="textbox"]'));
+    target.closest('button, a, input, textarea, select, summary, [contenteditable], [role="button"], [role="textbox"], [role="link"], [role="slider"], [role="checkbox"], [role="switch"], [role="radio"], [role="combobox"], [role="menuitem"], [role="tab"]'));
 }
 
 const COMMANDS = Object.freeze({
