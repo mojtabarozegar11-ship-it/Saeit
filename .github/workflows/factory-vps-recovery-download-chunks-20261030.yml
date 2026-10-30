@@ -55,7 +55,7 @@ jobs:
                     "bundle_bytes":bundle.stat().st_size,"bundle_sha256":h.hexdigest(),
                     "chunk_size_limit":400000000,"chunks":chunks}
           (root/"factory-vps-recovery-manifest.json").write_text(
-              json.dumps(manifest,sort_keys=True,indent=2)+"\\n",encoding="utf-8")
+              json.dumps(manifest,sort_keys=True,indent=2)+"\n",encoding="utf-8")
           for item in chunks:
               p=root/item["file"]
               target=root/p.name
