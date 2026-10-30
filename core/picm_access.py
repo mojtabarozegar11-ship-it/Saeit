@@ -18,7 +18,8 @@ def owner_id(root=None):
     # be swapped to a symlink between is_symlink() and read_text().
     if not hasattr(os, "O_NOFOLLOW"):
         return None
-    flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    flags = (os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+             | getattr(os, "O_NONBLOCK", 0))
     try:
         fd = os.open(path, flags)
         try:
