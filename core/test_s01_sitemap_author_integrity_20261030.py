@@ -110,7 +110,7 @@ class PublishedKnowledgeVisibilityTests(TestCase):
             domain="synthetic", objective="s01-visibility", status="drafting",
         )
         KnowledgeBook.objects.create(
-            plan=plan, code="s01%26book", title="URL encoding published",
+            plan=plan, code="s01&book", title="URL encoding published",
             domain="synthetic", objective="synthetic", status="published",
         )
 
@@ -132,4 +132,4 @@ class PublishedKnowledgeVisibilityTests(TestCase):
         body = response.content.decode("utf-8")
         self.assertIn("/knowledge/book/s01-public-book/", body)
         self.assertNotIn("/knowledge/book/s01-private-book/", body)
-        self.assertIn("/knowledge/book/s01%2526book/", body)
+        self.assertIn("/knowledge/book/s01%26book/", body)
