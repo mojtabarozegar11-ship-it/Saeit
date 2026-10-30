@@ -212,8 +212,9 @@ function exportCampaignBackup(){
 }
 // R41: manual recovery is available even when clipboard and Blob downloads are denied.
 // A code is displayed only after an explicit user action, and wiped on close.
-let backupCodeOrigin='home';
+let backupCodeOrigin='home',backupCodeReturnFocus=null;
 function openBackupCode(mode,raw=''){
+ backupCodeReturnFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
  backupCodeOrigin=screen==='pausePanel'?'pausePanel':'home';
  const box=$('#backupCodeText');box.value=raw;
  $('#backupCodeTitle').textContent=mode==='import'?'بازیابی پیشرفت از کد':'کد پشتیبان پیشرفت';
@@ -221,9 +222,24 @@ function openBackupCode(mode,raw=''){
  $('#applyBackupCode').hidden=mode!=='import';
  showScreen('backupCodePanel');box.focus();if(mode==='export')box.select();
 }
-function closeBackupCode(){
- $('#backupCodeText').value='';showScreen(backupCodeOrigin);
+function clearBackupCode(){
+ $('#backupCodeText').value='';
 }
+function closeBackupCode(){
+ clearBackupCode();showScreen(backupCodeOrigin);
+ if(backupCodeReturnFocus?.isConnected&&!backupCodeReturnFocus.closest('.hidden'))backupCodeReturnFocus.focus({preventScroll:true});
+ backupCodeReturnFocus=null;
+}
+// Keep keyboard users inside the private dialog; Escape must never resume gameplay.
+$('#backupCodePanel').addEventListener('keydown',e=>{
+ if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeBackupCode();return}
+ if(e.key!=='Tab')return;
+ const focusable=[...$('#backupCodePanel').querySelectorAll('textarea,button:not([hidden]):not([disabled])')];
+ if(!focusable.length)return;
+ const first=focusable[0],last=focusable[focusable.length-1];
+ if(e.shiftKey&&(document.activeElement===first||!focusable.includes(document.activeElement))){e.preventDefault();last.focus()}
+ else if(!e.shiftKey&&(document.activeElement===last||!focusable.includes(document.activeElement))){e.preventDefault();first.focus()}
+});
 $('#closeBackupCode').onclick=closeBackupCode;
 $('#pasteSave').onclick=()=>openBackupCode('import');
 $('#pastePauseSave').onclick=()=>openBackupCode('import');
@@ -233,6 +249,7 @@ $('#applyBackupCode').onclick=()=>{
  if(!imported){$('#backupCodeHint').textContent='کد پشتیبان معتبر نیست؛ پیشرفت فعلی دست‌نخورده باقی ماند.';return}
  applyImportedCampaign(imported);
  if(screen==='backupCodePanel')$('#backupCodeHint').textContent='بازیابی تأیید نشد؛ پیشرفت فعلی را بررسی کنید و بدون بستن این صفحه از آن پشتیبان بگیرید.';
+ else {clearBackupCode();backupCodeReturnFocus=null;} // Never retain an imported private code in hidden DOM after success.
 };
 async function copyCampaignBackup(){
  // Explicit user action; never auto-copy private progress or send it over the network.
@@ -324,7 +341,7 @@ addEventListener('compositionstart',()=>{keys={};updateHeldFire()});
 document.addEventListener('focusin',e=>{if(shouldReleaseHeldKeysOnFocus(screen,e.target)){keys={};updateHeldFire()}});
 addEventListener('blur',()=>{releaseGameInputs();if(screen==='game')$('#pause').click()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){releaseGameInputs();if(screen==='game')$('#pause').click()}});
-addEventListener('pagehide',save);addEventListener('storage',observeExternalCampaignSave);addEventListener('beforeunload',warnUnsavedCampaignBeforeExit);addEventListener('visibilitychange',saveCampaignOnHidden);setInterval(save,5000);
+addEventListener('pagehide',()=>{clearBackupCode();save()});addEventListener('storage',observeExternalCampaignSave);addEventListener('beforeunload',warnUnsavedCampaignBeforeExit);addEventListener('visibilitychange',saveCampaignOnHidden);setInterval(save,5000);
 const qaIsLocal=['localhost','127.0.0.1'].includes(location.hostname);
 const debugApi={
  heroes:Object.freeze([...NAMES]),skills:Object.freeze([...SKILLS]),
