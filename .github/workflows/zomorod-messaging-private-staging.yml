@@ -235,6 +235,23 @@ jobs:
           "$py" -m django makemigrations --check --dry-run company_messaging company_marketing enterprise_portal ecosystem_hub
           "$py" -m django migrate --plan > "$root/migration-plan.txt"
           "$py" -m django migrate --noinput --verbosity 0
+          # Build exact production-style manifest in isolated private directory.
+          "$py" - <<'PY'
+          import pathlib,django
+          from django.conf import settings
+          from django.core.management import call_command
+          django.setup()
+          isolated_root=pathlib.Path.cwd()/".static-preflight"
+          settings.STATIC_ROOT=isolated_root
+          call_command("collectstatic",interactive=False,verbosity=0)
+          assert (isolated_root/"staticfiles.json").is_file()
+          import json
+          manifest=json.loads((isolated_root/"staticfiles.json").read_text())
+          for asset in ("enterprise_portal/app.css",):
+              assert asset in manifest.get("paths",{}),asset
+          print("ISOLATED_STATIC_MANIFEST=validated")
+          print("PRODUCTION_STATIC_UNCHANGED=true")
+          PY
           "$py" - <<'PY'
           import os,sqlite3,pathlib
           import django
