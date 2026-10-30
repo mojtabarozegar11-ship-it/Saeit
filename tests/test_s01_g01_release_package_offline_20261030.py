@@ -8,7 +8,7 @@ import zipfile
 
 from scripts.s01_g01_release_package_offline_20261030 import build
 
-ASSETS = ["index.html", "game.js", "tactical-map.mjs",
+ASSETS = ["index.html", "game.js", "game.css", "tactical-map.mjs",
           "objective-navigation.mjs", "campaign-backup.mjs",
           "THREE-LICENSE.txt", "ASSET-CREDITS.md"]
 
@@ -26,7 +26,8 @@ class OfflineReleasePackageTests(unittest.TestCase):
         (self.game / "deploy.py").write_text(
             "ASSETS = " + repr(ASSETS) + "\n", encoding="utf-8")
         data = {
-            "index.html": b"<html>synthetic only</html>",
+            "index.html": b'<html><link rel="stylesheet" href="./game.css"><script src="./game.js"></script></html>',
+            "game.css": b"body{display:block}",
             "game.js": (b"import './tactical-map.mjs';"
                         b"import './objective-navigation.mjs';"
                         b"import './campaign-backup.mjs';"),
@@ -42,7 +43,7 @@ class OfflineReleasePackageTests(unittest.TestCase):
 
     def test_private_zip_readback_manifest_and_no_release_claim(self):
         result = build(self.game, self.output)
-        self.assertEqual(result["asset_count"], 8)
+        self.assertEqual(result["asset_count"], 9)
         self.assertFalse(result["deployment_authorized"])
         self.assertFalse(result["commercial_rights_verified"])
         self.assertTrue(self.output.is_file())
@@ -78,6 +79,32 @@ class OfflineReleasePackageTests(unittest.TestCase):
     def test_unreferenced_campaign_module_is_refused(self):
         self.game.joinpath("game.js").write_bytes(
             b"import './tactical-map.mjs'; import './objective-navigation.mjs';"
+        )
+        with self.assertRaises(ValueError):
+            build(self.game, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_remote_script_refused_before_archive(self):
+        self.game.joinpath("index.html").write_bytes(
+            b'<link rel="stylesheet" href="./game.css"><script src="https://other.example/app.js"></script>'
+        )
+        with self.assertRaises(ValueError):
+            build(self.game, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_missing_local_image_refused_before_archive(self):
+        self.game.joinpath("index.html").write_bytes(
+            b'<link rel="stylesheet" href="./game.css"><script src="./game.js"></script>'
+            b'<img src="./unlisted.webp">'
+        )
+        with self.assertRaises(ValueError):
+            build(self.game, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_html_base_url_refused_before_archive(self):
+        self.game.joinpath("index.html").write_bytes(
+            b'<base href="https://other.example/"><link rel="stylesheet" href="./game.css">'
+            b'<script src="./game.js"></script>'
         )
         with self.assertRaises(ValueError):
             build(self.game, self.output)
