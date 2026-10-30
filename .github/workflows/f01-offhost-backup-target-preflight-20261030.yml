@@ -270,8 +270,8 @@ jobs:
                               base["quota_uapi_status"]="ACCOUNT_QUOTA_OBSERVED"
                           else:
                               base["quota_uapi_status"]="DATA_NOT_USABLE"
-                    else:
-                        base["quota_uapi_status"]="API_STATUS_NOT_OK"
+                  else:
+                      base["quota_uapi_status"]="API_STATUS_NOT_OK"
           except (OSError,ValueError,TypeError,subprocess.TimeoutExpired):
               base["quota_uapi_status"]="ERROR_OR_TIMEOUT"
           print("CPANEL_CAPACITY_EVIDENCE="+json.dumps(base,sort_keys=True))
