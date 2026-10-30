@@ -39,7 +39,7 @@ jobs:
           test -s "$d/known"
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           for ssh_attempt in 1 2 3; do
-            if timeout 480s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+            if timeout 480s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 bash -se -- _ "$GITHUB_RUN_ID" <<'REMOTE'
           set -euo pipefail
           test "$(id -un)" = githubops
           run_id="$1"
@@ -195,37 +195,46 @@ jobs:
                       continue
                   try:
                       uid = entry.stat().st_uid
-                      if uid != os.geteuid():
-                          continue
                       raw = (entry / "cmdline").read_bytes()
                       command = raw.replace(b"\0", b" ").decode("utf-8", "replace").strip()
                       if command and target.search(command):
-                          found.append((pid, command))
+                          found.append((pid, command, uid))
                   except (OSError, ProcessLookupError):
                       continue
               return found
 
-          initial = process_matches()
-          print("FACTORY_HOLD_RELATED_PROCESSES_FOUND=" + str(len(initial)))
-          for pid, command in initial:
+          process_errors = []
+          def signal_target(pid, expected, uid, sig):
               try:
-                  os.kill(pid, signal.SIGTERM)
+                  current = (pathlib.Path("/proc") / str(pid) / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace").strip()
+                  if current != expected:
+                      return
+                  if uid == os.geteuid():
+                      os.kill(pid, sig)
+                  elif sudo_ok:
+                      result = run(["sudo", "-n", "kill", "-" + sig.name.lower(), str(pid)])
+                      if result is None or result.returncode != 0:
+                          process_errors.append("sudo_signal_failed")
+                  else:
+                      process_errors.append("foreign_uid_without_sudo")
               except ProcessLookupError:
                   pass
               except PermissionError:
-                  systemd_errors.append("process:permission_denied")
+                  process_errors.append("signal_permission_denied")
+              except OSError:
+                  pass
+
+          initial = process_matches()
+          print("FACTORY_HOLD_RELATED_PROCESSES_FOUND=" + str(len(initial)))
+          for pid, command, uid in initial:
+              signal_target(pid, command, uid, signal.SIGTERM)
           deadline = time.monotonic() + 15
           while time.monotonic() < deadline:
               if not process_matches():
                   break
               time.sleep(0.5)
-          for pid, command in process_matches():
-              try:
-                  current = (pathlib.Path("/proc") / str(pid) / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace").strip()
-                  if current == command:
-                      os.kill(pid, signal.SIGKILL)
-              except (OSError, ProcessLookupError):
-                  pass
+          for pid, command, uid in process_matches():
+              signal_target(pid, command, uid, signal.SIGKILL)
           time.sleep(1)
 
           remaining = process_matches()
@@ -261,7 +270,7 @@ jobs:
           print("FACTORY_HOLD_SUPERVISOR_CONTROL=" + ("readable" if supervisor_readable else "unavailable_or_not_installed"))
           print("FACTORY_HOLD_SUPERVISOR_RELATED_RUNNING=" + str(supervisor_running))
           print("FACTORY_HOLD_BACKUP_DIR_SHA256=" + hashlib.sha256(str(hold_dir).encode()).hexdigest())
-          if remaining or cron_remaining != 0 or running_units or supervisor_errors or supervisor_running not in (0, -1) or systemd_errors or inventory_errors:
+          if remaining or cron_remaining != 0 or running_units or supervisor_errors or supervisor_running not in (0, -1) or systemd_errors or inventory_errors or process_errors:
               raise SystemExit("FACTORY_FULL_HOLD=NOT_VERIFIED")
           print("FACTORY_FULL_HOLD=VERIFIED")
           PY
