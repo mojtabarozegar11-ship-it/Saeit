@@ -103,10 +103,20 @@ def verify(package):
                     metadata.get("sha256") != hashlib.sha256(data).hexdigest()):
                 raise ValueError("MANIFEST_DIGEST_MISMATCH")
         policy = archive.read(PREFIX + "moj1-commerce-policy.mjs").decode("utf-8")
-        if not all(re.search(r"\b" + flag + r"\s*:\s*false\b", policy)
-                   for flag in POLICY_FLAGS):
-            raise ValueError("MOJ1_DISABLED_SOURCE_FLAGS_MISSING")
-        if not re.search(r"\bcontractAddress\s*:\s*null\b", policy):
+        # Source-only admission: duplicate and nonliteral flags are not safe.
+        # A commented false value cannot hide a later true assignment.
+        for flag in POLICY_FLAGS:
+            assignments = re.findall(
+                r"\b" + flag + r"\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*|[0-9]+)",
+                policy,
+            )
+            if assignments != ["false"]:
+                raise ValueError("MOJ1_DISABLED_SOURCE_FLAGS_MISSING")
+        contract_assignments = re.findall(
+            r"\bcontractAddress\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*|[0-9]+)",
+            policy,
+        )
+        if contract_assignments != ["null"]:
             raise ValueError("MOJ1_CONTRACT_MUST_BE_NULL")
     # Never buffer an untrusted ZIP in memory merely to calculate its digest.
     digest = hashlib.sha256()
