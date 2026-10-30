@@ -7,7 +7,8 @@ from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q, Sum
 from django.db import transaction
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, FileResponse
+from pathlib import Path
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -88,6 +89,17 @@ class CompanyLogout(LogoutView):
 
     def dispatch(self, request, *args, **kwargs):
         return no_cache(super().dispatch(request, *args, **kwargs))
+
+
+@require_GET
+def office_stylesheet(request):
+    """Serve the immutable private-office CSS without changing the site's static manifest."""
+    asset = Path(__file__).resolve().parent / "static" / "enterprise_portal" / "app.css"
+    response = FileResponse(asset.open("rb"), content_type="text/css; charset=utf-8")
+    response["Cache-Control"] = "public, max-age=3600"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    return response
 
 
 MODULES = [
