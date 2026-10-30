@@ -1,0 +1,258 @@
+name: Factory VPS full hold and stop verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/vps-factory-full-hold-20261030.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-full-hold
+  cancel-in-progress: false
+jobs:
+  hold:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Stop factory schedules and workers through pinned VPS SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-full-hold-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          for keyscan_attempt in 1 2 3; do
+            if ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null && test -s "$d/known"; then
+              break
+            fi
+            sleep "$((keyscan_attempt * 3))"
+          done
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          for ssh_attempt in 1 2 3; do
+            if timeout 480s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'bash -se -- "$1"' _ "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          run_id="$1"
+          [[ "$run_id" =~ ^[0-9]+$ ]]
+          export HOLD_RUN_ID="$run_id"
+          python3 - <<'PY'
+          import hashlib, os, pathlib, re, shutil, signal, subprocess, sys, tempfile, time
+
+          home = pathlib.Path.home()
+          root = home / "factory-runtime"
+          ops = root / "operations"
+          if os.geteuid() == 0 or root.is_symlink() or not root.is_dir() or ops.is_symlink() or not ops.is_dir():
+              raise SystemExit("FACTORY_HOLD_PREFLIGHT=UNSAFE_OR_MISSING_ROOT")
+
+          target = re.compile(
+              r"SAEIT_(MASTER_AGENT_V1|FACTORY_EVERY_MINUTE_V1|FACTORY_LIFECYCLE_12_V1|"
+              r"AUTONOMOUS_PRODUCTS_V2|PRODUCTION_WAREHOUSE_V1|AGRI200_AUTONOMOUS_CLOSED_LOOP_V1|"
+              r"STRICT_SERIAL_PRODUCT_TO_QC1000_20261025)|factory[-_ ]?40|family[-_ ]master|"
+              r"build50|stage[2-6]|research[-_]navigator|agri200|qc1000|strict[-_. ]serial|"
+              r"autonomous[-_]product[-_]runtime|factory_vps_product_cycle|"
+              r"factory_production_warehouse|vps-only-loop|leech",
+              re.I,
+          )
+
+          def run(args, timeout=15):
+              try:
+                  return subprocess.run(args, capture_output=True, text=True, timeout=timeout, check=False)
+              except (OSError, subprocess.TimeoutExpired):
+                  return None
+
+          run_id = os.environ["HOLD_RUN_ID"]
+          hold_dir = ops / "holds" / ("full-hold-" + run_id)
+          hold_dir.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+          if hold_dir.parent.is_symlink() or hold_dir.exists() or hold_dir.is_symlink():
+              raise SystemExit("FACTORY_HOLD_PREFLIGHT=HOLD_PATH_EXISTS_OR_UNSAFE")
+          hold_dir.mkdir(mode=0o700)
+          os.chmod(hold_dir, 0o700)
+
+          cron = run(["crontab", "-l"])
+          if cron is None or cron.returncode != 0:
+              raise SystemExit("FACTORY_HOLD_PREFLIGHT=CRONTAB_UNREADABLE")
+          cron_before = cron.stdout
+          (hold_dir / "crontab.before").write_text(cron_before, encoding="utf-8")
+          os.chmod(hold_dir / "crontab.before", 0o600)
+          before_hash = hashlib.sha256(cron_before.encode()).hexdigest()
+          kept = [line for line in cron_before.splitlines(keepends=True)
+                  if not (line.strip() and not line.lstrip().startswith("#") and target.search(line))]
+          removed = sum(1 for line in cron_before.splitlines()
+                        if line.strip() and not line.lstrip().startswith("#") and target.search(line))
+          if removed:
+              fd, staged = tempfile.mkstemp(prefix="factory-hold-crontab-", dir="/tmp")
+              try:
+                  with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                      stream.writelines(kept)
+                      stream.flush()
+                      os.fsync(stream.fileno())
+                  os.chmod(staged, 0o600)
+                  applied = run(["crontab", staged])
+                  if applied is None or applied.returncode != 0:
+                      raise SystemExit("FACTORY_HOLD_CRON_UPDATE=FAILED")
+              finally:
+                  pathlib.Path(staged).unlink(missing_ok=True)
+          post_cron = run(["crontab", "-l"])
+          if post_cron is None or post_cron.returncode != 0:
+              raise SystemExit("FACTORY_HOLD_CRON_VERIFY=UNREADABLE")
+          if any(line.strip() and not line.lstrip().startswith("#") and target.search(line)
+                 for line in post_cron.stdout.splitlines()):
+              raise SystemExit("FACTORY_HOLD_CRON_VERIFY=RELATED_SCHEDULE_REMAINS")
+          (hold_dir / "crontab.after").write_text(post_cron.stdout, encoding="utf-8")
+          os.chmod(hold_dir / "crontab.after", 0o600)
+          print("FACTORY_HOLD_CRON_REMOVED=" + str(removed))
+          print("FACTORY_HOLD_CRONTAB_BEFORE_SHA256=" + before_hash)
+          print("FACTORY_HOLD_CRONTAB_AFTER_SHA256=" + hashlib.sha256(post_cron.stdout.encode()).hexdigest())
+
+          systemd_errors = []
+          def unit_names(args):
+              p = run(args)
+              if p is None or p.returncode != 0:
+                  return None
+              return [line.split()[0] for line in p.stdout.splitlines() if line.split()]
+
+          unit_scopes = [
+              (["systemctl", "list-unit-files", "--type=service", "--no-legend", "--no-pager"], "system"),
+              (["systemctl", "list-unit-files", "--type=timer", "--no-legend", "--no-pager"], "system"),
+              (["systemctl", "--user", "list-unit-files", "--type=service", "--no-legend", "--no-pager"], "user"),
+              (["systemctl", "--user", "list-unit-files", "--type=timer", "--no-legend", "--no-pager"], "user"),
+          ]
+          matched_units = []
+          sudo_ok = bool((run(["sudo", "-n", "true"]) or type("R", (), {"returncode": 1})()).returncode == 0)
+          for args, scope in unit_scopes:
+              names = unit_names(args)
+              if names is None:
+                  systemd_errors.append(scope + ":" + args[3] if scope == "user" else scope + ":" + args[2])
+                  continue
+              for name in names:
+                  if target.search(name):
+                      matched_units.append((name, scope))
+          print("FACTORY_HOLD_SYSTEMD_RELATED_UNITS=" + str(len(matched_units)))
+          print("FACTORY_HOLD_SYSTEMD_INVENTORY_ERRORS=" + str(len(systemd_errors)))
+          for name, scope in matched_units:
+              command = ["systemctl"]
+              if scope == "user":
+                  command.append("--user")
+              if scope == "system" and sudo_ok:
+                  command = ["sudo", "-n", "systemctl"]
+              stopped = run(command + ["disable", "--now", name])
+              if stopped is None or stopped.returncode != 0:
+                  systemd_errors.append(scope + ":stop_failed")
+          if systemd_errors:
+              print("FACTORY_HOLD_SYSTEMD_ERRORS=" + str(len(systemd_errors)))
+
+          supervisor_available = shutil.which("supervisorctl") is not None
+          supervisor_readable = False
+          supervisor_errors = 0
+          if supervisor_available:
+              status = run(["supervisorctl", "status"])
+              if status is not None and status.returncode == 0:
+                  supervisor_readable = True
+                  for line in status.stdout.splitlines():
+                      fields = line.split()
+                      if fields and target.search(fields[0]) and len(fields) > 1 and fields[1] in ("RUNNING", "STARTING", "STOPPING"):
+                          stopped = run(["supervisorctl", "stop", fields[0]], timeout=30)
+                          if stopped is None or stopped.returncode != 0:
+                              supervisor_errors += 1
+              else:
+                  supervisor_errors += 1
+
+          def process_matches():
+              found = []
+              for entry in pathlib.Path("/proc").iterdir():
+                  if not entry.name.isdigit():
+                      continue
+                  pid = int(entry.name)
+                  if pid == os.getpid():
+                      continue
+                  try:
+                      uid = entry.stat().st_uid
+                      if uid != os.geteuid():
+                          continue
+                      raw = (entry / "cmdline").read_bytes()
+                      command = raw.replace(b"\0", b" ").decode("utf-8", "replace").strip()
+                      if command and target.search(command):
+                          found.append((pid, command))
+                  except (OSError, ProcessLookupError):
+                      continue
+              return found
+
+          initial = process_matches()
+          print("FACTORY_HOLD_RELATED_PROCESSES_FOUND=" + str(len(initial)))
+          for pid, command in initial:
+              try:
+                  os.kill(pid, signal.SIGTERM)
+              except ProcessLookupError:
+                  pass
+              except PermissionError:
+                  systemd_errors.append("process:permission_denied")
+          deadline = time.monotonic() + 15
+          while time.monotonic() < deadline:
+              if not process_matches():
+                  break
+              time.sleep(0.5)
+          for pid, command in process_matches():
+              try:
+                  current = (pathlib.Path("/proc") / str(pid) / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace").strip()
+                  if current == command:
+                      os.kill(pid, signal.SIGKILL)
+              except (OSError, ProcessLookupError):
+                  pass
+          time.sleep(1)
+
+          remaining = process_matches()
+          post_cron = run(["crontab", "-l"])
+          cron_remaining = (sum(1 for line in post_cron.stdout.splitlines()
+                                if line.strip() and not line.lstrip().startswith("#") and target.search(line))
+                           if post_cron is not None and post_cron.returncode == 0 else -1)
+          running_units = 0
+          for scope_args, scope in [
+              (["systemctl", "list-units", "--all", "--no-legend", "--no-pager"], "system"),
+              (["systemctl", "--user", "list-units", "--all", "--no-legend", "--no-pager"], "user"),
+          ]:
+              p = run(scope_args)
+              if p is None or p.returncode != 0:
+                  continue
+              for line in p.stdout.splitlines():
+                  fields = line.split()
+                  if len(fields) >= 4 and target.search(fields[0]) and fields[3] in ("running", "activating", "reloading"):
+                      running_units += 1
+          supervisor_running = 0
+          if supervisor_readable:
+              status = run(["supervisorctl", "status"])
+              if status is None or status.returncode != 0:
+                  supervisor_running = -1
+              else:
+                  for line in status.stdout.splitlines():
+                      fields = line.split()
+                      if fields and target.search(fields[0]) and len(fields) > 1 and fields[1] in ("RUNNING", "STARTING", "STOPPING"):
+                          supervisor_running += 1
+          print("FACTORY_HOLD_RELATED_PROCESSES_REMAINING=" + str(len(remaining)))
+          print("FACTORY_HOLD_RELATED_CRON_REMAINING=" + str(cron_remaining))
+          print("FACTORY_HOLD_RELATED_ACTIVE_UNITS=" + str(running_units))
+          print("FACTORY_HOLD_SUPERVISOR_CONTROL=" + ("readable" if supervisor_readable else "unavailable_or_not_installed"))
+          print("FACTORY_HOLD_SUPERVISOR_RELATED_RUNNING=" + str(supervisor_running))
+          print("FACTORY_HOLD_BACKUP_DIR_SHA256=" + hashlib.sha256(str(hold_dir).encode()).hexdigest())
+          if remaining or cron_remaining != 0 or running_units or supervisor_errors or supervisor_running not in (0, -1) or systemd_errors:
+              raise SystemExit("FACTORY_FULL_HOLD=NOT_VERIFIED")
+          print("FACTORY_FULL_HOLD=VERIFIED")
+          PY
+          REMOTE
+              echo 'FACTORY_FULL_HOLD=VERIFIED'
+              exit 0
+            fi
+            echo "FACTORY_FULL_HOLD_SSH_ATTEMPT=$ssh_attempt failed; retrying"
+            sleep "$((ssh_attempt * 5))"
+          done
+          echo 'FACTORY_FULL_HOLD=FAILED_AFTER_RETRIES'
+          exit 1
