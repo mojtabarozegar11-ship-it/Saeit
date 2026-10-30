@@ -37,6 +37,18 @@ def _score(q, *fields):
     return score
 
 
+def _matches_company_alias(query):
+    # A one- or two-character search must not rank the company as a top hit
+    # merely because a common letter occurs in a title or executive name.
+    normalized = _norm(query)
+    if len(normalized) < 3:
+        return False
+    aliases = ("شرکت کشت و صنعت زمرد ملل", "زمرد ملل", "مجتبی روزگار",
+               "محقق و پژوهشگر", "مدیرعامل", "مدیر عامل")
+    return any(normalized in _norm(alias) or _norm(alias) in normalized
+               for alias in aliases)
+
+
 def _site_search_with_schema(request):
     # Normalize whitespace before applying the length cap; a whitespace-only
     # query must not return an arbitrary set of published records.
@@ -60,8 +72,7 @@ def _site_search_with_schema(request):
         products = Product.objects.filter(active=True).filter(Q(title__icontains=q) | Q(product_type__icontains=q))[:50]
         for x in products:
             results.append((_score(q, x.title, x.product_type), {"type": "فروشگاه", "title": x.title, "summary": f"{x.product_type or ''} · {x.price} {x.currency or ''}", "url": f"/store/product/{x.pk}/"}))
-        aliases = ("شرکت کشت و صنعت زمرد ملل", "زمرد ملل", "مجتبی روزگار", "محقق و پژوهشگر", "مدیرعامل", "مدیر عامل")
-        if any(_norm(q) in _norm(alias) or _norm(alias) in _norm(q) for alias in aliases):
+        if _matches_company_alias(q):
             results.append((100, {"type": "شرکت", "title": "شرکت کشت و صنعت زمرد ملل", "summary": "مجتبی روزگار — محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل", "url": "/company/"}))
     # Stable tie-breaking prevents search results flickering across DB query orders.
     results.sort(key=lambda item: (-item[0], _norm(item[1]["type"]),
