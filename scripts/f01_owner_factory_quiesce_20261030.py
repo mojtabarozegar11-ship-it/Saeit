@@ -20,18 +20,30 @@ from pathlib import Path
 
 MAX_PROC=2400
 MAX_TARGET=900
-FACTORY_HINTS=(b"/home/githubops/factory-runtime/", b"factory-runtime",
-               b"saeit_factory_", b"master-agent", b"master_agent",
-               b"forty-execution/", b"forty_family", b"factory_")
-CRON_HINTS=("factory", "master-agent", "master_agent",
-            "SAEIT_FACTORY", "FORTY_FAMILY", "forty-execution")
+FACTORY_ROOT=b"/home/githubops/factory-runtime/"
+# Never use arbitrary substrings such as "factory", "master-agent", or
+# "factory_" to justify terminating a process; unrelated shell arguments
+# and service commands may legitimately mention those terms.
+CRON_EXACT_MARKERS=(
+    "SAEIT_FACTORY_", "SAEIT_FACTORY_EVERY_MINUTE_V1",
+    "SAEIT_FACTORY_LIFECYCLE_12_V1",
+    "SAEIT_FACTORY_FORTY_FAMILY_", "SAEIT_FACTORY_BUILD50_",
+)
+CRON_SCOPED_PATHS=(
+    "/home/githubops/factory-runtime/", "$HOME/factory-runtime/",
+    "HOME/factory-runtime/", "~/factory-runtime/",
+)
 PAUSE_TAG="# F01_OWNER_PAUSED_FACTORY_20261030 "
 
 def cron_is_factory(line):
     v=line.strip()
     if not v or v.startswith("#") or "=" in v.split()[0]:
         return False
-    return any(term.lower() in v.lower() for term in CRON_HINTS)
+    # Restrict the classification to known owner cron markers or a
+    # fully scoped factory-runtime path. Unknown entries remain untouched.
+    return any(m in v.upper() for m in CRON_EXACT_MARKERS) or any(
+        p.lower() in v.lower() for p in CRON_SCOPED_PATHS
+    )
 
 def cron_lines():
     p=subprocess.run(["crontab","-l"],stdout=subprocess.PIPE,
@@ -68,7 +80,13 @@ def proc_info():
             ppid=int(fields[1])
             start=int(fields[19])
             state=fields[0][:1]
-            direct=any(h in cmd for h in FACTORY_HINTS)
+            args=[a for a in cmd.split(b"\\0") if a]
+            # A whole argv element must be a file underneath the private
+            # factory root. A mention in `bash -c` text is not sufficient.
+            # Do not target shells whose argument could be arbitrary code.
+            direct=any(a.startswith(FACTORY_ROOT) for a in args) and not any(
+                a in (b"-c", b"--command") for a in args
+            )
             items[pid]=(ppid,start,state,direct)
         except (OSError,ValueError,IndexError):
             continue
@@ -84,12 +102,10 @@ def proc_info():
         parent=item[0]
     direct={p for p,item in items.items() if item[3] and p not in protected}
     if len(direct)>MAX_TARGET:raise RuntimeError("TOO_MANY_FACTORY_TARGETS")
+    # Do not recursively expand to arbitrary descendants: a child can be
+    # an unrelated SSH/network or payment helper. All selected processes
+    # must independently meet the exact factory-runtime argv predicate.
     chosen=set(direct)
-    for _ in range(25):
-        kids={p for p,item in items.items() if item[0] in chosen and p not in protected}
-        if kids<=chosen:break
-        chosen|=kids
-        if len(chosen)>MAX_TARGET:raise RuntimeError("TOO_MANY_DESCENDANTS")
     return items,chosen,direct
 
 def live_identity(pid, start):
@@ -153,11 +169,10 @@ def pause(expected_sha):
     while time.monotonic()<deadline:
         if not any(live_identity(p,items[p][1]) for p in targets):break
         time.sleep(.75)
+    # Never SIGKILL a worker that could be writing SQLite. A graceful
+    # timeout means PARTIAL_STOP and requires a separately inspected
+    # operator decision, not unconditional process termination.
     stopped_kill=0
-    for pid in sorted(targets,reverse=True):
-        if live_identity(pid,items[pid][1]):
-            try:os.kill(pid,signal.SIGKILL);stopped_kill+=1
-            except (ProcessLookupError,PermissionError):pass
     time.sleep(2)
     _,remaining,direct_remaining=proc_info()
     cron_after=cron_lines()
@@ -165,7 +180,8 @@ def pause(expected_sha):
                    for x in cron_after.splitlines()))
     return {"schema":"f01-owner-factory-quiesce.v1",
             "observed_utc":dt.datetime.now(dt.timezone.utc).isoformat(),
-            "status":"OWNER_FACTORY_CRON_AND_PROCESS_STOP_VERIFIED" if verified else "PARTIAL_STOP",
+            "status":"SCOPED_USER_FACTORY_CRON_AND_PROCESS_STOP_VERIFIED" if verified else "PARTIAL_STOP",
+            "full_factory_stop_verified":False,
             "owned_factory_cron_disabled":paused,
             "cron_nonfactory_lines_unchanged":True,
             "owner_processes_targeted":len(targets),
@@ -173,8 +189,9 @@ def pause(expected_sha):
             "sigkill_sent":stopped_kill,
             "remaining_factory_targets":len(remaining),
             "remaining_direct_factory_targets":len(direct_remaining),
-            "owner_cron_factory_active_after":sum(cron_is_factory(x) for x in cron_after.splitlines()),
+            "forced_termination_disabled":True,
             "system_level_timers_verified":False,
+            "owner_cron_factory_active_after":sum(cron_is_factory(x) for x in cron_after.splitlines()),
             "other_service_users_unmodified":True,
             "db_touched":False,
             "reboot_performed":False,
