@@ -150,5 +150,33 @@ class StageGateTests(unittest.TestCase):
             gate.verify(self.path)
 
 
+    def test_duplicate_disabled_flag_with_true_override_is_rejected(self):
+        self.build(policy=(
+            b"export const MOJ1_COMMERCE = Object.freeze({"
+            b"ownerApproved:false, ownerApproved:true,"
+            b"checkoutEnabled:false, verifiedBackend:false, contractAddress:null});"
+        ))
+        with self.assertRaisesRegex(ValueError, "MOJ1_DISABLED_SOURCE_FLAGS_MISSING"):
+            gate.verify(self.path)
+
+    def test_duplicate_contract_address_with_live_override_is_rejected(self):
+        self.build(policy=(
+            b"export const MOJ1_COMMERCE = Object.freeze({"
+            b"ownerApproved:false, checkoutEnabled:false, verifiedBackend:false,"
+            b"contractAddress:null, contractAddress:liveAddress});"
+        ))
+        with self.assertRaisesRegex(ValueError, "MOJ1_CONTRACT_MUST_BE_NULL"):
+            gate.verify(self.path)
+
+    def test_nonliteral_dynamic_checkout_flag_is_rejected(self):
+        self.build(policy=(
+            b"export const MOJ1_COMMERCE = Object.freeze({"
+            b"ownerApproved:false, checkoutEnabled:enablePayments,"
+            b"verifiedBackend:false, contractAddress:null});"
+        ))
+        with self.assertRaisesRegex(ValueError, "MOJ1_DISABLED_SOURCE_FLAGS_MISSING"):
+            gate.verify(self.path)
+
+
 if __name__ == "__main__":
     unittest.main()
