@@ -178,11 +178,12 @@ def main():
             target = APP / module
             if target.exists() or target.is_symlink():
                 fail("CONCURRENT_MODULE_CHANGED " + module)
-            shutil.copytree(source, target, symlinks=False)
             created_modules.append(target)
-        # Pre-migrated isolated DB: no destructive schema changes on an existing database.
-        atomic_copy(code / "isolation.sqlite3", APP / "db.sqlite3", 0o600)
+            shutil.copytree(source, target, symlinks=False)
+        # Mark the live DB as potentially changed BEFORE atomic replacement so
+        # even a partially failed copy follows the verified rollback path.
         modified = True
+        atomic_copy(code / "isolation.sqlite3", APP / "db.sqlite3", 0o600)
         for relative in ("config/settings.py", "config/urls.py"):
             if blob(APP / relative) != MAIN_BLOBS[relative]:
                 fail("CONCURRENT_MAIN_CHANGE " + relative)
