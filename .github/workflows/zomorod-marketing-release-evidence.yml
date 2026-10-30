@@ -425,7 +425,7 @@ jobs:
       - name: Audit existing private business database independently without records
         shell: bash
         env:
-          COMMAND_HOST: \${{ steps.link.outputs.command_host }}
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
           dir="$RUNNER_TEMP/zm-marketing-ro"
