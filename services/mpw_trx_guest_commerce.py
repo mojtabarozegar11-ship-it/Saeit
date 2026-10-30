@@ -7,17 +7,13 @@ The browser gets a signed, secure owner cookie so no account signup is needed.
 from __future__ import annotations
 
 import hashlib
-import hmac
 import secrets
 import time
-from types import SimpleNamespace
 
 from django.core import signing
 from django.http import Http404
-from django.utils.html import escape
-from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_POST
 
 COOKIE = "mpw_trx_guest_owner"
 SALT = "mpw.trx.guest.owner.v1"
@@ -80,6 +76,8 @@ def _new_user(request):
     Model = get_user_model()
     field = Model.USERNAME_FIELD
     value = "mpwguest_" + secrets.token_hex(20)
+    if field.lower() in ("email", "email_address"):
+        value += "@guest.mojplaywin.com"
     user = Model(**{field: value})
     user.set_unusable_password()
     if hasattr(user, "is_active"):
@@ -122,19 +120,13 @@ def _install_cookie(response, token):
 def _dispatch(request, view, args, kwargs, *, create=False):
     user, token = _identity(request, create=create)
     request.user = user
-    try:
-        response = view(request, *args, **kwargs)
-    except BaseException:
-        if token:
-            user.delete()
-        raise
+    response = view(request, *args, **kwargs)
     return _install_cookie(response, token)
 
 
 def _checkout_page(request, product_id, pages_namespace):
     from django.conf import settings
     from django.db import connection
-    from django.http import HttpResponse
     from django.shortcuts import render
     from core.models import Product
     from mpw_commerce.buyer_orders import _eligible
@@ -173,7 +165,6 @@ def _checkout_page(request, product_id, pages_namespace):
 def patch_public(namespace):
     from django.views.decorators.cache import never_cache
     from django.views.decorators.http import require_GET
-    from django.http import Http404
     import inspect
 
     old_checkout = namespace.get("product_checkout")
