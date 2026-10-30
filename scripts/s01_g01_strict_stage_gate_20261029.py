@@ -35,6 +35,8 @@ def verify(package):
             raise ValueError("INVALID_MEMBER_SET")
         # Web and extraction targets may be case-insensitive. Never allow two
         # different archive members to overwrite the same runtime asset.
+        if len(set(name.casefold() for name in names)) != len(names):
+            raise ValueError("CASEFOLD_MEMBER_COLLISION")
         if len(set(unicodedata.normalize("NFC", name).casefold() for name in names)) != len(names):
             raise ValueError("NORMALIZED_MEMBER_COLLISION")
         if sum(item.file_size for item in members) > MAX_UNCOMPRESSED:
