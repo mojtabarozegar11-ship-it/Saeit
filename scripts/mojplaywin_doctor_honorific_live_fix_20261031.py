@@ -14,7 +14,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-PAGE = Path("/home/zomorod2/Saeit/design-preview-20261017/professor-mojtaba-roozegar-20261018.html")
+PAGE = Path("/home/zomorod2/mojplaywin.com/design-preview-20261017/professor-mojtaba-roozegar-20261018.html")
 BACKUP_ROOT = Path("/home/zomorod2")
 MARKER = "MOJPLAYWIN_PROFESSOR_MOJTabA_ROOZEGAR_PROFILE_20261018"
 OLD_SENTENCE = (
