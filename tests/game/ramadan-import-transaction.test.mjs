@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const source=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
-const start=source.indexOf("$('#importSaveFile').onchange=async e=>{");
-const end=source.indexOf("};$('#survival').onclick",start);
+const start=source.indexOf('function applyImportedCampaign(imported){');
+const end=source.indexOf("\n}\n$('#survival').onclick",start);
 assert.ok(start>=0&&end>start,'production import handler exists');
-const handler=source.slice(start+"$('#importSaveFile').onchange=".length,end+1);
+const handler=source.slice(start,end+2);
 async function run({old='OLD_SAVE',activate=true,writeOk=true,removeOk=true,foreign=false,baseline=undefined}={}){
  const state=new Map(old===null?[]:[['rwNativeCampaign',old]]),messages=[];
  const ctx={saveKey:'rwNativeCampaign',saveStatus:'not-saved',hero:2,foreignSaveDetected:foreign,lastSavedSnapshot:baseline,
@@ -20,9 +20,9 @@ async function run({old='OLD_SAVE',activate=true,writeOk=true,removeOk=true,fore
   toast:m=>messages.push(m),updateHome:()=>{},
   $:()=>({textContent:''})
  };
- vm.runInNewContext('globalThis.importHandler='+handler+';',ctx);
+ vm.runInNewContext(handler+'\nglobalThis.importHandler=applyImportedCampaign;',ctx);
  const input={files:[{size:100,text:async()=>'{"backup":true}'}],value:'selected'};
- await ctx.importHandler({currentTarget:input});
+ await ctx.importHandler('NEW_SAVE');
  return {ctx,state,messages,input};
 }
 test('failed runtime activation restores the previous disk save',async()=>{
