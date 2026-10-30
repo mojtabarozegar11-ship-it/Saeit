@@ -3,7 +3,7 @@
 // clicks, submissions, cookies, payment calls, credentials or customer data.
 const fs = require('node:fs');
 const {chromium} = require('playwright');
-const {classifyNavigation} = require('./s01_checkout_route_verdict_20261029.cjs');
+const {classifyNavigation, assessAnonymousRouteRows} = require('./s01_checkout_route_verdict_20261029.cjs');
 const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/product/879/',
   '/store/product/72/checkout/','/store/product/225/checkout/',
   '/store/product/879/checkout/','/commerce/trx-easy/purchases/'];
@@ -94,14 +94,12 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
         }
       } finally {await context.close();}
     }
+    const assessment=assessAnonymousRouteRows(rows,URLS,['mobile','desktop']);
     const report={schema:'s01-anonymous-get-controls.v1',scope:'GET_ONLY_NO_PAYMENT',
       checkedAt:new Date().toISOString(),mutatingRequestsSent:0,
       ordersCreated:null,paymentsCreated:null,transactionSideEffectsVerified:false,rows,
-      complete:rows.length===URLS.length*2 && rows.every(r=>{
-        const productDetail=/^\/store\/product\/(72|225|879)\/$/.test(r.path);
-        return r.observedSafe && r.jsErrors.length===0 &&
-          (!productDetail || (r.checkoutLinks>0 && r.mismatchedCheckoutLinks===0));
-      }),
+      complete:assessment.complete,
+      incompleteReasons:assessment.failures,
       completeMeaning:'ANONYMOUS_GET_OBSERVATION_AND_CORRECT_SKU_CTA_ONLY',
       authGatedRoutes:rows.filter(r=>r.authRequired).length,
       authenticatedBuyerFlowVerified:false,invoiceVerified:false,
@@ -109,9 +107,12 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
       commercialDeliveryStatus:'NOT_VERIFIED'};
     fs.writeFileSync('s01-public-checkout-controls.json',JSON.stringify(report,null,2));
     if (!report.complete) process.exitCode=2; // A partial scan must not be green.
-    console.log(JSON.stringify({schema:report.schema,rows:rows.map(x=>({
+    console.log(JSON.stringify({schema:report.schema,complete:report.complete,
+      incompleteReasons:report.incompleteReasons,rows:rows.map(x=>({
       device:x.device,path:x.path,http:x.http,finalPath:x.finalPath,checkoutLinks:x.checkoutLinks,controls:x.controls.length,
       disabled:x.controls.filter(c=>c.reasons.length).length,
+      mismatchedCheckoutLinks:x.mismatchedCheckoutLinks,
+      observedSafe:x.observedSafe,
       jsErrors:x.jsErrors.length,authRequired:x.authRequired,
       unexpectedRedirect:x.unexpectedRedirect,error:x.error
     }))}));
