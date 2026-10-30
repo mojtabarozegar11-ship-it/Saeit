@@ -53,6 +53,7 @@ urlpatterns = [
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),
+    path("company/office/login/", RedirectView.as_view(url="/admin/login/?next=/staff/command-center/", permanent=False), name="company_office_login"),
     path("company/office/messages/", include("company_messaging.urls")),
     path("company/office/marketing/", include("company_marketing.urls")),
     path("company/office/", include("enterprise_portal.urls")),
