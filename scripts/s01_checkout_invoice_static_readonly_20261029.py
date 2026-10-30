@@ -71,12 +71,15 @@ def function_signals(node):
         body[0].value, (ast.Constant,)
     ) and isinstance(body[0].value.value, str):
         body = body[1:]
+    # Nested function/class declarations do not implement the outer handler.
+    # Do not let their dormant ORM calls create a false invoice/settlement signal.
+    executable = [stmt for stmt in body if not isinstance(
+        stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
     # A public invoice/entitlement endpoint consisting only of a constant
-    # return or unconditional exception cannot establish a working contract.
-    # This is a conservative source-only signal, never proof of correctness.
-    is_stub = not body
-    if len(body) == 1:
-        statement = body[0]
+    # return, unconditional exception or nested definitions is not implemented.
+    is_stub = not executable
+    if len(executable) == 1:
+        statement = executable[0]
         is_stub = (
             isinstance(statement, (ast.Pass, ast.Raise)) or
             (isinstance(statement, ast.Expr) and
@@ -92,7 +95,15 @@ def function_signals(node):
             ))
         )
     calls = []
-    for child in ast.walk(node):
+    visited = []
+    stack = list(body)
+    while stack:
+        child = stack.pop()
+        # A nested definition's body is not executed by this entrypoint.
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            continue
+        visited.append(child)
+        stack.extend(ast.iter_child_nodes(child))
         if isinstance(child, ast.Call):
             fn = child.func
             calls.append(fn.attr if isinstance(fn, ast.Attribute) else fn.id if isinstance(fn, ast.Name) else "")
@@ -106,7 +117,7 @@ def function_signals(node):
         "has_atomic_call": "atomic" in names,
         "has_verified_receipt_name": any(
             isinstance(x, ast.Name) and x.id == "CommerceReceipt"
-            for x in ast.walk(node)
+            for x in visited
         ),
     }
 
