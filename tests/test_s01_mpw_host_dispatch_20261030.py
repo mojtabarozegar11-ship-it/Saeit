@@ -23,6 +23,7 @@ class MojPlayWinHostDispatchTests(SimpleTestCase):
         for host in (
             "zomorodmelal.ir", "evilmojplaywin.com",
             "mojplaywin.com.evil.example", "mojplaywin.com..evil",
+            "mojplaywin.com..",
             "localhost", "127.0.0.1",
         ):
             with self.subTest(host=host):
