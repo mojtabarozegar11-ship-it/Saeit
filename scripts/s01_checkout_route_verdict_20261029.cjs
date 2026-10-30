@@ -78,8 +78,8 @@ function redactObservedHref(href) {
     // only known public checkout navigation shapes; redact unknown paths.
     const safePath = url.pathname;
     const known = safePath === '/store/' ||
-      /^\\/store\\/product\\/(?:72|225|879)\\/(?:checkout\\/)?$/.test(safePath) ||
-      /^\\/accounts\\/(?:login|register)\\/$/.test(safePath) ||
+      new RegExp('^/store/product/(?:72|225|879)/(?:checkout/)?$').test(safePath) ||
+      new RegExp('^/accounts/(?:login|register)/$').test(safePath) ||
       safePath === '/commerce/trx-easy/purchases/';
     if (!known) return '[redacted-path]';
     return safePath + (url.search ? '?[redacted]' : '') +
