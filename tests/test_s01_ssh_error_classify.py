@@ -3,7 +3,7 @@ import sys
 import unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from s01_ssh_error_classify import classify
+from s01_ssh_error_classify import classify, phase
 
 class ClassifierTests(unittest.TestCase):
     def test_auth(self): self.assertEqual(classify("Permission denied (publickey)."), "AUTH_REJECTED")
@@ -21,6 +21,17 @@ class ClassifierTests(unittest.TestCase):
     def test_remote_identity(self): self.assertEqual(classify("debug1: Sending command: test\ndebug1: Exit status 1"), "REMOTE_IDENTITY_CHECK_REJECTED")
     def test_debug_success(self): self.assertEqual(classify("debug1: Authenticated to example\ndebug1: Exit status 0"), "REMOTE_COMMAND_SUCCEEDED")
     def test_secret_with_known_failure(self): self.assertEqual(classify("private-key-material Permission denied"), "AUTH_REJECTED")
+
+class PhaseTests(unittest.TestCase):
+    def test_no_bytes(self): self.assertEqual(phase(""), "NO_DIAGNOSTIC_BYTES")
+    def test_connect(self): self.assertEqual(phase("debug1: Connecting to relay port 22"), "SSH_CONNECT_ATTEMPTED")
+    def test_transport(self): self.assertEqual(phase("debug1: Connection established"), "SSH_TRANSPORT_ESTABLISHED")
+    def test_auth(self): self.assertEqual(phase("debug1: Offering public key: secret"), "SSH_AUTH_ATTEMPTED")
+    def test_authenticated(self): self.assertEqual(phase("debug1: Authenticated to host"), "SSH_AUTHENTICATED")
+    def test_remote(self): self.assertEqual(phase("debug1: Sending command: test"), "REMOTE_COMMAND_SENT")
+    def test_exit(self): self.assertEqual(phase("debug1: Exit status 1"), "REMOTE_EXIT_OBSERVED")
+    def test_unrecognized_no_leak(self): self.assertEqual(phase("private-key-material /home/owner/secret"), "NO_RECOGNIZED_SSH_STAGE")
+
 
 if __name__ == "__main__":
     unittest.main()
