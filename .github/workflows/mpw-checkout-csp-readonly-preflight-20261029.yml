@@ -124,6 +124,14 @@ jobs:
           printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" || { echo 'S01_CPANEL_HOST_PIN=BLOCKED'; exit 1; }
           echo 'S01_CPANEL_HOST_PIN=VERIFIED'
+          # Verify the relay hop independently. This is a read-only command;
+          # successful ProxyJump authentication alone is not cPanel proof.
+          if timeout 25s ssh -T -F "$d/config" saeit-vps 'true' >/dev/null 2>/dev/null; then
+            echo 'S01_VPS_READONLY_SESSION=VERIFIED'
+          else
+            echo 'S01_VPS_READONLY_SESSION=BLOCKED'
+            exit 1
+          fi
           # Reuse a single authenticated session. Retry only harmless identity reads.
           session_ready=0
           for attempt in 1 2 3 4 5; do
@@ -140,7 +148,18 @@ jobs:
             echo "S01_PINNED_IDENTITY_RETRY=$attempt"
             if [ "$attempt" -lt 5 ]; then sleep 6; fi
           done
-          test "$session_ready" = 1 || { echo 'S01_PINNED_SESSION=BLOCKED'; exit 1; }
+          if [ "$session_ready" != 1 ]; then
+            # Distinguish an accessible cPanel shell from a rejected identity
+            # assertion without printing the account, path or remote output.
+            if timeout 25s ssh -T -F "$d/config" saeit-cpanel 'true' >/dev/null 2>/dev/null; then
+              echo 'S01_CPANEL_REMOTE_SHELL=VERIFIED'
+              echo 'S01_CPANEL_IDENTITY_ASSERTION=BLOCKED'
+            else
+              echo 'S01_CPANEL_REMOTE_SHELL=NOT_VERIFIED'
+            fi
+            echo 'S01_PINNED_SESSION=BLOCKED'
+            exit 1
+          fi
           echo 'S01_PINNED_SESSION=VERIFIED'
       - name: Classify bounded cPanel checkout provenance (read-only; no source transfer)
         shell: bash
