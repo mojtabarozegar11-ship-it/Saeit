@@ -5,7 +5,7 @@ from . import trial_balance as reports
 app_name = "enterprise_portal"
 
 urlpatterns = [
-    path("login/", views.CompanyLogin.as_view(), name="login"),
+    path("secure-login/", views.CompanyLogin.as_view(), name="login"),
     path("logout/", views.CompanyLogout.as_view(), name="logout"),
     path("", views.dashboard, name="dashboard"),
     path("finance/", views.finance, name="finance"),
