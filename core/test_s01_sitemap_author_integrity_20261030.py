@@ -63,6 +63,28 @@ class AuthorStaticIntegrityTests(SimpleTestCase):
         self.assertEqual(response["Cache-Control"], "private, no-store")
         self.assertEqual(response["Retry-After"], "300")
 
+    def test_changed_link_count_during_read_is_not_served(self):
+        from types import SimpleNamespace
+        self.page.write_text("safe", encoding="utf-8")
+        original_fstat = os.fstat
+        calls = [0]
+
+        def changed_second_stat(fd):
+            info = original_fstat(fd)
+            calls[0] += 1
+            if calls[0] != 2:
+                return info
+            return SimpleNamespace(
+                st_dev=info.st_dev, st_ino=info.st_ino,
+                st_mode=info.st_mode, st_nlink=info.st_nlink + 1,
+                st_size=info.st_size, st_mtime_ns=info.st_mtime_ns,
+            )
+
+        with patch("os.fstat", side_effect=changed_second_stat):
+            response = self.response()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+
     def test_oversized_profile_is_not_served(self):
         self.page.write_bytes(b"x" * 1_000_001)
         response = self.response()
