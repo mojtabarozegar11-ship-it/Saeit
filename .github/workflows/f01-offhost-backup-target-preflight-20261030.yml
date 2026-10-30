@@ -233,6 +233,47 @@ jobs:
               base["quota_cli_success"] = q.returncode == 0
           except (OSError,subprocess.TimeoutExpired):
               pass
+          # Official cPanel UAPI account-level quota; read only.
+          # A host filesystem's shared free blocks do NOT prove cPanel quota.
+          base["quota_uapi_status"] = "NOT_RUN"
+          base["quota_cli_exists"] = os.path.isfile("/usr/local/cpanel/bin/uapi")
+          base["quota_cli_executable"] = os.access("/usr/local/cpanel/bin/uapi",os.X_OK)
+          try:
+              p = subprocess.run(["/usr/local/cpanel/bin/uapi","--output=json",
+                                  "--user=zomorod2","Quota","get_quota_info"],
+                                  stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+                                  timeout=16,check=False,text=True)
+              base["quota_uapi_status"] = "CLI_OK" if p.returncode == 0 else "CLI_NONZERO"
+              if p.returncode == 0 and len(p.stdout) < 60000:
+                  parsed=json.loads(p.stdout)
+                  result=parsed.get("result")
+                  if isinstance(result,dict) and result.get("status") in (1,True):
+                      data=result.get("data")
+                      if isinstance(data,dict):
+                          # Values are MB. Never print a raw API response.
+                          values={}
+                          for k in ("megabyte_limit","megabytes_used","megabytes_remain"):
+                              v=data.get(k)
+                              if isinstance(v,bool): continue
+                              try:
+                                  x=float(v)
+                              except (TypeError,ValueError):
+                                  continue
+                              if 0 <= x <= 1e9 and x == x and x != float("inf"):
+                                  values[k]=round(x,3)
+                          if "megabyte_limit" in values and values["megabyte_limit"]>0 and "megabytes_used" in values:
+                              base["account_quota_mb"]=values["megabyte_limit"]
+                              base["account_used_mb"]=values["megabytes_used"]
+                              # Remaining is bounded to the account limit even if the API reports stale data.
+                              base["account_remaining_mb"]=min(max(0.0,values["megabyte_limit"]-values["megabytes_used"]), values.get("megabytes_remain",1e9))
+                              base["account_limit_source"]="CPANEL_UAPI_QUOTA_GET_QUOTA_INFO"
+                              base["quota_uapi_status"]="ACCOUNT_QUOTA_OBSERVED"
+                          else:
+                              base["quota_uapi_status"]="DATA_NOT_USABLE"
+                    else:
+                        base["quota_uapi_status"]="API_STATUS_NOT_OK"
+          except (OSError,ValueError,TypeError,subprocess.TimeoutExpired):
+              base["quota_uapi_status"]="ERROR_OR_TIMEOUT"
           print("CPANEL_CAPACITY_EVIDENCE="+json.dumps(base,sort_keys=True))
           PY
       - name: Remove ephemeral private relay credentials
