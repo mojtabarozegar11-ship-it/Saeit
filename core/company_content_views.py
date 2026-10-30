@@ -24,7 +24,9 @@ def safe_gallery_target_path(path):
         # Multiple URL decoding stages can turn /%252fhost into //host.
         # Fail closed without changing the displayed gallery or the stored URL.
         for _ in range(8):
-            decoded_next = unquote(decoded)
+            # Invalid UTF-8 percent escapes must not silently become U+FFFD
+            # and produce a misleading public gallery target.
+            decoded_next = unquote(decoded, errors="strict")
             if decoded_next == decoded:
                 break
             decoded = decoded_next
@@ -38,7 +40,7 @@ def safe_gallery_target_path(path):
             return ""
         if decoded.startswith("//") or any(segment in (".", "..") for segment in decoded.split("/")):
             return ""
-    except ValueError:
+    except (ValueError, UnicodeDecodeError):
         return ""
     return path
 
