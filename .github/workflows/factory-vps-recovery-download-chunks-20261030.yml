@@ -33,7 +33,7 @@ jobs:
           bundle="${RUNNER_TEMP}/factory-vps-recovery-bundle.tar"
           split_prefix="${RUNNER_TEMP}/factory-vps-recovery-chunk-"
           tar --format=ustar -cf "$bundle" -C "$source_dir" .
-          split -b 400000000 -d -a 3 "$bundle" "$split_prefix"
+          split -b 400000000 -d -a 3 --numeric-suffixes=1 "$bundle" "$split_prefix"
           python3 - "$bundle" "$RUNNER_TEMP" <<'PY'
           import hashlib,json,pathlib,sys
           bundle=pathlib.Path(sys.argv[1]); root=pathlib.Path(sys.argv[2])
