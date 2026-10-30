@@ -43,6 +43,16 @@ class AuthorStaticIntegrityTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, data)
 
+    def test_truncated_or_overwritten_html_is_retryable_not_indexed(self):
+        for data in (b"just text", b"<!doctype html><html><body>incomplete"):
+            with self.subTest(data=data[:20]):
+                self.page.write_bytes(data)
+                response = self.response()
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(response["Cache-Control"], "private, no-store")
+                self.assertEqual(response["Retry-After"], "300")
+                self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
+
     def test_symlinked_intermediate_directory_is_not_followed(self):
         self.page.write_text("safe", encoding="utf-8")
         original = self.root / "public"
