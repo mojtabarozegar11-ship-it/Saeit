@@ -1,0 +1,28 @@
+name: F-01 factory scheduler overload guard — offline only
+on:
+  push:
+    branches: [fix/f01-factory-scheduler-overload-guard-20261030]
+    paths:
+      - scripts/f01_factory_dispatch_guard_20261030.py
+      - tests/test_f01_factory_dispatch_guard_20261030.py
+      - deploy/install_factory_40_execution_controller.sh
+      - .github/workflows/f01-factory-scheduler-overload-guard-20261030.yml
+permissions:
+  contents: read
+jobs:
+  offline-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test scheduler gate and non-inherited lock contract
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_40_execution_controller.sh
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_factory_dispatch_guard_20261030.py' -v
+          echo "VPS_TOUCHED=NO"
+          echo "CRON_MODIFIED=NO"
+          echo "WORKERS_SIGNALED=NO"
+          echo "PUBLIC_SITES_MODIFIED=NO"
