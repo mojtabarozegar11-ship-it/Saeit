@@ -231,6 +231,55 @@ jobs:
                   print("EFFECTIVE_DB_READ=ok")
           PY
           REMOTE
+      - name: Inspect Passenger WSGI configuration and configured DB without secrets
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 65s ssh -F "$dir/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          app=/home/zomorod2/Saeit
+          test -f "$app/passenger_wsgi.py" && test ! -L "$app/passenger_wsgi.py"
+          test -f "$app/config/settings.py"
+          cd "$app"
+          python3 -B - <<'PY'
+          import os, pathlib, re, sys
+          app=pathlib.Path.cwd()
+          wsgi=(app/"passenger_wsgi.py").read_text(errors="replace")
+          if 'env_path = os.path.join(BASE_DIR, ".env")' not in wsgi:
+              print("PASSENGER_ENV_LOADING=unknown"); sys.exit(0)
+          print("PASSENGER_ENV_LOADING=project_env")
+          envfile=app/".env"
+          print("PASSENGER_ENV_FILE="+("present" if envfile.is_file() and not envfile.is_symlink() else "missing_or_unsafe"))
+          if envfile.is_file() and not envfile.is_symlink():
+              for raw in envfile.read_text(encoding="utf-8",errors="replace").splitlines():
+                  line=raw.strip()
+                  if not line or line.startswith("#") or "=" not in line: continue
+                  key,value=line.split("=",1)
+                  key,value=key.strip(),value.strip()
+                  if value.startswith(("'",'"')) and value.endswith(value[0]):value=value[1:-1]
+                  if key and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*",key):
+                      os.environ.setdefault(key,value)
+          # Read only metadata; NEVER print environment values or connection strings.
+          uri=os.environ.get("DATABASE_URL","")
+          if uri.startswith(("mysql://","mysql2://")): engine="mysql"
+          elif uri.startswith(("postgres://","postgresql://")):engine="postgresql"
+          elif uri.startswith("sqlite:///") or not uri:engine="sqlite3"
+          else:engine="other_or_unrecognized"
+          print("PASSENGER_ENV_DATABASE_URL_PRESENT="+str(bool(uri)).lower())
+          print("PASSENGER_ENV_DB_ENGINE_CATEGORY="+engine)
+          print("PASSENGER_ENV_DEBUG_FALSE="+str(os.environ.get("DEBUG","").lower() in ("false","0","no")).lower())
+          print("PASSENGER_ENV_SECRET_CONFIGURED="+str(bool(os.environ.get("SECRET_KEY"))).lower())
+          print("PASSENGER_ENV_ALLOWED_HOSTS_CONFIGURED="+str(bool(os.environ.get("ALLOWED_HOSTS"))).lower())
+          for key in ("SESSION_COOKIE_SECURE","CSRF_COOKIE_SECURE","SECURE_SSL_REDIRECT"):
+              print("PASSENGER_"+key+"_TRUE="+str(os.environ.get(key,"").lower() in ("true","1","yes")).lower())
+          print("PASSENGER_DB_READ_ONLY_CONFIG_CLASSIFICATION=complete")
+          PY
+          REMOTE
       - name: Require restore proof and provider rights before any deployment
         run: |
           echo "RESTORE_VERIFIED=not-established-by-this-readonly-probe"
