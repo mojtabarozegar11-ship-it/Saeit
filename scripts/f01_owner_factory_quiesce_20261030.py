@@ -59,7 +59,7 @@ def paused_cron(text):
 
 def is_scoped_factory_process(cmdline):
     """Conservative argv predicate; ambiguous processes require operator review."""
-    args=[a for a in cmdline.lower().split(b"\\0") if a]
+    args=[a for a in cmdline.lower().split(bytes([0])) if a]
     if not args:
         return False
     executable=args[0].rsplit(b"/",1)[-1]
