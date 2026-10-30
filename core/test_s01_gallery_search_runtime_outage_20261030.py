@@ -13,7 +13,7 @@ class NullableSearchSummaryTests(SimpleTestCase):
     def test_empty_search_remains_usable_without_database_access(self):
         for value in ("", "   ", " \\t\\n "):
             request = RequestFactory().get("/search/", {"q": value})
-            with patch.object(seo_views, "missing_public_tables") as introspect, \\
+            with patch.object(seo_views, "missing_public_tables") as introspect, \
                  patch.object(seo_views, "render", return_value=HttpResponse("search form")) as renderer:
                 response = seo_views.site_search(request)
             self.assertEqual(response.status_code, 200)
