@@ -1,7 +1,7 @@
 Saeit cPanel deployment trigger
 
-This file is intentionally non-destructive. Its purpose is to create a new commit on main so an existing GitHub -> cPanel deployment hook can pull the latest Saeit revision.
+This file is intentionally non-destructive. Its purpose is to create a new commit on main so the existing GitHub -> cPanel deployment hook can pull the latest Saeit revision.
 
-Current release change: the existing education platform is served canonically at /amozeshgah/ with its course, lesson, assessment, and certificate paths; the prior /education/ paths remain available.
+Current release change: restore /company/office/login/ as a redirect to the existing authenticated Django admin login, with the staff command center as the post-login destination.
 
-No database, secrets, production settings, or application data are changed by this file.
+No visual design, database records, secrets, production settings, or application data are changed by this route fix. The normal cPanel deployment hook may run the repository's existing checks, migrations, and static collection as part of its established deployment process.
