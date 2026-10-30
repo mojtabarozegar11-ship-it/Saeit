@@ -7,7 +7,7 @@ on:
       - .github/workflows/mpw-checkout-csp-private-preimage-snapshot-20261029.yml
 permissions: {contents: read}
 concurrency:
-  group: s01-pinned-cpanel-relay-single-session
+  group: ${{ contains(github.event.pull_request.labels.*.name, 's01-preimage-snapshot-authorized') && 's01-pinned-cpanel-relay-single-session' || format('s01-preimage-disabled-{0}', github.run_id) }}
   cancel-in-progress: false
 # Explicit opt-in for this cPanel write-capable private backup. Normal PR updates
 # run the read-only provenance probe; do not reattempt a known SHA-drift snapshot.
