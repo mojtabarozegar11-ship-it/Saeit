@@ -59,6 +59,10 @@ def assess(path: Path) -> dict:
         errors.append("DUPLICATE_FASTQ_PATH")
     if len(cells) != 8 or any(n != 3 for n in cells.values()):
         errors.append("EXPECTED_8_CELLS_WITH_3_REPLICATES")
+    for field in ("factor_a", "factor_b", "factor_c"):
+        levels = {(row.get(field) or "").strip() for row in rows}
+        if "" in levels or len(levels) != 2:
+            errors.append("EXPECTED_TWO_NONEMPTY_LEVELS_FOR_" + field)
     if len(refs) != 1:
         errors.append("INCONSISTENT_REFERENCE_CHECKSUMS")
     if len(stranded) != 1 or not stranded.issubset({"forward", "reverse", "unstranded"}):
