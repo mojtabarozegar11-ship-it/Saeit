@@ -1,0 +1,11 @@
+# F-01 | Off-host recovery capacity decision | 2026-10-30
+
+**Stage:** CODE / usable offline file; no production deployment, no verified backup or worker.
+
+Latest independent read-only pinned VPS evidence: [GitHub Actions #40979616327](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/40979616327), observed 2026-10-30 00:28:20 UTC. Existing local SQLite snapshots: 1,396,473,856 bytes (2026-10-28 01:05 UTC) and 1,396,379,648 bytes (2026-10-27 18:56 UTC); ordinary-user free disk **0 bytes**, loadavg 140.41/139.73/138.17. Neither snapshot has independent SQLite consistency, off-host transfer, or restore proof. These are not current live-worker measurements.
+
+The newest existing snapshot is 47.43 hours old. A candidate destination requires **at least 3,866,689,536 account-free bytes** for one copy, one scratch rehearsal and 1GiB reserve. Host filesystem free space ~222GB is NOT cPanel account free quota. Authenticated cPanel UAPI quota endpoints failed, so account quota remains **NOT VERIFIED**.
+
+Use `python3 scripts/f01_offhost_destination_decision_20261030.py --source-inventory /path/to/redacted-source.json` to obtain a machine-readable **BLOCKED** decision. An optional `--account-quota-evidence` JSON must contain `account_quota_evidence=INDEPENDENTLY_VERIFIED`, `same_destination_account=true`, fresh offset-aware `observed_utc`, and nonnegative integer `account_free_bytes`. A self-asserted JSON file cannot itself authenticate provider quota; human review of original provider evidence remains required. A fresh, consistent snapshot is also required. Even a capacity candidate **never** authorizes transfer, reboot, cleanup, cron mutation, deployment or spending.
+
+**Next atomic F action:** independently obtain 30GB account-specific quota/usage and source-of-truth off-host destination approval; create a consistency-safe encrypted copy only after separate authorization and safeguards, verify SHA-256 and isolated restore, then remeasure VPS and seek controlled maintenance release. S-01 and G-01 should keep site/game deployment NO-GO until recovery proof; SKU879 remains excluded and SKU72/225 untouched. No secret, customer record, private file name or address is included.
