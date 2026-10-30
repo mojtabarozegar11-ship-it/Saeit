@@ -239,10 +239,37 @@ jobs:
           base["quota_cli_exists"] = os.path.isfile("/usr/local/cpanel/bin/uapi")
           base["quota_cli_executable"] = os.access("/usr/local/cpanel/bin/uapi",os.X_OK)
           try:
-              p = subprocess.run(["/usr/local/cpanel/bin/uapi","--output=json",
-                                  "--user=zomorod2","Quota","get_quota_info"],
-                                  stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
-                                  timeout=16,check=False,text=True)
+              # Execute under the already authenticated cPanel user. Some
+              # jailed shells reject an explicit --user flag.
+              cli="/usr/local/cpanel/bin/uapi"
+              attempts=([cli,"--output=json","Quota","get_quota_info"],
+                        [cli,"--output=json","--user=zomorod2","Quota","get_quota_info"])
+              p=None
+              failures=[]
+              for mode,args in zip(("current_user","explicit_user"),attempts):
+                  p=subprocess.run(args,stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE,timeout=12,
+                                   check=False,text=True)
+                  if p.returncode == 0:
+                      base["quota_cli_success_mode"]=mode
+                      break
+                  # Classify the error, but never reveal raw cPanel output.
+                  e=(p.stderr+" "+p.stdout).lower()[:8000]
+                  category="OTHER"
+                  for tag,term in (("DENIED","permission denied"),
+                                   ("FORBIDDEN","access denied"),
+                                   ("NOT_FOUND","not found"),
+                                   ("NO_LICENSE","license"),
+                                   ("UNAVAILABLE_MODULE","unknown module"),
+                                   ("QUOTA_DISABLED","quota disabled"),
+                                   ("CAGEFS","cagefs"),("MISSING_DEPENDENCY","cannot locate"),
+                                   ("INVALID_OPTION","unknown option"),
+                                   ("UNABLE_TO_RUN","failed to execute")):
+                      if term in e:
+                          category=tag
+                          break
+                  failures.append({"mode":mode,"exit":p.returncode,"category":category})
+              base["quota_uapi_failures"]=failures
               base["quota_uapi_status"] = "CLI_OK" if p.returncode == 0 else "CLI_NONZERO"
               if p.returncode == 0 and len(p.stdout) < 60000:
                   parsed=json.loads(p.stdout)
