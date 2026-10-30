@@ -153,6 +153,7 @@ jobs:
           timeout 50s scp -q -F "$d/config" games/ramadan-war/enemy-action-policy.mjs "host:$stage/incoming/enemy-action-policy.mjs"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/save-validation.mjs "host:$stage/incoming/save-validation.mjs"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/campaign-backup.mjs "host:$stage/incoming/campaign-backup.mjs"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/backup-clipboard.mjs "host:$stage/incoming/backup-clipboard.mjs"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/aim-sensitivity.mjs "host:$stage/incoming/aim-sensitivity.mjs"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/objective-navigation.mjs "host:$stage/incoming/objective-navigation.mjs"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/tactical-map.mjs "host:$stage/incoming/tactical-map.mjs"
