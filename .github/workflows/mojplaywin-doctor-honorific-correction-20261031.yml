@@ -1,0 +1,237 @@
+name: MojPlayWin exact public honorific correction (Professor to Dr)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-doctor-honorific-correction-20261031.yml"
+      - "scripts/mojplaywin_doctor_honorific_live_fix_20261031.py"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+
+jobs:
+  correct-visible-doctor-title:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate exact source and reversible patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_doctor_honorific_live_fix_20261031.py scripts/mojplaywin_professor_profile_builder_20261018.py
+          python3 - <<'PY'
+          from pathlib import Path
+          from scripts.mojplaywin_doctor_honorific_live_fix_20261031 import (
+              correction, OLD_SENTENCE, NEW_SENTENCE, OLD_RANK, NEW_RANK
+          )
+          template = Path('core/templates/mojplaywin/leadership_executive_cv_20261018.html').read_text('utf-8')
+          assert 'Dr. Mojtaba Roozegar' in template
+          assert 'Professor Mojtaba Roozegar' not in template
+          old_template = (template.replace('Dr. Mojtaba Roozegar', 'Professor Mojtaba Roozegar')
+                           .replace(NEW_SENTENCE, OLD_SENTENCE).replace(NEW_RANK, OLD_RANK))
+          sample = ('<title>Professor Mojtaba Roozegar</title><meta content="Professor Mojtaba Roozegar">'
+                    '<h1>Professor Mojtaba Roozegar</h1>'
+                    '<script type="application/ld+json">{"honorificPrefix":"Dr."}</script>' + old_template)
+          changed = correction(sample)
+          assert 'Professor Mojtaba Roozegar' not in changed
+          assert '<h1>Dr. Mojtaba Roozegar</h1>' in changed
+          assert 'mpw-sport-white-selection-20261018' in changed
+          assert changed.count('class="mpw-sport-white-card ') == 3
+          assert OLD_SENTENCE not in changed and NEW_SENTENCE in changed
+          assert OLD_RANK not in changed and NEW_RANK in changed
+          print('DOCTOR_HONORIFIC_SOURCE_AND_TRANSFORMATION=PASS')
+          PY
+
+      - name: Capture the neighboring public routes before the change
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          paths=['https://mojplaywin.com/','https://mojplaywin.com/store/',
+                 'https://mojplaywin.com/about/','https://mojplaywin.com/mojtaba.roozegar/',
+                 'https://zomorodmelal.ir/']
+          snapshot={}
+          for url in paths:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent':'MojPlayWinDoctorBefore/1.0'}),timeout=20) as res:
+                      snapshot[url]=res.status
+              except urllib.error.HTTPError as err:
+                  snapshot[url]=err.code
+              print('PROTECTED_BEFORE',url,snapshot[url])
+              if snapshot[url]!=200:raise SystemExit('A neighboring route is unhealthy; no deployment')
+          with open(os.environ['RUNNER_TEMP']+'/mpw-doctor-before.json','w') as f:
+              json.dump(snapshot,f)
+          PY
+
+      - name: Open pinned private SSH relay to existing cPanel
+        id: relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-doctor-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+
+      - name: Inspect exact live source candidates without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-doctor-ssh"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel "python3 -" <<'PY'
+          from pathlib import Path
+          checks=(
+             "/home/zomorod2/mojplaywin.com/design-preview-20261017/professor-mojtaba-roozegar-20261018.html",
+             "/home/zomorod2/Saeit/core/templates/mojplaywin/leadership_executive_cv_20261018.html",
+             "/home/zomorod2/mojplaywin.com/.htaccess",
+             "/home/zomorod2/Saeit/core/templates/mojplaywin/site_base.html",
+          )
+          for name in checks:
+              path=Path(name)
+              if not path.is_file() or path.is_symlink():
+                  print("DOCTOR_SOURCE_INSPECT",name,"missing_or_symlink")
+                  continue
+              value=path.read_text("utf-8",errors="replace")
+              print("DOCTOR_SOURCE_INSPECT",name,
+                    "size",len(value),
+                    "professor_full",value.count("Professor Mojtaba Roozegar"),
+                    "doctor_full",value.count("Dr. Mojtaba Roozegar"),
+                    "marker",int("MOJPLAYWIN_PROFESSOR_MOJTabA_ROOZEGAR_PROFILE_20261018" in value),
+                    "gallery",value.count('class="mpw-sport-white-card '),
+                    "route_rewrite",int("MPW_EXACT_LEADERSHIP_ROOZEGAR_20261018" in value))
+          PY
+
+      - name: Compare public and static HTTP routing without changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,urllib.request
+          for url in ('https://mojplaywin.com/about/mojtaba-rozegar/',
+                      'https://mojplaywin.com/design-preview-20261017/professor-mojtaba-roozegar-20261018.html'):
+              req=urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'MojPlayWinDoctorRouteInventory/1.0'})
+              with urllib.request.urlopen(req,timeout=25) as response:
+                  data=response.read(300000)
+                  headers=response.headers
+                  print('DOCTOR_HTTP_INSPECT',url,'status',response.status,'bytes',len(data),
+                        'sha256',hashlib.sha256(data).hexdigest(),'title_count',data.count(b'Professor Mojtaba Roozegar'))
+                  for name in ('Cache-Control','Age','ETag','Last-Modified','X-LiteSpeed-Cache','CF-Cache-Status','Server','Content-Type'):
+                      if headers.get(name):print('DOCTOR_HTTP_HEADER',name,headers.get(name)[:120])
+          PY
+          d="$RUNNER_TEMP/mojplaywin-doctor-ssh"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel "python3 -" <<'PY'
+          from pathlib import Path
+          path=Path('/home/zomorod2/mojplaywin.com/.htaccess')
+          lines=path.read_text('utf-8',errors='replace').splitlines()
+          hits=[i for i,line in enumerate(lines) if 'MPW_EXACT_LEADERSHIP_ROOZEGAR_20261018' in line]
+          print('DOCTOR_REWRITE_MARKERS',hits,'total_lines',len(lines))
+          for i in hits:
+              for j in range(max(0,i-8),min(len(lines),i+6)):
+                  line=lines[j].strip()
+                  if line.startswith(('Rewrite','Passenger')) or 'MPW_EXACT_LEADERSHIP' in line or not line:
+                      print('DOCTOR_REWRITE_CONTEXT',j+1,line[:170])
+                  else:
+                      print('DOCTOR_REWRITE_CONTEXT',j+1,'non-rewrite directive')
+          PY
+
+      - name: Atomically patch the single live static biography with private backup
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-doctor-ssh"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_doctor_honorific_live_fix_20261031.py
+
+      - name: Verify live Doctor title, search metadata and unaffected pages
+        if: steps.install.outcome == 'success'
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,time,urllib.request,urllib.error
+          url='https://mojplaywin.com/about/mojtaba-rozegar/'
+          for attempt in range(1,6):
+              request=urllib.request.Request(url+'?_doctor_fix='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt),
+                                           headers={'Cache-Control':'no-cache','User-Agent':'MojPlayWinDoctorVerify/1.0'})
+              with urllib.request.urlopen(request,timeout=25) as response:
+                  html=response.read(250000).decode('utf-8','replace')
+                  status=response.status
+              ok=(status==200 and '<h1 id="mpw-professor-title">Dr. Mojtaba Roozegar</h1>' in html
+                  and '<title>Dr. Mojtaba Roozegar | PhD, Research &amp; MojPlayWin Leadership</title>' in html
+                  and 'Professor Mojtaba Roozegar' not in html
+                  and 'The designation “Professor”' not in html
+                  and 'mpw-sport-white-selection-20261018' in html
+                  and html.count('class="mpw-sport-white-card ')==3
+                  and len(re.findall(r'<h1\b',html,re.I))==1)
+              print('DOCTOR_TITLE_LIVE_VERIFICATION',attempt,ok,status)
+              if ok:break
+              if attempt==5:raise SystemExit('Doctor title not visible after publication')
+              time.sleep(3)
+          original=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-doctor-before.json'))
+          for near,old_code in original.items():
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(near,headers={'User-Agent':'MojPlayWinDoctorAfter/1.0'}),timeout=20) as res:
+                      code=res.status
+              except urllib.error.HTTPError as err:
+                  code=err.code
+              print('PROTECTED_AFTER',near,code)
+              if code!=old_code:raise SystemExit('Neighboring page changed: '+near)
+          print('MOJPLAYWIN_DOCTOR_TITLE_PUBLICATION_VERIFIED=yes')
+          PY
+
+      - name: Restore exact prior biography if public verification fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-doctor-ssh"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_doctor_honorific_live_fix_20261031.py

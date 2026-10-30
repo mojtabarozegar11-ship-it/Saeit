@@ -1,0 +1,124 @@
+name: Scoped MPW Google Search Console HTML meta verification
+on:
+  pull_request:
+    paths:
+      - scripts/mpw_gsc_meta_tag_20261030.py
+      - tests/test_mpw_gsc_meta_tag_20261030.py
+      - .github/workflows/mpw-gsc-meta-tag-20261030.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/mpw_gsc_meta_tag_20261030.py
+      - tests/test_mpw_gsc_meta_tag_20261030.py
+      - .github/workflows/mpw-gsc-meta-tag-20261030.yml
+permissions:
+  contents: read
+concurrency:
+  group: scoped-mpw-gsc-html-meta-20261030
+  cancel-in-progress: false
+jobs:
+  offline-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify minimal exact HTML change and refusal cases
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mpw_gsc_meta_tag_20261030.py' -v
+          python3 -m py_compile scripts/mpw_gsc_meta_tag_20261030.py
+  publish:
+    needs: offline-tests
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish pinned non-forwarding SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-gsc-meta-ssh"
+          install -d -m 700 "$d"
+          for variable in VPS_KEY HOST_KEY; do
+            file="$d/$variable.key"
+            printf '%s' "${!variable}" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$file"
+            chmod 600 "$file"
+            ssh-keygen -y -P '' -f "$file" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          {
+            echo 'Host saeit-vps'
+            echo '  HostName 178.239.147.150'
+            echo '  User githubops'
+            echo "  IdentityFile $d/VPS_KEY.key"
+            echo "  UserKnownHostsFile $d/vps.known"
+            echo 'Host saeit-cpanel'
+            echo '  HostName zohal.pws-dns.net'
+            echo '  User zomorod2'
+            echo '  Port 1396'
+            echo "  IdentityFile $d/HOST_KEY.key"
+            echo "  UserKnownHostsFile $d/host.known"
+            echo '  ProxyJump saeit-vps'
+            echo 'Host *'
+            echo '  StrictHostKeyChecking yes'
+            echo '  IdentitiesOnly yes'
+            echo '  BatchMode yes'
+            echo '  ConnectTimeout 15'
+            echo '  ForwardAgent no'
+            echo '  RequestTTY no'
+          } > "$d/config"
+          chmod 600 "$d/config"
+      - name: Install single meta tag in guarded active MPW homepage
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-gsc-meta-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_gsc_meta_tag_20261030.py
+      - name: Read-only verify public root ownership tag and personal profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import time
+          from urllib.request import Request, urlopen
+          from urllib.error import URLError
+          tag = b'<meta name="google-site-verification" content="Ohs-EoudyKpuUQwxEZogMAPkJ9QhQeMKvaF-yXFXwCg" />'
+          root = "https://mojplaywin.com/"
+          for attempt in range(6):
+              try:
+                  with urlopen(Request(root + "?gsc_meta=20261030_" + str(attempt), headers={"Cache-Control": "no-cache", "User-Agent": "MojPlayWin-GSC-Ownership-Smoke/1.0"}), timeout=16) as response:
+                      body = response.read()
+                      assert response.status == 200, "Unexpected homepage HTTP status"
+                  if body.count(tag) == 1 and body.find(tag) < body.lower().find(b"</head>"):
+                      print("PUBLIC_ROOT_GSC_META=VERIFIED")
+                      break
+                  print("Waiting for root HTML cache to refresh, attempt", attempt + 1)
+              except (URLError, TimeoutError) as err:
+                  print("Public root temporarily unavailable:", type(err).__name__)
+              if attempt == 5:
+                  raise AssertionError("Public homepage missing exact HTML head verification meta tag")
+              time.sleep(6)
+          with urlopen(Request("https://mojplaywin.com/mojtaba.roozegar/", headers={"User-Agent": "MojPlayWin-GSC-Ownership-Smoke/1.0"}), timeout=16) as response:
+              assert response.status == 200, "Personal profile endpoint not 200"
+          print("PERSONAL_PROFILE_HTTP=200")
+          PY
+      - name: Restore exact pre-change homepage if public verification failed
+        if: ${{ failure() && steps.install.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-gsc-meta-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_gsc_meta_tag_20261030.py
