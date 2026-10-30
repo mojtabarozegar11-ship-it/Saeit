@@ -1,0 +1,17 @@
+{% extends "ecosystem_hub/base.html" %}
+{% block title %}ریسک و کنترل مدیریت{% endblock %}
+{% block hub_title %}ریسک، تصمیم‌سازی و بازبینی{% endblock %}
+{% block hub_subtitle %}اولویت ریسک‌های هر واحد و صف بررسی تصمیم‌ها با کنترل انسانی{% endblock %}
+{% block hub_content %}
+<div class="hub-section-title"><h2>ریسک‌های باز</h2>
+{% if perms.ecosystem_hub.add_managementrisk %}<a href="{% url 'admin:ecosystem_hub_managementrisk_add' %}">ثبت ریسک جدید ←</a>{% endif %}</div>
+<div class="table-frame"><table><thead><tr><th>موضوع</th><th>احتمال</th><th>اثر</th><th>امتیاز</th><th>مسئول</th><th>وضعیت</th><th>موعد</th></tr></thead><tbody>
+{% for risk in risks %}<tr><td>{{ risk.title }}</td><td>{{ risk.likelihood }}</td><td>{{ risk.impact }}</td><td>{{ risk.risk_score }}/۲۵</td><td>{{ risk.owner.get_username }}</td><td>{{ risk.get_state_display }}</td><td>{{ risk.due_date|default:"—" }}</td></tr>
+{% empty %}<tr><td colspan="7">ریسک باز ثبت‌شده‌ای موجود نیست؛ این نتیجه به معنی نبود ریسک نیست.</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="hub-section-title"><h2>در انتظار بازبینی</h2></div>
+<div class="hub-assistant-grid">
+{% for item in approvals %}<article class="hub-assistant"><h3>{{ item.summary }}</h3><p>ارجاع به {{ item.assigned_to.get_username }}</p><span class="hub-chip">{{ item.get_decision_display }}</span></article>
+{% empty %}<div class="hub-empty">درخواست قابل نمایش یا در انتظار بررسی در این واحد ثبت نشده است.</div>{% endfor %}
+</div>
+{% endblock %}

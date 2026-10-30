@@ -1,0 +1,51 @@
+{% extends "ecosystem_hub/base.html" %}
+{% block title %}اتاق کنترل دستیارهای مدیریت{% endblock %}
+{% block hub_title %}اتاق کنترل دستیارهای اکوسیستم{% endblock %}
+{% block hub_subtitle %}ردیابی گزارش‌ها و زمان‌بندی‌های هر واحد؛ با مجوز مستقل و بدون ادعای فعال‌بودن ربات روی سرور{% endblock %}
+{% block hub_content %}
+<div class="hub-notice" role="status">
+<strong>وضعیت موتور اجرا: تأیید نشده</strong>
+<p>علامت «فعال» در تنظیمات صرفاً نشان‌دهنده فعال‌بودن یک قاعده در پایگاه داده است؛ به معنی اجرای cron، کارگر پس‌زمینه، ربات ۲۴ ساعته یا اتصال به مدل هوش مصنوعی نیست. این صفحه فقط سوابق ثبت‌شده را می‌خواند و هیچ برنامه‌ای را اجرا نمی‌کند.</p>
+</div>
+<div class="hub-metrics" aria-label="آمار پرونده‌های قابل مشاهده">
+<article><span>قاعده زمان‌بندی قابل مشاهده</span><strong>{{ schedule_count }}</strong><small>فقط واحد و مجوزهای همین حساب</small></article>
+<article><span>گزارش قابل مشاهده</span><strong>{{ report_count }}</strong><small>آخرین ۴۰ پرونده مجاز این واحد</small></article>
+<article><span>تأیید اجرای مداوم خارجی</span><strong>—</strong><small>هنوز شواهد معتبر اجرا وجود ندارد</small></article>
+</div>
+<div class="hub-section-title"><div><span class="eyebrow">SCHEDULE CONFIGURATION — NOT WORKER HEARTBEAT</span><h2>قواعد زمان‌بندی</h2></div>
+{% if perms.ecosystem_hub.view_proposedautomation %}<a href="{% url 'admin:ecosystem_hub_proposedautomation_changelist' %}">تنظیمات مجاز Django ←</a>{% endif %}
+</div>
+<div class="table-frame"><table>
+<thead><tr><th>دستیار</th><th>صاحب برنامه</th><th>دوره</th><th>تنظیم در پایگاه داده</th><th>آخرین بررسی ثبت‌شده</th><th>نیاز به اجرای بعدی</th><th>موتور تحلیل</th></tr></thead>
+<tbody>
+{% for item in schedules %}
+<tr>
+<td>{{ item.title }}</td>
+<td>{{ item.owner.get_username }}</td>
+<td>{{ item.cadence }}</td>
+<td>{% if item.active %}فعال در تنظیمات{% else %}غیرفعال{% endif %}</td>
+<td>{{ item.last_checked|default:"ثبت نشده" }}</td>
+<td>{% if item.due %}<span class="status status-warning">موعد بررسی رسیده</span>{% else %}خیر{% endif %}</td>
+<td>{% if item.engine_available %}تحلیل داخلی قاعده‌محور{% else %}موتور متصل نیست{% endif %}</td>
+</tr>
+{% empty %}<tr><td colspan="7">برنامه زمان‌بندی قابل مشاهده‌ای برای این واحد ثبت نشده است.</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="hub-section-title"><div><span class="eyebrow">AUTHORIZED REVIEW HISTORY</span><h2>آخرین گزارش‌های قابل بررسی</h2></div>
+<a href="{% url 'enterprise_portal:ecosystem_hub:assistants' %}{% if selected_unit %}?unit={{ selected_unit.code|urlencode }}{% endif %}">فهرست همه دستیارها ←</a></div>
+<div class="table-frame"><table>
+<thead><tr><th>دستیار</th><th>ثبت‌کننده</th><th>تاریخ تولید</th><th>وضعیت پرونده</th><th>یافته‌ها</th><th>مشاهده</th></tr></thead>
+<tbody>
+{% for item in reports %}
+<tr>
+<td>{{ item.title }}</td><td>{{ item.report.requested_by.get_username }}</td>
+<td>{{ item.report.generated_at }}</td><td>{{ item.report.get_state_display }}</td>
+<td>{{ item.findings }}</td>
+<td><a href="{% url 'enterprise_portal:ecosystem_hub:report' item.report.pk %}">مشاهده گزارش ←</a></td>
+</tr>
+{% empty %}<tr><td colspan="6">گزارش مجازی برای این حساب و واحد ثبت نشده است.</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="hub-notice">
+<strong>معنای داده‌ها</strong>
+<p>زمان آخرین بررسی از یک رکورد ثبت‌شده خوانده می‌شود و تضمین‌کننده سلامت زمان‌بند نیست. داده‌های محرمانه مالی، کارکنان، مشتریان و تولید تنها زمانی در تاریخچه دیده می‌شوند که حساب کاربری مجوز فعلی منبع همان گزارش را داشته باشد. برای فعال‌سازی حقیقی ۲۴ ساعته باید مجوز امنیتی، زمان‌بند و نشانه سلامت مستقل بررسی شوند.</p>
+</div>
+{% endblock %}
