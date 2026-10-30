@@ -50,8 +50,10 @@ class AuthorStaticIntegrityTests(SimpleTestCase):
         original.rename(moved)
         original.symlink_to(moved, target_is_directory=True)
         response = self.response()
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response["Cache-Control"], "no-store")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
 
     def test_hardlinked_public_profile_is_not_served(self):
         self.page.write_text("safe", encoding="utf-8")
