@@ -455,6 +455,52 @@ jobs:
           print("PRIVATE_BUSINESS_DATA_UNCHANGED=true")
           PY
           REMOTE
+      - name: Audit live file identity, static capacity and private DB boundary
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 60s ssh -F "$dir/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import hashlib,os,shutil,json
+          base=Path("/home/zomorod2/Saeit")
+          expected={
+              "config/settings.py":"76d37568f3477ac514d6aac14237e49ce5fd4971",
+              "config/urls.py":"32a9b60c4ae5152c490b4d281069ba137d287cb1",
+              "passenger_wsgi.py":"a2c6ff97d3d8684e02de4ea2f76331f946867d93",
+          }
+          for name,sha in expected.items():
+              path=base/name
+              if not path.is_file() or path.is_symlink():
+                  print("PRODUCTION_BASELINE_"+name.upper().replace("/","_").replace(".","_")+"=missing_or_symlink")
+                  continue
+              raw=path.read_bytes()
+              found=hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\x00"+raw).hexdigest()
+              print("PRODUCTION_BASELINE_"+name.upper().replace("/","_").replace(".","_")+"="+("matches_main" if found==sha else "different_from_main"))
+          static=base/"staticfiles"
+          index=static/"staticfiles.json"
+          print("PRODUCTION_STATIC_MANIFEST_PRESENT="+str(index.is_file()).lower())
+          if index.is_file():
+              try:
+                  m=json.loads(index.read_text(errors="replace"))
+                  print("PRODUCTION_STATIC_ENTRIES="+str(len(m.get("paths",{}))))
+                  print("PRODUCTION_STATIC_OFFICE_CSS_PRESENT="+str("enterprise_portal/app.css" in m.get("paths",{})).lower())
+              except Exception:
+                  print("PRODUCTION_STATIC_MANIFEST_PARSE=failed")
+          disk=shutil.disk_usage(base)
+          print("PRODUCTION_FS_FREE_MIB="+str(disk.free//(1024*1024)))
+          py=Path("/home/zomorod2/virtualenv/Saeit/3.10/bin/python")
+          print("PRODUCTION_PINNED_PYTHON_EXISTS="+str(py.is_file()).lower())
+          print("PRODUCTION_DEFAULT_SQLITE_SIZE="+str((base/"db.sqlite3").stat().st_size if (base/"db.sqlite3").is_file() else -1))
+          print("PRODUCTION_RESIDENT_SITE_NOT_MODIFIED=true")
+          PY
+          REMOTE
       - name: Require restore proof and provider rights before any deployment
         run: |
           echo "RESTORE_VERIFIED=not-established-by-this-readonly-probe"
