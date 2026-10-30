@@ -33,6 +33,22 @@ export function joystickAxes(dx, dy, limit) {
   return {forward: -dy * scale, side: dx * scale};
 }
 
+// Pointer geometry can temporarily be zero during orientation changes, and
+// synthetic/stale pointer events may contain non-finite coordinates. Never
+// forward those values to the live movement axes or CSS transform.
+export function boundedJoystickPointer(clientX, clientY, rect) {
+  if (!rect || ![clientX, clientY, rect.left, rect.top, rect.width, rect.height]
+      .every(Number.isFinite) || rect.width < 8 || rect.height < 8) return null;
+  const limit = Math.min(rect.width * .36, 160);
+  const dx = clientX - (rect.left + rect.width / 2);
+  const dy = clientY - (rect.top + rect.height / 2);
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
+  const distance = Math.hypot(dx, dy);
+  if (!Number.isFinite(distance)) return null;
+  const factor = distance > 0 ? Math.min(1, limit / distance) : 0;
+  return {x: dx * factor, y: dy * factor, limit};
+}
+
 // Ignore secondary mouse buttons and pen barrel presses on gameplay controls.
 // Do not require isPrimary: a second finger must still be able to fire while moving.
 export function isPrimaryGameplayPress(event) {
