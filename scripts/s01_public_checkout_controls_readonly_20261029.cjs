@@ -53,7 +53,7 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
               const covered=!!(hit&&hit!==el&&!el.contains(hit));
               let href=null;
               if(el.tagName==='A'){try{
-                const u=new URL(el.href);href=u.origin===location.origin?u.pathname:'[external]';
+                const u=new URL(el.href);href=u.origin===location.origin?(u.pathname+u.search+u.hash):'[external]';
               }catch(_){href='[invalid]';}}
               const rawHref=el.tagName==='A'?(el.getAttribute('href')||'').trim():null;
               const reasons=[rawHref!==null&&(!rawHref||rawHref==='#'||/^javascript:/i.test(rawHref))?'invalid-action-link':null,
@@ -85,8 +85,12 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
     }
     const report={schema:'s01-anonymous-get-controls.v1',scope:'GET_ONLY_NO_PAYMENT',
       checkedAt:new Date().toISOString(),ordersCreated:0,paymentsCreated:0,rows,
-      complete:rows.length===URLS.length*2 && rows.every(r=>r.observedSafe&&r.jsErrors.length===0),
-      completeMeaning:'ANONYMOUS_GET_OBSERVATION_ONLY',
+      complete:rows.length===URLS.length*2 && rows.every(r=>{
+        const productDetail=/^\\/store\\/product\\/(72|225|879)\\/$/.test(r.path);
+        return r.observedSafe && r.jsErrors.length===0 &&
+          (!productDetail || (r.checkoutLinks>0 && r.mismatchedCheckoutLinks===0));
+      }),
+      completeMeaning:'ANONYMOUS_GET_OBSERVATION_AND_CORRECT_SKU_CTA_ONLY',
       authGatedRoutes:rows.filter(r=>r.authRequired).length,
       authenticatedBuyerFlowVerified:false,invoiceVerified:false,
       paymentVerified:false,emailDeliveryVerified:false,downloadVerified:false,
