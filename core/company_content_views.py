@@ -32,6 +32,11 @@ def safe_gallery_target_path(path):
             decoded = decoded_next
             if decoded.startswith("//") or "\\" in decoded:
                 return ""
+            # A proxy that decodes an encoded '?' or '#' in the PATH can
+            # reinterpret it as query/fragment syntax; fail closed rather
+            # than redirecting users to an ambiguous gallery destination.
+            if "?" in decoded or "#" in decoded:
+                return ""
             if any(ord(ch) < 32 or ord(ch) == 127 for ch in decoded):
                 return ""
         else:
