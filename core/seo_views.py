@@ -200,9 +200,10 @@ def persian_author_profile(request):
     try:
         body = _read_author_html(settings.BASE_DIR)
     except OSError:
-        # Do not let a temporary missing profile file become a cached 404.
-        response = HttpResponse(status=404)
-        response["Cache-Control"] = "no-store"
+        # This advertised author route is temporarily unavailable, not
+        # permanently removed. A 404 can cause premature search deindexing.
+        response = mark_public_data_unavailable(HttpResponse(status=503))
+        response["Retry-After"] = "300"
         return response
     except ValueError:
         # Corrupt/unsafe static source is an outage, not a permanent removal.
