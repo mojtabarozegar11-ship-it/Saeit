@@ -1,6 +1,6 @@
 // Pure, deterministic target selection; no browser or storage access.
 export function chooseNearestTarget(enemies, x, y, range = Infinity, requireLineOfSight = false, isBlocked = () => false) {
- if (!Array.isArray(enemies) || ![x,y,range].every(v => typeof v === 'number' && !Number.isNaN(v)) || range < 0) return null;
+ if (!Array.isArray(enemies) || ![x,y].every(Number.isFinite) || !(typeof range === 'number' && !Number.isNaN(range)) || range < 0) return null;
  if (typeof isBlocked !== 'function') return null;
  let best = null, distance = range;
  for (const e of enemies) {
