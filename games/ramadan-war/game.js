@@ -321,7 +321,7 @@ canvas.addEventListener('pointerdown',e=>{
 canvas.addEventListener('pointermove',e=>{
  if(aimId!==e.pointerId||!world)return;
  const delta=boundedAimMotion(e.clientX,e.clientY,aimLast,aimY);
- if(!delta){if(aimGesture)aimGesture.cancelled=true;return}
+ if(!delta){if(aimGesture)aimGesture.cancelled=true;const old=aimId;aimId=null;safeReleaseCapture(canvas,old);return}
  recordPointerGestureMovement(aimGesture,e);
  world.angle-=delta.dx*(W<700?.008:.0045)*aimMultiplier(aimSensitivity);engine.look(0,delta.dy*aimMultiplier(aimSensitivity),W);aimLast=e.clientX;aimY=e.clientY
 });
@@ -359,6 +359,9 @@ addEventListener('compositionstart',()=>{keys={};updateHeldFire()});
 // Keyboard focus may move to a HUD control without a window blur or keyup.
 // Preserve a genuinely held touch fire pointer while releasing keyboard input.
 document.addEventListener('focusin',e=>{if(shouldReleaseHeldKeysOnFocus(screen,e.target)){keys={};updateHeldFire()}});
+// A resize/orientation transition invalidates captured joystick and aim geometry.
+// Drop stale touch ownership without altering saved campaign state.
+addEventListener('resize',()=>{if(screen==='game')releaseGameInputs()});
 addEventListener('blur',()=>{releaseGameInputs();if(screen==='game')$('#pause').click()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){releaseGameInputs();if(screen==='game')$('#pause').click()}});
 addEventListener('pagehide',()=>{clearBackupCode();save()});addEventListener('storage',observeExternalCampaignSave);addEventListener('beforeunload',warnUnsavedCampaignBeforeExit);addEventListener('visibilitychange',saveCampaignOnHidden);setInterval(save,5000);
