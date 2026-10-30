@@ -1,10 +1,12 @@
 """S-01 static invoice scanner: no raw customer/source disclosure."""
 import tempfile
+import io
+from contextlib import redirect_stdout
 import unittest
 from pathlib import Path
 
 from scripts.s01_checkout_invoice_static_readonly_20261029 import (
-    inspect_source, read_regular,
+    inspect_source, read_regular, main,
 )
 
 
@@ -111,6 +113,23 @@ class InvoiceStaticReadOnlyTests(unittest.TestCase):
             self.assertIn("mpw_commerce/downloads.py:download_paid_item",
                           result["missing_contract_functions"])
             self.assertFalse(result["safe_to_publish"])
+
+    def test_offline_cli_never_claims_delivery_or_prints_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "mpw_commerce").mkdir()
+            (root / "mpw_commerce" / "invoicing.py").write_text(
+                "SECRET_TOKEN = 'synthetic-private-value'\n"
+                "def reserve_order_invoice(order):\n"
+                "    return order\n", encoding="utf-8",
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main(["--offline-root", str(root)])
+            self.assertEqual(code, 2)
+            self.assertIn('"offline_copy_only": true', output.getvalue())
+            self.assertIn('"safe_to_publish": false', output.getvalue())
+            self.assertNotIn("synthetic-private-value", output.getvalue())
 
     def test_regular_source_read_is_exact(self):
         with tempfile.TemporaryDirectory() as tmp:
