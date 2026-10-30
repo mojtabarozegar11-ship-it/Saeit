@@ -114,6 +114,49 @@ class InvoiceStaticReadOnlyTests(unittest.TestCase):
                           result["missing_contract_functions"])
             self.assertFalse(result["safe_to_publish"])
 
+    def test_dormant_nested_orm_calls_do_not_count_as_live_invoice_work(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / "mpw_commerce"
+            folder.mkdir()
+            (folder / "invoicing.py").write_text(
+                "def reserve_order_invoice(order):\n"
+                "    def unused():\n"
+                "        return Invoice.objects.get_or_create(order=order)\n"
+                "    return None\n", encoding="utf-8",
+            )
+            (folder / "settlement.py").write_text(
+                "def settle_order_invoice(order):\n"
+                "    class Unused:\n"
+                "        def fake(self):\n"
+                "            return CommerceReceipt.objects.create(order=order)\n"
+                "    return False\n", encoding="utf-8",
+            )
+            result = inspect_source(root, require_wsg=False)
+            invoice = result["modules"][0]["functions"][0]
+            settlement = next(x for x in result["modules"] if x["module"] == "mpw_commerce/settlement.py")["functions"][0]
+            self.assertTrue(invoice["is_stub"])
+            self.assertFalse(invoice["has_get_or_create_call"])
+            self.assertTrue(settlement["is_stub"])
+            self.assertFalse(settlement["has_create_call"])
+            self.assertFalse(settlement["has_verified_receipt_name"])
+            self.assertFalse(result["source_contract_complete"])
+            self.assertFalse(result["safe_to_publish"])
+
+    def test_nested_only_handler_is_a_stub(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / "mpw_commerce"
+            folder.mkdir()
+            (folder / "downloads.py").write_text(
+                "def download_paid_item(request):\n"
+                "    def unused():\n"
+                "        return request\n", encoding="utf-8",
+            )
+            result = inspect_source(root, require_wsg=False)
+            self.assertIn("mpw_commerce/downloads.py:download_paid_item",
+                          result["stub_contract_functions"])
+
     def test_offline_cli_never_claims_delivery_or_prints_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
