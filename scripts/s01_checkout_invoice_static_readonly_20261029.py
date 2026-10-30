@@ -78,6 +78,15 @@ def function_signals(node):
             (isinstance(statement, ast.Expr) and
              isinstance(statement.value, ast.Constant) and
              statement.value.value is Ellipsis) or
+            # A named handler returning only an empty sentinel does not
+            # implement payment, invoice issuance or buyer entitlement.
+            (isinstance(statement, ast.Return) and
+             (statement.value is None or
+              (isinstance(statement.value, ast.Constant) and
+               (statement.value.value is None or
+                statement.value.value is False or
+                statement.value.value is Ellipsis or
+                statement.value.value == "")))) or
             (isinstance(statement, ast.Raise) and statement.exc is not None and
              (isinstance(statement.exc, ast.Name) and statement.exc.id == "NotImplementedError" or
               isinstance(statement.exc, ast.Call) and
