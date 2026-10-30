@@ -100,7 +100,7 @@ def _company_temporarily_unavailable():
         '<!doctype html><html lang="fa" dir="rtl"><head>'
         '<meta charset="utf-8"><title>سامانه موقتاً در دسترس نیست</title>'
         '</head><body><main><h1>سامانه موقتاً در دسترس نیست</h1>'
-        '<p role="status">درخواست شما ثبت نشده است؛ لطفاً بعداً دوباره تلاش کنید.</p>'
+        '<p role="status">وضعیت ثبت درخواست قابل تأیید نیست؛ پیش از ارسال دوباره با شرکت تماس بگیرید.</p>'
         '<p><a href="/company/">بازگشت به شرکت</a></p>'
         '</main></body></html>',
         status=503,
@@ -110,7 +110,7 @@ def _company_temporarily_unavailable():
     return mark_public_data_unavailable(response)
 
 
-def company_content_feed(request, slug):
+def _company_content_feed_with_schema(request, slug):
     knowledge_model = CompanyContentLink._meta.get_field("knowledge_article").remote_field.model
     if missing_public_tables(CompanyContentLink, NewsletterStory, knowledge_model):
         return _company_temporarily_unavailable()
@@ -138,6 +138,14 @@ def company_content_feed(request, slug):
     return render(request, "core/company_content_feed.html", {"target": target, "links": links})
 
 
+def company_content_feed(request, slug):
+    """Handle database loss after schema introspection without a public 500."""
+    try:
+        return _company_content_feed_with_schema(request, slug)
+    except DatabaseError:
+        return _company_temporarily_unavailable()
+
+
 def company_portal_home(request):
     from django.shortcuts import redirect
     from django.contrib import messages
@@ -163,7 +171,14 @@ def company_portal_home(request):
             except ValidationError:
                 messages.error(request, "اطلاعات درخواست معتبر نیست؛ لطفاً فیلدها را اصلاح کنید.")
                 return redirect("company")
-            CompanyInquiry.objects.create(**fields)
+            except DatabaseError:
+                return _company_temporarily_unavailable()
+            # A transport failure after an INSERT may leave the commit outcome
+            # uncertain. Never claim failure/success or invite blind resubmits.
+            try:
+                CompanyInquiry.objects.create(**fields)
+            except DatabaseError:
+                return _company_temporarily_unavailable()
             messages.success(request, "درخواست شما با موفقیت ثبت شد و برای بررسی کارشناسی ارسال گردید.")
         else:
             messages.error(request, "لطفاً تمام فیلدهای الزامی را تکمیل کنید.")
