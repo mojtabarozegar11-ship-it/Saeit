@@ -70,7 +70,7 @@ class CompanyFeedAndInquiryOutageTests(SimpleTestCase):
             "kind": "general", "name": "Synthetic", "email": "fixture@example.test",
             "subject": "Synthetic", "message": "Synthetic",
         })
-        with patch.object(company_content_views, "missing_public_tables", return_value=False), \\
+        with patch.object(company_content_views, "missing_public_tables", return_value=False), \
              patch.object(company_content_views, "CompanyInquiry") as inquiry:
             inquiry.objects.create.side_effect = DatabaseError("synthetic commit unknown")
             response = company_content_views.company_portal_home(request)
