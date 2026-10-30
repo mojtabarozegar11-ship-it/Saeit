@@ -6,6 +6,7 @@ does not connect to a host, create a backup, read customers, or approve release.
 A hash match proves only byte identity, never Passenger DB or paid delivery.
 """
 import argparse
+import ast
 import hashlib
 import json
 import re
@@ -14,6 +15,15 @@ from pathlib import Path
 from scripts.s01_checkout_invoice_static_readonly_20261029 import read_regular
 
 CHECKOUT_REL = "mpw_commerce/product_checkout_page.py"
+
+
+def python_ast_digest(data):
+    """Hash normalized Python syntax without executing or exposing source."""
+    try:
+        tree = ast.parse(data)
+    except (SyntaxError, UnicodeError, ValueError):
+        return None
+    return hashlib.sha256(ast.dump(tree, include_attributes=False).encode("utf-8")).hexdigest()
 
 
 def assess(root, expected_sha256, approved_root=None):
@@ -29,6 +39,8 @@ def assess(root, expected_sha256, approved_root=None):
     data = read_regular(Path(root), CHECKOUT_REL)
     observed = hashlib.sha256(data).hexdigest()
     approved_valid = approved_sha is None or approved_sha == expected_sha256
+    observed_ast = python_ast_digest(data)
+    approved_ast = python_ast_digest(approved_data) if approved_data is not None else None
     # Compare bytes ONLY when the separate approved reference matches the
     # pre-existing pin. This never repins a changed production source and
     # never prints source content, credentials, excerpts or a unified diff.
@@ -41,6 +53,12 @@ def assess(root, expected_sha256, approved_root=None):
             "byte_identical": identical,
             "first_difference_offset": None if identical else offset,
             "approved_source_bytes": len(approved_data),
+            # Semantic equivalence is diagnostic ONLY; it never authorizes
+            # repinning a changed source, bypassing backup or deployment.
+            "python_ast_equivalent": (
+                approved_ast == observed_ast
+                if approved_ast is not None and observed_ast is not None else None
+            ),
             "difference_kind": ("IDENTICAL" if identical else
                                 "APPROVED_PREFIX" if offset == len(approved_data) else
                                 "OBSERVED_PREFIX" if offset == len(data) else
@@ -56,6 +74,10 @@ def assess(root, expected_sha256, approved_root=None):
         "expected_sha256": expected_sha256,
         "observed_sha256": observed,
         "source_bytes": len(data),
+        "observed_python_syntax_valid": observed_ast is not None,
+        "approved_python_syntax_valid": (
+            approved_ast is not None if approved_data is not None else None
+        ),
         "source_modified": False,
         "backup_created": False,
         "offhost_restore_verified": False,
