@@ -49,7 +49,7 @@ def _site_search_with_schema(request):
         articles = KnowledgeArticle.objects.filter(published=True).filter(Q(title__icontains=q) | Q(content__icontains=q))[:50]
         for x in articles:
             results.append((_score(q, x.title, x.content), {"type": "دانش", "title": x.title, "summary": x.content[:280], "url": f"/knowledge/article/{x.slug}/"}))
-        books = KnowledgeBook.objects.filter(Q(title__icontains=q) | Q(domain__icontains=q) | Q(objective__icontains=q))[:50]
+        books = KnowledgeBook.objects.filter(status="published").filter(Q(title__icontains=q) | Q(domain__icontains=q) | Q(objective__icontains=q))[:50]
         for x in books:
             results.append((_score(q, x.title, x.domain, x.objective), {"type": "کتاب", "title": x.title, "summary": x.objective[:280], "url": f"/knowledge/book/{x.code}/"}))
         domains = KnowledgeDomain.objects.filter(active=True).filter(Q(title__icontains=q) | Q(scientific_scope__icontains=q))[:50]
@@ -123,13 +123,13 @@ def sitemap_xml(request):
         for kind, count in company_ranges.items():
             urls.extend(f"/company/{kind}-{i}/" for i in range(1, count + 1))
         stories = NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()).values_list("slug", flat=True)
-        urls += [f"/newsletter/{slug}/" for slug in stories]
+        urls += [f"/newsletter/{quote(str(slug), safe='')}/" for slug in stories]
         articles = KnowledgeArticle.objects.filter(published=True).values_list("slug", flat=True)
-        urls += [f"/knowledge/article/{slug}/" for slug in articles]
-        books = KnowledgeBook.objects.values_list("code", flat=True)
-        urls += [f"/knowledge/book/{code}/" for code in books]
+        urls += [f"/knowledge/article/{quote(str(slug), safe='')}/" for slug in articles]
+        books = KnowledgeBook.objects.filter(status="published").values_list("code", flat=True)
+        urls += [f"/knowledge/book/{quote(str(code), safe='')}/" for code in books]
         domains = KnowledgeDomain.objects.filter(active=True).values_list("code", flat=True)
-        urls += [f"/knowledge/domain/{code}/" for code in domains]
+        urls += [f"/knowledge/domain/{quote(str(code), safe='')}/" for code in domains]
         urls += [f"/store/product/{pk}/" for pk in Product.objects.filter(active=True).values_list("pk",flat=True)]
     except DatabaseError:
         return _unavailable_sitemap()
