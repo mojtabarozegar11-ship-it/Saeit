@@ -144,10 +144,12 @@ jobs:
           if not private.is_dir() or private.is_symlink() or private.stat().st_mode&0o077:
               raise SystemExit('READONLY_PRIVATE_DIR_UNSAFE')
           if not web.is_dir(): raise SystemExit('READONLY_BUSINESS_WEBROOT_MISSING')
-          app=web/'app.php'
-          if not app.is_file() or app.is_symlink(): raise SystemExit('READONLY_ACTIVE_APP_MISSING')
+          candidates=(private/'app.php',web/'app.php')
+          app=next((p for p in candidates if p.is_file() and not p.is_symlink()),None)
+          if not app: raise SystemExit('READONLY_ACTIVE_APP_MISSING')
           source=app.read_text(encoding='utf-8',errors='replace')
           print('LIVE_PHP_APP=EXISTS')
+          print('LIVE_APP_PRIVATE_SOURCE='+str(app.parent==private))
           print('LIVE_APP_CREDENTIAL_STAMP='+str('credential_stamp' in source))
           print('LIVE_APP_SESSION_REGENERATE='+str('session_regenerate_id' in source))
           print('LIVE_APP_HTTPONLY='+str('httponly' in source.lower()))
