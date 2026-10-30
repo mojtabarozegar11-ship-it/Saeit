@@ -38,6 +38,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           python3 -m py_compile scripts/zomorod_office_guarded_release_20261031.py
+          python3 -m unittest -v scripts/test_zomorod_office_guarded_release_20261031.py
           python3 -m pip install --disable-pip-version-check -r requirements.txt
           python3 manage.py makemigrations --check --dry-run enterprise_portal ecosystem_hub company_messaging company_marketing
           python3 manage.py check
