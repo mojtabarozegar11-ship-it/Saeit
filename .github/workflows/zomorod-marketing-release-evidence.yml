@@ -396,7 +396,7 @@ jobs:
                       if key in known:
                           print("HTACCESS_ENV_KEY_"+key+"=present")
                           if key=="DATABASE_URL":
-                              scheme=value.strip().strip('"'').split(":",1)[0].lower()
+                              scheme=value.strip().strip(chr(34)+chr(39)).split(":",1)[0].lower()
                               print("HTACCESS_DB_SCHEME="+(scheme if scheme in ("mysql","mariadb","postgresql","postgres","sqlite") else "other"))
                   elif typ in {"passenv","passengerappenv"}:
                       print("HTACCESS_PASSENGER_DIRECTIVE="+typ)
