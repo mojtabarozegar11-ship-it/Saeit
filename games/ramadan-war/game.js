@@ -9,6 +9,7 @@ import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, re
 import {makeCampaignBackup,readCampaignBackup,MAX_CAMPAIGN_BACKUP_BYTES} from './campaign-backup.mjs';
 import {readAimSensitivity,aimMultiplier,nextAimSensitivity,aimSensitivityLabel} from './aim-sensitivity.mjs';
 import {copyCampaignBackupToClipboard} from './backup-clipboard.mjs';
+import {movePlayerWithCollision} from './player-collision.mjs';
 import {objectiveWaypoint,objectiveApproachWaypoint,closestReachableObjective,INTERACT_RANGE,canInteractAt} from './objective-navigation.mjs';
 import {routeGuidance,paintTacticalMap} from './tactical-map.mjs';
 (()=>{'use strict';
@@ -143,7 +144,7 @@ function routeToPlayer(e){const sx=e.x|0,sy=e.y|0,gx=world.x|0,gy=world.y|0,star
 function ray(a){let c=Math.cos(a),s=Math.sin(a);for(let d=.035;d<18;d+=.035)if(tile(world.x+c*d|0,world.y+s*d|0)!==0)return d;return 18}
 function body(x,y,type,hp){return{x,y,vx:0,vy:0,type,hp,max:hp,life:1.5,targetId:-1,dead:false}}
 function spawn(){const pts=[[5.5,2.5],[10.5,2.5],[12.5,5.5],[10.5,10.5],[5.5,10.5],[3.5,12.5],[12.5,12.5],[9.5,6.5],[3.5,8.5]];let [x,y]=world.missionKills===0&&world.enemies.length===0?[8.5,7.5]:pts[Math.floor(Math.random()*pts.length)];if(tile(x|0,y|0)!==0){x=12.5;y=11.5}const n=world.missionKills+world.enemies.length;let bossMission=!world.endless&&world.mission===5&&!world.bossSpawned;let type=bossMission?3:world.mission>=1&&n%7===6?3:world.mission>=2&&Math.random()<.35?2:Math.random()<.2?1:0;let hp=type===3?130+world.mission*18:type===2?88+world.mission*15:type===1?50:39+world.mission*4;let e=body(x,y,bossMission?3:type,bossMission?410:hp);if(bossMission){e.boss=true;world.bossSpawned=true;e.x=8.5;e.y=7.5}e.life=1.5;e.strafe=Math.random()<.5?-1:1;world.enemies.push(e)}
-function move(dx,dy){let nx=world.x+dx,ny=world.y+dy;if(tile(nx+Math.sign(dx)*.21|0,world.y|0)===0)world.x=nx;if(tile(world.x|0,ny+Math.sign(dy)*.21|0)===0)world.y=ny}
+function move(dx,dy){movePlayerWithCollision(world,dx,dy,(x,y)=>tile(x,y,world.mission)!==0)}
 function targetAim(range,cone=.32){let best=null,bd=Infinity;for(const e of world.enemies){if(!(e.hp>0))continue;let dx=e.x-world.x,dy=e.y-world.y,d=Math.hypot(dx,dy),a=Math.atan2(dy,dx)-world.angle;a=Math.atan2(Math.sin(a),Math.cos(a));if(d<range&&Math.abs(a)<cone&&d<bd&&!blocked(world.x,world.y,e.x,e.y)){best=e;bd=d}}return best}
 function nearest(range=Infinity,requireLineOfSight=false){return chooseNearestTarget(world.enemies,world.x,world.y,range,requireLineOfSight,blocked)}
 function visibleAttack(range=24){let target=null,best=Infinity;const aimPitch=engine.pitch();for(const e of world.enemies){if(!(e.hp>0))continue;let dx=e.x-world.x,dy=e.y-world.y,d=Math.hypot(dx,dy),yaw=Math.atan2(Math.sin(Math.atan2(dy,dx)-world.angle),Math.cos(Math.atan2(dy,dx)-world.angle)),bodyPitch=Math.atan2(1.08-1.62,d),yawTol=Math.atan2(.34,d),pitchTol=Math.atan2(.58,d);if(d<range&&Math.abs(yaw)<=yawTol&&Math.abs(aimPitch-bodyPitch)<=pitchTol&&!blocked(world.x,world.y,e.x,e.y)){const error=Math.hypot(yaw/yawTol,(aimPitch-bodyPitch)/pitchTol);if(error<best){target=e;best=error}}}return target}
