@@ -12,8 +12,8 @@ import argparse,hashlib,html,json,re
 URL="https://mojplaywin.com/about/mojtaba-rozegar/"
 MARKER="MOJPLAYWIN_PROFESSOR_MOJTabA_ROOZEGAR_PROFILE_20261018"
 OFFICIAL_IMAGE="https://mojplaywin.com/mojtaba.roozegar/assets/personal_site/official_profile_20261016/portrait.2935ce8cb70d.webp"
-TITLE="Professor Mojtaba Roozegar | PhD, Research & MojPlayWin Leadership"
-DESC=("Professor Mojtaba Roozegar: self-reported PhD in Agricultural Economics "
+TITLE="Dr. Mojtaba Roozegar | PhD, Research & MojPlayWin Leadership"
+DESC=("Dr. Mojtaba Roozegar: self-reported PhD in Agricultural Economics "
       "at Universiti Putra Malaysia, Production Economics and Farm Management; "
       "researcher, entrepreneur and founder of MojPlayWin.")
 
@@ -54,7 +54,7 @@ def construct(old,content):
     content_without_css=content[:css.start()]+content[css.end():]
     old=old.replace("Mojtaba Rozegar","Mojtaba Roozegar")
     old=re.sub(r"(<h1\b[^>]*>)\s*Mojtaba Roozegar\s*(</h1>)",
-               r"\1Professor Mojtaba Roozegar\2",old,count=1,flags=re.I)
+               r"\1Dr. Mojtaba Roozegar\2",old,count=1,flags=re.I)
     start=re.search(r"<main\b[^>]*>",old,re.I)
     old=old[:start.end()]+"\n"+content_without_css+"\n"+old[start.end():]
     old=old.replace("</head>",css.group(0)+"\n</head>",1)
@@ -84,7 +84,7 @@ def construct(old,content):
         raise RuntimeError("Main landmarks changed")
     if "Mojtaba Rozegar" in old:
         raise RuntimeError("Spelling inconsistencies remain")
-    if not all(x in old for x in ("Professor Mojtaba Roozegar","Universiti Putra Malaysia",
+    if not all(x in old for x in ("Dr. Mojtaba Roozegar","Universiti Putra Malaysia",
                                   "Production Economics and Farm Management",
                                   "Official profile portrait","Founder &amp; CEO")):
         raise RuntimeError("Academic source incomplete")
