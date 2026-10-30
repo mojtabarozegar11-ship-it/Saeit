@@ -137,14 +137,16 @@ jobs:
                 failure_class=HOST_KEY_MISMATCH
               elif grep -Eqi 'Permission denied|Authentication failed|No supported authentication methods' "$ssh_error"; then
                 failure_class=AUTH_REJECTED
-              elif grep -Eqi 'Connection timed out|Operation timed out|No route to host|Network is unreachable|Connection refused|Connection reset|kex_exchange_identification|banner exchange' "$ssh_error" || [ "$rc" -eq 124 ]; then
+              elif grep -Eqi 'Connection timed out|Operation timed out|No route to host|Network is unreachable|Connection refused|Connection reset|Connection closed by|Could not resolve hostname|ssh_exchange_identification|kex_exchange_identification|banner exchange|administratively prohibited' "$ssh_error" || [ "$rc" -eq 124 ]; then
                 failure_class=TRANSPORT_OR_TIMEOUT
               elif [ "$rc" -eq 1 ]; then
                 failure_class=REMOTE_IDENTITY_MISMATCH
+              elif [ "$rc" -eq 255 ]; then
+                failure_class=SSH_HANDSHAKE_OR_AUTH_UNCLASSIFIED
               else
                 failure_class=UNKNOWN
               fi
-              echo "S01_PINNED_SESSION_ATTEMPT=$attempt CLASS=$failure_class"
+              echo "S01_PINNED_SESSION_ATTEMPT=$attempt RC=$rc CLASS=$failure_class"
             fi
             if [ "$attempt" -lt 5 ]; then sleep 6; fi
           done
