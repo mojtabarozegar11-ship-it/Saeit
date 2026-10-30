@@ -83,6 +83,18 @@ export function normalizeMovementAxes(forward, side) {
 }
 
 
+// Orientation changes and synthetic pointer events can produce huge or non-finite
+// deltas. Bound each aim step to prevent a single event corrupting player angle.
+export function boundedAimMotion(nextX, nextY, previousX, previousY, maxStep = 120) {
+  if (![nextX, nextY, previousX, previousY, maxStep].every(Number.isFinite) || maxStep <= 0)
+    return null;
+  const limit = Math.min(maxStep, 240);
+  return {
+    dx: Math.max(-limit, Math.min(limit, nextX - previousX)),
+    dy: Math.max(-limit, Math.min(limit, nextY - previousY))
+  };
+}
+
 // A browser may coalesce pointermove events or deliver none before pointerup.
 // Include release coordinates so a long aim drag cannot masquerade as a click.
 export function recordPointerGestureMovement(gesture, event) {
