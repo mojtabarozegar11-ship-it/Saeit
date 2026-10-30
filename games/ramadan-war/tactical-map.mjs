@@ -1,4 +1,4 @@
-// G-01 R34: accessible, wall-aware route guidance. No campaign or storage writes.
+// G-01 R35: arrival distance is checked independently of same-tile BFS completion. No storage writes.
 export const MAP_CELLS=16;
 export function relativeDirection(px,py,angle,tx,ty){
  if(![px,py,angle,tx,ty].every(Number.isFinite))return 'نامشخص';
@@ -41,7 +41,12 @@ export function routeGuidance(px,py,angle,tx,ty,isWall,size=MAP_CELLS){
  if(![px,py,angle,tx,ty].every(Number.isFinite))return {status:'invalid',message:'مسیر هدف: نامشخص'};
  const route=findTacticalRoute(px,py,tx,ty,isWall,size);
  if(!route)return {status:'blocked',message:'مسیر هدف: مسدود؛ از سمت دیگری نزدیک شوید'};
- if(route.steps===0)return {status:'arrived',steps:0,message:route.approach?'در محدودهٔ تعامل هدف':'در محل هدف'};
+ if(route.steps===0){
+  const distance=Math.hypot(px-tx,py-ty);
+  const arrivalRange=route.approach?1.35:.78;
+  if(distance>arrivalRange)return {status:'nearby',steps:0,message:'مسیر هدف: نزدیک‌تر شوید · '+distance.toFixed(1)+' متر'};
+  return {status:'arrived',steps:0,message:route.approach?'در محدودهٔ تعامل هدف':'در محل هدف'};
+ }
  const next=route.path[1];
  return {status:'reachable',steps:route.steps,message:'مسیر هدف: '+relativeDirection(px,py,angle,next.x,next.y)+' · '+route.steps+' خانه'};
 }
