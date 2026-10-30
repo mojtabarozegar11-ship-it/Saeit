@@ -108,14 +108,16 @@ jobs:
             UserKnownHostsFile $d/host.known
             ProxyJump saeit-vps
             ControlMaster auto
-            ControlPath $d/control-%C
+            ControlPath $d/cpanel.sock
             ControlPersist 300
           Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
-            ConnectTimeout 10
-            ConnectionAttempts 1
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
             ForwardAgent no
             RequestTTY no
           EOF
@@ -124,18 +126,16 @@ jobs:
           printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" || { echo 'S01_CPANEL_HOST_PIN=BLOCKED'; exit 1; }
           echo 'S01_CPANEL_HOST_PIN=VERIFIED'
-          # Verify the relay hop independently. This is a read-only command;
-          # successful ProxyJump authentication alone is not cPanel proof.
-          if timeout 25s ssh -T -F "$d/config" saeit-vps 'true' >/dev/null 2>/dev/null; then
-            echo 'S01_VPS_READONLY_SESSION=VERIFIED'
-          else
-            echo 'S01_VPS_READONLY_SESSION=BLOCKED'
-            exit 1
-          fi
-          # Reuse a single authenticated session. Retry only harmless identity reads.
+          # Avoid an extra VPS SSH session before ProxyJump: the proven
+          # Zomorod private-staging relay succeeds with one pinned two-hop
+          # connection, while a separate early session can consume the
+          # intermittent SSH banner window. No direct-cPanel fallback.
+          # A successful remote identity assertion proves both authenticated hops.
+          # Reuse the pinned cPanel control socket for later read-only probes.
+          # Retry only harmless identity reads.
           session_ready=0
           for attempt in 1 2 3 4 5; do
-            if timeout 65s ssh -v -T -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>"$d/ssh-error"; then
+            if timeout 55s ssh -v -T -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>"$d/ssh-error"; then
               session_ready=1
               break
             fi
@@ -146,7 +146,7 @@ jobs:
             echo "S01_PINNED_IDENTITY_PHASE=$(python3 scripts/s01_ssh_error_classify.py --phase "$d/ssh-error")"
             : > "$d/ssh-error"
             echo "S01_PINNED_IDENTITY_RETRY=$attempt"
-            if [ "$attempt" -lt 5 ]; then sleep 6; fi
+            if [ "$attempt" -lt 5 ]; then sleep 12; fi
           done
           if [ "$session_ready" != 1 ]; then
             # Non-mutating TCP reachability from the already authenticated VPS
@@ -168,6 +168,7 @@ jobs:
             echo 'S01_PINNED_SESSION=BLOCKED'
             exit 1
           fi
+          echo 'S01_VPS_READONLY_SESSION=VERIFIED_VIA_PINNED_PROXYJUMP'
           echo 'S01_PINNED_SESSION=VERIFIED'
       - name: Classify bounded cPanel checkout provenance (read-only; no source transfer)
         shell: bash
