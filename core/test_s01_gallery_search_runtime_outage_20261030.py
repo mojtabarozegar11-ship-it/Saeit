@@ -64,6 +64,16 @@ class GalleryRuntimeOutageTests(SimpleTestCase):
         self.assertEqual(company_content_views.safe_gallery_target_path("/gallery/safe-photo/"),
                          "/gallery/safe-photo/")
 
+    def test_gallery_rejects_encoded_query_and_fragment_delimiters(self):
+        safe = company_content_views.safe_gallery_target_path
+        for path in ("/gallery/%3Fnext=other", "/gallery/%23fragment",
+                     "/gallery/%253fnext=other", "/gallery/%2523fragment"):
+            with self.subTest(path=path):
+                self.assertEqual(safe(path), "")
+        # A literal query on a local URL is not an encoded PATH delimiter.
+        self.assertEqual(safe("/gallery/photo/?size=large"),
+                         "/gallery/photo/?size=large")
+
     def test_healthy_gallery_preserves_original_renderer(self):
         expected = HttpResponse("existing gallery")
         with patch.object(company_content_views, "_company_gallery_with_schema",
