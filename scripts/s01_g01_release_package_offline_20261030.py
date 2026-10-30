@@ -10,6 +10,7 @@ import ast
 import hashlib
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import stat
 import zipfile
@@ -85,8 +86,23 @@ class _EntrypointReferences(HTMLParser):
         values = dict(attrs)
         if tag == "base":
             raise ValueError("base URL forbidden in offline game package")
-        if tag in ("script", "img") and values.get("src"):
+        # Source, responsive image and video-poster dependencies must be
+        # present in the signed asset list; otherwise a private ZIP may look
+        # complete while its real browser entrypoint requests missing files.
+        if tag in ("script", "img", "source", "audio", "video", "track") and values.get("src"):
             self.refs.append(values["src"])
+        if tag == "video" and "poster" in values:
+            self.refs.append(values["poster"])
+        if tag in ("img", "source") and "srcset" in values:
+            candidates = values["srcset"].split(",")
+            for candidate in candidates:
+                tokens = candidate.strip().split()
+                if (not tokens or len(tokens) > 2 or
+                        (len(tokens) == 2 and not re.fullmatch(
+                            r"(?:[1-9][0-9]*w|(?:[1-9][0-9]*(?:\\.[0-9]+)?)x)",
+                            tokens[1]))):
+                    raise ValueError("unsafe responsive game dependency")
+                self.refs.append(tokens[0])
         if tag == "link" and "stylesheet" in (values.get("rel") or "").lower():
             self.refs.append(values.get("href", ""))
 
