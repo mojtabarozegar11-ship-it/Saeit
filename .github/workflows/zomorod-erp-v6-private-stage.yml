@@ -203,16 +203,22 @@ jobs:
           print('V6_STAGE_PHP_LINT=PASS')
           print('V6_STAGE_MODULES='+str(len(files)))
           existing_roots=[private,Path('/home/zomorod2/public_html/business')]
-          checked=0;changed=0
+          checked=0;changed=0;changed_names=[];missing_names=[]
           for p in files:
               relative=p.name
               locations=[root/relative for root in existing_roots if (root/relative).is_file()]
-              if locations:
-                  checked+=1
-                  if all(hashlib.sha256(q.read_bytes()).digest()!=hashlib.sha256(p.read_bytes()).digest() for q in locations):
-                      changed+=1
+              if not locations:
+                  missing_names.append(relative)
+                  continue
+              checked+=1
+              candidate_hash=hashlib.sha256(p.read_bytes()).digest()
+              if all(hashlib.sha256(q.read_bytes()).digest()!=candidate_hash for q in locations):
+                  changed+=1
+                  changed_names.append(relative)
           print('V6_LIVE_MODULE_NAMES_MATCHED='+str(checked))
           print('V6_STAGED_MODULES_DIFFERING_FROM_LIVE='+str(changed))
+          print('V6_DIFFERING_MODULE_NAMES='+','.join(sorted(changed_names)))
+          print('V6_NOT_FOUND_AS_LIVE_MODULE_NAMES='+','.join(sorted(missing_names)))
           print('V6_PRIVATE_LIVE_APP_PRESENT='+str((private/'app.php').is_file()))
           print('V6_PRIVATE_SITE_AGENTS_PRESENT='+str((private/'site_agents.php').is_file()))
           print('V6_PRIVATE_SITE_STORE_PRESENT='+str((private/'site_store.php').is_file()))
