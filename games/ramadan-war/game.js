@@ -364,6 +364,7 @@ document.addEventListener('focusin',e=>{if(shouldReleaseHeldKeysOnFocus(screen,e
 addEventListener('resize',()=>{if(screen==='game')releaseGameInputs()});
 addEventListener('blur',()=>{releaseGameInputs();if(screen==='game')$('#pause').click()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){releaseGameInputs();if(screen==='game')$('#pause').click()}});
+addEventListener('pageshow',e=>{if(e.persisted){releaseGameInputs();if(screen==='game'){$('#pause').click()}}});
 addEventListener('pagehide',()=>{clearBackupCode();save()});addEventListener('storage',observeExternalCampaignSave);addEventListener('beforeunload',warnUnsavedCampaignBeforeExit);addEventListener('visibilitychange',saveCampaignOnHidden);setInterval(save,5000);
 const qaIsLocal=['localhost','127.0.0.1'].includes(location.hostname);
 const debugApi={
