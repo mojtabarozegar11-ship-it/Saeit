@@ -280,6 +280,47 @@ jobs:
           print("PASSENGER_DB_READ_ONLY_CONFIG_CLASSIFICATION=complete")
           PY
           REMOTE
+      - name: Read-only SQLite size and staging availability evidence
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 60s ssh -F "$dir/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          cd /home/zomorod2/Saeit
+          python3 -B - <<'PY'
+          import os, pathlib, re, sqlite3, urllib.parse
+          base=pathlib.Path.cwd()
+          for raw in (base/".env").read_text(encoding="utf-8",errors="replace").splitlines():
+              line=raw.strip()
+              if not line or line.startswith("#") or "=" not in line:continue
+              k,v=line.split("=",1);k,v=k.strip(),v.strip()
+              if v.startswith(("'",'"')) and v.endswith(v[0]):v=v[1:-1]
+              if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*",k):os.environ.setdefault(k,v)
+          url=os.environ.get("DATABASE_URL","")
+          if url and not url.startswith("sqlite:///"):
+              print("SQLITE_BACKUP_PREFLIGHT=not_sqlite");raise SystemExit(0)
+          path=(pathlib.Path(url[len("sqlite:///"):]) if url else base/"db.sqlite3").resolve(strict=False)
+          if not path.is_absolute():path=base/path
+          if not path.is_file() or path.is_symlink():
+              print("SQLITE_BACKUP_PREFLIGHT=database_file_missing_or_unsafe");raise SystemExit(0)
+          dbpath="file:"+urllib.parse.quote(str(path))+"?mode=ro"
+          with sqlite3.connect(dbpath,uri=True,timeout=3) as conn:
+              n=conn.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+          print("SQLITE_BACKUP_PREFLIGHT=readable")
+          print("SQLITE_DB_SIZE_KIB="+str((path.stat().st_size+1023)//1024))
+          print("SQLITE_TABLE_COUNT="+str(n))
+          staging=pathlib.Path("/home/zomorod2/Saeit-staging")
+          print("PRIVATE_STAGING_DIR_PRESENT="+str(staging.is_dir() and not staging.is_symlink()).lower())
+          private=pathlib.Path("/home/zomorod2/.private")
+          print("PRIVATE_PARENT_PRESENT="+str(private.is_dir() and not private.is_symlink()).lower())
+          print("SQLITE_BACKUP_OR_RESTORE_EXECUTED=false")
+          PY
+          REMOTE
       - name: Require restore proof and provider rights before any deployment
         run: |
           echo "RESTORE_VERIFIED=not-established-by-this-readonly-probe"
