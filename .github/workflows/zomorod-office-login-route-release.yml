@@ -160,7 +160,6 @@ jobs:
                   success = False
                   for attempt in range(6):
                       request = urllib.request.Request("https://zomorodmelal.ir" + path, method="GET")
-                      opener = urllib.request.build_opener(urllib.request.HTTPHandler())
                       try:
                           response = opener.open(request, timeout=12)
                           status = response.status
