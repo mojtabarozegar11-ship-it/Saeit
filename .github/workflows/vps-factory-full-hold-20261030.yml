@@ -281,6 +281,7 @@ jobs:
           print("FACTORY_FULL_HOLD=VERIFIED")
           PY
           REMOTE
+            then
               echo 'FACTORY_FULL_HOLD=VERIFIED'
               exit 0
             fi
