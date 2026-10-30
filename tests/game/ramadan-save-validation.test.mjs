@@ -352,14 +352,30 @@ test('valid player position is not moved and an unavailable fallback fails close
   assert.equal(restorePlayerPosition(valid,(x,y)=>x===4&&y===6),false);
   assert.equal(valid.x,6.5);
   const blocked={...fresh(),x:4.5,y:6.5};
-  assert.equal(restorePlayerPosition(blocked,(x,y)=>(x===4&&y===6)||(x===2&&y===7)),false);
+  assert.equal(restorePlayerPosition(blocked,(x,y)=>(x===4&&y===6)||(x===2&&y===7)),null,'unsafe fallback must fail closed');
   assert.equal(blocked.x,4.5,'do not move to an obstructed fallback');
+});
+
+test('corrupted non-finite coordinates never become a valid fallback spawn', () => {
+  const corrupt={...fresh(),x:NaN,y:Infinity,score:2300};
+  const original={...corrupt};
+  assert.equal(restorePlayerPosition(corrupt,()=>false,()=>true),null);
+  assert.deepEqual(corrupt,original,'corrupted checkpoint must not be rewritten');
 });
 
 test('campaign restore repairs obstructed player location before engine build', () => {
   const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
-  assert.ok(client.includes("restorePlayerPosition(world,(x,y)=>tile(x,y)!==0);if(restoreEnemyPositions(world,(x,y)=>tile(x,y,world.mission)!==0)<0){world=previousWorld;hero=previousHero;saveStatus='failed';return false;}hero=world.hero;"),
-    'unrecoverable enemies must abort before engine build and restore the previous in-memory checkpoint');
+  const playerGuard=client.indexOf("if(restorePlayerPosition(world,");
+  const enemyGuard=client.indexOf("if(restoreEnemyPositions(world,",playerGuard);
+  const heroCommit=client.indexOf("hero=world.hero;",enemyGuard);
+  const engineBuild=client.indexOf("engine.build(world,tile)",enemyGuard);
+  assert.ok(playerGuard>=0 && enemyGuard>playerGuard && heroCommit>enemyGuard && engineBuild>heroCommit,
+    'both restore guards must precede hero commit and engine build');
+  const abort="world=previousWorld;hero=previousHero;saveStatus='failed';return false;";
+  assert.ok(client.slice(playerGuard,enemyGuard).includes(abort),
+    'unsafe player fallback must preserve previous in-memory campaign');
+  assert.ok(client.slice(enemyGuard,heroCommit).includes(abort),
+    'unrecoverable enemies must preserve previous in-memory campaign');
 });
 
 test('restored time stop expires normally and forged permanent freezes fail closed', () => {
