@@ -70,6 +70,10 @@ jobs:
           path: ${{ runner.temp }}/s01-public-http.jsonl
           if-no-files-found: warn
           retention-days: 7
+      - name: Validate checkout provenance probe offline
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_cpanel_provenance_readonly_20261030.py -v
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -131,10 +135,6 @@ jobs:
           done
           test "$session_ready" = 1 || { echo 'S01_PINNED_SESSION=BLOCKED'; exit 1; }
           echo 'S01_PINNED_SESSION=VERIFIED'
-      - name: Validate checkout provenance probe offline
-        run: |
-          set -euo pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_cpanel_provenance_readonly_20261030.py -v
       - name: Classify bounded cPanel checkout provenance (read-only; no source transfer)
         shell: bash
         run: |
