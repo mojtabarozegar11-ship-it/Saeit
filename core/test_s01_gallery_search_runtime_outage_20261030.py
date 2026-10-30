@@ -57,6 +57,13 @@ class GalleryRuntimeOutageTests(SimpleTestCase):
         self.assertNotIn("synthetic internal detail", response.content.decode("utf-8"))
         self.assertIn("گالری", response.content.decode("utf-8"))
 
+    def test_gallery_rejects_invalid_utf8_percent_encoded_target(self):
+        self.assertEqual(company_content_views.safe_gallery_target_path("/gallery/%FF/file"), "")
+        self.assertEqual(company_content_views.safe_gallery_target_path("/gallery/%C3%28"), "")
+        self.assertEqual(company_content_views.safe_gallery_target_path("/gallery/%25FF/file"), "")
+        self.assertEqual(company_content_views.safe_gallery_target_path("/gallery/safe-photo/"),
+                         "/gallery/safe-photo/")
+
     def test_healthy_gallery_preserves_original_renderer(self):
         expected = HttpResponse("existing gallery")
         with patch.object(company_content_views, "_company_gallery_with_schema",
