@@ -98,7 +98,13 @@ Total output lines: 1
       const toppingNames={'🍓':'Berries','🌼':'Flowers','🍬':'Sweets'};
       function exportCake(){
         const candleShapes=Array.from({length:candles},(_,i)=>{const x=450+(i-(candles-1)/2)*27;return '<rect x="'+(x-5)+'" y="505" width="10" height="55" rx="3" fill="#fff4dc"/><ellipse cx="'+x+'" cy="499" rx="5" ry="10" fill="#ffbd51"/>'}).join('');
-        const body='<ellipse cx="450" cy="770" rx="255" ry="75" fill="#fff8f4"/><rect x="235" y="570" width="430" height="190" rx="36" fill="'+icing+'"/><ellipse cx="450" cy="570" rx="215" ry="65" fill="'+icing+'"/><ellipse cx="450" cy="765" rx="215" ry="48" fill="#9c4c79" opacity=".3"/>'+candleShapes+'<text x="450" y="910" text-anchor="middle" font-size="52" font-family="sans-serif" fill="#8d236a">Taniya Cake Maker</text><text x="450" y="975" text-anchor="middle" font-size="34" font-family="sans-serif" fill="#8d236a">'+toppingNames[topping]+' · '+candles+' candles</text>';
+        // The saved card must depict the topping selected in the playable designer.
+        const topperShapes={
+          '🍓':'<circle cx="345" cy="546" r="19" fill="#e94358"/><circle cx="450" cy="537" r="19" fill="#e94358"/><circle cx="555" cy="546" r="19" fill="#e94358"/><path d="M334 529l11-12 11 12M439 520l11-12 11 12M544 529l11-12 11 12" fill="none" stroke="#2e9c58" stroke-width="7"/>',
+          '🌼':'<g fill="#fff4c4" stroke="#eebf57" stroke-width="3"><circle cx="345" cy="545" r="21"/><circle cx="450" cy="537" r="21"/><circle cx="555" cy="545" r="21"/></g><g fill="#ffb12f"><circle cx="345" cy="545" r="8"/><circle cx="450" cy="537" r="8"/><circle cx="555" cy="545" r="8"/></g>',
+          '🍬':'<g fill="#b275ff"><rect x="325" y="530" width="42" height="26" rx="13"/><rect x="430" y="522" width="42" height="26" rx="13"/><rect x="535" y="530" width="42" height="26" rx="13"/></g><g fill="#ffdc70"><circle cx="346" cy="543" r="7"/><circle cx="451" cy="535" r="7"/><circle cx="556" cy="543" r="7"/></g>'
+        };
+        const body='<ellipse cx="450" cy="770" rx="255" ry="75" fill="#fff8f4"/><rect x="235" y="570" width="430" height="190" rx="36" fill="'+icing+'"/><ellipse cx="450" cy="570" rx="215" ry="65" fill="'+icing+'"/><ellipse cx="450" cy="765" rx="215" ry="48" fill="#9c4c79" opacity=".3"/>'+topperShapes[topping]+candleShapes+'<text x="450" y="910" text-anchor="middle" font-size="52" font-family="sans-serif" fill="#8d236a">Taniya Cake Maker</text><text x="450" y="975" text-anchor="middle" font-size="34" font-family="sans-serif" fill="#8d236a">'+toppingNames[topping]+' · '+candles+' candles</text>';
         downloadSvg('taniya-custom-cake',body);
         say('Your decorated cake card was saved with frosting, topping and candles.');
       }
