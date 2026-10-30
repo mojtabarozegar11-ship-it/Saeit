@@ -116,13 +116,26 @@ def without_exact_redirect(blob: bytes) -> bytes:
     return b"".join(lines[:matches[0]] + lines[matches[0] + 1:])
 
 
+STATIC_AUTHOR_REWRITE = (
+    b"RewriteRule ^authors/mojtaba-rozegar/?$ "
+    b"/authors/mojtaba-rozegar/index.html [L,NC]"
+)
+
+
 def verified_author_redirect_state(blob: bytes) -> bytes:
-    """Remove the obsolete exact redirect once, or preserve an already-live route."""
+    """Preserve the audited 200-serving rewrite; reject any unknown directive."""
     if REDIRECT in blob:
         return without_exact_redirect(blob)
-    if b"/authors/mojtaba-rozegar" in blob:
-        raise ValueError("UNKNOWN_AUTHOR_REDIRECT_OR_REWRITE")
-    return blob
+    matched = [
+        line.rstrip(b"\r\n")
+        for line in blob.splitlines(keepends=True)
+        if b"authors/mojtaba-rozegar" in line
+    ]
+    if not matched:
+        return blob
+    if matched == [STATIC_AUTHOR_REWRITE]:
+        return blob
+    raise ValueError("UNKNOWN_AUTHOR_REDIRECT_OR_REWRITE")
 
 
 def with_persian_sitemap_entry(blob: bytes) -> bytes:
