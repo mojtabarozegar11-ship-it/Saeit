@@ -83,13 +83,12 @@ class InvoiceStaticReadOnlyTests(unittest.TestCase):
             folder = root / "mpw_commerce"
             folder.mkdir()
             (folder / "invoicing.py").write_text(
-                "def reserve_order_invoice(order):\\n"
-                "    \\\"\\\"\\\"Not yet implemented\\\"\\\"\\\"\\n"
-                "    pass\\n", encoding="utf-8"
+                "def reserve_order_invoice(order):\n"
+                "    pass\n", encoding="utf-8"
             )
             (folder / "downloads.py").write_text(
-                "def download_paid_item(request):\\n"
-                "    raise NotImplementedError('not ready')\\n", encoding="utf-8"
+                "def download_paid_item(request):\n"
+                "    raise NotImplementedError('not ready')\n", encoding="utf-8"
             )
             result = inspect_source(root, require_wsg=False)
             self.assertFalse(result["source_contract_complete"])
@@ -104,9 +103,10 @@ class InvoiceStaticReadOnlyTests(unittest.TestCase):
     def test_regular_source_read_is_exact(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            data = b"def checkout_invoice(request):\\n    return None\\n"
+            data = b"def checkout_invoice(request):\n    return None\n"
             (root / "source.py").write_bytes(data)
             self.assertEqual(read_regular(root, "source.py"), data)
+
 
 if __name__ == "__main__":
     unittest.main()
