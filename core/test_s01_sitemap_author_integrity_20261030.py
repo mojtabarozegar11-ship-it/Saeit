@@ -126,6 +126,19 @@ class PublishedKnowledgeVisibilityTests(TestCase):
         self.assertIn("/knowledge/book/s01-public-book/", book_urls)
         self.assertNotIn("/knowledge/book/s01-private-book/", book_urls)
 
+
+    def test_search_percent_encodes_reserved_book_code(self):
+        from django.http import HttpResponse
+        with patch.object(seo_views, "render", return_value=HttpResponse("ok")) as renderer:
+            response = seo_views._site_search_with_schema(
+                RequestFactory().get("/search/?q=URL%20encoding")
+            )
+        self.assertEqual(response.status_code, 200)
+        rows = renderer.call_args.args[2]["results"]
+        book_urls = [row["url"] for row in rows if row["type"] == "کتاب"]
+        self.assertIn("/knowledge/book/s01%26book/", book_urls)
+        self.assertNotIn("/knowledge/book/s01&book/", book_urls)
+
     def test_sitemap_excludes_drafts_and_encodes_dynamic_codes(self):
         response = seo_views.sitemap_xml(RequestFactory().get("/sitemap.xml"))
         self.assertEqual(response.status_code, 200)
