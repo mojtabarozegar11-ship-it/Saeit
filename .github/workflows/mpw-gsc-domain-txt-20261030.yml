@@ -84,6 +84,19 @@ jobs:
             echo '  RequestTTY no'
           } > "$d/config"
           chmod 600 "$d/config"
+      - name: Enumerate available DNS API functions without DNS writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-gsc-dns-ssh"
+          functions="$(timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --list' 2>&1)" || true
+          matches="$(printf '%s\n' "$functions" | grep -Ei 'ZoneEdit|DNS|Zone' | head -60)" || true
+          if test -n "$matches"; then
+            printf 'AVAILABLE_DNS_UAPI_FUNCTIONS_BEGIN\n%s\nAVAILABLE_DNS_UAPI_FUNCTIONS_END\n' "$matches"
+          else
+            echo 'AVAILABLE_DNS_UAPI_FUNCTIONS=NONE'
+            printf '%s\n' "$functions" | head -12
+          fi
       - name: Verify domain ownership in cPanel and inspect exact zone without writes
         shell: bash
         run: |
