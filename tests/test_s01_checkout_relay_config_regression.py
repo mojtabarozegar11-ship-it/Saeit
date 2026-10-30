@@ -28,6 +28,10 @@ class PinnedRelayRegressionTests(unittest.TestCase):
         self.assertIn("S01_VPS_READONLY_SESSION=VERIFIED_VIA_PINNED_PROXYJUMP", WORKFLOW)
         self.assertIn('test "$(id -un)" = "zomorod2"', WORKFLOW)
 
+    def test_remote_argparse_never_receives_base64_transport_payload(self):
+        self.assertIn('sys.argv=[\\\"s01_invoice_static_probe\\\"]', WORKFLOW)
+        self.assertIn('src=base64.b64decode(sys.argv[1])', WORKFLOW)
+
     def test_readonly_and_no_release_claim(self):
         self.assertIn("S01_PROVENANCE_RELEASE_AUTHORIZATION=BLOCKED", WORKFLOW)
         self.assertIn("S01_PINNED_SESSION=BLOCKED", WORKFLOW)
