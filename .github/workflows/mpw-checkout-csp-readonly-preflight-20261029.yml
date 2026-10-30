@@ -5,6 +5,8 @@ on:
       - scripts/mpw_checkout_csp_zero_script_guard_20261029.py
       - scripts/s01_passenger_runtime_readonly_20261029.py
       - scripts/s01_checkout_invoice_static_readonly_20261029.py
+      - scripts/s01_checkout_cpanel_provenance_readonly_20261030.py
+      - tests/test_s01_checkout_cpanel_provenance_readonly_20261030.py
       - tests/test_s01_checkout_invoice_static_readonly_20261029.py
       - tests/test_s01_passenger_runtime_readonly_20261029.py
       - tests/test_mpw_checkout_csp_zero_script_20261029.py
@@ -129,6 +131,18 @@ jobs:
           done
           test "$session_ready" = 1 || { echo 'S01_PINNED_SESSION=BLOCKED'; exit 1; }
           echo 'S01_PINNED_SESSION=VERIFIED'
+      - name: Validate checkout provenance probe offline
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_cpanel_provenance_readonly_20261030.py -v
+      - name: Classify bounded cPanel checkout provenance (read-only; no source transfer)
+        shell: bash
+        run: |
+          set -euo pipefail
+          script64="$(base64 -w0 scripts/s01_checkout_cpanel_provenance_readonly_20261030.py)"
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;exec(compile(base64.b64decode(sys.argv[1]),\"s01_provenance\",\"exec\"))' '$script64'"
+          echo 'S01_PROVENANCE_RELEASE_AUTHORIZATION=BLOCKED'
       - name: Inspect cPanel checkout source and rollback capacity without writes
         shell: bash
         run: |
