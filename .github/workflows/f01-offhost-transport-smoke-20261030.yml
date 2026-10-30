@@ -1,0 +1,41 @@
+name: F-01 off-host transport smoke test (no private data)
+on:
+  push:
+    branches: [ops/offhost-backup-target-preflight-20261030]
+    paths:
+      - .github/workflows/f01-offhost-transport-smoke-20261030.yml
+permissions:
+  contents: read
+jobs:
+  transport-smoke:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Generate non-sensitive diagnostic marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/f01-transport-test"
+          python3 - "$RUNNER_TEMP/f01-transport-test/marker.json" <<'PY'
+          import json,sys,datetime
+          from pathlib import Path
+          data={"schema":"f01-offhost-transport-smoke.v1",
+                "observed_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "user_data_included":False,
+                "vps_connected":False,
+                "source_backup_copied":False,
+                "offhost_restore_proven":False,
+                "encrypted_backup_produced":False,
+                "reboot_authorized":False}
+          Path(sys.argv[1]).write_text(json.dumps(data,sort_keys=True)+"\n")
+          print("SMOKE_MARKER_GENERATED_WITHOUT_PRIVATE_DATA")
+          PY
+      - name: Upload harmless marker as test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: f01-backup-transport-smoke-20261030
+          path: ${{ runner.temp }}/f01-transport-test/marker.json
+          if-no-files-found: error
+          retention-days: 3
