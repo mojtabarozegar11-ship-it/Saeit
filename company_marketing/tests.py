@@ -320,6 +320,15 @@ class MarketingTests(TestCase):
         self.campaign.refresh_from_db()
         self.assertEqual(self.campaign.status, "closed")
 
+    def test_non_won_lead_cannot_claim_verified_revenue_without_evidence(self):
+        contact = Contact.objects.create(unit=self.unit, name="Offline lead")
+        lead = Lead(unit=self.unit, contact=contact, campaign=self.campaign,
+                    owner=self.owner, source="offline", stage="qualified",
+                    verified_sale_irr=50000, sale_evidence_reference="")
+        with self.assertRaises(ValidationError):
+            lead.save()
+        self.assertFalse(Lead.objects.filter(contact=contact).exists())
+
     def test_future_dated_performance_metric_is_rejected(self):
         item = self.publication()
         metric = PerformanceMetric(
