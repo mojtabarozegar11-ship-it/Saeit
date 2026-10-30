@@ -7,11 +7,13 @@ test('healthy public product route is anonymous GET only', () => {
     {authRequired:false, unexpectedRedirect:false, observedSafe:true});
 });
 test('buyer checkout login redirect is not a completed purchase', () => {
-  assert.deepEqual(classifyNavigation('/store/product/72/checkout/', 200, '/accounts/login/', null),
+  assert.deepEqual(classifyNavigation('/store/product/72/checkout/', 200, '/accounts/login/', null,
+    '?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F'),
     {authRequired:true, unexpectedRedirect:false, observedSafe:true});
 });
 test('invoice history login redirect is expected, not invoice proof', () => {
-  const v=classifyNavigation('/commerce/trx-easy/purchases/', 200, '/accounts/login/', null);
+  const v=classifyNavigation('/commerce/trx-easy/purchases/', 200, '/accounts/login/', null,
+    '?next=%2Fcommerce%2Ftrx-easy%2Fpurchases%2F');
   assert.equal(v.authRequired,true);
   assert.equal(v.observedSafe,true);
 });
@@ -59,4 +61,19 @@ test('external and duplicate login return targets fail closed', () => {
   for(const search of ['?next=https%3A%2F%2Fevil.example%2F','?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F&next=%2Fstore%2F']) {
     assert.equal(classifyNavigation(path,200,'/accounts/login/',null,search).observedSafe,false);
   }
+});
+
+test('missing or ambiguous login return is not a usable buyer route', () => {
+  const path='/store/product/72/checkout/';
+  for (const search of ['', '?', '?campaign=ad', '?next=',
+    '?next=%2Fstore%2Fproduct%2F72%2Fcheckout%2F&campaign=ad']) {
+    const v=classifyNavigation(path,200,'/accounts/login/',null,search);
+    assert.equal(v.observedSafe,false,search);
+    assert.equal(v.unexpectedRedirect,true,search);
+  }
+});
+test('canonical checkout redirected with an unexpected query is not a safe observation', () => {
+  const v=classifyNavigation('/store/product/72/checkout/',200,
+    '/store/product/72/checkout/',null,'?next=%2Fstore%2Fproduct%2F225%2Fcheckout%2F');
+  assert.equal(v.observedSafe,false);
 });
