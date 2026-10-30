@@ -75,6 +75,19 @@ class OfflinePreimageReconcileTests(unittest.TestCase):
         self.assertEqual(comparison["approved_source_bytes"], len(self.secret_fixture))
         self.assertNotIn("SECRET-CUSTOMER", str(comparison))
 
+    def test_approved_reference_first_byte_mismatch_stays_blocked(self):
+        approved = self.root / "approved"
+        (approved / "mpw_commerce").mkdir(parents=True)
+        (approved / "mpw_commerce" / "product_checkout_page.py").write_bytes(self.secret_fixture)
+        self.source.write_bytes(b"X" + self.secret_fixture[1:])
+        verdict = assess(self.root, self.expected, approved_root=approved)
+        comparison = verdict["approved_reference_comparison"]
+        self.assertEqual(verdict["status"], "SOURCE_SHA_DRIFT")
+        self.assertEqual(comparison["first_difference_offset"], 0)
+        self.assertEqual(comparison["difference_kind"], "BYTE_MISMATCH")
+        self.assertFalse(verdict["release_permitted"])
+        self.assertNotIn("SECRET-CUSTOMER", str(verdict))
+
     def test_approved_reference_identical_bytes_are_not_release_authorization(self):
         approved = self.root / "approved"
         (approved / "mpw_commerce").mkdir(parents=True)
