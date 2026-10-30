@@ -119,5 +119,59 @@ class OfflineReleasePackageTests(unittest.TestCase):
         self.assertFalse((public / "candidate.zip").exists())
 
 
+    def test_unlisted_srcset_image_is_refused_before_private_zip(self):
+        self.game.joinpath("index.html").write_bytes(
+            b'<link rel="stylesheet" href="./game.css"><script src="./game.js"></script>'
+            b'<img srcset="./not-in-release.webp 1x">'
+        )
+        with self.assertRaises(ValueError):
+            build(self.game, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_remote_srcset_image_is_refused_before_private_zip(self):
+        self.game.joinpath("index.html").write_bytes(
+            b'<link rel="stylesheet" href="./game.css"><script src="./game.js"></script>'
+            b'<source srcset="https://example.test/asset.webp 2x">'
+        )
+        with self.assertRaises(ValueError):
+            build(self.game, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_unlisted_video_poster_is_refused_before_private_zip(self):
+        self.game.joinpath("index.html").write_bytes(
+            b'<link rel="stylesheet" href="./game.css"><script src="./game.js"></script>'
+            b'<video poster="./missing-poster.webp"></video>'
+        )
+        with self.assertRaises(ValueError):
+            build(self.game, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_local_srcset_and_video_poster_pass_when_in_release_contract(self):
+        for name in ("hero.webp", "hero2.webp"):
+            (self.game / name).write_bytes(b"synthetic-image-bytes")
+        (self.game / "deploy.py").write_text(
+            "ASSETS = " + repr(ASSETS + ["hero.webp", "hero2.webp"]) + "\\n",
+            encoding="utf-8",
+        )
+        self.game.joinpath("index.html").write_bytes(
+            b'<link rel="stylesheet" href="./game.css"><script src="./game.js"></script>'
+            b'<img srcset="./hero.webp 1x, ./hero2.webp 2x">'
+            b'<video poster="./hero.webp"></video>'
+        )
+        result = build(self.game, self.output)
+        self.assertEqual(result["asset_count"], 11)
+        with zipfile.ZipFile(self.output) as archive:
+            self.assertIn("hero2.webp", archive.namelist())
+
+    def test_malformed_srcset_descriptor_is_refused(self):
+        self.game.joinpath("index.html").write_bytes(
+            b'<link rel="stylesheet" href="./game.css"><script src="./game.js"></script>'
+            b'<img srcset="./hero.webp nonsense">'
+        )
+        with self.assertRaises(ValueError):
+            build(self.game, self.output)
+        self.assertFalse(self.output.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
