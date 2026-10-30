@@ -271,7 +271,7 @@ jobs:
           print("FACTORY_HOLD_RELATED_ACTIVE_UNITS=" + str(running_units))
           print("FACTORY_HOLD_SUPERVISOR_CONTROL=" + ("readable" if supervisor_readable else "unavailable_or_not_installed"))
           print("FACTORY_HOLD_SUPERVISOR_RELATED_RUNNING=" + str(supervisor_running))
-          print("FACTORY_HOLD_BACKUP_DIR_SHA256=" + hashlib.sha256(str(hold_dir).encode()).hexdigest())
+          print("FACTORY_HOLD_CONFIG_SNAPSHOT=stored_private_mode_0600")
           if remaining or cron_remaining != 0 or running_units or supervisor_errors or supervisor_running not in (0, -1) or systemd_errors or inventory_errors or process_errors:
               raise SystemExit("FACTORY_FULL_HOLD=NOT_VERIFIED")
           print("FACTORY_FULL_HOLD=VERIFIED")
