@@ -105,8 +105,11 @@ def build(source_dir, output_zip):
         "live_verified": False,
     }
     output = Path(output_zip)
-    if output.is_symlink() or not output.parent.is_dir():
+    if output.is_symlink() or output.parent.is_symlink() or not output.parent.is_dir():
         raise ValueError("unsafe output location")
+    parent_info = output.parent.stat()
+    if parent_info.st_uid != os.getuid() or stat.S_IMODE(parent_info.st_mode) & 0o077:
+        raise ValueError("output must be inside an owner-only private directory")
     with zipfile.ZipFile(output, "x", compression=zipfile.ZIP_DEFLATED,
                          compresslevel=6) as archive:
         for name, data in sorted(files.items()):
