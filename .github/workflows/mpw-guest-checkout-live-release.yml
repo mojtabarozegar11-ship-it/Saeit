@@ -111,7 +111,7 @@ jobs:
           set -euo pipefail
           remote="/home/zomorod2/.mpw-guest-release-$GITHUB_RUN_ID"
           timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-guest-ssh/config" saeit-cpanel \
-            "python3 '$remote/release.py' verify"
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python '$remote/release.py' verify"
       - name: Verify the public buyer pages remain healthy
         run: |
           python3 - <<'PY'
