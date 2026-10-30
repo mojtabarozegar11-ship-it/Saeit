@@ -5,6 +5,7 @@ on:
     paths:
       - "services/mpw_trx_guest_commerce.py"
       - "scripts/mpw_guest_checkout_live_release.py"
+      - "scripts/test_mpw_guest_first_order_identity.py"
       - ".github/workflows/mpw-guest-checkout-live-release.yml"
 permissions:
   contents: read
@@ -22,7 +23,8 @@ jobs:
       - name: Compile reviewed release files
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mpw_guest_checkout_live_release.py services/mpw_trx_guest_commerce.py
+          python3 -m py_compile scripts/mpw_guest_checkout_live_release.py services/mpw_trx_guest_commerce.py scripts/test_mpw_guest_first_order_identity.py
+          python3 scripts/test_mpw_guest_first_order_identity.py
       - name: Record storefront baseline
         run: |
           python3 - <<'PY'
