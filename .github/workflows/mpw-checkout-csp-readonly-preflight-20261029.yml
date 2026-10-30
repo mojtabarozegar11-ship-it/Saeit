@@ -74,6 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_cpanel_provenance_readonly_20261030.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_ssh_error_classify.py -v
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -126,10 +127,13 @@ jobs:
           # Reuse a single authenticated session. Retry only harmless identity reads.
           session_ready=0
           for attempt in 1 2 3 4 5; do
-            if timeout 65s ssh -T -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>&1; then
+            if timeout 65s ssh -T -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>"$d/ssh-error"; then
               session_ready=1
               break
             fi
+            # Print only a bounded, predefined classification, never raw SSH stderr.
+            echo "S01_PINNED_IDENTITY_FAILURE=$(python3 scripts/s01_ssh_error_classify.py "$d/ssh-error")"
+            : > "$d/ssh-error"
             echo "S01_PINNED_IDENTITY_RETRY=$attempt"
             if [ "$attempt" -lt 5 ]; then sleep 6; fi
           done
@@ -333,6 +337,6 @@ jobs:
           d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
           if [ -d "$d" ]; then
             if [ -f "$d/config" ]; then ssh -F "$d/config" -O exit saeit-cpanel >/dev/null 2>&1 || true; fi
-            rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/vps-error" "$d/config"
+            rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/vps-error" "$d/ssh-error" "$d/config"
             rmdir "$d"
           fi
