@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {classifyNavigation, assessAnonymousRouteRows, isDirectCheckoutHref} = require('../scripts/s01_checkout_route_verdict_20261029.cjs');
+const {classifyNavigation, assessAnonymousRouteRows, isDirectCheckoutHref, redactObservedHref} = require('../scripts/s01_checkout_route_verdict_20261029.cjs');
 test('healthy public product route is anonymous GET only', () => {
   assert.deepEqual(classifyNavigation('/store/product/72/', 200, '/store/product/72/', null),
     {authRequired:false, unexpectedRedirect:false, observedSafe:true});
@@ -120,4 +120,21 @@ test('registration next=checkout is not a direct or mismatched checkout CTA', ()
   assert.equal(isDirectCheckoutHref('/store/product/225/checkout/'),true);
   assert.equal(isDirectCheckoutHref('/store/product/72/checkout/?next=/store/'),false);
   assert.equal(isDirectCheckoutHref('https://evil.example/store/product/72/checkout/'),false);
+});
+
+test('redacts signed checkout URLs and fragments before CI artifact serialization', () => {
+  const raw='/store/product/72/checkout/?token=secret-123&next=%2Fstore%2F#session=secret';
+  const safe=redactObservedHref(raw);
+  assert.equal(safe,'/store/product/72/checkout/?[redacted]#[redacted]');
+  assert.ok(!JSON.stringify({href:safe}).includes('secret-123'));
+  assert.equal(isDirectCheckoutHref(raw),false); // do not misclassify queried CTA
+  assert.equal(isDirectCheckoutHref(safe),false);
+});
+test('preserves canonical SKU CTA and rejects external control destinations', () => {
+  assert.equal(redactObservedHref('/store/product/879/checkout/'),'/store/product/879/checkout/');
+  assert.equal(redactObservedHref('/accounts/register/?next=%2Fstore%2Fproduct%2F879%2Fcheckout%2F'),
+    '/accounts/register/?[redacted]');
+  assert.equal(redactObservedHref('[external]'),'[external]');
+  assert.equal(redactObservedHref('//evil.example/?token=abc'),'[invalid]');
+  assert.equal(redactObservedHref(null),null);
 });
