@@ -29,13 +29,13 @@ class Gate(HTMLParser):
             self.ids.add(a["id"])
         if tag == "label" and a.get("for"):
             self.labels.add(a["for"])
-        if tag in ("input", "select", "textarea") and a.get("type", "").lower() not in ("hidden", "submit", "button", "reset", "image"):
+        if tag in ("input", "select", "textarea") and (a.get("type") or "").lower() not in ("hidden", "submit", "button", "reset", "image"):
             self.controls.append(("CONTROL", a.get("id"), a.get("aria-label"), a.get("aria-labelledby")))
         if tag == "button":
             self.buttons.append({"aria": a.get("aria-label") or a.get("aria-labelledby"), "text": ""})
             self.stack.append(len(self.buttons) - 1)
         if tag == "a":
-            self.links.append((a.get("href", ""), a.get("target", ""), a.get("rel", "")))
+            self.links.append(((a.get("href") or ""), (a.get("target") or ""), (a.get("rel") or "")))
 
     def handle_data(self, data):
         if self.stack:
