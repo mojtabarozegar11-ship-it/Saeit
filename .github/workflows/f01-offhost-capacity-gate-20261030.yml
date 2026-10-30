@@ -1,0 +1,33 @@
+name: F01 offhost capacity gate regression
+on:
+  push:
+    branches:
+      - f01/offhost-capacity-safety-gate-20261030
+    paths:
+      - scripts/f01_offhost_destination_decision_20261030.py
+      - tests/test_f01_offhost_destination_decision_20261030.py
+      - .github/workflows/f01-offhost-capacity-gate-20261030.yml
+permissions:
+  contents: read
+jobs:
+  offline-fail-closed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Eight independent fail-closed regressions
+        run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_offhost_destination_decision_20261030.py' -v
+      - name: Check read-only tool never grants operational release
+        run: |
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          tree=ast.parse(Path('scripts/f01_offhost_destination_decision_20261030.py').read_text())
+          banned={'subprocess','socket','requests','urllib','paramiko'}
+          imports={n.names[0].name.split('.')[0] for n in ast.walk(tree) if isinstance(n,ast.Import)}
+          imports|={n.module.split('.')[0] for n in ast.walk(tree) if isinstance(n,ast.ImportFrom) and n.module}
+          assert not banned.intersection(imports), banned.intersection(imports)
+          print('OFFLINE_ONLY=PASS')
+          PY
