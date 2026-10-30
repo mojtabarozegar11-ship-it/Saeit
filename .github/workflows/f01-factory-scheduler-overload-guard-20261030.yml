@@ -7,6 +7,8 @@ on:
       - tests/test_f01_factory_dispatch_guard_20261030.py
       - deploy/install_factory_40_execution_controller.sh
       - .github/workflows/f01-factory-scheduler-overload-guard-20261030.yml
+      - scripts/f01_factory_inherited_lock_probe_20261030.py
+      - tests/test_f01_factory_inherited_lock_probe_20261030.py
 permissions:
   contents: read
 jobs:
@@ -22,6 +24,7 @@ jobs:
           set -euo pipefail
           bash -n deploy/install_factory_40_execution_controller.sh
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_factory_dispatch_guard_20261030.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_factory_inherited_lock_probe_20261030.py' -v
           echo "VPS_TOUCHED=NO"
           echo "CRON_MODIFIED=NO"
           echo "WORKERS_SIGNALED=NO"
