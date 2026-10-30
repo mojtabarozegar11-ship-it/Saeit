@@ -20,7 +20,10 @@ const {chromium}=require('playwright');
    await page.goto(root+'/templates/taniya_studio/index.html');
    await page.locator('[data-game="Cake Maker"]').click();
    await page.locator('[data-action="candle"]').click();
+   assert.equal((await page.locator('#cakepreview').innerText()).split('🕯️').length-1,1,'One tap adds exactly one candle');
    await page.locator('[data-action="candle"]').click();
+   assert.equal((await page.locator('#cakepreview').innerText()).split('🕯️').length-1,2,'Second tap adds exactly two candles');
+
    await page.locator('[data-top="🌼"]').click();
    const decorated=await page.locator('#cakepreview').innerText();
    assert.equal((decorated.match(/🕯️/gu)||[]).length,2,'Taniya candles persist after topping switch');
