@@ -31,14 +31,15 @@ export function canInteractAt(px,py,tx,ty,range=INTERACT_RANGE){
  // When a goal is blocked, guide only to a traversable position near it.
 export function objectiveApproachWaypoint(px,py,tx,ty,passable,radius=INTERACT_RANGE,size=16){
   if (![px,py,tx,ty,radius].every(Number.isFinite)||radius<=0||radius>4||!Number.isInteger(size)||size<2||size>64||typeof passable!=='function')return null;
-  let best=null;
+  let best=null, bestDistance=Infinity;
   for(let y=Math.max(0,Math.floor(ty-radius-1));y<=Math.min(size-1,Math.ceil(ty+radius));y++){
     for(let x=Math.max(0,Math.floor(tx-radius-1));x<=Math.min(size-1,Math.ceil(tx+radius));x++){
       if(!passable(x,y))continue;
       const cx=x+.5,cy=y+.5;
       if(Math.hypot(cx-tx,cy-ty)>radius)continue;
       const route=objectiveWaypoint(px,py,cx,cy,passable,size);
-      if(route&&(best===null||route.steps<best.steps))best=route;
+      const distance=Math.hypot(cx-px,cy-py);
+      if(route&&(best===null||route.steps<best.steps||(route.steps===best.steps&&distance<bestDistance))){best=route;bestDistance=distance;}
     }
   }
   return best;
