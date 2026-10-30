@@ -39,7 +39,7 @@ jobs:
           test -s "$d/known"
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           for ssh_attempt in 1 2 3; do
-            if timeout 480s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'bash -se -- "$1"' _ "$GITHUB_RUN_ID" <<'REMOTE'
+            if timeout 480s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
           set -euo pipefail
           test "$(id -un)" = githubops
           run_id="$1"
@@ -115,6 +115,7 @@ jobs:
           print("FACTORY_HOLD_CRONTAB_AFTER_SHA256=" + hashlib.sha256(post_cron.stdout.encode()).hexdigest())
 
           systemd_errors = []
+          inventory_errors = []
           def unit_names(args):
               p = run(args)
               if p is None or p.returncode != 0:
@@ -128,17 +129,34 @@ jobs:
               (["systemctl", "--user", "list-unit-files", "--type=timer", "--no-legend", "--no-pager"], "user"),
           ]
           matched_units = []
-          sudo_ok = bool((run(["sudo", "-n", "true"]) or type("R", (), {"returncode": 1})()).returncode == 0)
+          sudo_check = run(["sudo", "-n", "true"])
+          sudo_ok = sudo_check is not None and sudo_check.returncode == 0
           for args, scope in unit_scopes:
               names = unit_names(args)
               if names is None:
-                  systemd_errors.append(scope + ":" + args[3] if scope == "user" else scope + ":" + args[2])
+                  if scope == "system":
+                      inventory_errors.append("system:" + args[2])
                   continue
               for name in names:
                   if target.search(name):
                       matched_units.append((name, scope))
+          # If the per-user manager is unavailable, check its standard unit-file roots;
+          # any relevant unit still makes the hold fail closed below.
+          user_unit_roots = [
+              home / ".config/systemd/user", home / ".local/share/systemd/user",
+              pathlib.Path("/etc/systemd/user"), pathlib.Path("/usr/lib/systemd/user"),
+              pathlib.Path("/lib/systemd/user"),
+          ]
+          user_files = []
+          for base in user_unit_roots:
+              if base.is_dir() and not base.is_symlink():
+                  for candidate in base.rglob("*"):
+                      if candidate.is_file() and not candidate.is_symlink() and target.search(candidate.name):
+                          user_files.append(candidate.name)
+          if user_files and not any(scope == "user" for _, scope in matched_units):
+              inventory_errors.append("user:relevant_unit_files_unmanaged")
           print("FACTORY_HOLD_SYSTEMD_RELATED_UNITS=" + str(len(matched_units)))
-          print("FACTORY_HOLD_SYSTEMD_INVENTORY_ERRORS=" + str(len(systemd_errors)))
+          print("FACTORY_HOLD_SYSTEMD_INVENTORY_ERRORS=" + str(len(inventory_errors)))
           for name, scope in matched_units:
               command = ["systemctl"]
               if scope == "user":
@@ -225,7 +243,7 @@ jobs:
                   continue
               for line in p.stdout.splitlines():
                   fields = line.split()
-                  if len(fields) >= 4 and target.search(fields[0]) and fields[3] in ("running", "activating", "reloading"):
+                  if len(fields) >= 4 and target.search(fields[0]) and (fields[3] in ("running", "activating", "reloading") or (fields[0].endswith(".timer") and fields[2] == "active")):
                       running_units += 1
           supervisor_running = 0
           if supervisor_readable:
@@ -243,7 +261,7 @@ jobs:
           print("FACTORY_HOLD_SUPERVISOR_CONTROL=" + ("readable" if supervisor_readable else "unavailable_or_not_installed"))
           print("FACTORY_HOLD_SUPERVISOR_RELATED_RUNNING=" + str(supervisor_running))
           print("FACTORY_HOLD_BACKUP_DIR_SHA256=" + hashlib.sha256(str(hold_dir).encode()).hexdigest())
-          if remaining or cron_remaining != 0 or running_units or supervisor_errors or supervisor_running not in (0, -1) or systemd_errors:
+          if remaining or cron_remaining != 0 or running_units or supervisor_errors or supervisor_running not in (0, -1) or systemd_errors or inventory_errors:
               raise SystemExit("FACTORY_FULL_HOLD=NOT_VERIFIED")
           print("FACTORY_FULL_HOLD=VERIFIED")
           PY
