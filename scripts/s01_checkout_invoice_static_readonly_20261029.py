@@ -51,8 +51,11 @@ def read_regular(root, relative):
                 raise RuntimeError("nonregular, linked or oversized source")
             with os.fdopen(os.dup(file_fd), "rb") as stream:
                 data = stream.read(MAX_BYTES + 1)
-            if len(data) > MAX_BYTES:
-                raise RuntimeError("source grew beyond read budget")
+            after = os.fstat(file_fd)
+            if (len(data) > MAX_BYTES or len(data) != info.st_size or
+                    (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) !=
+                    (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)):
+                raise RuntimeError("source changed or grew during read")
             return data
         finally:
             os.close(file_fd)
@@ -60,6 +63,27 @@ def read_regular(root, relative):
         os.close(directory_fd)
 
 def function_signals(node):
+    # A parseable, named function is not a working invoice/download handler.
+    # Ignore docstrings and reject common placeholder-only implementations.
+    body = list(node.body)
+    if body and isinstance(body[0], ast.Expr) and isinstance(
+        body[0].value, (ast.Constant,)
+    ) and isinstance(body[0].value.value, str):
+        body = body[1:]
+    is_stub = not body
+    if len(body) == 1:
+        statement = body[0]
+        is_stub = (
+            isinstance(statement, ast.Pass) or
+            (isinstance(statement, ast.Expr) and
+             isinstance(statement.value, ast.Constant) and
+             statement.value.value is Ellipsis) or
+            (isinstance(statement, ast.Raise) and statement.exc is not None and
+             (isinstance(statement.exc, ast.Name) and statement.exc.id == "NotImplementedError" or
+              isinstance(statement.exc, ast.Call) and
+              isinstance(statement.exc.func, ast.Name) and
+              statement.exc.func.id == "NotImplementedError"))
+        )
     calls = []
     for child in ast.walk(node):
         if isinstance(child, ast.Call):
@@ -67,6 +91,7 @@ def function_signals(node):
             calls.append(fn.attr if isinstance(fn, ast.Attribute) else fn.id if isinstance(fn, ast.Name) else "")
     names = set(calls)
     return {
+        "is_stub": is_stub,
         "has_create_call": "create" in names,
         "has_get_or_create_call": "get_or_create" in names,
         "has_update_or_create_call": "update_or_create" in names,
@@ -92,6 +117,7 @@ def inspect_source(root=APP, require_wsg=True):
         "customer_data_accessed": False, "orders_created": 0, "payments_created": 0,
         "source_modified": False, "modules": [],
         "source_contract_complete": False, "missing_contract_functions": [],
+        "stub_contract_functions": [],
         "safe_to_publish": False,
     }
     for rel, names in SELECTED.items():
@@ -117,13 +143,18 @@ def inspect_source(root=APP, require_wsg=True):
     # A parseable file is not enough: all expected entrypoints must exist.
     # Absence is an explicit release blocker, not a silently green source map.
     found = {
-        record["module"]: {fn["name"] for fn in record["functions"]}
+        record["module"]: {fn["name"] for fn in record["functions"] if not fn["is_stub"]}
         for record in result["modules"]
     }
     result["missing_contract_functions"] = sorted(
         module + ":" + name
         for module, names in SELECTED.items()
         for name in names - found.get(module, set())
+    )
+    result["stub_contract_functions"] = sorted(
+        record["module"] + ":" + fn["name"]
+        for record in result["modules"] for fn in record["functions"]
+        if fn["is_stub"]
     )
     result["source_contract_complete"] = not result["missing_contract_functions"]
     # AST structure cannot prove buyer entitlement, idempotency or delivery.
