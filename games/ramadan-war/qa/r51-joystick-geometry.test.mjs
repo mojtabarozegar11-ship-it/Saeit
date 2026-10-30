@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {boundedJoystickPointer, joystickAxes} from '../input-guard.mjs';
+const rect={left:100,top:200,width:100,height:100};
+const src=readFileSync(new URL('../game.js',import.meta.url),'utf8');
+test('centered joystick is neutral',()=>assert.deepEqual(boundedJoystickPointer(150,250,rect),{x:0,y:0,limit:36}));
+test('ordinary joystick touch preserves exact motion',()=>assert.deepEqual(boundedJoystickPointer(165,230,rect),{x:15,y:-20,limit:36}));
+test('out-of-bounds touch is radially capped',()=>{const v=boundedJoystickPointer(9999,-9999,rect);assert.ok(Math.abs(Math.hypot(v.x,v.y)-36)<1e-8)});
+test('non-finite touch and malformed bounds fail closed',()=>{for(const v of [NaN,Infinity,-Infinity]){assert.equal(boundedJoystickPointer(v,230,rect),null);assert.equal(boundedJoystickPointer(150,v,rect),null)}for(const k of ['left','top','width','height'])assert.equal(boundedJoystickPointer(150,250,{...rect,[k]:Infinity}),null)});
+test('zero or collapsing joystick surface cannot move player',()=>{for(const width of [0,1,7])assert.equal(boundedJoystickPointer(150,250,{...rect,width}),null);assert.equal(boundedJoystickPointer(150,250,{...rect,height:0}),null)});
+test('large touch surface cannot exceed 160px movement radius',()=>{const p=boundedJoystickPointer(5000,5000,{left:0,top:0,width:1200,height:1200});assert.equal(p.limit,160);assert.ok(Math.hypot(p.x,p.y)<=160.0000001)});
+test('live axes remain finite and bounded after projection',()=>{for(const [x,y] of [[150,250],[160,270],[9999,-9999]]){const p=boundedJoystickPointer(x,y,rect);const a=joystickAxes(p.x,p.y,p.limit);assert.ok(Number.isFinite(a.forward)&&Number.isFinite(a.side));assert.ok(Math.hypot(a.forward,a.side)<=1.0000001)}});
+test('live touch handler uses fail-closed geometry and clears held input',()=>{assert.match(src,/const point=boundedJoystickPointer\(e\.clientX,e\.clientY,stick\.getBoundingClientRect\(\)\)/);assert.match(src,/if\(!point\)\{joyF=joyS=0;knob\.style\.transform='';return\}/);assert.match(src,/joystickAxes\(point\.x,point\.y,point\.limit\)/)});
