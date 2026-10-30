@@ -1,0 +1,49 @@
+name: Zomorod V7 treasury offline CI and existing ERP regressions
+on:
+  push:
+    branches: [feature/zomorod-treasury-readonly-offline-v7-20261030]
+    paths:
+      - 'scripts/treasury_reconciliation.py'
+      - 'scripts/test_treasury_reconciliation.py'
+      - 'docs/zomorod-offline-v7-qa.md'
+      - '.github/workflows/zomorod-treasury-offline-v7-ci.yml'
+  pull_request:
+    paths:
+      - 'scripts/treasury_reconciliation.py'
+      - 'scripts/test_treasury_reconciliation.py'
+permissions:
+  contents: read
+jobs:
+  treasury-and-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, sqlite3, mbstring
+      - name: Verify isolated V7 treasury module and current GitHub ERP baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/treasury_reconciliation.py scripts/test_treasury_reconciliation.py
+          python3 scripts/test_treasury_reconciliation.py
+          php -r 'exit(extension_loaded("pdo_sqlite")?0:1);'
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/payroll_control.php
+          php -l content/zomorod-business/payroll_ui.php
+          php scripts/zomorod_payroll_control_synthetic_qa.php
+          php scripts/zomorod_workflow_desk_synthetic_qa.php
+          php scripts/zomorod_command_center_synthetic_qa.php
+          php scripts/zomorod_command_quality_synthetic_qa.php
+          php scripts/zomorod_command_planner_synthetic_qa.php
+          python3 scripts/zomorod_workflow_web_synthetic_qa.py
+          echo 'V7_TREASURY_PYTHON_SQLITE=PASS'
+          echo 'GITHUB_EXISTING_PHP_BASELINE=PASS'
+          echo 'LOCAL_V7_FULL_PHP_SOURCE_SYNC=NOT_COMPLETE'
+          echo 'PRODUCTION_DEPLOYMENT=NOT_PERFORMED'
