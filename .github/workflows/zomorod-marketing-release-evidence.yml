@@ -321,6 +321,54 @@ jobs:
           print("SQLITE_BACKUP_OR_RESTORE_EXECUTED=false")
           PY
           REMOTE
+      - name: Inspect running Passenger process DB configuration without values
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 55s ssh -F "$dir/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import os, pathlib, re
+          ht=pathlib.Path("/home/zomorod2/public_html/.htaccess")
+          if ht.is_file() and not ht.is_symlink():
+              content=ht.read_text(encoding="utf-8",errors="replace")
+              print("HTACCESS_PASSENGER_APP_ROOT_EXPECTED="+str('PassengerAppRoot "/home/zomorod2/Saeit"' in content).lower())
+              print("HTACCESS_HAS_PASSENGER_PYTHON="+str(bool(re.search(r"(?im)^\s*PassengerPython\s+",content))).lower())
+              print("HTACCESS_HAS_PASSENGER_ENV_DIRECTIVES="+str(bool(re.search(r"(?im)^\s*(?:SetEnv|PassengerAppEnv)\s+",content))).lower())
+          me=os.getuid()
+          counts={"owned_processes":0,"candidate":0,"environ_readable":0,"db_url_present":0,
+                  "mysql":0,"postgresql":0,"sqlite3":0,"other":0}
+          for pp in pathlib.Path("/proc").iterdir():
+              if not pp.name.isdecimal():continue
+              try:
+                  if pp.stat().st_uid!=me:continue
+                  counts["owned_processes"]+=1
+                  cmd=(pp/"cmdline").read_bytes()[:4096].lower()
+                  if not (b"passenger" in cmd or (b"python" in cmd and b"saeit" in cmd)):continue
+                  counts["candidate"]+=1
+                  raw=(pp/"environ").read_bytes()[:128000]
+                  counts["environ_readable"]+=1
+                  data=dict(part.split(b"=",1) for part in raw.split(b"\x00") if b"=" in part)
+                  value=data.get(b"DATABASE_URL",b"")
+                  if value:
+                      counts["db_url_present"]+=1
+                      if value.startswith((b"mysql://",b"mysql2://")):engine="mysql"
+                      elif value.startswith((b"postgres://",b"postgresql://")):engine="postgresql"
+                      elif value.startswith(b"sqlite:///"):engine="sqlite3"
+                      else:engine="other"
+                      counts[engine]+=1
+              except (OSError,ValueError):
+                  continue
+          for key in sorted(counts):
+              print("PASSENGER_PROC_"+key.upper()+"="+str(counts[key]))
+          print("PASSENGER_PROCESS_DB_CONCLUSION="+("not_proven" if not counts["db_url_present"] else "runtime_env_keys_observed"))
+          PY
+          REMOTE
       - name: Require restore proof and provider rights before any deployment
         run: |
           echo "RESTORE_VERIFIED=not-established-by-this-readonly-probe"
