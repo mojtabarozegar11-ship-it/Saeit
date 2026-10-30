@@ -47,6 +47,7 @@ class OfflineReleasePackageTests(unittest.TestCase):
         self.assertFalse(result["deployment_authorized"])
         self.assertFalse(result["commercial_rights_verified"])
         self.assertTrue(self.output.is_file())
+        self.assertEqual(self.output.stat().st_mode & 0o777, 0o600)
         with zipfile.ZipFile(self.output) as archive:
             self.assertIsNone(archive.testzip())
             self.assertEqual(result["assets_sha256"]["game.js"],
