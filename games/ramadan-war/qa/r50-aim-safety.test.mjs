@@ -11,7 +11,7 @@ test('invalid prior pointer position fails closed',()=>assert.equal(boundedAimMo
 test('invalid step limit fails closed',()=>{assert.equal(boundedAimMotion(10,20,0,0,0),null);assert.equal(boundedAimMotion(10,20,0,0,Infinity),null)});
 test('live game uses bounded aim before applying angle and camera pitch',()=>{
  assert.match(src,/const delta=boundedAimMotion\(e\.clientX,e\.clientY,aimLast,aimY\)/);
- assert.match(src,/if\(!delta\)\{if\(aimGesture\)aimGesture\.cancelled=true;return\}/);
+ assert.match(src,/if\(!delta\)\{if\(aimGesture\)aimGesture\.cancelled=true;const old=aimId;aimId=null;safeReleaseCapture\(canvas,old\);return\}/);
  assert.match(src,/world\.angle-=delta\.dx/);assert.match(src,/engine\.look\(0,delta\.dy/);
 });
 test('orientation transient does not resize WebGL to zero pixels',()=>assert.match(src,/W=Math\.max\(1,gameRoot\.clientWidth\|\|0\);H=Math\.max\(1,gameRoot\.clientHeight\|\|0\)/));
