@@ -1,5 +1,6 @@
 import json
 from django.http import Http404, HttpResponse
+from django.db import DatabaseError
 from django.shortcuts import render
 
 from .models import Agent, NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory
@@ -76,11 +77,9 @@ def newsletter_archive(request):
     return newsletter_home(request)
 
 
-def newsletter_detail(request, slug):
-    # Article data cannot be reconstructed from a missing schema. Return a
-    # truthful, temporary failure instead of an OperationalError/false 404.
-    if missing_public_tables(NewsletterStory, NewsletterSource, NewsletterPublication, Agent):
-        response = HttpResponse(
+def _unavailable_newsletter_detail():
+    """Do not claim an article is deleted when the database is unavailable."""
+    response = HttpResponse(
             '<!doctype html><html lang="fa" dir="rtl"><head>'
             '<meta charset="utf-8"><title>خبرنامه موقتاً در دسترس نیست</title>'
             '</head><body><main><h1>خبرنامه موقتاً در دسترس نیست</h1>'
@@ -91,8 +90,14 @@ def newsletter_detail(request, slug):
             status=503,
             content_type="text/html; charset=utf-8",
         )
-        response["Retry-After"] = "300"
-        return mark_public_data_unavailable(response)
+    response["Retry-After"] = "300"
+    return mark_public_data_unavailable(response)
+
+
+def _newsletter_detail_with_schema(request, slug):
+    # An absent schema and a mid-request database failure are both temporary.
+    if missing_public_tables(NewsletterStory, NewsletterSource, NewsletterPublication, Agent):
+        return _unavailable_newsletter_detail()
     from django.utils import timezone
     story = NewsletterStory.objects.select_related("source", "agent").filter(
         slug=slug, status="published", published_at__lte=timezone.now()
@@ -123,6 +128,14 @@ def newsletter_detail(request, slug):
         "mainEntityOfPage": {"@type": "WebPage", "@id": f"https://zomorodmelal.ir/newsletter/{story.slug}/"}
     })
     return render(request, "core/newsletter_detail.html", {"story": story, "related": related, "publications": publications, "article_jsonld": article_jsonld})
+
+
+def newsletter_detail(request, slug):
+    try:
+        return _newsletter_detail_with_schema(request, slug)
+    except DatabaseError:
+        # Introspection may succeed immediately before a transient ORM error.
+        return _unavailable_newsletter_detail()
 
 
 # The public site never bypasses the editorial approval state. Drafts are visible only in admin/API workflows.
