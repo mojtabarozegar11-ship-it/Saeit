@@ -9,6 +9,7 @@ import zipfile
 from scripts.s01_g01_release_package_offline_20261030 import build
 
 ASSETS = ["index.html", "game.js", "tactical-map.mjs",
+          "objective-navigation.mjs", "campaign-backup.mjs",
           "THREE-LICENSE.txt", "ASSET-CREDITS.md"]
 
 
@@ -26,8 +27,12 @@ class OfflineReleasePackageTests(unittest.TestCase):
             "ASSETS = " + repr(ASSETS) + "\n", encoding="utf-8")
         data = {
             "index.html": b"<html>synthetic only</html>",
-            "game.js": b"import './tactical-map.mjs';",
+            "game.js": (b"import './tactical-map.mjs';"
+                        b"import './objective-navigation.mjs';"
+                        b"import './campaign-backup.mjs';"),
             "tactical-map.mjs": b"export function relativeDirection() { return 0; }",
+            "objective-navigation.mjs": b"export function objectiveWaypoint() { return 0; }",
+            "campaign-backup.mjs": b"export function makeCampaignBackup() { return 0; }",
             "THREE-LICENSE.txt": b"The MIT License - synthetic fixture",
             "ASSET-CREDITS.md": b"CC BY 4.0 synthetic fixture",
             ".htaccess": b"PassengerEnabled off\nDirectoryIndex index.html\n",
@@ -37,7 +42,7 @@ class OfflineReleasePackageTests(unittest.TestCase):
 
     def test_private_zip_readback_manifest_and_no_release_claim(self):
         result = build(self.game, self.output)
-        self.assertEqual(result["asset_count"], 6)
+        self.assertEqual(result["asset_count"], 8)
         self.assertFalse(result["deployment_authorized"])
         self.assertFalse(result["commercial_rights_verified"])
         self.assertTrue(self.output.is_file())
@@ -58,6 +63,23 @@ class OfflineReleasePackageTests(unittest.TestCase):
         (self.game / "tactical-map.mjs").unlink()
         (self.game / "tactical-map.mjs").symlink_to(target)
         with self.assertRaises(OSError):
+            build(self.game, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_missing_objective_module_is_refused_before_zip_creation(self):
+        self.game.joinpath("deploy.py").write_text(
+            "ASSETS = " + repr([a for a in ASSETS if a != "objective-navigation.mjs"]) + "\n",
+            encoding="utf-8",
+        )
+        with self.assertRaises(ValueError):
+            build(self.game, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_unreferenced_campaign_module_is_refused(self):
+        self.game.joinpath("game.js").write_bytes(
+            b"import './tactical-map.mjs'; import './objective-navigation.mjs';"
+        )
+        with self.assertRaises(ValueError):
             build(self.game, self.output)
         self.assertFalse(self.output.exists())
 
