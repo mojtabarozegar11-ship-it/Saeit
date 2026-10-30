@@ -66,6 +66,35 @@ class OfflinePreimageReconcileTests(unittest.TestCase):
         self.assertTrue(verdict["approved_copy_verified"])
         self.assertEqual(verdict["approved_sha256"], self.expected)
         self.assertFalse(verdict["release_permitted"])
+        comparison = verdict["approved_reference_comparison"]
+        self.assertFalse(comparison["byte_identical"])
+        self.assertEqual(comparison["first_difference_offset"], 0)
+        self.assertEqual(comparison["difference_kind"], "BYTE_MISMATCH")
+        self.assertEqual(comparison["approved_source_bytes"], len(self.secret_fixture))
+        self.assertNotIn("SECRET-CUSTOMER", str(comparison))
+
+    def test_approved_reference_identical_bytes_are_not_release_authorization(self):
+        approved = self.root / "approved"
+        (approved / "mpw_commerce").mkdir(parents=True)
+        (approved / "mpw_commerce" / "product_checkout_page.py").write_bytes(self.secret_fixture)
+        verdict = assess(self.root, self.expected, approved_root=approved)
+        self.assertEqual(verdict["status"], "MATCH")
+        self.assertEqual(verdict["approved_reference_comparison"]["difference_kind"], "IDENTICAL")
+        self.assertIsNone(verdict["approved_reference_comparison"]["first_difference_offset"])
+        self.assertFalse(verdict["release_permitted"])
+
+    def test_approved_reference_prefix_reports_offset_not_source(self):
+        approved = self.root / "approved"
+        (approved / "mpw_commerce").mkdir(parents=True)
+        (approved / "mpw_commerce" / "product_checkout_page.py").write_bytes(self.secret_fixture)
+        self.source.write_bytes(self.secret_fixture + b"\n# synthetic change")
+        verdict = assess(self.root, self.expected, approved_root=approved)
+        self.assertEqual(verdict["status"], "SOURCE_SHA_DRIFT")
+        comparison = verdict["approved_reference_comparison"]
+        self.assertEqual(comparison["difference_kind"], "APPROVED_PREFIX")
+        self.assertEqual(comparison["first_difference_offset"], len(self.secret_fixture))
+        self.assertNotIn("synthetic change", str(verdict))
+        self.assertFalse(verdict["release_permitted"])
 
     def test_unapproved_reference_cannot_validate_source(self):
         approved = self.root / "approved"
@@ -74,6 +103,7 @@ class OfflinePreimageReconcileTests(unittest.TestCase):
         verdict = assess(self.root, self.expected, approved_root=approved)
         self.assertEqual(verdict["status"], "APPROVED_COPY_SHA_MISMATCH")
         self.assertFalse(verdict["approved_copy_verified"])
+        self.assertIsNone(verdict["approved_reference_comparison"])
         self.assertFalse(verdict["release_permitted"])
         output = io.StringIO()
         with redirect_stdout(output):
