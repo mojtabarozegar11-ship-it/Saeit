@@ -17,6 +17,14 @@ class RequestAuditMiddleware:
         request.trace_id = trace_id
         response = self.get_response(request)
 
+        # A public catalog explicitly marked unavailable must not trigger an
+        # additional audit DB write on a read-only GET/HEAD during schema loss.
+        # Preserve auditing for all other responses, especially mutations.
+        if (request.method in ("GET", "HEAD")
+                and getattr(response, "status_code", None) == 503
+                and response.get("X-ZM-Data-Status") == "temporarily-unavailable"):
+            return response
+
         user = getattr(request, "user", None)
         if user is not None and user.is_authenticated:
             try:
