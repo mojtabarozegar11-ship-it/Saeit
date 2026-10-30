@@ -44,7 +44,7 @@ function assessAnonymousRouteRows(rows, expectedPaths, expectedDevices) {
     if (row.observedSafe !== true) failures.push('UNSAFE_NAVIGATION:' + key);
     if (!Array.isArray(row.jsErrors) || row.jsErrors.length)
       failures.push('JS_ERRORS:' + key);
-    if (/^\\/store\\/product\\/(72|225|879)\\/$/.test(row.path)) {
+    if (['/store/product/72/','/store/product/225/','/store/product/879/'].includes(row.path)) {
       if (!Number.isInteger(row.checkoutLinks) || row.checkoutLinks < 1)
         failures.push('NO_USABLE_SKU_CHECKOUT_CTA:' + key);
       if (row.mismatchedCheckoutLinks !== 0)
