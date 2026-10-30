@@ -17,7 +17,7 @@ jobs:
   audit:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
@@ -40,7 +40,22 @@ jobs:
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
           chmod 600 "$d/key"
           ssh-keygen -y -P '' -f "$d/key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          timeout 65s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ForwardAgent=no githubops@178.239.147.150 'python3 -B -' < scripts/factory_vps_current_health_readonly_20261026.py
-          echo 'FACTORY_VPS_FRESH_READONLY=PASS'
+          known="$d/known"
+          for keyscan_attempt in 1 2 3; do
+            if ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$known" 2>/dev/null && test -s "$known"; then
+              break
+            fi
+            sleep "$((keyscan_attempt * 3))"
+          done
+          test -s "$known"
+          test "$(ssh-keygen -lf "$known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          for ssh_attempt in 1 2 3; do
+            if timeout 65s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'python3 -B -' < scripts/factory_vps_current_health_readonly_20261026.py; then
+              echo 'FACTORY_VPS_FRESH_READONLY=PASS'
+              exit 0
+            fi
+            echo "FACTORY_VPS_READONLY_SSH_ATTEMPT=$ssh_attempt failed; retrying"
+            sleep "$((ssh_attempt * 5))"
+          done
+          echo 'FACTORY_VPS_FRESH_READONLY=FAILED_AFTER_RETRIES'
+          exit 1
