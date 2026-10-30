@@ -39,12 +39,13 @@ jobs:
           test -s "$d/known"
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           for ssh_attempt in 1 2 3; do
-            if timeout 480s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 bash -se -- _ "$GITHUB_RUN_ID" <<'REMOTE'
+            if timeout 480s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 bash -se -- _ "$GITHUB_RUN_ID" "$ssh_attempt" <<'REMOTE'
           set -euo pipefail
           test "$(id -un)" = githubops
           run_id="$1"
-          [[ "$run_id" =~ ^[0-9]+$ ]]
-          export HOLD_RUN_ID="$run_id"
+          attempt_id="$2"
+          [[ "$run_id" =~ ^[0-9]+$ && "$attempt_id" =~ ^[0-9]+$ ]]
+          export HOLD_RUN_ID="$run_id-$attempt_id"
           python3 - <<'PY'
           import hashlib, os, pathlib, re, shutil, signal, subprocess, sys, tempfile, time
 
@@ -212,7 +213,7 @@ jobs:
                   if uid == os.geteuid():
                       os.kill(pid, sig)
                   elif sudo_ok:
-                      result = run(["sudo", "-n", "kill", "-" + sig.name.lower(), str(pid)])
+                      result = run(["sudo", "-n", "kill", "-" + sig.name[3:], str(pid)])
                       if result is None or result.returncode != 0:
                           process_errors.append("sudo_signal_failed")
                   else:
@@ -265,6 +266,7 @@ jobs:
                       if fields and target.search(fields[0]) and len(fields) > 1 and fields[1] in ("RUNNING", "STARTING", "STOPPING"):
                           supervisor_running += 1
           print("FACTORY_HOLD_RELATED_PROCESSES_REMAINING=" + str(len(remaining)))
+          print("FACTORY_HOLD_PROCESS_SIGNAL_ERRORS=" + str(len(process_errors)))
           print("FACTORY_HOLD_RELATED_CRON_REMAINING=" + str(cron_remaining))
           print("FACTORY_HOLD_RELATED_ACTIVE_UNITS=" + str(running_units))
           print("FACTORY_HOLD_SUPERVISOR_CONTROL=" + ("readable" if supervisor_readable else "unavailable_or_not_installed"))
