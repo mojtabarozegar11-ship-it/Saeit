@@ -80,8 +80,8 @@
 </style></head><body>
 <canvas id="field" aria-label="Real-time 3D aerial-combat battlefield"></canvas><div id="cinematic"><div class="line top"></div><div class="line bottom"></div></div><div id="vignette"></div><div id="grain"></div><div id="combatFlash"></div><div id="hud" aria-live="off"><div class="bar"><div><div class="title">AIR SUPREMACY <span style="color:#8df3df">// CAMPAIGN</span></div><div class="tiny">F-27 PHANTOM · TACTICAL STRIKE SQUADRON</div><div class="strip combat">HULL <div class="meter"><i id="hullFill"></i></div><span id="hullText">100</span></div><div class="strip combat">SHLD <div class="meter" id="shieldMeter"><i id="shieldFill"></i></div><span id="shieldText">100</span></div></div><div class="right combat"><div>MISSION <span id="missionNum">01</span> / 12</div><div>ELIMINATIONS <span id="kills">0</span></div><div>MISSILES <span id="missiles">8</span></div><div>LOCK <span id="targetState">SEARCHING</span></div></div></div><div id="mission">COASTAL AIR DEFENSE<br>Intercept hostiles approaching the island runway.</div><div id="objective"><span id="objectiveLabel">INTERCEPT 0 / 4</span><div id="missionProgress"><i id="missionProgressFill"></i></div></div><div id="status"></div><div id="crosshair"></div><div id="targetLock" class="lock"><strong>LOCKED</strong></div><div id="radar"><b></b></div><div id="speedHud"><small>AIRSPEED</small><span id="speedReading">420</span> KT</div><div id="altHud"><small>ALTITUDE</small><span id="altReading">3 850</span> FT</div><div id="warning">STANDBY · WEAPONS HOT</div><div id="bottom">WASD / ARROWS: BANK + PITCH · SPACE: CANNON · M: MISSILE · E: AFTERBURNER · SHIFT: EVADE</div></div>
 <div id="touch"><div id="stickArea"><div id="stickOuter"><div id="stickKnob"></div></div></div><div id="touchButtons"><button class="touchBtn" id="evade">EVADE</button><button class="touchBtn" id="missileBtn">MISSILE</button><button class="touchBtn primary" id="gunBtn" style="grid-column:1/3">HOLD TO FIRE · 30 MM</button><button class="touchBtn" id="boostBtn" style="grid-column:1/3;height:38px">HOLD · AFTERBURNER</button></div></div><button id="pauseBtn">Ⅱ PAUSE</button><div id="perf"></div><div id="danger"></div>
-<div id="menu"><div class="panel"><div class="sup">MOJPLAYWIN ORIGINAL · AIR COMBAT</div><h1>AIR<br>SUPREMACY</h1><p>Fly low over a living ocean combat zone. Break enemy formations, defend your fleet, evade incoming fire and hunt hostile warships. Twelve operations. One pilot. Your aircraft.</p><div><span class="pill">WEBGL + 2D FALLBACK</span><span class="pill">100 HULL</span><span class="pill">12 MISSIONS</span><span class="pill">FREE UPGRADES</span></div><div id="campaignStats" aria-live="polite">MISSIONS 1 / 12 · CREDITS 0</div><div id="hangar" aria-label="Flight hangar upgrades"><button class="upgrade" id="cannonUpgrade"><strong>CANNON LV 0</strong>Upgrade · 250 CR</button><button class="upgrade" id="armorUpgrade"><strong>ARMOR LV 0</strong>Upgrade · 250 CR</button><button class="upgrade" id="missileUpgrade"><strong>MISSILES LV 0</strong>Upgrade · 250 CR</button></div><div id="settings"><label for="missionSelect">MISSION</label><select id="missionSelect" aria-label="Unlocked mission selection"></select><label for="difficulty">FLIGHT MODE</label><select id="difficulty" aria-label="Game difficulty"><option value="cadet">CADET</option><option value="ace">ACE</option></select><button id="audioToggle" type="button">SOUND OFF</button></div><button id="launch" class="launch">START SORTIE</button><p class="muted">Desktop: steer with WASD, Space to fire, M to lock and launch, E to boost. Mobile: left stick and right weapon controls. Self-contained graphics; your earned credits and campaign progress are saved locally on this device. No paid items.</p><p class="muted" id="support"></p></div></div>
-<div id="pauseOverlay" aria-hidden="true"><div class="panel"><div class="sup">FLIGHT OPERATIONS</div><h1>PAUSED</h1><p>Your sortie is safely suspended.</p><button id="resumeBtn" class="launch">RESUME FLIGHT</button><button id="abandonBtn" class="secondary">END SORTIE</button></div></div><div id="gameover" class="hidden"><div class="panel"><div class="sup" id="endLabel">SORTIE COMPLETE</div><h1 id="endTitle">MISSION<br>COMPLETE</h1><p id="endText"></p><button class="launch" id="relaunch">FLY AGAIN</button><button class="secondary" id="backMenu">BACK TO HANGAR</button><p class="muted">Progress saved locally. No purchases or financial transactions.</p></div></div>
+<div id="menu"><div class="panel"><div class="sup">MOJPLAYWIN ORIGINAL · AIR COMBAT</div><h1>AIR<br>SUPREMACY</h1><p>Fly low over a living ocean combat zone. Break enemy formations, defend your fleet, evade incoming fire and hunt hostile warships. Twelve operations. One pilot. Your aircraft.</p><div><span class="pill">WEBGL + 2D FALLBACK</span><span class="pill">100 HULL</span><span class="pill">12 MISSIONS</span><span class="pill">FREE UPGRADES</span></div><div id="campaignStats" aria-live="polite">MISSIONS 1 / 12 · CREDITS 0</div><div id="hangar" aria-label="Flight hangar upgrades"><button class="upgrade" id="cannonUpgrade"><strong>CANNON LV 0</strong>Upgrade · 250 CR</button><button class="upgrade" id="armorUpgrade"><strong>ARMOR LV 0</strong>Upgrade · 250 CR</button><button class="upgrade" id="missileUpgrade"><strong>MISSILES LV 0</strong>Upgrade · 250 CR</button></div><div id="settings"><label for="missionSelect">MISSION</label><select id="missionSelect" aria-label="Unlocked mission selection"></select><label for="difficulty">FLIGHT MODE</label><select id="difficulty" aria-label="Game difficulty"><option value="cadet">CADET</option><option value="ace">ACE</option></select><button id="audioToggle" type="button">SOUND OFF</button></div><button id="launch" class="launch">START SORTIE</button><p class="muted">Desktop: steer with WASD, Space to fire, M to lock and launch, E to boost. Mobile: left stick and right weapon controls. Self-contained graphics; your earned credits and campaign progress are saved locally only when browser storage permits. No paid items.</p><p class="muted" id="support"></p><p class="muted" id="profileSaveNotice" role="status" aria-live="polite">Local save verification pending.</p></div></div>
+<div id="pauseOverlay" aria-hidden="true"><div class="panel"><div class="sup">FLIGHT OPERATIONS</div><h1>PAUSED</h1><p>Your sortie is safely suspended.</p><button id="resumeBtn" class="launch">RESUME FLIGHT</button><button id="abandonBtn" class="secondary">END SORTIE</button></div></div><div id="gameover" class="hidden"><div class="panel"><div class="sup" id="endLabel">SORTIE COMPLETE</div><h1 id="endTitle">MISSION<br>COMPLETE</h1><p id="endText"></p><button class="launch" id="relaunch">FLY AGAIN</button><button class="secondary" id="backMenu">BACK TO HANGAR</button><p class="muted" id="endSaveStatus" role="status" aria-live="polite">Local save verification pending. No purchases or financial transactions.</p></div></div>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id),canvas=$('field');let gl;
@@ -285,7 +285,7 @@ function loadProfile(){
 const profile=loadProfile();
 let missionKills=0,missionGoal=MISSION_GOALS[1],missionBossNeeded=false,bossSpawned=false,bossCleared=true,creditsEarned=0,combatStreak=0,streakTimer=0;
 let audioOn=false,audioCtx=null,missionWon=false,missionNotified=false,radarT=0,pendingMissionAdvance=false,afterburner=false,exhaustTimer=0,flashTimer=0,shake=0;
-function persistProfile(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(profile))}catch{}}
+function persistProfile(){let saved=false;try{const snapshot=JSON.stringify(profile);localStorage.setItem(SAVE_KEY,snapshot);saved=localStorage.getItem(SAVE_KEY)===snapshot}catch{}const notice=saved?'Pilot progress verified in local browser storage.':'Browser storage is blocked or full. Pilot progress may be lost when this page closes.';$('profileSaveNotice').textContent=notice;$('endSaveStatus').textContent=notice+' No purchases or financial transactions.';return saved}
 function upgradeCost(key){return profile.upgrades[key]>=MAX_UPGRADE?null:UPGRADE_COST[profile.upgrades[key]]}
 function refreshHangar(){
  const sel=$('missionSelect'),requested=Number(sel.value)||profile.unlocked;
@@ -304,7 +304,10 @@ function refreshHangar(){
 }
 function buyUpgrade(key){
  const cost=upgradeCost(key);if(cost===null||profile.credits<cost||run)return;
- profile.credits-=cost;profile.upgrades[key]++;persistProfile();refreshHangar();
+ const oldCredits=profile.credits,oldLevel=profile.upgrades[key];
+ profile.credits-=cost;profile.upgrades[key]++;
+ if(!persistProfile()){profile.credits=oldCredits;profile.upgrades[key]=oldLevel;refreshHangar();return}
+ refreshHangar();
 }
 for(const key of ['cannon','armor','missile'])$(key+'Upgrade').addEventListener('click',()=>buyUpgrade(key));
 $('difficulty').addEventListener('change',()=>{if(run)return;profile.difficulty=$('difficulty').value==='ace'?'ace':'cadet';persistProfile();refreshHangar()});
@@ -385,7 +388,7 @@ function spawnEnemy(forceBoss=false){
 }
 function blast(x,y,z,count=13,scale=1){for(let i=0;i<count;i++){const a=rnd(0,Math.PI*2),b=rnd(-1,1),speed=rnd(5,28);sparks.push({x,y,z,vx:Math.cos(a)*speed,vy:b*speed,vz:Math.sin(a)*speed,life:rnd(.2,.85),scale:rnd(.2,1.3)*scale})}if(sparks.length>160)sparks.splice(0,sparks.length-160)}
 function begin(){
- afterburner=false;exhaustTimer=0;shake=0;flashTimer=0;
+ afterburner=false;boostHeld=false;exhaustTimer=0;shake=0;flashTimer=0;stick.x=0;stick.y=0;pointerId=null;
  const choice=Math.min(profile.unlocked,Math.max(1,Number($('missionSelect').value)||profile.unlocked));
  player={x:0,y:3,z:0,vx:0,vy:0,roll:0,pitch:0,shield:100,hp:100,inv:2};
  camera=[0,13,32];enemies=[];missiles=[];sparks=[];
@@ -402,7 +405,7 @@ function begin(){
 }
 function finish(won){
  if(!run)return;
- run=false;paused=false;firing=false;key.clear();
+ run=false;paused=false;releaseTouchHolds();firing=false;key.clear();boostHeld=false;afterburner=false;pointerId=null;stick.x=0;stick.y=0;
  $('pauseOverlay').classList.remove('on');$('pauseOverlay').setAttribute('aria-hidden','true');
  $('hud').classList.remove('active');$('touch').classList.remove('on');
  $('pauseBtn').classList.remove('activePause');
@@ -410,12 +413,12 @@ function finish(won){
  profile.credits=Math.min(1000000,profile.credits+payout);
  profile.bestScore=Math.max(profile.bestScore,score);
  if(won)profile.wins=Math.min(1000000,profile.wins+1);
- persistProfile();refreshHangar();
+ const profileSaved=persistProfile();refreshHangar();
  $('endLabel').textContent=won?'CAMPAIGN CLEARED':'SORTIE DEBRIEF';
  $('endTitle').innerHTML=won?'SKIES<br>SECURED':'RETURN<br>TO BASE';
  $('endText').textContent=kills+' enemy aircraft defeated · '+score+
    ' score · +'+payout+' credits · mission '+mission+' / '+MAX_MISSION+
-   (won?' · ALL TWELVE MISSIONS CLEARED':' · Progress and credits saved');
+   (won?' · ALL TWELVE MISSIONS CLEARED':' · Sortie ended')+(profileSaved?' · Progress saved':' · SAVE FAILED — KEEP THIS TAB OPEN');
  $('gameover').classList.remove('hidden');
 }
 function shoot(){
@@ -548,12 +551,29 @@ draw('water',model(),true);for(const item of world){if(innerWidth<700 && item.z<
 draw('jet',model(player.x,player.y,0,player.pitch,0,player.roll,innerWidth<700?.68:1.25));
 }
 let raf=0;function loop(ms){raf=requestAnimationFrame(loop);const dt=clamp((ms-last)/1000,0,.055);last=ms;sceneTime+=dt;if(run&&!paused)simulate(dt);render(sceneTime);fpsFrames++;fpsT+=dt;if(fpsT>1.2){frames=Math.round(fpsFrames/fpsT);fpsT=0;fpsFrames=0;if(frames<29&&gl){slowFrames++;if(slowFrames>=3&&renderScale>.68){renderScale=Math.max(.65,renderScale-.15);slowFrames=0;resize()}}else slowFrames=0;$('perf').textContent=(gl?'WEBGL 3D':'CANVAS FALLBACK')+' · '+frames+' FPS · '+Math.round(renderScale*100)+'% RES'}}
-$('launch').onclick=begin;$('relaunch').onclick=begin;$('backMenu').onclick=()=>{$('gameover').classList.add('hidden');$('menu').classList.remove('hidden')};function togglePause(force){if(!run)return;paused=typeof force==='boolean'?force:!paused;if(paused)boostHeld=false;$('pauseBtn').textContent=paused?'▶ RESUME':'Ⅱ PAUSE';$('pauseOverlay').classList.toggle('on',paused);$('pauseOverlay').setAttribute('aria-hidden',paused?'false':'true');key.clear();firing=false;stick.x=0;stick.y=0;$('stickKnob').style.transform='translate(0,0)'}
+$('launch').onclick=begin;$('relaunch').onclick=begin;$('backMenu').onclick=()=>{$('gameover').classList.add('hidden');$('menu').classList.remove('hidden')};let releaseTouchHolds=()=>{};
+function togglePause(force){if(!run)return;paused=typeof force==='boolean'?force:!paused;if(paused){releaseTouchHolds();boostHeld=false;afterburner=false;exhaustTimer=0;if(pointerId!==null){try{if(stickArea.hasPointerCapture(pointerId))stickArea.releasePointerCapture(pointerId)}catch(_){/* Browser already released the joystick pointer. */}}pointerId=null} $('pauseBtn').textContent=paused?'▶ RESUME':'Ⅱ PAUSE';$('pauseOverlay').classList.toggle('on',paused);$('pauseOverlay').setAttribute('aria-hidden',paused?'false':'true');key.clear();firing=false;stick.x=0;stick.y=0;$('stickKnob').style.transform='translate(0,0)'}
 $('pauseBtn').onclick=()=>togglePause();$('resumeBtn').onclick=()=>togglePause(false);$('abandonBtn').onclick=()=>finish(false);
-addEventListener('keydown',e=>{if(!run)return;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();key.add(e.code);if(e.repeat)return;if(e.code==='KeyM')launchMissile();if(e.code.startsWith('Shift'))evade();if(e.code==='KeyP'||e.code==='Escape')$('pauseBtn').click()});addEventListener('keyup',e=>key.delete(e.code));addEventListener('blur',()=>{key.clear();firing=false;if(run&&!paused)togglePause(true)});document.addEventListener('visibilitychange',()=>{if(document.hidden&&run&&!paused)togglePause(true)});canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();if(run)togglePause(true);$('support').textContent='Graphics context unavailable. Reload to restore 3D.'});
-const stickArea=$('stickArea'),knob=$('stickKnob');let pointerId=null;function drive(e){let r=stickArea.getBoundingClientRect(),cx=r.left+r.width*.23,cy=r.bottom-r.height*.21,dx=e.clientX-cx,dy=e.clientY-cy,d=Math.hypot(dx,dy),p=Math.min(1,d/63);stick.x=clamp(dx/63,-1,1)*p;stick.y=clamp(dy/63,-1,1)*p;knob.style.transform=`translate(${stick.x*29}px,${stick.y*29}px)`}stickArea.addEventListener('pointerdown',e=>{pointerId=e.pointerId;stickArea.setPointerCapture(e.pointerId);drive(e);e.preventDefault()});stickArea.addEventListener('pointermove',e=>{if(pointerId===e.pointerId)drive(e)});function resetStick(e){if(pointerId===e.pointerId){pointerId=null;stick.x=0;stick.y=0;knob.style.transform='translate(0,0)'}}for(const event of ['pointerup','pointercancel','lostpointercapture'])stickArea.addEventListener(event,resetStick);$('missileBtn').onclick=launchMissile;$('evade').onclick=evade;for(const ev of ['pointerdown'])$('boostBtn').addEventListener(ev,e=>{boostHeld=true;e.preventDefault()});for(const ev of ['pointerup','pointercancel','lostpointercapture'])$('boostBtn').addEventListener(ev,()=>boostHeld=false);for(const ev of ['pointerdown'])$('gunBtn').addEventListener(ev,e=>{firing=true;e.preventDefault()});for(const ev of ['pointerup','pointercancel','lostpointercapture'])$('gunBtn').addEventListener(ev,()=>firing=false);
+addEventListener('keydown',e=>{if(!run||e.isComposing||e.ctrlKey||e.altKey||e.metaKey)return;if(e.target instanceof HTMLElement&&e.target.closest('button,select,input,textarea,[contenteditable="true"]'))return;if(paused&&!['KeyP','Escape'].includes(e.code))return;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();key.add(e.code);if(e.repeat)return;if(e.code==='KeyM')launchMissile();if(e.code.startsWith('Shift'))evade();if(e.code==='KeyP'||e.code==='Escape')$('pauseBtn').click()});addEventListener('keyup',e=>key.delete(e.code));addEventListener('blur',()=>{releaseTouchHolds();key.clear();firing=false;if(run&&!paused)togglePause(true)});document.addEventListener('visibilitychange',()=>{if(document.hidden){releaseTouchHolds();key.clear();firing=false;if(run&&!paused)togglePause(true)}});canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();if(run)togglePause(true);$('support').textContent='Graphics context unavailable. Reload to restore 3D.'});
+const stickArea=$('stickArea'),knob=$('stickKnob');let pointerId=null;function drive(e){let r=stickArea.getBoundingClientRect(),cx=r.left+r.width*.23,cy=r.bottom-r.height*.21,dx=e.clientX-cx,dy=e.clientY-cy,d=Math.hypot(dx,dy),p=Math.min(1,d/63);stick.x=clamp(dx/63,-1,1)*p;stick.y=clamp(dy/63,-1,1)*p;knob.style.transform=`translate(${stick.x*29}px,${stick.y*29}px)`}stickArea.addEventListener('pointerdown',e=>{if(!run||paused||pointerId!==null||e.pointerType==='mouse'&&e.button!==0)return;try{stickArea.setPointerCapture(e.pointerId)}catch(_){return}pointerId=e.pointerId;drive(e);e.preventDefault()});stickArea.addEventListener('pointermove',e=>{if(pointerId===e.pointerId)drive(e)});function resetStick(e){if(pointerId===e.pointerId){pointerId=null;stick.x=0;stick.y=0;knob.style.transform='translate(0,0)'}}for(const event of ['pointerup','pointercancel','lostpointercapture'])stickArea.addEventListener(event,resetStick);$('missileBtn').onclick=launchMissile;$('evade').onclick=evade;// Capture each button's own pointer: sliding off the button must release fire/boost.
+const heldOwners=new Map();
+releaseTouchHolds=()=>{const owners=[...heldOwners];heldOwners.clear();for(const [id,pid] of owners){const button=$(id);try{if(button.hasPointerCapture(pid))button.releasePointerCapture(pid)}catch(_){/* Pointer already released by the browser. */}}boostHeld=false;firing=false};
+for(const [id,setHeld] of [['boostBtn',value=>{boostHeld=value}],['gunBtn',value=>{firing=value}]]){
+ const button=$(id);
+ button.addEventListener('pointerdown',e=>{
+  if(!run||paused||heldOwners.has(id)||(e.pointerType==='mouse'&&e.button!==0))return;
+  try{button.setPointerCapture(e.pointerId)}catch(_){return}
+  heldOwners.set(id,e.pointerId);setHeld(true);e.preventDefault();
+ });
+ for(const event of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(event,e=>{
+  if(heldOwners.get(id)!==e.pointerId)return;
+  heldOwners.delete(id);setHeld(false);
+ });
+}
 // Minimal reproducible QA hooks; do not expose mutators into the storefront.
-window.__AIR_SUPREMACY_QA__={snapshot:()=>({running:run,paused,playerHp:player.hp,shield:player.shield,score,kills,missiles:ammo,mission,enemies:enemies.length,webgl:!!gl,fps:frames}),start:begin,renderOnce:()=>render(sceneTime)};
+const airQa={snapshot:()=>({running:run,paused,playerHp:player.hp,shield:player.shield,score,kills,missiles:ammo,mission,enemies:enemies.length,webgl:!!gl,fps:frames})};
+if(typeof location!=='undefined'&&['localhost','127.0.0.1'].includes(location.hostname))Object.assign(airQa,{start:begin,renderOnce:()=>render(sceneTime)});
+window.__AIR_SUPREMACY_QA__=Object.freeze(airQa);
 refreshHangar();spawnScenery();last=performance.now();requestAnimationFrame(loop);
 })();
 </script></body></html>

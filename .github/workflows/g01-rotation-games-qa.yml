@@ -1,0 +1,63 @@
+name: G-01 Air and Crown real-browser input regression
+on:
+  pull_request:
+    paths:
+      - 'games/air-supremacy/index.html'
+      - 'games/crown-defender/index.html'
+      - 'games/echoform/signal-lattice.html'
+      - 'templates/studio_raha/index.html'
+      - 'templates/taniya_studio/index.html'
+      - 'tests/game/g01-r28-studios-browser.cjs'
+      - 'tests/game/g01-echoform-r26.test.cjs'
+      - 'tests/game/g01-air-profile-save-r26.test.cjs'
+      - 'tests/game/g01-rotation-smoke.cjs'
+      - 'tests/game/g01-r27-rotation-browser.cjs'
+      - 'tests/site/g01_s01_checkout_a11y_r27.cjs'
+      - 'tests/site/g01_s01_checkout_a11y_r27.test.cjs'
+      - 'tests/game/g01-public-qa-guards.test.mjs'
+      - 'tests/game/g01-r29-crown-fleet-save.test.cjs'
+      - 'tests/game/g01-r29-echo-pause-browser.cjs'
+      - 'games/g01-handoffs/g01_s01_mobile_readonly_audit_r29.cjs'
+      - '.github/workflows/g01-rotation-games-qa.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rotation-input:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated Chromium
+        run: |
+          npm install --prefix "$RUNNER_TEMP/g01-playwright" --no-save playwright@1.56.1
+          "$RUNNER_TEMP/g01-playwright/node_modules/.bin/playwright" install chromium
+      - name: Verify ECHOFORM replay and Air profile-save failures
+        run: node tests/game/g01-echoform-r26.test.cjs && node tests/game/g01-air-profile-save-r26.test.cjs
+      - name: Verify S-01 checkout control audit without network or payment
+        run: node --test tests/site/g01_s01_checkout_a11y_r27.test.cjs
+      - name: Verify public game QA exports cannot mutate gameplay
+        run: node --test tests/game/g01-public-qa-guards.test.mjs
+      - name: Test pause/resume and combat input in desktop/mobile Chromium
+        env:
+          NODE_PATH: ${{ runner.temp }}/g01-playwright/node_modules
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8766 --bind 127.0.0.1 --directory . > "$RUNNER_TEMP/g01-rotation-http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8766/games/air-supremacy/index.html >/dev/null; then break; fi
+            sleep 1
+          done
+          node tests/game/g01-rotation-smoke.cjs
+          node tests/game/g01-r27-rotation-browser.cjs
+          node tests/game/g01-r28-studios-browser.cjs
+          node --test tests/game/g01-r29-crown-fleet-save.test.cjs
+          node tests/game/g01-r29-echo-pause-browser.cjs
+          node games/g01-handoffs/g01_s01_mobile_readonly_audit_r29.cjs --self-test

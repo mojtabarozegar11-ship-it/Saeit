@@ -1,0 +1,37 @@
+name: G-01 to S-01 checkout read-only mobile browser evidence
+on:
+  pull_request:
+    paths:
+      - 'tests/site/g01-s01-checkout-readonly.cjs'
+      - '.github/workflows/g01-s01-checkout-readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mobile-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated browser QA dependencies
+        run: |
+          npm install --prefix "$RUNNER_TEMP/g01-browser" --no-save playwright@1.56.1
+          "$RUNNER_TEMP/g01-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Read-only public mobile store accessibility snapshot (no purchase)
+        env:
+          NODE_PATH: ${{ runner.temp }}/g01-browser/node_modules
+        run: node tests/site/g01-s01-checkout-readonly.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: g01-s01-checkout-readonly-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/g01-s01-*.png
+            ${{ runner.temp }}/g01-s01-checkout-readonly.json
+          if-no-files-found: warn
+          retention-days: 7
