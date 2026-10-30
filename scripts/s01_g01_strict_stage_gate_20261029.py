@@ -89,6 +89,15 @@ def verify(package):
             r"G01-R[0-9]+(?:[._-][A-Za-z0-9]+)*", str(manifest.get("version", ""))
         ):
             raise ValueError("INVALID_VERSION")
+        # R32 introduced a separately loaded tactical-map module. A complete
+        # older R26 package is valid for review, but an R32+ package without
+        # the module or its actual game.js import must never reach staging.
+        release_number = int(re.match(r"G01-R([0-9]+)", manifest["version"]).group(1))
+        if release_number >= 32:
+            if "tactical-map.mjs" not in actual:
+                raise ValueError("MISSING_R32_TACTICAL_MAP")
+            if b"./tactical-map.mjs" not in archive.read(PREFIX + "game.js"):
+                raise ValueError("R32_TACTICAL_MAP_NOT_IMPORTED")
         declared = manifest.get("files")
         if not isinstance(declared, dict) or set(declared) != actual:
             raise ValueError("MANIFEST_COVERAGE_MISMATCH")
