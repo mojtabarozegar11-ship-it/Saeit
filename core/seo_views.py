@@ -48,16 +48,16 @@ def _site_search_with_schema(request):
             results.append((_score(q, x.title, x.summary, x.body), {"type": "خبر", "title": x.title, "summary": x.summary, "url": f"/newsletter/{quote(str(x.slug), safe='')}/"}))
         articles = KnowledgeArticle.objects.filter(published=True).filter(Q(title__icontains=q) | Q(content__icontains=q))[:50]
         for x in articles:
-            results.append((_score(q, x.title, x.content), {"type": "دانش", "title": x.title, "summary": x.content[:280], "url": f"/knowledge/article/{quote(str(x.slug), safe='')}/"}))
+            results.append((_score(q, x.title, x.content), {"type": "دانش", "title": x.title, "summary": str(x.content or "")[:280], "url": f"/knowledge/article/{quote(str(x.slug), safe='')}/"}))
         books = KnowledgeBook.objects.filter(status="published").filter(Q(title__icontains=q) | Q(domain__icontains=q) | Q(objective__icontains=q))[:50]
         for x in books:
-            results.append((_score(q, x.title, x.domain, x.objective), {"type": "کتاب", "title": x.title, "summary": x.objective[:280], "url": f"/knowledge/book/{quote(str(x.code), safe='')}/"}))
+            results.append((_score(q, x.title, x.domain, x.objective), {"type": "کتاب", "title": x.title, "summary": str(x.objective or "")[:280], "url": f"/knowledge/book/{quote(str(x.code), safe='')}/"}))
         domains = KnowledgeDomain.objects.filter(active=True).filter(Q(title__icontains=q) | Q(scientific_scope__icontains=q))[:50]
         for x in domains:
-            results.append((_score(q, x.title, x.scientific_scope), {"type": "حوزه دانش", "title": x.title, "summary": x.scientific_scope[:280], "url": f"/knowledge/domain/{quote(str(x.code), safe='')}/"}))
+            results.append((_score(q, x.title, x.scientific_scope), {"type": "حوزه دانش", "title": x.title, "summary": str(x.scientific_scope or "")[:280], "url": f"/knowledge/domain/{quote(str(x.code), safe='')}/"}))
         products = Product.objects.filter(active=True).filter(Q(title__icontains=q) | Q(product_type__icontains=q))[:50]
         for x in products:
-            results.append((_score(q, x.title, x.product_type), {"type": "فروشگاه", "title": x.title, "summary": f"{x.product_type} · {x.price} {x.currency}", "url": f"/store/product/{x.pk}/"}))
+            results.append((_score(q, x.title, x.product_type), {"type": "فروشگاه", "title": x.title, "summary": f"{x.product_type or ''} · {x.price} {x.currency or ''}", "url": f"/store/product/{x.pk}/"}))
         aliases = ("شرکت کشت و صنعت زمرد ملل", "زمرد ملل", "مجتبی روزگار", "محقق و پژوهشگر", "مدیرعامل", "مدیر عامل")
         if any(_norm(q) in _norm(alias) or _norm(alias) in _norm(q) for alias in aliases):
             results.append((100, {"type": "شرکت", "title": "شرکت کشت و صنعت زمرد ملل", "summary": "مجتبی روزگار — محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل", "url": "/company/"}))
