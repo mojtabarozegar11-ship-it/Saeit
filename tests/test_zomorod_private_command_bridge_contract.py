@@ -251,6 +251,30 @@ def test_readonly_remote_commands_are_bounded_and_do_not_mutate():
     assert "CPANEL_FACTORY_OPERATIONS=NONE" in step
 
 
+
+def test_cpanel_quota_evidence_is_bounded_sanitized_and_local_only():
+    source = _source()
+    step = source.split(
+        "- name: Read only cPanel inventory for the authenticated chat owner", 1
+    )[1].split("- name: Read the current recipient public key", 1)[0]
+    assert "CPANEL_LOCAL_QUOTA_DATA=VERIFIED" in step
+    assert "CPANEL_LOCAL_QUOTA_DATA=UNVERIFIED" in step
+    assert 'detail.get("byte_limit")' in step
+    assert 'detail.get("bytes_used")' in step
+    assert "0 <= raw <= 10**15" in step
+    assert "max(0, limit - used)" in step
+    assert "CPANEL_LOCAL_QUOTA_HEADROOM_GIB_FLOOR=" in step
+    assert "print(document)" not in step
+    assert "print(result)" not in step
+    assert "shell=True" not in step
+    body = step.split("<<'CPANEL_READONLY_PY'\n", 1)[1].split(
+        "\n          CPANEL_READONLY_PY", 1
+    )[0]
+    lines = body.splitlines()
+    assert all(not line.strip() or line.startswith(" " * 10) for line in lines)
+    ast.parse("\n".join(line[10:] for line in lines))
+
+
 def test_unexpected_event_type_is_rejected(tmp_path):
     event = _owner_comment("ZMR-PUBLIC-KEY-V1")
     result, _, _ = _run_gate(event, "push", tmp_path)
