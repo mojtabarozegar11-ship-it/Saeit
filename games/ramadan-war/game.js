@@ -39,7 +39,7 @@ function plan(){return OPERATIONS[Math.min(world.mission,OPERATIONS.length-1)]}
 function objectiveTarget(){if(!world||world.endless)return null;const p=plan(),o=world.objective||{done:0};
  if(p.kind==='boss'){const boss=world.enemies.find(e=>e.boss&&e.hp>0);return boss?[boss.x,boss.y]:null}
  if(p.kind==='defend')return o.hold>=p.seconds?null:p.sites[0];
- if(p.kind==='recover'){const intel=world.pickups.filter(item=>item.type==='mission-intel').map(item=>[item.x,item.y]);return closestReachableObjective(world.x,world.y,intel,(x,y)=>tile(x,y,world.mission)===0)||intel[0]||null}
+ if(p.kind==='recover'){const intel=world.pickups.filter(item=>item.type==='mission-intel').map(item=>[item.x,item.y]);return closestReachableObjective(world.x,world.y,intel,(x,y)=>tile(x,y,world.mission)===0,16,.78)||intel[0]||null}
  return o.done>=p.sites.length?null:p.sites[o.done];
 }
 function prepareObjective(){if(world.endless)return;const p=plan();
