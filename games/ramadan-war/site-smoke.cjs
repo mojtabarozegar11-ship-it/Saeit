@@ -192,7 +192,7 @@ const assert=require('node:assert/strict');
      console.log('RAMADAN_HELD_KEY_SHORTCUT_IME_PASS',v.name);
    }
    if(localCandidate){
-    const occludedRocket=await page.evaluate(()=>{const g=window.RamadanWarDebug;g.spawnTestEnemy();const before=g.getState().rockets;g.rocket();return {before,after:g.getState().rockets}});
+    const occludedRocket=await page.evaluate(()=>{const g=window.RamadanWarDebug;if(!g.qaMove(2.5,7.5))throw Error('occluded rocket QA position missing');g.spawnTestEnemy();const before=g.getState().rockets;g.rocket();return {before,after:g.getState().rockets}});
     assert.equal(occludedRocket.after,occludedRocket.before,'occluded rocket target must not spend ammo');
     await page.evaluate(()=>{const g=window.RamadanWarDebug;if(!g.qaMove(6.5,6.5))throw Error('clear-LOS rocket QA position missing');g.rocket();g.fire();g.drone()});
     await page.evaluate(()=>{window.RamadanWarDebug.spawnTestPickup('ammo');window.RamadanWarDebug.tick(.04)});
