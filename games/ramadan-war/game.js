@@ -225,6 +225,16 @@ function openBackupCode(mode,raw=''){
 function clearBackupCode(){
  $('#backupCodeText').value='';
 }
+// R43: private manual backup text must not remain exposed after app switching.
+// Keep the dialog open so users are told why their code disappeared.
+function redactBackupCodeOnInactivity(){
+ if(screen!=='backupCodePanel')return;
+ clearBackupCode();
+ $('#backupCodeHint').textContent='کد خصوصی پس از خروج از صفحه پاک شد. برای ادامه، دوباره آن را وارد کنید یا پشتیبان بگیرید.';
+}
+addEventListener('blur',redactBackupCodeOnInactivity);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)redactBackupCodeOnInactivity()});
+addEventListener('pageshow',e=>{if(e.persisted)redactBackupCodeOnInactivity()});
 function closeBackupCode(){
  clearBackupCode();showScreen(backupCodeOrigin);
  if(backupCodeReturnFocus?.isConnected&&!backupCodeReturnFocus.closest('.hidden'))backupCodeReturnFocus.focus({preventScroll:true});
