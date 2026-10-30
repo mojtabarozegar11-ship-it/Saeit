@@ -139,5 +139,35 @@ class InvoiceStaticReadOnlyTests(unittest.TestCase):
             self.assertEqual(read_regular(root, "source.py"), data)
 
 
+    def test_unconditional_literal_allow_and_empty_invoice_are_not_working_contracts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / "mpw_commerce"
+            folder.mkdir()
+            (folder / "entitlements.py").write_text(
+                "def can_access_purchased_digital_item(order):\\n"
+                "    return True\\n", encoding="utf-8"
+            )
+            (folder / "invoicing.py").write_text(
+                "def reserve_order_invoice(order):\\n"
+                "    return {}\\n", encoding="utf-8"
+            )
+            (folder / "downloads.py").write_text(
+                "def download_paid_item(request):\\n"
+                "    raise RuntimeError('unavailable')\\n", encoding="utf-8"
+            )
+            result = inspect_source(root, require_wsg=False)
+            self.assertFalse(result["source_contract_complete"])
+            for label in (
+                "mpw_commerce/entitlements.py:can_access_purchased_digital_item",
+                "mpw_commerce/invoicing.py:reserve_order_invoice",
+                "mpw_commerce/downloads.py:download_paid_item",
+            ):
+                self.assertIn(label, result["stub_contract_functions"])
+                self.assertIn(label, result["missing_contract_functions"])
+            self.assertFalse(result["safe_to_publish"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
