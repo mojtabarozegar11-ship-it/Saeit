@@ -56,6 +56,40 @@ class OfflinePreimageReconcileTests(unittest.TestCase):
         self.assertIn("SOURCE_SHA_DRIFT", out.getvalue())
         self.assertNotIn("SECRET-CUSTOMER", out.getvalue())
 
+    def test_verified_approved_copy_does_not_hide_live_drift(self):
+        approved = self.root / "approved"
+        (approved / "mpw_commerce").mkdir(parents=True)
+        (approved / "mpw_commerce" / "product_checkout_page.py").write_bytes(self.secret_fixture)
+        self.source.write_bytes(b"synthetic-changed-checkout")
+        verdict = assess(self.root, self.expected, approved_root=approved)
+        self.assertEqual(verdict["status"], "SOURCE_SHA_DRIFT")
+        self.assertTrue(verdict["approved_copy_verified"])
+        self.assertEqual(verdict["approved_sha256"], self.expected)
+        self.assertFalse(verdict["release_permitted"])
+
+    def test_unapproved_reference_cannot_validate_source(self):
+        approved = self.root / "approved"
+        (approved / "mpw_commerce").mkdir(parents=True)
+        (approved / "mpw_commerce" / "product_checkout_page.py").write_bytes(b"wrong")
+        verdict = assess(self.root, self.expected, approved_root=approved)
+        self.assertEqual(verdict["status"], "APPROVED_COPY_SHA_MISMATCH")
+        self.assertFalse(verdict["approved_copy_verified"])
+        self.assertFalse(verdict["release_permitted"])
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = main(["--root", str(self.root), "--expected", self.expected,
+                         "--approved-root", str(approved)])
+        self.assertEqual(code, 3)
+        self.assertNotIn("SECRET-CUSTOMER", output.getvalue())
+
+    def test_symlinked_approved_reference_is_refused(self):
+        approved = self.root / "approved"
+        approved.mkdir()
+        (approved / "mpw_commerce").symlink_to(self.root / "mpw_commerce",
+                                                 target_is_directory=True)
+        with self.assertRaises((OSError, RuntimeError)):
+            assess(self.root, self.expected, approved_root=approved)
+
     def test_cli_fail_closed_on_missing_file(self):
         self.source.unlink()
         out = io.StringIO()
