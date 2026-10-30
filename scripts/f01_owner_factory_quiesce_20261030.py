@@ -57,6 +57,19 @@ def paused_cron(text):
     replaced=[PAUSE_TAG+x if cron_is_factory(x) else x for x in lines]
     return "".join(replaced),active
 
+def is_scoped_factory_process(cmdline):
+    """Conservative argv predicate; ambiguous processes require operator review."""
+    args=[a for a in cmdline.lower().split(b"\\0") if a]
+    if not args:
+        return False
+    executable=args[0].rsplit(b"/",1)[-1]
+    if executable not in (b"python",b"python3",b"python3.11",
+                          b"bash",b"sh",b"dash",b"flock",b"timeout"):
+        return False
+    if any(a in (b"-c",b"--command") for a in args):
+        return False
+    return any(a.startswith(FACTORY_ROOT) for a in args[1:])
+
 def proc_info():
     current=os.getpid()
     owner=os.getuid()
@@ -80,13 +93,7 @@ def proc_info():
             ppid=int(fields[1])
             start=int(fields[19])
             state=fields[0][:1]
-            args=[a for a in cmd.split(b"\\0") if a]
-            # A whole argv element must be a file underneath the private
-            # factory root. A mention in `bash -c` text is not sufficient.
-            # Do not target shells whose argument could be arbitrary code.
-            direct=any(a.startswith(FACTORY_ROOT) for a in args) and not any(
-                a in (b"-c", b"--command") for a in args
-            )
+            direct=is_scoped_factory_process(cmd)
             items[pid]=(ppid,start,state,direct)
         except (OSError,ValueError,IndexError):
             continue
