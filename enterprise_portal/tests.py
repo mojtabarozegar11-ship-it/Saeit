@@ -53,6 +53,14 @@ class OfficeSecurityTests(TestCase):
         self.assertEqual(resolve("/amozeshgah/").url_name, "education")
         self.assertEqual(resolve("/farnaz/").url_name, "farnaz_home" if False else resolve("/farnaz/").url_name)
 
+    def test_office_stylesheet_is_isolated_from_global_static_manifest(self):
+        response = self.client.get("/company/office/assets/app.css", secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/css; charset=utf-8")
+        self.assertIn("noindex", response["X-Robots-Tag"])
+        self.assertIn(b".site-shell", b"".join(response.streaming_content))
+        self.assertEqual(resolve("/company/office/assets/app.css").url_name, "office_css")
+
     def test_login_get_is_private_noindex_and_not_cached(self):
         response = self.client.get("/company/office/secure-login/", secure=True)
         self.assertEqual(response.status_code, 200)
