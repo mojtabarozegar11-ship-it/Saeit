@@ -45,16 +45,16 @@ def _site_search_with_schema(request):
             Q(title__icontains=q) | Q(summary__icontains=q) | Q(body__icontains=q) | Q(seo_keywords__icontains=q)
         )[:50]
         for x in stories:
-            results.append((_score(q, x.title, x.summary, x.body), {"type": "خبر", "title": x.title, "summary": x.summary, "url": f"/newsletter/{x.slug}/"}))
+            results.append((_score(q, x.title, x.summary, x.body), {"type": "خبر", "title": x.title, "summary": x.summary, "url": f"/newsletter/{quote(str(x.slug), safe='')}/"}))
         articles = KnowledgeArticle.objects.filter(published=True).filter(Q(title__icontains=q) | Q(content__icontains=q))[:50]
         for x in articles:
-            results.append((_score(q, x.title, x.content), {"type": "دانش", "title": x.title, "summary": x.content[:280], "url": f"/knowledge/article/{x.slug}/"}))
+            results.append((_score(q, x.title, x.content), {"type": "دانش", "title": x.title, "summary": x.content[:280], "url": f"/knowledge/article/{quote(str(x.slug), safe='')}/"}))
         books = KnowledgeBook.objects.filter(status="published").filter(Q(title__icontains=q) | Q(domain__icontains=q) | Q(objective__icontains=q))[:50]
         for x in books:
-            results.append((_score(q, x.title, x.domain, x.objective), {"type": "کتاب", "title": x.title, "summary": x.objective[:280], "url": f"/knowledge/book/{x.code}/"}))
+            results.append((_score(q, x.title, x.domain, x.objective), {"type": "کتاب", "title": x.title, "summary": x.objective[:280], "url": f"/knowledge/book/{quote(str(x.code), safe='')}/"}))
         domains = KnowledgeDomain.objects.filter(active=True).filter(Q(title__icontains=q) | Q(scientific_scope__icontains=q))[:50]
         for x in domains:
-            results.append((_score(q, x.title, x.scientific_scope), {"type": "حوزه دانش", "title": x.title, "summary": x.scientific_scope[:280], "url": f"/knowledge/domain/{x.code}/"}))
+            results.append((_score(q, x.title, x.scientific_scope), {"type": "حوزه دانش", "title": x.title, "summary": x.scientific_scope[:280], "url": f"/knowledge/domain/{quote(str(x.code), safe='')}/"}))
         products = Product.objects.filter(active=True).filter(Q(title__icontains=q) | Q(product_type__icontains=q))[:50]
         for x in products:
             results.append((_score(q, x.title, x.product_type), {"type": "فروشگاه", "title": x.title, "summary": f"{x.product_type} · {x.price} {x.currency}", "url": f"/store/product/{x.pk}/"}))
