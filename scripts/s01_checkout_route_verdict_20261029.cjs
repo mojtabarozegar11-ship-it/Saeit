@@ -25,4 +25,33 @@ function classifyNavigation(path, http, finalPath, error, finalSearch = '') {
   const observedSafe = Number.isInteger(http) && http >= 200 && http < 300 && !error && expectedDestination;
   return {authRequired, unexpectedRedirect, observedSafe};
 }
-module.exports = {classifyNavigation};
+// Separate an observable anonymous page contract from paid-buyer delivery.
+// Return specific, non-sensitive reasons; a single bad SKU/viewport fails closed.
+function assessAnonymousRouteRows(rows, expectedPaths, expectedDevices) {
+  const failures = [];
+  if (!Array.isArray(rows) || !Array.isArray(expectedPaths) ||
+      !Array.isArray(expectedDevices) || !expectedPaths.length || !expectedDevices.length)
+    return {complete:false, failures:['INVALID_OBSERVATION_MATRIX']};
+  const expected = new Set();
+  for (const device of expectedDevices)
+    for (const path of expectedPaths) expected.add(device + ':' + path);
+  const seen = new Set();
+  for (const row of rows) {
+    const key = String(row?.device) + ':' + String(row?.path);
+    if (!expected.has(key)) {failures.push('UNEXPECTED_ROW:' + key); continue;}
+    if (seen.has(key)) failures.push('DUPLICATE_ROW:' + key);
+    seen.add(key);
+    if (row.observedSafe !== true) failures.push('UNSAFE_NAVIGATION:' + key);
+    if (!Array.isArray(row.jsErrors) || row.jsErrors.length)
+      failures.push('JS_ERRORS:' + key);
+    if (/^\\/store\\/product\\/(72|225|879)\\/$/.test(row.path)) {
+      if (!Number.isInteger(row.checkoutLinks) || row.checkoutLinks < 1)
+        failures.push('NO_USABLE_SKU_CHECKOUT_CTA:' + key);
+      if (row.mismatchedCheckoutLinks !== 0)
+        failures.push('MISMATCHED_SKU_CHECKOUT_CTA:' + key);
+    }
+  }
+  for (const key of expected) if (!seen.has(key)) failures.push('MISSING_ROW:' + key);
+  return {complete:failures.length === 0, failures};
+}
+module.exports = {classifyNavigation, assessAnonymousRouteRows};
