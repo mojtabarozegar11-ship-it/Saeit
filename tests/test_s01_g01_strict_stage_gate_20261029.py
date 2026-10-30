@@ -66,6 +66,32 @@ class StageGateTests(unittest.TestCase):
         self.assertEqual(result["status"], "READY_FOR_REVIEW")
         self.assertFalse(result["deploy_authorized"])
 
+    def test_r39_requires_aim_sensitivity_runtime(self):
+        self.files["game.js"] = b"import './tactical-map.mjs'; import './aim-sensitivity.mjs';"
+        self.build(version="G01-R39", extra={"tactical-map.mjs": b"export const map = 1;"})
+        with self.assertRaisesRegex(ValueError, "MISSING_R39_AIM_SENSITIVITY"):
+            gate.verify(self.path)
+
+    def test_r39_rejects_unreferenced_aim_sensitivity_module(self):
+        self.files["game.js"] = b"import './tactical-map.mjs';"
+        self.build(version="G01-R39", extra={
+            "tactical-map.mjs": b"export const map = 1;",
+            "aim-sensitivity.mjs": b"export const aim = 1;",
+        })
+        with self.assertRaisesRegex(ValueError, "R39_AIM_SENSITIVITY_NOT_IMPORTED"):
+            gate.verify(self.path)
+
+    def test_r39_integrated_aim_sensitivity_is_review_only(self):
+        self.files["game.js"] = b"import './tactical-map.mjs'; import './aim-sensitivity.mjs';"
+        self.build(version="G01-R39", extra={
+            "tactical-map.mjs": b"export const map = 1;",
+            "aim-sensitivity.mjs": b"export const aim = 1;",
+        })
+        verdict = gate.verify(self.path)
+        self.assertEqual(verdict["status"], "READY_FOR_REVIEW")
+        self.assertFalse(verdict["deploy_authorized"])
+        self.assertFalse(verdict["live_verified"])
+
     def test_r26_navigation_runtime_is_mandatory_even_with_valid_manifest(self):
         self.files.pop("objective-navigation.mjs")
         self.build()
