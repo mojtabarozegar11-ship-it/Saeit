@@ -361,7 +361,7 @@ jobs:
           set -euo pipefail
           script64="$(base64 -w0 scripts/s01_checkout_invoice_static_readonly_20261029.py)"
           timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
-            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;exec(compile(base64.b64decode(sys.argv[1]),\"s01_invoice_static_probe\",\"exec\"))' '$script64'"
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;src=base64.b64decode(sys.argv[1]);sys.argv=[\"s01_invoice_static_probe\"];exec(compile(src,\"s01_invoice_static_probe\",\"exec\"))' '$script64'"
       - name: Delete runner-only SSH material
         if: always()
         run: |
