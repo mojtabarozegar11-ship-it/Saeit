@@ -9,9 +9,11 @@ permissions: {contents: read}
 concurrency:
   group: s01-pinned-cpanel-relay-single-session
   cancel-in-progress: false
+# Explicit opt-in for this cPanel write-capable private backup. Normal PR updates
+# run the read-only provenance probe; do not reattempt a known SHA-drift snapshot.
 jobs:
   snapshot_only:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository && contains(github.event.pull_request.labels.*.name, 's01-preimage-snapshot-authorized')
     runs-on: ubuntu-latest
     timeout-minutes: 9
     steps:
