@@ -209,15 +209,19 @@ def persian_author_profile(request):
     from django.conf import settings
     try:
         body = _read_author_html(settings.BASE_DIR)
-    except OSError:
-        # This advertised author route is temporarily unavailable, not
-        # permanently removed. A 404 can cause premature search deindexing.
-        response = mark_public_data_unavailable(HttpResponse(status=503))
+    except (OSError, ValueError):
+        # A temporary missing or unsafe file is not a permanent deletion.
+        # Return a useful, non-sensitive accessible fallback rather than an
+        # empty 503 body; the healthy static page remains byte-for-byte intact.
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>معرفی پژوهشگر موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>معرفی پژوهشگر موقتاً در دسترس نیست</h1>'
+            '<p role="status">لطفاً کمی بعد دوباره تلاش کنید.</p>'
+            '<p><a href="/company/">بازگشت به معرفی شرکت</a></p>'
+            '</main></body></html>',
+            status=503, content_type="text/html; charset=utf-8",
+        )
         response["Retry-After"] = "300"
-        return response
-    except ValueError:
-        # Corrupt/unsafe static source is an outage, not a permanent removal.
-        response = mark_public_data_unavailable(HttpResponse(status=503))
-        response["Retry-After"] = "300"
-        return response
+        return mark_public_data_unavailable(response)
     return HttpResponse(body, content_type="text/html; charset=utf-8")
