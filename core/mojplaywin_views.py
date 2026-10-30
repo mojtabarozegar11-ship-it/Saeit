@@ -41,7 +41,9 @@ SECTIONS = {
 }
 
 def _is_mojplaywin(request):
- return request.get_host().split(":")[0].lower() in {"mojplaywin.com", "www.mojplaywin.com"}
+ # Django accepts a final DNS dot, but get_host() preserves it.
+ # Keep that canonical host on the MojPlayWin renderer, never the other brand.
+ return request.get_host().split(":")[0].lower().rstrip(".") in {"mojplaywin.com", "www.mojplaywin.com"}
 
 def home(request):
  return render(request,"mojplaywin/home.html",{"features":FEATURES,"ventures":VENTURES})
