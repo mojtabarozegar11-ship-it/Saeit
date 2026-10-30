@@ -142,7 +142,7 @@ jobs:
                   html=response.read(250000).decode('utf-8','replace')
                   status=response.status
               ok=(status==200 and '<h1 id="mpw-professor-title">Dr. Mojtaba Roozegar</h1>' in html
-                  and 'Dr. Mojtaba Roozegar | PhD, Research & MojPlayWin Leadership' in html
+                  and '<title>Dr. Mojtaba Roozegar | PhD, Research &amp; MojPlayWin Leadership</title>' in html
                   and 'Professor Mojtaba Roozegar' not in html
                   and 'The designation “Professor”' not in html
                   and 'mpw-sport-white-selection-20261018' in html
