@@ -52,3 +52,29 @@ class GalleryRuntimeOutageTests(SimpleTestCase):
         with patch.object(company_content_views, "_company_gallery_with_schema",
                           return_value=expected):
             self.assertIs(company_content_views.company_gallery(self.request), expected)
+
+
+class CompanyFeedAndInquiryOutageTests(SimpleTestCase):
+    def test_feed_midquery_db_failure_returns_retryable_503(self):
+        request = RequestFactory().get("/company/department-1/content/")
+        with patch.object(company_content_views, "_company_content_feed_with_schema",
+                          side_effect=DatabaseError("private synthetic DB error")):
+            response = company_content_views.company_content_feed(request, "department-1")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertNotIn("private synthetic DB error", response.content.decode("utf-8"))
+
+    def test_inquiry_db_failure_does_not_claim_saved_or_request_blind_retry(self):
+        request = RequestFactory().post("/company/", {
+            "kind": "general", "name": "Synthetic", "email": "fixture@example.test",
+            "subject": "Synthetic", "message": "Synthetic",
+        })
+        with patch.object(company_content_views, "missing_public_tables", return_value=False), \\
+             patch.object(company_content_views, "CompanyInquiry") as inquiry:
+            inquiry.objects.create.side_effect = DatabaseError("synthetic commit unknown")
+            response = company_content_views.company_portal_home(request)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertNotIn("synthetic commit unknown", response.content.decode("utf-8"))
+        self.assertIn("قابل تأیید نیست", response.content.decode("utf-8"))
