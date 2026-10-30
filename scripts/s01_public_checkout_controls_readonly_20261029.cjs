@@ -3,7 +3,7 @@
 // clicks, submissions, cookies, payment calls, credentials or customer data.
 const fs = require('node:fs');
 const {chromium} = require('playwright');
-const {classifyNavigation, assessAnonymousRouteRows, isDirectCheckoutHref} = require('./s01_checkout_route_verdict_20261029.cjs');
+const {classifyNavigation, assessAnonymousRouteRows, isDirectCheckoutHref, redactObservedHref} = require('./s01_checkout_route_verdict_20261029.cjs');
 const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/product/879/',
   '/store/product/72/checkout/','/store/product/225/checkout/',
   '/store/product/879/checkout/','/commerce/trx-easy/purchases/'];
@@ -85,7 +85,10 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
           const productId=/^\/store\/product\/(\d+)\/$/.exec(path)?.[1]||null;
           const validCheckoutHref=href=>productId?href===`/store/product/${productId}/checkout/`:
             /^\/store\/product\/\d+\/checkout\/$/.test(href||'');
-          rows.push({device:device.name,path,http,finalPath,error,jsErrors,controls,
+          // Keep raw hrefs only in memory for exact-SKU classification. The
+          // persistent CI artifact receives redacted hrefs, never query tokens.
+          const safeControls=controls.map(c=>({...c,href:redactObservedHref(c.href)}));
+          rows.push({device:device.name,path,http,finalPath,error,jsErrors,controls:safeControls,
             ...verdict,authenticatedBuyerFlowVerified:false,
             checkoutLinks:controls.filter(c=>validCheckoutHref(c.href)&&c.reasons.length===0).length,
             mismatchedCheckoutLinks:productId?controls.filter(c=>isDirectCheckoutHref(c.href)&&!validCheckoutHref(c.href)).length:0,
