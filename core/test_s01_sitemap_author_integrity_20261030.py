@@ -85,6 +85,13 @@ class AuthorStaticIntegrityTests(SimpleTestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response["Cache-Control"], "private, no-store")
 
+    def test_corrupt_utf8_profile_is_not_served_as_success(self):
+        self.page.write_bytes(b"<!doctype html>\\xff")
+        response = self.response()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+
     def test_oversized_profile_is_not_served(self):
         self.page.write_bytes(b"x" * 1_000_001)
         response = self.response()
