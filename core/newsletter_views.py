@@ -34,7 +34,7 @@ def verified_story_author(story):
     return {"@type": "Organization", "name": "شرکت کشت و صنعت زمرد ملل"}
 
 
-def newsletter_home(request):
+def _newsletter_home_with_schema(request):
     from django.utils import timezone
     catalog_unavailable = missing_public_tables(
         NewsletterStory, NewsletterSource, NewsletterPublication, NewsletterSchedule, Agent
@@ -71,6 +71,25 @@ def newsletter_home(request):
     }
     response = render(request, "core/newsletter.html", context)
     return mark_public_data_unavailable(response) if catalog_unavailable else response
+
+
+def newsletter_home(request):
+    """Do not turn a mid-render database outage into an anonymous HTTP 500."""
+    try:
+        return _newsletter_home_with_schema(request)
+    except DatabaseError:
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>خبرنامه موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>خبرنامه موقتاً در دسترس نیست</h1>'
+            '<p role="status">دریافت فهرست خبرها موقتاً امکان‌پذیر نیست؛ '
+            'این وضعیت به معنای حذف خبرها نیست.</p>'
+            '<p><a href="/">بازگشت به صفحه اصلی</a></p>'
+            '</main></body></html>',
+            status=503, content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
 
 
 def newsletter_archive(request):
