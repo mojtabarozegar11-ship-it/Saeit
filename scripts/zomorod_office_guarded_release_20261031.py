@@ -14,6 +14,7 @@ import pwd
 import shutil
 import sqlite3
 import subprocess
+import tempfile
 import sys
 import time
 import urllib.error
@@ -76,15 +77,19 @@ def status(path: str, expected: int, location_contains: str | None = None, body_
 
 
 def atomic_copy(src: Path, dst: Path, mode: int = 0o644) -> None:
-    temp = dst.with_name("." + dst.name + ".zm-office-incoming")
-    if temp.exists():
-        fail("UNEXPECTED_INCOMING_FILE " + dst.name)
-    with src.open("rb") as input_stream, temp.open("xb") as output:
-        shutil.copyfileobj(input_stream, output, length=1024 * 1024)
-        output.flush()
-        os.fsync(output.fileno())
-    os.chmod(temp, mode)
-    os.replace(temp, dst)
+    # Unique same-filesystem temporary file, always removed on exceptions.
+    fd, name = tempfile.mkstemp(prefix=".zm-office-incoming-", dir=str(dst.parent))
+    temp = Path(name)
+    try:
+        with src.open("rb") as input_stream, os.fdopen(fd, "wb") as output:
+            shutil.copyfileobj(input_stream, output, length=1024 * 1024)
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temp, mode)
+        os.replace(temp, dst)
+    finally:
+        if temp.exists():
+            temp.unlink()
 
 
 def verify():
