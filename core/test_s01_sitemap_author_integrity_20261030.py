@@ -37,14 +37,22 @@ class AuthorStaticIntegrityTests(SimpleTestCase):
             return seo_views.persian_author_profile(self.request)
 
     def test_valid_html_is_byte_preserved(self):
-        data = "<html lang='fa'>\u0645\u062c\u062a\u0628\u06cc</html>".encode("utf-8")
+        data = ("<!doctype html><html lang='fa'><head><title>Profile</title></head>"
+                "<body>\u0645\u062c\u062a\u0628\u06cc</body></html>").encode("utf-8")
         self.page.write_bytes(data)
         response = self.response()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, data)
 
     def test_truncated_or_overwritten_html_is_retryable_not_indexed(self):
-        for data in (b"just text", b"<!doctype html><html><body>incomplete"):
+        for data in (
+            b"just text",
+            b"<!doctype html><html><body>incomplete",
+            b"<html></html>",
+            b"<html><head></head><body></body></html>",
+            b"<html><head><title>ok</title></head><body>missing-close</html>",
+            b"<html><head><title>ok</title></head><body>ok</body></html>trailing",
+        ):
             with self.subTest(data=data[:20]):
                 self.page.write_bytes(data)
                 response = self.response()
