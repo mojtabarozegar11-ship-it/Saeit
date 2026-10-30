@@ -39,7 +39,7 @@ jobs:
           test -s "$d/known"
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           for ssh_attempt in 1 2 3; do
-            if timeout 480s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 bash -se -- _ "$GITHUB_RUN_ID" "$ssh_attempt" <<'REMOTE'
+            if timeout 480s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 bash -se -- _ "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$ssh_attempt" <<'REMOTE' >"$d/ssh-$ssh_attempt.log" 2>&1
           set -euo pipefail
           test "$(id -un)" = githubops
           run_id="$1"
@@ -282,8 +282,13 @@ jobs:
           PY
           REMOTE
             then
+              cat "$d/ssh-$ssh_attempt.log"
               echo 'FACTORY_FULL_HOLD=VERIFIED'
               exit 0
+            else
+              ssh_rc=$?
+              cat "$d/ssh-$ssh_attempt.log"
+              echo "FACTORY_FULL_HOLD_SSH_EXIT=$ssh_rc"
             fi
             echo "FACTORY_FULL_HOLD_SSH_ATTEMPT=$ssh_attempt failed; retrying"
             sleep "$((ssh_attempt * 5))"
