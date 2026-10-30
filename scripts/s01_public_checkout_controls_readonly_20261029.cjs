@@ -22,7 +22,8 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
       await context.route('**/*', route => {
         const req = route.request();
         if (req.method() !== 'GET') return route.abort('blockedbyclient');
-        if (req.isNavigationRequest() && new URL(req.url()).origin !== 'https://mojplaywin.com')
+        // Never contact third-party endpoints, even via passive GET assets.
+        if (new URL(req.url()).origin !== 'https://mojplaywin.com')
           return route.abort('blockedbyclient');
         return route.continue();
       });
@@ -51,12 +52,21 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
               const inView=visible&&x>=0&&y>=0&&x<innerWidth&&y<innerHeight;
               const hit=inView?document.elementFromPoint(x,y):null;
               const covered=!!(hit&&hit!==el&&!el.contains(hit));
+              // Inspect form-based buyer CTAs without submitting or charging.
+              const form=el.form||null;
+              const formMethod=form?(el.getAttribute('formmethod')||form.getAttribute('method')||'get').toLowerCase():null;
+              const isSubmit=form&&(el.tagName==='BUTTON'||(el.tagName==='INPUT'&&el.type==='submit'));
               let href=null;
-              if(el.tagName==='A'){try{
-                const u=new URL(el.href);href=u.origin===location.origin?(u.pathname+u.search+u.hash):'[external]';
+              if(el.tagName==='A'||isSubmit){try{
+                const raw=el.tagName==='A'?el.getAttribute('href'):
+                  (el.getAttribute('formaction')||form.getAttribute('action')||location.pathname);
+                const u=new URL(raw,location.href);
+                href=u.origin===location.origin?(u.pathname+u.search+u.hash):'[external]';
               }catch(_){href='[invalid]';}}
               const rawHref=el.tagName==='A'?(el.getAttribute('href')||'').trim():null;
-              const reasons=[rawHref!==null&&(!rawHref||rawHref==='#'||/^javascript:/i.test(rawHref))?'invalid-action-link':null,
+              const reasons=[isSubmit&&formMethod!=='get'?'form-requires-authenticated-staging':null,
+                isSubmit&&href==='[external]'?'off-origin-form-action':null,
+                rawHref!==null&&(!rawHref||rawHref==='#'||/^javascript:/i.test(rawHref))?'invalid-action-link':null,
                 el.closest('[aria-hidden="true"]')?'assistive-tech-hidden':null,
                 el.disabled?'native-disabled':null,
                 el.getAttribute('aria-disabled')==='true'?'aria-disabled':null,
@@ -64,7 +74,7 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
                 el.closest('fieldset[disabled]')?'disabled-fieldset':null,
                 el.closest('[inert]')?'inert-ancestor':null,
                 !visible?'hidden':null,covered?'center-obstructed':null].filter(Boolean);
-              return {tag:el.tagName,name,href,reasons,
+              return {tag:el.tagName,name,href,formMethod,reasons,
                 coveredBy:covered?{tag:hit.tagName,id:(hit.id||'').slice(0,60)}:null};
             }).filter(x=>/checkout|invoice|pay|buy|purchase|cart|فاکتور|پرداخت|خرید|سبد/i
               .test(x.name+' '+x.href)).slice(0,60));
@@ -78,7 +88,8 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
           rows.push({device:device.name,path,http,finalPath,error,jsErrors,controls,
             ...verdict,authenticatedBuyerFlowVerified:false,
             checkoutLinks:controls.filter(c=>validCheckoutHref(c.href)&&c.reasons.length===0).length,
-            mismatchedCheckoutLinks:productId?controls.filter(c=>/\/checkout\/$/.test(c.href||'')&&!validCheckoutHref(c.href)).length:0});
+            mismatchedCheckoutLinks:productId?controls.filter(c=>/\/checkout\/$/.test(c.href||'')&&!validCheckoutHref(c.href)).length:0,
+            formSubmissionsNeedingStaging:controls.filter(c=>c.reasons.includes('form-requires-authenticated-staging')).length});
           await page.close();
         }
       } finally {await context.close();}
