@@ -11,8 +11,13 @@ permissions:
 concurrency:
   group: vps-factory-safe-backup-retention
   cancel-in-progress: false
+# HARD SAFETY HOLD (2026-10-30): two local SQLite snapshots exist, but no
+# independent off-host recovery or restore was verified. Retention deletion
+# must not run until a separately audited, explicitly approved new workflow
+# supersedes this obsolete destructive job. A manual dispatch cannot bypass it.
 jobs:
   retain:
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
