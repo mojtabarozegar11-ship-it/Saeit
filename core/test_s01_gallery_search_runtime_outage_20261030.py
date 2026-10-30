@@ -78,3 +78,16 @@ class CompanyFeedAndInquiryOutageTests(SimpleTestCase):
         self.assertEqual(response["Retry-After"], "300")
         self.assertNotIn("synthetic commit unknown", response.content.decode("utf-8"))
         self.assertIn("قابل تأیید نیست", response.content.decode("utf-8"))
+
+
+class AdvertisedAuthorAvailabilityTests(SimpleTestCase):
+    def test_missing_author_static_source_is_retryable_not_search_deindexing_404(self):
+        with patch.object(seo_views, "_read_author_html",
+                          side_effect=FileNotFoundError("synthetic source missing")):
+            response = seo_views.persian_author_profile(
+                RequestFactory().get("/authors/mojtaba-rozegar/")
+            )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "300")
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
