@@ -183,6 +183,24 @@ jobs:
                       block=text[trace:]
                       classes=re.findall(r"(?m)^(?:django\.\w+(?:\.\w+)*\.)?(\w+(?:Error|Exception))\s*:",block)
                       print("RECENT_EXCEPTION_CLASS="+(classes[-1] if classes else "unknown"))
+                      error_lines=[line for line in block.splitlines() if line.startswith("RuntimeError:")]
+                      last_error=error_lines[-1] if error_lines else ""
+                      for term,label in [
+                          ("doesn't declare an explicit app_label","UNREGISTERED_DJANGO_MODEL"),
+                          ("isn't in an application in INSTALLED_APPS","MODEL_NOT_IN_INSTALLED_APPS"),
+                          ("Missing staticfiles manifest entry","STATIC_MANIFEST_MISSING"),
+                          ("No module named","MODULE_IMPORT_MISSING"),
+                          ("database is locked","DATABASE_LOCKED"),
+                          ("no such table","DATABASE_TABLE_MISSING"),
+                          ("Settings cannot be imported","SETTINGS_IMPORT"),
+                      ]:
+                          if term in last_error:
+                              print("RECENT_EXCEPTION_REASON="+label)
+                              break
+                      else:
+                          print("RECENT_EXCEPTION_REASON=other")
+                      m=re.search(r"Model class ([A-Za-z0-9_.]+)",last_error)
+                      if m:print("RECENT_EXCEPTION_MODEL="+m.group(1))
                       frames=re.findall(r'File "[^"]*/([^/"]+\.py)", line (\d+), in (\w+)',block)
                       for name,lineno,func in frames[-6:]:
                           print("RECENT_EXCEPTION_FRAME="+name+":"+lineno+":"+func)
@@ -201,7 +219,7 @@ jobs:
         shell: bash
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
-          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+          SOURCE_SHA: fdd628d09813bc9c30e73fdbb25d19960cad9dc0
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zm-marketing-ro"
