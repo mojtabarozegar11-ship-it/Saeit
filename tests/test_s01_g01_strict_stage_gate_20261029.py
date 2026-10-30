@@ -25,7 +25,7 @@ class StageGateTests(unittest.TestCase):
             b"contractAddress:null});"
         )
 
-    def build(self, *, omit_manifest_name=None, policy=None, extra=None):
+    def build(self, *, omit_manifest_name=None, policy=None, extra=None, version='G01-R26'):
         files = dict(self.files)
         if policy is not None:
             files["moj1-commerce-policy.mjs"] = policy
@@ -39,7 +39,7 @@ class StageGateTests(unittest.TestCase):
             for name, data in files.items():
                 z.writestr("ramadan-war/" + name, data)
             z.writestr("ramadan-war/preview-manifest.json", json.dumps({
-                "version": "G01-R26", "files": manifest_files
+                "version": version, "files": manifest_files
             }))
 
     def test_valid_complete_manifest_is_review_only(self):
@@ -48,6 +48,23 @@ class StageGateTests(unittest.TestCase):
         self.assertEqual(result["status"], "READY_FOR_REVIEW")
         self.assertFalse(result["deploy_authorized"])
         self.assertFalse(result["live_verified"])
+
+    def test_r32_requires_tactical_map_asset(self):
+        self.build(version="G01-R32")
+        with self.assertRaisesRegex(ValueError, "MISSING_R32_TACTICAL_MAP"):
+            gate.verify(self.path)
+
+    def test_r32_requires_actual_tactical_map_import(self):
+        self.build(version="G01-R32", extra={"tactical-map.mjs": b"export const MAP_CELLS=16;"})
+        with self.assertRaisesRegex(ValueError, "R32_TACTICAL_MAP_NOT_IMPORTED"):
+            gate.verify(self.path)
+
+    def test_r32_integrated_tactical_map_is_review_only(self):
+        self.files["game.js"] = b"import {relativeDirection} from './tactical-map.mjs';"
+        self.build(version="G01-R32", extra={"tactical-map.mjs": b"export function relativeDirection(){}"})
+        result = gate.verify(self.path)
+        self.assertEqual(result["status"], "READY_FOR_REVIEW")
+        self.assertFalse(result["deploy_authorized"])
 
     def test_r26_navigation_runtime_is_mandatory_even_with_valid_manifest(self):
         self.files.pop("objective-navigation.mjs")
