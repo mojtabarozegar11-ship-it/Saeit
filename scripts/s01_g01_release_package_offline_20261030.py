@@ -103,8 +103,12 @@ class _EntrypointReferences(HTMLParser):
                             tokens[1]))):
                     raise ValueError("unsafe responsive game dependency")
                 self.refs.append(tokens[0])
-        if tag == "link" and "stylesheet" in (values.get("rel") or "").lower():
-            self.refs.append(values.get("href", ""))
+        if tag == "link":
+            # Module/preload links fetch code or assets before the entrypoint
+            # executes; a missing preload is still a broken release package.
+            rels = set((values.get("rel") or "").lower().split())
+            if rels & {"stylesheet", "modulepreload", "preload"}:
+                self.refs.append(values.get("href", ""))
 
 
 def validate_entrypoint_references(html, asset_names):
