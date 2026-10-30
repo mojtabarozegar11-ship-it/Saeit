@@ -41,9 +41,12 @@ class Contact(models.Model):
             or not 8 <= len(self.phone_e164) <= 16
         ):
             raise ValidationError({"phone_e164": "شماره باید با کد کشور و قالب E.164 باشد."})
-        if any((self.email_consent_at, self.sms_consent_at,
-                self.telegram_consent_at, self.bale_consent_at,
-                self.eitaa_consent_at, self.rubika_consent_at, self.whatsapp_consent_at)) and not self.consent_evidence.strip():
+        consents = (self.email_consent_at, self.sms_consent_at,
+                    self.telegram_consent_at, self.bale_consent_at,
+                    self.eitaa_consent_at, self.rubika_consent_at, self.whatsapp_consent_at)
+        if any(value and value > timezone.now() for value in consents):
+            raise ValidationError({"consent_evidence": "رضایت با تاریخ آینده معتبر نیست."})
+        if any(consents) and not self.consent_evidence.strip():
             raise ValidationError({"consent_evidence": "مرجع قابل پیگیری رضایت ضروری است."})
 
 
@@ -148,6 +151,10 @@ class Message(models.Model):
             }.get(self.channel)
             if not consent or not contact.consent_evidence or not address:
                 raise ValidationError("نشانی و رضایت مستند این کانال لازم است.")
+            # A future-dated opt-in is not consent effective at queue/dispatch time.
+            # This guard also covers contacts saved through direct ORM writes.
+            if consent > timezone.now():
+                raise ValidationError("رضایت این کانال هنوز معتبر نشده است.")
             if self.pk and self.status in ("queued", "sending"):
                 if not self.recipient_fingerprint or self.recipient_fingerprint != self.destination_fingerprint():
                     raise ValidationError("نشانی یا رضایت مخاطب پس از ثبت صف تغییر کرده است.")
