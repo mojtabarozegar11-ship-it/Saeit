@@ -49,6 +49,13 @@ class Contact(models.Model):
         if any(consents) and not self.consent_evidence.strip():
             raise ValidationError({"consent_evidence": "مرجع قابل پیگیری رضایت ضروری است."})
 
+    def save(self, *args, **kwargs):
+        # Direct ORM saves must not persist invented or future-dated opt-ins.
+        # QuerySet.update/bulk_update still bypass model hooks: dispatch
+        # independently revalidates the locked consent snapshot.
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
 
 class Message(models.Model):
     CHANNELS = (
