@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {classifyNavigation, assessAnonymousRouteRows} = require('../scripts/s01_checkout_route_verdict_20261029.cjs');
+const {classifyNavigation, assessAnonymousRouteRows, isDirectCheckoutHref} = require('../scripts/s01_checkout_route_verdict_20261029.cjs');
 test('healthy public product route is anonymous GET only', () => {
   assert.deepEqual(classifyNavigation('/store/product/72/', 200, '/store/product/72/', null),
     {authRequired:false, unexpectedRedirect:false, observedSafe:true});
@@ -111,4 +111,13 @@ test('checkout matrix rejects safe-looking HTTP with JS errors or unknown row', 
   row.observedSafe=false;
   assert.ok(assessAnonymousRouteRows([row],[path],['desktop']).failures.some(
     x=>x.startsWith('UNSAFE_NAVIGATION:')));
+});
+
+test('registration next=checkout is not a direct or mismatched checkout CTA', () => {
+  assert.equal(isDirectCheckoutHref('/accounts/register/?next=/store/product/72/checkout/'),false);
+  assert.equal(isDirectCheckoutHref('/accounts/register/?next=%2Fstore%2Fproduct%2F225%2Fcheckout%2F'),false);
+  assert.equal(isDirectCheckoutHref('/store/product/72/checkout/'),true);
+  assert.equal(isDirectCheckoutHref('/store/product/225/checkout/'),true);
+  assert.equal(isDirectCheckoutHref('/store/product/72/checkout/?next=/store/'),false);
+  assert.equal(isDirectCheckoutHref('https://evil.example/store/product/72/checkout/'),false);
 });
