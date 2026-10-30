@@ -71,28 +71,25 @@ def function_signals(node):
         body[0].value, (ast.Constant,)
     ) and isinstance(body[0].value.value, str):
         body = body[1:]
+    # A public invoice/entitlement endpoint consisting only of a constant
+    # return or unconditional exception cannot establish a working contract.
+    # This is a conservative source-only signal, never proof of correctness.
     is_stub = not body
     if len(body) == 1:
         statement = body[0]
         is_stub = (
-            isinstance(statement, ast.Pass) or
+            isinstance(statement, (ast.Pass, ast.Raise)) or
             (isinstance(statement, ast.Expr) and
              isinstance(statement.value, ast.Constant) and
              statement.value.value is Ellipsis) or
-            # A named handler returning only an empty sentinel does not
-            # implement payment, invoice issuance or buyer entitlement.
-            (isinstance(statement, ast.Return) and
-             (statement.value is None or
-              (isinstance(statement.value, ast.Constant) and
-               (statement.value.value is None or
-                statement.value.value is False or
-                statement.value.value is Ellipsis or
-                statement.value.value == "")))) or
-            (isinstance(statement, ast.Raise) and statement.exc is not None and
-             (isinstance(statement.exc, ast.Name) and statement.exc.id == "NotImplementedError" or
-              isinstance(statement.exc, ast.Call) and
-              isinstance(statement.exc.func, ast.Name) and
-              statement.exc.func.id == "NotImplementedError"))
+            (isinstance(statement, ast.Return) and (
+                statement.value is None or
+                isinstance(statement.value, ast.Constant) or
+                (isinstance(statement.value, (ast.List, ast.Tuple, ast.Set))
+                 and not statement.value.elts) or
+                (isinstance(statement.value, ast.Dict)
+                 and not statement.value.keys)
+            ))
         )
     calls = []
     for child in ast.walk(node):
