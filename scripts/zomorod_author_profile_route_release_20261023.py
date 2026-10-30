@@ -39,6 +39,9 @@ OLD_SOURCE_SHA256 = (
 CURRENT_SOURCE_SHA256 = (
     "4af0dde1a62dc24b52b899b44d1858d7ca04bced49286008492c35b365f49c19"
 )
+VERIFIED_LIVE_SOURCE_SHA256_20261030 = (
+    "2cd23312bb080a01f140754b07ba562ba80f23ef04781edab2730f3382ec6d77"
+)
 PASSENGER_ANCHOR = b'PassengerAppRoot "/home/zomorod2/Saeit"'
 PROFILE_MARKER = b'id="profile-name"'
 PERSIAN_URL = "https://zomorodmelal.ir/authors/mojtaba-rozegar/"
@@ -220,11 +223,11 @@ def install(run: str, want: str) -> None:
     existing_app_page = APP_TARGET.read_bytes() if APP_TARGET.is_file() else None
     if TARGET.exists() and existing_page is None:
         raise ValueError("AUTHOR_DEST_NOT_A_REGULAR_FILE")
-    if existing_page is not None and digest(existing_page) not in (want, OLD_SOURCE_SHA256, CURRENT_SOURCE_SHA256):
+    if existing_page is not None and digest(existing_page) not in (want, OLD_SOURCE_SHA256, CURRENT_SOURCE_SHA256, VERIFIED_LIVE_SOURCE_SHA256_20261030):
         raise ValueError("AUTHOR_DEST_UNKNOWN_CONTENT")
     if APP_TARGET.exists() and existing_app_page is None:
         raise ValueError("DJANGO_AUTHOR_DEST_NOT_A_REGULAR_FILE")
-    if existing_app_page is not None and digest(existing_app_page) not in (want, OLD_SOURCE_SHA256, CURRENT_SOURCE_SHA256):
+    if existing_app_page is not None and digest(existing_app_page) not in (want, OLD_SOURCE_SHA256, CURRENT_SOURCE_SHA256, VERIFIED_LIVE_SOURCE_SHA256_20261030):
         raise ValueError("DJANGO_AUTHOR_DEST_UNKNOWN_CONTENT")
     if digest(HTACCESS.read_bytes()) != digest(original_ht):
         raise ValueError("CONCURRENT_HTACCESS_CHANGE")
