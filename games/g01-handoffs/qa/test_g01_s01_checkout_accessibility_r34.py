@@ -1,4 +1,7 @@
 import unittest
+import sys
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from g01_s01_checkout_accessibility_r34 import inspect
 class OfflinePreflight(unittest.TestCase):
     def test_named_controls(self):
