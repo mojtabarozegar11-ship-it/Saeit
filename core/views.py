@@ -92,10 +92,12 @@ def taniya_studio(request):
 
 
 def platform_page(request, section):
-    # Keep the shared URL dispatcher consistent with the strict MojPlayWin
-    # canonical-host predicate; a single legal terminal DNS dot is valid.
-    from .mojplaywin_views import _is_mojplaywin, platform_section
-    if _is_mojplaywin(request):
+    # The strict canonical host predicate on the checkout branch also accepts
+    # one legal terminal DNS dot. Keep this dispatcher safe independently until
+    # that branch is merged; do not import the older default-branch predicate.
+    from .mojplaywin_views import platform_section
+    hostname = request.get_host().split(":")[0].lower().removesuffix(".")
+    if hostname in {"mojplaywin.com", "www.mojplaywin.com"}:
         return platform_section(request, section)
     pages = {
         "agriculture": {
