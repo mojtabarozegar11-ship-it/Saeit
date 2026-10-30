@@ -1,4 +1,4 @@
-{% load static %}<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8">
@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow,noarchive">
   <meta name="referrer" content="same-origin">
   <title>{% block title %}دفتر مدیریت{% endblock %} | زمرد ملل</title>
-  <link rel="stylesheet" href="{% static 'enterprise_portal/app.css' %}">
+  <link rel="stylesheet" href="{% url 'enterprise_portal:office_css' %}">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
