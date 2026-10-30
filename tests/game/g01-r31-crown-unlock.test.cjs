@@ -5,7 +5,7 @@ assert.ok(start>0&&end>start,'real Crown equipJet source exists');
 const source=html.slice(start,end);
 function scenario(profileOK,fleetOK){
  const events=[],ctx={
-  fleetById:id=>({id,cost:50}),previewJet:'newjet',fleetPending:false,ownedJet:()=>false,
+  fleetById:id=>({id,name:'Test Jet',cost:50}),previewJet:'newjet',fleetPending:false,ownedJet:()=>false,
   save:{credits:100},bank:100,fleetSave:{jets:[],selected:'falcon'},
   persist:()=>{events.push('profile');return profileOK},
   persistFleet:()=>{events.push('fleet');return fleetOK},
