@@ -31,7 +31,7 @@ jobs:
           done
           tar -cf "$RUNNER_TEMP/zm-msg-package.tar" \
             company_messaging company_marketing enterprise_portal ecosystem_hub \
-            config/settings.py config/urls.py
+            config
           test -s "$RUNNER_TEMP/zm-msg-package.tar"
           find company_messaging company_marketing enterprise_portal ecosystem_hub -type l -print -quit | grep -q . && exit 1 || true
           echo "PRIVATE_STAGE_PACKAGE_SHA256=$(sha256sum "$RUNNER_TEMP/zm-msg-package.tar" | cut -d' ' -f1)"
@@ -194,6 +194,70 @@ jobs:
           echo "PRODUCTION_FILES_CHANGED=false"
           echo "DB_MIGRATED=false"
           echo "OUTBOUND_SEND_ENABLED=false"
+          REMOTE
+      - name: Apply full Django schema to isolated staging database and check private login
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 210s ssh -F "$d/config" "$COMMAND_HOST" bash -se -- "$SOURCE_SHA" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          export PYTHONDONTWRITEBYTECODE=1
+          sha="$1"
+          root="/home/zomorod2/.private/zomorod-messaging-release-stages/$sha/code"
+          test -f "$root/config/__init__.py"
+          test -f "$root/config/settings.py"
+          test -f "$root/config/urls.py"
+          py="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
+          if test ! -x "$py"; then py="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"; fi
+          test -x "$py"
+          test -f "/home/zomorod2/Saeit/manage.py"
+          export PYTHONPATH="$root:/home/zomorod2/Saeit"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export SECRET_KEY="private-staging-only-key-not-for-production-20261031"
+          export ALLOWED_HOSTS="testserver,localhost"
+          export DEBUG=False
+          export DATABASE_URL="sqlite:///$root/isolation.sqlite3"
+          export COMPANY_MESSAGING_SEND_ENABLED=false
+          export COMPANY_MARKETING_PUBLISH_ENABLED=false
+          export ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED=false
+          export SESSION_COOKIE_SECURE=true
+          export CSRF_COOKIE_SECURE=true
+          export SECURE_SSL_REDIRECT=false
+          cd "$root"
+          "$py" -m django check
+          "$py" -m django makemigrations --check --dry-run company_messaging company_marketing enterprise_portal ecosystem_hub
+          "$py" -m django migrate --plan > "$root/migration-plan.txt"
+          "$py" -m django migrate --noinput --verbosity 0
+          "$py" - <<'PY'
+          import os,sqlite3,pathlib
+          from django.urls import resolve,reverse
+          from django.test import Client
+          from django.conf import settings
+          db=pathlib.Path(settings.DATABASES["default"]["NAME"])
+          assert db.is_file() and db.stat().st_size>80000
+          with sqlite3.connect("file:"+str(db)+"?mode=ro",uri=True) as c:
+              assert c.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+              n=c.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+          assert n>=35
+          assert resolve("/company/office/messages/").url_name is not None
+          assert resolve("/company/office/marketing/").url_name is not None
+          login="/company/office/secure-login/"
+          response=Client().get(login,secure=True)
+          assert response.status_code==200, response.status_code
+          print("STAGING_SCHEMA_INTEGRITY=passed")
+          print("STAGING_AUTH_LOGIN_HTTP=200")
+          print("STAGING_MESSAGING_ROUTES=resolved")
+          print("STAGING_SCHEMA_TABLE_COUNT="+str(n))
+          print("PRODUCTION_SCHEMA_UNMODIFIED=true")
+          PY
+          echo "PRIVATE_STAGING_DJANGO_MIGRATION=passed"
           REMOTE
       - name: Remove runner transient keys and package
         if: always()
