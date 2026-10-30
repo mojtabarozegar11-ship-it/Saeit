@@ -1,5 +1,6 @@
 """Offline tests: no real provider calls, no real spend, no live deployment."""
 import json
+from datetime import timedelta
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -318,3 +319,17 @@ class MarketingTests(TestCase):
             self.campaign.save()
         self.campaign.refresh_from_db()
         self.assertEqual(self.campaign.status, "closed")
+
+    def test_future_dated_performance_metric_is_rejected(self):
+        item = self.publication()
+        metric = PerformanceMetric(
+            publication=item, recorded_by=self.owner,
+            recorded_on=timezone.localdate() + timedelta(days=1),
+            impressions=100, clicks=3, leads=1, cost_irr=0,
+            evidence_reference="offline-evidence-only",
+        )
+        with self.assertRaises(ValidationError):
+            metric.full_clean()
+        with self.assertRaises(ValidationError):
+            metric.save()
+        self.assertEqual(PerformanceMetric.objects.count(), 0)
