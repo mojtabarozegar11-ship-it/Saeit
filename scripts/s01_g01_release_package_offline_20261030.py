@@ -159,12 +159,18 @@ def build(source_dir, output_zip):
     parent_info = output.parent.stat()
     if parent_info.st_uid != os.getuid() or stat.S_IMODE(parent_info.st_mode) & 0o077:
         raise ValueError("output must be inside an owner-only private directory")
-    with zipfile.ZipFile(output, "x", compression=zipfile.ZIP_DEFLATED,
-                         compresslevel=6) as archive:
-        for name, data in sorted(files.items()):
-            archive.writestr(name, data)
-        archive.writestr("S01_PRIVATE_RELEASE_MANIFEST.json",
-                         json.dumps(manifest, sort_keys=True, indent=2) + "\n")
+    # ZIP must be private from its first byte, not chmod'ed after creation:
+    # permissive caller umask must not expose an unpublished game candidate.
+    descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "wb") as stream:
+        with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED,
+                             compresslevel=6) as archive:
+            for name, data in sorted(files.items()):
+                archive.writestr(name, data)
+            archive.writestr("S01_PRIVATE_RELEASE_MANIFEST.json",
+                             json.dumps(manifest, sort_keys=True, indent=2) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
     with zipfile.ZipFile(output, "r") as archive:
         if archive.testzip() is not None:
             raise ValueError("release archive CRC verification failed")
