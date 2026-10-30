@@ -138,3 +138,19 @@ test('preserves canonical SKU CTA and rejects external control destinations', ()
   assert.equal(redactObservedHref('//evil.example/?token=abc'),'[invalid]');
   assert.equal(redactObservedHref(null),null);
 });
+
+
+test('never serializes unknown path-embedded access tokens', () => {
+  for (const value of [
+    '/private-download/bearer-SECRET123',
+    '/store/product/72/checkout/token-SECRET123/',
+    '/store/product/999/checkout/?key=SECRET123',
+    '/%2Fprivate-download%2FSECRET123'
+  ]) {
+    const safe=redactObservedHref(value);
+    assert.equal(safe,'[redacted-path]');
+    assert.ok(!safe.includes('SECRET123'));
+  }
+  assert.equal(redactObservedHref('/accounts/login/?next=%2Fsecret'),
+    '/accounts/login/?[redacted]');
+});
