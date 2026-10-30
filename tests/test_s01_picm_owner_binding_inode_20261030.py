@@ -38,6 +38,17 @@ class PICMOwnerBindingInodeTests(SimpleTestCase):
         os.link(actual, self.binding)
         self.assertIsNone(owner_id(self.root))
 
+    def test_group_or_world_writable_binding_fails_closed(self):
+        self.binding.write_bytes(b"42\n")
+        self.binding.chmod(0o600)
+        self.assertEqual(owner_id(self.root), "42")
+        for mode in (0o620, 0o602, 0o666):
+            with self.subTest(mode=mode):
+                self.binding.chmod(mode)
+                self.assertIsNone(owner_id(self.root))
+        self.binding.chmod(0o644)
+        self.assertEqual(owner_id(self.root), "42")
+
     def test_fifo_binding_is_rejected_without_waiting_for_writer(self):
         if not hasattr(os, "mkfifo"):
             self.skipTest("FIFO unavailable")
