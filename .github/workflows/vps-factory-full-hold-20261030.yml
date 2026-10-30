@@ -41,6 +41,11 @@ jobs:
           for ssh_attempt in 1 2 3; do
             if timeout 480s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 bash -se -- _ "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$ssh_attempt" <<'REMOTE' >"$d/ssh-$ssh_attempt.log" 2>&1
           set -euo pipefail
+          printf "FACTORY_HOLD_REMOTE_USER=%s\n" "$(id -un)"
+          printf "FACTORY_HOLD_REMOTE_ARGC=%s\n" "$#"
+          printf "FACTORY_HOLD_REMOTE_RUN_ID=%s\n" "${1-}"
+          printf "FACTORY_HOLD_REMOTE_WORKFLOW_ATTEMPT=%s\n" "${2-}"
+          printf "FACTORY_HOLD_REMOTE_SSH_ATTEMPT=%s\n" "${3-}"
           test "$(id -un)" = githubops
           run_id="$1"
           workflow_attempt="$2"
