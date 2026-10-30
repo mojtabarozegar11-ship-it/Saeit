@@ -92,7 +92,7 @@ class HubSuite(TestCase):
     def test_anonymous_cannot_see_confidential_data(self):
         response = self.client.get("/company/office/ecosystem/", secure=True)
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/company/office/login/", response["Location"])
+        self.assertIn("/company/office/secure-login/", response["Location"])
 
     def test_http_is_blocked(self):
         self.client.force_login(self.owner)
