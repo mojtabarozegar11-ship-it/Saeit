@@ -34,16 +34,37 @@ def classify(stderr: str) -> str:
         return "REMOTE_COMMAND_SUCCEEDED"
     return "UNKNOWN_SAFE_FAILURE"
 
+def phase(stderr: str) -> str:
+    """Return only the last observed SSH stage, never a log fragment."""
+    t = stderr.lower()
+    if not t.strip():
+        return "NO_DIAGNOSTIC_BYTES"
+    stages = (
+        ("REMOTE_EXIT_OBSERVED", ("exit status ",)),
+        ("REMOTE_COMMAND_SENT", ("sending command:",)),
+        ("SSH_AUTHENTICATED", ("authenticated to ",)),
+        ("SSH_AUTH_ATTEMPTED", ("authentications that can continue:", "offering public key:")),
+        ("SSH_TRANSPORT_ESTABLISHED", ("connection established",)),
+        ("SSH_CONNECT_ATTEMPTED", ("connecting to ",)),
+        ("SSH_PROXY_CONFIGURED", ("setting implicit proxycommand", "executing proxy command")),
+    )
+    for name, markers in stages:
+        if any(marker in t for marker in markers):
+            return name
+    return "NO_RECOGNIZED_SSH_STAGE"
+
+
 def main() -> int:
-    if len(sys.argv) != 2:
+    if len(sys.argv) not in (2, 3) or (len(sys.argv) == 3 and sys.argv[1] != "--phase"):
         return 2
     try:
-        with Path(sys.argv[1]).open("rb") as handle:
+        with Path(sys.argv[-1]).open("rb") as handle:
             raw = handle.read(MAX_BYTES)
     except OSError:
         print("DIAGNOSTIC_UNAVAILABLE")
         return 0
-    print(classify(raw.decode("utf-8", errors="replace")))
+    text = raw.decode("utf-8", errors="replace")
+    print(phase(text) if len(sys.argv) == 3 else classify(text))
     return 0
 
 if __name__ == "__main__":
