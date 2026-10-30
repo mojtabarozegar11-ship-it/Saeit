@@ -1,0 +1,152 @@
+name: Mojtaba Persian identity link and verified profile SEO
+on:
+  pull_request:
+    paths:
+      - scripts/mojtaba_persian_identity_link_20261030.py
+      - tests/test_mojtaba_persian_identity_link_20261030.py
+      - .github/workflows/mojtaba-persian-identity-link-20261030.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/mojtaba_persian_identity_link_20261030.py
+      - tests/test_mojtaba_persian_identity_link_20261030.py
+      - .github/workflows/mojtaba-persian-identity-link-20261030.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-inner-pages-production
+  cancel-in-progress: false
+jobs:
+  tests:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and verify protected personal homepage change
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_persian_identity_link_20261030.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_persian_identity_link_20261030.py' -v
+  publish:
+    needs: tests
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mojtaba-fa-seo"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SEO_SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Guarded deploy, independent site checks, rollback on failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mojtaba-fa-seo-$GITHUB_RUN_ID"
+          timeout 30s ssh -T -F "$SEO_SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 60s scp -q -F "$SEO_SSH_CONFIG" scripts/mojtaba_persian_identity_link_20261030.py "saeit-host:$stage/"
+          timeout 1000s ssh -T -F "$SEO_SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
+          script="/home/zomorod2/.mojtaba-fa-seo-$id/mojtaba_persian_identity_link_20261030.py"
+          installed=0
+          verified=0
+          finish() {
+            status=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0; then
+              "$py" "$script" rollback --run-id "$id" && echo "FA_SEO_ROLLBACK=VERIFIED" || echo "FA_SEO_ROLLBACK_REQUIRES_REVIEW=YES"
+              test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+            fi
+            exit "$status"
+          }
+          trap finish EXIT
+          test -x "$py" && test -f "$app/manage.py"
+          "$py" "$script" check
+          installed=1
+          "$py" "$script" install --run-id "$id"
+          cd "$app"
+          "$py" manage.py check
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$py" - <<'PY'
+          from urllib.request import Request,urlopen
+          import time
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          for attempt in range(7):
+              try:
+                  with urlopen(Request(base+"?_fa_seo="+str(time.time_ns()),headers={"Cache-Control":"no-cache"}),timeout=25) as response:
+                      html=response.read(250000).decode("utf-8","replace")
+                      if response.status!=200:raise RuntimeError("PAGE_NOT_200")
+                  if html.count('id="mojtaba-current-persian-profile"')!=1:raise RuntimeError("FA_LINK_MISSING")
+                  if 'href="https://zomorodmelal.ir/authors/mojtaba-rozegar/"' not in html:raise RuntimeError("FA_TARGET_MISSING")
+                  if 'زندگی‌نامه رسمی مجتبی روزگار' not in html or 'Vancouver, Canada' not in html:raise RuntimeError("CURRENT_IDENTITY_MISSING")
+                  if html.count('id="hero-title"')!=1:raise RuntimeError("H1_REGRESSION")
+                  break
+              except Exception:
+                  if attempt==6:raise
+                  time.sleep(4)
+          for path in ("about/","resume/","blog/"):
+              with urlopen(Request(base+path,headers={"Cache-Control":"no-cache"}),timeout=25) as r:
+                  if r.status!=200:raise RuntimeError("PROTECTED_ROUTE_BAD_"+path)
+          print("PERSIAN_IDENTITY_LIVE=VERIFIED",flush=True)
+          PY
+          verified=1
+          echo "PERSIAN_IDENTITY_SEO_RELEASE=VERIFIED"
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mojtaba-fa-seo"
+          test ! -d "$d" || rm -rf -- "$d"
