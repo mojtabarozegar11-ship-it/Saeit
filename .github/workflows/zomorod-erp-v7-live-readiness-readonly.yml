@@ -1,0 +1,194 @@
+name: Zomorod ERP V7 active runtime readiness read-only
+on:
+  push:
+    branches: ['audit/zomorod-erp-v7-live-readonly-20261030']
+    paths:
+      - '.github/workflows/zomorod-erp-v7-live-readiness-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  host-read-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Inspect current PHP, session revocation and business dependencies without mutations
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          ssh -F "$d/config" "$COMMAND_HOST" "python3 -B -" <<'PY'
+          import os,sqlite3,subprocess,hashlib
+          from pathlib import Path
+          private=Path('/home/zomorod2/.private/zomorod-business')
+          web=Path('/home/zomorod2/public_html/business')
+          if not private.is_dir() or private.is_symlink() or private.stat().st_mode&0o077:
+              raise SystemExit('READONLY_PRIVATE_DIR_UNSAFE')
+          if not web.is_dir(): raise SystemExit('READONLY_BUSINESS_WEBROOT_MISSING')
+          app=web/'app.php'
+          if not app.is_file() or app.is_symlink(): raise SystemExit('READONLY_ACTIVE_APP_MISSING')
+          source=app.read_text(encoding='utf-8',errors='replace')
+          print('LIVE_PHP_APP=EXISTS')
+          print('LIVE_APP_CREDENTIAL_STAMP='+str('credential_stamp' in source))
+          print('LIVE_APP_SESSION_REGENERATE='+str('session_regenerate_id' in source))
+          print('LIVE_APP_HTTPONLY='+str('httponly' in source.lower()))
+          print('LIVE_APP_SAMESITE_STRICT='+str('samesite' in source.lower() and 'strict' in source.lower()))
+          print('LIVE_APP_CSRF='+str('csrf' in source.lower()))
+          names=('command_center.php','command_planner.php','command_quality.php',
+                 'workflow_desk.php','payroll_control.php','payroll_ui.php',
+                 'period_controls.php','industry_operations.php','finance_audit.php',
+                 'treasury_control.php','treasury_ui.php')
+          missing=[]
+          for name in names:
+              if not (private/name).is_file():
+                  missing.append(name)
+          print('LIVE_PRIVATE_V7_MODULES_PRESENT='+str(len(names)-len(missing)))
+          print('LIVE_PRIVATE_V7_MODULES_ABSENT='+','.join(missing))
+          dbfile=private/'management.sqlite3'
+          if not dbfile.is_file() or dbfile.is_symlink() or dbfile.stat().st_mode&0o077:
+              raise SystemExit('READONLY_DB_UNSAFE')
+          with sqlite3.connect('file:'+str(dbfile)+'?mode=ro',uri=True,timeout=12) as db:
+              check=db.execute('PRAGMA quick_check').fetchone()[0]
+              admin=db.execute("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1").fetchone()[0]
+              table_count=db.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+          if check!='ok' or admin!=1: raise SystemExit('READONLY_DB_INTEGRITY_OR_ADMIN')
+          print('LIVE_SQLITE_INTEGRITY=ok')
+          print('LIVE_ACTIVE_ADMIN=ONE')
+          print('LIVE_SCHEMA_TABLE_COUNT='+str(table_count))
+          candidates=[Path('/opt/cpanel/ea-php83/root/usr/bin/php'),
+                      Path('/opt/cpanel/ea-php82/root/usr/bin/php'),
+                      Path('/usr/bin/php')]
+          pdo=0
+          for php in candidates:
+              if php.is_file():
+                  ret=subprocess.run([str(php),'-r',"exit(extension_loaded('pdo_sqlite')?0:1);"],
+                      stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=8,check=False)
+                  if ret.returncode==0:pdo+=1
+          print('LIVE_PHP_WITH_PDO_SQLITE_CANDIDATES='+str(pdo))
+          print('LIVE_DATABASE_MODIFIED=NO')
+          print('LIVE_PHP_CODE_MODIFIED=NO')
+          print('V7_RELEASE_GATE=NOT_APPROVED')
+          PY
+      - name: Remove runner-only SSH materials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-command-channel"
