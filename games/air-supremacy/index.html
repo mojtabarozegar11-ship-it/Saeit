@@ -410,6 +410,8 @@ function begin(){
 }
 function finish(won){
  if(!run)return;
+ // Release every held mobile control before leaving the sortie; no sticky boost/fire on relaunch.
+ togglePause(true);
  run=false;paused=false;firing=false;key.clear();
  $('pauseOverlay').classList.remove('on');$('pauseOverlay').setAttribute('aria-hidden','true');
  $('hud').classList.remove('active');$('touch').classList.remove('on');

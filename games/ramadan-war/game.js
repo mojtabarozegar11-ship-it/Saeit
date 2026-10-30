@@ -114,7 +114,7 @@ function restore(){// A corrupt disk save must never discard a newer in-memory c
 const previousWorld=hasResumableCampaignInMemory()?world:null,previousHero=hero;
 world=null;try{const s=parseCampaignSave(storageRead(saveKey));if(!validateCampaignSave(s)){world=previousWorld;saveStatus='failed';return false;}world={ammo:8,magazine:8,reloadTimer:0,combo:0,comboTimer:0,score:0,rocketHits:0,pickups:[],...s};world.power=Math.min(12,world.power??0);world.armor=Math.min(5,world.armor??0);// Keep recovery mission intel at the tail when limiting restored transient drops.
 world.pickups=boundedCampaignPickups(world.pickups).slice(-30);if(!world.endless&&!world.objective){prepareObjective()}if(!world.endless&&world.mission===2)restoreRecoveryPickups(world,OPERATIONS[2].sites);if(!world.endless&&world.mission===5)reconcileBossEncounter(world);if(world.x===2.5&&world.y===2.5&&world.missionKills===0)world.y=7.5;restorePlayerPosition(world,(x,y)=>tile(x,y)!==0);if(restoreEnemyPositions(world,(x,y)=>tile(x,y,world.mission)!==0)<0){world=previousWorld;hero=previousHero;saveStatus='failed';return false;}hero=world.hero;world.enemies=world.enemies.slice(0,20);world.enemies.forEach((e,i)=>restoreEnemyRuntime(e,i));world.hostile=(world.hostile||[]).slice(0,100);world.missiles=(world.missiles||[]).slice(0,50);screen='play';engine.build(world,tile);lastSavedSnapshot=storageRead(saveKey);foreignSaveDetected=false;saveStatus='saved';if(resumeCampaignScreen(world)==='success'){showResult('منطقه پاکسازی شد','پیشرفت ذخیره شد؛ موشک و پهپاد در مرحلهٔ بعد شارژ می‌شوند.','success');return true}showScreen('game');last=performance.now();scheduleFrame();toast('بازی ذخیره‌شده ادامه پیدا می‌کند');return true}catch(_){world=previousWorld;hero=previousHero;saveStatus='failed';return false}}
-function showScreen(name){if(name!=='game')releaseGameInputs();else if(document.activeElement?.closest?.('.panel'))document.activeElement.blur();screen=name;gameRoot.classList.toggle('playing',name==='game');if(name==='game'&&world)setMissionScene(world.mission);hud.classList.toggle('hidden',name!=='game');for(const id of ['home','heroes','pausePanel','upgradePanel','result'])$('#'+id).classList.toggle('hidden',id!==name&&!(id==='result'&&['success','victory','over'].includes(name)));if(name==='home'){updateHome();updateHomeSaveStatus();$('#survival').classList.toggle('hidden',!sessionWinUnlocked&&storageRead('rwWin')!=='1');$('#start').textContent=hasResumableCampaignInMemory()||storageRead(saveKey)?'ادامهٔ نبرد':'شروع نبرد'}if(name==='game'){hud.classList.remove('hidden');sync()}if(name==='pausePanel')updatePauseSaveStatus()}
+function showScreen(name){if(name!=='game')releaseGameInputs();else if(document.activeElement?.closest?.('.panel'))document.activeElement.blur();screen=name;gameRoot.classList.toggle('playing',name==='game');if(name==='game'&&world)setMissionScene(world.mission);hud.classList.toggle('hidden',name!=='game');for(const id of ['home','heroes','pausePanel','upgradePanel','result','backupCodePanel'])$('#'+id).classList.toggle('hidden',id!==name&&!(id==='result'&&['success','victory','over'].includes(name)));if(name==='home'){updateHome();updateHomeSaveStatus();$('#survival').classList.toggle('hidden',!sessionWinUnlocked&&storageRead('rwWin')!=='1');$('#start').textContent=hasResumableCampaignInMemory()||storageRead(saveKey)?'ادامهٔ نبرد':'شروع نبرد'}if(name==='game'){hud.classList.remove('hidden');sync()}if(name==='pausePanel')updatePauseSaveStatus()}
 function toast(text){const el=$('#toast');el.textContent=text;el.classList.add('on');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('on'),1700)}
 function hasResumableCampaignInMemory(){return !!(world&&!world.endless&&!world.victory&&!world.gameOver)}
 function resumeInMemoryCampaign(){if(!hasResumableCampaignInMemory())return false;if(world.missionPassed){showResult('منطقه پاکسازی شد','پیشرفت کارزار در حافظهٔ همین صفحه محفوظ است؛ برای نگهداری دائمی پشتیبان بگیرید.','success');return true}showScreen('game');last=performance.now();scheduleFrame();if(saveStatus==='failed')toast('ذخیرهٔ مرورگر ناموفق بود؛ برای جلوگیری از حذف پیشرفت پشتیبان بگیرید');return true}
@@ -210,13 +210,38 @@ function exportCampaignBackup(){
   toast('دانلود پشتیبان ممکن نشد؛ پیشرفت فعلی را حفظ کنید و دوباره تلاش کنید');
  }
 }
+// R41: manual recovery is available even when clipboard and Blob downloads are denied.
+// A code is displayed only after an explicit user action, and wiped on close.
+let backupCodeOrigin='home';
+function openBackupCode(mode,raw=''){
+ backupCodeOrigin=screen==='pausePanel'?'pausePanel':'home';
+ const box=$('#backupCodeText');box.value=raw;
+ $('#backupCodeTitle').textContent=mode==='import'?'بازیابی پیشرفت از کد':'کد پشتیبان پیشرفت';
+ $('#backupCodeHint').textContent=mode==='import'?'کد JSON پشتیبان قبلی را وارد کنید. تا پیش از اعتبارسنجی، پیشرفت فعلی تغییر نمی‌کند.':'این کد فقط در همین صفحه نمایش داده می‌شود. آن را انتخاب و در یک فایل خصوصی ذخیره کنید.';
+ $('#applyBackupCode').hidden=mode!=='import';
+ showScreen('backupCodePanel');box.focus();if(mode==='export')box.select();
+}
+function closeBackupCode(){
+ $('#backupCodeText').value='';showScreen(backupCodeOrigin);
+}
+$('#closeBackupCode').onclick=closeBackupCode;
+$('#pasteSave').onclick=()=>openBackupCode('import');
+$('#pastePauseSave').onclick=()=>openBackupCode('import');
+$('#applyBackupCode').onclick=()=>{
+ const code=$('#backupCodeText').value;
+ const imported=readCampaignBackup(code);
+ if(!imported){$('#backupCodeHint').textContent='کد پشتیبان معتبر نیست؛ پیشرفت فعلی دست‌نخورده باقی ماند.';return}
+ applyImportedCampaign(imported);
+ if(screen==='backupCodePanel')$('#backupCodeHint').textContent='بازیابی تأیید نشد؛ پیشرفت فعلی را بررسی کنید و بدون بستن این صفحه از آن پشتیبان بگیرید.';
+};
 async function copyCampaignBackup(){
  // Explicit user action; never auto-copy private progress or send it over the network.
  const current=world&&!world.endless?JSON.stringify({...world,pickups:boundedCampaignPickups(world.pickups)}):storageRead(saveKey);
  const backup=makeCampaignBackup(current);
  if(!backup){toast('پیشرفت معتبر برای کپی پشتیبان پیدا نشد');return}
  const copied=await copyCampaignBackupToClipboard(backup,navigator,document);
- toast(copied?'کد پشتیبان کپی شد؛ آن را در یک فایل متنی امن نگه دارید':'کپی پشتیبان ممکن نشد؛ از دریافت فایل استفاده کنید');
+ if(copied)toast('کد پشتیبان کپی شد؛ آن را در یک فایل متنی امن نگه دارید');
+ else openBackupCode('export',backup);
 }
 $('#copySave').onclick=copyCampaignBackup;$('#copyPauseSave').onclick=copyCampaignBackup;
 $('#exportSave').onclick=exportCampaignBackup;$('#exportPauseSave').onclick=exportCampaignBackup;$('#resultExport').onclick=exportCampaignBackup;$('#resultRetryClear').onclick=()=>{const ok=save();if(ok){$('#resultRetryClear').hidden=true;$('#resultSaveStatus').textContent='ذخیرهٔ پایان‌یافته پاکسازی و تأیید شد.'}else $('#resultSaveStatus').textContent='پاکسازی ذخیره ناموفق بود؛ ذخیرهٔ قدیمی هنوز ممکن است موجود باشد.'};$('#retrySave').onclick=()=>{save();updatePauseSaveStatus();if(saveStatus==='saved')toast('پیشرفت کارزار اکنون ذخیره شد')};
@@ -227,6 +252,9 @@ $('#importSaveFile').onchange=async e=>{
  if(file.size>MAX_CAMPAIGN_BACKUP_BYTES){toast('حجم فایل پشتیبان بیش از حد مجاز است');return}
  let imported=null;try{imported=readCampaignBackup(await file.text())}catch(_){imported=null}
  if(!imported){toast('فایل پشتیبان معتبر نیست؛ پیشرفت فعلی محفوظ ماند');return}
+ applyImportedCampaign(imported);
+};
+function applyImportedCampaign(imported){
  if((hasResumableCampaignInMemory()||storageRead(saveKey)!==null)&&!confirm('بازیابی، پیشرفت فعلی (از جمله پیشرفت ذخیره‌نشده در همین صفحه) را جایگزین می‌کند. ادامه می‌دهید؟'))return;
  const priorSave=storageRead(saveKey);
 // Import is a destructive replacement: refuse a stale-tab overwrite.
@@ -242,7 +270,9 @@ if(foreignSaveDetected||(lastSavedSnapshot!==undefined&&priorSave!==lastSavedSna
   return;
  }
  saveStatus='saved';lastSavedSnapshot=imported;foreignSaveDetected=false;storageWrite('rwHero',hero);updateHome();toast('پشتیبان بازیابی شد و نبرد آمادهٔ ادامه است');
-};$('#survival').onclick=()=>{if(!confirmCampaignReplacement('survival'))return;newWorld(true)};$('#pause').onclick=()=>{save();showScreen('pausePanel')};$('#resume').onclick=()=>{showScreen('game');last=performance.now();scheduleFrame()};$('#openUpgrades').onclick=()=>{if(world){$('#upgradePoints').textContent=fa(world.points);$('#upgradePoints2').textContent=fa(world.points);showScreen('upgradePanel');updateUpgradeButtons();$('#moj1Status').textContent='خرید با '+MOJ1_COMMERCE.asset+' فعلاً غیرفعال است؛ امتیازهای ارتقا فقط در بازی به‌دست می‌آیند.'}};$('#upgradeBack').onclick=()=>{showScreen('game');last=performance.now();scheduleFrame()};document.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>upgrade(+b.dataset.up));$('#goHome').onclick=()=>{save();showScreen('home')};$('#continue').onclick=nextMission;$('#retry').onclick=()=>{if(!confirmCampaignReplacement('retry'))return;newWorld(false)};$('#resultHome').onclick=modalResultHome;$('#rocket').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;e.preventDefault();launchRocket()};$('#rocket').onclick=e=>{if(isKeyboardOrAssistiveClick(e))launchRocket()};$('#drone').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;e.preventDefault();droneStrike()};$('#drone').onclick=e=>{if(isKeyboardOrAssistiveClick(e))droneStrike()};$('#special').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;e.preventDefault();special()};$('#special').onclick=e=>{if(isKeyboardOrAssistiveClick(e))special()};$('#fire').onpointerdown=e=>{if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer(fireId,e.pointerId,screen))return;e.preventDefault();fireId=e.pointerId;try{$('#fire').setPointerCapture(e.pointerId)}catch(_){fireId=null;return}updateHeldFire();fire()};function endFire(e){if(!isOwnedGameplayPointer(fireId,e.pointerId))return;fireId=null;updateHeldFire()}$('#fire').onpointerup=$('#fire').onpointercancel=$('#fire').onlostpointercapture=endFire;$('#fire').onclick=e=>{if(isKeyboardOrAssistiveClick(e))fire()};$('#interact').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;e.preventDefault();interactObjective()};$('#interact').onclick=e=>{if(isKeyboardOrAssistiveClick(e))interactObjective()};
+
+}
+$('#survival').onclick=()=>{if(!confirmCampaignReplacement('survival'))return;newWorld(true)};$('#pause').onclick=()=>{save();showScreen('pausePanel')};$('#resume').onclick=()=>{showScreen('game');last=performance.now();scheduleFrame()};$('#openUpgrades').onclick=()=>{if(world){$('#upgradePoints').textContent=fa(world.points);$('#upgradePoints2').textContent=fa(world.points);showScreen('upgradePanel');updateUpgradeButtons();$('#moj1Status').textContent='خرید با '+MOJ1_COMMERCE.asset+' فعلاً غیرفعال است؛ امتیازهای ارتقا فقط در بازی به‌دست می‌آیند.'}};$('#upgradeBack').onclick=()=>{showScreen('game');last=performance.now();scheduleFrame()};document.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>upgrade(+b.dataset.up));$('#goHome').onclick=()=>{save();showScreen('home')};$('#continue').onclick=nextMission;$('#retry').onclick=()=>{if(!confirmCampaignReplacement('retry'))return;newWorld(false)};$('#resultHome').onclick=modalResultHome;$('#rocket').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;e.preventDefault();launchRocket()};$('#rocket').onclick=e=>{if(isKeyboardOrAssistiveClick(e))launchRocket()};$('#drone').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;e.preventDefault();droneStrike()};$('#drone').onclick=e=>{if(isKeyboardOrAssistiveClick(e))droneStrike()};$('#special').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;e.preventDefault();special()};$('#special').onclick=e=>{if(isKeyboardOrAssistiveClick(e))special()};$('#fire').onpointerdown=e=>{if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer(fireId,e.pointerId,screen))return;e.preventDefault();fireId=e.pointerId;try{$('#fire').setPointerCapture(e.pointerId)}catch(_){fireId=null;return}updateHeldFire();fire()};function endFire(e){if(!isOwnedGameplayPointer(fireId,e.pointerId))return;fireId=null;updateHeldFire()}$('#fire').onpointerup=$('#fire').onpointercancel=$('#fire').onlostpointercapture=endFire;$('#fire').onclick=e=>{if(isKeyboardOrAssistiveClick(e))fire()};$('#interact').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;e.preventDefault();interactObjective()};$('#interact').onclick=e=>{if(isKeyboardOrAssistiveClick(e))interactObjective()};
 const stick=$('#stick'),knob=$('#knob');function stickMove(e){let r=stick.getBoundingClientRect(),dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2),lim=r.width*.36,len=Math.hypot(dx,dy)||1,x=dx/len*Math.min(len,lim),y=dy/len*Math.min(len,lim);knob.style.transform=`translate(${x}px,${y}px)`;const axes=joystickAxes(x,y,lim);joyF=axes.forward;joyS=axes.side}stick.onpointerdown=e=>{if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer(joyId,e.pointerId,screen))return;e.preventDefault();joyId=e.pointerId;try{stick.setPointerCapture(e.pointerId)}catch(_){joyId=null;return}stickMove(e)};stick.onpointermove=e=>{if(e.pointerId===joyId)stickMove(e)};function endStick(e){if(e.pointerId!==joyId)return;joyId=null;joyF=joyS=0;knob.style.transform=''}stick.onpointerup=endStick;stick.onpointercancel=endStick;stick.onlostpointercapture=endStick;
 // Aiming with a finger (including landscape tablets) must never fire a shot.
 // A desktop mouse drag is also an aim gesture, not a click-to-fire action.
