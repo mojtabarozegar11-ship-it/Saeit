@@ -1,0 +1,25 @@
+intake_slot_not_sample_id	actual_sample_id	biological_replicate_id	treatment_group	collection_date_utc	species_taxon_id	sequencing_platform	read_layout	read_mate_R1_or_R2_or_SE	raw_fastq_filename	raw_fastq_bytes	raw_fastq_sha256	fastq_phred_encoding	run_accession	provider_chain_of_custody	reference_assembly_accession	reference_assembly_release	reference_fasta_sha256	reference_annotation_accession	reference_annotation_release	reference_gff3_sha256	authorization_for_research_use	verification_state
+FILE_SLOT_01																						MISSING_NOT_RECEIVED
+FILE_SLOT_02																						MISSING_NOT_RECEIVED
+FILE_SLOT_03																						MISSING_NOT_RECEIVED
+FILE_SLOT_04																						MISSING_NOT_RECEIVED
+FILE_SLOT_05																						MISSING_NOT_RECEIVED
+FILE_SLOT_06																						MISSING_NOT_RECEIVED
+FILE_SLOT_07																						MISSING_NOT_RECEIVED
+FILE_SLOT_08																						MISSING_NOT_RECEIVED
+FILE_SLOT_09																						MISSING_NOT_RECEIVED
+FILE_SLOT_10																						MISSING_NOT_RECEIVED
+FILE_SLOT_11																						MISSING_NOT_RECEIVED
+FILE_SLOT_12																						MISSING_NOT_RECEIVED
+FILE_SLOT_13																						MISSING_NOT_RECEIVED
+FILE_SLOT_14																						MISSING_NOT_RECEIVED
+FILE_SLOT_15																						MISSING_NOT_RECEIVED
+FILE_SLOT_16																						MISSING_NOT_RECEIVED
+FILE_SLOT_17																						MISSING_NOT_RECEIVED
+FILE_SLOT_18																						MISSING_NOT_RECEIVED
+FILE_SLOT_19																						MISSING_NOT_RECEIVED
+FILE_SLOT_20																						MISSING_NOT_RECEIVED
+FILE_SLOT_21																						MISSING_NOT_RECEIVED
+FILE_SLOT_22																						MISSING_NOT_RECEIVED
+FILE_SLOT_23																						MISSING_NOT_RECEIVED
+FILE_SLOT_24																						MISSING_NOT_RECEIVED
