@@ -92,8 +92,10 @@ def taniya_studio(request):
 
 
 def platform_page(request, section):
-    if request.get_host().split(":")[0].lower() in {"mojplaywin.com", "www.mojplaywin.com"}:
-        from .mojplaywin_views import platform_section
+    # Keep the shared URL dispatcher consistent with the strict MojPlayWin
+    # canonical-host predicate; a single legal terminal DNS dot is valid.
+    from .mojplaywin_views import _is_mojplaywin, platform_section
+    if _is_mojplaywin(request):
         return platform_section(request, section)
     pages = {
         "agriculture": {
