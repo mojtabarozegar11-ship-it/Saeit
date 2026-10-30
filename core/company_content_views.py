@@ -1,4 +1,5 @@
 from urllib.parse import unquote, urlsplit
+from django.db import DatabaseError
 from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import render
@@ -42,7 +43,7 @@ def safe_gallery_target_path(path):
     return path
 
 
-def company_gallery(request):
+def _company_gallery_with_schema(request):
     catalog_unavailable = missing_public_tables(CompanyGalleryMedia, NewsletterStory)
     kind = request.GET.get("type", "").strip().lower()[:16]  # Bound public filter parsing
     query = request.GET.get("q", "").strip()[:120]  # Avoid unbounded public title scans
@@ -72,6 +73,25 @@ def company_gallery(request):
     })
     return mark_public_data_unavailable(response) if catalog_unavailable else response
 
+
+
+def company_gallery(request):
+    """Do not turn a mid-query/gallery-render DB outage into an HTTP 500."""
+    try:
+        return _company_gallery_with_schema(request)
+    except DatabaseError:
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>گالری موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>گالری موقتاً در دسترس نیست</h1>'
+            '<p role="status">نمایش تصاویر و ویدئوها موقتاً امکان‌پذیر نیست؛ '
+            'این وضعیت به معنای حذف آثار نیست.</p>'
+            '<p><a href="/company/">بازگشت به شرکت</a></p>'
+            '</main></body></html>',
+            status=503, content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
 
 
 def _company_temporarily_unavailable():
