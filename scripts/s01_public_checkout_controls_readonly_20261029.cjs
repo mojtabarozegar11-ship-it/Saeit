@@ -86,7 +86,7 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
     const report={schema:'s01-anonymous-get-controls.v1',scope:'GET_ONLY_NO_PAYMENT',
       checkedAt:new Date().toISOString(),ordersCreated:0,paymentsCreated:0,rows,
       complete:rows.length===URLS.length*2 && rows.every(r=>{
-        const productDetail=/^\\/store\\/product\\/(72|225|879)\\/$/.test(r.path);
+        const productDetail=/^\/store\/product\/(72|225|879)\/$/.test(r.path);
         return r.observedSafe && r.jsErrors.length===0 &&
           (!productDetail || (r.checkoutLinks>0 && r.mismatchedCheckoutLinks===0));
       }),
