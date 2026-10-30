@@ -207,3 +207,13 @@ class PublishedKnowledgeVisibilityTests(TestCase):
         self.assertIn("/knowledge/book/s01-public-book/", body)
         self.assertNotIn("/knowledge/book/s01-private-book/", body)
         self.assertIn("/knowledge/book/s01%26book/", body)
+
+
+class CompanyAliasRelevanceTests(SimpleTestCase):
+    def test_single_character_search_does_not_invent_company_top_hit(self):
+        for query in ("م", "ز", "  م  ", "مد"):
+            self.assertFalse(seo_views._matches_company_alias(query), query)
+
+    def test_explicit_company_and_executive_searches_still_match(self):
+        for query in ("زمرد ملل", "مجتبی روزگار", "مدیرعامل", "شرکت کشت و صنعت زمرد ملل"):
+            self.assertTrue(seo_views._matches_company_alias(query), query)
