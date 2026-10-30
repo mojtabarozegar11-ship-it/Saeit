@@ -1,0 +1,44 @@
+name: MojPlayWin private backup direct cPanel preflight
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-private-backup-direct-cpanel-preflight
+  cancel-in-progress: false
+jobs:
+  pinned-direct-cpanel-readonly:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify pinned direct cPanel SSH without touching production
+        shell: bash
+        env:
+          SITE_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$SITE_KEY" || { echo 'CPANEL_KEY_NOT_CONFIGURED'; exit 1; }
+          d="$RUNNER_TEMP/mpw-cpanel-private-probe"
+          install -d -m 700 "$d"
+          printf '%s' "$SITE_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/site.key"
+          chmod 600 "$d/site.key"
+          ssh-keygen -y -P "" -f "$d/site.key" >/dev/null
+          ssh-keyscan -T 12 -p 1396 -t ed25519 178.239.147.125 > "$d/site.known" 2>/dev/null
+          test -s "$d/site.known" || { echo 'CPANEL_PORT_UNREACHABLE'; exit 1; }
+          fingerprint="$(ssh-keygen -lf "$d/site.known" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$fingerprint" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' || { echo 'CPANEL_HOST_KEY_PIN_MISMATCH'; exit 1; }
+          timeout 45s ssh -T -F /dev/null \
+            -i "$d/site.key" \
+            -o UserKnownHostsFile="$d/site.known" \
+            -o StrictHostKeyChecking=yes \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=12 \
+            -o ConnectionAttempts=1 \
+            -o ForwardAgent=no \
+            -p 1396 zomorod2@178.239.147.125 \
+            'test "$(id -un)" = zomorod2 && test -d /home/zomorod2/mojplaywin.com && printf "CPANEL_DIRECT_AUTHENTICATED=YES\n" && df -PB1 /home/zomorod2 | awk '"'"'NR == 2 {print "HOST_FREE_BYTES=" $4}'"'"''
+          echo 'PRODUCTION_WRITES=NONE'
+          echo 'FACTORY_VPS_USED=NO'
