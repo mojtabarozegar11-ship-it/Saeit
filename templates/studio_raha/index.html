@@ -154,11 +154,11 @@ function runnerGame(stage){
  stage.append(jump);
  const restart=button('Run again',()=>runnerGame(stage),'alt');restart.hidden=true;stage.append(restart);
  const ground=191,playerX=88;
- function stop(){running=false;cancelAnimationFrame(raf);document.removeEventListener('keydown',key);document.removeEventListener('visibilitychange',visibility);canvas.removeEventListener('pointerdown',touch)}
+ function stop(){running=false;cancelAnimationFrame(raf);document.removeEventListener('keydown',key);document.removeEventListener('visibilitychange',visibility);canvas.removeEventListener('pointerdown',touch);window.removeEventListener('blur',suspend);window.removeEventListener('focus',resumeVisible)}
  function finish(won){stop();score.textContent='Cleared: '+passed+' / 8';message(stage,won?'🏆 Eight obstacles cleared — jungle complete!':'🌿 You hit an obstacle. Time your jump and try again.');jump.disabled=true;restart.hidden=false}
- function key(e){if(e.code!=='Space'||e.repeat||e.ctrlKey||e.altKey||e.metaKey||!$('#gameOverlay').classList.contains('open'))return;if(e.target?.closest?.('input,textarea,select,[contenteditable="true"]'))return;e.preventDefault();jump.click()}
+ function key(e){if(e.code!=='Space'||e.repeat||e.ctrlKey||e.altKey||e.metaKey||!$('#gameOverlay').classList.contains('open'))return;if(e.target?.closest?.('button,a,input,textarea,select,[contenteditable="true"]'))return;e.preventDefault();jump.click()}
  function touch(e){if(e.pointerType==='mouse'&&e.button!==0)return;e.preventDefault();jump.click()}
- function visibility(){if(document.hidden){cancelAnimationFrame(raf);raf=0;last=0}else if(running&&!raf){raf=requestAnimationFrame(frame)}}
+ function suspend(){cancelAnimationFrame(raf);raf=0;last=0}\n function resumeVisible(){if(running&&!document.hidden&&!raf)raf=requestAnimationFrame(frame)}\n function visibility(){if(document.hidden)suspend();else resumeVisible()}
  function draw(){
   ctx.clearRect(0,0,640,230);ctx.fillStyle='#baf0e5';ctx.fillRect(0,0,640,230);
   ctx.fillStyle='#68b66c';ctx.fillRect(0,ground,640,39);
@@ -175,7 +175,7 @@ function runnerGame(stage){
    if(o.x<playerX+33&&o.x+o.w>playerX+6&&air<o.h-5){draw();finish(false);return}}
   obstacles=obstacles.filter(o=>o.x+o.w>-20);speed=Math.min(320,230+passed*11);draw();raf=requestAnimationFrame(frame);
  }
- document.addEventListener('keydown',key);document.addEventListener('visibilitychange',visibility);canvas.addEventListener('pointerdown',touch);
+ document.addEventListener('keydown',key);document.addEventListener('visibilitychange',visibility);window.addEventListener('blur',suspend);window.addEventListener('focus',resumeVisible);canvas.addEventListener('pointerdown',touch);
  activeRunnerCleanup=()=>stop();draw();raf=requestAnimationFrame(frame);
 }
 function ticGame(stage){let board=Array(9).fill(''),turn='✕';stage.innerHTML='<div class="stage-message">Two-player mini match · X goes first</div>';const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(3,54px);gap:6px';for(let i=0;i<9;i++){let b=button('',()=>{if(board[i])return;board[i]=turn;b.textContent=turn;b.classList.add('alt');if(checkWin(board,turn)){message(stage,turn+' wins! Nice match.');grid.querySelectorAll('button').forEach(x=>x.disabled=true)}else if(board.every(Boolean))message(stage,'A friendly draw! Play again?');else{turn=turn==='✕'?'○':'✕';message(stage,turn+' plays next.')}} ,'alt');b.style.cssText='height:54px;font-size:22px;padding:0';grid.append(b)}stage.append(grid,button('New board',()=>ticGame(stage),'alt'))}
