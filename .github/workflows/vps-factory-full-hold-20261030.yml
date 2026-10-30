@@ -57,7 +57,7 @@ jobs:
           target = re.compile(
               r"SAEIT_(MASTER_AGENT_V1|FACTORY_EVERY_MINUTE_V1|FACTORY_LIFECYCLE_12_V1|"
               r"AUTONOMOUS_PRODUCTS_V2|PRODUCTION_WAREHOUSE_V1|AGRI200_AUTONOMOUS_CLOSED_LOOP_V1|"
-              r"STRICT_SERIAL_PRODUCT_TO_QC1000_20261025)|factory[-_ ]?40|family[-_ ]master|"
+              r"STRICT_SERIAL_PRODUCT_TO_QC1000_20261025)|factory|family[-_ ]master|"
               r"build50|stage[2-6]|research[-_]navigator|agri200|qc1000|strict[-_. ]serial|"
               r"autonomous[-_]product[-_]runtime|factory_vps_product_cycle|"
               r"factory_production_warehouse|vps-only-loop|leech",
