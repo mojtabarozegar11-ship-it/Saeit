@@ -123,16 +123,32 @@ jobs:
           printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" || { echo 'S01_CPANEL_HOST_PIN=BLOCKED'; exit 1; }
           echo 'S01_CPANEL_HOST_PIN=VERIFIED'
-          # Reuse a single authenticated session. Retry only harmless identity reads.
+          # Keep raw SSH diagnostics private; print only a bounded failure class.
           session_ready=0
+          ssh_error="$d/ssh-error"
           for attempt in 1 2 3 4 5; do
-            if timeout 65s ssh -T -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>&1; then
+            : > "$ssh_error"
+            if timeout 65s ssh -T -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>"$ssh_error"; then
               session_ready=1
               break
+            else
+              rc=$?
+              if grep -Eqi 'Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED' "$ssh_error"; then
+                failure_class=HOST_KEY_MISMATCH
+              elif grep -Eqi 'Permission denied|Authentication failed|No supported authentication methods' "$ssh_error"; then
+                failure_class=AUTH_REJECTED
+              elif grep -Eqi 'Connection timed out|Operation timed out|No route to host|Network is unreachable|Connection refused|Connection reset|kex_exchange_identification|banner exchange' "$ssh_error" || [ "$rc" -eq 124 ]; then
+                failure_class=TRANSPORT_OR_TIMEOUT
+              elif [ "$rc" -eq 1 ]; then
+                failure_class=REMOTE_IDENTITY_MISMATCH
+              else
+                failure_class=UNKNOWN
+              fi
+              echo "S01_PINNED_SESSION_ATTEMPT=$attempt CLASS=$failure_class"
             fi
-            echo "S01_PINNED_IDENTITY_RETRY=$attempt"
             if [ "$attempt" -lt 5 ]; then sleep 6; fi
           done
+          rm -f "$ssh_error"
           test "$session_ready" = 1 || { echo 'S01_PINNED_SESSION=BLOCKED'; exit 1; }
           echo 'S01_PINNED_SESSION=VERIFIED'
       - name: Classify bounded cPanel checkout provenance (read-only; no source transfer)
