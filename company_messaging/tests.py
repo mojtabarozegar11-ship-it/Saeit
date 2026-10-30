@@ -275,13 +275,21 @@ class MessagingTests(TestCase):
         self.assertEqual(msg.external_reference, "accepted-reference")
 
     def test_future_dated_opt_in_cannot_queue_or_dispatch(self):
-        contact = Contact.objects.create(
-            unit=self.unit, name="Future opt-in", email="future@example.org",
-            email_consent_at=timezone.now() + timedelta(days=1),
-            consent_evidence="future-dated-record",
-        )
+        contact = Contact(unit=self.unit, name="Future opt-in", email="future@example.org",
+                          email_consent_at=timezone.now() + timedelta(days=1),
+                          consent_evidence="future-dated-record")
         with self.assertRaises(ValidationError):
             contact.full_clean()
+        with self.assertRaises(ValidationError):
+            contact.save()
+        self.assertIsNone(contact.pk)
+        # Simulate legacy/imported records bypassing model hooks; queue still
+        # fails closed even if an administrator used QuerySet.update().
+        contact.email_consent_at = None
+        contact.save()
+        Contact.objects.filter(pk=contact.pk).update(
+            email_consent_at=timezone.now() + timedelta(days=1))
+        contact.refresh_from_db()
         with self.assertRaises(ValidationError):
             enqueue(Message(unit=self.unit, channel="email", sender=self.owner,
                             contact=contact, body="Must not send"))
@@ -290,8 +298,9 @@ class MessagingTests(TestCase):
     def test_expired_future_consent_blocks_queued_message_at_handoff(self):
         msg = self.external()
         contact = msg.contact
-        contact.email_consent_at = timezone.now() + timedelta(days=1)
-        contact.save()
+        # An import bypassed save(); dispatch must still revalidate.
+        Contact.objects.filter(pk=contact.pk).update(
+            email_consent_at=timezone.now() + timedelta(days=1))
         with patch("company_messaging.services._deliver") as delivery:
             self.assertEqual(dispatch_one(msg.pk), "blocked")
             delivery.assert_not_called()
