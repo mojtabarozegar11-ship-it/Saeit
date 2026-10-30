@@ -121,7 +121,7 @@ Total output lines: 1
         $('#icing',gamebody).oninput=e=>{icing=e.target.value;$('#cakepreview',gamebody).style.filter='drop-shadow(0 0 14px '+icing+')';$('#cakepreview',gamebody).style.borderBottom='12px solid '+icing;rememberCake()};
         gamebody.querySelectorAll('[data-top]').forEach(b=>b.onclick=()=>{topping=b.dataset.top;rememberCake();draw();gamebody.querySelector('[data-top="'+topping+'"]')?.focus({preventScroll:true})});
         gamebody.querySelector('[data-cake-action="candle"]').onclick=()=>{candles=Math.min(12,candles+1);rememberCake();draw();gamebody.querySelector('[data-cake-action="'+(candles===12?'undo':'candle')+'"]')?.focus({preventScroll:true})};
-        gamebody.querySelector('[data-cake-action="undo"]').onclick=()=>{candles=Math.max(0,candles-1);rememberCake();draw();gamebody.querySelector('[data-cake-action="'+(candles===0?'candle':'undo')+'"]')?.focus({preventScroll:true})};
+        gamebody.querySelector('[data-cake-action="undo"]').onclick=()=>{candles=Math.max(0,candles-1);draw();rememberCake();gamebody.querySelector('[data-cake-action="'+(candles===0?'candle':'undo')+'"]')?.focus({preventScroll:true})};
         gamebody.querySelector('[data-cake-action="download"]').onclick=exportCake;
         gamebody.querySelector('[data-cake-action="reset"]').onclick=()=>{try{sessionStorage.removeItem('taniyaCakeDraftR51')}catch{}mountCake()};
       }
