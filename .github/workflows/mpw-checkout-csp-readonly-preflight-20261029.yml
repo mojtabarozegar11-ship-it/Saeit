@@ -127,11 +127,13 @@ jobs:
           # Reuse a single authenticated session. Retry only harmless identity reads.
           session_ready=0
           for attempt in 1 2 3 4 5; do
-            if timeout 65s ssh -T -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>"$d/ssh-error"; then
+            if timeout 65s ssh -v -T -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>"$d/ssh-error"; then
               session_ready=1
               break
             fi
-            # Print only a bounded, predefined classification, never raw SSH stderr.
+            # -v diagnostics remain ephemeral in runner-only stderr; emit only an allowlisted class.
+          # Never upload/print raw stderr, keys, paths or account identifiers.
+          # Print only a bounded, predefined classification, never raw SSH stderr.
             echo "S01_PINNED_IDENTITY_FAILURE=$(python3 scripts/s01_ssh_error_classify.py "$d/ssh-error")"
             : > "$d/ssh-error"
             echo "S01_PINNED_IDENTITY_RETRY=$attempt"
