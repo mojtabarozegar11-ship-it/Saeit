@@ -158,7 +158,9 @@ function runnerGame(stage){
  function finish(won){stop();score.textContent='Cleared: '+passed+' / 8';message(stage,won?'🏆 Eight obstacles cleared — jungle complete!':'🌿 You hit an obstacle. Time your jump and try again.');jump.disabled=true;restart.hidden=false}
  function key(e){if(e.code!=='Space'||e.repeat||e.ctrlKey||e.altKey||e.metaKey||!$('#gameOverlay').classList.contains('open'))return;if(e.target?.closest?.('button,a,input,textarea,select,[contenteditable="true"]'))return;e.preventDefault();jump.click()}
  function touch(e){if(!running||!$('#gameOverlay').classList.contains('open')||e.isPrimary===false||(e.pointerType==='mouse'&&e.button!==0))return;e.preventDefault();jump.click()}
- function suspend(){cancelAnimationFrame(raf);raf=0;last=0}\n function resumeVisible(){if(running&&!document.hidden&&!raf)raf=requestAnimationFrame(frame)}\n function visibility(){if(document.hidden)suspend();else resumeVisible()}
+ function suspend(){cancelAnimationFrame(raf);raf=0;last=0}
+ function resumeVisible(){if(running&&!document.hidden&&!raf)raf=requestAnimationFrame(frame)}
+ function visibility(){if(document.hidden)suspend();else resumeVisible()}
  function draw(){
   ctx.clearRect(0,0,640,230);ctx.fillStyle='#baf0e5';ctx.fillRect(0,0,640,230);
   ctx.fillStyle='#68b66c';ctx.fillRect(0,ground,640,39);
