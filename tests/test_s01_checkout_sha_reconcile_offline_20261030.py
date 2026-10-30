@@ -147,9 +147,9 @@ class OfflinePreimageReconcileTests(unittest.TestCase):
     def test_comments_only_source_drift_is_ast_equivalent_but_still_blocked(self):
         approved = self.root / "approved"
         (approved / "mpw_commerce").mkdir(parents=True)
-        original = b"price = 5\\n"
+        original = b"price = 5\n"
         (approved / "mpw_commerce" / "product_checkout_page.py").write_bytes(original)
-        self.source.write_bytes(b"# harmless comment\\nprice = 5\\n")
+        self.source.write_bytes(b"# harmless comment\nprice = 5\n")
         verdict = assess(self.root, hashlib.sha256(original).hexdigest(),
                          approved_root=approved)
         self.assertEqual(verdict["status"], "SOURCE_SHA_DRIFT")
@@ -161,9 +161,9 @@ class OfflinePreimageReconcileTests(unittest.TestCase):
     def test_logic_changing_drift_has_distinct_ast_and_stays_blocked(self):
         approved = self.root / "approved"
         (approved / "mpw_commerce").mkdir(parents=True)
-        original = b"price = 5\\n"
+        original = b"price = 5\n"
         (approved / "mpw_commerce" / "product_checkout_page.py").write_bytes(original)
-        self.source.write_bytes(b"price = 6\\n")
+        self.source.write_bytes(b"price = 6\n")
         verdict = assess(self.root, hashlib.sha256(original).hexdigest(),
                          approved_root=approved)
         self.assertEqual(verdict["status"], "SOURCE_SHA_DRIFT")
@@ -173,9 +173,9 @@ class OfflinePreimageReconcileTests(unittest.TestCase):
     def test_unparseable_checkout_is_never_treated_as_semantically_equal(self):
         approved = self.root / "approved"
         (approved / "mpw_commerce").mkdir(parents=True)
-        original = b"price = 5\\n"
+        original = b"price = 5\n"
         (approved / "mpw_commerce" / "product_checkout_page.py").write_bytes(original)
-        self.source.write_bytes(b"def broken(:\\n")
+        self.source.write_bytes(b"def broken(:\n")
         verdict = assess(self.root, hashlib.sha256(original).hexdigest(),
                          approved_root=approved)
         self.assertFalse(verdict["observed_python_syntax_valid"])
