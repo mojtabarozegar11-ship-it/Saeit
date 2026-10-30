@@ -48,7 +48,7 @@ jobs:
           echo "OFFICE_RELEASE_QUALITY=passed"
   deploy:
     needs: quality
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feature/zomorod-messaging-main-integration-20261030'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feature/zomorod-messaging-main-integration-20261030' && false # blocked pending production HTTP 500 root cause
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
