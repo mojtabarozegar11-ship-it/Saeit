@@ -96,9 +96,10 @@ Total output lines: 1
     function mountCake(){
       // Only local, non-personal design state; tolerate disabled/private storage.
       let draft=null;try{draft=JSON.parse(sessionStorage.getItem('taniyaCakeDraftR51')||'null')}catch{}
-      let icing=typeof draft?.icing==='string'&&/^#[0-9a-fA-F]{6}$/.test(draft.icing)?draft.icing:'#ff79b8';
-      let topping=['🍓','🌼','🍬'].includes(draft?.topping)?draft.topping:'🍓';
-      let candles=Number.isInteger(draft?.candles)?Math.max(0,Math.min(12,draft.candles)):0;
+      let icing='#ff79b8',topping='🍓',candles=0;
+      if(typeof draft?.icing==='string'&&/^#[0-9a-fA-F]{6}$/.test(draft.icing))icing=draft.icing;
+      if(['🍓','🌼','🍬'].includes(draft?.topping))topping=draft.topping;
+      if(Number.isInteger(draft?.candles))candles=Math.max(0,Math.min(12,draft.candles));
       function rememberCake(){try{sessionStorage.setItem('taniyaCakeDraftR51',JSON.stringify({icing,topping,candles}))}catch{}}
       const toppingNames={'🍓':'Berries','🌼':'Flowers','🍬':'Sweets'};
       function exportCake(){
