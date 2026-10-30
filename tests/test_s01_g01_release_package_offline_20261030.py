@@ -150,7 +150,7 @@ class OfflineReleasePackageTests(unittest.TestCase):
         for name in ("hero.webp", "hero2.webp"):
             (self.game / name).write_bytes(b"synthetic-image-bytes")
         (self.game / "deploy.py").write_text(
-            "ASSETS = " + repr(ASSETS + ["hero.webp", "hero2.webp"]) + "\\n",
+            "ASSETS = " + repr(ASSETS + ["hero.webp", "hero2.webp"]) + "\n",
             encoding="utf-8",
         )
         self.game.joinpath("index.html").write_bytes(
