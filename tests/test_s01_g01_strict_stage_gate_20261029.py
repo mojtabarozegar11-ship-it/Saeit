@@ -76,7 +76,7 @@ class StageGateTests(unittest.TestCase):
             gate.verify(self.path)
 
     def test_unicode_normalization_alias_is_rejected(self):
-        self.build(extra={"game\\u0301.js": b"decomposed", "gam\\u00e9.js": b"composed"})
+        self.build(extra={"game\u0301.js": b"decomposed", "gam\u00e9.js": b"composed"})
         with self.assertRaisesRegex(ValueError, "NORMALIZED_MEMBER_COLLISION"):
             gate.verify(self.path)
 
