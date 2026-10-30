@@ -1,4 +1,4 @@
-// G-01 R33: bounded, read-only radar route overlay. No campaign or storage writes.
+// G-01 R34: accessible, wall-aware route guidance. No campaign or storage writes.
 export const MAP_CELLS=16;
 export function relativeDirection(px,py,angle,tx,ty){
  if(![px,py,angle,tx,ty].every(Number.isFinite))return 'نامشخص';
@@ -36,6 +36,15 @@ export function findTacticalRoute(px,py,tx,ty,isWall,size=MAP_CELLS){
  }
  path.reverse();return {path,steps:path.length-1,approach:solidGoal};
 }
+// Guidance follows the same walkable route as the radar, never a bearing through a wall.
+export function routeGuidance(px,py,angle,tx,ty,isWall,size=MAP_CELLS){
+ if(![px,py,angle,tx,ty].every(Number.isFinite))return {status:'invalid',message:'مسیر هدف: نامشخص'};
+ const route=findTacticalRoute(px,py,tx,ty,isWall,size);
+ if(!route)return {status:'blocked',message:'مسیر هدف: مسدود؛ از سمت دیگری نزدیک شوید'};
+ if(route.steps===0)return {status:'arrived',steps:0,message:route.approach?'در محدودهٔ تعامل هدف':'در محل هدف'};
+ const next=route.path[1];
+ return {status:'reachable',steps:route.steps,message:'مسیر هدف: '+relativeDirection(px,py,angle,next.x,next.y)+' · '+route.steps+' خانه'};
+}
 export function paintTacticalMap(canvas,state,isWall,target){
  if(!canvas||!state||typeof isWall!=='function')return false;
  const ctx=canvas.getContext?.('2d');if(!ctx||!Number.isFinite(canvas.width)||canvas.width<=0)return false;
@@ -45,6 +54,11 @@ export function paintTacticalMap(canvas,state,isWall,target){
   if(isWall(x,y)){ctx.fillStyle='#56717a';ctx.fillRect(x*cell,y*cell,cell,cell)}
  const targetValid=Array.isArray(target)&&target.length===2&&target.every(Number.isFinite)&&target.every(v=>v>=0&&v<MAP_CELLS);
  const playerValid=[state.x,state.y,state.angle].every(Number.isFinite)&&state.x>=0&&state.y>=0&&state.x<MAP_CELLS&&state.y<MAP_CELLS;
+ if(typeof canvas.setAttribute==='function'){
+  const hint=targetValid&&playerValid?routeGuidance(state.x,state.y,state.angle,target[0],target[1],isWall):null;
+  const label=hint?'نقشه تاکتیکی؛ '+hint.message:targetValid?'نقشه تاکتیکی؛ موقعیت بازیکن نامعتبر است':'نقشه تاکتیکی؛ هدف فعالی وجود ندارد';
+  if(canvas.getAttribute?.('aria-label')!==label)canvas.setAttribute('aria-label',label);
+ }
  if(targetValid&&playerValid){
   const route=findTacticalRoute(state.x,state.y,target[0],target[1],isWall);
   if(route&&route.path.length>1&&typeof ctx.stroke==='function'){
