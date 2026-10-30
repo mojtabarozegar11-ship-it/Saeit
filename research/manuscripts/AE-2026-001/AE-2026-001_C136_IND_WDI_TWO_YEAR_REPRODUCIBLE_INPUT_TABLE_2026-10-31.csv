@@ -1,0 +1,3 @@
+country_iso3,year,employment_agriculture_pct_total_modeled_ilo,value_added_agriculture_forestry_fishing_pct_gdp,share_gap_percentage_points,share_ratio_dimensionless,provider_vintage,source_provenance
+IND,2023,43.513581124579,17.656538932824,25.857042191755,2.464445681576,2026-10-08,browser_extracted_official_WDI_API_not_raw_http
+IND,2024,42.354773887644,17.573579952417,24.781193935227,2.410139197723,2026-10-08,browser_extracted_official_WDI_API_not_raw_http
