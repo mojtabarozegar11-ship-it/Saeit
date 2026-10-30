@@ -234,6 +234,8 @@ class PerformanceMetric(models.Model):
         ordering = ("-recorded_on",)
 
     def clean(self):
+        if self.recorded_on and self.recorded_on > timezone.localdate():
+            raise ValidationError({"recorded_on": "آمار عملکرد برای تاریخ آینده قابل تأیید نیست."})
         if self.cost_irr is None or self.cost_irr < 0:
             raise ValidationError("هزینه منفی مجاز نیست.")
         if not self.evidence_reference.strip():
