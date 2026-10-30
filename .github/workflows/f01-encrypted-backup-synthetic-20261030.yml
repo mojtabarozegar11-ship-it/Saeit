@@ -42,7 +42,7 @@ jobs:
           import sys,os
           p=sys.argv[1]
           with open(p,"rb") as f:
-              assert f.read(29)==b"F01ENC-RSA3072-AES256GCM-V1\\n"
+              assert f.read(28)==b"F01ENC-RSA3072-AES256GCM-V1\\n"
           assert os.stat(p).st_size>4096
           print("ENCRYPTED_SYNTHETIC_ONLY=PASS")
           PY
