@@ -29,8 +29,16 @@ class KnowledgeInternalPagesTests(TestCase):
         self.assertContains(response, "OWNER APPROVAL")
         self.assertContains(response, "هنوز مقاله‌ای با وضعیت انتشار عمومی ثبت نشده است.")
 
-    def test_sitemap_contains_knowledge_book_and_domain(self):
+    def test_sitemap_indexes_published_books_only_and_active_domains(self):
+        # A book page may show an honest "not published" notice, but the
+        # discovery sitemap must not advertise a draft as a published book.
+        response = self.client.get("/sitemap.xml")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, f"/knowledge/book/{self.book.code}/")
+        self.assertContains(response, f"/knowledge/domain/{self.domain.code}/")
+
+        self.book.status = "published"
+        self.book.save(update_fields=["status"])
         response = self.client.get("/sitemap.xml")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f"/knowledge/book/{self.book.code}/")
-        self.assertContains(response, f"/knowledge/domain/{self.domain.code}/")
