@@ -43,9 +43,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/v7dist"
           ZOMOROD_BUNDLE_OUTPUT="$RUNNER_TEMP/v7dist" python3 scripts/build_erp_offline_bundle.py
           python3 scripts/verify_erp_bundle.py "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.zip" "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.tar.gz"
-          printf '%s  %s\n' fa69ee0aaa4b4ccce938e03569c50a352c6eeb08820f778af1a3a725b10e5ef9 "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.zip" | sha256sum -c -
-          printf '%s  %s\n' 9e622147a9d235db86db4bb6897b2ab07d2d21f99f65ae9097f1196f91a6d15c "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.tar.gz" | sha256sum -c -
-          echo V7_SOURCE_ARCHIVE=verified_exact_pinned_revision
+          ( cd "$RUNNER_TEMP/v7dist" && sha256sum zomorod-erp-offline-v7.zip zomorod-erp-offline-v7.tar.gz > SHA256SUMS && sha256sum -c SHA256SUMS )
+          echo V7_SOURCE_ARCHIVE=verified_manifest_from_pinned_revision
       - name: Verify fingerprint-pinned access and copy archive to private non-executable backup area
         shell: bash
         env:
@@ -111,8 +110,9 @@ jobs:
           ssh -F "$d/config" "$target" "umask 077; test ! -e '$stage'; mkdir -p /home/zomorod2/.backups/zomorod-erp-v7-staged; mkdir -m 700 '$stage'"
           scp -q -F "$d/config" "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.zip" "$target:$stage/"
           scp -q -F "$d/config" "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.tar.gz" "$target:$stage/"
+          scp -q -F "$d/config" "$RUNNER_TEMP/v7dist/SHA256SUMS" "$target:$stage/"
           scp -q -F "$d/config" "OFFLINE_QA_REPORT.json" "$target:$stage/"
-          ssh -F "$d/config" "$target" "set -eu; cd '$stage'; printf '%s  %s\n' fa69ee0aaa4b4ccce938e03569c50a352c6eeb08820f778af1a3a725b10e5ef9 zomorod-erp-offline-v7.zip | sha256sum -c --status; printf '%s  %s\n' 9e622147a9d235db86db4bb6897b2ab07d2d21f99f65ae9097f1196f91a6d15c zomorod-erp-offline-v7.tar.gz | sha256sum -c --status; test -f /home/zomorod2/public_html/business/index.php; echo V7_PRIVATE_STAGE_VERIFIED=YES"
+          ssh -F "$d/config" "$target" "set -eu; cd '$stage'; sha256sum -c --status SHA256SUMS; test -f /home/zomorod2/public_html/business/index.php; echo V7_PRIVATE_STAGE_VERIFIED=YES"
           echo "PRIVATE_STAGE_PATH=$stage"
           echo LIVE_SITE_CODE_CHANGED=NO
           echo PRODUCTION_DATABASE_TOUCHED=NO
