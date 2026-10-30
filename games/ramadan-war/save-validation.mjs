@@ -218,7 +218,9 @@ export function reconcileBossEncounter(state) {
 // placing the hero inside a solid wall. Recover to the known passable spawn
 // without touching score, objectives, inventory or earned campaign progress.
 export function restorePlayerPosition(state, isBlocked, isFootprintClear = null) {
-  if (!state || typeof isBlocked !== 'function') return null;
+  // A corrupt numeric checkpoint is not a wall-clipped valid save; never rewrite it.
+  if (!state || typeof isBlocked !== 'function' ||
+      !Number.isFinite(state.x) || !Number.isFinite(state.y)) return null;
   const clear = typeof isFootprintClear === 'function' ? isFootprintClear :
     (x, y) => !isBlocked(Math.floor(x), Math.floor(y));
   // A centre can be in a floor tile while the player's radius overlaps a wall.
