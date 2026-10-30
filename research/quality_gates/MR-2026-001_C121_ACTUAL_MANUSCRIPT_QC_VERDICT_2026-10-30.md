@@ -4,10 +4,10 @@ Checked 2026-10-30 against GitHub-fetched **C121** journal-facing manuscript and
 
 | Check | Actual result |
 |---|---|
-| Manuscript length | 122991 characters; 15123 whitespace-delimited words (approximate) |
+| Manuscript length | 122659 characters; ~15120 whitespace-delimited words (approximate; editorial recheck) |
 | Required major sections | PRESENT (9 headings) |
 | Internal Cxx version tokens | 0 |
-| Relative links to internal MR evidence files | 3; must be reviewed before journal submission |
+| Relative links to internal MR evidence files | 0 after C121 copy-edit and verified readback |
 | DOI-like occurrences | 53; syntax count only, **not** bibliographic verification |
 | Reviewer matrix | 8 claims, 6 explicitly BLOCKED |
 | Human author approval | NOT PRESENT |
@@ -16,4 +16,4 @@ Checked 2026-10-30 against GitHub-fetched **C121** journal-facing manuscript and
 
 **Decision: BLOCK_SUBMISSION.** A clean reading copy is usable for author/reviewer inspection, but it is not an accepted, submitted or published article. Do not convert unresolved Car 74/72 and 41/40, Amini F7, Cvejić roster or Baroni supplement into corrected numbers without primary evidence. Original Car institutional abstract independently states 72 and 45+13+14; it does **not** adjudicate conflicting Table 5/6 rows: https://researchers.une.edu.au/en/publications/using-a-mobile-phone-short-messaging-service-sms-for-irrigation-s-5/ .
 
-**Next atomic step:** resolve/remove 3 remaining internal relative links, then source-check all references and record author approval for the exact manuscript before selecting an appropriate journal submission workflow. Factory VPS remains on hold.
+**Next atomic step:** source-check all references and record author approval for the exact manuscript before selecting an appropriate journal submission workflow. Factory VPS remains on hold.
