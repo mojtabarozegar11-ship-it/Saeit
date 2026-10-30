@@ -1,0 +1,167 @@
+name: Split encrypted F-01 backup for recovery download
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/factory-vps-recovery-download-chunks-20261030.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: saeit-factory-backup-download-chunks
+  cancel-in-progress: false
+jobs:
+  split:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Download the existing encrypted backup
+        uses: actions/download-artifact@v4
+        with:
+          name: factory-vps-encrypted-backup-41096358597
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 41096358597
+          path: ${{ runner.temp }}/factory-vps-recovery-source
+      - name: Package and split into sub-512 MiB transport chunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_dir="${RUNNER_TEMP}/factory-vps-recovery-source"
+          bundle="${RUNNER_TEMP}/factory-vps-recovery-bundle.tar"
+          split_prefix="${RUNNER_TEMP}/factory-vps-recovery-chunk-"
+          tar --format=ustar -cf "$bundle" -C "$source_dir" .
+          split -b 400000000 -d -a 3 "$bundle" "$split_prefix"
+          python3 - "$bundle" "$RUNNER_TEMP" <<'PY'
+          import hashlib,json,pathlib,sys
+          bundle=pathlib.Path(sys.argv[1]); root=pathlib.Path(sys.argv[2])
+          chunks=[]
+          for p in sorted(root.glob("factory-vps-recovery-chunk-*")):
+              h=hashlib.sha256()
+              with p.open("rb") as f:
+                  for block in iter(lambda:f.read(1024*1024),b""):
+                      h.update(block)
+              chunks.append({"file":p.name,"bytes":p.stat().st_size,"sha256":h.hexdigest()})
+          if not chunks or max(x["bytes"] for x in chunks) > 400000000:
+              raise SystemExit("invalid transport chunk set")
+          h=hashlib.sha256()
+          with bundle.open("rb") as f:
+              for block in iter(lambda:f.read(1024*1024),b""):
+                  h.update(block)
+          manifest={"schema":"f01.recovery-transport-manifest.v1",
+                    "source_run_id":41096358597,"bundle":"factory-vps-recovery-bundle.tar",
+                    "bundle_bytes":bundle.stat().st_size,"bundle_sha256":h.hexdigest(),
+                    "chunk_size_limit":400000000,"chunks":chunks}
+          (root/"factory-vps-recovery-manifest.json").write_text(
+              json.dumps(manifest,sort_keys=True,indent=2)+"\\n",encoding="utf-8")
+          for item in chunks:
+              p=root/item["file"]
+              target=root/p.name
+              if p != target: p.replace(target)
+          if len(chunks) != 11:
+              raise SystemExit(f"expected 11 chunks for the recorded 4 GB artifact; got {len(chunks)}")
+          PY
+          for n in 001 002 003 004 005 006 007 008 009 010 011; do
+            test -s "${RUNNER_TEMP}/factory-vps-recovery-chunk-$n"
+          done
+      - name: Upload recovery transport manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-manifest
+          path: ${{ runner.temp }}/factory-vps-recovery-manifest.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload recovery transport chunk 001
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-001
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-001
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 002
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-002
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-002
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 003
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-003
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-003
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 004
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-004
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-004
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 005
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-005
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-005
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 006
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-006
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-006
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 007
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-007
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-007
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 008
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-008
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-008
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 009
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-009
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-009
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 010
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-010
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-010
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload recovery transport chunk 011
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-recovery-chunk-011
+          path: ${{ runner.temp }}/factory-vps-recovery-chunk-011
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Remove temporary recovery bundle
+        if: always()
+        shell: bash
+        run: rm -rf -- "${RUNNER_TEMP}/factory-vps-recovery-source" "${RUNNER_TEMP}/factory-vps-recovery-bundle.tar" "${RUNNER_TEMP}/factory-vps-recovery-chunk-"*
