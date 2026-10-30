@@ -28,8 +28,8 @@ jobs:
           assert "domain=mojplaywin.com" in text
           assert "ZoneEdit add_zone_record" in text
           assert "ZoneEdit list_zone_records" in text
-          assert "ZoneEdit remove_zone_record" not in text
-          assert "ZoneEdit edit_zone_record" not in text
+          assert ("ZoneEdit " + "remove_zone_record") not in text
+          assert ("ZoneEdit " + "edit_zone_record") not in text
           assert "DomainInfo list_domains" in text
           print("SOURCE_SCOPE=PASS")
           PY
