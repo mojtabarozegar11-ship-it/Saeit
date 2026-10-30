@@ -31,26 +31,34 @@ export function canInteractAt(px,py,tx,ty,range=INTERACT_RANGE){
  // When a goal is blocked, guide only to a traversable position near it.
 export function objectiveApproachWaypoint(px,py,tx,ty,passable,radius=INTERACT_RANGE,size=16){
   if (![px,py,tx,ty,radius].every(Number.isFinite)||radius<=0||radius>4||!Number.isInteger(size)||size<2||size>64||typeof passable!=='function')return null;
-  let best=null;
+  const margin=.20;
+  let best=null, bestDistance=Infinity;
   for(let y=Math.max(0,Math.floor(ty-radius-1));y<=Math.min(size-1,Math.ceil(ty+radius));y++){
     for(let x=Math.max(0,Math.floor(tx-radius-1));x<=Math.min(size-1,Math.ceil(tx+radius));x++){
       if(!passable(x,y))continue;
-      const cx=x+.5,cy=y+.5;
-      if(Math.hypot(cx-tx,cy-ty)>radius)continue;
+      const cx=Math.max(x+margin,Math.min(x+1-margin,tx));
+      const cy=Math.max(y+margin,Math.min(y+1-margin,ty));
+      const distance=Math.hypot(cx-tx,cy-ty);
+      if(distance>radius-1e-6)continue;
       const route=objectiveWaypoint(px,py,cx,cy,passable,size);
-      if(route&&(best===null||route.steps<best.steps))best=route;
+      if(route&&(best===null||route.steps<best.steps||route.steps===best.steps&&distance<bestDistance)){
+        best=route;bestDistance=distance;
+      }
     }
   }
   return best;
 }
-// Recovery intel is order-independent: use the closest reachable package.
-export function closestReachableObjective(px,py,targets,passable,size=16){
-  if(!Array.isArray(targets)||targets.length>64||typeof passable!=='function')return null;
-  let best=null,steps=Infinity;
+// Recovery intel can be collected in any order: prefer reachable pickup
+// distance, including a legal approach when the pickup occupies a solid tile.
+export function closestReachableObjective(px,py,targets,passable,size=16,radius=.78){
+  if(!Array.isArray(targets)||targets.length>64||typeof passable!=='function'||!Number.isFinite(radius)||radius<=0||radius>4)return null;
+  let best=null,steps=Infinity, distance=Infinity;
   for(const target of targets){
     if(!Array.isArray(target)||target.length<2||!target.slice(0,2).every(Number.isFinite))continue;
-    const route=objectiveWaypoint(px,py,target[0],target[1],passable,size);
-    if(route&&route.steps<steps){best=[target[0],target[1]];steps=route.steps}
+    const route=objectiveWaypoint(px,py,target[0],target[1],passable,size)||objectiveApproachWaypoint(px,py,target[0],target[1],passable,radius,size);
+    if(!route)continue;
+    const d=Math.hypot(px-target[0],py-target[1]);
+    if(route.steps<steps||route.steps===steps&&d<distance){best=[target[0],target[1]];steps=route.steps;distance=d}
   }
   return best;
 }
