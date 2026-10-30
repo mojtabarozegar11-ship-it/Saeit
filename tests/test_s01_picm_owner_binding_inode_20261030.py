@@ -38,6 +38,12 @@ class PICMOwnerBindingInodeTests(SimpleTestCase):
         os.link(actual, self.binding)
         self.assertIsNone(owner_id(self.root))
 
+    def test_fifo_binding_is_rejected_without_waiting_for_writer(self):
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("FIFO unavailable")
+        os.mkfifo(self.binding)
+        self.assertIsNone(owner_id(self.root))
+
     def test_directory_binding_is_not_accepted(self):
         self.binding.mkdir()
         self.assertIsNone(owner_id(self.root))
