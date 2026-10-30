@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""S-01 -> G-01: offline, rights-gated Ramadan Web package builder.
+
+Reads only a supplied local game source directory. No SSH, deploy, network,
+payment, factory, database, or GitHub action. Does not assert licensing or
+commercial release. ZIP stays on the operator's private filesystem.
+"""
+import argparse
+import ast
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import stat
+import zipfile
+
+MAX_FILE = 40 * 1024 * 1024
+MAX_TOTAL = 256 * 1024 * 1024
+REQUIRED = {"index.html", "game.js", "tactical-map.mjs",
+            "THREE-LICENSE.txt", "ASSET-CREDITS.md"}
+
+
+def safe_read(root, relative):
+    path = PurePosixPath(relative)
+    if (path.is_absolute() or not path.parts or
+            any(part in ("", ".", "..") for part in path.parts) or
+            str(path) != relative):
+        raise ValueError("unsafe asset path")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    parent_fd = os.open(root, flags)
+    try:
+        for part in path.parts[:-1]:
+            next_fd = os.open(part, flags, dir_fd=parent_fd)
+            os.close(parent_fd)
+            parent_fd = next_fd
+        file_fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                          dir_fd=parent_fd)
+        try:
+            before = os.fstat(file_fd)
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                    or before.st_size < 1 or before.st_size > MAX_FILE):
+                raise ValueError("unsafe asset type or size")
+            with os.fdopen(os.dup(file_fd), "rb") as stream:
+                data = stream.read(MAX_FILE + 1)
+            after = os.fstat(file_fd)
+            signature = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns)
+            if len(data) != before.st_size or signature(before) != signature(after):
+                raise ValueError("asset changed during read")
+            return data
+        finally:
+            os.close(file_fd)
+    finally:
+        os.close(parent_fd)
+
+
+def assets_from_deploy(source):
+    tree = ast.parse(source.decode("utf-8"))
+    assignments = [node for node in tree.body if isinstance(node, ast.Assign)
+                   and any(isinstance(t, ast.Name) and t.id == "ASSETS"
+                           for t in node.targets)]
+    if len(assignments) != 1:
+        raise ValueError("exactly one static ASSETS list required")
+    names = ast.literal_eval(assignments[0].value)
+    if (not isinstance(names, list) or not 5 <= len(names) <= 80
+            or any(not isinstance(name, str) for name in names)
+            or len(names) != len(set(names)) or not REQUIRED.issubset(names)):
+        raise ValueError("invalid or incomplete release asset contract")
+    for name in names:
+        p = PurePosixPath(name)
+        if (p.is_absolute() or str(p) != name or
+                any(part in ("", ".", "..") for part in p.parts)):
+            raise ValueError("release path escape")
+    return names
+
+
+def build(source_dir, output_zip):
+    root = Path(source_dir)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("unsafe source root")
+    assets = assets_from_deploy(safe_read(root, "deploy.py"))
+    files = {}
+    total = 0
+    for name in assets + [".htaccess"]:
+        data = safe_read(root, name)
+        total += len(data)
+        if total > MAX_TOTAL:
+            raise ValueError("release exceeds private package limit")
+        files[name] = data
+    if files[".htaccess"] != b"PassengerEnabled off\nDirectoryIndex index.html\n":
+        raise ValueError("game route configuration changed")
+    if (b"./tactical-map.mjs" not in files["game.js"]
+            or b"relativeDirection" not in files["tactical-map.mjs"]
+            or b"The MIT License" not in files["THREE-LICENSE.txt"]
+            or b"CC BY 4.0" not in files["ASSET-CREDITS.md"]):
+        raise ValueError("game dependency or attribution contract incomplete")
+    manifest = {
+        "scope": "G01_RAMADAN_OFFLINE_CANDIDATE",
+        "asset_count": len(files),
+        "total_source_bytes": total,
+        "assets_sha256": {name: hashlib.sha256(data).hexdigest()
+                          for name, data in sorted(files.items())},
+        "commercial_rights_verified": False,
+        "independent_backup_restore_verified": False,
+        "deployment_authorized": False,
+        "live_verified": False,
+    }
+    output = Path(output_zip)
+    if output.is_symlink() or not output.parent.is_dir():
+        raise ValueError("unsafe output location")
+    with zipfile.ZipFile(output, "x", compression=zipfile.ZIP_DEFLATED,
+                         compresslevel=6) as archive:
+        for name, data in sorted(files.items()):
+            archive.writestr(name, data)
+        archive.writestr("S01_PRIVATE_RELEASE_MANIFEST.json",
+                         json.dumps(manifest, sort_keys=True, indent=2) + "\n")
+    with zipfile.ZipFile(output, "r") as archive:
+        if archive.testzip() is not None:
+            raise ValueError("release archive CRC verification failed")
+        if set(archive.namelist()) != set(files) | {"S01_PRIVATE_RELEASE_MANIFEST.json"}:
+            raise ValueError("release archive membership mismatch")
+        for name, expected in manifest["assets_sha256"].items():
+            if hashlib.sha256(archive.read(name)).hexdigest() != expected:
+                raise ValueError("release archive readback mismatch")
+    return manifest
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("source_dir", help="private local games/ramadan-war directory")
+    parser.add_argument("output_zip", help="new private output ZIP (never overwritten)")
+    args = parser.parse_args()
+    manifest = build(args.source_dir, args.output_zip)
+    print(json.dumps({"scope": manifest["scope"],
+                      "asset_count": manifest["asset_count"],
+                      "zip_verified": True, "deployment_authorized": False},
+                     sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()
