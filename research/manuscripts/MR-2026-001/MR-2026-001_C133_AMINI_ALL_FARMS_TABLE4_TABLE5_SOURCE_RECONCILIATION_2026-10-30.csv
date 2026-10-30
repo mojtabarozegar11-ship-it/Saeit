@@ -1,0 +1,9 @@
+farm,yield_treatment_t_ha,yield_control_t_ha,irrigation_depth_treatment_mm,irrigation_depth_control_mm,derived_wp_treatment_kg_m3,derived_wp_control_kg_m3,derived_absolute_wp_difference_kg_m3,derived_relative_wp_change_percent,original_table5_wp_column_printed_value,original_column_label,interpretation
+F1,9.6,9.6,306.9,306.9,3.12805,3.12805,0.00000,0.000,0,Increase in water productivity (%),Recomputed from displayed Tables 4-5; not a raw-data estimate
+F2,6,6,721.5,721.5,0.83160,0.83160,0.00000,0.000,0,Increase in water productivity (%),Recomputed from displayed Tables 4-5; not a raw-data estimate
+F3,92.7,91,1064.7,1223.1,8.70668,7.44011,1.26657,17.023,1.17,Increase in water productivity (%),Recomputed from displayed Tables 4-5; not a raw-data estimate
+F4,92.3,80.6,1460.2,1234.4,6.32105,6.52949,-0.20844,-3.192,-2.3,Increase in water productivity (%),Recomputed from displayed Tables 4-5; not a raw-data estimate
+F5,30.5,28.2,363.2,616.8,8.39758,4.57198,3.82559,83.675,3.87,Increase in water productivity (%),Recomputed from displayed Tables 4-5; not a raw-data estimate
+F6,3.5,3.5,739.3,1048.3,0.47342,0.33387,0.13955,41.796,1.45,Increase in water productivity (%),Recomputed from displayed Tables 4-5; not a raw-data estimate
+F7,48.9,45.6,1057.6,764.9,4.62368,5.96156,-1.33789,-22.442,-3.22,Increase in water productivity (%),Recomputed from displayed Tables 4-5; not a raw-data estimate
+F8,10.3,9.2,1413.8,1455,0.72853,0.63230,0.09623,15.219,9.15,Increase in water productivity (%),Recomputed from displayed Tables 4-5; not a raw-data estimate
