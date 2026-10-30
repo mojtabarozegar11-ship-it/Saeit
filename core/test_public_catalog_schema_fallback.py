@@ -121,7 +121,10 @@ class PublicCatalogSchemaFallbackTests(SimpleTestCase):
                 target.write_bytes(b"private")
                 page.symlink_to(target)
                 response = persian_author_profile(self.requests.get("/authors/mojtaba-rozegar/"))
-                self.assertEqual(response.status_code, 404)
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(response["Retry-After"], "300")
+                self.assertEqual(response["Cache-Control"], "private, no-store")
+                self.assertEqual(response["X-ZM-Data-Status"], "temporarily-unavailable")
 
     def test_company_feed_missing_schema_returns_retryable_503_without_query(self):
         with patch("core.company_content_views.missing_public_tables", return_value=True) as guard, patch(
