@@ -27,8 +27,9 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          d="$RUNNER_TEMP/factory-backup-$GITHUB_RUN_ID"
-          install -d -m 700 "$d" "$d/encrypted"
+          d="$RUNNER_TEMP/factory-backup-work-$GITHUB_RUN_ID"
+          cipher_dir="$RUNNER_TEMP/factory-vps-encrypted-$GITHUB_RUN_ID"
+          install -d -m 700 "$d" "$cipher_dir"
           trap 'rm -rf -- "$d"' EXIT
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
           chmod 600 "$d/key"
@@ -48,11 +49,11 @@ jobs:
           part_index=0
           for part in "$d"/plain-part-*; do
             part_index=$((part_index + 1))
-            encrypted="$d/encrypted/factory-runtime-$(printf '%03d' "$part_index").f01enc"
+            encrypted="$cipher_dir/factory-runtime-$(printf '%03d' "$part_index").f01enc"
             python3 scripts/f01_encrypted_stream_v1.py encrypt --input "$part" --output "$encrypted" --public-key security/factory_recovery_public_20261030.pem
             echo "FACTORY_BACKUP_ENCRYPTED_PART_${part_index}_SHA256=$(sha256sum "$encrypted" | awk '{print $1}')"
           done
-          python3 - "$d/encrypted/manifest.json" "$archive_bytes" "$archive_sha" "$d/encrypted" <<'PY'
+          python3 - "$cipher_dir/manifest.json" "$archive_bytes" "$archive_sha" "$cipher_dir" <<'PY'
           import hashlib,json,pathlib,sys
           out=pathlib.Path(sys.argv[1]); folder=pathlib.Path(sys.argv[4])
           parts=[]
@@ -75,6 +76,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: factory-vps-encrypted-backup-${{ github.run_id }}
-          path: ${{ runner.temp }}/factory-backup-${{ github.run_id }}/encrypted/
+          path: ${{ runner.temp }}/factory-vps-encrypted-${{ github.run_id }}/
           if-no-files-found: error
           retention-days: 7
+      - name: Remove encrypted runner staging
+        if: always()
+        shell: bash
+        run: rm -rf -- "${RUNNER_TEMP}/factory-vps-encrypted-${GITHUB_RUN_ID}"
