@@ -212,7 +212,7 @@ class Lead(models.Model):
             raise ValidationError("مقادیر منفی مجاز نیست.")
         # Any nonzero verified sale amount is a commercial claim, even while
         # a lead remains in a non-won stage. Never count it without evidence.
-        if self.verified_sale_irr > 0 and not self.sale_evidence_reference.strip():
+        if (self.verified_sale_irr or 0) > 0 and not self.sale_evidence_reference.strip():
             raise ValidationError("مبلغ فروش تأییدشده بدون سند قابل ثبت نیست.")
         if self.stage == "won" and (not self.sale_evidence_reference.strip()
                                     or self.verified_sale_irr <= 0):
