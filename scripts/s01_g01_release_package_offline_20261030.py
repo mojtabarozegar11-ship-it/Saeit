@@ -17,6 +17,7 @@ import zipfile
 MAX_FILE = 40 * 1024 * 1024
 MAX_TOTAL = 256 * 1024 * 1024
 REQUIRED = {"index.html", "game.js", "tactical-map.mjs",
+            "objective-navigation.mjs", "campaign-backup.mjs",
             "THREE-LICENSE.txt", "ASSET-CREDITS.md"}
 
 
@@ -89,7 +90,11 @@ def build(source_dir, output_zip):
     if files[".htaccess"] != b"PassengerEnabled off\nDirectoryIndex index.html\n":
         raise ValueError("game route configuration changed")
     if (b"./tactical-map.mjs" not in files["game.js"]
+            or b"./objective-navigation.mjs" not in files["game.js"]
+            or b"./campaign-backup.mjs" not in files["game.js"]
             or b"relativeDirection" not in files["tactical-map.mjs"]
+            or b"objectiveWaypoint" not in files["objective-navigation.mjs"]
+            or b"makeCampaignBackup" not in files["campaign-backup.mjs"]
             or b"The MIT License" not in files["THREE-LICENSE.txt"]
             or b"CC BY 4.0" not in files["ASSET-CREDITS.md"]):
         raise ValueError("game dependency or attribution contract incomplete")
