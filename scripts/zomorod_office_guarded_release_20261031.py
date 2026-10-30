@@ -92,6 +92,28 @@ def atomic_copy(src: Path, dst: Path, mode: int = 0o644) -> None:
             temp.unlink()
 
 
+def restart_passenger(passenger: Path) -> None:
+    """Signal Passenger's documented restart marker after atomic file swaps.
+
+    Merely touching the WSGI module was insufficient in the October 30 live
+    release: stale workers kept the old INSTALLED_APPS while loading new URLs.
+    """
+    if not regular(passenger):
+        fail("PASSENGER_WSGI_INVALID")
+    app_tmp = APP / "tmp"
+    if app_tmp.is_symlink() or (app_tmp.exists() and not app_tmp.is_dir()):
+        fail("PASSENGER_RESTART_DIRECTORY_UNSAFE")
+    app_tmp.mkdir(mode=0o700, exist_ok=True)
+    marker = app_tmp / "restart.txt"
+    if marker.is_symlink() or (marker.exists() and not marker.is_file()):
+        fail("PASSENGER_RESTART_MARKER_UNSAFE")
+    marker.touch()
+    passenger.touch()
+    print("PASSENGER_RESTART_MARKER=signalled", flush=True)
+    # Give Passenger time to consume the restart event before HTTP checks.
+    time.sleep(3)
+
+
 def verify():
     if len(sys.argv) != 2 or len(sys.argv[1]) != 40 or any(x not in ALLOWED_HEAD for x in sys.argv[1]):
         fail("HEAD_SHA_INVALID")
@@ -193,7 +215,7 @@ def main():
             if blob(APP / relative) != MAIN_BLOBS[relative]:
                 fail("CONCURRENT_MAIN_CHANGE " + relative)
             atomic_copy(code / relative, APP / relative)
-        passenger.touch()
+        restart_passenger(passenger)
         py = HOME / "virtualenv/Saeit/3.10/bin/python"
         if not py.is_file():
             py = HOME / "virtualenv/Saeit/3.11/bin/python"
@@ -240,7 +262,7 @@ def main():
             saved = backup / relative.replace("/", "__")
             if saved.is_file():
                 atomic_copy(saved, target, 0o600 if relative == "db.sqlite3" else 0o644)
-        passenger.touch()
+        restart_passenger(passenger)
         meta["status"] = "rolled_back_after_error"
         (backup / "manifest.json").write_text(json.dumps(meta, sort_keys=True))
         print("ZOMOROD_OFFICE_ROLLBACK=completed", flush=True)
