@@ -1,0 +1,25 @@
+name: F-01 owner factory stop safety tests (offline only)
+on:
+  push:
+    branches: [ops/f01-factory-quiesce-backup-20261030]
+    paths:
+      - scripts/f01_owner_factory_quiesce_20261030.py
+      - tests/test_f01_owner_factory_quiesce_20261030.py
+      - .github/workflows/f01-factory-stop-offline-test-20261030.yml
+permissions:
+  contents: read
+jobs:
+  offline-safety:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate safe scoped cron logic without VPS access
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_f01_owner_factory_quiesce_20261030.py' -v
+          echo "VPS_STOP=NOT_EXECUTED"
+          echo "CRON_MODIFIED=NO"
+          echo "PRODUCTION_BACKUP=NOT_CREATED"
