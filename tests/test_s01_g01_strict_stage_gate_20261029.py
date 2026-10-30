@@ -75,6 +75,27 @@ class StageGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "CASEFOLD_MEMBER_COLLISION"):
             gate.verify(self.path)
 
+    def test_unicode_normalization_alias_is_rejected(self):
+        self.build(extra={"game\\u0301.js": b"decomposed", "gam\\u00e9.js": b"composed"})
+        with self.assertRaisesRegex(ValueError, "NORMALIZED_MEMBER_COLLISION"):
+            gate.verify(self.path)
+
+    def test_duplicate_manifest_json_key_is_rejected(self):
+        self.build()
+        with zipfile.ZipFile(self.path, "r") as archive:
+            files = {entry.filename: archive.read(entry.filename)
+                     for entry in archive.infolist()
+                     if entry.filename != "ramadan-war/preview-manifest.json"}
+            original = archive.read("ramadan-war/preview-manifest.json").decode("utf-8")
+        duplicate = original.replace('"version": "G01-R26",',
+                                     '"version": "G01-R26", "version": "G01-R999",', 1)
+        with zipfile.ZipFile(self.path, "w") as archive:
+            for name, data in files.items():
+                archive.writestr(name, data)
+            archive.writestr("ramadan-war/preview-manifest.json", duplicate)
+        with self.assertRaisesRegex(ValueError, "DUPLICATE_MANIFEST_KEY"):
+            gate.verify(self.path)
+
     def test_archive_size_limit_fails_before_zip_processing(self):
         from unittest.mock import patch
         self.build()
