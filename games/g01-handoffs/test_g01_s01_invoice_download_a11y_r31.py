@@ -1,5 +1,11 @@
 import unittest
-from g01_s01_invoice_download_a11y_r31 import audit
+from importlib.util import spec_from_file_location, module_from_spec
+from pathlib import Path
+_source = Path(__file__).with_name('g01_s01_invoice_download_a11y_r31.py')
+_spec = spec_from_file_location('g01_s01_invoice_download_a11y_r31', _source)
+_module = module_from_spec(_spec)
+_spec.loader.exec_module(_module)
+audit = _module.audit
 class AuditTests(unittest.TestCase):
     def test_safe_receipt(self):
         self.assertEqual(audit('<main><h1>Invoice</h1><p role="status">Ready</p><a href="/account/invoices/42/download/">Download PDF</a></main>'),[])
