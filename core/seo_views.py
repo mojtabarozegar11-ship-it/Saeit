@@ -210,7 +210,12 @@ def _read_author_html(base_dir):
                 raise ValueError("public profile changed during read")
             # Declared response charset is UTF-8. Reject damaged bytes rather
             # than returning a 200 with replacement glyphs in the public CV.
-            body.decode("utf-8", "strict")
+            document = body.decode("utf-8", "strict").lstrip("\ufeff \t\r\n").lower()
+            # A truncated or overwritten profile must not be indexed as a
+            # successful HTML biography merely because its bytes are UTF-8.
+            if not ((document.startswith("<!doctype html") or document.startswith("<html"))
+                    and "<html" in document and "</html>" in document):
+                raise ValueError("incomplete public profile HTML")
             return body
         finally:
             os.close(file_fd)
