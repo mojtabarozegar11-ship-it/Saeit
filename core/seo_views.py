@@ -61,7 +61,9 @@ def _site_search_with_schema(request):
         aliases = ("شرکت کشت و صنعت زمرد ملل", "زمرد ملل", "مجتبی روزگار", "محقق و پژوهشگر", "مدیرعامل", "مدیر عامل")
         if any(_norm(q) in _norm(alias) or _norm(alias) in _norm(q) for alias in aliases):
             results.append((100, {"type": "شرکت", "title": "شرکت کشت و صنعت زمرد ملل", "summary": "مجتبی روزگار — محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل", "url": "/company/"}))
-    results.sort(key=lambda item: item[0], reverse=True)
+    # Stable tie-breaking prevents search results flickering across DB query orders.
+    results.sort(key=lambda item: (-item[0], _norm(item[1]["type"]),
+                                   _norm(item[1]["title"]), item[1]["url"]))
     return render(request, "core/search.html", {"q": q, "results": [item[1] for item in results[:50]]})
 
 
@@ -198,7 +200,13 @@ def persian_author_profile(request):
     try:
         body = _read_author_html(settings.BASE_DIR)
     except OSError:
-        return HttpResponse(status=404)
+        # Do not let a temporary missing profile file become a cached 404.
+        response = HttpResponse(status=404)
+        response["Cache-Control"] = "no-store"
+        return response
     except ValueError:
-        return HttpResponse(status=503)
+        # Corrupt/unsafe static source is an outage, not a permanent removal.
+        response = mark_public_data_unavailable(HttpResponse(status=503))
+        response["Retry-After"] = "300"
+        return response
     return HttpResponse(body, content_type="text/html; charset=utf-8")
