@@ -172,6 +172,35 @@ class OfflineReleasePackageTests(unittest.TestCase):
             build(self.game, self.output)
         self.assertFalse(self.output.exists())
 
+    def test_missing_modulepreload_refused_before_private_zip(self):
+        self.game.joinpath("index.html").write_bytes(
+            b'<link rel="stylesheet" href="./game.css">'
+            b'<link rel="modulepreload" href="./missing-module.mjs">'
+            b'<script src="./game.js"></script>'
+        )
+        with self.assertRaises(ValueError):
+            build(self.game, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_remote_preload_refused_before_private_zip(self):
+        self.game.joinpath("index.html").write_bytes(
+            b'<link rel="stylesheet" href="./game.css">'
+            b'<link rel="preload" as="fetch" href="https://example.invalid/private">'
+            b'<script src="./game.js"></script>'
+        )
+        with self.assertRaises(ValueError):
+            build(self.game, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_valid_modulepreload_asset_passes(self):
+        self.game.joinpath("index.html").write_bytes(
+            b'<link rel="stylesheet" href="./game.css">'
+            b'<link rel="modulepreload" href="./tactical-map.mjs">'
+            b'<script src="./game.js"></script>'
+        )
+        result = build(self.game, self.output)
+        self.assertEqual(result["asset_count"], 9)
+
 
 if __name__ == "__main__":
     unittest.main()
