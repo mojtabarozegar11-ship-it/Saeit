@@ -11,7 +11,8 @@ test('home and pause offer both file and pasted-code recovery',()=>{
  assert.match(js,/applyImportedCampaign\(imported\);/);
 });
 test('manual code is cleared and never transmitted or persisted automatically',()=>{
- assert.match(js,/function closeBackupCode\(\)\{\s*\$\('#backupCodeText'\)\.value='';/);
+ assert.match(js,/function clearBackupCode\(\)\{\s*\$\('#backupCodeText'\)\.value='';/);
+ assert.match(js,/function closeBackupCode\(\)\{\s*clearBackupCode\(\);/);
  assert.match(js,/if\(copied\)toast\(/);
  assert.match(js,/else openBackupCode\('export',backup\)/);
  assert.doesNotMatch(js,/fetch\([^)]*backupCodeText/);

@@ -157,7 +157,7 @@ function runnerGame(stage){
  function stop(){running=false;cancelAnimationFrame(raf);document.removeEventListener('keydown',key);document.removeEventListener('visibilitychange',visibility);canvas.removeEventListener('pointerdown',touch);window.removeEventListener('blur',suspend);window.removeEventListener('focus',resumeVisible)}
  function finish(won){stop();score.textContent='Cleared: '+passed+' / 8';message(stage,won?'🏆 Eight obstacles cleared — jungle complete!':'🌿 You hit an obstacle. Time your jump and try again.');jump.disabled=true;restart.hidden=false}
  function key(e){if(e.code!=='Space'||e.repeat||e.ctrlKey||e.altKey||e.metaKey||!$('#gameOverlay').classList.contains('open'))return;if(e.target?.closest?.('button,a,input,textarea,select,[contenteditable="true"]'))return;e.preventDefault();jump.click()}
- function touch(e){if(e.pointerType==='mouse'&&e.button!==0)return;e.preventDefault();jump.click()}
+ function touch(e){if(!running||!$('#gameOverlay').classList.contains('open')||e.isPrimary===false||(e.pointerType==='mouse'&&e.button!==0))return;e.preventDefault();jump.click()}
  function suspend(){cancelAnimationFrame(raf);raf=0;last=0}\n function resumeVisible(){if(running&&!document.hidden&&!raf)raf=requestAnimationFrame(frame)}\n function visibility(){if(document.hidden)suspend();else resumeVisible()}
  function draw(){
   ctx.clearRect(0,0,640,230);ctx.fillStyle='#baf0e5';ctx.fillRect(0,0,640,230);
