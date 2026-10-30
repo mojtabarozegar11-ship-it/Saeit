@@ -1,0 +1,80 @@
+name: Encrypted F-01 Factory VPS backup
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/factory-vps-encrypted-backup-20261030.yml"
+      - "scripts/f01_encrypted_stream_v1.py"
+      - "security/factory_recovery_public_20261030.pem"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-encrypted-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Stream stopped factory state over pinned SSH and encrypt off-host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-backup-$GITHUB_RUN_ID"
+          install -d -m 700 "$d" "$d/encrypted"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          archive="$d/factory-runtime.tar.gz"
+          timeout 900s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'set -euo pipefail; test "$(id -un)" = githubops; test -d /home/githubops/factory-runtime; tar --numeric-owner --xattrs --acls --one-file-system -czf - -C /home/githubops factory-runtime' > "$archive"
+          test -s "$archive"
+          tar -tzf "$archive" >/dev/null
+          archive_bytes="$(stat -c %s "$archive")"
+          archive_sha="$(sha256sum "$archive" | awk '{print $1}')"
+          echo "FACTORY_BACKUP_ARCHIVE_BYTES=$archive_bytes"
+          echo "FACTORY_BACKUP_ARCHIVE_SHA256=$archive_sha"
+          split -b 2000000000 -d -a 3 "$archive" "$d/plain-part-"
+          part_index=0
+          for part in "$d"/plain-part-*; do
+            part_index=$((part_index + 1))
+            encrypted="$d/encrypted/factory-runtime-$(printf '%03d' "$part_index").f01enc"
+            python3 scripts/f01_encrypted_stream_v1.py encrypt --input "$part" --output "$encrypted" --public-key security/factory_recovery_public_20261030.pem
+            echo "FACTORY_BACKUP_ENCRYPTED_PART_${part_index}_SHA256=$(sha256sum "$encrypted" | awk '{print $1}')"
+          done
+          python3 - "$d/encrypted/manifest.json" "$archive_bytes" "$archive_sha" "$d/encrypted" <<'PY'
+          import hashlib,json,pathlib,sys
+          out=pathlib.Path(sys.argv[1]); folder=pathlib.Path(sys.argv[4])
+          parts=[]
+          for p in sorted(folder.glob("*.f01enc")):
+              parts.append({"file":p.name,"ciphertext_bytes":p.stat().st_size,
+                            "ciphertext_sha256":hashlib.sha256(p.read_bytes()).hexdigest()})
+          doc={"schema":"f01.factory-vps-backup-manifest.v1",
+               "created_utc":"2026-10-30","archive":"factory-runtime.tar.gz",
+               "archive_bytes":int(sys.argv[2]),"archive_sha256":sys.argv[3],
+               "part_bytes_limit":2000000000,"parts":parts,
+               "encryption":"F01ENC-RSA3072-AES256GCM-V1",
+               "source":"/home/githubops/factory-runtime"}
+          out.write_text(json.dumps(doc,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+          PY
+          rm -f -- "$archive" "$d"/plain-part-*
+          test "$(find "$d" -maxdepth 1 -type f -name 'plain-part-*' | wc -l)" -eq 0
+          echo "FACTORY_BACKUP_ENCRYPTED_PARTS=$part_index"
+          echo "FACTORY_BACKUP_PLAINTEXT_TEMP_REMOVED=YES"
+      - name: Upload encrypted backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: factory-vps-encrypted-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/factory-backup-${{ github.run_id }}/encrypted/
+          if-no-files-found: error
+          retention-days: 7
