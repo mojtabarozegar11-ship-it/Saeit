@@ -4,7 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from django.test import RequestFactory, SimpleTestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
 from core import seo_views
 
@@ -90,3 +90,46 @@ class SearchOutageTests(SimpleTestCase):
              patch.object(seo_views, "_site_search_with_schema", return_value=expected):
             response = seo_views.site_search(self.request)
         self.assertIs(response, expected)
+
+
+class PublishedKnowledgeVisibilityTests(TestCase):
+    """Search and XML discovery must not disclose books still under review."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from core.knowledge_agent_models import KnowledgeAgentPlan, KnowledgeBook
+        plan = KnowledgeAgentPlan.objects.create(
+            code="s01-visibility-plan", mission="Synthetic QA", goal="Synthetic QA"
+        )
+        KnowledgeBook.objects.create(
+            plan=plan, code="s01-public-book", title="s01-visibility published",
+            domain="synthetic", objective="s01-visibility", status="published",
+        )
+        KnowledgeBook.objects.create(
+            plan=plan, code="s01-private-book", title="s01-visibility draft",
+            domain="synthetic", objective="s01-visibility", status="drafting",
+        )
+        KnowledgeBook.objects.create(
+            plan=plan, code="s01%26book", title="URL encoding published",
+            domain="synthetic", objective="synthetic", status="published",
+        )
+
+    def test_search_returns_published_book_only(self):
+        from django.http import HttpResponse
+        with patch.object(seo_views, "render", return_value=HttpResponse("ok")) as renderer:
+            response = seo_views._site_search_with_schema(
+                RequestFactory().get("/search/?q=s01-visibility")
+            )
+        self.assertEqual(response.status_code, 200)
+        rows = renderer.call_args.args[2]["results"]
+        book_urls = [row["url"] for row in rows if row["type"] == "کتاب"]
+        self.assertIn("/knowledge/book/s01-public-book/", book_urls)
+        self.assertNotIn("/knowledge/book/s01-private-book/", book_urls)
+
+    def test_sitemap_excludes_drafts_and_encodes_dynamic_codes(self):
+        response = seo_views.sitemap_xml(RequestFactory().get("/sitemap.xml"))
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode("utf-8")
+        self.assertIn("/knowledge/book/s01-public-book/", body)
+        self.assertNotIn("/knowledge/book/s01-private-book/", body)
+        self.assertIn("/knowledge/book/s01%2526book/", body)
