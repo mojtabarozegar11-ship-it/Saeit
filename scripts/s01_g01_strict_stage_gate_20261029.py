@@ -98,6 +98,14 @@ def verify(package):
                 raise ValueError("MISSING_R32_TACTICAL_MAP")
             if b"./tactical-map.mjs" not in archive.read(PREFIX + "game.js"):
                 raise ValueError("R32_TACTICAL_MAP_NOT_IMPORTED")
+        # R39 introduced a separate aim-sensitivity runtime. G-01's first
+        # R39 browser CI failed when its deploy asset list omitted this file.
+        # A syntactically valid ZIP without the imported module is unusable.
+        if release_number >= 39:
+            if "aim-sensitivity.mjs" not in actual:
+                raise ValueError("MISSING_R39_AIM_SENSITIVITY")
+            if b"./aim-sensitivity.mjs" not in archive.read(PREFIX + "game.js"):
+                raise ValueError("R39_AIM_SENSITIVITY_NOT_IMPORTED")
         declared = manifest.get("files")
         if not isinstance(declared, dict) or set(declared) != actual:
             raise ValueError("MANIFEST_COVERAGE_MISMATCH")
