@@ -36,7 +36,7 @@ def check_archive(path):
         for guard in ['checkoutEnabled:false','ownerApproved:false','verifiedBackend:false','contractAddress:null']:
             if guard not in policy:problems.append('MOJ1 guard absent '+guard)
         html=z.read(ROOT+'index.html').decode('utf-8')
-        if re.search(r'<script[^>]+src\\s*=\\s*["\\\']https?://',html,re.I):
+        if re.search(r"<script[^>]+src\s*=\s*['\"]https?://",html,re.I):
             problems.append('remote executable script')
         if '<script type="module" src="./game.js"></script>' not in html:
             problems.append('game entrypoint absent')
