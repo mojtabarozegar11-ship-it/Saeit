@@ -237,6 +237,8 @@ jobs:
           "$py" -m django migrate --noinput --verbosity 0
           "$py" - <<'PY'
           import os,sqlite3,pathlib
+          import django
+          django.setup()
           from django.urls import resolve,reverse
           from django.test import Client
           from django.conf import settings
