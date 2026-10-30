@@ -6,6 +6,7 @@ queries databases, creates orders, or reveals payment addresses/secrets.
 A static call-shape signal is NOT evidence of transaction idempotency.
 """
 import ast
+import argparse
 import hashlib
 import json
 import os
@@ -170,5 +171,26 @@ def inspect_source(root=APP, require_wsg=True):
     result["safe_to_publish"] = False
     return result
 
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--offline-root", help="authorized local COPY of app source; never cPanel")
+    args = parser.parse_args(argv)
+    try:
+        # Explicit offline mode cannot be mistaken for a live Passenger audit.
+        root = Path(args.offline_root) if args.offline_root else APP
+        result = inspect_source(root=root, require_wsg=not bool(args.offline_root))
+        result["offline_copy_only"] = bool(args.offline_root)
+        result["safe_to_publish"] = False
+        print("S01_INVOICE_STATIC_MAP=" + json.dumps(result, sort_keys=True))
+        return 0 if result["source_contract_complete"] else 2
+    except (OSError, RuntimeError, ValueError):
+        print("S01_INVOICE_STATIC_MAP=" + json.dumps({
+            "scope": "S01_CHECKOUT_INVOICE_STATIC_READONLY",
+            "status": "BLOCKED_SOURCE_UNREADABLE",
+            "source_contract_complete": False, "safe_to_publish": False,
+        }, sort_keys=True))
+        return 3
+
+
 if __name__ == "__main__":
-    print("S01_INVOICE_STATIC_MAP=" + json.dumps(inspect_source(), sort_keys=True))
+    raise SystemExit(main())
