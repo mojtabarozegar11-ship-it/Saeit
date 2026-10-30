@@ -3,7 +3,7 @@
 // clicks, submissions, cookies, payment calls, credentials or customer data.
 const fs = require('node:fs');
 const {chromium} = require('playwright');
-const {classifyNavigation, assessAnonymousRouteRows} = require('./s01_checkout_route_verdict_20261029.cjs');
+const {classifyNavigation, assessAnonymousRouteRows, isDirectCheckoutHref} = require('./s01_checkout_route_verdict_20261029.cjs');
 const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/product/879/',
   '/store/product/72/checkout/','/store/product/225/checkout/',
   '/store/product/879/checkout/','/commerce/trx-easy/purchases/'];
@@ -88,7 +88,7 @@ const URLS = ['/store/','/store/product/72/','/store/product/225/','/store/produ
           rows.push({device:device.name,path,http,finalPath,error,jsErrors,controls,
             ...verdict,authenticatedBuyerFlowVerified:false,
             checkoutLinks:controls.filter(c=>validCheckoutHref(c.href)&&c.reasons.length===0).length,
-            mismatchedCheckoutLinks:productId?controls.filter(c=>/\/checkout\/$/.test(c.href||'')&&!validCheckoutHref(c.href)).length:0,
+            mismatchedCheckoutLinks:productId?controls.filter(c=>isDirectCheckoutHref(c.href)&&!validCheckoutHref(c.href)).length:0,
             formSubmissionsNeedingStaging:controls.filter(c=>c.reasons.includes('form-requires-authenticated-staging')).length});
           await page.close();
         }
