@@ -1,0 +1,15 @@
+# R-01 → B-01 | Fresh mushroom packaging: jurisdiction and product-scope guard (30 October 2026)
+
+**Owner:** B-01. **Status:** evidence-scoped editorial handoff; not approved textbook copy, manufacturing instruction, certification or public release.
+
+## Original official-source distinction
+
+1. **Fresh whole/part mushrooms in plastic film:** Health Canada's *Guidance concerning the Packaging of Fresh Mushrooms* (20 June 2005; revised 10 May 2013) recommends visibly perforated film; it describes **at least two 3.0-mm holes above the tray or equivalent perforation lines** as one advisory means of allowing air access. It separately states that **non-commercially-sterile, hermetically sealed** fresh mushroom packs must remain **at or below 4°C from packaging**, with bilingual **Keep Refrigerated / Garder au froid** and a **Best Before** date. Source: https://www.canada.ca/en/health-canada/services/food-nutrition/legislation-guidelines/guidance-documents/guidance-concerning-packaging-fresh-mushrooms.html
+2. **Mushrooms stored *in oil*:** Health Canada's *Guidance on Mitigating the Health Risk Associated with C. botulinum in Plant and Mushroom Products Stored in Oil* expressly scopes itself to products **covered in oil**, with distinct processing/storage scenarios. Its preservation barriers and risk controls **must not be copied as though they were general instructions for fresh tray-packed mushrooms**. Source: https://www.canada.ca/en/health-canada/services/food-nutrition/legislation-guidelines/guidance-documents/plant-mushroom-oil-profile/plant-mushroom-oil.html
+3. **U.S. rule:** 21 CFR §112.115 requires covered produce to be packaged so as to prevent C. botulinum toxin formation when it is a known or reasonably foreseeable hazard, explicitly naming mushrooms as an example. This is a hazard-based obligation, **not a U.S. federal mandate that every mushroom tray use exactly two 3.0-mm holes**. Source: https://www.ecfr.gov/current/title-21/chapter-I/subchapter-B/part-112/subpart-K/section-112.115
+
+## Copy-ready editorial limitation
+
+“Packaging advice depends on product type, country and validation. For fresh mushrooms sold in Canada, Health Canada advises visibly ventilated film and describes two 3-mm top perforations or equivalent air exchange as an advisory example. The separate Canadian rules for hermetically sealed, non-sterile packs require controlled refrigeration and specified labels. Guidance for mushrooms preserved in oil applies to a different food category. Neither the Canadian perforation example nor U.S. hazard-based rules establish a universally validated package geometry, microbial shelf life, or authorization to market a specific product.”
+
+**B-01 acceptance gate:** compare existing Ch21–22 against these original documents; correct any accidental cross-scope transfer; require qualified food-safety review of exact packaging design, local jurisdiction, shelf-life evidence and regulatory status before production/publication. Do not infer that ventilation alone eliminates all food hazards. No change to B source files by R.
