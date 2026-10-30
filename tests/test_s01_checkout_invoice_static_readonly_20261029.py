@@ -90,8 +90,20 @@ class InvoiceStaticReadOnlyTests(unittest.TestCase):
                 "def download_paid_item(request):\n"
                 "    raise NotImplementedError('not ready')\n", encoding="utf-8"
             )
+            (folder / "settlement.py").write_text(
+                "def settle_order_invoice(order):\n"
+                "    return None\n", encoding="utf-8"
+            )
+            (folder / "entitlements.py").write_text(
+                "def can_access_purchased_digital_item(order):\n"
+                "    return False\n", encoding="utf-8"
+            )
             result = inspect_source(root, require_wsg=False)
             self.assertFalse(result["source_contract_complete"])
+            self.assertIn("mpw_commerce/settlement.py:settle_order_invoice",
+                          result["stub_contract_functions"])
+            self.assertIn("mpw_commerce/entitlements.py:can_access_purchased_digital_item",
+                          result["missing_contract_functions"])
             self.assertIn("mpw_commerce/invoicing.py:reserve_order_invoice",
                           result["stub_contract_functions"])
             self.assertIn("mpw_commerce/downloads.py:download_paid_item",
