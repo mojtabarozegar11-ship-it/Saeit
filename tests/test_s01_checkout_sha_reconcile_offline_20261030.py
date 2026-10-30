@@ -68,7 +68,9 @@ class OfflinePreimageReconcileTests(unittest.TestCase):
         self.assertFalse(verdict["release_permitted"])
         comparison = verdict["approved_reference_comparison"]
         self.assertFalse(comparison["byte_identical"])
-        self.assertEqual(comparison["first_difference_offset"], 0)
+        changed = b"synthetic-changed-checkout"
+        expected_offset = next(i for i, (a, b) in enumerate(zip(self.secret_fixture, changed)) if a != b)
+        self.assertEqual(comparison["first_difference_offset"], expected_offset)
         self.assertEqual(comparison["difference_kind"], "BYTE_MISMATCH")
         self.assertEqual(comparison["approved_source_bytes"], len(self.secret_fixture))
         self.assertNotIn("SECRET-CUSTOMER", str(comparison))
