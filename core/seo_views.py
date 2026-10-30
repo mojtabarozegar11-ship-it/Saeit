@@ -38,7 +38,9 @@ def _score(q, *fields):
 
 
 def _site_search_with_schema(request):
-    q = str(request.GET.get("q", "")).strip()[:120]
+    # Normalize whitespace before applying the length cap; a whitespace-only
+    # query must not return an arbitrary set of published records.
+    q = " ".join(str(request.GET.get("q", "")).split())[:120]
     results = []
     if q:
         stories = NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()).filter(
