@@ -310,6 +310,25 @@ if(isset($_SESSION['zm_auction_flash'])){echo '<p class="notice" role="status">'
 echo '<div class="cards">';
 foreach(['total'=>'کل مزایده‌ها','urgent'=>'مهلت در ۷ روز','approved'=>'مصوب داخلی','submitted'=>'دارای رسید شرکت','won'=>'برنده ثبت‌شده'] as $key=>$label)echo '<div class="card"><div class="metric">'.$stats[$key].'</div>'.aucEsc($label).'</div>';
 echo '</div>';
+$deadlineQueue=[];
+foreach($auctions as $item){
+    $info=$eventMap[(int)$item['id']]['state'];
+    if($info['outcome']||$info['submission'])continue;
+    $seconds=strtotime((string)$item['deadline_utc'].' UTC')-time();
+    if($seconds<=7*86400){
+        $label=$seconds<0?'مهلت گذشته؛ بررسی مختومه‌سازی':($seconds<=86400?'اقدام فوری؛ کمتر از ۲۴ ساعت':'اقدام در هفت روز آینده');
+        $deadlineQueue[]=['id'=>(int)$item['id'],'title'=>(string)$item['title'],'reference'=>(string)$item['reference'],
+            'deadline'=>(string)$item['deadline_utc'],'left'=>$seconds,'label'=>$label];
+    }
+}
+usort($deadlineQueue,fn(array $a,array $b)=>$a['left']<=>$b['left']);
+if($deadlineQueue){
+    echo '<section aria-labelledby="deadlines"><h2 id="deadlines">کارتابل مهلت‌های مزایده و اقدام لازم</h2>';
+    echo '<p>هشدار داخلی در هنگام بازکردن میز مدیریت؛ هیچ پیام یا پیشنهاد بیرونی ارسال نمی‌شود.</p><div class="scroll"><table><tr><th>شماره</th><th>موضوع</th><th>مهلت UTC</th><th>اولویت</th><th>اقدام</th></tr>';
+    foreach(array_slice($deadlineQueue,0,20) as $due)
+        echo '<tr><td>'.aucEsc($due['reference']).'</td><td>'.aucEsc($due['title']).'</td><td>'.aucEsc($due['deadline']).'</td><td>'.aucEsc($due['label']).'</td><td><a href="?id='.$due['id'].'">بررسی پرونده</a></td></tr>';
+    echo '</table></div></section>';
+}
 if(in_array($role,['admin','manager'],true)){
     echo '<section><h2>ثبت فرصت جدید (خرید یا فروش)</h2><form method="post" action="/business/auctions/"><input type="hidden" name="csrf" value="'.aucEsc($csrf).'"><input type="hidden" name="action" value="create"><div class="row">';
     $fields=[
