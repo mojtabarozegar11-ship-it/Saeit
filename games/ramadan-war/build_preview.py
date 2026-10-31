@@ -23,7 +23,6 @@ ASSETS = _DEPLOY_MODULE.ASSETS
 
 MODEL_SIZES = {
     "soldier-rigged-ccby.glb": 3094592,
-    "m24-sniper-ccby.glb": 1247684,
 }
 
 
