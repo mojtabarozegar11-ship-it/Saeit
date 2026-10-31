@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
-from scripts.s01_checkout_cpanel_provenance_readonly_20261030 import probe
+from scripts.s01_checkout_cpanel_provenance_readonly_20261030 import callable_delta, probe
 
 
 class ProvenanceTests(unittest.TestCase):
@@ -50,6 +50,17 @@ class ProvenanceTests(unittest.TestCase):
         r = self.verdict()
         self.assertEqual(r["classification"], "SOURCE_SHA_DRIFT_SEMANTIC_OR_SYNTAX_DIFFERENCE")
         self.assertFalse(r["ast_equivalent"])
+
+    def test_callable_delta_reports_only_bounded_names_and_states(self):
+        approved = b'def invoice():\\n    return "approved-secret"\\nclass Handler: pass\\n'
+        current = b'def invoice():\\n    return "current-secret"\\ndef settle(): return 1\\n'
+        delta = callable_delta(approved, current)
+        self.assertEqual(
+            {(row["name"], row["state"]) for row in delta},
+            {("invoice", "MODIFIED"), ("Handler", "REMOVED"), ("settle", "ADDED")},
+        )
+        self.assertNotIn("approved-secret", str(delta))
+        self.assertNotIn("current-secret", str(delta))
 
     def test_private_permissions_refused(self):
         self.staging.write_bytes(b"price = 6\n")
