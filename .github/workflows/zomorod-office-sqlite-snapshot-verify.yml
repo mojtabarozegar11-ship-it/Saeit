@@ -1,0 +1,161 @@
+name: ZM office SQLite consistent private snapshot and isolated restore
+
+on:
+  push:
+    branches:
+      - feature/zomorod-auction-management-private-20261031
+    paths:
+      - .github/workflows/zomorod-office-sqlite-snapshot-verify.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zm-office-db-private-backup
+  cancel-in-progress: false
+
+jobs:
+  private_backup:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Create consistent SQLite copy outside public_html and verify isolated in-memory restore
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$GITHUB_RUN_ID" -gt 0
+          d="$RUNNER_TEMP/zomorod-auction-host-preflight"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 15
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          target=""
+          for host in saeit-cpanel saeit-cpanel-direct; do
+            if timeout 55s ssh -F "$d/config" "$host" 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/business/index.php && test -d /home/zomorod2/.private/zomorod-business' >/dev/null; then
+              target="$host"
+              break
+            fi
+          done
+          test -n "$target"
+          ssh -F "$d/config" "$target" 'python3 -B -' <<'PY'
+          import datetime,hashlib,json,os,pathlib,secrets,shutil,sqlite3,stat,sys
+          home=pathlib.Path('/home/zomorod2')
+          private=home/'.private/zomorod-business'
+          master=private/'management.sqlite3'
+          recover=private/'recovery-snapshots'
+          if not private.is_dir() or private.is_symlink() or not master.is_file() or master.is_symlink():
+              raise SystemExit('OFFICE_SNAPSHOT=BLOCKED_PRIVATE_PATH_OR_DB')
+          n=master.stat().st_size
+          if n<=0 or n>1073741824 or shutil.disk_usage(private).free<(n*3+1073741824):
+              raise SystemExit('OFFICE_SNAPSHOT=BLOCKED_SIZE_OR_RESERVE')
+          if recover.exists():
+              if not recover.is_dir() or recover.is_symlink() or stat.S_IMODE(recover.stat().st_mode)&0o077:
+                  raise SystemExit('OFFICE_SNAPSHOT=BLOCKED_RECOVERY_DIR_PERMISSIONS')
+          else:
+              recover.mkdir(mode=0o700)
+              os.chmod(recover,0o700)
+          stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+          base='management-'+stamp+'-'+secrets.token_hex(8)
+          destination=recover/(base+'.sqlite3')
+          receipt=recover/(base+'.manifest.json')
+          created=False
+          try:
+              flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL
+              if hasattr(os,'O_NOFOLLOW'):flags|=os.O_NOFOLLOW
+              fd=os.open(str(destination),flags,0o600)
+              created=True
+              os.close(fd)
+              src=sqlite3.connect('file:'+str(master)+'?mode=ro',uri=True,timeout=10)
+              src.execute('PRAGMA query_only=ON')
+              dst=sqlite3.connect(str(destination),timeout=10)
+              try:
+                  src.backup(dst,pages=256,sleep=0.05)
+                  dst.commit()
+              finally:
+                  dst.close()
+                  src.close()
+              os.chmod(destination,0o600)
+              verification=sqlite3.connect('file:'+str(destination)+'?mode=ro',uri=True,timeout=10)
+              mem=sqlite3.connect(':memory:')
+              try:
+                  verification.backup(mem,pages=256)
+                  integrity=[x[0] for x in mem.execute('PRAGMA integrity_check').fetchall()]
+                  if integrity!=['ok']:raise RuntimeError('integrity check failed')
+                  users={x[1] for x in mem.execute('PRAGMA table_info(users)').fetchall()}
+                  projects={x[1] for x in mem.execute('PRAGMA table_info(projects)').fetchall()}
+                  if not {'id','role','active'}.issubset(users) or not {'id','title'}.issubset(projects):
+                      raise RuntimeError('essential schema missing in restore')
+                  restored=mem.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+                  if restored<2:raise RuntimeError('restore table count invalid')
+              finally:
+                  mem.close()
+                  verification.close()
+              digest=hashlib.sha256()
+              with destination.open('rb') as fh:
+                  for block in iter(lambda:fh.read(1048576),b''):digest.update(block)
+              metadata={'created_utc':stamp,'source':'office-management-sqlite3',
+                        'backup_sha256':digest.hexdigest(),'backup_bytes':destination.stat().st_size,
+                        'integrity_check':'ok','isolated_memory_restore':'ok',
+                        'auth_project_schema':'ok','off_host':False}
+              f=os.open(str(receipt),flags,0o600)
+              with os.fdopen(f,'w',encoding='utf-8') as stream:json.dump(metadata,stream,sort_keys=True)
+              os.chmod(receipt,0o600)
+              print('OFFICE_SNAPSHOT=PASS_CONSISTENT_PRIVATE_COPY')
+              print('OFFICE_RESTORE=PASS_ISOLATED_MEMORY_AND_INTEGRITY')
+              print('OFFICE_SNAPSHOT_BYTES='+str(metadata['backup_bytes']))
+              print('OFFICE_SNAPSHOT_SHA256_PREFIX='+metadata['backup_sha256'][:16])
+              print('OFFICE_SNAPSHOT_SOURCE_READONLY=YES')
+              print('OFFICE_SNAPSHOT_OUTSIDE_PUBLIC_HTML=YES')
+              print('OFFICE_SNAPSHOT_PERMISSIONS=0600_AND_0700')
+              print('OFFICE_OFFHOST_ENCRYPTED_RESTORE_VERIFIED=NO')
+              print('OFFICE_PUBLIC_SITE_OR_MASTER_DB_MUTATIONS=NONE')
+          except Exception as e:
+              if created and destination.exists() and not destination.is_symlink():
+                  destination.rename(recover/(base+'.incomplete'))
+              print('OFFICE_SNAPSHOT=BLOCKED_'+type(e).__name__)
+              raise
+          PY
