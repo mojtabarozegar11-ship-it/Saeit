@@ -83,6 +83,16 @@ class ProvenanceTests(unittest.TestCase):
         self.assertNotIn("approved-secret", str(delta))
         self.assertNotIn("current-secret", str(delta))
 
+    def test_release_gate_verifies_preimage_independently_of_current_candidate_size(self):
+        workflow = (
+            Path(__file__).resolve().parents[1]
+            / ".github/workflows/mpw-checkout-csp-readonly-preflight-20261029.yml"
+        ).read_text("utf8")
+        self.assertIn("source_sha_matches_known_candidate", workflow)
+        self.assertIn("record.get(\"bytes\") == bs.st_size", workflow)
+        self.assertNotIn("bs.st_size == source.stat().st_size", workflow)
+        self.assertIn("\"safe_to_publish\": False", workflow)
+
     def test_private_permissions_refused(self):
         self.staging.write_bytes(b"price = 6\n")
         path = self.private / ("mpw-checkout-csp-preimage-" + self.pin[:16] + ".bak")
