@@ -94,6 +94,7 @@ def classify(digests: dict) -> dict:
     return {
         "scope": "S01_TRX_LIVE_SOURCE_READONLY",
         "source_states": states,
+        "observed_sha256": {k: v if isinstance(v, str) and len(v) == 64 and all(c in "0123456789abcdef" for c in v) else None for k, v in digests.items()},
         "source_identity_all_match": all(x == "REFERENCE_MATCH" for x in states.values()),
         "release_permitted": False,
         "passenger_db_authority_verified": False,
