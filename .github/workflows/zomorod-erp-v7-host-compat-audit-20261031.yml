@@ -107,7 +107,7 @@ jobs:
           done
           test -n "$target"
           ssh -F "$d/config" "$target" 'python3 -B -' > "$RUNNER_TEMP/live-erp-inventory.json" <<'PY'
-          import hashlib,json,os,pathlib,subprocess
+          import hashlib,json,os,pathlib,subprocess,shutil,sqlite3
           root=pathlib.Path('/home/zomorod2/.private/zomorod-business')
           if not root.is_dir() or root.is_symlink():
               raise SystemExit('LIVE_PRIVATE_ROOT_UNSAFE')
@@ -119,8 +119,26 @@ jobs:
           checksums_ok=(staged.is_dir() and not staged.is_symlink() and
               subprocess.run(['sha256sum','-c','--status','SHA256SUMS'],cwd=staged,capture_output=True,timeout=20).returncode==0)
           db=root/'management.sqlite3'
+          app=(root/'app.php').read_text(encoding='utf-8',errors='replace')
+          pending=('finance_audit.php','industry_operations.php','payroll_control.php','payroll_ui.php','period_controls.php','workflow_desk.php')
+          includes={n:(n in app) for n in pending}
+          bytes_used=db.stat().st_size if db.is_file() else 0
+          free_mib=shutil.disk_usage(root).free//1048576
+          tables=None
+          try:
+              if db.is_file():
+                  con=sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True,timeout=2)
+                  con.execute('PRAGMA query_only=ON')
+                  tables=con.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+                  con.close()
+          except (OSError,sqlite3.Error):
+              pass
           result={
               'installed_php':installed,
+              'live_app_module_references':includes,
+              'database_size_mib':(bytes_used+1048575)//1048576,
+              'disk_free_mib':free_mib,
+              'existing_database_table_count':tables,
               'original_database_exists':db.is_file() and not db.is_symlink(),
               'v7_staged_package_checksum_verified':checksums_ok,
               'active_web_wrapper_exists':pathlib.Path('/home/zomorod2/public_html/business/index.php').is_file()
@@ -146,6 +164,11 @@ jobs:
           print('HOST_ONLY_MODULES='+','.join(extra))
           print('V7_STAGED_CHECKSUM='+('PASS' if actual['v7_staged_package_checksum_verified'] else 'FAIL'))
           print('HOST_DATABASE_EXISTS='+str(actual['original_database_exists']))
+          print('LIVE_APP_REFERENCES='+','.join(n for n,used in actual['live_app_module_references'].items() if used))
+          print('LIVE_APP_DOES_NOT_REFERENCE='+','.join(n for n,used in actual['live_app_module_references'].items() if not used))
+          print('LIVE_DB_SIZE_MIB='+str(actual['database_size_mib']))
+          print('HOST_FREE_SPACE_MIB='+str(actual['disk_free_mib']))
+          print('LIVE_DB_SCHEMA_TABLE_COUNT='+str(actual['existing_database_table_count']))
           print('LIVE_WEB_WRAPPER_PRESENT='+str(actual['active_web_wrapper_exists']))
           print('LIVE_ERP_CODE_MUTATIONS=NONE')
           print('LIVE_ERP_DB_MUTATIONS=NONE')
