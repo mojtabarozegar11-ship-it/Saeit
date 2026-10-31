@@ -1,0 +1,149 @@
+name: Zomorod business private live source identity (read only)
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/zomorod-business-live-source-readonly-20261031.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-business-live-source-readonly-20261031.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-business-live-readonly-20261031
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate unchanged independent PHP source
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/index.php
+          python3 -m py_compile scripts/zomorod_project_approval_snapshot.py
+          echo "BUSINESS_PREFLIGHT_SOURCE=verified"
+  inspect:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-business-source-readonly"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo "VPS_HOSTKEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # Resolve cPanel from the already pinned VPS, then compare its ED25519
+          # fingerprint before any connection to the production account.
+          scan="$(timeout 35s ssh -T -F "$d/config" saeit-vps 'timeout 10s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOSTKEY=verified"
+          expected_app="$(sha256sum content/zomorod-business/app.php | awk '{print $1}')"
+          expected_entry="$(sha256sum content/zomorod-business/index.php | awk '{print $1}')"
+          timeout 115s ssh -F "$d/config" saeit-cpanel bash -se -- "$expected_app" "$expected_entry" <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          expected_app="$1"
+          expected_entry="$2"
+          case "$expected_app:$expected_entry" in
+            *[!0-9a-f:]* ) exit 5 ;;
+          esac
+          private="$HOME/.private/zomorod-business"
+          live="$private/app.php"
+          entry="$HOME/public_html/business/index.php"
+          database="$private/management.sqlite3"
+          registry="$private/approvals_snapshot.json"
+          test -d "$private" && test ! -L "$private"
+          test -s "$entry" && test ! -L "$entry"
+          if test -s "$live" && test ! -L "$live"; then
+            live_hash="$(sha256sum "$live" | awk '{print $1}')"
+            test "$live_hash" != ""
+            echo "LIVE_APP_PRESENT=true"
+            echo "LIVE_APP_SHA256=$live_hash"
+            if test "$live_hash" = "$expected_app"; then echo "LIVE_APP_MATCHES_REPO=true"; else echo "LIVE_APP_MATCHES_REPO=false"; fi
+            if php -l "$live" >/dev/null 2>&1; then echo "LIVE_APP_PHP_SYNTAX=pass"; else echo "LIVE_APP_PHP_SYNTAX=fail"; fi
+          else
+            echo "LIVE_APP_PRESENT=false"
+            echo "LIVE_APP_MATCHES_REPO=false"
+          fi
+          entry_hash="$(sha256sum "$entry" | awk '{print $1}')"
+          if test "$entry_hash" = "$expected_entry"; then echo "LIVE_ENTRY_MATCHES_REPO=true"; else echo "LIVE_ENTRY_MATCHES_REPO=false"; fi
+          if test -s "$registry" && test ! -L "$registry"; then echo "LIVE_APPROVAL_SNAPSHOT_PRESENT=true"; else echo "LIVE_APPROVAL_SNAPSHOT_PRESENT=false"; fi
+          if test -s "$database" && test ! -L "$database"; then
+            PYTHONDONTWRITEBYTECODE=1 python3 -B - "$database" <<'PY'
+          import pathlib
+          import sqlite3
+          import sys
+          from urllib.parse import quote
+          path=pathlib.Path(sys.argv[1])
+          if not path.is_file() or path.is_symlink():
+              raise SystemExit(4)
+          uri="file:"+quote(str(path),safe="/")+"?mode=ro"
+          try:
+              conn=sqlite3.connect(uri,uri=True,timeout=4)
+              conn.execute("PRAGMA query_only=ON")
+              check=conn.execute("PRAGMA quick_check(1)").fetchone()[0]
+              allowed={"projects","journal_entries","invoices","users"}
+              tables={str(row[0]) for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              print("LIVE_BUSINESS_DB_INTEGRITY="+("ok" if check=="ok" else "fail"))
+              print("LIVE_BUSINESS_TABLE_COUNT="+str(len(tables)))
+              for name in sorted(allowed):
+                  value=str(conn.execute("SELECT COUNT(*) FROM "+name).fetchone()[0]) if name in tables else "absent"
+                  print("LIVE_"+name.upper()+"_COUNT="+value)
+              conn.close()
+          except sqlite3.Error as exc:
+              print("LIVE_BUSINESS_DB_READONLY_ERROR="+type(exc).__name__)
+          PY
+          else
+            echo "LIVE_BUSINESS_DB_PRESENT=false"
+          fi
+          echo "PRODUCTION_DATA_TOUCHED=no"
+          echo "PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no"
+          REMOTE
+          echo "BUSINESS_SOURCE_PREFLIGHT_READONLY=completed"
