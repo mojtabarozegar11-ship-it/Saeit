@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import Counter
 import json
 import os
+import posixpath
 import tarfile
 import threading
 from pathlib import PurePosixPath
@@ -36,9 +37,32 @@ def member_category(name):
     return "approved_root"
 
 
+
+def link_category(name, target, is_symlink):
+    """Mirror extractor link-target normalization, never return a path."""
+    if not isinstance(target, str):
+        return "invalid_link_target"
+    parts = PurePosixPath(name).parts
+    if target.startswith("/"):
+        if not is_symlink:
+            return "absolute_hardlink_rejected"
+        try:
+            relative = PurePosixPath(target).relative_to("/home/zomorod2")
+        except ValueError:
+            return "unbacked_absolute_symlink"
+        candidate = str(relative)
+    elif is_symlink:
+        candidate = posixpath.normpath(posixpath.join(*parts[:-1], target))
+    else:
+        candidate = posixpath.normpath(target)
+    category = member_category(candidate)
+    return ("inside_approved_roots" if category == "approved_root"
+            else category)
+
 def classify_tar(stream):
     """Consume archive headers, not payload content, then drain to GPG EOF."""
     counts = Counter()
+    link_counts = Counter()
     entries = 0
     tar_status = "PASS"
     try:
@@ -49,6 +73,9 @@ def classify_tar(stream):
                     tar_status = "MEMBER_LIMIT"
                     break
                 counts[member_category(member.name)] += 1
+                if member.issym() or member.islnk():
+                    kind = 'symlink' if member.issym() else 'hardlink'
+                    link_counts[kind + '_' + link_category(member.name, member.linkname, member.issym())] += 1
     except (tarfile.TarError, OSError, ValueError, UnicodeError):
         tar_status = "TAR_PARSE_FAILURE"
     # The encrypted source has an authenticated footer after the tar end.
@@ -57,6 +84,7 @@ def classify_tar(stream):
         pass
     return {"member_count_capped": min(entries, MAX_ENTRIES),
             "categories": dict(sorted(counts.items())),
+            "link_target_categories": dict(sorted(link_counts.items())),
             "tar_read_status": tar_status}
 
 
