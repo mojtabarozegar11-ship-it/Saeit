@@ -18,10 +18,9 @@ class RequestAuditMiddleware:
         response = self.get_response(request)
 
         # A public catalog explicitly marked unavailable must not trigger an
-        # additional audit DB write on a read-only GET/HEAD during schema loss.
-        # Preserve auditing for all other responses, especially mutations.
+        # audit DB write on GET/HEAD during schema loss, including a 200
+        # static-fallback shell. Keep normal/mutating-request auditing intact.
         if (request.method in ("GET", "HEAD")
-                and getattr(response, "status_code", None) == 503
                 and response.get("X-ZM-Data-Status") == "temporarily-unavailable"):
             return response
 
