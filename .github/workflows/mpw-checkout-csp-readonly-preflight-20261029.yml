@@ -10,6 +10,8 @@ on:
       - tests/test_s01_checkout_invoice_static_readonly_20261029.py
       - tests/test_s01_passenger_runtime_readonly_20261029.py
       - tests/test_mpw_checkout_csp_zero_script_20261029.py
+      - scripts/s01_ssh_error_classify.py
+      - tests/test_s01_ssh_error_classify.py
       - .github/workflows/mpw-checkout-csp-readonly-preflight-20261029.yml
 permissions: {contents: read}
 concurrency:
@@ -74,6 +76,7 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_cpanel_provenance_readonly_20261030.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_ssh_error_classify.py -v
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -128,25 +131,15 @@ jobs:
           ssh_error="$d/ssh-error"
           for attempt in 1 2 3 4 5; do
             : > "$ssh_error"
-            if timeout 65s ssh -T -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>"$ssh_error"; then
+            if timeout 65s ssh -v -T -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>"$ssh_error"; then
               session_ready=1
               break
             else
               rc=$?
-              if grep -Eqi 'Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED' "$ssh_error"; then
-                failure_class=HOST_KEY_MISMATCH
-              elif grep -Eqi 'Permission denied|Authentication failed|No supported authentication methods' "$ssh_error"; then
-                failure_class=AUTH_REJECTED
-              elif grep -Eqi 'Connection timed out|Operation timed out|No route to host|Network is unreachable|Connection refused|Connection reset|Connection closed by|Could not resolve hostname|ssh_exchange_identification|kex_exchange_identification|banner exchange|administratively prohibited' "$ssh_error" || [ "$rc" -eq 124 ]; then
-                failure_class=TRANSPORT_OR_TIMEOUT
-              elif [ "$rc" -eq 1 ]; then
-                failure_class=REMOTE_IDENTITY_MISMATCH
-              elif [ "$rc" -eq 255 ]; then
-                failure_class=SSH_HANDSHAKE_OR_AUTH_UNCLASSIFIED
-              else
-                failure_class=UNKNOWN
-              fi
-              echo "S01_PINNED_SESSION_ATTEMPT=$attempt RC=$rc CLASS=$failure_class"
+              failure_class="$(python3 scripts/s01_ssh_error_classify.py "$ssh_error")"
+              failure_phase="$(python3 scripts/s01_ssh_error_classify.py --phase "$ssh_error")"
+              echo "S01_PINNED_SESSION_ATTEMPT=$attempt RC=$rc CLASS=$failure_class PHASE=$failure_phase"
+              : > "$ssh_error"
             fi
             if [ "$attempt" -lt 5 ]; then sleep 6; fi
           done
