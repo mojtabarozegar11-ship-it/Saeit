@@ -10,6 +10,7 @@
 {% block content %}
 <div class="msg-form">
 <h1>ثبت پیام جدید</h1>
+{% if not external_send_enabled %}<p role="status" style="color:#ffe1a3;font-weight:700">ارسال برون‌سازمانی در حال حاضر غیرفعال است؛ ثبت پیام خارجی به معنی ارسال نیست و پیام تا فعال‌شدن مجاز سرویس‌دهنده در صف باقی می‌ماند. پیام‌های داخلی قابل ثبت‌اند.</p>{% endif %}
 <p>برای پیام داخلی «کارمند گیرنده» و برای کانال بیرونی «مخاطب دفترچه» انتخاب شود. کانال‌های بیرونی تنها با رضایت ثبت‌شده به صف می‌روند؛ ارسال واقعی در پردازشگر مجاز انجام می‌شود.</p>
 <form method="post">{% csrf_token %}
 {% if form.non_field_errors %}<div class="msg-errors">{{ form.non_field_errors }}</div>{% endif %}
