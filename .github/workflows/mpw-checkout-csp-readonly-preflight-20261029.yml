@@ -12,6 +12,7 @@ on:
       - tests/test_mpw_checkout_csp_zero_script_20261029.py
       - scripts/s01_ssh_error_classify.py
       - tests/test_s01_ssh_error_classify.py
+      - tests/test_s01_checkout_relay_config_regression.py
       - .github/workflows/mpw-checkout-csp-readonly-preflight-20261029.yml
 permissions: {contents: read}
 concurrency:
@@ -77,6 +78,7 @@ jobs:
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_cpanel_provenance_readonly_20261030.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_ssh_error_classify.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_relay_config_regression.py -v
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -110,14 +112,16 @@ jobs:
             UserKnownHostsFile $d/host.known
             ProxyJump saeit-vps
             ControlMaster auto
-            ControlPath $d/control-%C
+            ControlPath $d/cpanel.sock
             ControlPersist 300
           Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
-            ConnectTimeout 10
-            ConnectionAttempts 1
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
             ForwardAgent no
             RequestTTY no
           EOF
@@ -131,7 +135,7 @@ jobs:
           ssh_error="$d/ssh-error"
           for attempt in 1 2 3 4 5; do
             : > "$ssh_error"
-            if timeout 65s ssh -v -T -F "$d/config" -o ConnectTimeout=12 -o ConnectionAttempts=2 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>"$ssh_error"; then
+            if timeout 55s ssh -v -T -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>"$ssh_error"; then
               session_ready=1
               break
             else
@@ -141,7 +145,7 @@ jobs:
               echo "S01_PINNED_SESSION_ATTEMPT=$attempt RC=$rc CLASS=$failure_class PHASE=$failure_phase"
               : > "$ssh_error"
             fi
-            if [ "$attempt" -lt 5 ]; then sleep 6; fi
+            if [ "$attempt" -lt 5 ]; then sleep 12; fi
           done
           rm -f "$ssh_error"
           if [ "$session_ready" != 1 ]; then
@@ -151,6 +155,12 @@ jobs:
               echo 'S01_CPANEL_RELAY_TCP=OPEN'
             else
               echo 'S01_CPANEL_RELAY_TCP=NOT_VERIFIED'
+            fi
+            if timeout 25s ssh -T -F "$d/config" saeit-cpanel 'true' >/dev/null 2>/dev/null; then
+              echo 'S01_CPANEL_REMOTE_SHELL=VERIFIED'
+              echo 'S01_CPANEL_IDENTITY_ASSERTION=BLOCKED'
+            else
+              echo 'S01_CPANEL_REMOTE_SHELL=NOT_VERIFIED'
             fi
           fi
           test "$session_ready" = 1 || { echo 'S01_PINNED_SESSION=BLOCKED'; exit 1; }
@@ -346,7 +356,7 @@ jobs:
           set -euo pipefail
           script64="$(base64 -w0 scripts/s01_checkout_invoice_static_readonly_20261029.py)"
           timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
-            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;exec(compile(base64.b64decode(sys.argv[1]),\"s01_invoice_static_probe\",\"exec\"))' '$script64'"
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;src=base64.b64decode(sys.argv[1]);sys.argv=[\"s01_invoice_static_probe\"];exec(compile(src,\"s01_invoice_static_probe\",\"exec\"))' '$script64'"
       - name: Delete runner-only SSH material
         if: always()
         run: |
