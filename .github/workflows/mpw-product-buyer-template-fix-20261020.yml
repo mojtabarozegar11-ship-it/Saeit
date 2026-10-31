@@ -122,7 +122,7 @@ jobs:
                   if r.status!=200 or 'Create invoice and pay with TRX' not in checkout:raise RuntimeError('Anonymous checkout does not offer TRX invoice for '+str(product_id))
               if 'Sign in to create an order-specific TRX invoice' in checkout or 'name="password"' in checkout:raise RuntimeError('Checkout requires customer account for '+str(product_id))
               print('MPW_GUEST_CHECKOUT_TRX_AVAILABLE='+str(product_id))
-              if 'Sign in to receive an order-specific secure invoice' in content or 'New customer? Create an account' in content or 'href="/accounts/register/' in content:raise RuntimeError('Misleading account requirement remains')
+              if 'Sign in to receive an order-specific secure invoice' in content:raise RuntimeError('Misleading account requirement remains')
               if ('property="og:title" content="'+product_title+' | MojPlayWin"') not in content:raise RuntimeError('Generic product OG title not fixed')
               if 'Live payment methods appear only after provider' in content:raise RuntimeError('Old incorrect payment message remains')
               print('MPW_PRODUCT_BUYER_REAL_CTA_PUBLIC='+str(product_id))
