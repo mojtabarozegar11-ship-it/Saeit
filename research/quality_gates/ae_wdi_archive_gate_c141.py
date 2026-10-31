@@ -9,6 +9,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 from pathlib import Path
 
 
@@ -44,6 +45,10 @@ def archive(raw: bytes, country: str, indicator: str):
         value = record.get('value')
         if value is not None and (isinstance(value, bool) or not isinstance(value, (float, int))):
             raise ValueError('Invalid numeric value')
+        if value is not None and not math.isfinite(value):
+            raise ValueError('Non-finite numeric value forbidden')
+        if value is not None and indicator == 'SL.AGR.EMPL.ZS' and not (0 <= value <= 100):
+            raise ValueError('Agricultural employment share outside 0–100 percent')
         out.append({'country_iso3': country, 'indicator': indicator, 'year': date,
                     'value': '' if value is None else repr(value),
                     'country_label': country_obj.get('value', '')})
