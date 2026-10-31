@@ -1,0 +1,22 @@
+# G-01 / Ramadan War Web R58 — same-version save-status correction
+# Scope: LOW-GRAPHICS-OFFLINE.html and standalone copy only.
+# This is a source-level patch, NOT a release, merge, or deployment.
+# The 35-file pinned 3D runtime and launchers must remain unchanged.
+# Applies to owner-private R58 package SHA256 d35ba0f330cfdea5126e878699ec79799102095ef7fa0a67fc6304f41452ec3e.
+# Replace each exact line once; reject missing or duplicate matches.
+
+--- a/LOW-GRAPHICS-OFFLINE.html
++++ b/LOW-GRAPHICS-OFFLINE.html
+@@
+-$('save').onclick=()=>{save();notice('پیشرفت ذخیره شد؛ پشتیبان JSON نیز توصیه می‌شود.')}
++$('save').onclick=()=>{const ok=save();notice(ok?'پیشرفت در مرورگر ذخیره شد؛ پشتیبان JSON نیز توصیه می‌شود.':'ذخیرهٔ مرورگر ناموفق بود؛ برای حفظ پیشرفت، پشتیبان JSON دریافت کنید.')}
+@@
+-$('import').onclick=()=>$('file').click();$('file').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;if(f.size>65536){notice('فایل بیش از حد بزرگ است.');return}try{const d=validate(JSON.parse(await f.text()));Object.assign(s,d);save();resetStage(true);notice('پشتیبان بازیابی شد.')}catch(err){notice('خطا: '+err.message)}finally{e.target.value=''}};
++$('import').onclick=()=>$('file').click();$('file').onchange=async e=>{const f=e.target.files?.[0];if(!f)return;if(f.size>65536){notice('فایل بیش از حد بزرگ است.');return}try{const d=validate(JSON.parse(await f.text()));Object.assign(s,d);const ok=save();resetStage(true);notice(ok?'پشتیبان بازیابی شد و ذخیرهٔ مرورگر فعال است.':'پشتیبان در بازی بازیابی شد، اما ذخیرهٔ مرورگر مسدود است؛ برای حفظ پیشرفت، پشتیبان JSON بگیرید.')}catch(err){notice('خطا: '+err.message)}finally{e.target.value=''}};
+
+# Chromium desktop/mobile in-memory functional QA: 20/20 PASS.
+# Direct file:// and HTTP browser navigation: ERR_BLOCKED_BY_ADMINISTRATOR (NOT tested successfully).
+# Linux launcher --verify-only: 35/35 PASS; ZIP CRC/manifest: PASS, 49 files.
+# Candidate ZIP SHA256 df8c0b5de004a147e278c4754c182214a0ccbc694b106d872923df8dc7fc5a85.
+# Durable private Library upload of candidate: BLOCKED container_session_unavailable.
+# Existing owner-private R58 ZIP remains untouched in Library; public release blocked by S-01 rights/restore/rollback.
