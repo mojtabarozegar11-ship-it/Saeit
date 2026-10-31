@@ -59,8 +59,8 @@ class TrxCommerceOverlayTests(unittest.TestCase):
                      "<synthetic-quote-provider>", "exec"), namespace)
         market = ModuleType("scripts.mojplaywin_direct_wallet_rates")
         market.RateFeedUnavailable = RateFeedUnavailable
-        with patch.dict(sys.modules, {"scripts.mojplaywin_direct_wallet_rates": market}), \\
-             patch("time.time", return_value=NOW), \\
+        with patch.dict(sys.modules, {"scripts.mojplaywin_direct_wallet_rates": market}), \
+             patch("time.time", return_value=NOW), \
              patch("urllib.request.urlopen", side_effect=error,
                    return_value=FakeResponse(quote() if body is None else body,
                                              url=url, status=status)):
