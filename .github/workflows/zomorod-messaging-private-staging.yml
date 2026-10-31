@@ -402,13 +402,16 @@ jobs:
           os.environ.pop("DJANGO_SETTINGS_MODULE", None)
           from office_passenger_wsgi import application
           from django.conf import settings
-          from django.urls import reverse, resolve
+          from django.urls import reverse, resolve, set_script_prefix
           from django.test.utils import override_settings
           from django.test import Client
           assert settings.ROOT_URLCONF == "office_runtime.urls"
           assert settings.FORCE_SCRIPT_NAME == os.environ["ZM_OFFICE_BASE_PATH"]
           assert settings.SESSION_COOKIE_PATH == settings.FORCE_SCRIPT_NAME + "/"
           assert settings.CSRF_COOKIE_PATH == settings.FORCE_SCRIPT_NAME + "/"
+          # The script prefix is installed automatically inside Passenger requests.
+          # A bare reverse() outside a request needs explicit setup.
+          set_script_prefix(settings.FORCE_SCRIPT_NAME + "/")
           assert reverse("enterprise_portal:login") == settings.FORCE_SCRIPT_NAME + "/secure-login/"
           assert resolve("/messages/").url_name == "inbox"
           assert resolve("/marketing/").url_name == "dashboard"
