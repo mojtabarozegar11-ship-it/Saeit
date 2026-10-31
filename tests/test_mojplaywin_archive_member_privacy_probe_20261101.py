@@ -4,7 +4,7 @@ import tarfile
 import unittest
 
 from scripts.mojplaywin_archive_member_privacy_probe_20261101 import (
-    classify_tar, member_category,
+    classify_tar, link_category, member_category,
 )
 
 
@@ -42,6 +42,41 @@ class MemberCategoryTests(unittest.TestCase):
         self.assertEqual(stream.tell(), len(stream.getvalue()))
         self.assertNotIn("unrelated-site", str(report))
         self.assertNotIn("private", str(report))
+
+    def test_link_target_categories_preserve_tenant_boundary(self):
+        self.assertEqual(
+            link_category("Saeit-staging/sub/link", "../../outside", True),
+            "outside_approved_roots")
+        self.assertEqual(
+            link_category("Saeit-staging/sub/link", "/etc/passwd", True),
+            "unbacked_absolute_symlink")
+        self.assertEqual(
+            link_category("Saeit-staging/sub/link",
+                          "/home/zomorod2/mojplaywin.com/file", True),
+            "inside_approved_roots")
+        self.assertEqual(
+            link_category("Saeit-staging/hard", "/etc/passwd", False),
+            "absolute_hardlink_rejected")
+
+    def test_link_tar_metadata_summary_never_reveals_target(self):
+        output = io.BytesIO()
+        with tarfile.open(fileobj=output, mode="w") as writer:
+            for name, target, kind in (
+                ("Saeit-staging/symlink", "../../../secret-link-target",
+                 tarfile.SYMTYPE),
+                ("mojplaywin.com/hardlink", "Saeit-staging/data",
+                 tarfile.LNKTYPE),
+            ):
+                item = tarfile.TarInfo(name)
+                item.type = kind
+                item.linkname = target
+                writer.addfile(item)
+        report = classify_tar(io.BytesIO(output.getvalue()))
+        self.assertEqual(report["link_target_categories"][
+            "symlink_parent_traversal"], 1)
+        self.assertEqual(report["link_target_categories"][
+            "hardlink_inside_approved_roots"], 1)
+        self.assertNotIn("secret-link-target", str(report))
 
 
 if __name__ == "__main__":
