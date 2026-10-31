@@ -9,15 +9,22 @@ if not settings.configured and not os.environ.get("DJANGO_SETTINGS_MODULE"):
     settings.configure(SECRET_KEY="synthetic-s01-only", DEFAULT_CHARSET="utf-8")
 
 from django.http import Http404, HttpResponse
+from django.test import RequestFactory
 from services.mpw_trx_guest_commerce import COOKIE, patch_public
 
 
 def request(*, secure=True, host="mojplaywin.com", cookie=None, authenticated=False, method="GET"):
-    return SimpleNamespace(
-        method=method, COOKIES=({COOKIE: cookie} if cookie is not None else {}),
-        user=SimpleNamespace(is_authenticated=authenticated),
-        is_secure=lambda: secure, get_host=lambda: host,
+    # Django's never_cache decorator requires a genuine HttpRequest (META).
+    # Keep this test entirely synthetic: no session, database or HTTP request.
+    req = RequestFactory().generic(
+        method, "/commerce/trx-easy/purchases/", secure=secure,
+        HTTP_HOST=host,
     )
+    req.user = SimpleNamespace(is_authenticated=authenticated)
+    req.COOKIES = {COOKIE: cookie} if cookie is not None else {}
+    # Exercise our explicit hostname guard, independent of ALLOWED_HOSTS.
+    req.get_host = lambda: host
+    return req
 
 
 class GuestRecoveryLandingTests(unittest.TestCase):
