@@ -1,0 +1,37 @@
+name: S-01 office R23 no-host source integrity tests
+
+on:
+  pull_request:
+    branches:
+      - fix/s01-office-stage-archive-integrity-r21-20261031
+    paths:
+      - .github/workflows/s01-office-r23-offline-tests.yml
+      - scripts/zomorod_office_guarded_release_20261031.py
+      - scripts/test_zomorod_office_guarded_release_20261031.py
+
+permissions:
+  contents: read
+
+jobs:
+  exact-head-no-host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run only synthetic guarded release tests
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          python -m unittest scripts.test_zomorod_office_guarded_release_20261031 -v
+          echo 'S01_OFFICE_R23_OFFLINE_ONLY=PASS_RELEASE_STILL_BLOCKED'

@@ -202,5 +202,41 @@ class GuardedStageArchiveIntegrityTests(unittest.TestCase):
                 release.require_stage_payload_matches_archive(stage, code)
 
 
+
+    def test_extra_unarchived_template_fails_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            stage, code = self.make_stage(d)
+            extra = code / "company_messaging/templates/unsafe.html"
+            extra.parent.mkdir(parents=True, exist_ok=True)
+            extra.write_text("<script>unexpected()</script>")
+            with self.assertRaisesRegex(RuntimeError, "STAGE_EXTRACTED_ASSET_UNARCHIVED"):
+                release.require_stage_payload_matches_archive(stage, code)
+
+    def test_extra_unarchived_javascript_fails_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            stage, code = self.make_stage(d)
+            extra = code / "company_messaging/static/unsafe.js"
+            extra.parent.mkdir(parents=True, exist_ok=True)
+            extra.write_text("console.log('unarchived')")
+            with self.assertRaisesRegex(RuntimeError, "STAGE_EXTRACTED_ASSET_UNARCHIVED"):
+                release.require_stage_payload_matches_archive(stage, code)
+
+    def test_stage_parent_symlink_fails_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            real = root / "real"
+            real.mkdir()
+            stage, code = self.make_stage(real)
+            alias = root / "alias"
+            alias.symlink_to(stage, target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, "STAGE_ANCESTOR_SYMLINK"):
+                release.require_stage_payload_matches_archive(alias, alias / "code")
+
+    def test_release_verify_is_not_disabled_by_python_optimized_mode(self):
+        import ast
+        import inspect
+        tree = ast.parse(inspect.getsource(release.verify))
+        self.assertFalse(any(isinstance(n, ast.Assert) for n in ast.walk(tree)))
+
 if __name__ == "__main__":
     unittest.main()
