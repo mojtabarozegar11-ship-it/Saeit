@@ -56,6 +56,11 @@ jobs:
           cron="$(crontab -l 2>/dev/null || true)"
           count="$(printf '%s\n' "$cron" | awk '!/^ *#/ && /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/{n++} END{print n+0}')"
           echo "HEALTH_FACTORY_HOLD_CRON_ENTRIES=$count"
+          echo "HEALTH_OS_KERNEL=$(uname -r)"
+          echo "HEALTH_VIRTUALIZATION=$(systemd-detect-virt 2>/dev/null || echo unknown)"
+          echo "HEALTH_FWUPD_PACKAGE_VERSION=$(dpkg-query -W -f='${Version}' fwupd 2>/dev/null || echo not_available)"
+          echo "HEALTH_FWUPD_TIMER_STATE=$(systemctl is-active fwupd-refresh.timer 2>/dev/null || true)"
+          systemctl show fwupd-refresh.timer -p LastTriggerUSec -p NextElapseUSecRealtime --no-pager 2>/dev/null | sed 's/^/HEALTH_FWUPD_TIMER_PROPERTY_/' || true
           echo "HEALTH_FWUPD_DETAIL_BEGIN"
           systemctl show fwupd-refresh.service -p LoadState -p ActiveState -p SubState -p Result -p ExecMainCode -p ExecMainStatus -p UnitFileState --no-pager 2>&1 | head -n 20 || true
           echo "HEALTH_FWUPD_TIMER=$(systemctl is-enabled fwupd-refresh.timer 2>/dev/null || true)"
