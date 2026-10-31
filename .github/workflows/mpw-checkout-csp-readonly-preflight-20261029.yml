@@ -178,6 +178,27 @@ jobs:
           trx_path=filenames['trx_web']
           if out['files']['trx_web'].get('present'):
               src=trx_path.read_text('utf8','replace')
+              # Classify the exact stale-rate call site without publishing
+              # private commerce source or executing payment code.
+              try:
+                  tree=ast.parse(src)
+                  class RateCalls(ast.NodeVisitor):
+                      def __init__(self): self.fn='module'; self.found=[]
+                      def visit_FunctionDef(self,node):
+                          prev=self.fn;self.fn=node.name
+                          self.generic_visit(node);self.fn=prev
+                      def visit_Call(self,node):
+                          func=node.func
+                          if isinstance(func,ast.Name) and func.id=='fetch_server_rate':
+                              args=node.args
+                              self.found.append({'function':self.fn,
+                                  'line':node.lineno,
+                                  'trx_literal':len(args)==1 and isinstance(args[0],ast.Constant) and args[0].value=='TRX'})
+                          self.generic_visit(node)
+                  visitor=RateCalls();visitor.visit(tree)
+                  out['trx_rate_call_sites']=visitor.found[:10]
+              except SyntaxError:
+                  out['trx_rate_call_sites']='SOURCE_SYNTAX_ERROR'
               out['trx_rate_source_static']={
                   'uses_server_rate':"fetch_server_rate(" in src,
                   'uses_trx':"'TRX'" in src or '"TRX"' in src,
