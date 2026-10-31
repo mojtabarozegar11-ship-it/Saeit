@@ -37,7 +37,7 @@ foreach ([$recipient, $envelopePath] as $file) {
     }
 }
 $encoded = @file_get_contents($envelopePath);
-if ($encoded === false || strlen($encoded) > 22001 || strlen($encoded) < 900) {
+if ($encoded === false || strlen($encoded) > 22001 || strlen($encoded) < 600) {
     zmReceiveFail('ENVELOPE_SIZE');
 }
 try {
