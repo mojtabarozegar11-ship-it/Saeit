@@ -116,11 +116,61 @@ def build(original: bytes, *, expected_sha256: str = EXPECTED_SOURCE_SHA256) -> 
     return revised.encode("utf-8")
 
 
+def actual_source_in_memory_smoke(candidate: bytes) -> None:
+    """Execute ONLY the patched provider AST against stub modules, never Django."""
+    from decimal import Decimal
+    from types import ModuleType, SimpleNamespace
+    from unittest.mock import patch
+
+    fn = _function(ast.parse(candidate.decode("utf-8")))
+    class OriginalRateError(Exception):
+        pass
+    class TrustedRateUnavailable(Exception):
+        pass
+
+    fake_scripts = ModuleType("scripts")
+    fake_scripts.__path__ = []
+    fake_market = ModuleType("scripts.mojplaywin_direct_wallet_rates")
+    fake_market.RateFeedUnavailable = OriginalRateError
+    fake_quote = ModuleType("scripts.s01_trx_rate_isolation_candidate")
+    fake_quote.TrustedRateUnavailable = TrustedRateUnavailable
+    fake_quote.fetch_trx_only = lambda: SimpleNamespace(
+        usd_per_trx=Decimal("0.25"), observed_at=1793470000)
+    scope = {}
+    with patch.dict(sys.modules, {
+        "scripts": fake_scripts,
+        "scripts.mojplaywin_direct_wallet_rates": fake_market,
+        "scripts.s01_trx_rate_isolation_candidate": fake_quote,
+    }):
+        exec(compile(ast.Module(body=[fn], type_ignores=[]),
+                     "<exact-live-source-memory>", "exec"), scope)
+        provider = scope["_rate_provider"]
+        if provider() != (Decimal("0.25"), 1793470000):
+            raise SourceContractChanged("Patched provider tuple smoke failed")
+        fake_quote.fetch_trx_only = lambda: (_ for _ in ()).throw(
+            TrustedRateUnavailable("stale"))
+        try:
+            provider()
+        except OriginalRateError:
+            pass
+        else:
+            raise SourceContractChanged("Stale quote did not fail closed")
+        fake_quote.fetch_trx_only = lambda: SimpleNamespace(
+            usd_per_trx=Decimal("150"), observed_at=1793470000)
+        try:
+            provider()
+        except OriginalRateError:
+            pass
+        else:
+            raise SourceContractChanged("Out-of-range quote did not fail closed")
+
+
 def preview() -> None:
     if TARGET.is_symlink() or not TARGET.is_file():
         raise SourceContractChanged("Commerce source is not a regular file")
     original = TARGET.read_bytes()
     candidate = build(original)
+    actual_source_in_memory_smoke(candidate)
     print("S01_TRX_PROVIDER_OVERLAY_PREVIEW=" + json.dumps({
         "status": "CODE_ONLY_NOT_INSTALLED",
         "source_sha256": digest(original),
@@ -130,6 +180,7 @@ def preview() -> None:
         "target": "services/mpw_trx_commercial_web.py",
         "db_access": False,
         "production_writes": False,
+        "actual_source_in_memory_smoke": "PASS",
         "orders_created": 0,
         "payments_created": 0,
         "requires_offhost_restore_and_approved_release": True,
