@@ -1,23 +1,33 @@
-"""Server-side HTTPS price and registered native TRX receiving wallet."""
-import json
+"""TRX-only guest quote with timestamp freshness; staging feature, not live-routed.
+
+An ETH update cannot invalidate a fresh TRX quote. Never issue a payable
+invoice if TRX has no independently fresh, trusted USD observation.
+"""
 from decimal import Decimal
-from urllib.request import Request,urlopen
-from mpw_commerce.invoicing import RECEIVERS
-from scripts.mojplaywin_native_chain_verify import tron_address_to_hex
+
+from scripts.s01_trx_rate_isolation_candidate import (
+    TrustedRateUnavailable,
+    fetch_trx_only,
+)
+
 
 def receive_wallet():
- chain,address,decimals=RECEIVERS.get("TRX",(None,None,None))
- if chain!="tron-mainnet" or decimals!=6 or not address:
-  raise RuntimeError("TRX receiving wallet unavailable")
- tron_address_to_hex(address)
- return address
+    # Runtime-only imports: price validation itself must be testable without
+    # loading the external production commerce ledger or chain verifier.
+    from mpw_commerce.invoicing import RECEIVERS
+    from scripts.mojplaywin_native_chain_verify import tron_address_to_hex
+
+    chain, address, decimals = RECEIVERS.get("TRX", (None, None, None))
+    if chain != "tron-mainnet" or decimals != 6 or not address:
+        raise RuntimeError("TRX receiving wallet unavailable")
+    tron_address_to_hex(address)
+    return address
+
 
 def price_usd():
- req=Request("https://api.coingecko.com/api/v3/simple/price?ids=tron&vs_currencies=usd",headers={"Accept":"application/json","User-Agent":"MojPlayWinGuestTRX/1"},method="GET")
- with urlopen(req,timeout=9) as response:raw=response.read(2049)
- if len(raw)>2048:raise ValueError("Oversized price quote")
- value=json.loads(raw.decode("utf8")).get("tron",{}).get("usd")
- if type(value) not in (int,float,str):raise ValueError("Invalid TRX quote")
- d=Decimal(str(value))
- if not d.is_finite() or not Decimal("0.001")<=d<=Decimal("100"):raise ValueError("TRX quote outside safety range")
- return d
+    """Price of one TRX in USD; fail closed on stale/invalid/untrusted quotes."""
+    observation = fetch_trx_only()
+    value = observation.usd_per_trx
+    if not Decimal("0.001") <= value <= Decimal("100"):
+        raise TrustedRateUnavailable("TRX quote outside commerce safety range")
+    return value
