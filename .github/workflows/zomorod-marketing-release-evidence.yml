@@ -501,6 +501,47 @@ jobs:
           print("PRODUCTION_RESIDENT_SITE_NOT_MODIFIED=true")
           PY
           REMOTE
+      - name: Classify actual Passenger Python version without paths or secrets
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 50s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import os,pathlib,re
+          home=pathlib.Path.home()
+          ht=home/"public_html"/".htaccess"
+          version="not_found"
+          if ht.is_file() and not ht.is_symlink():
+              for line in ht.read_text(errors="replace").splitlines():
+                  match=re.match(r"^\s*PassengerPython\s+(\S+)",line,re.I)
+                  if not match:continue
+                  value=match.group(1).strip(chr(34)+chr(39))
+                  found=re.findall(r"(?<!\d)(3\.\d+)(?!\d)",value)
+                  if found: version=found[-1]
+                  elif value.endswith("/python3"):version="3.unspecified"
+                  else:version="path_without_version"
+                  break
+          print("PASSENGER_CONFIGURED_PYTHON_VERSION="+version)
+          seen=set()
+          for proc in pathlib.Path("/proc").iterdir():
+              if not proc.name.isdecimal():continue
+              try:
+                  if proc.stat().st_uid!=os.getuid():continue
+                  cmd=(proc/"cmdline").read_bytes()[:5000].lower()
+                  if not (b"passenger" in cmd or (b"python" in cmd and b"saeit" in cmd)):continue
+                  path=os.readlink(proc/"exe")
+                  known=re.findall(r"(?<!\d)(3\.\d+)(?!\d)",path)
+                  if known:seen.add(known[-1])
+              except (OSError,ValueError):continue
+          print("PASSENGER_OWNED_PROCESS_EXEC_VERSION_CATEGORIES="+(",".join(sorted(seen)) if seen else "unavailable"))
+          print("PASSENGER_PYTHON_VERSION_AUDIT=readonly")
+          PY
+          REMOTE
       - name: Require restore proof and provider rights before any deployment
         run: |
           echo "RESTORE_VERIFIED=not-established-by-this-readonly-probe"
