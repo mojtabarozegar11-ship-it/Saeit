@@ -260,6 +260,22 @@ jobs:
                       out['trx_rate_provider_contract']={'function_count':len(funcs)}
               except (SyntaxError,ValueError):
                   out['trx_rate_provider_contract']={'source_parse_error':True}
+          # Verify the only external application dependency of the proposed
+          # one-file TRX patch by AST, without importing commerce or Django.
+          error_module=app/'scripts/mojplaywin_direct_wallet_rates.py'
+          out['existing_rate_error_contract']='UNKNOWN'
+          try:
+              if error_module.is_file() and not error_module.is_symlink():
+                  rate_tree=ast.parse(error_module.read_text('utf8'))
+                  direct=any(isinstance(n,ast.ClassDef) and n.name=='RateFeedUnavailable'
+                             for n in rate_tree.body)
+                  imported=any(isinstance(n,ast.ImportFrom) and
+                               any(a.name=='RateFeedUnavailable' and
+                                   (a.asname is None or a.asname=='RateFeedUnavailable')
+                                   for a in n.names) for n in rate_tree.body)
+                  out['existing_rate_error_contract']='PRESENT' if (direct or imported) else 'MISSING'
+          except (OSError,SyntaxError,UnicodeError):
+              out['existing_rate_error_contract']='UNREADABLE'
           out['safe_to_release']=False  # DB authority + external restore not proven.
           print('S01_CHECKOUT_SOURCE_FINGERPRINTS='+json.dumps(out,sort_keys=True))
           PY
