@@ -516,6 +516,8 @@ jobs:
           home=pathlib.Path.home()
           ht=home/"public_html"/".htaccess"
           version="not_found"
+          resolved_version="not_proven"
+          configured_executable="not_proven"
           if ht.is_file() and not ht.is_symlink():
               for line in ht.read_text(errors="replace").splitlines():
                   match=re.match(r"^\s*PassengerPython\s+(\S+)",line,re.I)
@@ -525,9 +527,21 @@ jobs:
                   if found: version=found[-1]
                   elif value.endswith("/python3"):version="3.unspecified"
                   else:version="path_without_version"
+                  candidate=pathlib.Path(value)
+                  if candidate.is_file() and os.access(candidate,os.X_OK):
+                      configured_executable="present_and_executable"
+                      resolved=os.path.realpath(str(candidate))
+                      matches=re.findall(r"(?<!\\d)(3\\.\\d+)(?!\\d)",resolved)
+                      if matches:resolved_version=matches[-1]
+                      else:resolved_version="unknown_version"
+                  else:configured_executable="not_found_or_not_executable"
                   break
           print("PASSENGER_CONFIGURED_PYTHON_VERSION="+version)
+          print("PASSENGER_CONFIGURED_EXE_STATUS="+configured_executable)
+          print("PASSENGER_CONFIGURED_PYTHON_REALPATH_VERSION="+resolved_version)
           seen=set()
+          site_versions=set()
+          site_workers=0
           for proc in pathlib.Path("/proc").iterdir():
               if not proc.name.isdecimal():continue
               try:
@@ -535,9 +549,17 @@ jobs:
                   cmd=(proc/"cmdline").read_bytes()[:5000].lower()
                   if not (b"passenger" in cmd or (b"python" in cmd and b"saeit" in cmd)):continue
                   path=os.readlink(proc/"exe")
-                  known=re.findall(r"(?<!\d)(3\.\d+)(?!\d)",path)
+                  known=re.findall(r"(?<!\\d)(3\\.\\d+)(?!\\d)",path)
                   if known:seen.add(known[-1])
+                  try:
+                      cwd=os.path.realpath(os.readlink(proc/"cwd"))
+                      if cwd==str(home/"Saeit"):
+                          site_workers+=1
+                          if known:site_versions.add(known[-1])
+                  except OSError:pass
               except (OSError,ValueError):continue
+          print("PASSENGER_SITE_WORKER_COUNT="+str(site_workers))
+          print("PASSENGER_SITE_WORKER_EXE_VERSIONS="+(",".join(sorted(site_versions)) if site_versions else "not_identified"))
           print("PASSENGER_OWNED_PROCESS_EXEC_VERSION_CATEGORIES="+(",".join(sorted(seen)) if seen else "unavailable"))
           print("PASSENGER_PYTHON_VERSION_AUDIT=readonly")
           PY
