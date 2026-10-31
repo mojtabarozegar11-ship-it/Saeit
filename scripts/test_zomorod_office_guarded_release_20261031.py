@@ -123,5 +123,70 @@ class GuardedReleaseMfaReadinessTests(unittest.TestCase):
             release.require_mfa_provisioned(self.db)
 
 
+
+class GuardedStageArchiveIntegrityTests(unittest.TestCase):
+    """Synthetic local archive fixtures; no SSH, cPanel or production DB."""
+
+    def make_stage(self, root):
+        import io
+        import tarfile
+        stage = Path(root)
+        code = stage / "code"
+        files = {
+            "company_messaging/models.py": b"class Example: pass\\n",
+            "config/settings.py": b"DEBUG = False\\n",
+        }
+        with tarfile.open(stage / "package.tar", "w") as tar:
+            for name, data in files.items():
+                info = tarfile.TarInfo(name)
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+                target = code / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+        return stage, code
+
+    def test_exact_archive_and_extracted_files_pass(self):
+        with tempfile.TemporaryDirectory() as d:
+            stage, code = self.make_stage(d)
+            self.assertEqual(release.require_stage_payload_matches_archive(stage, code), 2)
+
+    def test_modified_extracted_settings_fails_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            stage, code = self.make_stage(d)
+            (code / "config/settings.py").write_text("DEBUG = True")
+            with self.assertRaisesRegex(RuntimeError, "STAGE_EXTRACTED_FILE_CHANGED"):
+                release.require_stage_payload_matches_archive(stage, code)
+
+    def test_extra_unarchived_python_fails_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            stage, code = self.make_stage(d)
+            (code / "config/extra.py").write_text("raise RuntimeError('extra')")
+            with self.assertRaisesRegex(RuntimeError, "STAGE_EXTRACTED_EXECUTABLE_UNARCHIVED"):
+                release.require_stage_payload_matches_archive(stage, code)
+
+    def test_extracted_symlink_fails_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            stage, code = self.make_stage(d)
+            target = code / "config/settings.py"
+            target.unlink()
+            target.symlink_to(code / "company_messaging/models.py")
+            with self.assertRaisesRegex(RuntimeError, "STAGE_EXTRACTED_SYMLINK"):
+                release.require_stage_payload_matches_archive(stage, code)
+
+    def test_archive_path_traversal_fails_closed(self):
+        import io
+        import tarfile
+        with tempfile.TemporaryDirectory() as d:
+            stage, code = self.make_stage(d)
+            with tarfile.open(stage / "package.tar", "a") as tar:
+                data = b"bad"
+                info = tarfile.TarInfo("../escape.py")
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+            with self.assertRaisesRegex(RuntimeError, "STAGE_ARCHIVE_PATH_UNSAFE"):
+                release.require_stage_payload_matches_archive(stage, code)
+
+
 if __name__ == "__main__":
     unittest.main()
