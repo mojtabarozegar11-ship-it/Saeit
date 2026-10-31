@@ -278,6 +278,94 @@ jobs:
           print("SELECTOR_PREVIEW_INVENTORY_AUDIT=read_only")
           PY
           REMOTE
+      - name: Inspect independent preview ownership, rewrite hierarchy and app stderr read-only
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          test "$COMMAND_HOST" = saeit-cpanel
+          timeout 105s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import re
+          import os
+
+          home = Path("/home/zomorod2")
+          docroot = home / "public_html"
+          stem = "office-preflight-9ab790b15a42"
+          app = home / "zomorod_office_top_preflight_9ab790b15a42"
+          route = docroot / stem
+          rootHt = docroot / ".htaccess"
+          companyHt = docroot / "company" / ".htaccess"
+          routeHt = route / ".htaccess"
+
+          for label, path in (("ROOT", rootHt),
+                              ("COMPANY_PARENT", companyHt),
+                              ("INDEPENDENT_ROUTE", routeHt)):
+              print("OFFICE_TRACE_"+label+"_HTACCESS_PRESENT="+str(path.is_file() and not path.is_symlink()).lower())
+              if not path.is_file() or path.is_symlink():
+                  continue
+              rows = path.read_text(encoding="utf-8", errors="replace").splitlines()
+              active = [line.strip() for line in rows if line.strip() and not line.lstrip().startswith("#")]
+              directives = Counter(re.split(r"\s+",line,1)[0].lower() for line in active)
+              print("OFFICE_TRACE_"+label+"_ACTIVE_ROWS="+str(len(active)))
+              for key in ("rewriteengine", "rewritecond", "rewriterule", "passengerenabled",
+                          "passengerapproot", "passengerbaseuri", "passengerpython", "passengerstartupfile",
+                          "directoryindex", "fallbackresource", "errordocument", "sethandler"):
+                  print("OFFICE_TRACE_"+label+"_"+key.upper()+"_COUNT="+str(directives[key]))
+              if any(re.fullmatch(r"PassengerEnabled\s+off",line,re.I) for line in active):
+                  print("OFFICE_TRACE_"+label+"_PASSENGER_DISABLED=true")
+              if any(re.fullmatch(r"PassengerEnabled\s+on",line,re.I) for line in active):
+                  print("OFFICE_TRACE_"+label+"_PASSENGER_ENABLED=true")
+              if label == "INDEPENDENT_ROUTE":
+                  expected = {
+                      "passengerapproot":str(app),
+                      "passengerbaseuri":"/"+stem,
+                      "passengerstartupfile":"office_passenger_wsgi.py"
+                  }
+                  for key,val in expected.items():
+                      actual=[line.split(None,1)[1].strip().strip('"') for line in active
+                              if len(line.split(None,1))==2 and line.split(None,1)[0].lower()==key]
+                      print("OFFICE_TRACE_CHILD_"+key.upper()+"_EXACT="+
+                            ("true" if len(actual)==1 and actual[0]==val else "false"))
+                  python_path=[line.split(None,1)[1].strip().strip('"') for line in active
+                               if len(line.split(None,1))==2 and line.split(None,1)[0].lower()=="passengerpython"]
+                  print("OFFICE_TRACE_CHILD_PASSENGER_PYTHON_EXECUTABLE="+
+                        str(len(python_path)==1 and os.access(python_path[0],os.X_OK)).lower())
+              if label == "ROOT":
+                  print("OFFICE_TRACE_ROOT_PHP_ROUTER_REFERENCED="+str(
+                      any(re.search(r"(?:index|app)\.php",line,re.I) for line in active)).lower())
+                  print("OFFICE_TRACE_ROOT_CATCHALL_REWRITE="+str(
+                      any(line.lower().startswith("rewriterule") and re.search(r"\s(?:index|app)\.php",line,re.I)
+                          for line in active)).lower())
+          print("OFFICE_TRACE_INDEPENDENT_ROUTE_DIR_EXISTS="+str(route.is_dir()).lower())
+          print("OFFICE_TRACE_INDEPENDENT_ROUTE_IS_SYMLINK="+str(route.is_symlink()).lower())
+          print("OFFICE_TRACE_INDEPENDENT_APP_ROOT_EXISTS="+str(app.is_dir()).lower())
+          print("OFFICE_TRACE_INDEPENDENT_APP_MARKER_EXISTS="+str((app/".preview-registered").is_file()).lower())
+          print("OFFICE_TRACE_INDEPENDENT_STARTUP_EXISTS="+str((app/"office_passenger_wsgi.py").is_file()).lower())
+          for label,filename in (("APP_STDERR",app/"stderr.log"),("APP_ERROR",app/"error.log"),
+                                 ("ROUTE_ERROR",route/"error_log")):
+              regular=filename.is_file() and not filename.is_symlink()
+              print("OFFICE_TRACE_"+label+"_PRESENT="+str(regular).lower())
+              if regular:
+                  data=filename.read_bytes()[-32768:]
+                  patterns={
+                      "IMPORT_ERROR":rb"(?:ImportError|ModuleNotFoundError)",
+                      "DJANGO_ERROR":rb"(?:ImproperlyConfigured|DisallowedHost|django\.core)",
+                      "WSGI_ERROR":rb"(?:WSGI|Traceback|Exception)",
+                      "PERMISSION_ERROR":rb"(?:PermissionError|Permission denied)",
+                  }
+                  for name,regex in patterns.items():
+                      print("OFFICE_TRACE_"+label+"_"+name+"="+str(bool(re.search(regex,data,re.I))).lower())
+          print("OFFICE_TRACE_READONLY=true")
+          PY
+          REMOTE
       - name: Check external routing status without touching server
         shell: bash
         run: |
