@@ -86,5 +86,33 @@ class GuestRecoveryLandingTests(unittest.TestCase):
         self.assertNotIn(COOKIE, result.cookies)
 
 
+class OfflineWalletReturnRecoveryArtifactTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+        cls.page = (Path(__file__).resolve().parents[1] / "tools" /
+                    "customer-recovery" /
+                    "MojPlayWin_TRX_Purchase_Recovery_Companion.html").read_text("utf8")
+
+    def test_wallet_return_error_option_is_available_without_claiming_payment(self):
+        self.assertIn("Wallet returned with an error", self.page)
+        self.assertIn("no TRX transfer confirmed", self.page)
+        self.assertIn("do not invent a transaction ID", self.page)
+
+    def test_support_message_is_prepared_locally_without_payment_or_email(self):
+        self.assertIn("No email is sent by this tool", self.page)
+        self.assertIn("No email or payment was sent", self.page)
+        self.assertIn("support@mojplaywin.com", self.page)
+        self.assertIn("URL.createObjectURL(blob)", self.page)
+        self.assertIn("navigator.clipboard.writeText(prepared)", self.page)
+
+    def test_offline_artifact_does_not_collect_or_transmit_secrets(self):
+        self.assertIn("connect-src 'none'", self.page)
+        self.assertIn("form-action 'none'", self.page)
+        self.assertIn("No payment verification has occurred", self.page)
+        self.assertNotIn("localStorage.", self.page)
+        self.assertNotIn("fetch(", self.page)
+
+
 if __name__ == "__main__":
     unittest.main()
