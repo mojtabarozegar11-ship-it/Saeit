@@ -42,3 +42,55 @@ class ComposeForm(forms.ModelForm):
             if data.get("contact") and data.get("unit") and data["contact"].unit_id != data["unit"].pk:
                 raise forms.ValidationError("مخاطب باید متعلق به همین واحد باشد.")
         return data
+
+
+
+class ContactForm(forms.ModelForm):
+    """Unit-scoped recipient record; consent is never inferred from an address."""
+
+    class Meta:
+        model = Contact
+        fields = (
+            "unit", "name", "email", "phone_e164",
+            "telegram_chat_id", "bale_chat_id", "eitaa_chat_id", "rubika_chat_id",
+            "email_consent_at", "sms_consent_at", "telegram_consent_at",
+            "bale_consent_at", "eitaa_consent_at", "rubika_consent_at",
+            "whatsapp_consent_at", "consent_evidence", "active", "suppressed",
+        )
+        labels = {
+            "unit": "واحد سازمانی", "name": "نام مخاطب", "email": "ایمیل",
+            "phone_e164": "شماره همراه با کد کشور (+98...)",
+            "telegram_chat_id": "شناسه گفت‌وگوی تلگرام", "bale_chat_id": "شناسه بله",
+            "eitaa_chat_id": "شناسه ایتا", "rubika_chat_id": "شناسه روبیکا",
+            "email_consent_at": "تاریخ رضایت ایمیل", "sms_consent_at": "تاریخ رضایت پیامک",
+            "telegram_consent_at": "تاریخ رضایت تلگرام", "bale_consent_at": "تاریخ رضایت بله",
+            "eitaa_consent_at": "تاریخ رضایت ایتا", "rubika_consent_at": "تاریخ رضایت روبیکا",
+            "whatsapp_consent_at": "تاریخ رضایت واتساپ",
+            "consent_evidence": "مرجع قابل پیگیری رضایت",
+            "active": "مخاطب فعال است", "suppressed": "ارسال به مخاطب مسدود است",
+        }
+        widgets = {
+            field: forms.DateTimeInput(attrs={"type": "datetime-local"})
+            for field in (
+                "email_consent_at", "sms_consent_at", "telegram_consent_at",
+                "bale_consent_at", "eitaa_consent_at", "rubika_consent_at",
+                "whatsapp_consent_at",
+            )
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["unit"].queryset = user_units(user) if user else Contact.objects.none()
+        if self.instance.pk:
+            # No moving an existing consent record to another business unit.
+            self.fields["unit"].disabled = True
+
+    def clean(self):
+        data = super().clean()
+        destinations = (
+            "email", "phone_e164", "telegram_chat_id", "bale_chat_id",
+            "eitaa_chat_id", "rubika_chat_id",
+        )
+        if not any(str(data.get(field) or "").strip() for field in destinations):
+            raise forms.ValidationError("دست‌کم یک نشانی تماس معتبر لازم است.")
+        return data
