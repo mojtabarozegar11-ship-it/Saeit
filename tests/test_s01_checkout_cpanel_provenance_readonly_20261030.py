@@ -51,6 +51,26 @@ class ProvenanceTests(unittest.TestCase):
         self.assertEqual(r["classification"], "SOURCE_SHA_DRIFT_SEMANTIC_OR_SYNTAX_DIFFERENCE")
         self.assertFalse(r["ast_equivalent"])
 
+    def test_exact_approved_candidate_is_recognized_but_not_release_authorized(self):
+        candidate = b"price = 6\\n"
+        candidate_sha = hashlib.sha256(candidate).hexdigest()
+        self.staging.write_bytes(candidate)
+        backup = self.private / ("mpw-checkout-csp-preimage-" + self.pin[:16] + ".bak")
+        backup.write_bytes(self.approved)
+        backup.chmod(0o600)
+        with unittest.mock.patch(
+            "scripts.s01_checkout_cpanel_provenance_readonly_20261030.APPROVED_CANDIDATE_SHA256",
+            candidate_sha,
+        ):
+            r = self.verdict()
+        self.assertEqual(
+            r["classification"], "APPROVED_CANDIDATE_PRESENT_RELEASE_STILL_BLOCKED"
+        )
+        self.assertFalse(r["source_matches_pin"])
+        self.assertTrue(r["source_matches_approved_candidate"])
+        self.assertTrue(r["approved_reference_found"])
+        self.assertFalse(r["release_permitted"])
+
     def test_callable_delta_reports_only_bounded_names_and_states(self):
         approved = b'def invoice():\n    return "approved-secret"\nclass Handler: pass\n'
         current = b'def invoice():\n    return "current-secret"\ndef settle(): return 1\n'
