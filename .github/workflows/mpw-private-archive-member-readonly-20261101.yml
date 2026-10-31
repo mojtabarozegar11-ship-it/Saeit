@@ -4,6 +4,8 @@ on:
     paths:
       - 'scripts/mojplaywin_archive_member_privacy_probe_20261101.py'
       - 'tests/test_mojplaywin_archive_member_privacy_probe_20261101.py'
+      - 'scripts/mojplaywin_restore_files_isolated_runner.py'
+      - 'tests/test_mojplaywin_recovery_isolated_once.py'
       - '.github/workflows/mpw-private-archive-member-readonly-20261101.yml'
 permissions: {contents: read}
 concurrency:
@@ -21,6 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mojplaywin_archive_member_privacy_probe_20261101.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mojplaywin_recovery_isolated_once.py -v
           python3 -B -m py_compile scripts/mojplaywin_archive_member_privacy_probe_20261101.py
       - name: Prepare fingerprint-pinned VPS access without exposing keys
         env:
