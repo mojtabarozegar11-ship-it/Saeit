@@ -1,0 +1,261 @@
+name: Zomorod ERP V7 owner-approved guarded internal release
+on:
+  push:
+    branches:
+      - feature/zomorod-erp-v7-host-stage-20261031
+    paths:
+      - .github/workflows/zomorod-erp-v7-owner-release-20261031.yml
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-erp-v7-owner-release
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 97e3991d5b8b7e2c484c8ff6db74789dcaa7edec
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3,mbstring
+      - name: Strict source and test gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 97e3991d5b8b7e2c484c8ff6db74789dcaa7edec
+          php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'
+          python3 scripts/run_all_offline_qa.py --report-out OFFLINE_QA_REPORT.json
+          python3 - OFFLINE_QA_REPORT.json <<'PY'
+          import json, sys
+          r=json.load(open(sys.argv[1]))
+          assert r.get('offline_checks_available_here')=='PASS'
+          assert r.get('php_sqlite_business_tests')=='PASS'
+          assert r.get('full_offline_database_tests_verified') is True
+          assert not r.get('failed_or_timed_out', [])
+          print('V7_OFFLINE_GATE=PASS')
+          PY
+          mkdir -p "$RUNNER_TEMP/v7dist"
+          ZOMOROD_BUNDLE_OUTPUT="$RUNNER_TEMP/v7dist" python3 scripts/build_erp_offline_bundle.py
+          python3 scripts/verify_erp_bundle.py "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.zip" "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.tar.gz"
+          ( cd "$RUNNER_TEMP/v7dist" && sha256sum zomorod-erp-offline-v7.zip zomorod-erp-offline-v7.tar.gz > SHA256SUMS && sha256sum -c SHA256SUMS )
+          echo V7_SOURCE_ARCHIVE=verified_manifest_from_pinned_revision
+      - name: Compare pinned source against live private modules without changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$GITHUB_RUN_ID" -gt 0
+          d="$RUNNER_TEMP/zomorod-v7-host-credentials"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 15
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          target=""
+          for host in saeit-cpanel saeit-cpanel-direct; do
+            if timeout 55s ssh -F "$d/config" "$host" 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/business/index.php && test -d /home/zomorod2/.private/zomorod-business' >/dev/null; then
+              target="$host"
+              break
+            fi
+          done
+          test -n "$target"
+          stage="/home/zomorod2/.backups/zomorod-erp-v7-merged/41151766345"
+          backup="/home/zomorod2/.backups/zomorod-erp-v7-release-safety/41152450061"
+          expected="fa2566c65ab0bcbbe716e47c7a53b09fefdf45a6df9c47c222deae260a416c3b"
+          candidate="6f352ce49d5cb700aef3a949368eaeb986365cc466c183c314948bb7c48ac8bc"
+          url="https://zomorodmelal.ir/business/"
+          curl -fsSL --max-time 30 -D "$RUNNER_TEMP/erp-before.headers" -o "$RUNNER_TEMP/erp-before.html" "$url"
+          python3 - "$RUNNER_TEMP/erp-before.headers" "$RUNNER_TEMP/erp-before.html" <<'PY'
+          from pathlib import Path
+          import sys
+          headers=Path(sys.argv[1]).read_text(errors='replace').lower()
+          body=Path(sys.argv[2]).read_text(errors='replace')
+          if 'ورود مدیر و حسابدار' not in body or 'درخواست انجام نشد' in body:
+              raise SystemExit('PUBLIC_LOGIN_BASELINE_UNEXPECTED')
+          if 'no-store' not in headers or 'noindex' not in headers:
+              raise SystemExit('PUBLIC_LOGIN_CACHE_OR_INDEX_HEADER_MISSING')
+          print('ERP_PUBLIC_UNAUTHENTICATED_BASELINE=PASS')
+          PY
+          ssh -F "$d/config" "$target" "python3 -B - '$GITHUB_RUN_ID' '$expected' '$candidate'" <<'PY'
+          import hashlib,json,os,pathlib,re,shutil,sqlite3,subprocess,sys,tempfile
+          run,expected,candidate_hash=sys.argv[1:]
+          if not re.fullmatch(r'[0-9]{8,15}',run):raise SystemExit('INVALID_RUN_ID')
+          private=pathlib.Path('/home/zomorod2/.private/zomorod-business')
+          web=pathlib.Path('/home/zomorod2/public_html/business')
+          stage=pathlib.Path('/home/zomorod2/.backups/zomorod-erp-v7-merged/41151766345')
+          backup=pathlib.Path('/home/zomorod2/.backups/zomorod-erp-v7-release-safety/41152450061')
+          app=private/'app.php'
+          source=stage/'home/public_html/business/app.php'
+          modules=('workflow_desk.php','industry_operations.php','finance_audit.php','payroll_control.php','payroll_ui.php','period_controls.php')
+          for root in (private,web,stage,backup):
+              if root.is_symlink() or not root.is_dir():raise SystemExit('UNSAFE_PATH')
+          if app.is_symlink() or not app.is_file() or hashlib.sha256(app.read_bytes()).hexdigest()!=expected:
+              raise SystemExit('LIVE_APP_DRIFT_BLOCKED')
+          if source.is_symlink() or hashlib.sha256(source.read_bytes()).hexdigest()!=candidate_hash:
+              raise SystemExit('CANDIDATE_CHANGED_BLOCKED')
+          snapshot=backup/'snapshot/private/app.php'
+          if snapshot.is_symlink() or not snapshot.is_file() or hashlib.sha256(snapshot.read_bytes()).hexdigest()!=expected:
+              raise SystemExit('RELEASE_BACKUP_APP_INVALID')
+          mfile=backup/'manifest-private.json'
+          m=json.loads(mfile.read_text())
+          if m.get('status')!='ISOLATED_RESTORE_VERIFIED' or m.get('live_app_sha256')!=expected or len(m.get('files',[]))<20:
+              raise SystemExit('RELEASE_BACKUP_UNVERIFIED')
+          for row in m['files']:
+              file=backup/'isolated-restore'/row['path']
+              if file.is_symlink() or not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest()!=row['sha256']:
+                  raise SystemExit('RELEASE_RESTORE_PROOF_DRIFTED')
+          if (web/'index.php').read_bytes()!=(backup/'snapshot/public/index.php').read_bytes():
+              raise SystemExit('LIVE_WRAPPER_DRIFTED')
+          db=sqlite3.connect('file:'+str(private/'management.sqlite3')+'?mode=ro',uri=True,timeout=15)
+          if db.execute('PRAGMA quick_check').fetchall()!=[('ok',)]:raise SystemExit('LIVE_DB_INTEGRITY_FAIL')
+          db.close()
+          for name in modules:
+              target=private/name
+              ref=stage/'home/.private/zomorod-business'/name
+              if target.exists() or target.is_symlink():raise SystemExit('MODULE_EXISTS_NO_OVERWRITE_'+name)
+              if ref.is_symlink() or not ref.is_file():raise SystemExit('STAGED_MODULE_MISSING_'+name)
+              check=subprocess.run(['php','-l',str(ref)],capture_output=True,timeout=15)
+              if check.returncode:raise SystemExit('STAGED_MODULE_LINT_FAIL_'+name)
+          check=subprocess.run(['php','-l',str(source)],capture_output=True,timeout=15)
+          if check.returncode:raise SystemExit('STAGED_APP_LINT_FAIL')
+          marker=backup/('release-'+run+'.json')
+          if marker.exists():raise SystemExit('RELEASE_MARKER_ALREADY_EXISTS')
+          marker.write_text(json.dumps({'run':run,'status':'PREPARED','live_sha_before':expected,'candidate_sha':candidate_hash,'backup':str(backup)}),encoding='utf-8')
+          os.chmod(marker,0o600)
+          # Install independent modules first. The original app has no references
+          # to these files, so they remain inert until the final atomic app swap.
+          for name in modules:
+              ref=stage/'home/.private/zomorod-business'/name
+              temp=private/('.'+name+'.v7-'+run+'.tmp')
+              if temp.exists():raise SystemExit('MODULE_TEMP_EXISTS')
+              shutil.copyfile(ref,temp);os.chmod(temp,0o600)
+              if hashlib.sha256(temp.read_bytes()).hexdigest()!=hashlib.sha256(ref.read_bytes()).hexdigest():
+                  raise SystemExit('MODULE_COPY_MISMATCH')
+              os.replace(temp,private/name)
+          temp=private/('.app.php.v7-'+run+'.tmp')
+          if temp.exists():raise SystemExit('APP_TEMP_EXISTS')
+          shutil.copyfile(source,temp);os.chmod(temp,0o600)
+          if hashlib.sha256(temp.read_bytes()).hexdigest()!=candidate_hash:raise SystemExit('APP_COPY_MISMATCH')
+          os.replace(temp,app)
+          if hashlib.sha256(app.read_bytes()).hexdigest()!=candidate_hash:raise SystemExit('APP_ACTIVATION_MISMATCH')
+          marker.write_text(json.dumps({'run':run,'status':'ACTIVATED_PENDING_HTTP_SMOKE','live_sha_before':expected,'candidate_sha':candidate_hash,'backup':str(backup)}),encoding='utf-8')
+          os.chmod(marker,0o600)
+          print('ERP_V7_ATOMIC_APP_PROMOTION=COMPLETE_PENDING_PUBLIC_SMOKE')
+          print('ERP_V7_LIVE_MODULES_INSTALLED=6')
+          print('ERP_V7_ROLLBACK_PROOF_PATH='+str(backup))
+          PY
+          health="FAIL"
+          if curl -fsSL --max-time 30 -D "$RUNNER_TEMP/erp-after.headers" -o "$RUNNER_TEMP/erp-after.html" "$url"; then
+            if python3 - "$RUNNER_TEMP/erp-after.headers" "$RUNNER_TEMP/erp-after.html" <<'PY'
+          from pathlib import Path
+          import sys
+          headers=Path(sys.argv[1]).read_text(errors='replace').lower()
+          body=Path(sys.argv[2]).read_text(errors='replace')
+          assert 'ورود مدیر و حسابدار' in body
+          assert 'درخواست انجام نشد' not in body
+          assert 'no-store' in headers and 'noindex' in headers
+          assert 'text/html' in headers
+          print('ERP_V7_PUBLIC_UNAUTHENTICATED_LOGIN=PASS')
+          PY
+            then health="PASS"; fi
+          fi
+          if [ "$health" = "PASS" ]; then
+            if ! ssh -F "$d/config" "$target" "python3 -B - '$GITHUB_RUN_ID' '$expected' '$candidate'" <<'PY'
+          import hashlib,json,os,pathlib,re,sqlite3,sys
+          run,prior,installed=sys.argv[1:]
+          if not re.fullmatch(r'[0-9]{8,15}',run):raise SystemExit('INVALID_RUN_ID')
+          private=pathlib.Path('/home/zomorod2/.private/zomorod-business')
+          backup=pathlib.Path('/home/zomorod2/.backups/zomorod-erp-v7-release-safety/41152450061')
+          if hashlib.sha256((private/'app.php').read_bytes()).hexdigest()!=installed:
+              raise SystemExit('LIVE_APP_DRIFT_AFTER_HTTP_SMOKE')
+          db=sqlite3.connect('file:'+str(private/'management.sqlite3')+'?mode=ro',uri=True)
+          if db.execute('PRAGMA quick_check').fetchall()!=[('ok',)]:raise SystemExit('POST_RELEASE_DB_INTEGRITY_FAILURE')
+          if db.execute('PRAGMA foreign_key_check').fetchall():raise SystemExit('POST_RELEASE_FK_FAILURE')
+          db.close()
+          marker=backup/('release-'+run+'.json')
+          marker.write_text(json.dumps({'run':run,'status':'PUBLISHED_AND_PUBLIC_ANONYMOUS_LOGIN_VERIFIED','live_app_sha256':installed,'backup':str(backup)}),encoding='utf-8')
+          os.chmod(marker,0o600)
+          print('ERP_V7_PRODUCTION_INTERNAL_MODULE_RELEASE=SUCCESS')
+          print('ERP_V7_RELEASE_RECEIPT='+str(marker))
+          print('ERP_V7_LIVE_APP_SHA256='+installed)
+          print('ERP_V7_LIVE_DB_INTEGRITY=PASS')
+          PY
+            then health="FAIL"; fi
+          fi
+          if [ "$health" != "PASS" ]; then
+            echo ERP_V7_PUBLIC_SMOKE=FAILED_ROLLBACK_START
+            ssh -F "$d/config" "$target" "python3 -B - '$GITHUB_RUN_ID' '$expected' '$candidate'" <<'PY'
+          import hashlib,json,os,pathlib,re,shutil,sys
+          run,prior,installed=sys.argv[1:]
+          if not re.fullmatch(r'[0-9]{8,15}',run):raise SystemExit('INVALID_RUN_ID')
+          private=pathlib.Path('/home/zomorod2/.private/zomorod-business')
+          backup=pathlib.Path('/home/zomorod2/.backups/zomorod-erp-v7-release-safety/41152450061')
+          live=private/'app.php'
+          source=backup/'snapshot/private/app.php'
+          if hashlib.sha256(live.read_bytes()).hexdigest()!=installed:raise SystemExit('CONCURRENT_CHANGE_CANNOT_ROLLBACK')
+          if hashlib.sha256(source.read_bytes()).hexdigest()!=prior:raise SystemExit('BACKUP_TAMPERED')
+          temp=private/('.app.php.rollback-'+run+'.tmp')
+          shutil.copyfile(source,temp);os.chmod(temp,0o600)
+          os.replace(temp,live)
+          if hashlib.sha256(live.read_bytes()).hexdigest()!=prior:raise SystemExit('ROLLBACK_FAILED')
+          for name in ('workflow_desk.php','industry_operations.php','finance_audit.php','payroll_control.php','payroll_ui.php','period_controls.php'):
+              target=private/name
+              ref=pathlib.Path('/home/zomorod2/.backups/zomorod-erp-v7-merged/41151766345/home/.private/zomorod-business')/name
+              if target.is_file() and not target.is_symlink() and hashlib.sha256(target.read_bytes()).hexdigest()==hashlib.sha256(ref.read_bytes()).hexdigest():
+                  target.unlink()
+          marker=backup/('release-'+run+'.json')
+          marker.write_text(json.dumps({'run':run,'status':'ROLLED_BACK_AFTER_FAILED_HTTP_SMOKE'}),encoding='utf-8')
+          os.chmod(marker,0o600)
+          print('ERP_V7_ROLLBACK_APP_SHA=RESTORED')
+          print('ERP_V7_LIVE_DB_BACKUP_STILL_PRIVATE=YES')
+          PY
+            exit 1
+          fi
+          echo FACTORY_HOLD_UNCHANGED=YES
