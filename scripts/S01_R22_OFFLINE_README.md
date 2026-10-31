@@ -12,7 +12,7 @@ python scripts/s01_r22_offline_gates.py public-routes --evidence /absolute/autho
 python scripts/s01_r22_offline_gates.py game-source --game /absolute/game.js --policy /absolute/moj1-commerce-policy.mjs
 ```
 
-Synthetic offline test suite: 16/16 PASS, Python 3.13.5. Exact file Git blob IDs: source `fb7fb5a11c11045d1edc06dd5273d5206da7410a`; tests `1198829b205565a3c92fd727fd1c4d5ff22b34e8`. Original local-only fixture result; CI run #41169341915 failed pytest collection on the former unqualified import. Commit 9e8195b8 corrects the import for repo-root pytest collection; verify the new exact-head CI before claiming green.
+Synthetic offline test suite: 16/16 PASS, Python 3.13.5. Current file Git blob IDs: source `fb7fb5a11c11045d1edc06dd5273d5206da7410a`; tests `9e4844506d24199f7792a547a5178bb9ba4b1254`. Original local-only fixture result; CI run #41169341915 failed pytest collection on the former unqualified import. Commit 9e8195b8 corrects the import for repo-root pytest collection; verify the new exact-head CI before claiming green.
 
 Scope:
 - Checkout: pinned approved SHA; syntax and AST top-level drift classification; no source text in report.
