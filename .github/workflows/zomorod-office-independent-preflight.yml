@@ -130,8 +130,8 @@ jobs:
           timeout 900s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
           set -euo pipefail
           umask 077
-          rel="zomorod_office_top_preflight_2a8a0f4b9e17"
-          uri="office-preflight-2a8a0f4b9e17"
+          rel="zomorod_office_top_preflight_9ab790b15a42"
+          uri="office-preflight-9ab790b15a42"
           stage_sha="9ab790b15a42b3ea24e46982b361e9596d0ec828"
           stage="/home/zomorod2/.private/zomorod-messaging-release-stages/$stage_sha"
           root="/home/zomorod2/$rel"
@@ -291,7 +291,7 @@ jobs:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
-          url="https://zomorodmelal.ir/office-preflight-2a8a0f4b9e17/secure-login/"
+          url="https://zomorodmelal.ir/office-preflight-9ab790b15a42/secure-login/"
           body="$(mktemp)"
           trap 'rm -f -- "$body"' EXIT
           code=000
@@ -310,7 +310,7 @@ jobs:
           echo "PUBLIC_SITE_POST_PREVIEW_HEALTH=$health"
           if test "$code" != 200 || test "$valid_template" != true || test "$health" != 200; then
             d="$RUNNER_TEMP/zm-marketing-ro"
-            timeout 80s ssh -F "$d/config" "$COMMAND_HOST" '/usr/sbin/cloudlinux-selector stop --json --interpreter python --domain zomorodmelal.ir --app-root zomorod_office_top_preflight_2a8a0f4b9e17' >/dev/null 2>&1 || true
+            timeout 80s ssh -F "$d/config" "$COMMAND_HOST" '/usr/sbin/cloudlinux-selector stop --json --interpreter python --domain zomorodmelal.ir --app-root zomorod_office_top_preflight_9ab790b15a42' >/dev/null 2>&1 || true
             echo "OFFICE_PREVIEW=stopped_for_investigation"
             exit 1
           fi
@@ -318,7 +318,7 @@ jobs:
           echo "PUBLIC_SITE_HEALTH_UNCHANGED=true"
           # A successful preflight is paused, not served continuously.
           d="$RUNNER_TEMP/zm-marketing-ro"
-          timeout 75s ssh -F "$d/config" "$COMMAND_HOST" '/usr/sbin/cloudlinux-selector stop --json --interpreter python --domain zomorodmelal.ir --app-root zomorod_office_top_preflight_2a8a0f4b9e17' >/dev/null
+          timeout 75s ssh -F "$d/config" "$COMMAND_HOST" '/usr/sbin/cloudlinux-selector stop --json --interpreter python --domain zomorodmelal.ir --app-root zomorod_office_top_preflight_9ab790b15a42' >/dev/null
           echo "TOP_LEVEL_PREVIEW=verified_and_stopped"
       - name: Remove runner temporary SSH credentials
         if: always()
