@@ -23,6 +23,7 @@ jobs:
           set -euo pipefail
           php -l content/zomorod-business/app.php
           php -l content/zomorod-business/index.php
+          php -l content/zomorod-business/approvals.php
           python3 -m py_compile scripts/zomorod_project_approval_snapshot.py
           echo "BUSINESS_PREFLIGHT_SOURCE=verified"
   inspect:
@@ -115,6 +116,18 @@ jobs:
           entry_hash="$(sha256sum "$entry" | awk '{print $1}')"
           if test "$entry_hash" = "$expected_entry"; then echo "LIVE_ENTRY_MATCHES_REPO=true"; else echo "LIVE_ENTRY_MATCHES_REPO=false"; fi
           if test -s "$registry" && test ! -L "$registry"; then echo "LIVE_APPROVAL_SNAPSHOT_PRESENT=true"; else echo "LIVE_APPROVAL_SNAPSHOT_PRESENT=false"; fi
+          php -r 'echo "LIVE_CLI_SQLITE3_EXTENSION=".(class_exists("SQLite3")?"ready":"missing").PHP_EOL;echo "LIVE_CLI_SESSION_EXTENSION=".(extension_loaded("session")?"ready":"missing").PHP_EOL;'
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - "$private" "$live" "$HOME/public_html/business/approvals" <<'PY'
+          import os,pathlib,re,stat,sys
+          private,app,route=map(pathlib.Path,sys.argv[1:])
+          mode=private.stat().st_mode
+          print("LIVE_PRIVATE_APPROVAL_DIR_OWNER_MATCH="+str(private.stat().st_uid==os.getuid()).lower())
+          print("LIVE_PRIVATE_APPROVAL_DIR_STRICT_MODE="+str(stat.S_ISDIR(mode) and mode & 0o077==0).lower())
+          print("LIVE_ISOLATED_APPROVAL_ROUTE_FREE="+str(not route.exists() and not route.is_symlink()).lower())
+          text=app.read_text(encoding="utf-8",errors="replace") if app.is_file() and not app.is_symlink() else ""
+          print("LIVE_SESSION_NAME_COMPATIBLE="+str(bool(re.search(r"session_name\s*\(\s*['\"]ZM_BUSINESS['\"]",text))).lower())
+          print("LIVE_SESSION_UID_COMPATIBLE="+str(bool(re.search(r"\$_SESSION\s*\[\s*['\"]uid['\"]\s*\]",text))).lower())
+          PY
           if test -s "$database" && test ! -L "$database"; then
             PYTHONDONTWRITEBYTECODE=1 python3 -B - "$database" <<'PY'
           import pathlib
@@ -136,6 +149,13 @@ jobs:
               for name in sorted(allowed):
                   value=str(conn.execute("SELECT COUNT(*) FROM "+name).fetchone()[0]) if name in tables else "absent"
                   print("LIVE_"+name.upper()+"_COUNT="+value)
+              if "users" in tables:
+                  user_columns={str(row[1]) for row in conn.execute("PRAGMA table_info(users)")}
+                  compatible={"id","role","active"}.issubset(user_columns)
+                  print("LIVE_USERS_SCHEMA_APPROVAL_COMPATIBLE="+str(compatible).lower())
+                  if compatible:
+                      role_count=conn.execute("SELECT COUNT(*) FROM users WHERE active=1 AND role IN ('admin','accountant','manager','viewer')").fetchone()[0]
+                      print("LIVE_ACTIVE_APPROVAL_ROLE_USERS="+str(role_count))
               conn.close()
           except sqlite3.Error as exc:
               print("LIVE_BUSINESS_DB_READONLY_ERROR="+type(exc).__name__)
