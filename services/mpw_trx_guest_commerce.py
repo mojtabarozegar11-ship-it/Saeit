@@ -210,6 +210,34 @@ def patch_public(namespace):
     @never_cache
     @require_GET
     def purchases(request):
+        # A missing/expired guest owner cookie is not a missing URL.
+        # Never reveal orders without a signed cookie or authenticated user.
+        if not _host_ok(request):
+            raise Http404
+        current = getattr(request, "user", None)
+        authenticated = bool(current is not None and getattr(current, "is_authenticated", False))
+        if not authenticated and _read_user(request) is None:
+            from django.http import HttpResponse
+            response = HttpResponse(
+                "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+                "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                "<title>TRX purchase recovery | MojPlayWin</title></head><body>"
+                "<main><h1>TRX purchase recovery</h1>"
+                "<p>No active purchase session was found in this browser. "
+                "For security, purchases cannot be displayed without the original "
+                "browser session.</p>"
+                "<p>If you have already paid, do not send another payment. "
+                "Contact purchase support with your invoice reference and "
+                "transaction hash; never send a wallet recovery phrase.</p>"
+                "<p><a href=\"/store/\">Return to store</a> "
+                "<a href=\"/support/\">Purchase support</a></p></main></body></html>",
+                content_type="text/html; charset=utf-8",
+                status=200,
+            )
+            response["Content-Security-Policy"] = (
+                "default-src 'none'; base-uri 'none'; form-action 'none'; "
+                "frame-ancestors 'none'")
+            return _install_cookie(response, None)
         return _dispatch(request, inspect.unwrap(old_purchases), (), {})
 
     namespace["product_checkout"] = never_cache(require_GET(product_checkout))
