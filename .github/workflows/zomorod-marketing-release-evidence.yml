@@ -819,6 +819,63 @@ jobs:
           print("CPANEL_PASSENGER_UAPI_AUDIT=read_only")
           PY
           REMOTE
+      - name: Discover CloudLinux Python application selector read-only
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 65s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import json,pathlib,subprocess
+          selector=pathlib.Path("/usr/sbin/cloudlinux-selector")
+          cagefs=pathlib.Path("/bin/cagefs_enter.proxied")
+          if not selector.is_file():
+              print("CLOUDLINUX_PYTHON_SELECTOR=not_present")
+              raise SystemExit(0)
+          print("CLOUDLINUX_PYTHON_SELECTOR=present")
+          attempts=[
+              [str(selector),"get","--json","--interpreter","python"],
+          ]
+          if cagefs.is_file():
+              attempts.append([str(cagefs),str(selector),"get","--json","--interpreter","python"])
+          parsed=None
+          for index,command in enumerate(attempts,1):
+              try:
+                  response=subprocess.run(command,capture_output=True,text=True,timeout=25,check=False)
+                  parsed=json.loads(response.stdout)
+                  if isinstance(parsed,dict):
+                      print("CLOUDLINUX_SELECTOR_WORKING_ROUTE="+str(index))
+                      print("CLOUDLINUX_SELECTOR_EXIT_CATEGORY="+
+                            ("zero" if response.returncode==0 else "nonzero"))
+                      break
+              except (OSError,ValueError,subprocess.TimeoutExpired):
+                  parsed=None
+          if not isinstance(parsed,dict):
+              print("CLOUDLINUX_SELECTOR_READ_ONLY_RESULT=unavailable")
+              raise SystemExit(0)
+          print("CLOUDLINUX_SELECTOR_RESULT="+
+                ("success" if str(parsed.get("result","")).lower()=="success" else "not_success"))
+          print("CLOUDLINUX_SELECTOR_RESPONSE_KEYS="+",".join(sorted(parsed.keys())))
+          data=parsed.get("data",{})
+          if isinstance(data,dict):
+              print("CLOUDLINUX_SELECTOR_DATA_KEYS="+",".join(sorted(data.keys())))
+              apps=data.get("applications",[])
+              if isinstance(apps,list):
+                  print("CLOUDLINUX_REGISTERED_PYTHON_APPS="+str(len(apps)))
+                  for app in apps[:20]:
+                      if not isinstance(app,dict):continue
+                      print("CLOUDLINUX_APP_FIELDS="+",".join(sorted(app.keys())))
+                      uri=str(app.get("app_uri") or app.get("app-uri") or "")
+                      print("CLOUDLINUX_APP_OFFICE_URI_EXISTS="+str(
+                          uri.strip("/") in ("company/office","business/office")).lower())
+          print("CLOUDLINUX_SELECTOR_DISCOVERY=read_only")
+          PY
+          REMOTE
       - name: Require restore proof and provider rights before any deployment
         run: |
           echo "RESTORE_VERIFIED=not-established-by-this-readonly-probe"
