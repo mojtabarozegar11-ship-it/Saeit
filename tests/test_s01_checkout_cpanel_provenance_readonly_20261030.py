@@ -91,7 +91,7 @@ class ProvenanceTests(unittest.TestCase):
         self.assertIn("source_sha_matches_known_candidate", workflow)
         self.assertIn("record.get(\"bytes\") == bs.st_size", workflow)
         self.assertNotIn("bs.st_size == source.stat().st_size", workflow)
-        self.assertIn("\"safe_to_publish\": False", workflow)
+        self.assertIn('result["safe_to_publish"] = False', workflow)
 
     def test_private_permissions_refused(self):
         self.staging.write_bytes(b"price = 6\n")
