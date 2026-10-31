@@ -85,5 +85,16 @@ class GuestRecoveryLandingTests(unittest.TestCase):
         self.assertEqual(result["Vary"], "Accept-Encoding")
         self.assertNotIn(COOKIE, result.cookies)
 
+class StorefrontRecoveryCopyTests(unittest.TestCase):
+    def test_purchase_support_fallback_is_explicit(self):
+        from pathlib import Path
+        storefront = (Path(__file__).resolve().parents[1] / "core" / "templates" /
+                      "mojplaywin" / "store.html").read_text("utf8")
+        self.assertIn('href="/commerce/trx-easy/purchases/"', storefront)
+        self.assertIn('href="/support/"', storefront)
+        self.assertIn("do not pay a second time", storefront)
+        self.assertIn("Never share your wallet recovery phrase", storefront)
+
+
 if __name__ == "__main__":
     unittest.main()
