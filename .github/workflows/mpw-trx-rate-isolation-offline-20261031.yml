@@ -144,14 +144,18 @@ jobs:
               raise SystemExit("S01_TRX_PROBE_OUTPUT_BLOCKED")
           doc=json.loads(raw[len(prefix):])
           states=doc.get("source_states")
+          observed=doc.get("observed_sha256")
           accepted={"REFERENCE_MATCH","SHA_DRIFT","UNAVAILABLE_OR_UNSAFE","INVALID_DIGEST"}
           if (not isinstance(states,dict) or set(states)!={"rate","buyer","web","guest","wallet"}
               or any(x not in accepted for x in states.values())
+              or not isinstance(observed,dict) or set(observed)!=set(states)
+              or any(x is not None and (not isinstance(x,str) or len(x)!=64 or any(c not in "0123456789abcdef" for c in x)) for x in observed.values())
               or doc.get("release_permitted") is not False
               or doc.get("cpanel_writes") is not False):
               raise SystemExit("S01_TRX_PROBE_CONTRACT_BLOCKED")
           print("S01_TRX_LIVE_READONLY="+json.dumps({
               "source_states":states,
+              "observed_sha256":observed,
               "source_identity_all_match":doc.get("source_identity_all_match") is True,
               "passenger_wsgi_regular_owned":doc.get("passenger_wsgi_regular_owned") is True,
               "passenger_db_authority_verified":False,
