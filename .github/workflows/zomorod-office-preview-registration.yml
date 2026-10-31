@@ -1,0 +1,309 @@
+name: Register isolated Zomorod office preview (no main-site cutover)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-office-preview-registration.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-office-preview-registration
+  cancel-in-progress: false
+jobs:
+  preview-registration:
+    if: github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Set up pinned GitHub to VPS to cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Verify existing public health before preview registration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(curl -fsSL --max-time 25 -o /dev/null -w '%{http_code}' 'https://zomorodmelal.ir/api/health/')" = 200
+          echo "PUBLIC_SITE_PREVIEW_BASELINE_HTTP=200"
+      - name: Prepare private preview copy and register separate CloudLinux app
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 830s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          rel="zomorod_office_preflight_2a8a0f4b9e17"
+          uri="company/office-preflight-2a8a0f4b9e17"
+          stage_sha="1fa13775a4c2cd7573d31f229fe9ba20cefdca8d"
+          stage="/home/zomorod2/.private/zomorod-messaging-release-stages/$stage_sha"
+          root="/home/zomorod2/$rel"
+          selector="/usr/sbin/cloudlinux-selector"
+          protected="/home/zomorod2/.private/zomorod-company-office"
+          test -x "$selector"
+          test -d "$stage/code" && test ! -L "$stage/code"
+          test -f "$stage/package.tar" && test ! -L "$stage/package.tar"
+          test -f "$stage/manifest.txt"
+          grep -Fxq "release=$stage_sha" "$stage/manifest.txt"
+          grep -Fxq "mode=PRIVATE_STAGE_NO_DEPLOY" "$stage/manifest.txt"
+          test -f "$stage/code/isolation.sqlite3" && test ! -L "$stage/code/isolation.sqlite3"
+          test -f "$stage/code/office_passenger_wsgi.py"
+          test -f "$protected/office.sqlite3"
+          if test -e "$root" || test -L "$root"; then
+            if test -f "$root/.preview-registered"; then
+              echo "OFFICE_PREVIEW_REGISTRATION=already_verified"
+              exit 0
+            fi
+            echo "OFFICE_PREVIEW_REGISTRATION=blocked_partial_root_preserved"
+            exit 1
+          fi
+          test -d /home/zomorod2/public_html
+          test -f /home/zomorod2/public_html/.htaccess
+          test ! -L /home/zomorod2/public_html/.htaccess
+          backup="$protected/preflight-public-html-htaccess-20261031.bak"
+          test ! -e "$backup" && test ! -L "$backup"
+          cp -p -- /home/zomorod2/public_html/.htaccess "$backup"
+          chmod 600 "$backup"
+          echo "ROOT_PASSENGER_CONFIGURATION_BACKUP=verified_private"
+          install -d -m 700 "$root"
+          tar --no-same-owner --no-same-permissions -xf "$stage/package.tar" -C "$root"
+          test -f "$root/office_passenger_wsgi.py" && test -f "$root/requirements.txt"
+          test -z "$(find "$root" -type l -print -quit)"
+          python3 - "$stage/code/isolation.sqlite3" "$root" "$uri" <<'PY'
+          import os,sqlite3,secrets,sys,pathlib
+          source=pathlib.Path(sys.argv[1])
+          root=pathlib.Path(sys.argv[2])
+          uri=sys.argv[3]
+          target=root/"office-preview.sqlite3"
+          with sqlite3.connect("file:"+str(source)+"?mode=ro",uri=True) as src:
+              assert src.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+              assert src.execute("SELECT COUNT(*) FROM auth_user").fetchone()[0]==0
+              with sqlite3.connect(target) as dst:
+                  src.backup(dst)
+          assert target.stat().st_size>80000
+          os.chmod(target,0o600)
+          assert sqlite3.connect(target).execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+          env={
+              "SECRET_KEY":secrets.token_urlsafe(64),
+              "DEBUG":"False",
+              "ALLOWED_HOSTS":"zomorodmelal.ir,www.zomorodmelal.ir,testserver",
+              "CSRF_TRUSTED_ORIGINS":"https://zomorodmelal.ir,https://www.zomorodmelal.ir",
+              "DATABASE_URL":"sqlite:///"+str(target),
+              "ZM_OFFICE_BASE_PATH":"/"+uri,
+              "COMPANY_MESSAGING_SEND_ENABLED":"false",
+              "COMPANY_MESSAGING_EMAIL_ENABLED":"false",
+              "COMPANY_MESSAGING_SMS_ENABLED":"false",
+              "COMPANY_MESSAGING_TELEGRAM_ENABLED":"false",
+              "COMPANY_MESSAGING_WHATSAPP_ENABLED":"false",
+              "COMPANY_MESSAGING_BALE_ENABLED":"false",
+              "COMPANY_MESSAGING_EITAA_ENABLED":"false",
+              "COMPANY_MESSAGING_RUBIKA_ENABLED":"false",
+              "COMPANY_MARKETING_PUBLISH_ENABLED":"false",
+              "TRADE_EMAIL_ENABLED":"false",
+              "ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED":"false",
+              "SESSION_COOKIE_SECURE":"true",
+              "CSRF_COOKIE_SECURE":"true",
+          }
+          path=root/".env"
+          fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+          try:
+              os.write(fd,("".join(k+"="+v+"\n" for k,v in env.items())).encode())
+          finally:
+              os.close(fd)
+          assert (path.stat().st_mode & 0o777)==0o600
+          print("OFFICE_PREVIEW_DATABASE=isolated_zero_users")
+          print("OFFICE_PREVIEW_ENV=private_send_disabled")
+          PY
+          py="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
+          test -x "$py"
+          cd "$root"
+          DJANGO_SETTINGS_MODULE=office_runtime.settings "$py" -m django check
+          DJANGO_SETTINGS_MODULE=office_runtime.settings "$py" -m django collectstatic --noinput --verbosity 0
+          test -f "$root/office-staticfiles/staticfiles.json"
+          echo "OFFICE_PREVIEW_PREBIND_DJANGO=validated"
+          if "$selector" create --json --interpreter python \
+                --domain zomorodmelal.ir \
+                --app-root "$rel" \
+                --app-uri "$uri" \
+                --version 3.10 \
+                --startup-file office_passenger_wsgi.py \
+                --entry-point application > "$root/.selector-create.json" 2> "$root/.selector-create.stderr"; then
+            python3 - "$root/.selector-create.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1]))
+          assert x.get("result")=="success", "Selector did not confirm success"
+          print("OFFICE_PREVIEW_CLOUDLINUX_CREATE=success")
+          PY
+          else
+            echo "OFFICE_PREVIEW_CLOUDLINUX_CREATE=failed_no_main_route_change_requested"
+            exit 1
+          fi
+          if timeout 600s "$selector" install-modules --json --interpreter python \
+                --domain zomorodmelal.ir --app-root "$rel" \
+                --requirements-file requirements.txt > "$root/.selector-install.json" 2> "$root/.selector-install.stderr"; then
+            python3 - "$root/.selector-install.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1]))
+          assert x.get("result")=="success", "Selector modules did not confirm success"
+          print("OFFICE_PREVIEW_DEPENDENCIES=installed")
+          PY
+          else
+            echo "OFFICE_PREVIEW_DEPENDENCIES=install_failed_preview_not_production"
+            "$selector" stop --json --interpreter python --domain zomorodmelal.ir --app-root "$rel" >/dev/null 2>&1 || true
+            exit 1
+          fi
+          "$selector" restart --json --interpreter python --domain zomorodmelal.ir --app-root "$rel" > "$root/.selector-restart.json"
+          python3 - "$root/.selector-restart.json" <<'PY'
+          import json,sys
+          assert json.load(open(sys.argv[1])).get("result")=="success"
+          print("OFFICE_PREVIEW_CLOUDLINUX_RESTART=success")
+          PY
+          printf 'source=%s\nuri=%s\nmode=PREVIEW_ISOLATED_NO_SEND\n' "$stage_sha" "$uri" > "$root/.preview-registered"
+          chmod 600 "$root/.preview-registered"
+          echo "OFFICE_PREVIEW_REGISTRATION=verified"
+          echo "MAIN_OFFICE_ROUTE_NOT_REGISTERED=true"
+          REMOTE
+      - name: Verify preview HTTPS login and unchanged main site
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          url="https://zomorodmelal.ir/company/office-preflight-2a8a0f4b9e17/secure-login/"
+          code=000
+          for attempt in 1 2 3 4 5; do
+            code="$(curl --silent --show-error --location --max-time 25 --output /dev/null --write-out '%{http_code}' "$url" || true)"
+            if test "$code" = 200; then break; fi
+            sleep 12
+          done
+          echo "OFFICE_PREVIEW_HTTPS_LOGIN_STATUS=$code"
+          health="$(curl --silent --show-error --location --max-time 25 --output /dev/null --write-out '%{http_code}' 'https://zomorodmelal.ir/api/health/' || true)"
+          echo "PUBLIC_SITE_POST_PREVIEW_HEALTH=$health"
+          if test "$code" != 200 || test "$health" != 200; then
+            d="$RUNNER_TEMP/zm-marketing-ro"
+            timeout 80s ssh -F "$d/config" "$COMMAND_HOST" '/usr/sbin/cloudlinux-selector stop --json --interpreter python --domain zomorodmelal.ir --app-root zomorod_office_preflight_2a8a0f4b9e17' >/dev/null 2>&1 || true
+            echo "OFFICE_PREVIEW=stopped_for_investigation"
+            exit 1
+          fi
+          echo "OFFICE_PREVIEW_HTTPS_LOGIN=200"
+          echo "PUBLIC_SITE_HEALTH_UNCHANGED=true"
+      - name: Remove runner temporary SSH credentials
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
