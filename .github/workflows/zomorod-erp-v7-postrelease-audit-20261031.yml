@@ -1,0 +1,191 @@
+name: Zomorod ERP V7 independent read-only post-release verification
+on:
+  push:
+    branches:
+      - feature/zomorod-erp-v7-host-stage-20261031
+    paths:
+      - .github/workflows/zomorod-erp-v7-postrelease-audit-20261031.yml
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-erp-v7-postrelease-audit
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 97e3991d5b8b7e2c484c8ff6db74789dcaa7edec
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3,mbstring
+      - name: Strict source and test gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 97e3991d5b8b7e2c484c8ff6db74789dcaa7edec
+          php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'
+          python3 scripts/run_all_offline_qa.py --report-out OFFLINE_QA_REPORT.json
+          python3 - OFFLINE_QA_REPORT.json <<'PY'
+          import json, sys
+          r=json.load(open(sys.argv[1]))
+          assert r.get('offline_checks_available_here')=='PASS'
+          assert r.get('php_sqlite_business_tests')=='PASS'
+          assert r.get('full_offline_database_tests_verified') is True
+          assert not r.get('failed_or_timed_out', [])
+          print('V7_OFFLINE_GATE=PASS')
+          PY
+          mkdir -p "$RUNNER_TEMP/v7dist"
+          ZOMOROD_BUNDLE_OUTPUT="$RUNNER_TEMP/v7dist" python3 scripts/build_erp_offline_bundle.py
+          python3 scripts/verify_erp_bundle.py "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.zip" "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.tar.gz"
+          ( cd "$RUNNER_TEMP/v7dist" && sha256sum zomorod-erp-offline-v7.zip zomorod-erp-offline-v7.tar.gz > SHA256SUMS && sha256sum -c SHA256SUMS )
+          echo V7_SOURCE_ARCHIVE=verified_manifest_from_pinned_revision
+      - name: Compare pinned source against live private modules without changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$GITHUB_RUN_ID" -gt 0
+          d="$RUNNER_TEMP/zomorod-v7-host-credentials"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 15
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          target=""
+          for host in saeit-cpanel saeit-cpanel-direct; do
+            if timeout 55s ssh -F "$d/config" "$host" 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/business/index.php && test -d /home/zomorod2/.private/zomorod-business' >/dev/null; then
+              target="$host"
+              break
+            fi
+          done
+          test -n "$target"
+          ssh -F "$d/config" "$target" 'python3 -B -' <<'PY'
+          import hashlib,json,pathlib,sqlite3,subprocess
+          private=pathlib.Path('/home/zomorod2/.private/zomorod-business')
+          backups=pathlib.Path('/home/zomorod2/.backups/zomorod-erp-v7-release-safety/41152450061')
+          stage=pathlib.Path('/home/zomorod2/.backups/zomorod-erp-v7-merged/41151766345/home/.private/zomorod-business')
+          sha='6f352ce49d5cb700aef3a949368eaeb986365cc466c183c314948bb7c48ac8bc'
+          for p in (private,backups,stage):
+              if p.is_symlink() or not p.is_dir():raise SystemExit('PRIVATE_ROOT_INVALID')
+          live=private/'app.php'
+          if live.is_symlink() or hashlib.sha256(live.read_bytes()).hexdigest()!=sha:
+              raise SystemExit('LIVE_APP_RELEASE_FINGERPRINT_MISMATCH')
+          receipt=backups/'release-41152622755.json'
+          data=json.loads(receipt.read_text())
+          if data.get('status')!='PUBLISHED_AND_PUBLIC_ANONYMOUS_LOGIN_VERIFIED' or data.get('live_app_sha256')!=sha:
+              raise SystemExit('RELEASE_RECEIPT_MISSING_OR_STALE')
+          for name in ('workflow_desk.php','industry_operations.php','finance_audit.php','payroll_control.php','payroll_ui.php','period_controls.php'):
+              target=private/name
+              expected=stage/name
+              if target.is_symlink() or expected.is_symlink() or not target.is_file() or not expected.is_file():
+                  raise SystemExit('MODULE_MISSING_'+name)
+              if hashlib.sha256(target.read_bytes()).hexdigest()!=hashlib.sha256(expected.read_bytes()).hexdigest():
+                  raise SystemExit('MODULE_HASH_DRIFT_'+name)
+              lint=subprocess.run(['php','-l',str(target)],capture_output=True,timeout=15)
+              if lint.returncode:raise SystemExit('MODULE_LINT_FAILURE_'+name)
+          original=json.loads((backups/'manifest-private.json').read_text())
+          original_hash={row['path']:row['sha256'] for row in original['files']}
+          for name in ('site_agents.php','site_store.php','command_center.php','command_planner.php','command_quality.php'):
+              path=private/name
+              if not path.is_file() or path.is_symlink():raise SystemExit('HOST_EXTENSION_REMOVED_'+name)
+              key='private/'+name
+              if key not in original_hash or hashlib.sha256(path.read_bytes()).hexdigest()!=original_hash[key]:
+                  raise SystemExit('HOST_EXTENSION_DRIFT_'+name)
+          dbpath=private/'management.sqlite3'
+          if dbpath.is_symlink() or not dbpath.is_file():raise SystemExit('DB_PATH_INVALID')
+          con=sqlite3.connect('file:'+str(dbpath)+'?mode=ro',uri=True,timeout=15)
+          con.execute('PRAGMA query_only=ON')
+          if con.execute('PRAGMA integrity_check').fetchall()!=[('ok',)]:raise SystemExit('DATABASE_INTEGRITY_FAILED')
+          if con.execute('PRAGMA foreign_key_check').fetchall():raise SystemExit('DATABASE_FOREIGN_KEYS_FAILED')
+          schema={row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          if 'zm_accounting_periods' not in schema:raise SystemExit('PERIOD_CONTROL_SCHEMA_NOT_APPLIED')
+          issue_count=0
+          required={'journal_entries','journal_lines','invoices','invoice_payments','inventory_movements'}
+          if not required.issubset(schema):raise SystemExit('ACCOUNTING_SCHEMA_INCOMPLETE')
+          unbalanced=con.execute("""
+             SELECT COUNT(*) FROM
+              (SELECT entry_id,currency,SUM(debit) dr,SUM(credit) cr FROM journal_lines
+               GROUP BY entry_id,currency HAVING dr!=cr)
+          """).fetchone()[0]
+          overpaid=con.execute("""
+              SELECT COUNT(*) FROM invoices i WHERE
+              (SELECT COALESCE(SUM(amount),0) FROM invoice_payments WHERE invoice_id=i.id)>i.amount
+          """).fetchone()[0]
+          con.close()
+          print('LIVE_ERP_RELEASE_SHA256=VERIFIED')
+          print('LIVE_ERP_SIX_V7_MODULE_HASHES=VERIFIED')
+          print('LIVE_ERP_FIVE_HOST_ONLY_EXTENSIONS=UNCHANGED')
+          print('LIVE_ERP_PHP_LINT=PASS')
+          print('LIVE_ERP_PERIOD_CONTROL_SCHEMA=PRESENT')
+          print('LIVE_ERP_SQLITE_INTEGRITY=PASS')
+          print('LIVE_ERP_FINANCE_UNBALANCED_ENTRY_CURRENCY_GROUPS='+str(unbalanced))
+          print('LIVE_ERP_FINANCE_OVERPAID_INVOICES='+str(overpaid))
+          print('LIVE_ERP_RELEASE_RECEIPT=VERIFIED')
+          print('LIVE_ERP_AUDIT_MUTATIONS=NONE')
+          PY
+          python3 - <<'PY'
+          import subprocess
+          from urllib.parse import urlencode
+          pages=['dashboard','finance_audit','period_controls','payroll','workflow_desk','industry_ops']
+          for page in pages:
+              url='https://zomorodmelal.ir/business/?'+urlencode({'page':page})
+              cmd=['curl','-fsSL','--max-time','25','--retry','1','-D','-','-o','/dev/null',url]
+              p=subprocess.run(cmd,capture_output=True,text=True,timeout=55)
+              if p.returncode:raise SystemExit('LIVE_HTTP_PAGE_FAILURE_'+page)
+              if 'no-store' not in p.stdout.lower() or 'noindex' not in p.stdout.lower():
+                  raise SystemExit('LIVE_HTTP_CACHE_INDEX_HEADERS_FAILED_'+page)
+              # Request a separate body; no authentication cookies or real data.
+              b=subprocess.run(['curl','-fsSL','--max-time','25','--retry','1',url],capture_output=True,text=True,timeout=55)
+              if b.returncode or 'ورود مدیر و حسابدار' not in b.stdout or 'درخواست انجام نشد' in b.stdout:
+                  raise SystemExit('UNAUTHENTICATED_PRIVATE_PAGE_EXPOSURE_OR_ERROR_'+page)
+              print('LIVE_ERP_GUEST_LOGIN_GATE=PASS:'+page)
+          print('LIVE_ERP_PUBLIC_GUEST_ROUTES=6/6_PASS')
+          PY
+          echo FACTORY_HOLD_UNCHANGED=YES
