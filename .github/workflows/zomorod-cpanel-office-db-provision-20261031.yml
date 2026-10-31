@@ -175,8 +175,32 @@ jobs:
           backup="$base/office.initial.backup.sqlite3"
           config="$base/office.env"
           if test -f "$target" && test ! -L "$target"; then
-            echo "OFFICE_DB_PROVISION=existing_no_overwrite"
-            exit 16
+            test -f "$backup" && test ! -L "$backup"
+            test -f "$config" && test ! -L "$config"
+            "$py" -B - "$target" "$backup" "$config" <<'PY'
+          import pathlib,sqlite3,stat,sys
+          source,backup,config=map(pathlib.Path,sys.argv[1:])
+          assert stat.S_IMODE(source.stat().st_mode)==0o600
+          assert stat.S_IMODE(backup.stat().st_mode)==0o600
+          assert stat.S_IMODE(config.stat().st_mode)==0o600
+          datasets=[]
+          for path in (source,backup):
+              db=sqlite3.connect("file:"+str(path)+"?mode=ro",uri=True)
+              try:
+                  assert db.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+                  tables={name for (name,) in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                  assert len(tables)>=120
+                  assert db.execute("SELECT COUNT(*) FROM auth_user").fetchone()[0]==0
+                  datasets.append(tables)
+              finally:db.close()
+          assert datasets[0]==datasets[1]
+          print("OFFICE_DB_EXISTING_SCHEMA_TABLES="+str(len(datasets[0])))
+          print("OFFICE_DB_EXISTING_BACKUP=verified")
+          PY
+            echo "OFFICE_DB_PROVISION=existing_verified_no_overwrite"
+            echo "OFFICE_DB_LIVE_PASSENGER_BOUND=false"
+            echo "OFFICE_DB_PHP_ACCOUNTING_UNCHANGED=true"
+            exit 0
           fi
           test ! -e "$target" && test ! -L "$target"
           test ! -e "$pending" && test ! -L "$pending"
