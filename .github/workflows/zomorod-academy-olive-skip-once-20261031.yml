@@ -166,7 +166,7 @@ jobs:
           before=target.read_bytes()
           old=b'background:#fff;color:#000;padding:8px'
           new=b'background:#fff;color:#173a24;padding:8px'
-          if before.count(old)!=1 or new in before or b'saeit-zomorod-education-managed-v2' not in before:
+          if before.count(old)!=1 or new in before or before.count('<title>آموزشگاه زمرد ملل | از یادگیری تا مهارت</title>'.encode('utf-8'))!=1:
               raise SystemExit('LIVE_ACADEMY_DRIFT_OR_ALREADY_PATCHED')
           after=before.replace(old,new,1)
           base=home/'.backups/zomorod-academy-olive-20261031'
