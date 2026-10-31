@@ -144,6 +144,43 @@ def require_mfa_provisioned(conn: sqlite3.Connection) -> None:
         fail("OFFICE_ADMIN_MFA_DEVICE_MISSING")
 
 
+
+def production_python() -> Path:
+    """Select the same preferred cPanel virtualenv used by post-release checks."""
+    for version in ("3.10", "3.11"):
+        candidate = HOME / "virtualenv" / "Saeit" / version / "bin" / "python"
+        if candidate.is_file():
+            return candidate
+    fail("PASSENGER_PYTHON_MISSING")
+
+
+def require_production_dependencies(py: Path) -> None:
+    """Fail closed *before mutation* when the live venv lacks pinned MFA support.
+
+    Isolated Python ignores PYTHONPATH and user packages, so a dependency
+    installed under the private staging directory cannot give a false pass.
+    Never print interpreter output: it may contain environment details.
+    """
+    expression = (
+        "import importlib.metadata as metadata; "
+        "import django, django_otp; "
+        "assert metadata.version('django-otp') == '1.7.5'"
+    )
+    try:
+        completed = subprocess.run(
+            [str(py), "-I", "-B", "-c", expression],
+            cwd=APP,
+            check=False,
+            timeout=25,
+            capture_output=True,
+            env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        fail("PRODUCTION_DEPENDENCY_PREFLIGHT_FAILED")
+    if completed.returncode != 0:
+        fail("PRODUCTION_DEPENDENCY_PREFLIGHT_FAILED")
+
+
 def verify():
     if len(sys.argv) != 2 or len(sys.argv[1]) != 40 or any(x not in ALLOWED_HEAD for x in sys.argv[1]):
         fail("HEAD_SHA_INVALID")
@@ -197,11 +234,15 @@ def verify():
     shell = code / "enterprise_portal" / "templates" / "enterprise_portal" / "shell.html"
     if not regular(shell) or b"enterprise_portal:office_css" not in shell.read_bytes():
         fail("OFFICE_STYLESHEET_ROUTE_REQUIRED")
-    return sha, stage, code
+    # Inspect the actual production virtualenv before creating backups or
+    # replacing even a single live file. Staging-only dependencies do not count.
+    py = production_python()
+    require_production_dependencies(py)
+    return sha, stage, code, py
 
 
 def main():
-    sha, stage, code = verify()
+    sha, stage, code, py = verify()
     preflight = (("/", 200), ("/api/health/", 200), ("/business/", 200),
                  ("/amozeshgah/", 200), ("/company/office/login/", 302))
     for path, expected in preflight:
@@ -244,11 +285,6 @@ def main():
                 fail("CONCURRENT_MAIN_CHANGE " + relative)
             atomic_copy(code / relative, APP / relative)
         restart_passenger(passenger)
-        py = HOME / "virtualenv/Saeit/3.10/bin/python"
-        if not py.is_file():
-            py = HOME / "virtualenv/Saeit/3.11/bin/python"
-        if not py.is_file():
-            fail("PASSENGER_PYTHON_MISSING")
         subprocess.run([str(py), "manage.py", "check", "--deploy"],
                        cwd=APP, check=True, timeout=55, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
         status("/", 200)
