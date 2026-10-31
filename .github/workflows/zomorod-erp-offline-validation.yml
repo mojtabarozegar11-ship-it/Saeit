@@ -1,0 +1,66 @@
+name: Zomorod ERP V7 unified offline PHP SQLite release-candidate tests
+on:
+  push:
+    branches: ['feature/zomorod-erp-unified-offline-v7-20261029']
+  pull_request:
+    paths:
+      - 'content/zomorod-business/**'
+      - 'scripts/**'
+      - '.github/workflows/zomorod-erp-offline-validation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, sqlite3, mbstring
+      - name: Require SQLite extension and execute all offline suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -r 'exit(extension_loaded("pdo_sqlite")?0:1);'
+          python3 scripts/run_all_offline_qa.py --report-out OFFLINE_QA_REPORT.json
+          python3 - <<'PY'
+          import json
+          report=json.load(open('OFFLINE_QA_REPORT.json'))
+          assert report['offline_checks_available_here']=='PASS'
+          assert report['php_sqlite_business_tests']=='PASS'
+          assert report['full_offline_database_tests_verified'] is True
+          print('OFFLINE_PHP_SQLITE_QA=PASS')
+          print('PRODUCTION_DEPLOYMENT=NOT_PERFORMED')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zomorod-offline-test-report-php-${{ matrix.php }}
+          path: OFFLINE_QA_REPORT.json
+          retention-days: 14
+
+      - name: Build source-only V7 archive from actual verified PHP 8.3 run
+        if: matrix.php == '8.3'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist && ZOMOROD_BUNDLE_OUTPUT=dist python3 scripts/build_erp_offline_bundle.py
+          python3 scripts/verify_erp_bundle.py dist/zomorod-erp-offline-v7.zip dist/zomorod-erp-offline-v7.tar.gz
+          echo 'PRODUCTION_DEPLOYMENT=NOT_PERFORMED'
+      - name: Upload offline verified source archive
+        if: matrix.php == '8.3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-erp-v7-unified-php-sqlite-qa
+          path: |
+            dist/zomorod-erp-offline-v7.zip
+            dist/zomorod-erp-offline-v7.tar.gz
+          if-no-files-found: error
+          retention-days: 14

@@ -23,9 +23,12 @@ $private = $home.'/.private/zomorod-business';
 if(is_file($private.'/site_agents.php')) require_once $private.'/site_agents.php';
 if(is_file($private.'/site_store.php')) require_once $private.'/site_store.php';
 if(is_file($private.'/command_center.php')) require_once $private.'/command_center.php';
+if(is_file($private.'/workflow_desk.php')) require_once $private.'/workflow_desk.php';
 if(is_file($private.'/payroll_control.php')) require_once $private.'/payroll_control.php';
 if(is_file($private.'/payroll_ui.php')) require_once $private.'/payroll_ui.php';
-if(is_file($private.'/workflow_desk.php')) require_once $private.'/workflow_desk.php';
+if(is_file($private.'/industry_operations.php')) require_once $private.'/industry_operations.php';
+if(is_file($private.'/finance_audit.php')) require_once $private.'/finance_audit.php';
+require_once $private.'/period_controls.php';
 function esc(mixed $s): string {return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');}
 function req(string $k, string $default=''): string {return trim((string)($_POST[$k]??$default));}
 function bail(string $m, int $code=422): never {http_response_code($code); throw new RuntimeException($m);}
@@ -59,6 +62,7 @@ function db(string $private): PDO {
     $db->exec("CREATE TABLE IF NOT EXISTS audit_events (id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), verb TEXT NOT NULL, subject TEXT NOT NULL, entity_id INTEGER, occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     $seed=['1000'=>['صندوق','asset'],'1010'=>['بانک','asset'],'1100'=>['حساب‌های دریافتنی','asset'],'1200'=>['موجودی کالا','asset'],'1500'=>['دارایی ثابت','asset'],'2000'=>['حساب‌های پرداختنی','liability'],'2100'=>['مالیات پرداختنی','liability'],'3000'=>['سرمایه','equity'],'4000'=>['درآمد فروش','income'],'5000'=>['بهای تمام‌شده','expense'],'5100'=>['هزینه عملیاتی','expense'],'5200'=>['هزینه حقوق','expense']];
     $s=$db->prepare('INSERT OR IGNORE INTO ledger_accounts(code,name,type) VALUES (?,?,?)');foreach($seed as $code=>$parts)$s->execute([$code,$parts[0],$parts[1]]);
+    zmPeriodSchema($db);
     return $db;
 }
 function q(PDO $db,string $sql,array $args=[]): array {$s=$db->prepare($sql);$s->execute($args);return $s->fetchAll();}
@@ -68,6 +72,7 @@ function role(): string {return (string)($_SESSION['role']??'');}
 function authorize(string $access): void {$roles=['viewer'=>['view'],'manager'=>['view','manage'],'accountant'=>['view','manage','account'],'admin'=>['view','manage','account','users']];if(!in_array($access,$roles[role()]??[],true))bail('دسترسی کافی ندارید.',403);}
 function audit(PDO $db,string $verb,string $subject,int $id=0):void {$db->prepare('INSERT INTO audit_events(user_id,verb,subject,entity_id) VALUES(?,?,?,?)')->execute([actor()?:null,$verb,$subject,$id?:null]);}
 function record(PDO $db,string $number,string $date,string $note,string $cur,array $lines):int {
+    zmPeriodGuard($db,$date);
     if(strlen($number)>60||strlen($note)>800||!validDate($date))bail('اطلاعات سند نامعتبر است.');
     if(count($lines)<2||count($lines)>12)bail('سند باید بین دو تا دوازده ردیف داشته باشد.');
     $debits=0;$credits=0;
@@ -84,7 +89,7 @@ function record(PDO $db,string $number,string $date,string $note,string $cur,arr
 }
 function uniqueNo(string $prefix):string {return $prefix.'-'.gmdate('YmdHis').'-'.strtoupper(substr(bin2hex(random_bytes(5)),0,8));}
 function layoutStart(string $page,?array $user=null):void {
-    $nav=['dashboard'=>'داشبورد','insights'=>'گزارش مدیریتی','command_center'=>'مرکز فرمان هوشمند','workflow_desk'=>'اتوماسیون و کارتابل','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','payroll'=>'محاسبهٔ حقوق','documents'=>'مکاتبات','projects'=>'پروژه‌ها','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
+    $nav=['dashboard'=>'داشبورد','insights'=>'گزارش مدیریتی','command_center'=>'مرکز فرمان هوشمند','workflow_desk'=>'اتوماسیون و کارتابل','industry_ops'=>'عملیات کشاورزی و تولید','finance_audit'=>'کنترل مالی','period_controls'=>'بستن دورهٔ مالی','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','payroll'=>'حقوق و دستمزد','documents'=>'مکاتبات','projects'=>'پروژه‌ها','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
     $navHtml='';foreach($nav as $key=>$label){if($key==='users'&&role()!=='admin')continue;$navHtml.='<a class="'.($page===$key?'sel':'').'" href="?page='.esc($key).'">'.esc($label).'</a>';}
     echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.esc(APP_TITLE).'</title><link rel="icon" type="image/webp" href="/static/site/zomorod-v7/company-logo.webp"><style>\n    :root{font-family:Tahoma,Arial,sans-serif;color:#e9e7d9;background:#0c1811}*{box-sizing:border-box}body{margin:0;background:#203b23;min-height:100vh}a{color:#d9bc72;text-decoration:none}header{padding:20px 4%;background:#1a341e;border-bottom:3px double #e5c374;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:21px;color:#edcd79;font-weight:bold}.small{font-size:12px;color:#b9c0ae}nav{display:flex;overflow:auto;gap:8px;padding:16px 4%;background:#1a341e;scrollbar-width:thin}nav a{white-space:nowrap;padding:11px 13px;background:#284c30;border:1px solid #e1c47f;border-radius:12px}nav .sel{color:#081509;background:#d8ba6e;border-color:#f3d590}main{max-width:1260px;margin:auto;padding:26px 20px 70px}h1,h2,h3{color:#edcf88}h1{font-size:clamp(23px,3vw,32px)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:15px;margin:18px 0}.card,section{background:#18291e;border:1px solid #546545;border-radius:18px;padding:20px;margin:16px 0;box-shadow:0 8px 28px #0002}.metric{font-size:28px;color:#f1d68e;font-weight:bold}table{border-collapse:collapse;width:100%;min-width:580px}th,td{padding:12px;text-align:right;border-bottom:1px solid #405243}th{color:#e4cb83}.scroll{overflow:auto}label{display:block;color:#d1dcbf;margin:9px 0 5px}input,textarea,select{font:inherit;color:#f3eedc;background:#0c1a12;border:1px solid #647153;border-radius:9px;padding:11px;width:100%;max-width:440px}textarea{min-height:88px}button{background:linear-gradient(120deg,#a98741,#f3d584);border:1px solid #f8dd9a;color:#15200e;padding:12px 19px;border-radius:12px;cursor:pointer;font-weight:bold;margin-top:13px}button:hover{filter:brightness(1.1)}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 18px}.form .full{grid-column:1/-1}.notice{border:1px solid #b99550;background:#354027;padding:15px;border-radius:12px}.danger{background:#4d1e20;border-color:#c26b6b}.muted{color:#bec8b6}.account-line{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}.sign{max-width:540px;margin:70px auto;padding:30px}footer{padding:24px 4%;border-top:1px solid #52613b;text-align:center;color:#bdc7ae;font-size:12px}.tags{display:flex;flex-wrap:wrap;gap:8px}.tags span{border:1px solid #6b7050;border-radius:15px;padding:4px 10px}@media(max-width:650px){.account-line{grid-template-columns:1fr 1fr}.account-line select{grid-column:1/-1}main{padding:14px 12px}header{padding:15px}}\n    </style></head><body><header><div><div class="brand"><img src="/static/site/zomorod-v7/company-logo.webp" alt="نشان شرکت زمرد ملل" width="48" height="48" style="width:48px;height:48px;border-radius:50%;border:2px solid #e5c377;vertical-align:middle;margin-left:12px;background:#fff">زمرد ملل · مدیریت جامع</div><div class="small">مدیریت سازمان · دفاتر مالی · ثبت عملیات با کنترل دسترسی</div></div><div><a href="https://zomorodmelal.ir/">بازگشت به سایت</a>';
     if($user)echo ' · <span class="small">'.esc($user['username']).' ('.esc($user['role']).')</span> · <a href="?page=logout">خروج</a>';
@@ -199,21 +204,30 @@ try {
                 $db->prepare('INSERT INTO invoices(invoice_no,kind,party_id,invoice_date,due_date,description,amount,currency,posted_entry,created_by) VALUES(?,?,?,?,?,?,?,?,?,?)')->execute([$no,$kind,$party,$date,$due,$desc,$amount,$cur,$j,actor()]);audit($db,'create','invoice',(int)$db->lastInsertId());$db->commit();
             }catch(Throwable $e){$db->rollBack();throw $e;}
         } elseif($action==='payment'){
-            $invoice=(int)req('invoice_id');$db->beginTransaction();$rows=q($db,'SELECT i.*,COALESCE((SELECT SUM(amount) FROM invoice_payments WHERE invoice_id=i.id),0) AS paid FROM invoices i WHERE i.id=?',[$invoice]);
-            if(!$rows)bail('فاکتور پیدا نشد.');$inv=$rows[0];$amount=cents(req('amount'));$remaining=(int)$inv['amount']-(int)$inv['paid'];
-            if($amount<=0||$amount>$remaining)bail('مبلغ بیشتر از مانده فاکتور یا نامعتبر است.');
-            $on=inputDate('date');
+            $invoice=(int)req('invoice_id');$db->beginTransaction();
             try{
+                $rows=q($db,'SELECT i.*,COALESCE((SELECT SUM(amount) FROM invoice_payments WHERE invoice_id=i.id),0) AS paid FROM invoices i WHERE i.id=?',[$invoice]);
+                if(!$rows)bail('فاکتور پیدا نشد.');$inv=$rows[0];$amount=cents(req('amount'));$remaining=(int)$inv['amount']-(int)$inv['paid'];
+                if($amount<=0||$amount>$remaining)bail('مبلغ بیشتر از مانده فاکتور یا نامعتبر است.');
+                $on=inputDate('date');
                 $j=record($db,uniqueNo('PAY'),$on,'تسویه فاکتور '.$inv['invoice_no'],(string)$inv['currency'],$inv['kind']==='sale'?[['1010',$amount,0],['1100',0,$amount]]:[['2000',$amount,0],['1010',0,$amount]]);
                 $db->prepare('INSERT INTO invoice_payments(invoice_id,amount,paid_on,entry_id,created_by) VALUES(?,?,?,?,?)')->execute([$invoice,$amount,$on,$j,actor()]);audit($db,'create','invoice-payment',(int)$db->lastInsertId());$db->commit();
-            }catch(Throwable $e){$db->rollBack();throw $e;}
+            }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
         } elseif($action==='inventory'){
             $sku=req('sku');$name=req('name');if($sku===''||$name==='')bail('شناسه کالا و نام لازم است.');
             $db->prepare('INSERT INTO inventory(sku,name,unit,reorder_level) VALUES(?,?,?,?)')->execute([$sku,$name,req('unit','عدد'),max(0,(int)req('reorder_level','0'))]);audit($db,'create','inventory',(int)$db->lastInsertId());
         } elseif($action==='stock'){
-            $id=(int)req('inventory_id');$qty=(int)req('qty');if(!one($db,'SELECT id FROM inventory WHERE id=?',[$id])||$qty===0||abs($qty)>100000000)bail('مقدار کالا نامعتبر است.');
-            $now=(int)one($db,'SELECT COALESCE(SUM(qty),0) FROM inventory_movements WHERE inventory_id=?',[$id]);if($now+$qty<0)bail('موجودی انبار منفی می‌شود.');
-            $db->prepare('INSERT INTO inventory_movements(inventory_id,movement_date,qty,note,created_by) VALUES(?,?,?,?,?)')->execute([$id,inputDate('date'),$qty,req('note'),actor()]);audit($db,'move','inventory-stock',(int)$db->lastInsertId());
+            $id=(int)req('inventory_id');$rawQty=req('qty');
+            if(!preg_match('/^-?[1-9][0-9]{0,8}$/D',$rawQty))bail('مقدار کالا نامعتبر است.');
+            $qty=(int)$rawQty;
+            $db->beginTransaction();
+            try{
+                if(!one($db,'SELECT id FROM inventory WHERE id=?',[$id]))bail('کالا پیدا نشد.');
+                $now=(int)one($db,'SELECT COALESCE(SUM(qty),0) FROM inventory_movements WHERE inventory_id=?',[$id]);
+                if($now+$qty<0)bail('موجودی انبار منفی می‌شود.');
+                $db->prepare('INSERT INTO inventory_movements(inventory_id,movement_date,qty,note,created_by) VALUES(?,?,?,?,?)')->execute([$id,inputDate('date'),$qty,req('note'),actor()]);
+                audit($db,'move','inventory-stock',(int)$db->lastInsertId());$db->commit();
+            }catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
         } elseif($action==='employee'){
             $fullname=req('fullname');$job=req('job_title');if($fullname===''||$job==='')bail('نام و سمت لازم است.');
             $db->prepare('INSERT INTO employees(fullname,job_title,start_date,monthly_salary) VALUES(?,?,?,?)')->execute([$fullname,$job,inputDate('start_date'),cents(req('salary','0'))]);audit($db,'create','employee',(int)$db->lastInsertId());
@@ -239,6 +253,11 @@ try {
         } elseif(in_array($action,['flow_create','flow_transition'],true)){
             if(!function_exists('zmFlowHandle'))bail('گردش‌کار سازمانی در دسترس نیست.',503);
             zmFlowHandle(zmFlowDb($private),$action);
+        } elseif(in_array($action,['industry_create','industry_advance'],true)){
+            if(!function_exists('zmIndustryHandle'))bail('سامانه عملیاتی در دسترس نیست.',503);
+            zmIndustryHandle(zmIndustryDb($private),$action);
+        } elseif(in_array($action,['period_freeze','period_close'],true)){
+            zmPeriodAction($db,$action,req('period_key'),req('note'),actor(),role());
         } elseif(in_array($action,['payroll_create','payroll_decision'],true)){
             if(!function_exists('zmPayrollUiHandle'))bail('کنترل حقوق در دسترس نیست.',503);
             zmPayrollUiHandle(zmPayrollDb($private),$action);
@@ -266,6 +285,21 @@ try {
         authorize('view');
         if(!function_exists('zmFlowRender'))bail('اتوماسیون سازمانی در دسترس نیست.',503);
         zmFlowRender(zmFlowDb($private));
+    } elseif($page==='industry_ops'){
+        authorize('view');
+        if(!function_exists('zmIndustryRender'))bail('سامانه صنعت در دسترس نیست.',503);
+        zmIndustryRender(zmIndustryDb($private));
+    } elseif($page==='period_controls'){
+        authorize('account');
+        zmPeriodRender($db);
+    } elseif($page==='finance_audit'){
+        authorize('account');
+        if(!function_exists('zmFinanceAuditRender'))bail('ممیزی مالی در دسترس نیست.',503);
+        zmFinanceAuditRender($db);
+    } elseif($page==='payroll'){
+        authorize('view');
+        if(!function_exists('zmPayrollUiRender'))bail('پنل حقوق در دسترس نیست.',503);
+        zmPayrollUiRender(zmPayrollDb($private));
     } elseif($page==='agent_center'){
         authorize('view');
         if(!function_exists('zmAgentDb'))bail('موتور ایجنت در دسترس نیست.',503);
@@ -274,10 +308,6 @@ try {
         authorize('view');
         if(!function_exists('zmStoreDb'))bail('فروشگاه در دسترس نیست.',503);
         zmStoreRender(zmStoreDb($private));
-    } elseif($page==='payroll'){
-        authorize('view');
-        if(!function_exists('zmPayrollUiRender'))bail('پنل حقوق در دسترس نیست.',503);
-        zmPayrollUiRender(zmPayrollDb($private));
     } elseif($page==='accounts'){
         echo '<section><h2>کدینگ حساب‌ها</h2><div class="scroll"><table><tr><th>کد</th><th>نام</th><th>نوع</th></tr>';foreach(q($db,'SELECT * FROM ledger_accounts ORDER BY code') as $r)echo '<tr><td>'.esc($r['code']).'</td><td>'.esc($r['name']).'</td><td>'.esc($r['type']).'</td></tr>';echo '</table></div></section>';
         if(in_array(role(),['admin','accountant'],true)){echo '<section><h2>افزودن حساب جدید</h2>';formBegin('account');echo '<div class="form"><div><label>کد</label><input name="code" required pattern="[0-9]{3,8}"></div><div><label>عنوان حساب</label><input name="name" required></div><div><label>ماهیت</label><select name="type"><option value="asset">دارایی</option><option value="liability">بدهی</option><option value="equity">سرمایه</option><option value="income">درآمد</option><option value="expense">هزینه</option></select></div></div><button>ثبت حساب</button></form></section>';}
