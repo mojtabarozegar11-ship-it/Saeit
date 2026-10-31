@@ -1,0 +1,61 @@
+name: MojPlayWin private archive member safety diagnostic
+on:
+  pull_request:
+    paths:
+      - 'scripts/mojplaywin_archive_member_privacy_probe_20261101.py'
+      - 'tests/test_mojplaywin_archive_member_privacy_probe_20261101.py'
+      - '.github/workflows/mpw-private-archive-member-readonly-20261101.yml'
+permissions: {contents: read}
+concurrency:
+  group: mpw-private-archive-member-diagnostic
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify privacy-safe metadata classifier with no customer archive
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mojplaywin_archive_member_privacy_probe_20261101.py -v
+          python3 -B -m py_compile scripts/mojplaywin_archive_member_privacy_probe_20261101.py
+      - name: Prepare fingerprint-pinned VPS access without exposing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-archive-privacy-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          chmod 600 "$d/vps.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+      - name: Inspect encrypted archive TAR member categories in memory on VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-archive-privacy-ssh"
+          source64="$(base64 -w0 scripts/mojplaywin_recovery_stream_vps.py)"
+          probe64="$(base64 -w0 scripts/mojplaywin_archive_member_privacy_probe_20261101.py)"
+          launcher='import base64,sys,types; a=types.ModuleType("mpw_recovery");exec(base64.b64decode(sys.argv[1]),a.__dict__);b=types.ModuleType("mpw_probe");exec(base64.b64decode(sys.argv[2]),b.__dict__);sys.exit(b.main(a))'
+          timeout 900s ssh -T -i "$d/vps.key" \
+            -o UserKnownHostsFile="$d/vps.known" -o StrictHostKeyChecking=yes \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 \
+            githubops@178.239.147.150 \
+            "nice -n 19 python3 -B -c '$launcher' '$source64' '$probe64'"
+      - name: Remove runner-only SSH material
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-archive-privacy-ssh"
+          if [ -d "$d" ]; then
+            rm -f "$d/vps.key" "$d/vps.known"
+            rmdir "$d"
+          fi
