@@ -141,6 +141,41 @@ jobs:
               except OSError:
                   entry['read_error']=True
               out['files'][label]=entry
+          # Static, no-execution structural audit: a changed SHA is NOT a safe
+          # substitute for proving the exact old CSP guard/branch exists.
+          import ast
+          csp_path=filenames['checkout_view']
+          if out['files']['checkout_view'].get('present'):
+              source=csp_path.read_text('utf8','replace')
+              legacy_guard="""if len(scripts) != 1 or len(styles) not in (1, 2) or b'<meta charset="utf-8">' not in body:"""
+              legacy_policy="""\"script-src 'self' \" + source_hash(scripts[0]) + \"; \""""
+              try:
+                  tree=ast.parse(source)
+                  matches=[n for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name=='_apply_two_book_strict_csp']
+                  structural={'python_parse':True,'handler_count':len(matches),
+                              'old_guard_count':source.count(legacy_guard),
+                              'old_policy_count':source.count(legacy_policy),
+                              'unsafe_eval_in_handler':False,
+                              'unsafe_inline_in_handler':False}
+                  if len(matches)==1:
+                      code=ast.get_source_segment(source,matches[0]) or ''
+                      structural['unsafe_eval_in_handler']=("'unsafe-eval'" in code)
+                      structural['unsafe_inline_in_handler']=("'unsafe-inline'" in code)
+                  structural['legacy_patch_exact_match']=(len(matches)==1 and
+                      structural['old_guard_count']==1 and
+                      structural['old_policy_count']==1 and
+                      not structural['unsafe_eval_in_handler'] and
+                      not structural['unsafe_inline_in_handler'])
+              except (SyntaxError,ValueError):
+                  structural={'python_parse':False,'legacy_patch_exact_match':False}
+              out['checkout_csp_structure']=structural
+          trx_path=filenames['trx_web']
+          if out['files']['trx_web'].get('present'):
+              src=trx_path.read_text('utf8','replace')
+              out['trx_rate_source_static']={
+                  'uses_server_rate':"fetch_server_rate(" in src,
+                  'uses_trx':"'TRX'" in src or '"TRX"' in src,
+                  'has_rate_feed_unavailable':"RateFeedUnavailable" in src}
           out['safe_to_release']=False  # DB authority + external restore not proven.
           print('S01_CHECKOUT_SOURCE_FINGERPRINTS='+json.dumps(out,sort_keys=True))
           PY
