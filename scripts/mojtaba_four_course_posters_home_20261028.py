@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add four no-fake-portrait course posters to existing personal Django homepage.
+"""Maintain ten personal-website course posters with the owner's verified real photograph.
 
 One exact template only. NO modifications to main MojPlayWin, Zomorod Melal,
 Django DBs, social credentials, unrelated templates, pictures or webserver config.
@@ -24,6 +24,12 @@ POSTERS=(
     ("agriculture","Increasing Agricultural Income","Farm economics, productivity and market access"),
     ("online-income","How to Earn Money Online","Digital skills, freelancing and online business"),
     ("chatgpt","Advanced ChatGPT Training","Prompt engineering, AI research and practical workflows"),
+    ("research-methods","Scientific Research & Data Analysis","Study design, statistics and reproducible findings"),
+    ("feasibility","Agribusiness Feasibility & Investment","Investment analysis, agricultural projects and risks"),
+    ("digital-marketing","Digital Marketing & SEO Strategy","Search visibility, content and conversion analytics"),
+    ("business-finance","Business Finance & Profit Management","Costs, pricing, cash flow and profitability"),
+    ("food-quality","Food Processing & Quality Systems","Processing, traceability and production quality"),
+    ("ai-automation","AI Automation for Enterprise Teams","Reliable AI workflows and management controls"),
 )
 SITE="/mojtaba.roozegar/"
 HUB=SITE+"social-command/"
@@ -49,13 +55,13 @@ def _run_id(value):
 def section_html():
     posters=[]
     for slug,title,desc in POSTERS:
-        svg=HUB+"posters/"+slug+".svg?v=en-20261028"
+        svg=HUB+"posters/"+slug+".svg?v=en-20261031-photo"
         detail=HUB+"courses/#"+slug
         posters.append(
             '<article class="mpw-course-home-card">'
             '<a href="'+detail+'" aria-label="Learn more about '+title+'">'
             '<img src="'+svg+'" loading="lazy" decoding="async" width="900" height="1200" alt="'+
-            title+'; original vector poster with no fabricated instructor portrait"></a>'
+            title+'; original vector poster with the verified real instructor photograph"></a>'
             '<div class="mpw-course-home-copy"><h3>'+title+'</h3>'
             '<p>'+desc+'</p>'
             '<a class="mpw-course-home-more" href="'+detail+'">Course overview</a></div></article>'
@@ -71,7 +77,7 @@ border:1px solid #ab8b50;border-radius:18px;box-shadow:0 16px 48px #0006;box-siz
 font-size:12px;letter-spacing:.15em;text-transform:uppercase}
 #mpw-four-course-posters-20261028 h2{color:#f7dbad;font-size:clamp(25px,3.3vw,40px);margin:10px 0}
 #mpw-four-course-posters-20261028 .mpw-course-home-header p{color:#e6dccd;font-size:15px;line-height:1.85}
-#mpw-four-course-posters-20261028 .mpw-course-home-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}
+#mpw-four-course-posters-20261028 .mpw-course-home-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:15px}
 #mpw-four-course-posters-20261028 .mpw-course-home-card{min-width:0;border:1px solid #725d3f;
 border-radius:13px;overflow:hidden;background:#1d2925}
 #mpw-four-course-posters-20261028 .mpw-course-home-card img{width:100%;height:auto;aspect-ratio:3/4;
@@ -95,17 +101,17 @@ padding:7px 11px;border-radius:8px;color:#1d251d!important;text-decoration:none;
         +css+
         '<div class="mpw-course-home-header"><div class="mpw-course-home-eyebrow">'
         'MOJTABA ROOZEGAR · EDUCATION</div>'
-        '<h2 id="mpw-four-courses-title">Four Courses to Build Practical Skills</h2>'
-        '<p>Explore business growth, agricultural economics, online earning skills and advanced '
-        'ChatGPT workflows.</p></div>'
+        '<h2 id="mpw-four-courses-title">Ten Professional Courses · Practical Skills</h2>'
+        '<p>Explore business, agricultural economics, research, finance, marketing, food quality and '
+        'responsible AI workflows.</p></div>'
         '<div class="mpw-course-home-grid">'+''.join(posters)+'</div>'
-        '<p class="mpw-course-home-note">Course previews only. Start dates, tuition and '
+        '<p class="mpw-course-home-note">Ten course overviews with authentic instructor photographs. Start dates, tuition and '
         'enrollment are not announced yet. No income results are guaranteed.</p></section>\n'
     )
 
 def patch(current):
     if current.count(MARKER):
-        raise RuntimeError("Four-course section already installed; abort duplicate")
+        raise RuntimeError("Course section already installed; abort duplicate")
     start="{% block content %}"
     end="{% endblock %}"
     if current.count(start)!=1:
@@ -117,7 +123,7 @@ def patch(current):
     out=current[:index]+section_html()+current[index:]
     if out.count(MARKER)!=1 or any(out.count('src="'+HUB+"posters/"+slug+".svg")!=1
                                       for slug,_,_ in POSTERS):
-        raise RuntimeError("Four-poster injection shape invalid")
+        raise RuntimeError("Ten-poster injection shape invalid")
     if out[:begin]!=current[:begin] or out[index+len(section_html()):]!=current[index:]:
         raise RuntimeError("Non-additive template edit detected")
     return out
@@ -159,7 +165,7 @@ def install(app,backup,run_id):
     orig=folder/"original_home.html"
     orig.write_bytes(old)
     os.chmod(orig,0o600)
-    meta={"kind":"four_course_home_only","target":str(target),
+    meta={"kind":"personal_course_home_only","target":str(target),
           "before_sha":sha(old),"after_sha":sha(updated)}
     path=folder/"manifest.json"
     path.write_text(json.dumps(meta,sort_keys=True),encoding="utf-8")
@@ -169,7 +175,7 @@ def install(app,backup,run_id):
     _write_atomic(target,updated)
     if sha(target.read_bytes())!=meta["after_sha"]:
         raise RuntimeError("Poster home template hash mismatch")
-    return {"status":"installed","posters":4,"backup":str(folder),
+    return {"status":"installed","posters":len(POSTERS),"backup":str(folder),
             "other_site_files_touched":False,"database_preserved":True}
 
 def rollback(app,backup,run_id):
@@ -181,7 +187,7 @@ def rollback(app,backup,run_id):
         raise RuntimeError("Verified poster rollback unavailable")
     meta=json.loads(m.read_text(encoding="utf-8"))
     old=o.read_bytes()
-    if meta.get("kind")!="four_course_home_only" or meta.get("target")!=str(target):
+    if meta.get("kind")!="personal_course_home_only" or meta.get("target")!=str(target):
         raise RuntimeError("Poster rollback target mismatch")
     if sha(old)!=meta["before_sha"] or sha(target.read_bytes())!=meta["after_sha"]:
         raise RuntimeError("Homepage changed; refuse unsafe rollback")
@@ -194,7 +200,7 @@ def rollback(app,backup,run_id):
 def translate_existing_section(old):
     """Update only our existing section, never reinsert it or touch other homepage content."""
     if old.count(MARKER)!=1:
-        raise RuntimeError("Existing four-course section is absent or duplicated")
+        raise RuntimeError("Existing course section is absent or duplicated")
     opening="<section "+MARKER
     if old.count(opening)!=1:
         raise RuntimeError("Existing course section opening tag changed")
@@ -204,16 +210,16 @@ def translate_existing_section(old):
         raise RuntimeError("Existing course section closing tag missing")
     end=final+len("</section>")
     current_section=old[start:end]
-    if (current_section.count('<article class="mpw-course-home-card"')!=4
+    if (current_section.count('<article class="mpw-course-home-card"') not in (4,10)
         or current_section.count("<section")!=1
-        or any("/posters/"+slug+".svg" not in current_section for slug,_,_ in POSTERS)
+        or any("/posters/"+slug+".svg" not in current_section for slug,_,_ in POSTERS[:4])
         or len(current_section)<2500):
         raise RuntimeError("Unexpected edits inside course section; refuse destructive overwrite")
     translated=section_html().strip()
-    if (translated.count('<article class="mpw-course-home-card"')!=4
+    if (translated.count('<article class="mpw-course-home-card"')!=10
         or translated.count(MARKER)!=1
         or re.search(r"[\u0600-\u06ff]",translated)):
-        raise RuntimeError("English poster section validation failed")
+        raise RuntimeError("Ten-poster English section validation failed")
     updated=old[:start]+translated+old[end:]
     if updated[:start]!=old[:start] or updated[start+len(translated):]!=old[end:]:
         raise RuntimeError("Course translation touched content outside protected section")
@@ -225,7 +231,7 @@ def check_english(app):
     new=translate_existing_section(previous.decode("utf-8")).encode("utf-8")
     return {"status":"already_english" if previous==new else "ready_english",
             "old_sha":sha(previous),"new_sha":sha(new),
-            "previous_section_preserved_outside":True,"course_count":4}
+            "previous_section_preserved_outside":True,"course_count":len(POSTERS)}
 
 def upgrade_english(app,backup,run_id):
     target=_safe_target(app)
@@ -247,7 +253,7 @@ def upgrade_english(app,backup,run_id):
     prev=folder/"home_before_english.html"
     prev.write_bytes(original)
     os.chmod(prev,0o600)
-    manifest={"kind":"four_course_home_english_upgrade",
+    manifest={"kind":"personal_course_home_english_upgrade",
               "target":str(target),"before_sha":sha(original),"after_sha":sha(new)}
     m=folder/"english_manifest.json"
     m.write_text(json.dumps(manifest,sort_keys=True),encoding="utf-8")
@@ -260,7 +266,7 @@ def upgrade_english(app,backup,run_id):
             raise RuntimeError("Failed to write the English homepage")
         _write_atomic(target,original)
         raise RuntimeError("English homepage checksum mismatch; original restored")
-    return {"status":"english_installed","course_count":4,
+    return {"status":"english_installed","course_count":len(POSTERS),
             "home_changed":True,"backup":str(folder),
             "other_site_files_touched":False,"database_preserved":True}
 
@@ -275,7 +281,7 @@ def rollback_english(app,backup,run_id):
         raise RuntimeError("English rollout backup unavailable")
     data=json.loads(manifest_path.read_text(encoding="utf-8"))
     previous=previous_path.read_bytes()
-    if (data.get("kind")!="four_course_home_english_upgrade"
+    if (data.get("kind")!="personal_course_home_english_upgrade"
         or data.get("target")!=str(target)
         or sha(previous)!=data.get("before_sha")
         or sha(target.read_bytes())!=data.get("after_sha")):
