@@ -1,0 +1,188 @@
+name: Zomorod ERP V7 host compatibility audit (read only)
+on:
+  push:
+    branches:
+      - feature/zomorod-erp-v7-host-stage-20261031
+    paths:
+      - .github/workflows/zomorod-erp-v7-host-compat-audit-20261031.yml
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-erp-v7-host-compat-audit
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 97e3991d5b8b7e2c484c8ff6db74789dcaa7edec
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3,mbstring
+      - name: Strict source and test gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 97e3991d5b8b7e2c484c8ff6db74789dcaa7edec
+          php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'
+          python3 scripts/run_all_offline_qa.py --report-out OFFLINE_QA_REPORT.json
+          python3 - OFFLINE_QA_REPORT.json <<'PY'
+          import json, sys
+          r=json.load(open(sys.argv[1]))
+          assert r.get('offline_checks_available_here')=='PASS'
+          assert r.get('php_sqlite_business_tests')=='PASS'
+          assert r.get('full_offline_database_tests_verified') is True
+          assert not r.get('failed_or_timed_out', [])
+          print('V7_OFFLINE_GATE=PASS')
+          PY
+          mkdir -p "$RUNNER_TEMP/v7dist"
+          ZOMOROD_BUNDLE_OUTPUT="$RUNNER_TEMP/v7dist" python3 scripts/build_erp_offline_bundle.py
+          python3 scripts/verify_erp_bundle.py "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.zip" "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.tar.gz"
+          ( cd "$RUNNER_TEMP/v7dist" && sha256sum zomorod-erp-offline-v7.zip zomorod-erp-offline-v7.tar.gz > SHA256SUMS && sha256sum -c SHA256SUMS )
+          echo V7_SOURCE_ARCHIVE=verified_manifest_from_pinned_revision
+      - name: Compare pinned source against live private modules without changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$GITHUB_RUN_ID" -gt 0
+          d="$RUNNER_TEMP/zomorod-v7-host-credentials"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 15
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          target=""
+          for host in saeit-cpanel saeit-cpanel-direct; do
+            if timeout 55s ssh -F "$d/config" "$host" 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/business/index.php && test -d /home/zomorod2/.private/zomorod-business' >/dev/null; then
+              target="$host"
+              break
+            fi
+          done
+          test -n "$target"
+          ssh -F "$d/config" "$target" 'python3 -B -' > "$RUNNER_TEMP/live-erp-inventory.json" <<'PY'
+          import hashlib,json,os,pathlib,subprocess,shutil,sqlite3,re
+          root=pathlib.Path('/home/zomorod2/.private/zomorod-business')
+          if not root.is_dir() or root.is_symlink():
+              raise SystemExit('LIVE_PRIVATE_ROOT_UNSAFE')
+          installed={}
+          for file in root.glob('*.php'):
+              if file.is_file() and not file.is_symlink():
+                  installed[file.name]=hashlib.sha256(file.read_bytes()).hexdigest()
+          staged=pathlib.Path('/home/zomorod2/.backups/zomorod-erp-v7-staged/41147478945')
+          checksums_ok=(staged.is_dir() and not staged.is_symlink() and
+              subprocess.run(['sha256sum','-c','--status','SHA256SUMS'],cwd=staged,capture_output=True,timeout=20).returncode==0)
+          db=root/'management.sqlite3'
+          app=(root/'app.php').read_text(encoding='utf-8',errors='replace')
+          pending=('finance_audit.php','industry_operations.php','payroll_control.php','payroll_ui.php','period_controls.php','workflow_desk.php')
+          includes={n:(n in app) for n in pending}
+          live_functions=sorted(set(re.findall(r'\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(',app)))
+          bytes_used=db.stat().st_size if db.is_file() else 0
+          free_mib=shutil.disk_usage(root).free//1048576
+          tables=None
+          try:
+              if db.is_file():
+                  con=sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True,timeout=2)
+                  con.execute('PRAGMA query_only=ON')
+                  tables=con.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+                  con.close()
+          except (OSError,sqlite3.Error):
+              pass
+          result={
+              'installed_php':installed,
+              'live_app_module_references':includes,
+              'live_app_functions':live_functions,
+              'database_size_mib':(bytes_used+1048575)//1048576,
+              'disk_free_mib':free_mib,
+              'existing_database_table_count':tables,
+              'original_database_exists':db.is_file() and not db.is_symlink(),
+              'v7_staged_package_checksum_verified':checksums_ok,
+              'active_web_wrapper_exists':pathlib.Path('/home/zomorod2/public_html/business/index.php').is_file()
+          }
+          print(json.dumps(result,sort_keys=True))
+          PY
+          python3 - "$RUNNER_TEMP/live-erp-inventory.json" <<'PY'
+          import hashlib,json,pathlib,sys
+          actual=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          source=pathlib.Path('content/zomorod-business')
+          expected={p.name:hashlib.sha256(p.read_bytes()).hexdigest()
+                    for p in source.glob('*.php') if p.name!='index.php' and p.is_file() and not p.is_symlink()}
+          installed=actual['installed_php']
+          matching=sorted(n for n,h in expected.items() if installed.get(n)==h)
+          changed=sorted(n for n,h in expected.items() if n in installed and installed[n]!=h)
+          missing=sorted(set(expected)-set(installed))
+          extra=sorted(set(installed)-set(expected))
+          print('V7_SOURCE_MODULE_COUNT='+str(len(expected)))
+          print('HOST_PRIVATE_MODULE_COUNT='+str(len(installed)))
+          print('MATCHING_MODULES='+','.join(matching))
+          print('CHANGED_MODULES='+','.join(changed))
+          print('NOT_INSTALLED_V7_MODULES='+','.join(missing))
+          print('HOST_ONLY_MODULES='+','.join(extra))
+          print('V7_STAGED_CHECKSUM='+('PASS' if actual['v7_staged_package_checksum_verified'] else 'FAIL'))
+          print('HOST_DATABASE_EXISTS='+str(actual['original_database_exists']))
+          print('LIVE_APP_REFERENCES='+','.join(n for n,used in actual['live_app_module_references'].items() if used))
+          import re
+          v7_app=(source/'app.php').read_text(encoding='utf-8',errors='replace')
+          v7_functions=set(re.findall(r'\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(',v7_app))
+          host_functions=set(actual['live_app_functions'])
+          print('HOST_ONLY_FUNCTIONS='+','.join(sorted(host_functions-v7_functions)))
+          print('V7_ONLY_FUNCTIONS='+','.join(sorted(v7_functions-host_functions)))
+          print('SHARED_FUNCTION_COUNT='+str(len(host_functions & v7_functions)))
+          print('LIVE_APP_DOES_NOT_REFERENCE='+','.join(n for n,used in actual['live_app_module_references'].items() if not used))
+          print('LIVE_DB_SIZE_MIB='+str(actual['database_size_mib']))
+          print('HOST_FREE_SPACE_MIB='+str(actual['disk_free_mib']))
+          print('LIVE_DB_SCHEMA_TABLE_COUNT='+str(actual['existing_database_table_count']))
+          print('LIVE_WEB_WRAPPER_PRESENT='+str(actual['active_web_wrapper_exists']))
+          print('LIVE_ERP_CODE_MUTATIONS=NONE')
+          print('LIVE_ERP_DB_MUTATIONS=NONE')
+          print('BACKUP_RESTORE_TESTED=NO')
+          print('V7_AUTOMATIC_PRODUCTION_ACTIVATION=BLOCKED_PENDING_SERVER_DIFF_REVIEW')
+          assert actual['v7_staged_package_checksum_verified']
+          assert actual['active_web_wrapper_exists']
+          PY
