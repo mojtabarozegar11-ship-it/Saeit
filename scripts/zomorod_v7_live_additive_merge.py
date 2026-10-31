@@ -123,7 +123,9 @@ def merge(live: str, v7: str) -> str:
     if result == live or len(result) <= len(live):
         raise UnsafeMerge("Candidate did not expand correctly")
     for name in MODULES:
-        require_once(result, "'/" + name + "'", "module: " + name)
+        needle = ("require_once $private.'/period_controls.php';" if name == "period_controls.php"
+                  else "if(is_file($private.'/" + name + "'))")
+        require_once(result, needle, "module: " + name)
     for name in PAGES:
         require_once(result, "$page==='" + name + "'", "page: " + name)
     for name in ACTIONS:
