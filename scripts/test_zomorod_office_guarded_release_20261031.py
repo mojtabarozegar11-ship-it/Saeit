@@ -128,33 +128,48 @@ class GuardedReleaseDependencyPreflightTests(unittest.TestCase):
 
     def test_missing_passenger_config_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
-            with patch.object(release, "APP", Path(directory)):
+            with patch.object(release, "HOME", Path(directory)):
                 with self.assertRaisesRegex(RuntimeError, "PASSENGER_PYTHON_UNATTESTED"):
                     release.production_python()
 
-    def test_uses_explicit_passenger_python_not_guessed_venv(self):
+    def test_uses_public_document_root_not_app_local_htaccess(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            app = root / "Saeit"
+            app.mkdir()
             configured = root / "virtualenv/Saeit/bin/python"
             configured.parent.mkdir(parents=True)
             configured.write_bytes(b"fixture")
             configured.chmod(0o755)
-            (root / ".htaccess").write_text(
-                '# app config\nPassengerPython "' + str(configured) + '"\n',
+            public_html = root / "public_html"
+            public_html.mkdir()
+            (public_html / ".htaccess").write_text(
+                '# cPanel config\nPassengerAppRoot "' + str(app) + '"\nPassengerPython "' + str(configured) + '"\n',
                 encoding="utf-8",
             )
-            with patch.object(release, "APP", root):
+            (app / ".htaccess").write_text("PassengerPython /nonexistent\n")
+            with patch.object(release, "HOME", root), patch.object(release, "APP", app):
                 selected = release.production_python()
             self.assertEqual(selected, configured)
+
+    def test_app_local_htaccess_alone_is_not_trusted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".htaccess").write_text("PassengerPython /opt/python\n")
+            with patch.object(release, "HOME", root), patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "PASSENGER_PYTHON_UNATTESTED"):
+                    release.production_python()
 
     def test_duplicate_passenger_interpreters_fail_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / ".htaccess").write_text(
+            public_html = root / "public_html"
+            public_html.mkdir()
+            (public_html / ".htaccess").write_text(
                 "PassengerPython /opt/python3\nPassengerPython /opt/python4\n",
                 encoding="utf-8",
             )
-            with patch.object(release, "APP", root):
+            with patch.object(release, "HOME", root):
                 with self.assertRaisesRegex(RuntimeError, "PASSENGER_PYTHON_UNATTESTED"):
                     release.production_python()
 
