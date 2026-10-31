@@ -1,0 +1,214 @@
+name: Zomorod ERP V7 private additive merge and isolated smoke test
+on:
+  push:
+    branches:
+      - feature/zomorod-erp-v7-host-stage-20261031
+    paths:
+      - .github/workflows/zomorod-erp-v7-private-merge-gate-20261031.yml
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-erp-v7-private-merge-gate
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 97e3991d5b8b7e2c484c8ff6db74789dcaa7edec
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3,mbstring
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: merge-scripts
+          persist-credentials: false
+      - name: Strict source and test gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 97e3991d5b8b7e2c484c8ff6db74789dcaa7edec
+          php -r 'exit(extension_loaded("pdo_sqlite") ? 0 : 1);'
+          python3 scripts/run_all_offline_qa.py --report-out OFFLINE_QA_REPORT.json
+          python3 - OFFLINE_QA_REPORT.json <<'PY'
+          import json, sys
+          r=json.load(open(sys.argv[1]))
+          assert r.get('offline_checks_available_here')=='PASS'
+          assert r.get('php_sqlite_business_tests')=='PASS'
+          assert r.get('full_offline_database_tests_verified') is True
+          assert not r.get('failed_or_timed_out', [])
+          print('V7_OFFLINE_GATE=PASS')
+          PY
+          mkdir -p "$RUNNER_TEMP/v7dist"
+          ZOMOROD_BUNDLE_OUTPUT="$RUNNER_TEMP/v7dist" python3 scripts/build_erp_offline_bundle.py
+          python3 scripts/verify_erp_bundle.py "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.zip" "$RUNNER_TEMP/v7dist/zomorod-erp-offline-v7.tar.gz"
+          ( cd "$RUNNER_TEMP/v7dist" && sha256sum zomorod-erp-offline-v7.zip zomorod-erp-offline-v7.tar.gz > SHA256SUMS && sha256sum -c SHA256SUMS )
+          echo V7_SOURCE_ARCHIVE=verified_manifest_from_pinned_revision
+      - name: Compare pinned source against live private modules without changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$GITHUB_RUN_ID" -gt 0
+          d="$RUNNER_TEMP/zomorod-v7-host-credentials"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 15
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          target=""
+          for host in saeit-cpanel saeit-cpanel-direct; do
+            if timeout 55s ssh -F "$d/config" "$host" 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/business/index.php && test -d /home/zomorod2/.private/zomorod-business' >/dev/null; then
+              target="$host"
+              break
+            fi
+          done
+          test -n "$target"
+          expected="fa2566c65ab0bcbbe716e47c7a53b09fefdf45a6df9c47c222deae260a416c3b"
+          ssh -F "$d/config" "$target" "test -f /home/zomorod2/.private/zomorod-business/app.php && test ! -L /home/zomorod2/.private/zomorod-business/app.php"
+          live_hash="$(ssh -F "$d/config" "$target" "sha256sum /home/zomorod2/.private/zomorod-business/app.php" | awk '{print $1}')"
+          test "$live_hash" = "$expected" || { echo LIVE_APP_DRIFT=BLOCKED; exit 1; }
+          scp -q -F "$d/config" "$target:/home/zomorod2/.private/zomorod-business/app.php" "$RUNNER_TEMP/live-app.php"
+          chmod 600 "$RUNNER_TEMP/live-app.php"
+          python3 -m py_compile merge-scripts/scripts/zomorod_v7_live_additive_merge.py
+          python3 merge-scripts/scripts/zomorod_v7_live_additive_merge.py \
+            --live "$RUNNER_TEMP/live-app.php" \
+            --v7 content/zomorod-business/app.php \
+            --out "$RUNNER_TEMP/merged-app.php" \
+            --expected-live-sha256 "$expected"
+          php -l "$RUNNER_TEMP/merged-app.php"
+          python3 - "$RUNNER_TEMP/live-app.php" "$RUNNER_TEMP/merged-app.php" <<'PY'
+          from pathlib import Path
+          import sys
+          live=Path(sys.argv[1]).read_text()
+          merged=Path(sys.argv[2]).read_text()
+          assert len(merged)>len(live)
+          for marker in ("site_agents.php","site_store.php","function authorize(","verifyCsrf();","zmPeriodGuard($db,$date)","zmPeriodSchema($db)"):
+              assert marker in merged, marker
+          print('LIVE_SECURITY_AND_HOST_EXTENSION_MARKERS=PASS')
+          PY
+          remote_after="$(ssh -F "$d/config" "$target" "sha256sum /home/zomorod2/.private/zomorod-business/app.php" | awk '{print $1}')"
+          test "$remote_after" = "$expected" || { echo CONCURRENT_LIVE_APP_EDIT=BLOCKED; exit 1; }
+          stage="/home/zomorod2/.backups/zomorod-erp-v7-merged/$GITHUB_RUN_ID"
+          ssh -F "$d/config" "$target" "python3 -B - '$GITHUB_RUN_ID' '$expected'" <<'PY'
+          import hashlib,os,pathlib,re,shutil,sqlite3,sys
+          run,expected=sys.argv[1:]
+          if not re.fullmatch(r'[0-9]{8,15}',run):raise SystemExit('RUN_ID_REJECTED')
+          live=pathlib.Path('/home/zomorod2/.private/zomorod-business')
+          backup_root=pathlib.Path('/home/zomorod2/.backups')
+          if live.is_symlink() or backup_root.is_symlink() or not live.is_dir() or not backup_root.is_dir():
+              raise SystemExit('UNSAFE_ROOT')
+          active_app=live/'app.php'
+          if active_app.is_symlink() or hashlib.sha256(active_app.read_bytes()).hexdigest()!=expected:
+              raise SystemExit('LIVE_APP_CHANGED_BEFORE_STAGE')
+          parent=backup_root/'zomorod-erp-v7-merged'
+          parent.mkdir(mode=0o700,exist_ok=True)
+          if parent.is_symlink():raise SystemExit('UNSAFE_STAGE_PARENT')
+          os.chmod(parent,0o700)
+          stage=parent/run
+          stage.mkdir(mode=0o700,exist_ok=False)
+          target=stage/'home/.private/zomorod-business'
+          web=stage/'home/public_html/business'
+          target.mkdir(mode=0o700,parents=True)
+          web.mkdir(mode=0o700,parents=True)
+          for file in live.glob('*.php'):
+              if file.name=='app.php':continue
+              if file.is_symlink() or not file.is_file():raise SystemExit('UNSAFE_LIVE_EXTENSION')
+              shutil.copyfile(file,target/file.name)
+              os.chmod(target/file.name,0o600)
+          db=live/'management.sqlite3'
+          if db.is_symlink() or not db.is_file():raise SystemExit('LIVE_DATABASE_REJECTED')
+          source=sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True,timeout=15)
+          dest=sqlite3.connect(str(target/'management.sqlite3'),timeout=15)
+          source.backup(dest,pages=256,sleep=0.1)
+          dest.commit();dest.close();source.close()
+          os.chmod(target/'management.sqlite3',0o600)
+          check=sqlite3.connect('file:'+str(target/'management.sqlite3')+'?mode=ro',uri=True)
+          if check.execute('PRAGMA quick_check').fetchall()!=[('ok',)]:raise SystemExit('ISOLATED_DB_CORRUPT')
+          if check.execute('PRAGMA foreign_key_check').fetchall():raise SystemExit('ISOLATED_DB_FK_FAIL')
+          check.close()
+          print('ERP_CANDIDATE_PRIVATE_STAGE_CREATED=YES')
+          print('ERP_CANDIDATE_DATABASE_ISOLATED_SNAPSHOT=PASS')
+          print('ERP_HOST_ONLY_PHP_EXTENSIONS_COPIED_TO_PRIVATE_STAGE=YES')
+          PY
+          scp -q -F "$d/config" "$RUNNER_TEMP/merged-app.php" "$target:$stage/home/public_html/business/app.php"
+          for n in workflow_desk.php industry_operations.php finance_audit.php payroll_control.php payroll_ui.php period_controls.php; do
+            scp -q -F "$d/config" "content/zomorod-business/$n" "$target:$stage/home/.private/zomorod-business/$n"
+          done
+          ssh -F "$d/config" "$target" "python3 -B - '$GITHUB_RUN_ID' '$expected'" <<'PY'
+          import hashlib,os,pathlib,re,sqlite3,subprocess,sys
+          run,expected=sys.argv[1:]
+          if not re.fullmatch(r'[0-9]{8,15}',run):raise SystemExit('RUN_ID_REJECTED')
+          root=pathlib.Path('/home/zomorod2/.backups/zomorod-erp-v7-merged')/run
+          app=root/'home/public_html/business/app.php'
+          private=root/'home/.private/zomorod-business'
+          if not app.is_file() or app.is_symlink():raise SystemExit('MISSING_CANDIDATE')
+          if os.stat(app).st_mode & 0o077:raise SystemExit('CANDIDATE_PERMISSIONS_TOO_BROAD')
+          for n in ('workflow_desk','industry_operations','finance_audit','payroll_control','payroll_ui','period_controls'):
+              f=private/(n+'.php')
+              if f.is_symlink() or not f.is_file():raise SystemExit('MISSING_PRIVATE_MODULE_'+n)
+          live=pathlib.Path('/home/zomorod2/.private/zomorod-business/app.php')
+          if hashlib.sha256(live.read_bytes()).hexdigest()!=expected:raise SystemExit('LIVE_APP_DRIFT_AFTER_STAGE')
+          db=sqlite3.connect('file:'+str(private/'management.sqlite3')+'?mode=ro',uri=True)
+          if db.execute('PRAGMA quick_check').fetchall()!=[('ok',)]:raise SystemExit('DB_CHECK_FAILED')
+          db.close()
+          php=subprocess.run(['php','-v'],capture_output=True,text=True,timeout=10)
+          if php.returncode!=0:raise SystemExit('HOST_PHP_CLI_NOT_AVAILABLE')
+          for f in (app,*private.glob('*.php')):
+              result=subprocess.run(['php','-l',str(f)],capture_output=True,text=True,timeout=15)
+              if result.returncode:raise SystemExit('PHP_LINT_FAIL_'+f.name)
+          print('V7_PRIVATE_PHP_LINT=PASS')
+          print('V7_PRIVATE_DATABASE_READINESS=PASS')
+          print('V7_PRIVATE_STAGE_PATH='+str(root))
+          print('LIVE_APP_REPLACED=NO')
+          print('LIVE_DATABASE_MODIFIED_BY_WORKFLOW=NO')
+          print('V7_PUBLIC_ACTIVATION=NOT_PERFORMED')
+          PY
+          echo FACTORY_HOLD_UNCHANGED=YES
