@@ -30,7 +30,6 @@ jobs:
           node --check games/ramadan-war/site-smoke.cjs
           python3 -m py_compile games/ramadan-war/deploy.py
           test "$(wc -c < games/ramadan-war/soldier-rigged-ccby.glb)" -eq 3094592
-          test "$(wc -c < games/ramadan-war/m24-sniper-ccby.glb)" -eq 1247684
       - name: Exercise fail-closed release SHA-256 verification (offline)
         run: python3 -m unittest discover -s games/ramadan-war -p 'test_verify_public_release.py' -v
       - name: Assert all imported game assets are included in the production stage contract
@@ -53,7 +52,7 @@ jobs:
         run: |
           node --test games/g01-qa/r58-background-entry-rotation.test.mjs
           node games/g01-handoffs/g01_s01_r58_release_check.mjs
-      - name: Full desktop and mobile gameplay with real GLB texture loading
+      - name: Full desktop and mobile gameplay with soldier GLB and procedural first-person weapon
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/ramadan-playwright"
