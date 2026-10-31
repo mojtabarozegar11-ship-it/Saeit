@@ -120,6 +120,30 @@ def restart_passenger(passenger: Path) -> None:
     time.sleep(3)
 
 
+
+def require_mfa_provisioned(conn: sqlite3.Connection) -> None:
+    """Fail closed until the isolated office DB contains a named, confirmed MFA administrator.
+
+    This verifies metadata only: no password, OTP secret or private record is read.
+    It is not a substitute for an owner-verified live login acceptance test.
+    """
+    try:
+        active_admins = conn.execute(
+            "SELECT COUNT(*) FROM auth_user WHERE is_active=1 AND is_staff=1 AND is_superuser=1"
+        ).fetchone()[0]
+        confirmed_admin_devices = conn.execute(
+            "SELECT COUNT(*) FROM otp_totp_totpdevice AS d "
+            "JOIN auth_user AS u ON u.id=d.user_id "
+            "WHERE d.confirmed=1 AND u.is_active=1 AND u.is_staff=1 AND u.is_superuser=1"
+        ).fetchone()[0]
+    except sqlite3.DatabaseError:
+        fail("OFFICE_MFA_SCHEMA_NOT_READY")
+    if active_admins < 1:
+        fail("OFFICE_NAMED_ADMIN_MISSING")
+    if confirmed_admin_devices < 1:
+        fail("OFFICE_ADMIN_MFA_DEVICE_MISSING")
+
+
 def verify():
     if len(sys.argv) != 2 or len(sys.argv[1]) != 40 or any(x not in ALLOWED_HEAD for x in sys.argv[1]):
         fail("HEAD_SHA_INVALID")
@@ -159,9 +183,7 @@ def verify():
     with sqlite3.connect("file:" + str(staged_db) + "?mode=ro", uri=True) as conn:
         if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             fail("STAGE_SQLITE_INTEGRITY_FAIL")
-        count = conn.execute("SELECT COUNT(*) FROM auth_user").fetchone()[0]
-        if count != 0:
-            fail("STAGING_ACCOUNT_PROVISIONING_UNEXPECTED")
+        require_mfa_provisioned(conn)
         n = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
         if n < 55:
             fail("STAGING_SCHEMA_INCOMPLETE")
@@ -241,13 +263,12 @@ def main():
         status("/company/office/", 302, location_contains="secure-login")
         # Release has no users and outbound services are disabled by default.
         with sqlite3.connect("file:" + str(APP / "db.sqlite3") + "?mode=ro", uri=True) as conn:
-            if conn.execute("SELECT COUNT(*) FROM auth_user").fetchone()[0] != 0:
-                fail("UNEXPECTED_PRODUCTION_AUTH_USERS")
+            require_mfa_provisioned(conn)
         meta["status"] = "verified_limited_web_release"
         (backup / "manifest.json").write_text(json.dumps(meta, sort_keys=True))
         print("ZOMOROD_OFFICE_LIVE_RELEASE=verified", flush=True)
-        print("DYNAMIC_OFFICE_LOGIN=live_no_users_provisioned", flush=True)
-        print("PRODUCTION_AUTH_WITH_MFA=not_provisioned", flush=True)
+        print("DYNAMIC_OFFICE_LOGIN=provisioned_authenticity_not_live_tested", flush=True)
+        print("PRODUCTION_AUTH_WITH_MFA=device_registered_live_login_not_tested", flush=True)
         print("LEGACY_BUSINESS_DB_UNMODIFIED_BY_RELEASE=true", flush=True)
         print("FACTORY_STATE_UNMODIFIED=true", flush=True)
         print("OUTBOUND_MESSAGING=disabled", flush=True)
