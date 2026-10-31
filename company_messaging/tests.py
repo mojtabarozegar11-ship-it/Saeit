@@ -1,5 +1,7 @@
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
+from ecosystem_hub.models import UnitMembership
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -45,6 +47,95 @@ class MessagingTests(TestCase):
             compose = self.client.get("/company/office/messages/new/", secure=True)
         self.assertContains(inbox, "ارسال برون‌سازمانی در حال حاضر غیرفعال است")
         self.assertContains(compose, "ارسال برون‌سازمانی در حال حاضر غیرفعال است")
+
+    def test_contact_create_from_private_desk_does_not_send(self):
+        with patch("company_messaging.services._deliver") as sender:
+            res = self.client.post("/company/office/messages/contacts/new/", secure=True, data={
+                "unit": self.unit.pk, "name": "مشتری امن", "email": "contact@example.org",
+                "email_consent_at": "2026-10-31T10:00",
+                "consent_evidence": "signed consent record #410", "active": "on",
+            })
+        self.assertRedirects(res, "/company/office/messages/contacts/")
+        self.assertEqual(Contact.objects.count(), 1)
+        self.assertEqual(Contact.objects.get().consent_evidence, "signed consent record #410")
+        self.assertEqual(Message.objects.count(), 0)
+        sender.assert_not_called()
+        self.assertContains(self.client.get("/company/office/messages/contacts/", secure=True), "مشتری امن")
+
+    def test_contact_missing_evidence_rejected_and_never_sent(self):
+        res = self.client.post("/company/office/messages/contacts/new/", secure=True, data={
+            "unit": self.unit.pk, "name": "بدون مجوز", "email": "no@example.org",
+            "email_consent_at": "2026-10-31T10:00", "active": "on",
+        })
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, "مرجع")
+        self.assertEqual(Contact.objects.count(), 0)
+
+    def test_contact_must_have_destination(self):
+        res = self.client.post("/company/office/messages/contacts/new/", secure=True, data={
+            "unit": self.unit.pk, "name": "بدون نشانی", "active": "on",
+        })
+        self.assertContains(res, "دست‌کم یک نشانی تماس معتبر")
+        self.assertEqual(Contact.objects.count(), 0)
+
+    def test_contact_management_denied_to_staff_without_permission(self):
+        self.staff.user_permissions.add(Permission.objects.get(
+            content_type__app_label="enterprise_portal", codename="view_businessunit",
+        ))
+        UnitMembership.objects.create(user=self.staff, unit=self.unit, role="manager")
+        self.client.force_login(self.staff)
+        for url in ("/company/office/messages/contacts/",
+                    "/company/office/messages/contacts/new/"):
+            self.assertEqual(self.client.get(url, secure=True).status_code, 403)
+        self.assertEqual(Contact.objects.count(), 0)
+
+    def test_contact_write_restricted_to_membership_and_manager_role(self):
+        self.staff.user_permissions.add(
+            Permission.objects.get(content_type__app_label="enterprise_portal",
+                                   codename="view_businessunit"),
+            Permission.objects.get(content_type__app_label="company_messaging",
+                                   codename="manage_company_contacts"),
+        )
+        UnitMembership.objects.create(user=self.staff, unit=self.unit, role="viewer")
+        self.client.force_login(self.staff)
+        url = "/company/office/messages/contacts/new/"
+        data = {"unit": self.unit.pk, "name": "معرفی", "email": "a@example.org", "active": "on"}
+        self.assertEqual(self.client.post(url, data, secure=True).status_code, 403)
+        self.assertEqual(Contact.objects.count(), 0)
+        UnitMembership.objects.filter(user=self.staff, unit=self.unit).update(role="manager")
+        cross_unit = self.client.post(url, {**data, "unit": self.unit2.pk}, secure=True)
+        self.assertEqual(cross_unit.status_code, 200)
+        self.assertEqual(Contact.objects.count(), 0)
+        good = self.client.post(url, data, secure=True)
+        self.assertEqual(good.status_code, 302)
+        self.assertEqual(Contact.objects.get().unit, self.unit)
+
+    def test_contact_edit_cannot_move_unit_or_bypass_queued_snapshot(self):
+        msg = self.external()
+        url = "/company/office/messages/contacts/%s/edit/" % msg.contact_id
+        with patch("company_messaging.services._deliver") as sender:
+            result = self.client.post(url, secure=True, data={
+                "unit": self.unit2.pk,  # intentionally forged; server disables this field
+                "name": "مشتری", "email": "changed@example.org", "active": "on",
+                "email_consent_at": "2026-10-31T10:00",
+                "consent_evidence": "documented opt-in ticket #42",
+            })
+            sender.assert_not_called()
+        self.assertEqual(result.status_code, 302)
+        msg.contact.refresh_from_db()
+        self.assertEqual(msg.contact.unit_id, self.unit.pk)
+        self.assertEqual(msg.contact.email, "changed@example.org")
+        with patch("company_messaging.services._deliver") as sender:
+            self.assertEqual(dispatch_one(msg.pk), "blocked")
+            sender.assert_not_called()
+
+    def test_contact_urls_never_expose_without_office_login(self):
+        self.client.logout()
+        for url in ("/company/office/messages/contacts/",
+                    "/company/office/messages/contacts/new/"):
+            response = self.client.get(url, secure=True)
+            self.assertEqual(response.status_code, 302)
+            self.assertIn("/secure-login/", response["Location"])
 
     def test_private_pages_and_auth(self):
         self.assertEqual(self.client.get("/company/office/messages/", secure=True).status_code, 200)
