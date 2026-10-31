@@ -11,7 +11,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: zomorod-office-root-fallback-release
+  # Serialize with the author-route publisher: both can atomically edit live config/urls.py.
+  group: zomorod-persian-author-static-safe
   cancel-in-progress: false
 jobs:
   validate:
