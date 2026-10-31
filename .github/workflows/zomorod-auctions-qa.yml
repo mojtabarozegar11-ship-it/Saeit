@@ -20,7 +20,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.3"
-          extensions: sqlite3
+          extensions: sqlite3, fileinfo
           coverage: none
       - name: Validate PHP source syntax
         run: php -l content/zomorod-business/auctions.php
@@ -35,8 +35,10 @@ jobs:
           assert "BEGIN IMMEDIATE" in src
           assert "hash_equals($csrf" in src
           assert "INSERT INTO auction_events" in src
-          assert "move_uploaded_file" not in src
+          assert "move_uploaded_file" in src
+          assert "hash_file('sha256'" in src
+          assert "auction_scenarios" in src
           for forbidden in ("curl_exec(", "file_get_contents($notice", "shell_exec(", "mail("):
               assert forbidden not in src
-          print("No auction submission, payments or outbound network")
+          print("Private documents and economic scenarios; no auction submission, payment or outbound network")
           PY
