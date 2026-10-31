@@ -20,5 +20,10 @@
 <td><a href="{% url 'company_messaging:contact_edit' contact.pk %}">ویرایش امن</a></td></tr>
 {% empty %}<tr><td colspan="4">مخاطبی در واحدهای مجاز ثبت نشده است.</td></tr>{% endfor %}
 </tbody></table>
+{% if contacts.has_other_pages %}<nav aria-label="صفحه‌بندی مخاطبان">
+{% if contacts.has_previous %}<a href="?page={{ contacts.previous_page_number }}">صفحه قبل</a>{% endif %}
+<span>صفحه {{ contacts.number }} از {{ contacts.paginator.num_pages }}</span>
+{% if contacts.has_next %}<a href="?page={{ contacts.next_page_number }}">صفحه بعد</a>{% endif %}
+</nav>{% endif %}
 </section>
 {% endblock %}
