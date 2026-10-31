@@ -54,7 +54,7 @@ def transform(name,original):
             if stop<0:fail('Guest checkout paragraph is incomplete')
             paragraph='''<p>No account or subscription is required. Pay for this digital book with native TRX on the TRON network only. Bank cards, USDT and other networks are not accepted. The invoice displays the exact TRX amount and receiving address; network fees may apply. Your private download unlocks after on-chain payment confirmation.</p>'''
             updated=text[:start]+paragraph+text[stop+4:]
-            register=re.compile(r"<a\b[^>]*href=['\"]/accounts/register/[^'\"]*['\"][^>]*>.*?</a>",re.S)
+            register=re.compile(r'<a\b[^>]*>(?:(?!<a\b).)*?New customer\?\s*Create an account(?:(?!<a\b).)*?</a>',re.S)
             matches=register.findall(updated)
             if len(matches)!=1:fail('Registration link is unknown or duplicated')
             updated=register.sub('',updated,count=1)
