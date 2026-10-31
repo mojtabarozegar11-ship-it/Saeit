@@ -264,18 +264,55 @@ def check_sitemap() -> tuple[Check, int]:
     return check, len(urls)
 
 
-def check_authentication_gate(product_id: int) -> Check:
+def check_guest_checkout_response(product_id: int, check: Check, data: bytes) -> Check:
+    """Validate the intentionally public guest checkout without creating an order."""
     path = f"/store/product/{product_id}/checkout/"
-    check, _ = get(ORIGIN + path)
-    landing = urllib.parse.urlsplit(check.effective)
-    if check.status != 200 or landing.scheme != "https" or landing.netloc != "mojplaywin.com":
-        raise RuntimeError(f"Checkout {product_id} resolved outside store: {check.effective}")
-    if landing.path != "/accounts/login/":
-        raise RuntimeError(f"Checkout {product_id} bypassed login: {check.effective}")
-    params = urllib.parse.parse_qs(landing.query, keep_blank_values=True)
-    if params != {"next": [path]}:
-        raise RuntimeError(f"Checkout {product_id} lost its exact post-login return path")
+    if check.status != 200 or check.effective != ORIGIN + path:
+        raise RuntimeError(
+            f"Guest checkout {product_id} is not directly available: "
+            f"{check.status}, {check.effective}"
+        )
+    if len(data) < 150:
+        raise RuntimeError(f"Guest checkout {product_id} returned incomplete HTML")
+    document = BasicHtml()
+    document.feed(data.decode("utf-8", "replace"))
+    if not document.saw_html or not document.saw_body:
+        raise RuntimeError(f"Guest checkout {product_id} did not return an HTML page")
     return check
+
+
+def check_guest_checkout(product_id: int) -> Check:
+    path = f"/store/product/{product_id}/checkout/"
+    check, data = get(ORIGIN + path)
+    return check_guest_checkout_response(product_id, check, data)
+
+
+def _checkout_regression_selftest() -> None:
+    body = (
+        b"<html><head><title>TRX checkout</title></head><body>"
+        + b"Anonymous checkout invoice preview. " * 10
+        + b"</body></html>"
+    )
+    for product_id in PROTECTED_PRODUCT_IDS:
+        path = f"/store/product/{product_id}/checkout/"
+        url = ORIGIN + path
+        valid = Check(url, url, 200, 0.01)
+        check_guest_checkout_response(product_id, valid, body)
+        wrong_product = 72 if product_id != 72 else 225
+        rejected = (
+            (Check(url, ORIGIN + "/accounts/login/?next=" + path, 200, 0.01), body),
+            (Check(url, "https://example.org" + path, 200, 0.01), body),
+            (Check(url, ORIGIN + f"/store/product/{wrong_product}/checkout/", 200, 0.01), body),
+            (Check(url, url, 503, 0.01), body),
+            (valid, b"<html><body>short</body></html>"),
+            (valid, b"invalid response" * 25),
+        )
+        for response, payload in rejected:
+            try:
+                check_guest_checkout_response(product_id, response, payload)
+            except RuntimeError:
+                continue
+            raise AssertionError(f"Unsafe checkout regression accepted: {product_id}")
 
 
 def main() -> int:
@@ -291,16 +328,17 @@ def main() -> int:
         assert "/picm/" in REQUIRED_PATHS
         assert len(set(REQUIRED_PATHS)) == len(REQUIRED_PATHS)
         assert all(path.startswith("/") for path in REQUIRED_PATHS)
+        _checkout_regression_selftest()
         print("READ_ONLY_CONTINUITY_SELFTEST_OK")
         return 0
 
     checks = [check_site_page(path) for path in REQUIRED_PATHS]
     sitemap, sitemap_count = check_sitemap()
-    auth_checks = [check_authentication_gate(pk) for pk in PROTECTED_PRODUCT_IDS]
+    guest_checks = [check_guest_checkout(pk) for pk in PROTECTED_PRODUCT_IDS]
     results = {
         "main_and_child_pages": [asdict(check) for check in checks],
         "sitemap": {**asdict(sitemap), "unique_urls": sitemap_count},
-        "anonymous_checkout_gates": [asdict(check) for check in auth_checks],
+        "guest_checkout_routes": [asdict(check) for check in guest_checks],
         "protected_children": list(PROTECTED_CHILDREN),
         "protected_personal_site": list(PERSONAL_PATHS),
         "read_only": True,
@@ -314,7 +352,7 @@ def main() -> int:
             summary.write(f"- Protected child apps: {', '.join(PROTECTED_CHILDREN)}\n")
             summary.write(f"- Owner's personal website: {len(PERSONAL_PATHS)} pages unchanged and accessible\n")
             summary.write(f"- Unique sitemap entries: {sitemap_count}\n")
-            summary.write("- Anonymous product checkout guards: 3 passed\n")
+            summary.write("- Anonymous guest checkout routes: 3 passed\n")
             summary.write("- Server mutations: none\n")
     print("MPW_MAIN_AND_PROTECTED_CHILDREN_ALL_HEALTHY")
     return 0
