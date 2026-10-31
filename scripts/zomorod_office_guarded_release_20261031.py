@@ -155,16 +155,24 @@ def production_python() -> Path:
         fail("PASSENGER_PYTHON_UNATTESTED")
     try:
         configured = []
+        app_roots = []
         for line in htaccess.read_text(encoding="utf-8").splitlines():
             if re.match(r"^\s*PassengerPython(?:\s|$)", line, re.IGNORECASE):
                 fields = shlex.split(line, comments=True)
                 if len(fields) != 2 or fields[0].lower() != "passengerpython":
                     fail("PASSENGER_PYTHON_UNATTESTED")
                 configured.append(fields[1])
+            elif re.match(r"^\s*PassengerAppRoot(?:\s|$)", line, re.IGNORECASE):
+                fields = shlex.split(line, comments=True)
+                if len(fields) != 2 or fields[0].lower() != "passengerapproot":
+                    fail("PASSENGER_APP_ROOT_UNATTESTED")
+                app_roots.append(fields[1])
     except (OSError, UnicodeError, ValueError):
         fail("PASSENGER_PYTHON_UNATTESTED")
     if len(configured) != 1:
         fail("PASSENGER_PYTHON_UNATTESTED")
+    if app_roots != [str(APP)]:
+        fail("PASSENGER_APP_ROOT_UNATTESTED")
     candidate = Path(configured[0])
     if not candidate.is_absolute() or not candidate.is_file() or not os.access(candidate, os.X_OK):
         fail("PASSENGER_PYTHON_UNATTESTED")
