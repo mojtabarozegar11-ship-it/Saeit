@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'services/mpw_trx_guest_commerce.py'
+      - 'core/templates/mojplaywin/store.html'
       - 'scripts/test_mpw_guest_purchases_safe_recovery_20261031.py'
       - '.github/workflows/mpw-guest-recovery-readonly-20261031.yml'
   workflow_dispatch:
