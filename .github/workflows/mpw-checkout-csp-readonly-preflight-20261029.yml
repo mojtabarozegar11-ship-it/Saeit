@@ -144,6 +144,15 @@ jobs:
             if [ "$attempt" -lt 5 ]; then sleep 6; fi
           done
           rm -f "$ssh_error"
+          if [ "$session_ready" != 1 ]; then
+            # Read-only TCP reachability from the authenticated relay VPS to cPanel.
+            if timeout 18s ssh -T -F "$d/config" saeit-vps \
+              'timeout 7 bash -c "exec 3<>/dev/tcp/178.239.147.125/1396"' >/dev/null 2>/dev/null; then
+              echo 'S01_CPANEL_RELAY_TCP=OPEN'
+            else
+              echo 'S01_CPANEL_RELAY_TCP=NOT_VERIFIED'
+            fi
+          fi
           test "$session_ready" = 1 || { echo 'S01_PINNED_SESSION=BLOCKED'; exit 1; }
           echo 'S01_PINNED_SESSION=VERIFIED'
       - name: Classify bounded cPanel checkout provenance (read-only; no source transfer)
