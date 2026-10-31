@@ -164,6 +164,7 @@ jobs:
             fi
           fi
           test "$session_ready" = 1 || { echo 'S01_PINNED_SESSION=BLOCKED'; exit 1; }
+          echo 'S01_VPS_READONLY_SESSION=VERIFIED_VIA_PINNED_PROXYJUMP'
           echo 'S01_PINNED_SESSION=VERIFIED'
       - name: Classify bounded cPanel checkout provenance (read-only; no source transfer)
         shell: bash
