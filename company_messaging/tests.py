@@ -39,6 +39,13 @@ class MessagingTests(TestCase):
         return enqueue(Message(unit=self.unit, channel="email", sender=self.owner,
                                contact=c, body="متن ایمیل", subject="پیگیری"))
 
+    def test_disabled_external_send_is_visible_to_manager(self):
+        with override_settings(COMPANY_MESSAGING_SEND_ENABLED=False):
+            inbox = self.client.get("/company/office/messages/", secure=True)
+            compose = self.client.get("/company/office/messages/new/", secure=True)
+        self.assertContains(inbox, "ارسال برون‌سازمانی در حال حاضر غیرفعال است")
+        self.assertContains(compose, "ارسال برون‌سازمانی در حال حاضر غیرفعال است")
+
     def test_private_pages_and_auth(self):
         self.assertEqual(self.client.get("/company/office/messages/", secure=True).status_code, 200)
         self.client.logout()
