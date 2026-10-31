@@ -1,9 +1,8 @@
 # انتساب دارایی‌های بازی «جنگ رمضان»
 
-این پروژه به‌صورت رایگان عرضه می‌شود. مدل‌های زیر با مجوز Creative Commons Attribution 4.0 (CC BY 4.0) استفاده شده‌اند؛ اندازه و جای‌گذاری آن‌ها برای نمای اول‌شخص بازی تغییر داده شده است.
+این نسخه فقط برای استفاده خصوصی و بررسی آماده شده است؛ انتشار عمومی تأیید نشده است. مدل‌های ثالث باقی‌مانده با انتساب درج‌شده استفاده شده‌اند؛ اندازه و جای‌گذاری آن‌ها برای نمای اول‌شخص بازی تغییر داده شده است.
 
 - سرباز متحرک: “FREE [Military Soldier] RIGGED” از BAMEN. منبع: https://sketchfab.com/3d-models/free-military-soldier-rigged-e9c56308a67d4a3db62e914fafa4d198
-- تفنگ M24: “M24 Bounty Hunter Sniper Rifle” از Naudaff3D. منبع: https://sketchfab.com/3d-models/m24-bounty-hunter-sniper-rifle-d40e74e2259549f5b025807163f1028c
 - دستکش‌ها و بازوهای نمای اول‌شخص: “Fps arms” از bumstrum (DJMaesen). منبع: https://sketchfab.com/3d-models/fps-arms-9452ce4cddde4110a4fd73e555a8e412
 - مجوز این دو مدل: https://creativecommons.org/licenses/by/4.0/
 - GLTFLoader و ابزارهای Three.js با مجوز MIT؛ متن مجوز در `THREE-LICENSE.txt`.
@@ -40,6 +39,8 @@ SOFTWARE.
 
 - کد منشأ: https://github.com/cktang88/3d-fps/tree/130ac2a5c856401ec36e7d35afcfefe40c5801f4
 - سرباز: `public/assets/models/characters/soldier.glb` — 3,094,592 bytes — Git blob SHA-1 `b00ed33108f2579880c82cd27d10f9237ff3a219`.
-- M24 با اجزای نمای اول‌شخص: `public/assets/models/fp/m24.glb` — 1,247,684 bytes — Git blob SHA-1 `537d61b8a28f1cea048c048c1e6a29c27c02cb6e`.
 
 مدل‌ها در اجرای آزمون با `fetch_verified_models.sh` فقط پس از تطبیق شناسهٔ محتوا، طول فایل و ساختار GLB جایگزین می‌شوند. هیچ نشانی دانلود موقت یا کلید شخصی در مخزن نگهداری نمی‌شود. نام فایل‌ها برای سازگاری با بازی تغییر کرده است و حقوق سازندگان اصلی با همان مجوز CC BY 4.0 محفوظ است.
+
+## R58 procedural rifle rights hardening
+The unverified Naudaff3D M24 derivative is excluded from this candidate and is not loaded or distributed in the preview. The in-engine procedural weapon meshes in `engine3d.js` replace it. All other third-party image, texture, character and library rights still require independent review before any public or commercial release.
