@@ -22,6 +22,7 @@ TARGET = Path("/home/zomorod2/Saeit-staging/services/mpw_trx_commercial_web.py")
 # separately; failure or stale data MUST NOT create a payable invoice.
 NEW_FUNCTION = '''def _rate_provider():
     """TRX-only fresh USD quote; preserves the existing tuple contract."""
+    from decimal import Decimal
     from scripts.s01_trx_rate_isolation_candidate import (
         TrustedRateUnavailable, fetch_trx_only,
     )
@@ -29,6 +30,8 @@ NEW_FUNCTION = '''def _rate_provider():
         observation = fetch_trx_only()
     except TrustedRateUnavailable as exc:
         raise RateFeedUnavailable("Trusted TRX rate unavailable") from exc
+    if not Decimal("0.001") <= observation.usd_per_trx <= Decimal("100"):
+        raise RateFeedUnavailable("TRX quote outside commerce safety range")
     return observation.usd_per_trx, observation.observed_at
 '''
 
