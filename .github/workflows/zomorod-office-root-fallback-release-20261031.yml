@@ -4,10 +4,12 @@ on:
     paths:
       - ".github/workflows/zomorod-office-root-fallback-release-20261031.yml"
       - "config/urls.py"
+      - "scripts/test_s01_office_release_default_deny.py"
   push:
     branches: [main]
     paths:
       - ".github/workflows/zomorod-office-root-fallback-release-20261031.yml"
+      - "scripts/test_s01_office_release_default_deny.py"
 permissions:
   contents: read
 concurrency:
@@ -34,15 +36,8 @@ jobs:
           grep -Fq 'from django.views.generic import RedirectView' config/urls.py
           grep -Fq 'path("company/office/", RedirectView.as_view(url="/business/", permanent=False), name="company_office_fallback")' config/urls.py
           echo "OFFICE_LOGIN_ROUTE_SOURCE=verified"
-          python3 - <<'PY'
-          from pathlib import Path
-          source = Path(".github/workflows/zomorod-office-root-fallback-release-20261031.yml").read_text(encoding="utf-8")
-          body = source.partition("\n  release:\n")[2]
-          expected = "\n    if: " + "$" + "{{ false }}\n"
-          if not body or expected not in body:
-              raise SystemExit("OFFICE_RELEASE_DEFAULT_DENY_GUARD_MISSING")
-          print("OFFICE_RELEASE_DEFAULT_DENY=PASS_RELEASE_BLOCKED")
-          PY
+          PYTHONDONTWRITEBYTECODE=1 python3 scripts/test_s01_office_release_default_deny.py --check
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts.test_s01_office_release_default_deny -v
   relay-readonly-diagnostic:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
