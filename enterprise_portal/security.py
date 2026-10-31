@@ -7,6 +7,8 @@ Ingress-level per-IP rate limits remain an additional production requirement.
 from datetime import timedelta
 
 from django.core.signing import salted_hmac
+from django.conf import settings
+from django.http import HttpResponseForbidden
 from django.db import transaction
 from django.utils import timezone
 
@@ -63,3 +65,30 @@ def register_failed_login(request, username):
 def clear_login_failures(request, username):
     if username:
         OfficeLoginFailure.objects.filter(key=_login_key(request, username)).delete()
+
+
+class PrivateOfficeAdminMfaMiddleware:
+    """Protect private-company Django admin data and OTP enrollment from password-only sessions."""
+
+    PROTECTED_PREFIXES = (
+        "/admin/enterprise_portal/",
+        "/admin/ecosystem_hub/",
+        "/admin/company_messaging/",
+        "/admin/company_marketing/",
+        "/admin/otp_totp/",
+        "/admin/otp_static/",
+        "/admin/auth/",
+    )
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if settings.COMPANY_OFFICE_REQUIRE_MFA and request.path_info.startswith(self.PROTECTED_PREFIXES):
+            verified = getattr(request.user, "is_verified", None)
+            if not callable(verified) or not verified():
+                response = HttpResponseForbidden("تأیید دومرحله‌ای برای مدیریت شرکت الزامی است.")
+                response["Cache-Control"] = "private, no-store"
+                response["X-Robots-Tag"] = "noindex, nofollow"
+                return response
+        return self.get_response(request)
