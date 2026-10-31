@@ -1,3 +1,4 @@
+from django.test import override_settings
 """Regression checks for private access, accurate ledger posting and safe coexistence."""
 from datetime import date, timedelta
 from decimal import Decimal
@@ -27,6 +28,7 @@ D = Decimal
 
 @override_settings(STORAGES=TEST_STORAGES)
 @override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver", "zomorodmelal.ir"])
+@override_settings(COMPANY_OFFICE_REQUIRE_MFA=False)
 class OfficeSecurityTests(TestCase):
     def setUp(self):
         self.unit = BusinessUnit.objects.create(code="hq", name="دفتر مرکزی")
@@ -207,6 +209,7 @@ class OfficeSecurityTests(TestCase):
 
 
 @override_settings(STORAGES=TEST_STORAGES)
+@override_settings(COMPANY_OFFICE_REQUIRE_MFA=False)
 class FinanceIntegrityTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_superuser(
@@ -409,6 +412,7 @@ class FinanceIntegrityTests(TestCase):
 
 
 @override_settings(STORAGES=TEST_STORAGES)
+@override_settings(COMPANY_OFFICE_REQUIRE_MFA=False)
 class InventoryAndOfficeTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_superuser(username="chief", email="chief@example.org", password="test")
@@ -504,3 +508,43 @@ class InventoryAndOfficeTests(TestCase):
             record.save()
         with self.assertRaises(ValidationError):
             record.delete()
+
+
+@override_settings(STORAGES=TEST_STORAGES, DEBUG=False, ALLOWED_HOSTS=["testserver"])
+class OfficeMfaReleaseGateTests(TestCase):
+    """MFA fail-closed regressions: password-only sessions may not enter."""
+
+    def setUp(self):
+        self.owner = User.objects.create_superuser(
+            username="mfa-release-owner", email="mfa-owner@example.org",
+            password="OnlyForMfaTest!123",
+        )
+
+    def test_password_only_cannot_create_private_login_session(self):
+        response = self.client.post("/company/office/secure-login/", {
+            "username": self.owner.username, "password": "OnlyForMfaTest!123",
+        }, secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_password_authenticated_unverified_session_denied_on_private_paths(self):
+        self.client.force_login(self.owner)
+        for path in ("/company/office/", "/company/office/messages/", "/company/office/marketing/"):
+            response = self.client.get(path, secure=True)
+            self.assertEqual(response.status_code, 302, path)
+            self.assertIn("/company/office/secure-login/", response["Location"])
+        response = self.client.get("/admin/enterprise_portal/businessunit/", secure=True)
+        self.assertEqual(response.status_code, 403)
+
+    def test_confirmed_totp_device_can_complete_private_login(self):
+        from django_otp.oath import totp
+        from django_otp.plugins.otp_totp.models import TOTPDevice
+        device = TOTPDevice.objects.create(user=self.owner, name="Office authenticator", confirmed=True)
+        otp = str(totp(device.bin_key)).zfill(device.digits)
+        response = self.client.post("/company/office/secure-login/", {
+            "username": self.owner.username, "password": "OnlyForMfaTest!123",
+            "otp_device": device.persistent_id, "otp_token": otp,
+        }, secure=True)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/company/office/")
+        self.assertEqual(self.client.get("/company/office/", secure=True).status_code, 200)
