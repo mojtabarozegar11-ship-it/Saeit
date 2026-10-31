@@ -166,6 +166,65 @@ jobs:
                   names=sorted(set(re.findall(r'application/x-httpd-(?:ea|alt)-php[0-9]+',sample)))
                   handlers.append({'scope':where,'versions':names})
           result['inherited_php_handler_tokens']=handlers
+          result['effective_domain_php']={'uapi_status':'not_run','version':'unknown','php_fpm':'unknown','userdata_version':'unknown'}
+          uapi=pathlib.Path('/usr/local/cpanel/bin/uapi')
+          if uapi.is_file() and not uapi.is_symlink():
+              try:
+                  p=subprocess.run([str(uapi),'--output=json','LangPHP','php_get_vhost_versions','vhost=zomorodmelal.ir'],
+                                   capture_output=True,text=True,timeout=25)
+                  result['effective_domain_php']['uapi_status']='returned' if p.returncode==0 else 'error'
+                  if p.returncode==0 and len(p.stdout)<300000:
+                      payload=json.loads(p.stdout)
+                      result['effective_domain_php']['uapi_status']='parsed'
+                      def match_domain(obj,depth=0):
+                          if depth>8:return
+                          if isinstance(obj,dict):
+                              if str(obj.get('vhost',obj.get('domain',''))).lower().rstrip('.')=='zomorodmelal.ir':
+                                  v=obj.get('version',obj.get('phpversion'))
+                                  if v is not None and re.fullmatch(r'(?:ea|alt)-php\d+|inherit',str(v)):
+                                      result['effective_domain_php']['version']=str(v)
+                                  if 'php_fpm' in obj and str(obj['php_fpm']) in ('0','1','True','False'):
+                                      result['effective_domain_php']['php_fpm']=str(obj['php_fpm'])
+                              for v in obj.values():match_domain(v,depth+1)
+                          elif isinstance(obj,list):
+                              for v in obj[:100]:match_domain(v,depth+1)
+                      match_domain(payload)
+              except (OSError,ValueError,subprocess.TimeoutExpired):
+                  result['effective_domain_php']['uapi_status']='unavailable'
+          config=pathlib.Path('/var/cpanel/userdata/zomorod2/zomorodmelal.ir')
+          if config.is_file() and not config.is_symlink():
+              try:
+                  for line in config.read_text(encoding='utf-8',errors='replace').splitlines():
+                      m=re.fullmatch(r'\s*phpversion:\s*(\S+)\s*',line)
+                      if m and re.fullmatch(r'(?:ea|alt)-php\d+|inherit',m.group(1)):
+                          result['effective_domain_php']['userdata_version']=m.group(1)
+              except OSError:pass
+          backup={'scanned_files':0,'erp_named':0,'sqlite_named':0,'archive_named':0,
+                  'roots_accessible':0,'latest_erp_named_days':None,'offhost_restore_verified':False}
+          now=__import__('time').time()
+          for root in (h/'.backups',h/'backup',h/'backups'):
+              if not root.is_dir() or root.is_symlink():continue
+              backup['roots_accessible']+=1
+              try:
+                  for current,dirs,files in os.walk(root,followlinks=False):
+                      depth=len(pathlib.Path(current).relative_to(root).parts)
+                      dirs[:]=[d for d in dirs if not (pathlib.Path(current)/d).is_symlink() and depth<3]
+                      for name in files:
+                          if backup['scanned_files']>=4000:break
+                          item=pathlib.Path(current)/name
+                          if item.is_symlink() or not item.is_file():continue
+                          backup['scanned_files']+=1
+                          low=name.lower()
+                          if ('management' in low or 'zomorod-business' in low or 'office' in low) and item.stat().st_size>0:
+                              backup['erp_named']+=1
+                              age=max(0,int((now-item.stat().st_mtime)//86400))
+                              prior=backup['latest_erp_named_days']
+                              backup['latest_erp_named_days']=age if prior is None else min(prior,age)
+                          if low.endswith(('.sqlite','.sqlite3','.db','.db3')):backup['sqlite_named']+=1
+                          if low.endswith(('.gz','.zip','.zst','.tar','.tgz')):backup['archive_named']+=1
+                      if backup['scanned_files']>=4000:break
+              except OSError:continue
+          result['local_backup_metadata']=backup
           print(json.dumps(result,sort_keys=True))
           PY
           python3 - "$RUNNER_TEMP/zomorod-auction-host.json" <<'PY'
@@ -192,6 +251,18 @@ jobs:
               print('AUCTION_INHERITED_HANDLER_'+str(entry.get('scope')).upper()+'='+','.join(entry.get('versions') or ['unspecified']))
           print('AUCTION_HOST_NEW_ROUTE_PRESENT='+str(data.get('auction_path_preexists')))
           print('AUCTION_HOST_FREE_MIB='+str(data.get('free_mib','unknown')))
+          domain=data.get('effective_domain_php') or {}
+          print('AUCTION_DOMAIN_PHP_UAPI='+str(domain.get('uapi_status','unknown')))
+          print('AUCTION_DOMAIN_PHP_VERSION='+str(domain.get('version','unknown')))
+          print('AUCTION_DOMAIN_PHP_FPM='+str(domain.get('php_fpm','unknown')))
+          print('AUCTION_DOMAIN_PHP_USERDATA='+str(domain.get('userdata_version','unknown')))
+          backups=data.get('local_backup_metadata') or {}
+          print('AUCTION_BACKUP_SCAN_FILES='+str(backups.get('scanned_files',0)))
+          print('AUCTION_BACKUP_ERP_NAMED='+str(backups.get('erp_named',0)))
+          print('AUCTION_BACKUP_SQLITE_NAMED='+str(backups.get('sqlite_named',0)))
+          print('AUCTION_BACKUP_ARCHIVE_NAMED='+str(backups.get('archive_named',0)))
+          print('AUCTION_BACKUP_LATEST_ERP_NAMED_DAYS='+str(backups.get('latest_erp_named_days','unknown')))
+          print('AUCTION_BACKUP_OFFHOST_RESTORE_VERIFIED=NO')
           print('AUCTION_DEPLOY_OR_DB_MUTATIONS=NONE')
           def version_ok(version):
               try:return tuple(map(int,str(version).split('.')[:2])) >= (8,1)
