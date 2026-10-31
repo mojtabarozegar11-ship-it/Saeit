@@ -42,6 +42,15 @@ class RequestAuditDegradedTests(unittest.TestCase):
     def test_head_degraded_does_not_write(self):
         self.assertEqual(self.call(method="HEAD"), 0)
 
+    def test_get_degraded_static_shell_200_does_not_write(self):
+        self.assertEqual(self.call(method="GET", status=200, marker=True), 0)
+
+    def test_head_degraded_static_shell_200_does_not_write(self):
+        self.assertEqual(self.call(method="HEAD", status=200, marker=True), 0)
+
+    def test_post_degraded_static_shell_200_still_audits(self):
+        self.assertEqual(self.call(method="POST", status=200, marker=True), 1)
+
     def test_post_degraded_preserves_mutation_audit(self):
         self.assertEqual(self.call(method="POST"), 1)
 
