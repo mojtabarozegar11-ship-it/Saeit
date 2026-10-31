@@ -10,7 +10,7 @@ if not settings.configured and not os.environ.get("DJANGO_SETTINGS_MODULE"):
 
 from django.http import Http404, HttpResponse
 from django.test import RequestFactory
-from services.mpw_trx_guest_commerce import COOKIE, patch_public
+from services.mpw_trx_guest_commerce import COOKIE, patch_public, _install_cookie
 
 
 def request(*, secure=True, host="mojplaywin.com", cookie=None, authenticated=False, method="GET"):
@@ -67,6 +67,23 @@ class GuestRecoveryLandingTests(unittest.TestCase):
 
     def test_post_is_not_accepted(self):
         self.assertEqual(self.view(request(method="POST")).status_code, 405)
+
+    def test_signed_owner_cookie_preserves_existing_vary(self):
+        response = HttpResponse("invoice")
+        response["Vary"] = "Accept-Language"
+        result = _install_cookie(response, "synthetic-test-token")
+        vary = {part.strip().lower() for part in result["Vary"].split(",")}
+        self.assertEqual(vary, {"accept-language", "cookie"})
+        self.assertEqual(result.cookies[COOKIE]["httponly"], True)
+        self.assertEqual(result.cookies[COOKIE]["secure"], True)
+        self.assertIn("no-store", result["Cache-Control"])
+
+    def test_missing_cookie_does_not_clobber_existing_vary(self):
+        response = HttpResponse("recovery")
+        response["Vary"] = "Accept-Encoding"
+        result = _install_cookie(response, None)
+        self.assertEqual(result["Vary"], "Accept-Encoding")
+        self.assertNotIn(COOKIE, result.cookies)
 
 
 if __name__ == "__main__":
