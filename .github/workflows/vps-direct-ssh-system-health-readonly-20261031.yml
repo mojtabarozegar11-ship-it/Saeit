@@ -68,5 +68,23 @@ jobs:
           fi
           echo "HEALTH_FWUPD_PRIVILEGED_LOG_CLASS_END"
           echo "HEALTH_FWUPD_DETAIL_END"
+          # Fail closed on critical operating conditions; never mutate services or factory state.
+          gate_fail=0
+          root_free_kib="$(df -Pk / | awk 'NR==2 {print $4}')"
+          root_inode_used_pct="$(df -Pi / | awk 'NR==2 {gsub("%","",$5); print $5}')"
+          ram_available_mb="$(free -m | awk '/^Mem:/ {print $7}')"
+          [[ "$root_free_kib" =~ ^[0-9]+$ && "$root_inode_used_pct" =~ ^[0-9]+$ && "$ram_available_mb" =~ ^[0-9]+$ && "$count" =~ ^[0-9]+$ ]] || { echo "HEALTH_GATE=INVALID_METRICS"; exit 1; }
+          if (( root_free_kib < 2097152 )); then echo "HEALTH_CRITICAL=root_disk_free_below_2GiB"; gate_fail=1; fi
+          if (( root_inode_used_pct >= 95 )); then echo "HEALTH_CRITICAL=root_inodes_95pct_or_more"; gate_fail=1; fi
+          if (( ram_available_mb < 512 )); then echo "HEALTH_CRITICAL=ram_available_below_512MiB"; gate_fail=1; fi
+          if (( count > 0 )); then echo "HEALTH_CRITICAL=factory_hold_cron_violation"; gate_fail=1; fi
+          ssh_active="$(systemctl is-active ssh 2>/dev/null || true)"
+          sshd_active="$(systemctl is-active sshd 2>/dev/null || true)"
+          if [[ "$ssh_active" != active && "$sshd_active" != active ]]; then echo "HEALTH_CRITICAL=ssh_daemon_inactive"; gate_fail=1; fi
+          # A failed fwupd firmware-metadata refresh is advisory until its privileged journal is available.
+          if [[ "$(systemctl is-failed fwupd-refresh.service 2>/dev/null || true)" = failed ]]; then echo "HEALTH_ADVISORY=fwupd_refresh_failed_needs_admin_journal"; fi
+          echo "HEALTH_GATE_CRITICAL_FAILURE_COUNT=$gate_fail"
+          if (( gate_fail != 0 )); then echo "HEALTH_GATE=FAIL"; exit 1; fi
+          echo "HEALTH_GATE=PASS"
           echo "HEALTH_READ_ONLY_DONE=true"
           REMOTE
