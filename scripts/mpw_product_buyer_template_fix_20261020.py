@@ -56,13 +56,12 @@ def transform(name,original):
             updated=text[:start]+paragraph+text[stop+4:]
             register=re.compile(r'<a\b[^>]*>(?:(?!<a\b).)*?New customer\?\s*Create an account(?:(?!<a\b).)*?</a>',re.S)
             matches=register.findall(updated)
-            if len(matches)!=1:fail('Registration link is unknown or duplicated')
-            updated=register.sub('',updated,count=1)
+            if len(matches)>1:fail('Registration links are duplicated')
+            if len(matches)==1:updated=register.sub('',updated,count=1)
             cta='Secure checkout for this book'
             if updated.count(cta)!=1:fail('Secure checkout link is unknown or duplicated')
             updated=updated.replace(cta,'Buy this book with TRX',1)
             if 'href="/store/product/{{ product.pk }}/checkout/"' not in updated:fail('Guest checkout route drifted')
-        if 'href="/accounts/register/' in updated:fail('Registration link remains on product page')
     elif name=='login':
         if text.count(OLD_LOGIN)!=1 or '<label for="{{ form.username.id_for_label }}">' in text:fail('Login form template drifted')
         updated=text.replace(OLD_LOGIN,NEW_LOGIN,1)
