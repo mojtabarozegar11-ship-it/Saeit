@@ -18,12 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Verify immutable PR head checkout
         shell: bash
         env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
@@ -36,12 +36,22 @@ jobs:
           export COPY_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           test "${#COPY_SOURCE_SHA}" -eq 40
           [[ "$COPY_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          for path in company_messaging company_marketing enterprise_portal ecosystem_hub config/settings.py config/urls.py; do
+          for path in company_messaging company_marketing enterprise_portal ecosystem_hub config/settings.py config/urls.py requirements.txt; do
             test -e "$path" && test ! -L "$path"
           done
+          grep -qx 'django-otp==1.7.5' requirements.txt
+          deps="$RUNNER_TEMP/zm-msg-deps"
+          install -d -m 700 "$deps"
+          python3 -m pip download --disable-pip-version-check --no-deps --only-binary=:all: \
+            --dest "$deps" 'django-otp==1.7.5'
+          wheel="$deps/django_otp-1.7.5-py3-none-any.whl"
+          test -f "$wheel" && test ! -L "$wheel"
+          actual="$(sha256sum "$wheel" | awk '{print $1}')"
+          test "$actual" = "475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc"
+          echo "STAGE_OTP_WHEEL_SHA256=$actual"
           tar -cf "$RUNNER_TEMP/zm-msg-package.tar" \
             company_messaging company_marketing enterprise_portal ecosystem_hub \
-            config
+            config requirements.txt -C "$RUNNER_TEMP" zm-msg-deps
           test -s "$RUNNER_TEMP/zm-msg-package.tar"
           find company_messaging company_marketing enterprise_portal ecosystem_hub -type l -print -quit | grep -q . && exit 1 || true
           echo "PRIVATE_STAGE_PACKAGE_SHA256=$(sha256sum "$RUNNER_TEMP/zm-msg-package.tar" | cut -d' ' -f1)"
@@ -195,6 +205,9 @@ jobs:
           test -f "$root/code/ecosystem_hub/models.py"
           test -f "$root/code/config/settings.py"
           test -f "$root/code/config/urls.py"
+          test -f "$root/code/requirements.txt"
+          test -f "$root/code/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl"
+          test "$(sha256sum "$root/code/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl" | awk '{print $1}')" = "475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc"
           test -z "$(find "$root/code" -type l -print -quit)"
           python3 -B -m compileall -q "$root/code/company_messaging" "$root/code/company_marketing" "$root/code/enterprise_portal" "$root/code/ecosystem_hub" "$root/code/config"
           printf 'release=%s\nsha256=%s\nmode=PRIVATE_STAGE_NO_DEPLOY\n' "$sha" "$actual" > "$root/manifest.txt"
@@ -228,7 +241,19 @@ jobs:
           if test ! -x "$py"; then py="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"; fi
           test -x "$py"
           test -f "/home/zomorod2/Saeit/manage.py"
-          export PYTHONPATH="$root:/home/zomorod2/Saeit"
+          if "$py" -c 'import django_otp' >/dev/null 2>&1; then
+            echo "EXISTING_CPANEL_OTP=available"
+          else
+            echo "EXISTING_CPANEL_OTP=missing_PRODUCTION_RELEASE_BLOCKED"
+          fi
+          # Install only inside the immutable private stage, never in Passenger's live venv.
+          test -f "$root/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl"
+          test "$(sha256sum "$root/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl" | awk '{print $1}')" = "475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc"
+          "$py" -m pip install --disable-pip-version-check --no-index --no-deps \
+            --target "$root/.stage-deps" --find-links "$root/zm-msg-deps" 'django-otp==1.7.5'
+          export PYTHONPATH="$root/.stage-deps:$root:/home/zomorod2/Saeit"
+          "$py" -c 'import django_otp,pathlib; assert pathlib.Path(django_otp.__file__).resolve().is_relative_to(pathlib.Path.cwd()/".stage-deps")'
+          echo "STAGING_ONLY_OTP=verified"
           export DJANGO_SETTINGS_MODULE=config.settings
           export SECRET_KEY="private-staging-only-key-not-for-production-20261031"
           export ALLOWED_HOSTS="testserver,localhost"
