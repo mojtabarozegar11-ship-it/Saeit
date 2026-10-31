@@ -26,6 +26,7 @@ def validate_manifest(path: Path, expected_files=24, verify_bytes=True):
     by_sample = defaultdict(set)
     seen_paths = set()
     references = set()
+    verified_record_counts = defaultdict(dict)
     for row in rows:
         sample, mate, filepath = row['sample_id'].strip(), row['mate'], row['path']
         if not sample or mate not in ('R1', 'R2') or not filepath:
@@ -57,16 +58,33 @@ def validate_manifest(path: Path, expected_files=24, verify_bytes=True):
             if h.hexdigest() != expected_hash:
                 raise ValueError(f'SHA mismatch: {filepath}')
             opener = gzip.open if p.suffix == '.gz' else open
-            with opener(p, 'rt', encoding='ascii') as handle:
-                a, b, c, d = [handle.readline().rstrip('\n\r') for _ in range(4)]
-            if not a.startswith('@') or c != '+' or not b or len(b) != len(d):
-                raise ValueError(f'Invalid first FASTQ record: {filepath}')
+            # Consume every record; for gzip this also verifies trailer/CRC.
+            records = 0
+            with opener(p, 'rt', encoding='ascii', newline='') as handle:
+                while True:
+                    header = handle.readline()
+                    if not header:
+                        break
+                    seq, plus, qual = (handle.readline() for _ in range(3))
+                    if not seq or not plus or not qual:
+                        raise ValueError(f'Truncated FASTQ record: {filepath}')
+                    header, seq, plus, qual = (v.rstrip('\r\n') for v in (header, seq, plus, qual))
+                    if not header.startswith('@') or not plus.startswith('+') or not seq or len(seq) != len(qual):
+                        raise ValueError(f'Invalid FASTQ record: {filepath}')
+                    if any(not (33 <= ord(q) <= 126) for q in qual):
+                        raise ValueError(f'Invalid FASTQ quality ASCII: {filepath}')
+                    records += 1
+            if records == 0:
+                raise ValueError(f'Empty FASTQ records: {filepath}')
+            verified_record_counts[sample][mate] = records
     if any(mates != {'R1', 'R2'} for mates in by_sample.values()):
         raise ValueError('Every sample must have exactly R1 and R2')
+    if verify_bytes and any(counts.get('R1') != counts.get('R2') for counts in verified_record_counts.values()):
+        raise ValueError('Paired FASTQ R1/R2 record counts differ')
     if len(references) != 1:
         raise ValueError('Mixed reference assembly/release')
     return {'samples': len(by_sample), 'files': len(rows), 'reference': next(iter(references)),
-            'full_sha_and_first_record_verified': verify_bytes,
+            'full_sha_and_all_records_verified': verify_bytes,
             'biological_replicates_confirmed': False,
             'rna_seq_results_authorized': False}
 
