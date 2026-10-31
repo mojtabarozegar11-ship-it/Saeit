@@ -4,6 +4,7 @@ Does not connect to cPanel or alter a live application.
 """
 import importlib.util
 import os
+import sqlite3
 from pathlib import Path
 import tempfile
 import unittest
@@ -69,6 +70,57 @@ class GuardedReleaseRollbackTests(unittest.TestCase):
                     release.atomic_copy(source, destination)
             self.assertEqual(destination.read_bytes(), b"original")
             self.assertFalse(list(root.glob(".zm-office-incoming-*")))
+
+
+class GuardedReleaseMfaReadinessTests(unittest.TestCase):
+    """Completely in-memory SQLite fixtures, never a live corporate database."""
+
+    def setUp(self):
+        self.db = sqlite3.connect(":memory:")
+        self.db.executescript("""
+            CREATE TABLE auth_user (
+                id INTEGER PRIMARY KEY,
+                is_active INTEGER NOT NULL,
+                is_staff INTEGER NOT NULL,
+                is_superuser INTEGER NOT NULL
+            );
+            CREATE TABLE otp_totp_totpdevice (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                confirmed INTEGER NOT NULL
+            );
+        """)
+
+    def tearDown(self):
+        self.db.close()
+
+    def test_refuse_empty_private_office_database(self):
+        with self.assertRaisesRegex(RuntimeError, "OFFICE_NAMED_ADMIN_MISSING"):
+            release.require_mfa_provisioned(self.db)
+
+    def test_refuse_administrator_without_confirmed_second_factor(self):
+        self.db.execute(
+            "INSERT INTO auth_user(id,is_active,is_staff,is_superuser) VALUES (1,1,1,1)"
+        )
+        self.db.execute(
+            "INSERT INTO otp_totp_totpdevice(id,user_id,confirmed) VALUES (1,1,0)"
+        )
+        with self.assertRaisesRegex(RuntimeError, "OFFICE_ADMIN_MFA_DEVICE_MISSING"):
+            release.require_mfa_provisioned(self.db)
+
+    def test_accept_only_confirmed_device_for_active_superuser(self):
+        self.db.execute(
+            "INSERT INTO auth_user(id,is_active,is_staff,is_superuser) VALUES (1,1,1,1)"
+        )
+        self.db.execute(
+            "INSERT INTO otp_totp_totpdevice(id,user_id,confirmed) VALUES (1,1,1)"
+        )
+        release.require_mfa_provisioned(self.db)
+
+    def test_missing_totp_schema_fails_closed(self):
+        self.db.execute("DROP TABLE otp_totp_totpdevice")
+        with self.assertRaisesRegex(RuntimeError, "OFFICE_MFA_SCHEMA_NOT_READY"):
+            release.require_mfa_provisioned(self.db)
 
 
 if __name__ == "__main__":
