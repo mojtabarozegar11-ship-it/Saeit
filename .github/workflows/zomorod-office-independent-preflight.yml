@@ -141,6 +141,18 @@ jobs:
           done
           selector="/usr/sbin/cloudlinux-selector"
           protected="/home/zomorod2/.private/zomorod-company-office"
+          # Read-only preflight gate outputs: all booleans, never paths/secrets/records.
+          flag() { if "$@" >/dev/null 2>&1; then echo true; else echo false; fi; }
+          echo "TOP_PRECHECK_SELECTOR_AVAILABLE=$(flag test -x "$selector")"
+          echo "TOP_PRECHECK_STAGE_MANIFEST=$(flag test -f "$stage/manifest.txt")"
+          echo "TOP_PRECHECK_STAGE_PACKAGE=$(flag test -f "$stage/package.tar")"
+          echo "TOP_PRECHECK_STAGE_SQLITE=$(flag test -f "$stage/code/isolation.sqlite3")"
+          echo "TOP_PRECHECK_PINNED_SOURCE=$(flag grep -Fxq "release=$stage_sha" "$stage/manifest.txt")"
+          echo "TOP_PRECHECK_ISOLATED_MODE=$(flag grep -Fxq 'mode=PRIVATE_STAGE_NO_DEPLOY' "$stage/manifest.txt")"
+          echo "TOP_PRECHECK_INDEPENDENT_PREFIX=$(flag grep -Fq 'r"/office-preflight-[0-9a-f]{12}"' "$stage/code/office_runtime/settings.py")"
+          echo "TOP_PRECHECK_PREVIEW_ROOT_VACANT=$(flag test ! -e "$root")"
+          echo "TOP_PRECHECK_PREVIEW_URI_VACANT=$(flag test ! -e "/home/zomorod2/public_html/$uri")"
+          echo "TOP_PRECHECK_PROTECTED_OFFICE_DB=$(flag test -f "$protected/office.sqlite3")"
           test -x "$selector"
           test -d "$stage/code" && test ! -L "$stage/code"
           test -f "$stage/package.tar" && test ! -L "$stage/package.tar"
