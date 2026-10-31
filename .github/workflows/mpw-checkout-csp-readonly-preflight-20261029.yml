@@ -161,12 +161,12 @@ jobs:
                       code=ast.get_source_segment(source,matches[0]) or ''
                       structural['unsafe_eval_in_handler']=("'unsafe-eval'" in code)
                       structural['unsafe_inline_in_handler']=("'unsafe-inline'" in code)
-                  structural['calls_source_hash']=any(
-                      isinstance(n,ast.Call) and isinstance(n.func,ast.Name)
-                      and n.func.id=='source_hash' for n in ast.walk(matches[0]))
-                  structural['has_script_src_policy']=('script-src' in code)
-                  structural['has_style_src_policy']=('style-src' in code)
-                  structural['uses_response_header']=('Content-Security-Policy' in code)
+                      structural['calls_source_hash']=any(
+                          isinstance(n,ast.Call) and isinstance(n.func,ast.Name)
+                          and n.func.id=='source_hash' for n in ast.walk(matches[0]))
+                      structural['has_script_src_policy']=('script-src' in code)
+                      structural['has_style_src_policy']=('style-src' in code)
+                      structural['uses_response_header']=('Content-Security-Policy' in code)
                   structural['legacy_patch_exact_match']=(len(matches)==1 and
                       structural['old_guard_count']==1 and
                       structural['old_policy_count']==1 and
