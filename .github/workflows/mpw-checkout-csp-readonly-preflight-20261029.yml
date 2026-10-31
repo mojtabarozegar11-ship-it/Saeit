@@ -100,6 +100,50 @@ jobs:
           result['local_preflight']=('PASS' if all(result.get(x,False) for x in required) else 'BLOCKED')
           print('S01_CSP_READONLY_PREFLIGHT='+json.dumps(result,sort_keys=True))
           PY
+      - name: Inspect live checkout source signatures via existing pinned read-only relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No imports from live Django app; no DB connections, writes or restarts.
+          timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' <<'PY'
+          import hashlib, json, os, stat
+          from pathlib import Path
+          app = Path('/home/zomorod2/Saeit-staging')
+          root = Path('/home/zomorod2/mojplaywin.com')
+          filenames = {
+              'checkout_view': app/'mpw_commerce/product_checkout_page.py',
+              'trx_web': app/'services/mpw_trx_commercial_web.py',
+              'rate_feed': app/'scripts/mojplaywin_direct_wallet_rates.py',
+              'buyer_wallets': app/'mpw_commerce/buyer_wallets.py',
+              'commerce_urls': app/'mpw_commerce/urls.py',
+              'django_settings': app/'config/settings.py',
+              'live_wsgi': root/'passenger_wsgi.py',
+          }
+          # Public CI: report only SHA/size of application source, never file bytes,
+          # credentials, .env contents, DB host/user/name, process environment or keys.
+          out = {'scope':'S01_CHECKOUT_ACTUAL_SOURCE_READONLY',
+                 'site_writes':False,'factory_writes':False,
+                 'db_queries':False,'passenger_restart':False,
+                 'effective_passenger_db_proven':False,
+                 'complete_offhost_restore_proven':False,'files':{}}
+          for label,p in filenames.items():
+              entry = {'present':False}
+              try:
+                  s=p.lstat()
+                  entry['regular']=stat.S_ISREG(s.st_mode)
+                  entry['symlink']=stat.S_ISLNK(s.st_mode)
+                  if entry['regular'] and not entry['symlink'] and s.st_size<=524288:
+                      entry.update(present=True,bytes=s.st_size,
+                                   sha256=hashlib.sha256(p.read_bytes()).hexdigest())
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  entry['read_error']=True
+              out['files'][label]=entry
+          out['safe_to_release']=False  # DB authority + external restore not proven.
+          print('S01_CHECKOUT_SOURCE_FINGERPRINTS='+json.dumps(out,sort_keys=True))
+          PY
       - name: Capture non-transactional public HTTP and sitemap status
         shell: bash
         run: |
