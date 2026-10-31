@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - "tests/test_zomorod_company_office_fallback.py"
+      - "tests/test_zomorod_office_sidecar_urls.py"
+      - "office_runtime/**"
       - "enterprise_portal/**"
       - "config/urls.py"
       - ".github/workflows/zomorod-office-route-regression-20261031.yml"
@@ -33,7 +35,7 @@ jobs:
       - name: Assert exact private-office route behavior without a production DB
         run: |
           set -euo pipefail
-          python -m pytest -q tests/test_zomorod_company_office_fallback.py
+          python -m pytest -q tests/test_zomorod_company_office_fallback.py tests/test_zomorod_office_sidecar_urls.py
           echo ZOMOROD_OFFICE_ROUTE_SECURITY=PASS
       - name: No live deploy or external send
         run: |
