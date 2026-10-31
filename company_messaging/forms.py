@@ -1,6 +1,7 @@
 from django import forms
 from django.db.models import Q
 from enterprise_portal.forms import colleagues
+from enterprise_portal.models import BusinessUnit
 from ecosystem_hub.access import user_units
 from .models import Contact, Message
 
@@ -70,7 +71,7 @@ class ContactForm(forms.ModelForm):
             "active": "مخاطب فعال است", "suppressed": "ارسال به مخاطب مسدود است",
         }
         widgets = {
-            field: forms.DateTimeInput(attrs={"type": "datetime-local"})
+            field: forms.DateTimeInput(format="%Y-%m-%dT%H:%M", attrs={"type": "datetime-local"})
             for field in (
                 "email_consent_at", "sms_consent_at", "telegram_consent_at",
                 "bale_consent_at", "eitaa_consent_at", "rubika_consent_at",
@@ -80,7 +81,7 @@ class ContactForm(forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["unit"].queryset = user_units(user) if user else Contact.objects.none()
+        self.fields["unit"].queryset = user_units(user) if user else BusinessUnit.objects.none()
         if self.instance.pk:
             # No moving an existing consent record to another business unit.
             self.fields["unit"].disabled = True
