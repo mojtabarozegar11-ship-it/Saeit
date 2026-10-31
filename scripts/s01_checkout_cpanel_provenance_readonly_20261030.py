@@ -51,6 +51,42 @@ def ast_fingerprint(data):
         return None
 
 
+def top_level_callable_fingerprints(data):
+    """Return hashes keyed only by top-level callable names; never expose source."""
+    try:
+        tree = ast.parse(data)
+    except (SyntaxError, UnicodeError, ValueError, TypeError):
+        return None
+    result = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            label = type(node).__name__ + ":" + node.name
+            fingerprint = hashlib.sha256(
+                ast.dump(node, include_attributes=False).encode("utf-8")
+            ).hexdigest()
+            result[label] = fingerprint
+    return result
+
+
+def callable_delta(approved, current):
+    """Expose bounded callable names and change kinds, never code or literals."""
+    old = top_level_callable_fingerprints(approved)
+    new = top_level_callable_fingerprints(current)
+    if old is None or new is None:
+        return None
+    changes = []
+    for label in sorted(set(old) | set(new)):
+        if old.get(label) == new.get(label):
+            continue
+        name = label.split(":", 1)[1]
+        if len(name) > 64 or not name.isidentifier():
+            continue
+        state = ("ADDED" if label not in old else
+                 "REMOVED" if label not in new else "MODIFIED")
+        changes.append({"name": name, "state": state})
+    return changes[:40]
+
+
 def probe(home, *, expected=PIN, owner_uid=None):
     if not re.fullmatch(r"[0-9a-f]{64}", expected):
         raise ValueError("invalid SHA256 pin")
@@ -107,6 +143,7 @@ def probe(home, *, expected=PIN, owner_uid=None):
         ref_ast = ast_fingerprint(approved)
         now_ast = ast_fingerprint(current)
         report["ast_equivalent"] = (ref_ast == now_ast if ref_ast and now_ast else None)
+        report["top_level_callable_delta"] = callable_delta(approved, current)
         report["first_difference_offset"] = next(
             (i for i, (a, b) in enumerate(zip(approved, current)) if a != b),
             min(len(approved), len(current)))
