@@ -65,6 +65,17 @@ assert len(entries)==3
 assert all(dr==cr and dr>0 for _,_,dr,cr in entries)
 assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
 assert db.execute('SELECT length(password_hash) FROM users').fetchone()[0]>40
+# Downgrading a user's live role must revoke the old admin session immediately.
+with sqlite3.connect(str(private/'management.sqlite3')) as rw:
+    rw.execute("UPDATE users SET role='viewer' WHERE username='TestOnlyAdmin'")
+blocked=request('POST','projects',{'csrf':csrf,'action':'project','title':'Must not be created','owner':'Synthetic','state':'planned','budget':'0'})
+assert 'درخواست انجام نشد' in blocked
+assert db.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==0
+assert 'درخواست انجام نشد' in request('GET','users')
+with sqlite3.connect(str(private/'management.sqlite3')) as rw:
+    rw.execute("UPDATE users SET role='admin' WHERE username='TestOnlyAdmin'")
+assert 'درخواست انجام نشد' not in request('GET','users')
+print('ROLE_DOWNGRADE_REVOKES_EXISTING_SESSION=PASS')
 print('ZOMOROD_ACCOUNTING_SYNTHETIC_QA=PASS')
 print('TEST_USERS=1 PARTIES=1 INVOICES=1 PAYMENTS=1 JOURNALS=3')
 print('BALANCED_ENTRIES=3')
