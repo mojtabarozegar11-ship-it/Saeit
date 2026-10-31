@@ -366,6 +366,47 @@ jobs:
           print("OFFICE_TRACE_READONLY=true")
           PY
           REMOTE
+      - name: Audit CloudLinux Selector ownership and LiteSpeed integration read-only
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          test "$COMMAND_HOST" = saeit-cpanel
+          timeout 90s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import os,stat
+          home=Path("/home/zomorod2")
+          selector=home/".cl.selector"
+          cache=selector/"htaccess_cache"
+          docroot=home/"public_html"
+          route=docroot/"office-preflight-9ab790b15a42"
+          print("HOST_READONLY_SELECTOR_DIR_EXISTS="+str(selector.is_dir() and not selector.is_symlink()).lower())
+          print("HOST_READONLY_HTACCESS_CACHE_EXISTS="+str(cache.is_file() and not cache.is_symlink()).lower())
+          for name,path in (("SELECTOR_DIR",selector),("HTACCESS_CACHE",cache),("PUBLIC_ROOT",docroot),("PREVIEW_ROUTE",route)):
+              try:
+                  meta=path.lstat()
+              except (OSError,ValueError):
+                  print("HOST_READONLY_"+name+"_STAT=unavailable")
+                  continue
+              print("HOST_READONLY_"+name+"_STAT=ok")
+              print("HOST_READONLY_"+name+"_OWNED_BY_CPANEL_USER="+str(meta.st_uid==os.geteuid()).lower())
+              print("HOST_READONLY_"+name+"_IS_SYMLINK="+str(stat.S_ISLNK(meta.st_mode)).lower())
+          script=Path("/usr/local/lsws/admin/misc/enable_ruby_python_selector.sh")
+          print("HOST_READONLY_LSWS_SELECTOR_INTEGRATION_SCRIPT_EXISTS="+str(script.is_file()).lower())
+          print("HOST_READONLY_LSWS_SELECTOR_INTEGRATION_SCRIPT_EXECUTABLE="+str(os.access(script,os.X_OK)).lower())
+          good=home/"zomorod_office_top_preflight_9ab790b15a42"/".public-html-htaccess.original"
+          wrong=home/".private"/"zomorod-company-office"/".public-html-htaccess.original"
+          print("HOST_READONLY_CORRECT_ROOT_HTACCESS_BACKUP_PRESENT="+str(good.is_file()).lower())
+          print("HOST_READONLY_OBSOLETE_BACKUP_PATH_PRESENT="+str(wrong.is_file()).lower())
+          print("HOST_SELECTOR_AND_BACKUP_AUDIT=read_only")
+          PY
+          REMOTE
       - name: Check external routing status without touching server
         shell: bash
         run: |
