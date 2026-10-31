@@ -1,0 +1,2 @@
+case,source_treatment_t_ha,source_control_t_ha,source_printed_percent,computed_percent_from_displayed,rounding_lower_percent,rounding_upper_percent,interpretation
+F5,30.5,28.2,10.3,8.1560283688,7.7876106195,8.5257548845,"Printed 10.3% outside conventional same-pair nearest-tenth rounding envelope; raw formula unknown"
