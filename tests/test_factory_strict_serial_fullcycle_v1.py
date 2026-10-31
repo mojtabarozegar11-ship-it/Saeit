@@ -3,6 +3,7 @@ import importlib.util
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -52,7 +53,22 @@ def accepted_handoff(root, order, cycle_id="B-01"):
         "artifact_sha256": hashlib.sha256(data).hexdigest(),
         "acceptance_evidence": "receiver acceptance record in private handoff inbox",
     }), encoding="utf8")
+    key_dir = root / "test-trusted-receiver-keys"
+    key_dir.mkdir(exist_ok=True, mode=0o700)
+    secret = key_dir / (cycle_id + ".test-private.pem")
+    public = key_dir / (cycle_id + ".pem")
+    subprocess.run(["openssl", "ecparam", "-name", "prime256v1", "-genkey",
+                    "-noout", "-out", str(secret)], check=True, capture_output=True)
+    subprocess.run(["openssl", "pkey", "-in", str(secret), "-pubout",
+                    "-out", str(public)], check=True, capture_output=True)
+    sign_receipt(receiver, secret)
     return receiver
+
+
+def sign_receipt(receiver, secret):
+    subprocess.run(["openssl", "dgst", "-sha256", "-sign", str(secret),
+                    "-out", str(receiver / "receipt.sig"),
+                    str(receiver / "receipt.json")], check=True, capture_output=True)
 
 
 class Disk:
@@ -86,6 +102,9 @@ class StrictSerialTests(unittest.TestCase):
                 "* * * * * python /opt/factory/another_product.py\n")
         with self.assertRaisesRegex(RuntimeError, "SCOPE_FLAG_MISSING"):
             cycle.verify_cron_partition(valid.replace("--require-scheduler-scope", ""))
+        with self.assertRaisesRegex(RuntimeError, "COMMAND_INVALID"):
+            cycle.verify_cron_partition(valid.replace("strict-serial-fullcycle-v1.py",
+                                                       "unrelated.py"))
 
     def test_one_product_holds_across_rework_cycles(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -161,7 +180,8 @@ class StrictSerialTests(unittest.TestCase):
             self.assertFalse(result["handoff_accepted"])
             self.assertEqual(result["stages_executed"], 0)
             accepted_handoff(root, "WO-00000601")
-            with patch.object(cycle, "certified_finished", return_value=True):
+            with (patch.object(cycle, "certified_finished", return_value=True),
+                  patch.object(cycle, "TRUST_ROOT", root / "test-trusted-receiver-keys")):
                 delivered = cycle.tick(root, ops, disk_usage=lambda _:Disk())
             self.assertTrue(delivered["handoff_accepted"])
             self.assertEqual(delivered["active_order_after_cycle"], "WO-00000602")
@@ -184,14 +204,33 @@ class StrictSerialTests(unittest.TestCase):
             receipt = json.loads(receipt_file.read_text())
             receipt["artifact_sha256"] = "0" * 64
             receipt_file.write_text(json.dumps(receipt))
-            self.assertFalse(cycle.handoff_accepted(root, "WO-00000601"))
-            with patch.object(cycle, "certified_finished", return_value=True):
+            with patch.object(cycle, "TRUST_ROOT", root / "test-trusted-receiver-keys"):
+                self.assertFalse(cycle.handoff_accepted(root, "WO-00000601"))
+                with patch.object(cycle, "certified_finished", return_value=True):
+                    held = cycle.tick(root, ops, disk_usage=lambda _:Disk())
+                self.assertEqual(held["active_order_after_cycle"], "WO-00000601")
+                receipt["artifact_sha256"] = hashlib.sha256(
+                    (receipt_dir / "product.zip").read_bytes()).hexdigest()
+                receipt["acceptance_evidence"] = "tampered receiver claim"
+                receipt_file.write_text(json.dumps(receipt))
+                # A correct SHA in a tampered receipt is still not an acceptance.
+                self.assertFalse(cycle.handoff_accepted(root, "WO-00000601"))
+                sign_receipt(receipt_dir, root / "test-trusted-receiver-keys/B-01.test-private.pem")
+                self.assertTrue(cycle.handoff_accepted(root, "WO-00000601"))
+
+    def test_unsigned_and_untrusted_receipts_cannot_unlock_next_product(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            receiver = accepted_handoff(root, "WO-00000601")
+            with (patch.object(cycle, "TRUST_ROOT", root / "test-trusted-receiver-keys"),
+                  patch.object(cycle, "certified_finished", return_value=True)):
+                (receiver / "receipt.sig").unlink()
+                self.assertFalse(cycle.handoff_accepted(root, "WO-00000601"))
                 held = cycle.tick(root, ops, disk_usage=lambda _:Disk())
-            self.assertEqual(held["active_order_after_cycle"], "WO-00000601")
-            receipt["artifact_sha256"] = hashlib.sha256(
-                (receipt_dir / "product.zip").read_bytes()).hexdigest()
-            receipt_file.write_text(json.dumps(receipt))
-            self.assertTrue(cycle.handoff_accepted(root, "WO-00000601"))
+                self.assertEqual(held["active_order_after_cycle"], "WO-00000601")
+                sign_receipt(receiver, root / "test-trusted-receiver-keys/B-01.test-private.pem")
+                (root / "test-trusted-receiver-keys/B-01.pem").unlink()
+                self.assertFalse(cycle.handoff_accepted(root, "WO-00000601"))
 
     def test_budget_does_not_create_false_pass(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -274,7 +313,8 @@ class StrictSerialTests(unittest.TestCase):
                                          "active_order":"WO-00000800", "index":199,
                                          "ticks":19}))
             accepted_handoff(root, "WO-00000800")
-            with patch.object(cycle, "certified_finished", return_value=True):
+            with (patch.object(cycle, "certified_finished", return_value=True),
+                  patch.object(cycle, "TRUST_ROOT", root / "test-trusted-receiver-keys")):
                 done = cycle.tick(root,ops,disk_usage=lambda _:Disk())
             self.assertTrue(done["certified_to_private_finished_goods"])
             self.assertIsNone(done["active_order_after_cycle"])
