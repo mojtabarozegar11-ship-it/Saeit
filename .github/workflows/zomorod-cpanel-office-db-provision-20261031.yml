@@ -1,0 +1,255 @@
+name: Provision isolated Zomorod Django office database safely (no live binding)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-cpanel-office-db-provision-20261031.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-cpanel-office-db-provision
+  cancel-in-progress: false
+jobs:
+  provision-office-db:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify immutable authorized source
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          echo "OFFICE_DB_RELEASE_SOURCE_SHA_PINNED=true"
+      - name: Set up pinned GitHub to VPS to cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Create unique private office schema with initial verified backup
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 190s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          export PYTHONDONTWRITEBYTECODE=1
+          unset PYTHONPATH
+          test "$(id -un)" = "zomorod2"
+          py="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
+          test -x "$py"
+          stage="/home/zomorod2/.private/zomorod-messaging-release-stages/627090763100af89cc80c79eb8f6fab2ac74f02f"
+          source="$stage/code"
+          test -d "$source" && test ! -L "$source"
+          test -f "$stage/manifest.txt"
+          grep -Fxq 'release=627090763100af89cc80c79eb8f6fab2ac74f02f' "$stage/manifest.txt"
+          grep -Fxq 'mode=PRIVATE_STAGE_NO_DEPLOY' "$stage/manifest.txt"
+          test -f "$source/core/migrations/0001_initial.py"
+          test -f "$source/company_messaging/migrations/0001_initial.py"
+          test -f "$source/config/settings.py"
+          base="/home/zomorod2/.private/zomorod-company-office"
+          target="$base/office.sqlite3"
+          pending="$base/.office-provision-20261031.sqlite3"
+          backup="$base/office.initial.backup.sqlite3"
+          config="$base/office.env"
+          if test -f "$target" && test ! -L "$target"; then
+            echo "OFFICE_DB_PROVISION=existing_no_overwrite"
+            exit 16
+          fi
+          test ! -e "$target" && test ! -L "$target"
+          test ! -e "$pending" && test ! -L "$pending"
+          test ! -e "$backup" && test ! -L "$backup"
+          if test -e "$base"; then test -d "$base" && test ! -L "$base"; fi
+          install -d -m 700 "$base"
+          test ! -e "$config" && test ! -L "$config"
+          "$py" -B - <<'PY' > "$config"
+          import secrets
+          print("SECRET_KEY="+secrets.token_urlsafe(72))
+          print("DATABASE_URL=sqlite:////home/zomorod2/.private/zomorod-company-office/office.sqlite3")
+          print("COMPANY_MESSAGING_SEND_ENABLED=false")
+          print("COMPANY_MARKETING_PUBLISH_ENABLED=false")
+          print("ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED=false")
+          PY
+          chmod 600 "$config"
+          export PYTHONPATH="$source/.stage-deps:$source"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export SECRET_KEY="$("$py" -B -c 'import secrets;print(secrets.token_urlsafe(48))')"
+          export DATABASE_URL="sqlite:///$pending"
+          export DEBUG=False
+          export ALLOWED_HOSTS="zomorodmelal.ir,www.zomorodmelal.ir,localhost"
+          export COMPANY_MESSAGING_SEND_ENABLED=false
+          export COMPANY_MARKETING_PUBLISH_ENABLED=false
+          export ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED=false
+          export SECURE_SSL_REDIRECT=false
+          cd "$source"
+          "$py" -B -m django check
+          "$py" -B -m django makemigrations --check --dry-run core command_center farnaz company_messaging company_marketing enterprise_portal ecosystem_hub
+          "$py" -B -m django migrate --noinput --verbosity 0
+          "$py" -B - "$pending" "$backup" <<'PY'
+          import pathlib,sqlite3,sys
+          source,back=map(pathlib.Path,sys.argv[1:])
+          assert source.is_file() and not source.is_symlink()
+          assert not back.exists()
+          original=sqlite3.connect("file:"+str(source)+"?mode=ro",uri=True)
+          original.execute("PRAGMA query_only=ON")
+          try:
+              assert original.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+              tables={name for (name,) in original.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              assert len(tables)>=120,len(tables)
+              assert {"core_auditlog","core_researchproject","company_messaging_message"}.issubset(tables)
+              assert original.execute("SELECT COUNT(*) FROM auth_user").fetchone()[0]==0
+              with sqlite3.connect(str(back)) as target:
+                  original.backup(target)
+          finally:
+              original.close()
+          independent=sqlite3.connect("file:"+str(back)+"?mode=ro",uri=True)
+          try:
+              assert independent.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+              copied={name for (name,) in independent.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              assert copied==tables
+              assert independent.execute("SELECT COUNT(*) FROM auth_user").fetchone()[0]==0
+          finally:
+              independent.close()
+          print("OFFICE_DB_SCHEMA_TABLES="+str(len(tables)))
+          print("OFFICE_DB_INITIAL_BACKUP_INDEPENDENT_READ=verified")
+          print("OFFICE_DB_INITIAL_USER_COUNT=0")
+          PY
+          chmod 600 "$pending" "$backup"
+          test ! -e "$target" && test ! -L "$target"
+          mv -T -- "$pending" "$target"
+          test -f "$target" && test ! -L "$target"
+          echo "OFFICE_DB_PRIVATE_PROVISION=complete"
+          echo "OFFICE_DB_LIVE_PASSENGER_BOUND=false"
+          echo "OFFICE_DB_PHP_ACCOUNTING_UNCHANGED=true"
+          echo "OFFICE_DB_PUBLIC_SITE_UNMODIFIED=true"
+          echo "OUTBOUND_MESSAGE_SEND_ENABLED=false"
+          REMOTE
+      - name: Remove runner transient relay credentials
+        if: always()
+        shell: bash
+        run: |
+          if test -d "$RUNNER_TEMP/zm-marketing-ro"; then
+            rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
+          fi
