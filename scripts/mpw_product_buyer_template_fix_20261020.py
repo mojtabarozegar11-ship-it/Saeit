@@ -9,8 +9,6 @@ APP=ROOT/'Saeit-staging'
 SITE=ROOT/'mojplaywin.com'
 FILES={
  'product':APP/'core/templates/brands/mojplaywin/product.html',
- 'brandbase':APP/'core/templates/brands/mojplaywin/base.html',
- 'login':APP/'mpw_commerce/templates/mpw_commerce/customer_login.html',
 }
 LEGACY_PRODUCT_OLD='<p>Live payment methods appear only after provider and market controls are configured.</p><a class="primary" href="/crypto-payments/">Payment options</a>'
 OLD_PRODUCT='''<p>Sign in to receive an order-specific secure invoice for this verified digital book. Private delivery is granted only after independently confirmed payment.</p>
