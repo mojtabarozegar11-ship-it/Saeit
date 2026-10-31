@@ -606,6 +606,94 @@ jobs:
           print("PASSENGER_PYTHON_VERSION_AUDIT=readonly")
           PY
           REMOTE
+      - name: Attest actual Passenger interpreter and process-bound DB without secrets
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 65s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import os,pathlib,re,sqlite3,subprocess,urllib.parse
+          root=pathlib.Path("/home/zomorod2/Saeit").resolve()
+          ht=pathlib.Path("/home/zomorod2/public_html/.htaccess")
+          interpreter=None
+          if ht.is_file() and not ht.is_symlink():
+              for line in ht.read_text(errors="replace").splitlines():
+                  match=re.match(r'^\s*PassengerPython\s+(".*?"|\'.*?\'|\S+)',line,re.I)
+                  if match:
+                      interpreter=pathlib.Path(match.group(1).strip(chr(34)+chr(39)))
+                      break
+          if interpreter and interpreter.is_file() and os.access(interpreter,os.X_OK):
+              probe=(
+                  "import importlib.util,sys;"
+                  "print('PASSENGER_EXEC_PYTHON_MINOR='+str(sys.version_info.major)+'.'+str(sys.version_info.minor));"
+                  "print('PASSENGER_EXEC_DJANGO_PRESENT='+str(importlib.util.find_spec('django') is not None).lower());"
+                  "print('PASSENGER_EXEC_DJANGO_OTP_PRESENT='+str(importlib.util.find_spec('django_otp') is not None).lower());"
+                  "print('PASSENGER_EXEC_REST_FRAMEWORK_PRESENT='+str(importlib.util.find_spec('rest_framework') is not None).lower())"
+              )
+              try:
+                  result=subprocess.run([str(interpreter),"-B","-c",probe],capture_output=True,text=True,timeout=10,check=False)
+                  if result.returncode==0 and all(line.startswith("PASSENGER_EXEC_") for line in result.stdout.splitlines()):
+                      for line in result.stdout.splitlines():print(line)
+                      print("PASSENGER_EXEC_IMPORT_PROBE=passed")
+                  else:print("PASSENGER_EXEC_IMPORT_PROBE=failed")
+              except (OSError,subprocess.TimeoutExpired):
+                  print("PASSENGER_EXEC_IMPORT_PROBE=unavailable")
+          else:
+              print("PASSENGER_EXEC_IMPORT_PROBE=not_configured")
+          counts={"site_workers":0,"database_url_present":0,"sqlite_url":0,"other_url":0,"url_schema_verified":0}
+          fds=set()
+          validated=set()
+          for pp in pathlib.Path("/proc").iterdir():
+              if not pp.name.isdecimal():continue
+              try:
+                  if pp.stat().st_uid!=os.getuid():continue
+                  cmd=(pp/"cmdline").read_bytes()[:4096].lower()
+                  if not (b"python" in cmd or b"passenger" in cmd):continue
+                  if pathlib.Path(os.readlink(pp/"cwd")).resolve()!=root:continue
+                  counts["site_workers"]+=1
+                  raw=(pp/"environ").read_bytes()[:128000]
+                  env=dict(piece.split(b"=",1) for piece in raw.split(b"\x00") if b"=" in piece)
+                  url=env.get(b"DATABASE_URL",b"")
+                  if url:
+                      counts["database_url_present"]+=1
+                      if url.startswith(b"sqlite:////"):
+                          counts["sqlite_url"]+=1
+                          path=pathlib.Path(urllib.parse.unquote(url.decode("utf8","strict").split("?",1)[0][len("sqlite:///"):]))
+                          if (path.is_absolute() and str(path).startswith("/home/zomorod2/")
+                              and path.is_file() and not path.is_symlink()):
+                              uri="file:"+urllib.parse.quote(str(path),safe="/")+"?mode=ro"
+                              with sqlite3.connect(uri,uri=True,timeout=2) as db:
+                                  n=db.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+                                  integrity=db.execute("PRAGMA quick_check").fetchone()[0]
+                              if n>=10 and integrity=="ok":
+                                  validated.add(str(path.resolve()))
+                                  counts["url_schema_verified"]+=1
+                      else:counts["other_url"]+=1
+                  try:
+                      for fd in list((pp/"fd").iterdir())[:512]:
+                          try: link=os.readlink(fd)
+                          except OSError:continue
+                          if link.endswith((" (deleted)",)):continue
+                          if link.endswith((".sqlite3",".sqlite",".db")) and link.startswith("/home/zomorod2/"):
+                              fds.add(os.path.realpath(link))
+                  except OSError:pass
+              except (OSError,ValueError,UnicodeError,sqlite3.Error):
+                  continue
+          for key in sorted(counts):
+              print("PASSENGER_LIVE_"+key.upper()+"="+str(counts[key]))
+          print("PASSENGER_LIVE_OPEN_SQLITE_FILES="+str(len(fds)))
+          print("PASSENGER_LIVE_DISTINCT_VERIFIED_URL_DATABASES="+str(len(validated)))
+          print("PASSENGER_LIVE_DB_LINKAGE="+("process_url_verified" if len(validated)==1 else "not_attested"))
+          print("PASSENGER_RUNTIME_AUDIT=read_only")
+          print("PRODUCTION_DEPLOY_ALLOWED=no")
+          PY
+          REMOTE
       - name: Require restore proof and provider rights before any deployment
         run: |
           echo "RESTORE_VERIFIED=not-established-by-this-readonly-probe"
