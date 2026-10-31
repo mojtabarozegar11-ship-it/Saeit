@@ -1,0 +1,58 @@
+name: VPS Direct SSH System Health Read Only 20261031
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/vps-direct-ssh-system-health-readonly-20261031.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-direct-system-health-readonly
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check VPS platform health using fingerprint-pinned direct SSH, read only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-direct-platform-health-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 90s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          echo "HEALTH_UTC=$(date -u +%FT%TZ)"
+          echo "HEALTH_HOSTNAME=$(hostname -f 2>/dev/null || hostname)"
+          echo "HEALTH_UPTIME=$(uptime -p)"
+          awk '{printf "HEALTH_LOAD_1_5_15=%s,%s,%s\n",$1,$2,$3}' /proc/loadavg
+          free -m | awk '/^Mem:/ {printf "HEALTH_RAM_TOTAL_MB=%s AVAILABLE_MB=%s\n",$2,$7}'
+          free -m | awk '/^Swap:/ {printf "HEALTH_SWAP_TOTAL_MB=%s FREE_MB=%s\n",$2,$4}'
+          df -Pk / | awk 'NR==2 {printf "HEALTH_ROOT_DISK_TOTAL_KIB=%s USED_KIB=%s FREE_KIB=%s USE_PCT=%s\n",$2,$3,$4,$5}'
+          df -Pi / | awk 'NR==2 {printf "HEALTH_ROOT_INODES_USED_PCT=%s\n",$5}'
+          echo "HEALTH_SYSTEMD_FAILED_BEGIN"
+          systemctl --failed --no-legend --no-pager --plain 2>/dev/null | awk 'NF {print "HEALTH_FAILED_UNIT=" $1}' | head -n 30 || true
+          echo "HEALTH_SYSTEMD_FAILED_END"
+          for unit in ssh sshd cron crond systemd-journald; do
+            state="$(systemctl is-active "$unit" 2>/dev/null || true)"
+            echo "HEALTH_SERVICE_${unit}=${state:-unknown}"
+          done
+          cron="$(crontab -l 2>/dev/null || true)"
+          count="$(printf '%s\n' "$cron" | awk '!/^ *#/ && /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/{n++} END{print n+0}')"
+          echo "HEALTH_FACTORY_HOLD_CRON_ENTRIES=$count"
+          echo "HEALTH_READ_ONLY_DONE=true"
+          REMOTE
