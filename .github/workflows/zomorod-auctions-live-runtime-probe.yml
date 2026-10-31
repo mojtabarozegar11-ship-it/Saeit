@@ -144,4 +144,42 @@ jobs:
                   route.unlink()
               print('AUCTION_TRANSIENT_WEB_PROBE_REMOVED='+str(not route.exists()))
               print('AUCTION_MODULE_DEPLOY_OR_DB_MUTATIONS=NONE')
+          # Per-directory override test: scope a single temporary directory, never the site root.
+          subdir=web/('_zm_83probe_'+secrets.token_hex(20))
+          local_nonce=secrets.token_hex(24)
+          index=subdir/'index.php'
+          override=subdir/'.htaccess'
+          made=False
+          try:
+              os.mkdir(subdir,0o755)
+              made=True
+              os.chmod(subdir,0o755)
+              with open(override,'x',encoding='utf-8') as f:
+                  f.write('<IfModule mime_module>\nAddHandler application/x-httpd-ea-php83 .php\n</IfModule>\n')
+              os.chmod(override,0o644)
+              with open(index,'x',encoding='utf-8') as f:
+                  f.write(source.replace(nonce,local_nonce))
+              os.chmod(index,0o644)
+              request=urllib.request.Request('https://zomorodmelal.ir/business/'+subdir.name+'/index.php',
+                                             headers={'User-Agent':'Zomorod-Private-PHP83-Override-Audit'})
+              try:
+                  with urllib.request.urlopen(request,timeout=20,context=ssl.create_default_context()) as response:
+                      raw=response.read(2048)
+                  payload=json.loads(raw.decode('utf-8'))
+                  if payload.get('nonce')!=local_nonce:raise ValueError('PHP handler override mismatch')
+                  print('AUCTION_DIRECTORY_PHP_VERSION='+str(payload.get('version','unknown'))[:35])
+                  print('AUCTION_DIRECTORY_PHP_SAPI='+str(payload.get('sapi','unknown'))[:30])
+                  for extension in ('sqlite3','fileinfo','sessions'):
+                      print('AUCTION_DIRECTORY_'+extension.upper()+'='+('PASS' if payload.get(extension) is True else 'BLOCKED'))
+                  print('AUCTION_DIRECTORY_PHP83_HANDLER='+('PASS' if str(payload.get('version','')).startswith('8.3.') and payload.get('fileinfo') is True else 'BLOCKED'))
+              except (urllib.error.URLError,ValueError,UnicodeError,TimeoutError,KeyError,ssl.SSLError) as e:
+                  print('AUCTION_DIRECTORY_PHP83_HANDLER=UNVERIFIED')
+                  print('AUCTION_DIRECTORY_OVERRIDE_ERROR_TYPE='+type(e).__name__)
+          finally:
+              if made:
+                  for item in (index,override):
+                      if item.is_file() and not item.is_symlink():item.unlink()
+                  os.rmdir(subdir)
+              print('AUCTION_DIRECTORY_OVERRIDE_PROBE_REMOVED='+str(not subdir.exists()))
+              print('AUCTION_PRODUCTION_PHP_CONFIGURATION_UNCHANGED=YES')
           PY
