@@ -174,6 +174,20 @@ class GuardedStageArchiveIntegrityTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "STAGE_EXTRACTED_SYMLINK"):
                 release.require_stage_payload_matches_archive(stage, code)
 
+
+    def test_archive_backslash_name_fails_closed(self):
+        import io
+        import tarfile
+        with tempfile.TemporaryDirectory() as d:
+            stage, code = self.make_stage(d)
+            with tarfile.open(stage / "package.tar", "a") as tar:
+                data = b"bad"
+                info = tarfile.TarInfo("config\\\\extra.py")
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+            with self.assertRaisesRegex(RuntimeError, "STAGE_ARCHIVE_PATH_UNSAFE"):
+                release.require_stage_payload_matches_archive(stage, code)
+
     def test_archive_path_traversal_fails_closed(self):
         import io
         import tarfile
