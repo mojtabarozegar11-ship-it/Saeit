@@ -629,6 +629,37 @@ jobs:
                       interpreter=pathlib.Path(match.group(1).strip(chr(34)+chr(39)))
                       break
           if interpreter and interpreter.is_file() and os.access(interpreter,os.X_OK):
+              try:
+                  with interpreter.open("rb") as exe:
+                      header=exe.read(72)
+                  kind=("ELF" if header.startswith(bytes((127,69,76,70))) else
+                        "script" if header.startswith(b"#!") else
+                        "empty" if not header else "other")
+              except OSError:
+                  kind="unreadable"
+              print("PASSENGER_CONFIGURED_EXECUTABLE_CLASS="+kind)
+              print("PASSENGER_CONFIGURED_EXECUTABLE_BASENAME="+
+                    (interpreter.name if re.fullmatch(r"[A-Za-z0-9._-]{1,40}",interpreter.name) else "redacted"))
+              for version in ("3.10","3.11"):
+                  alternative=pathlib.Path("/home/zomorod2/virtualenv/Saeit")/version/"bin/python"
+                  tag=version.replace(".","_")
+                  if not alternative.is_file() or not os.access(alternative,os.X_OK):
+                      print("AVAILABLE_CPANEL_PYTHON_"+tag+"=absent")
+                      continue
+                  print("AVAILABLE_CPANEL_PYTHON_"+tag+"=present")
+                  print("CONFIGURED_PYTHON_SAMEFILE_"+tag+"="+
+                        str(os.path.samefile(interpreter,alternative)).lower())
+                  check=subprocess.run([str(alternative),"-B","-c","import sys;sys.exit(37)"],
+                      capture_output=True,text=True,timeout=8,check=False)
+                  print("AVAILABLE_CPANEL_PYTHON_"+tag+"_CLI="+
+                        ("verified" if check.returncode==37 else "not_verified"))
+                  if check.returncode==37:
+                      otp=subprocess.run([str(alternative),"-B","-c",
+                          "import importlib.util,sys;sys.exit(0 if importlib.util.find_spec('django_otp') else 44)"],
+                          capture_output=True,text=True,timeout=8,check=False)
+                      print("AVAILABLE_CPANEL_PYTHON_"+tag+"_OTP="+
+                            ("installed" if otp.returncode==0 else
+                             "missing" if otp.returncode==44 else "unknown"))
               probe=(
                   "import importlib.util,sys;"
                   "print('PASSENGER_EXEC_PYTHON_MINOR='+str(sys.version_info.major)+'.'+str(sys.version_info.minor));"
