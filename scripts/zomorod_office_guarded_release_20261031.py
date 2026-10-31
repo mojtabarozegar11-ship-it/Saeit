@@ -168,7 +168,7 @@ def require_stage_payload_matches_archive(stage: Path, code: Path) -> int:
                 name = member.name
                 parts = PurePosixPath(name).parts
                 normalized = name.rstrip("/")
-                if (not parts or name.startswith("/") or "\\\\" in name or
+                if (not parts or name.startswith("/") or "\\" in name or
                     any(p in ("", ".", "..") for p in normalized.split("/")) or
                     parts[0] not in allowed or normalized in seen):
                     fail("STAGE_ARCHIVE_PATH_UNSAFE")
