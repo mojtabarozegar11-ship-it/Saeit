@@ -72,7 +72,7 @@ urlpatterns = [
     path("amozeshgah/course/<slug:slug>/assessment/<int:assessment_id>/submit/", education_assessment_submit, name="education_assessment_submit"),
     path("amozeshgah/course/<slug:slug>/certificate/issue/", education_issue_certificate, name="education_issue_certificate"),
     # Keep the previous public paths available for bookmarks and older links.
-    path("education/", education, name="education_legacy"),
+    path("education/", RedirectView.as_view(url="/amozeshgah/", permanent=True), name="education_legacy"),
     path("education/dashboard/", education_dashboard, name="education_dashboard_legacy"),
     path("education/certificate/<str:code>/", education_certificate, name="education_certificate_legacy"),
     path("education/course/<slug:slug>/", education_course_detail, name="education_course_detail_legacy"),
