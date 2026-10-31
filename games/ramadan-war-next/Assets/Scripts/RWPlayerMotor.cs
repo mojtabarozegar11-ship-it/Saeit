@@ -17,7 +17,7 @@ namespace RamadanWar.Next
         private float pitch, verticalVelocity, nextShot, reloadEnd, bobTime;
         private bool reloading, finished, ads, suppressMouseFireUntilRelease;
         private Vector2 touchMove, touchLook;
-        private bool touchFire, touchInteract, touchReload;
+        private bool touchFire, touchInteract, touchReload, ignoreTouchUntilReleased;
         private Transform gun;
         private Vector3 gunRest;
         private float recoil;
@@ -35,8 +35,30 @@ namespace RamadanWar.Next
             EnhancedTouchSupport.Disable();
         }
 
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused) SuspendInput();
+        }
+
+        private void OnApplicationFocus(bool focused)
+        {
+            if (!focused) SuspendInput();
+        }
+
+        private void SuspendInput()
+        {
+            touchMove = Vector2.zero;
+            touchLook = Vector2.zero;
+            touchFire = touchInteract = touchReload = false;
+            ignoreTouchUntilReleased = true;
+            suppressMouseFireUntilRelease = true;
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+
         private void Start()
         {
+            if (Eye == null || Controller == null) { Debug.LogError("RWPlayerMotor requires Eye and Controller."); enabled = false; return; }
             // Temporary equipment blockout; replace only with licensed, complete animated assets.
             var frame = RWBootstrap.Block(Eye.transform, "FP weapon placeholder", new Vector3(.34f, -.26f, .66f),
                 new Vector3(.16f, .17f, .78f), new Color(.22f,.29f,.29f), false);
@@ -135,8 +157,16 @@ namespace RamadanWar.Next
             touchFire = false;
             touchInteract = false;
             touchReload = false;
+            if (Screen.width < 16 || Screen.height < 16) return;
+            if (ignoreTouchUntilReleased)
+            {
+                if (Touch.activeTouches.Count == 0) ignoreTouchUntilReleased = false;
+                return;
+            }
             foreach (var touch in Touch.activeTouches)
             {
+                if (touch.phase == UnityEngine.InputSystem.TouchPhase.Ended ||
+                    touch.phase == UnityEngine.InputSystem.TouchPhase.Canceled) continue;
                 var at = touch.screenPosition;
                 if (at.x < Screen.width * .42f)
                 {
@@ -158,6 +188,8 @@ namespace RamadanWar.Next
                 }
                 else { touchLook += touch.delta; }
             }
+            touchMove = Vector2.ClampMagnitude(touchMove, 1f);
+            touchLook = Vector2.ClampMagnitude(touchLook, 180f);
         }
 
         private void Reload()
