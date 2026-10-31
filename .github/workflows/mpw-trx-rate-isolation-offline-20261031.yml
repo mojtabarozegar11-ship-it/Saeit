@@ -19,4 +19,5 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_trx_single_asset_rate_regression.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_trx_live_source_guard_readonly_20261031.py' -v
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile scripts/mojplaywin_direct_wallet_rates.py mpw_commerce/buyer_wallets.py
