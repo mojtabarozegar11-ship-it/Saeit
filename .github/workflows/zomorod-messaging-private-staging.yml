@@ -36,7 +36,7 @@ jobs:
           export COPY_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           test "${#COPY_SOURCE_SHA}" -eq 40
           [[ "$COPY_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          for path in company_messaging company_marketing enterprise_portal ecosystem_hub config/settings.py config/urls.py requirements.txt; do
+          for path in company_messaging company_marketing enterprise_portal ecosystem_hub core command_center farnaz templates manage.py config/settings.py config/urls.py requirements.txt; do
             test -e "$path" && test ! -L "$path"
           done
           grep -qx 'django-otp==1.7.5' requirements.txt
@@ -51,9 +51,10 @@ jobs:
           echo "STAGE_OTP_WHEEL_SHA256=$actual"
           tar -cf "$RUNNER_TEMP/zm-msg-package.tar" \
             company_messaging company_marketing enterprise_portal ecosystem_hub \
+            core command_center farnaz templates manage.py \
             config requirements.txt -C "$RUNNER_TEMP" zm-msg-deps
           test -s "$RUNNER_TEMP/zm-msg-package.tar"
-          find company_messaging company_marketing enterprise_portal ecosystem_hub -type l -print -quit | grep -q . && exit 1 || true
+          find company_messaging company_marketing enterprise_portal ecosystem_hub core command_center farnaz templates -type l -print -quit | grep -q . && exit 1 || true
           echo "PRIVATE_STAGE_PACKAGE_SHA256=$(sha256sum "$RUNNER_TEMP/zm-msg-package.tar" | cut -d' ' -f1)"
           echo "PRIVATE_STAGE_SOURCE_SHA=$COPY_SOURCE_SHA"
       - name: Set up pinned GitHub to VPS to cPanel relay
@@ -184,6 +185,28 @@ jobs:
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           base="/home/zomorod2/.private/zomorod-messaging-release-stages"
           target="$base/$SOURCE_SHA"
+          # Recoverably quarantine the failed 5bf67 stage, including any orphaned QA identity.
+          # It is private, never deployed, and retains its immutable diagnostic artifact.
+          ssh -F "$dir/config" "$COMMAND_HOST" bash -se -- "5bf66717618267a859bfacb5c5875dd8e023c483" <<'QUARANTINE'
+          set -euo pipefail
+          base="/home/zomorod2/.private/zomorod-messaging-release-stages"
+          failed="$base/$1"
+          held="$base/.quarantine/$1"
+          if test -e "$failed"; then
+            test -d "$failed" && test ! -L "$failed"
+            test -f "$failed/manifest.txt" && test ! -L "$failed/manifest.txt"
+            grep -Fxq "release=$1" "$failed/manifest.txt"
+            grep -Fxq "mode=PRIVATE_STAGE_NO_DEPLOY" "$failed/manifest.txt"
+            test -f "$failed/code/isolation.sqlite3" && test ! -L "$failed/code/isolation.sqlite3"
+            install -d -m 700 "$base/.quarantine"
+            test ! -e "$held" && test ! -L "$held"
+            mv -T -- "$failed" "$held"
+            echo "FAILED_STAGE_QUARANTINE=recoverable_verified"
+          else
+            test -d "$held" && test ! -L "$held"
+            echo "FAILED_STAGE_QUARANTINE=already_verified"
+          fi
+          QUARANTINE
           archive="$RUNNER_TEMP/zm-msg-package.tar"
           localsha="$(sha256sum "$archive" | awk '{print $1}')"
           # Creation is add-only: never overwrite a prior release candidate or production file.
@@ -206,10 +229,14 @@ jobs:
           test -f "$root/code/config/settings.py"
           test -f "$root/code/config/urls.py"
           test -f "$root/code/requirements.txt"
+          test -f "$root/code/core/migrations/0001_initial.py"
+          test -f "$root/code/command_center/models.py"
+          test -f "$root/code/farnaz/models.py"
+          test -f "$root/code/manage.py"
           test -f "$root/code/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl"
           test "$(sha256sum "$root/code/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl" | awk '{print $1}')" = "475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc"
           test -z "$(find "$root/code" -type l -print -quit)"
-          python3 -B -m compileall -q "$root/code/company_messaging" "$root/code/company_marketing" "$root/code/enterprise_portal" "$root/code/ecosystem_hub" "$root/code/config"
+          python3 -B -m compileall -q "$root/code/company_messaging" "$root/code/company_marketing" "$root/code/enterprise_portal" "$root/code/ecosystem_hub" "$root/code/core" "$root/code/command_center" "$root/code/farnaz" "$root/code/config"
           printf 'release=%s\nsha256=%s\nmode=PRIVATE_STAGE_NO_DEPLOY\n' "$sha" "$actual" > "$root/manifest.txt"
           chmod 600 "$root/package.tar" "$root/manifest.txt"
           echo "PRIVATE_STAGE_TRANSFER=verified"
@@ -240,7 +267,7 @@ jobs:
           py="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
           if test ! -x "$py"; then py="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"; fi
           test -x "$py"
-          test -f "/home/zomorod2/Saeit/manage.py"
+          test -f "$root/manage.py"
           if "$py" -c 'import django_otp' >/dev/null 2>&1; then
             echo "EXISTING_CPANEL_OTP=available"
           else
@@ -251,7 +278,7 @@ jobs:
           test "$(sha256sum "$root/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl" | awk '{print $1}')" = "475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc"
           "$py" -m pip install --disable-pip-version-check --no-index --no-deps \
             --target "$root/.stage-deps" --find-links "$root/zm-msg-deps" 'django-otp==1.7.5'
-          export PYTHONPATH="$root/.stage-deps:$root:/home/zomorod2/Saeit"
+          export PYTHONPATH="$root/.stage-deps:$root"
           "$py" -c 'import django_otp,pathlib,os; assert pathlib.Path(django_otp.__file__).resolve().is_relative_to(pathlib.Path(os.environ["PYTHONPATH"].split(os.pathsep)[0]).resolve())'
           echo "STAGING_ONLY_OTP=verified"
           export DJANGO_SETTINGS_MODULE=config.settings
@@ -267,7 +294,7 @@ jobs:
           export SECURE_SSL_REDIRECT=false
           cd "$root"
           "$py" -m django check
-          "$py" -m django makemigrations --check --dry-run company_messaging company_marketing enterprise_portal ecosystem_hub
+          "$py" -m django makemigrations --check --dry-run core command_center farnaz company_messaging company_marketing enterprise_portal ecosystem_hub
           "$py" -m django migrate --plan > "$root/migration-plan.txt"
           "$py" -m django migrate --noinput --verbosity 0
           # Build exact production-style manifest in isolated private directory.
@@ -292,6 +319,14 @@ jobs:
           import django
           django.setup()
           from django.urls import resolve,reverse
+          from django.apps import apps
+          from django.db import connection
+          present=set(connection.introspection.table_names())
+          needed={m._meta.db_table for m in apps.get_models() if m._meta.managed and not m._meta.proxy}
+          missing=sorted(needed-present)
+          assert not missing,"STAGING_INCOMPLETE_SCHEMA:"+",".join(missing[:15])
+          assert {"core_auditlog","core_researchproject"}.issubset(present),"STAGING_CORE_SCHEMA_DRIFT"
+          print("STAGING_ALL_MANAGED_MODEL_TABLES=present")
           from django.test import Client
           from django.conf import settings
           db=pathlib.Path(settings.DATABASES["default"]["NAME"])
@@ -342,7 +377,12 @@ jobs:
               key=browser.session.session_key
               if key:
                   Session.objects.filter(session_key=key).delete()
-              qa_user.delete()
+              try:
+                  qa_user.delete()
+              finally:
+                  # Fail closed even if a surprising cascade error prevents deletion.
+                  if User.objects.filter(username=qa_name).exists():
+                      User.objects.filter(username=qa_name).update(is_active=False,is_staff=False,is_superuser=False,password="!")
           assert not User.objects.filter(username=qa_name).exists()
           print("STAGING_SYNTHETIC_ADMIN_RETAINED=false")
           print("STAGING_MESSAGING_ROUTES=resolved")
