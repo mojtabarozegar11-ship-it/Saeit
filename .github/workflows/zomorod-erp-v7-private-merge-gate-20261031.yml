@@ -117,7 +117,6 @@ jobs:
           test "$live_hash" = "$expected" || { echo LIVE_APP_DRIFT=BLOCKED; exit 1; }
           scp -q -F "$d/config" "$target:/home/zomorod2/.private/zomorod-business/app.php" "$RUNNER_TEMP/live-app.php"
           chmod 600 "$RUNNER_TEMP/live-app.php"
-          echo V7_MERGE_VALIDATOR_REV=2
           python3 -m py_compile merge-scripts/scripts/zomorod_v7_live_additive_merge.py
           python3 merge-scripts/scripts/zomorod_v7_live_additive_merge.py \
             --live "$RUNNER_TEMP/live-app.php" \
@@ -211,5 +210,80 @@ jobs:
           print('LIVE_APP_REPLACED=NO')
           print('LIVE_DATABASE_MODIFIED_BY_WORKFLOW=NO')
           print('V7_PUBLIC_ACTIVATION=NOT_PERFORMED')
+          PY
+          ssh -F "$d/config" "$target" "python3 -B - '$GITHUB_RUN_ID'" <<'PY'
+          import os,pathlib,re,secrets,shutil,sqlite3,subprocess,sys
+          run=sys.argv[1]
+          if not re.fullmatch(r'[0-9]{8,15}',run):raise SystemExit('RUN_ID_REJECTED')
+          base=pathlib.Path('/home/zomorod2/.backups/zomorod-erp-v7-merged')/run
+          root=base/'qa_home'
+          if root.exists():raise SystemExit('ISOLATED_QA_ROOT_EXISTS')
+          shutil.copytree(base/'home',root,symlinks=False)
+          private=root/'.private/zomorod-business'
+          db=sqlite3.connect(str(private/'management.sqlite3'))
+          ids={}
+          for role in ('admin','accountant','manager','viewer'):
+              username='qa_v7_'+role+'_'+run
+              db.execute("INSERT INTO users(username,password_hash,role,active) VALUES(?,?,?,1)",(username,'disabled-test-password',role))
+              ids[role]=db.execute('SELECT last_insert_rowid()').fetchone()[0]
+          db.commit();db.close()
+          sessions=base/'qa_sessions'
+          sessions.mkdir(mode=0o700)
+          entry=root/'public_html/business/app.php'
+          php_script=r'''
+          ini_set('session.save_path',getenv('ZM_QA_SESSION_DIR'));
+          session_name('ZM_BUSINESS');
+          $sid=getenv('ZM_QA_SESSION_ID');
+          session_id($sid);
+          session_start();
+          $_SESSION['uid']=(int)getenv('ZM_QA_UID');
+          $_SESSION['role']=getenv('ZM_QA_STALE_ROLE');
+          $_SESSION['csrf']='qa-csrf-value';
+          session_write_close();
+          $_COOKIE['ZM_BUSINESS']=$sid;
+          $_SERVER['REQUEST_METHOD']='GET';
+          $_SERVER['HTTPS']='on';
+          $_SERVER['SCRIPT_NAME']='/business/index.php';
+          $_GET['page']=getenv('ZM_QA_PAGE');
+          require getenv('ZM_QA_ENTRY');
+          '''
+          cases=[
+            ('anonymous','dashboard',False,True),
+            ('admin','finance_audit',True,False),
+            ('admin','period_controls',True,False),
+            ('admin','workflow_desk',True,False),
+            ('admin','payroll',True,False),
+            ('accountant','finance_audit',True,False),
+            ('accountant','period_controls',True,False),
+            ('manager','workflow_desk',True,False),
+            ('manager','payroll',True,False),
+            ('manager','period_controls',False,False),
+            ('manager','finance_audit',False,False),
+            ('viewer','workflow_desk',False,False),
+            ('viewer','payroll',False,False),
+            ('viewer','period_controls',False,False),
+            ('viewer','finance_audit',False,False),
+            ('viewer','industry_ops',True,False),
+          ]
+          for role,page,allow,anonymous in cases:
+              env=os.environ.copy()
+              env.update(ZM_QA_SESSION_DIR=str(sessions),ZM_QA_SESSION_ID='qa'+secrets.token_hex(13),
+                  ZM_QA_UID=str(ids.get(role,0)), ZM_QA_STALE_ROLE='admin',
+                  ZM_QA_PAGE=page,ZM_QA_ENTRY=str(entry))
+              proc=subprocess.run(['php','-d','display_errors=0','-r',php_script],env=env,capture_output=True,text=True,timeout=25)
+              if proc.returncode!=0:raise SystemExit('PHP_EXEC_FAILURE_'+role+'_'+page)
+              body=proc.stdout
+              if anonymous:
+                  passed='ورود مدیر و حسابدار' in body and 'درخواست انجام نشد' not in body
+              elif allow:
+                  passed='درخواست انجام نشد' not in body and '<nav' in body
+              else:
+                  passed='درخواست انجام نشد' in body and '<nav' not in body
+              if not passed:
+                  raise SystemExit('ROLE_ROUTE_QA_FAIL_'+role+'_'+page)
+              print('ROLE_ROUTE_QA_PASS='+role+':'+page)
+          print('V7_PRIVATE_AUTHENTICATED_ROLE_SCENARIOS='+str(len(cases))+'/16_PASS')
+          print('V7_PRIVATE_SESSION_ROLE_DOWNGRADE_TESTED=YES')
+          print('V7_PRIVATE_QA_DATABASE_ISOLATED_FROM_CANDIDATE=YES')
           PY
           echo FACTORY_HOLD_UNCHANGED=YES
