@@ -6,6 +6,7 @@ on:
       - "scripts/zomorod_approval_sealed_receive.php"
       - "scripts/zomorod_approval_envelope_encrypt.py"
       - "tests/test_zomorod_approval_envelope.py"
+      - "tests/test_zomorod_approval_connector_gates.py"
   issue_comment:
     types: [created]
 permissions:
@@ -30,6 +31,7 @@ jobs:
           php -l scripts/zomorod_approval_sealed_receive.php
           python3 -m pip install -q 'cryptography>=44,<51'
           python3 -B -m unittest discover -s tests -p 'test_zomorod_approval_envelope.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_approval_connector_gates.py' -v
           echo SEALED_HANDOFF_OFFLINE_QA=PASS
           echo REAL_PRIVATE_CSV_TOUCHED=no
   owner-authorized-receive:
