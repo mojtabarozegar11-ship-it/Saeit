@@ -137,6 +137,9 @@ def main():
             past=dict(payload);past["deadline_utc"]="2020-01-01T12:00"
             must(post(base,"manager",manager_token,"create",past)==422,"past deadline accepted")
             must(post(base,"manager",manager_token,"create",payload)==200,"valid creation failed")
+            dashboard_status,dashboard=call(base,cookie="manager")
+            must(dashboard_status==200 and "کارتابل مهلت‌های مزایده".encode() in dashboard
+                 and b"AUCTION-001" in dashboard,"in-app deadline action queue missing")
             local=private/"auctions_v1.sqlite3"
             must(local.is_file(),"private auction DB missing")
             must(local.stat().st_mode & 0o777 == 0o600,"private DB permissions too broad")
