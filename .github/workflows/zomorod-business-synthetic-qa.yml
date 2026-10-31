@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/zomorod-business-synthetic-qa.yml"
       - "content/zomorod-business/app.php"
+      - "content/zomorod-business/approvals.php"
       - "scripts/zomorod_business_synthetic_qa.py"
       - "scripts/zomorod_project_approval_snapshot.py"
       - "tests/test_zomorod_approval_snapshot.py"
@@ -12,6 +13,7 @@ on:
     paths:
       - ".github/workflows/zomorod-business-synthetic-qa.yml"
       - "content/zomorod-business/app.php"
+      - "content/zomorod-business/approvals.php"
       - "scripts/zomorod_business_synthetic_qa.py"
       - "scripts/zomorod_project_approval_snapshot.py"
       - "tests/test_zomorod_approval_snapshot.py"
@@ -32,6 +34,7 @@ jobs:
           set -euo pipefail
           php -m | grep -qi pdo_sqlite
           php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/approvals.php
           php -l content/zomorod-business/index.php
           python3 -m py_compile scripts/zomorod_business_synthetic_qa.py
           python3 -m py_compile scripts/zomorod_project_approval_snapshot.py tests/test_zomorod_approval_snapshot.py
