@@ -750,6 +750,55 @@ jobs:
           print("PRODUCTION_DEPLOY_ALLOWED=no")
           PY
           REMOTE
+      - name: Inventory cPanel Passenger application mappings without changes
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 65s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import json,pathlib,subprocess
+          candidates=(pathlib.Path("/usr/local/cpanel/bin/uapi"),pathlib.Path("/usr/bin/uapi"))
+          binary=next((c for c in candidates if c.is_file()),None)
+          if binary is None:
+              print("CPANEL_PASSENGER_UAPI=unavailable")
+              raise SystemExit(0)
+          try:
+              r=subprocess.run([str(binary),"--output=json","PassengerApps","list_applications"],
+                  capture_output=True,text=True,timeout=35,check=False)
+              obj=json.loads(r.stdout)
+          except (OSError,ValueError,subprocess.TimeoutExpired):
+              print("CPANEL_PASSENGER_UAPI=unparseable")
+              raise SystemExit(0)
+          print("CPANEL_PASSENGER_UAPI_COMMAND="+("success" if r.returncode==0 else "nonzero"))
+          print("CPANEL_PASSENGER_UAPI_RESPONSE_KEYS="+
+                ",".join(sorted(obj.keys())) if isinstance(obj,dict) else "nonobject")
+          data=obj.get("data",[]) if isinstance(obj,dict) else []
+          if isinstance(data,dict):
+              print("CPANEL_PASSENGER_UAPI_DATA_KEYS="+",".join(sorted(data.keys())))
+              data=next((v for v in data.values() if isinstance(v,list)),[])
+          if not isinstance(data,list):
+              print("CPANEL_PASSENGER_UAPI_SCHEMA=unexpected")
+              raise SystemExit(0)
+          print("CPANEL_REGISTERED_APPLICATIONS="+str(len(data)))
+          for item in data[:25]:
+              if not isinstance(item,dict):continue
+              domain=str(item.get("domain") or item.get("deployment_domain") or "")
+              uri=str(item.get("base_uri") or item.get("base_url") or item.get("url") or "")
+              path=str(item.get("path") or item.get("app_path") or item.get("application_path") or "")
+              print("CPANEL_APPLICATION_FIELDS="+",".join(sorted(item.keys())))
+              print("CPANEL_APPLICATION_ZOMOROD_DOMAIN="+str("zomorodmelal.ir" in domain).lower())
+              print("CPANEL_APPLICATION_ROOT_BASE_URI="+str(uri in ("","/")).lower())
+              print("CPANEL_APPLICATION_OFFICE_BASE_URI="+str(uri.rstrip("/") in ("/company/office","/business/office")).lower())
+              print("CPANEL_APPLICATION_LIVE_SAEIT_PATH="+str(path.rstrip("/").endswith("/Saeit")).lower())
+          print("CPANEL_PASSENGER_UAPI_AUDIT=read_only")
+          PY
+          REMOTE
       - name: Require restore proof and provider rights before any deployment
         run: |
           echo "RESTORE_VERIFIED=not-established-by-this-readonly-probe"
