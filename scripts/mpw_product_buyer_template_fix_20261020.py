@@ -14,9 +14,8 @@ FILES={
 }
 OLD_PRODUCT='<p>Live payment methods appear only after provider and market controls are configured.</p><a class="primary" href="/crypto-payments/">Payment options</a>'
 NEW_PRODUCT='''{% if product.pk == 72 or product.pk == 225 %}
-<p>Sign in to receive an order-specific secure invoice for this verified digital book. Private delivery is granted only after independently confirmed payment.</p>
-<a class="primary" href="/store/product/{{ product.pk }}/checkout/">Secure checkout for this book</a>
-<a href="/accounts/register/">New customer? Create an account</a>
+<p>No account or subscription is required. Pay for this digital book with native TRX on the TRON network only. Bank cards, USDT and other networks are not accepted. The invoice displays the exact TRX amount and receiving address; network fees may apply. Your private download unlocks after on-chain payment confirmation.</p>
+<a class="primary" href="/store/product/{{ product.pk }}/checkout/">Buy this book with TRX</a>
 {% else %}<p>Contact MojPlayWin to confirm purchasing and delivery availability for this product.</p><a href="/contact/">Enquire about this product</a>{% endif %}'''
 OLD_LOGIN='{% csrf_token %}{{ form.as_p }}'
 NEW_LOGIN='''{% csrf_token %}
@@ -119,7 +118,7 @@ def selftest():
     for k,b in tests.items():
         result=transform(k,b)
         assert result!=b
-        assert (b'secure invoice' in result) if k=='product' else len(result)>len(b)
+        assert (b'No account or subscription is required.' in result and b'/accounts/register/' not in result) if k=='product' else len(result)>len(b)
     print('MPW_BUYER_TEMPLATE_BOUNDED_SELFTEST=PASS')
 if __name__=='__main__':
     if len(sys.argv)==2 and sys.argv[1]=='selftest':selftest()
