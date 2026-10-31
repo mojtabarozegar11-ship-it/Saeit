@@ -199,6 +199,8 @@ jobs:
           test ! -e "$route" && test ! -L "$route"
           expected_sha="$(sha256sum "$csv" | awk '{print $1}')"
           test "${#expected_sha}" -eq 64
+          test "$expected_sha" = 40c09b1aff17143cf315884177b61a35c6b1d62aa30a445056cfd8303deb3366
+          test "$(stat -c %s "$csv")" = 52072
           python3 -B "$tool/zomorod_project_approval_snapshot.py" "$csv" \
             --expected-sha256 "$expected_sha" \
             --expected-records 193 \
