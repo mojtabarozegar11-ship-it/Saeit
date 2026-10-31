@@ -122,7 +122,7 @@ def patch(current):
         raise RuntimeError("Cannot locate end of personal homepage content")
     out=current[:index]+section_html()+current[index:]
     if out.count(MARKER)!=1 or any(out.count('src="'+HUB+"posters/"+slug+".svg")!=1
-                                      for slug,_,_ in POSTERS[:4]):
+                                      for slug,_,_ in POSTERS):
         raise RuntimeError("Ten-poster injection shape invalid")
     if out[:begin]!=current[:begin] or out[index+len(section_html()):]!=current[index:]:
         raise RuntimeError("Non-additive template edit detected")
@@ -212,7 +212,7 @@ def translate_existing_section(old):
     current_section=old[start:end]
     if (current_section.count('<article class="mpw-course-home-card"') not in (4,10)
         or current_section.count("<section")!=1
-        or any("/posters/"+slug+".svg" not in current_section for slug,_,_ in POSTERS)
+        or any("/posters/"+slug+".svg" not in current_section for slug,_,_ in POSTERS[:4])
         or len(current_section)<2500):
         raise RuntimeError("Unexpected edits inside course section; refuse destructive overwrite")
     translated=section_html().strip()
