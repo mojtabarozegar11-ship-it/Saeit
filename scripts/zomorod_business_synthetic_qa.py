@@ -75,6 +75,20 @@ assert 'درخواست انجام نشد' in request('GET','users')
 with sqlite3.connect(str(private/'management.sqlite3')) as rw:
     rw.execute("UPDATE users SET role='admin' WHERE username='TestOnlyAdmin'")
 assert 'درخواست انجام نشد' not in request('GET','users')
+# The approvals page reads only a separately controlled private snapshot.
+(private/'approvals_snapshot.json').write_text(json.dumps({
+    'version':1,
+    'summary':{'records':1,'approved':1,'rejected':0,'undetermined':0,'planned_operational_jobs':5},
+    'items':[{'external_key':'ZM-001','title':'SyntheticOnlyProposalTitle',
+              'decision':'approved','execution_state':'planned',
+              'planned_operational_jobs':5,'official_title_verified':True,
+              'review_required':False}]
+},ensure_ascii=False),encoding='utf-8')
+register=request('GET','approval_register')
+assert 'SyntheticOnlyProposalTitle' in register
+assert 'اشتغال برنامه‌ای' in register
+print('APPROVAL_REGISTER_VIEW_SYNTHETIC=PASS')
+
 print('ROLE_DOWNGRADE_REVOKES_EXISTING_SESSION=PASS')
 print('ZOMOROD_ACCOUNTING_SYNTHETIC_QA=PASS')
 print('TEST_USERS=1 PARTIES=1 INVOICES=1 PAYMENTS=1 JOURNALS=3')
