@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Rehydrate the *complete* CC-BY model derivatives before any game smoke/deploy.
-# The two binary files checked into the project are truncated and are never trusted.
+# Rehydrate the complete CC-BY soldier model before any game smoke/deploy.
+# The soldier binary checked into the project may be truncated and are never trusted.
 set -euo pipefail
 
 source_commit="130ac2a5c856401ec36e7d35afcfefe40c5801f4"
@@ -60,5 +60,4 @@ fetch_one() {
 }
 
 fetch_one "soldier-rigged-ccby.glb" "characters/soldier.glb" 3094592 "b00ed33108f2579880c82cd27d10f9237ff3a219" 0
-fetch_one "m24-sniper-ccby.glb" "fp/m24.glb" 1247684 "537d61b8a28f1cea048c048c1e6a29c27c02cb6e" 1
 echo "RAMADAN_COMPLETE_MODELS_READY=PASS"
