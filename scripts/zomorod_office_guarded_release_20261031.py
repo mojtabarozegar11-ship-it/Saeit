@@ -61,7 +61,7 @@ def http(path: str, redirects: bool = False) -> tuple[int, str, bytes]:
 
 def status(path: str, expected: int, location_contains: str | None = None, body_contains: bytes | None = None) -> None:
     last = None
-    for attempt in range(6):
+    for attempt in range(15):
         try:
             code, location, body = http(path)
             last = (code, location)
@@ -72,7 +72,7 @@ def status(path: str, expected: int, location_contains: str | None = None, body_
                 return
         except (OSError, TimeoutError) as err:
             last = type(err).__name__
-        time.sleep(2)
+        time.sleep(3)
     fail("LIVE_SMOKE_FAILED " + path + " LAST=" + str(last))
 
 
@@ -107,10 +107,16 @@ def restart_passenger(passenger: Path) -> None:
     marker = app_tmp / "restart.txt"
     if marker.is_symlink() or (marker.exists() and not marker.is_file()):
         fail("PASSENGER_RESTART_MARKER_UNSAFE")
+    # Rollback may signal another restart within the same clock tick.
+    # Guarantee the marker's timestamp advances even on coarse filesystems.
+    prior = marker.stat().st_mtime_ns if marker.exists() else -1
     marker.touch()
+    observed = time.time_ns()
+    newer_than_prior = max(observed, prior + 1_000_000_000)
+    os.utime(marker, ns=(newer_than_prior, newer_than_prior))
     passenger.touch()
     print("PASSENGER_RESTART_MARKER=signalled", flush=True)
-    # Give Passenger time to consume the restart event before HTTP checks.
+    # Passenger notices restarts on incoming requests, subject to throttling.
     time.sleep(3)
 
 
