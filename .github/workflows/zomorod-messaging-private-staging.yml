@@ -252,7 +252,7 @@ jobs:
           "$py" -m pip install --disable-pip-version-check --no-index --no-deps \
             --target "$root/.stage-deps" --find-links "$root/zm-msg-deps" 'django-otp==1.7.5'
           export PYTHONPATH="$root/.stage-deps:$root:/home/zomorod2/Saeit"
-          "$py" -c 'import django_otp,pathlib; assert pathlib.Path(django_otp.__file__).resolve().is_relative_to(pathlib.Path.cwd()/".stage-deps")'
+          "$py" -c 'import django_otp,pathlib,os; assert pathlib.Path(django_otp.__file__).resolve().is_relative_to(pathlib.Path(os.environ["PYTHONPATH"].split(os.pathsep)[0]).resolve())'
           echo "STAGING_ONLY_OTP=verified"
           export DJANGO_SETTINGS_MODULE=config.settings
           export SECRET_KEY="private-staging-only-key-not-for-production-20261031"
