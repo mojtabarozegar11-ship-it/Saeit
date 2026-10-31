@@ -9,6 +9,7 @@ on:
       - "enterprise_portal/templates/enterprise_portal/shell.html"
       - "config/settings.py"
       - "config/urls.py"
+      - "requirements.txt"
       - ".github/workflows/zomorod-company-messaging-quality.yml"
   workflow_dispatch:
 permissions:
