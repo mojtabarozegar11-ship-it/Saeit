@@ -41,8 +41,6 @@ jobs:
           test -s games/ramadan-war/scene-night.webp
           test -s games/ramadan-war/scene-airbase.webp
           test -s games/ramadan-war/soldier-rigged-ccby.glb
-          test -s games/ramadan-war/arms_basecolor.webp
-          test -s games/ramadan-war/arms_normal.webp
           test -s games/ramadan-war/three-addons/loaders/GLTFLoader.js
           test -s games/ramadan-war/three-addons/utils/SkeletonUtils.js
           test -s games/ramadan-war/three-addons/utils/BufferGeometryUtils.js
@@ -171,8 +169,6 @@ jobs:
           timeout 50s scp -q -F "$d/config" games/ramadan-war/scene-night.webp "host:$stage/incoming/scene-night.webp"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/scene-airbase.webp "host:$stage/incoming/scene-airbase.webp"
           timeout 55s scp -q -F "$d/config" games/ramadan-war/soldier-rigged-ccby.glb "host:$stage/incoming/soldier-rigged-ccby.glb"
-          timeout 50s scp -q -F "$d/config" games/ramadan-war/arms_basecolor.webp "host:$stage/incoming/arms_basecolor.webp"
-          timeout 50s scp -q -F "$d/config" games/ramadan-war/arms_normal.webp "host:$stage/incoming/arms_normal.webp"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/three-addons/loaders/GLTFLoader.js "host:$stage/incoming/three-addons/loaders/GLTFLoader.js"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/three-addons/utils/SkeletonUtils.js "host:$stage/incoming/three-addons/utils/SkeletonUtils.js"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/three-addons/utils/BufferGeometryUtils.js "host:$stage/incoming/three-addons/utils/BufferGeometryUtils.js"
