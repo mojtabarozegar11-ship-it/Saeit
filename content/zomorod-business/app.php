@@ -119,6 +119,8 @@ try {
     }
     if(($_GET['page']??'')==='logout'){$_SESSION=[];session_destroy();header('Location: /business/',true,303);exit;}
     $uid=actor();$user=$uid?q($db,'SELECT id,username,role,active FROM users WHERE id=?',[$uid])[0]??null:null;
+    // A permission downgrade takes effect on the next request, including existing sessions.
+    if($user && (int)$user['active']===1)$_SESSION['role']=(string)$user['role'];
     if(!$user||(int)$user['active']!==1){
         if($_SERVER['REQUEST_METHOD']==='POST'){
             verifyCsrf();$username=req('username');$pass=req('password');
