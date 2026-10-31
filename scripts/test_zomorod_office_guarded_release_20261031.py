@@ -182,7 +182,7 @@ class GuardedStageArchiveIntegrityTests(unittest.TestCase):
             stage, code = self.make_stage(d)
             with tarfile.open(stage / "package.tar", "a") as tar:
                 data = b"bad"
-                info = tarfile.TarInfo("config\\\\extra.py")
+                info = tarfile.TarInfo("config\\extra.py")
                 info.size = len(data)
                 tar.addfile(info, io.BytesIO(data))
             with self.assertRaisesRegex(RuntimeError, "STAGE_ARCHIVE_PATH_UNSAFE"):
