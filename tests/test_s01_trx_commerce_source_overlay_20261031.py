@@ -113,6 +113,9 @@ class TrxCommerceOverlayTests(unittest.TestCase):
         with self.assertRaisesRegex(overlay.SourceContractChanged, "original import"):
             self.candidate(changed)
 
+    def test_actual_source_ast_smoke_with_stubs(self):
+        overlay.actual_source_in_memory_smoke(self.candidate())
+
     def test_no_install_mode_exists(self):
         self.assertFalse(hasattr(overlay, "install"))
         self.assertFalse(hasattr(overlay, "publish"))
