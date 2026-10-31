@@ -54,8 +54,7 @@ jobs:
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
-          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
-          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "VPS_HOSTKEY=verified"
           cat > "$d/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
@@ -64,7 +63,7 @@ jobs:
             IdentityFile $d/vps.key
             UserKnownHostsFile $d/vps.known
           Host saeit-cpanel
-            HostName 178.239.147.125
+            HostName zohal.pws-dns.net
             User zomorod2
             Port 1396
             IdentityFile $d/host.key
@@ -80,10 +79,18 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$d/config"
+          # Resolve cPanel from the already pinned VPS, then compare its ED25519
+          # fingerprint before any connection to the production account.
+          scan="$(timeout 35s ssh -T -F "$d/config" saeit-vps 'timeout 10s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOSTKEY=verified"
           timeout 110s ssh -F "$d/config" saeit-cpanel "bash -se -- '$GITHUB_SHA'" <<'REMOTE'
           set -euo pipefail
           sha="$1"
-          python="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"
+          python="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
           app="/home/zomorod2/Saeit"
           test "$(id -un)" = "zomorod2"
           test -x "$python"
@@ -153,7 +160,7 @@ jobs:
                   print("OFFICE_ROOT_ROUTE=already_present_validate_live")
           
               subprocess.run(
-                  ["/home/zomorod2/virtualenv/Saeit/3.11/bin/python", "manage.py", "check", "--deploy"],
+                  ["/home/zomorod2/virtualenv/Saeit/3.10/bin/python", "manage.py", "check", "--deploy"],
                   cwd=app, check=True, timeout=90,
               )
               class NoRedirect(urllib.request.HTTPRedirectHandler):
