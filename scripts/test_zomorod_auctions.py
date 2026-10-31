@@ -203,6 +203,11 @@ def main():
                  "review was changed after executive approval")
             must(post(base,"admin",admin_token,"submission",dict(scope,evidence=""))==422,
                  "submission without evidence accepted")
+            must(post(base,"admin",admin_token,"submission",scope)==409,
+                 "submission accepted without archived external receipt")
+            must(upload_document(base,"accountant",accountant_token,auction_id,"receipt",
+                                 "participation-receipt.pdf",pdf)==200,
+                 "receipt archive failed before manual participation record")
             must(post(base,"admin",admin_token,"submission",scope)==200,"submission receipt not recorded")
             must(post(base,"manager",manager_token,"outcome",dict(scope,decision="won"))==200,
                  "manual auction outcome not recorded")
@@ -212,7 +217,7 @@ def main():
             must(upload_document(base,"admin",admin_token,auction_id,"contract","contract.pdf",pdf)==200,
                  "closed auction cannot archive subsequent contract evidence")
             with sqlite3.connect(local) as db:
-                must(db.execute("SELECT COUNT(*) FROM auction_documents").fetchone()[0]==2,
+                must(db.execute("SELECT COUNT(*) FROM auction_documents").fetchone()[0]==3,
                      "post-outcome contract evidence not archived")
                 contract_id=db.execute("SELECT id FROM auction_documents WHERE category='contract'").fetchone()[0]
             must(call(base+"?document="+str(contract_id),cookie="viewer")[0]==404,
@@ -231,6 +236,33 @@ def main():
             must(n==7 and status==("outcome","won"),"audit event timeline incorrect")
             must(hashlib.sha256(master.read_bytes()).hexdigest()==master_hash,
                  "main accounting DB modified during decision workflow")
+            sell=dict(payload,reference="AUCTION-002",direction="sell",
+                      title="مزایده فروش تجهیزات مصنوعی")
+            must(post(base,"manager",manager_token,"create",sell)==200,
+                 "sale-side auction registration failed")
+            with sqlite3.connect(local) as db:
+                second_id=str(db.execute("SELECT id FROM auctions WHERE reference='AUCTION-002'").fetchone()[0])
+            scope2={"auction_id":second_id,"evidence":"صورتجلسه مصنوعی کمیته فروش شماره ۲"}
+            must(post(base,"manager",manager_token,"review",dict(scope2,kind="technical",decision="approved"))==200,
+                 "sale-side technical review failed")
+            must(post(base,"admin",admin_token,"review",dict(scope2,kind="legal",decision="approved"))==200,
+                 "sale-side legal review failed")
+            must(post(base,"accountant",accountant_token,"review",dict(scope2,kind="financial",decision="approved"))==200,
+                 "sale-side independent finance review failed")
+            must(post(base,"admin",admin_token,"executive",scope2)==409,
+                 "executive approval allowed without documentary and economic evidence")
+            must(post(base,"accountant",accountant_token,"scenario",
+                      dict(economics,auction_id=second_id))==200,
+                 "sale-side forecast failed")
+            must(post(base,"admin",admin_token,"executive",scope2)==409,
+                 "executive approval allowed without official notice or valuation evidence")
+            must(upload_document(base,"manager",manager_token,second_id,"notice",
+                                 "sale-notice.pdf",pdf)==200,
+                 "sale-side notice archive failed")
+            must(post(base,"admin",admin_token,"executive",scope2)==200,
+                 "evidence-backed sale-side approval failed")
+            must(hashlib.sha256(master.read_bytes()).hexdigest()==master_hash,
+                 "business accounting database changed by sell-side workflow")
             print("ZM auctions: offline HTTP/security/workflow, economic forecast and document-integrity assertions passed; no external bid or payment.")
         finally:
             server.terminate()
