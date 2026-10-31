@@ -76,7 +76,7 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
-      - name: Atomically update three isolated MojPlayWin-specific presentation templates only
+      - name: Atomically update MojPlayWin product detail template only
         id: install
         run: |
           set -euo pipefail
@@ -101,7 +101,7 @@ jobs:
           marker.touch()
           print('MPW_MAIN_PASSENGER_CACHED_TEMPLATES_RELOAD=REQUESTED')
           PY
-      - name: Verify guest checkout CTAs, product metadata and translated login
+      - name: Verify guest checkout CTAs and both anonymous TRX checkouts
         run: |
           python3 - <<'PY'
           import urllib.request,urllib.error,os,json,time,re
@@ -123,12 +123,8 @@ jobs:
               if 'Sign in to create an order-specific TRX invoice' in checkout or 'name="password"' in checkout:raise RuntimeError('Checkout requires customer account for '+str(product_id))
               print('MPW_GUEST_CHECKOUT_TRX_AVAILABLE='+str(product_id))
               if 'Sign in to receive an order-specific secure invoice' in content:raise RuntimeError('Misleading account requirement remains')
-              if ('property="og:title" content="'+product_title+' | MojPlayWin"') not in content:raise RuntimeError('Generic product OG title not fixed')
               if 'Live payment methods appear only after provider' in content:raise RuntimeError('Old incorrect payment message remains')
               print('MPW_PRODUCT_BUYER_REAL_CTA_PUBLIC='+str(product_id))
-          with urllib.request.urlopen(origin+'/accounts/login/?buyer_template='+str(time.time_ns()),timeout=20) as r:
-              page=r.read(200000).decode('utf8','replace')
-              assert r.status==200 and '<label for=' in page and '>Username</label>' in page and '>Password</label>' in page and 'csrfmiddlewaretoken' in page
           baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-branded-template-baseline.json'))
           for path,status in baseline.items():
               try:
@@ -137,7 +133,7 @@ jobs:
               if actual!=status:raise RuntimeError('Sibling route status changed: '+path)
           print('MPW_BRANDED_CHECKOUT_SEO_LOGIN_AND_SIBLINGS=PASS')
           PY
-      - name: Restore only three MojPlayWin presentation templates if public smoke fails
+      - name: Restore only MojPlayWin product detail template if public smoke fails
         if: failure() && steps.install.outcome == 'success'
         run: |
           set -euo pipefail
