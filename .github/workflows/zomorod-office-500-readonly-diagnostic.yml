@@ -263,6 +263,110 @@ jobs:
           PY
           done
           REMOTE
+      - name: Attest the root Passenger SQLite identity without opening a writable DB
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 80s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          app=/home/zomorod2/Saeit
+          test -d "$app" && test ! -L "$app" && test -s "$app/passenger_wsgi.py"
+          py=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
+          test -x "$py"
+          cd "$app"
+          PYTHONDONTWRITEBYTECODE=1 "$py" -B - <<'PY'
+          import os
+          import pathlib
+          import sqlite3
+          import sys
+          from urllib.parse import quote
+
+          app=pathlib.Path("/home/zomorod2/Saeit")
+          if pathlib.Path.cwd().resolve()!=app:
+              raise SystemExit("PASSENGER_DB_PROBE_APP_ROOT_MISMATCH")
+          sys.path.insert(0,str(app))
+          try:
+              import passenger_wsgi
+              from django.conf import settings
+              db=settings.DATABASES["default"]
+          except Exception as exc:
+              print("PASSENGER_DB_PROBE_IMPORT="+type(exc).__name__)
+              print("PASSENGER_APP_DB_ATTESTED=false")
+              print("PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no")
+              raise SystemExit(0)
+
+          engine=str(db.get("ENGINE","")).rsplit(".",1)[-1]
+          print("PASSENGER_DB_PROBE_ENGINE="+engine)
+          print("PASSENGER_DB_PROBE_PYTHON="+str(sys.version_info.major)+"."+str(sys.version_info.minor))
+          name=str(db.get("NAME",""))
+          if engine!="sqlite3" or name in ("",":memory:"):
+              print("PASSENGER_DB_PROBE_SQLITE=not_applicable")
+              print("PASSENGER_APP_DB_ATTESTED=false")
+              print("PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no")
+              raise SystemExit(0)
+
+          path=pathlib.Path(name)
+          if not path.is_absolute():
+              path=app/path
+          path=path.resolve()
+          stat=None
+          try:
+              if path.is_file() and not path.is_symlink():
+                  stat=path.stat()
+          except OSError:
+              pass
+          print("PASSENGER_DB_PROBE_FILE_PRESENT="+str(stat is not None).lower())
+          print("PASSENGER_DB_PROBE_SIZE_NONZERO="+str(bool(stat and stat.st_size>0)).lower())
+          tables=None
+          if stat and stat.st_size>0:
+              try:
+                  uri="file:"+quote(str(path),safe="/")+ "?mode=ro"
+                  conn=sqlite3.connect(uri,uri=True,timeout=3)
+                  conn.execute("PRAGMA query_only=ON")
+                  tables=len(conn.execute(
+                      "SELECT name FROM sqlite_master WHERE type='table'"
+                  ).fetchall())
+                  conn.close()
+              except (OSError,sqlite3.Error):
+                  pass
+          print("PASSENGER_DB_PROBE_READONLY_TABLE_COUNT="+(str(tables) if tables is not None else "unavailable"))
+
+          # Process-file identity is only attested when an app-owned worker has
+          # an open FD to this same database inode. A configured path alone is
+          # insufficient; idle workers often leave no open SQLite descriptor.
+          worker_count=0
+          matching_fd=0
+          for pid_dir in pathlib.Path("/proc").iterdir():
+              if not pid_dir.name.isdigit():continue
+              try:
+                  if pid_dir.stat().st_uid!=os.getuid():continue
+                  cwd=pathlib.Path(os.readlink(pid_dir/"cwd"))
+                  if cwd.resolve()!=app:continue
+                  worker_count+=1
+                  if stat is None:continue
+                  for fd in (pid_dir/"fd").iterdir():
+                      try:
+                          s=fd.stat()
+                          if s.st_dev==stat.st_dev and s.st_ino==stat.st_ino:
+                              matching_fd+=1
+                      except (OSError,PermissionError):
+                          continue
+              except (OSError,PermissionError):
+                  continue
+          print("PASSENGER_DB_PROBE_APP_CWD_PROCESSES="+str(worker_count))
+          print("PASSENGER_DB_PROBE_MATCHING_SQLITE_FD="+str(matching_fd))
+          attested=bool(stat and stat.st_size>0 and tables is not None and matching_fd>0)
+          print("PASSENGER_APP_DB_ATTESTED="+str(attested).lower())
+          # DB identity is necessary, not sufficient: restore/MFA/provider gates
+          # remain independent even if an active worker file match is observed.
+          print("PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no")
+          PY
+          REMOTE
       - name: Erase transient private relay files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
