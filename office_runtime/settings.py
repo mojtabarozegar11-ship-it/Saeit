@@ -11,8 +11,15 @@ from config.settings import *  # noqa: F401,F403
 
 # A temporary, independently mounted route can be smoke-tested before cutover.
 OFFICE_BASE_PATH = os.environ.get("ZM_OFFICE_BASE_PATH", "/company/office")
-if OFFICE_BASE_PATH != "/company/office" and not re.fullmatch(
-    r"/company/office-preflight-[0-9a-f]{12}", OFFICE_BASE_PATH
+# Preview is allowed either under the company tree or at a *separate*
+# top-level mount. The latter avoids the parent /company/ PassengerEnabled off
+# rule while leaving the protected PHP management area unchanged.
+_ALLOWED_PREFLIGHT_PATHS = (
+    r"/company/office-preflight-[0-9a-f]{12}",
+    r"/office-preflight-[0-9a-f]{12}",
+)
+if OFFICE_BASE_PATH != "/company/office" and not any(
+    re.fullmatch(pattern, OFFICE_BASE_PATH) for pattern in _ALLOWED_PREFLIGHT_PATHS
 ):
     raise RuntimeError("Invalid private-office mount path")
 
