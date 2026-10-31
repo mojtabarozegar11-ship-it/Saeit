@@ -333,7 +333,7 @@ jobs:
           set -euo pipefail
           export PYTHONDONTWRITEBYTECODE=1
           python3 -B - <<'PY'
-          import os, pathlib, re
+          import os, pathlib, re, sqlite3, urllib.parse
           ht=pathlib.Path("/home/zomorod2/public_html/.htaccess")
           if ht.is_file() and not ht.is_symlink():
               content=ht.read_text(encoding="utf-8",errors="replace")
@@ -367,6 +367,47 @@ jobs:
           for key in sorted(counts):
               print("PASSENGER_PROC_"+key.upper()+"="+str(counts[key]))
           print("PASSENGER_PROCESS_DB_CONCLUSION="+("not_proven" if not counts["db_url_present"] else "runtime_env_keys_observed"))
+          # Only process-bound SQLite paths for this app are eligible. Never print values.
+          live_root=pathlib.Path("/home/zomorod2/Saeit")
+          observed={}
+          for pp in pathlib.Path("/proc").iterdir():
+              if not pp.name.isdecimal():continue
+              try:
+                  if pp.stat().st_uid!=me:continue
+                  cmd=(pp/"cmdline").read_bytes()[:4096].lower()
+                  if not (b"passenger" in cmd or (b"python" in cmd and b"saeit" in cmd)):continue
+                  env=(pp/"environ").read_bytes()[:128000]
+                  data=dict(part.split(b"=",1) for part in env.split(b"\x00") if b"=" in part)
+                  raw_url=data.get(b"DATABASE_URL",b"")
+                  if not raw_url.startswith(b"sqlite:////"):continue
+                  configured_root=data.get(b"PASSENGER_APP_ROOT",b"").decode("utf8","strict").rstrip("/")
+                  try: process_cwd=os.readlink(pp/"cwd")
+                  except OSError: process_cwd=""
+                  if configured_root!=str(live_root) and process_cwd!=str(live_root):continue
+                  url=raw_url.decode("utf8","strict")
+                  path=pathlib.Path(urllib.parse.unquote(url.split("?",1)[0][len("sqlite:///"):]))
+                  if not path.is_absolute() or not path.is_file() or path.is_symlink():continue
+                  if path.resolve(strict=True)!=path or not str(path).startswith("/home/zomorod2/"):continue
+                  uri="file:"+urllib.parse.quote(str(path),safe="/")+"?mode=ro"
+                  with sqlite3.connect(uri,uri=True,timeout=3) as db:
+                      db.execute("PRAGMA query_only=ON")
+                      tables=db.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+                      integrity=db.execute("PRAGMA quick_check").fetchone()[0]
+                  observed[str(path)]=(path.stat().st_size,tables,integrity)
+              except (OSError,ValueError,UnicodeError,sqlite3.Error):
+                  continue
+          print("PASSENGER_APP_DB_ATTESTED="+str(len(observed)==1).lower())
+          print("PASSENGER_APP_DB_DISTINCT_COUNT="+str(len(observed)))
+          if len(observed)==1:
+              name,record=next(iter(observed.items()))
+              size,tables,integrity=record
+              print("PASSENGER_APP_DB_SIZE_KIB="+str((size+1023)//1024))
+              print("PASSENGER_APP_DB_TABLES="+str(tables))
+              print("PASSENGER_APP_DB_INTEGRITY="+("ok" if integrity=="ok" else "not_ok"))
+              default=live_root/"db.sqlite3"
+              same_default=default.is_file() and not default.is_symlink() and os.path.samefile(name,default)
+              print("PASSENGER_APP_DB_IS_DEFAULT="+str(same_default).lower())
+          print("PRODUCTION_DEPLOY_ALLOWED=no")
           PY
           REMOTE
       - name: Audit Passenger directives and database candidates without secrets
