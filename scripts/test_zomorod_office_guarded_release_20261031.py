@@ -29,7 +29,7 @@ class GuardedReleaseRollbackTests(unittest.TestCase):
                 previous = marker.stat().st_mtime_ns
                 with patch.object(release, "regular", wraps=release.regular):
                     release.restart_passenger(wsgi)
-                self.assertTrue(marker.stat().st_mtime_ns >= previous)
+                self.assertGreater(marker.stat().st_mtime_ns, previous)
 
     def test_passenger_restart_rejects_untrusted_symlink_directory(self):
         with tempfile.TemporaryDirectory() as directory:
