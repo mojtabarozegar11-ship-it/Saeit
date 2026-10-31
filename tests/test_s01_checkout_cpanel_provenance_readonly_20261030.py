@@ -52,7 +52,7 @@ class ProvenanceTests(unittest.TestCase):
         self.assertEqual(r["classification"], "SOURCE_SHA_DRIFT_SEMANTIC_OR_SYNTAX_DIFFERENCE")
         self.assertFalse(r["ast_equivalent"])
 
-    def test_exact_approved_candidate_is_recognized_but_not_release_authorized(self):
+    def test_exact_known_candidate_is_recognized_but_not_release_authorized(self):
         candidate = b"price = 6\\n"
         candidate_sha = hashlib.sha256(candidate).hexdigest()
         self.staging.write_bytes(candidate)
@@ -60,15 +60,15 @@ class ProvenanceTests(unittest.TestCase):
         backup.write_bytes(self.approved)
         backup.chmod(0o600)
         with patch(
-            "scripts.s01_checkout_cpanel_provenance_readonly_20261030.APPROVED_CANDIDATE_SHA256",
+            "scripts.s01_checkout_cpanel_provenance_readonly_20261030.KNOWN_CANDIDATE_SHA256",
             candidate_sha,
         ):
             r = self.verdict()
         self.assertEqual(
-            r["classification"], "APPROVED_CANDIDATE_PRESENT_RELEASE_STILL_BLOCKED"
+            r["classification"], "KNOWN_CANDIDATE_SOURCE_PRESENT_RELEASE_STILL_BLOCKED"
         )
         self.assertFalse(r["source_matches_pin"])
-        self.assertTrue(r["source_matches_approved_candidate"])
+        self.assertTrue(r["source_matches_known_candidate"])
         self.assertTrue(r["approved_reference_found"])
         self.assertFalse(r["release_permitted"])
 
