@@ -88,6 +88,23 @@ register=request('GET','approval_register')
 assert 'SyntheticOnlyProposalTitle' in register
 assert 'اشتغال برنامه‌ای' in register
 print('APPROVAL_REGISTER_VIEW_SYNTHETIC=PASS')
+# Exercise the new endpoint without replacing or importing production management.php.
+approval_src=pathlib.Path(__file__).resolve().parents[1]/'content/zomorod-business/approvals.php'
+approval_web=web/'approvals'
+approval_web.mkdir()
+shutil.copy2(approval_src,approval_web/'index.php')
+isolated_code="session_id(getenv('SID'));$_SERVER['REQUEST_METHOD']='GET';require getenv('APPROVAL_INDEX');"
+def isolated_approval_page(current_sid):
+    env=os.environ.copy()
+    env.update({'SID':current_sid,'APPROVAL_INDEX':str(approval_web/'index.php')})
+    output=subprocess.run([php,'-d','session.save_path='+str(sessions),'-r',isolated_code],
+                          env=env,capture_output=True,text=True,timeout=25)
+    assert output.returncode==0,output.stderr[-250:]
+    return output.stdout
+assert 'SyntheticOnlyProposalTitle' in isolated_approval_page(sid)
+assert 'SyntheticOnlyProposalTitle' not in isolated_approval_page('anonymous'+sha[:12])
+print('ISOLATED_APPROVAL_ROUTE_AUTH=PASS')
+
 
 print('ROLE_DOWNGRADE_REVOKES_EXISTING_SESSION=PASS')
 print('ZOMOROD_ACCOUNTING_SYNTHETIC_QA=PASS')
