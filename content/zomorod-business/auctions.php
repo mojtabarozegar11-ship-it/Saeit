@@ -252,11 +252,14 @@ if($method==='POST'){
             }elseif($action==='executive'){
                 if($role!=='admin'||$state['executive']||$state['submission'])aucFail(403,'تصویب نهایی فقط یک‌بار توسط مدیر اصلی مجاز است.');
                 foreach($state['reviews'] as $review)if(!$review||$review['decision']!=='approved')aucFail(409,'سه داوری فنی، مالی و حقوقی مثبت لازم است.');
+                if(!aucRows($db,'SELECT id FROM auction_scenarios WHERE auction_id=? LIMIT 1',[$id]))aucFail(409,'تحلیل اقتصادی مستند برای تصویب لازم است.');
+                if(!aucRows($db,"SELECT id FROM auction_documents WHERE auction_id=? AND category IN ('notice','valuation') LIMIT 1",[$id]))aucFail(409,'پیوست آگهی رسمی یا کارشناسی ارزش لازم است.');
                 if((int)$state['reviews']['financial']['actor_id']===$uid)aucFail(409,'داور مالی و تصویب‌کننده نهایی باید دو شخص مستقل باشند.');
                 if(strtotime((string)$auction['deadline_utc'].' UTC')<=time())aucFail(409,'مهلت مزایده به پایان رسیده است.');
                 aucSql($db,'INSERT INTO auction_events(auction_id,kind,decision,actor_id,evidence) VALUES(?,?,?,?,?)',[$id,'executive','approved',$uid,$evidence]);
             }elseif($action==='submission'){
                 if($role!=='admin'||!$state['executive']||$state['submission'])aucFail(409,'فقط ثبت رسید شرکت در مزایده مصوب مجاز است.');
+                if(!aucRows($db,"SELECT id FROM auction_documents WHERE auction_id=? AND category='receipt' LIMIT 1",[$id]))aucFail(409,'فایل رسید رسمی شرکت در مزایده باید قبلاً بایگانی شود.');
                 aucSql($db,'INSERT INTO auction_events(auction_id,kind,decision,actor_id,evidence) VALUES(?,?,?,?,?)',[$id,'submission','submitted',$uid,$evidence]);
             }elseif($action==='outcome'){
                 $decision=aucPost('decision');
