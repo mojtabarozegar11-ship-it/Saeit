@@ -1,0 +1,327 @@
+name: Stage Zomorod private messaging release safely (no live deploy)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-messaging-private-staging.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-private-messaging-stage
+  cancel-in-progress: false
+jobs:
+  safe-stage:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify immutable PR head checkout
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          echo "IMMUTABLE_HEAD_CHECKOUT=verified"
+      - name: Prepare a constrained no-secrets package
+        shell: bash
+        run: |
+          set -euo pipefail
+          export COPY_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          test "${#COPY_SOURCE_SHA}" -eq 40
+          [[ "$COPY_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          for path in company_messaging company_marketing enterprise_portal ecosystem_hub config/settings.py config/urls.py requirements.txt; do
+            test -e "$path" && test ! -L "$path"
+          done
+          grep -qx 'django-otp==1.7.5' requirements.txt
+          deps="$RUNNER_TEMP/zm-msg-deps"
+          install -d -m 700 "$deps"
+          python3 -m pip download --disable-pip-version-check --no-deps --only-binary=:all: \
+            --dest "$deps" 'django-otp==1.7.5'
+          wheel="$deps/django_otp-1.7.5-py3-none-any.whl"
+          test -f "$wheel" && test ! -L "$wheel"
+          actual="$(sha256sum "$wheel" | awk '{print $1}')"
+          test "$actual" = "475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc"
+          echo "STAGE_OTP_WHEEL_SHA256=$actual"
+          tar -cf "$RUNNER_TEMP/zm-msg-package.tar" \
+            company_messaging company_marketing enterprise_portal ecosystem_hub \
+            config requirements.txt -C "$RUNNER_TEMP" zm-msg-deps
+          test -s "$RUNNER_TEMP/zm-msg-package.tar"
+          find company_messaging company_marketing enterprise_portal ecosystem_hub -type l -print -quit | grep -q . && exit 1 || true
+          echo "PRIVATE_STAGE_PACKAGE_SHA256=$(sha256sum "$RUNNER_TEMP/zm-msg-package.tar" | cut -d' ' -f1)"
+          echo "PRIVATE_STAGE_SOURCE_SHA=$COPY_SOURCE_SHA"
+      - name: Set up pinned GitHub to VPS to cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Transfer immutable private staging package only
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          base="/home/zomorod2/.private/zomorod-messaging-release-stages"
+          target="$base/$SOURCE_SHA"
+          archive="$RUNNER_TEMP/zm-msg-package.tar"
+          localsha="$(sha256sum "$archive" | awk '{print $1}')"
+          # Creation is add-only: never overwrite a prior release candidate or production file.
+          ssh -F "$dir/config" "$COMMAND_HOST" "test ! -e '$target' && install -d -m 700 '$base' && install -d -m 700 '$target' && install -d -m 700 '$target/code'"
+          cat "$archive" | ssh -F "$dir/config" "$COMMAND_HOST" "umask 077; cat > '$target/package.tar'"
+          ssh -F "$dir/config" "$COMMAND_HOST" bash -s -- "$SOURCE_SHA" "$localsha" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          expected="$2"
+          root="/home/zomorod2/.private/zomorod-messaging-release-stages/$sha"
+          test -d "$root/code" && test -f "$root/package.tar"
+          actual="$(sha256sum "$root/package.tar" | awk '{print $1}')"
+          test "$actual" = "$expected"
+          tar -tf "$root/package.tar" | grep -Eq '(^/|(^|/)\.\.(/|$))' && exit 1 || true
+          tar --no-same-owner --no-same-permissions -xf "$root/package.tar" -C "$root/code"
+          test -f "$root/code/company_messaging/models.py"
+          test -f "$root/code/company_marketing/models.py"
+          test -f "$root/code/enterprise_portal/models.py"
+          test -f "$root/code/ecosystem_hub/models.py"
+          test -f "$root/code/config/settings.py"
+          test -f "$root/code/config/urls.py"
+          test -f "$root/code/requirements.txt"
+          test -f "$root/code/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl"
+          test "$(sha256sum "$root/code/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl" | awk '{print $1}')" = "475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc"
+          test -z "$(find "$root/code" -type l -print -quit)"
+          python3 -B -m compileall -q "$root/code/company_messaging" "$root/code/company_marketing" "$root/code/enterprise_portal" "$root/code/ecosystem_hub" "$root/code/config"
+          printf 'release=%s\nsha256=%s\nmode=PRIVATE_STAGE_NO_DEPLOY\n' "$sha" "$actual" > "$root/manifest.txt"
+          chmod 600 "$root/package.tar" "$root/manifest.txt"
+          echo "PRIVATE_STAGE_TRANSFER=verified"
+          echo "PRIVATE_STAGE_COMPILE=passed"
+          echo "PRODUCTION_FILES_CHANGED=false"
+          echo "DB_MIGRATED=false"
+          echo "OUTBOUND_SEND_ENABLED=false"
+          REMOTE
+      - name: Apply full Django schema to isolated staging database and check private login
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 210s ssh -F "$d/config" "$COMMAND_HOST" bash -se -- "$SOURCE_SHA" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          export PYTHONDONTWRITEBYTECODE=1
+          sha="$1"
+          root="/home/zomorod2/.private/zomorod-messaging-release-stages/$sha/code"
+          test -f "$root/config/__init__.py"
+          test -f "$root/config/settings.py"
+          test -f "$root/config/urls.py"
+          py="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
+          if test ! -x "$py"; then py="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"; fi
+          test -x "$py"
+          test -f "/home/zomorod2/Saeit/manage.py"
+          if "$py" -c 'import django_otp' >/dev/null 2>&1; then
+            echo "EXISTING_CPANEL_OTP=available"
+          else
+            echo "EXISTING_CPANEL_OTP=missing_PRODUCTION_RELEASE_BLOCKED"
+          fi
+          # Install only inside the immutable private stage, never in Passenger's live venv.
+          test -f "$root/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl"
+          test "$(sha256sum "$root/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl" | awk '{print $1}')" = "475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc"
+          "$py" -m pip install --disable-pip-version-check --no-index --no-deps \
+            --target "$root/.stage-deps" --find-links "$root/zm-msg-deps" 'django-otp==1.7.5'
+          export PYTHONPATH="$root/.stage-deps:$root:/home/zomorod2/Saeit"
+          "$py" -c 'import django_otp,pathlib,os; assert pathlib.Path(django_otp.__file__).resolve().is_relative_to(pathlib.Path(os.environ["PYTHONPATH"].split(os.pathsep)[0]).resolve())'
+          echo "STAGING_ONLY_OTP=verified"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export SECRET_KEY="private-staging-only-key-not-for-production-20261031"
+          export ALLOWED_HOSTS="testserver,localhost"
+          export DEBUG=False
+          export DATABASE_URL="sqlite:///$root/isolation.sqlite3"
+          export COMPANY_MESSAGING_SEND_ENABLED=false
+          export COMPANY_MARKETING_PUBLISH_ENABLED=false
+          export ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED=false
+          export SESSION_COOKIE_SECURE=true
+          export CSRF_COOKIE_SECURE=true
+          export SECURE_SSL_REDIRECT=false
+          cd "$root"
+          "$py" -m django check
+          "$py" -m django makemigrations --check --dry-run company_messaging company_marketing enterprise_portal ecosystem_hub
+          "$py" -m django migrate --plan > "$root/migration-plan.txt"
+          "$py" -m django migrate --noinput --verbosity 0
+          # Build exact production-style manifest in isolated private directory.
+          "$py" - <<'PY'
+          import pathlib,django
+          from django.conf import settings
+          from django.core.management import call_command
+          django.setup()
+          isolated_root=pathlib.Path.cwd()/".static-preflight"
+          settings.STATIC_ROOT=isolated_root
+          call_command("collectstatic",interactive=False,verbosity=0)
+          assert (isolated_root/"staticfiles.json").is_file()
+          import json
+          manifest=json.loads((isolated_root/"staticfiles.json").read_text())
+          for asset in ("enterprise_portal/app.css",):
+              assert asset in manifest.get("paths",{}),asset
+          print("ISOLATED_STATIC_MANIFEST=validated")
+          print("PRODUCTION_STATIC_UNCHANGED=true")
+          PY
+          "$py" - <<'PY'
+          import os,sqlite3,pathlib
+          import django
+          django.setup()
+          from django.urls import resolve,reverse
+          from django.test import Client
+          from django.conf import settings
+          db=pathlib.Path(settings.DATABASES["default"]["NAME"])
+          assert db.is_file() and db.stat().st_size>80000
+          with sqlite3.connect("file:"+str(db)+"?mode=ro",uri=True) as c:
+              assert c.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+              n=c.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+          assert n>=35
+          assert resolve("/company/office/messages/").url_name is not None
+          assert resolve("/company/office/marketing/").url_name is not None
+          login="/company/office/secure-login/"
+          from django.test.utils import override_settings
+          staging_storage={
+              "default": settings.STORAGES["default"],
+              "staticfiles": {"BACKEND":"django.contrib.staticfiles.storage.StaticFilesStorage"},
+          }
+          with override_settings(STORAGES=staging_storage):
+              response=Client().get(login,secure=True)
+          assert response.status_code==200, response.status_code
+          print("STAGING_SCHEMA_INTEGRITY=passed")
+          print("STAGING_AUTH_LOGIN_HTTP=200")
+          print("STAGING_MESSAGING_ROUTES=resolved")
+          print("STAGING_SCHEMA_TABLE_COUNT="+str(n))
+          print("PRODUCTION_SCHEMA_UNMODIFIED=true")
+          PY
+          echo "PRIVATE_STAGING_DJANGO_MIGRATION=passed"
+          REMOTE
+      - name: Remove runner transient keys and package
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
+          rm -f -- "$RUNNER_TEMP/zm-msg-package.tar"
