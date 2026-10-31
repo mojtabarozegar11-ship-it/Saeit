@@ -19,7 +19,7 @@ class RateFeedUnavailable(ValueError):
     pass
 
 
-def parse_coin_gecko_rates(document, now_epoch):
+def parse_coin_gecko_rates(document, now_epoch, *, required_assets=("ETH", "TRX")):
     try:
         from scripts.mojplaywin_direct_wallet_invoice import SpotRate
     except ModuleNotFoundError:
@@ -30,8 +30,14 @@ def parse_coin_gecko_rates(document, now_epoch):
         raise RateFeedUnavailable("Invalid server clock")
     if not isinstance(document, dict):
         raise RateFeedUnavailable("Invalid market rate payload")
+    if type(required_assets) is not tuple or required_assets not in (
+        ("ETH",), ("TRX",), ("ETH", "TRX")
+    ):
+        raise RateFeedUnavailable("Invalid requested rate assets")
     result = {}
     for symbol, coin_id in (("ETH", "ethereum"), ("TRX", "tron")):
+        if symbol not in required_assets:
+            continue
         record = document.get(coin_id)
         if not isinstance(record, dict):
             raise RateFeedUnavailable("Missing exchange rate for " + symbol)
@@ -53,7 +59,7 @@ def parse_coin_gecko_rates(document, now_epoch):
     return result
 
 
-def fetch_fresh_rates(*, fetch=urlopen, now=None):
+def fetch_fresh_rates(*, fetch=urlopen, now=None, required_assets=("ETH", "TRX")):
     if now is None:
         now = int(time.time())
     try:
@@ -63,7 +69,7 @@ def fetch_fresh_rates(*, fetch=urlopen, now=None):
         if len(body) > MAX_BODY_BYTES:
             raise RateFeedUnavailable("Rate payload exceeds size limit")
         doc = json.loads(body.decode("utf-8"))
-        return parse_coin_gecko_rates(doc, now)
+        return parse_coin_gecko_rates(doc, now, required_assets=required_assets)
     except RateFeedUnavailable:
         raise
     except (OSError, TimeoutError, ValueError, UnicodeError, json.JSONDecodeError) as exc:

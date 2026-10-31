@@ -1,0 +1,173 @@
+name: MPW TRX rate isolation offline regression
+on:
+  push:
+    branches:
+      - fix/mpw-trx-single-asset-rate-readonly-20261031
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: s01-pinned-cpanel-relay-single-session
+  cancel-in-progress: false
+jobs:
+  rate-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Exact-head TRX/ETH quote isolation regression (no network or DB)
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_trx_single_asset_rate_regression.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_trx_live_source_guard_readonly_20261031.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile scripts/mojplaywin_direct_wallet_rates.py mpw_commerce/buyer_wallets.py
+  live-source-readonly:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # Previously observed public host key, pinned and revalidated before auth.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" || { echo 'S01_VPS_HOST_PIN=BLOCKED'; exit 1; }
+          echo 'S01_VPS_HOST_PIN=VERIFIED'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # Public 30GB cPanel host key, pinned before any authenticated session.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" || { echo 'S01_CPANEL_HOST_PIN=BLOCKED'; exit 1; }
+          echo 'S01_CPANEL_HOST_PIN=VERIFIED'
+          # Avoid an extra VPS SSH session before ProxyJump: the proven
+          # Zomorod private-staging relay succeeds with one pinned two-hop
+          # connection, while a separate early session can consume the
+          # intermittent SSH banner window. No direct-cPanel fallback.
+          # A successful remote identity assertion proves both authenticated hops.
+          # Reuse the pinned cPanel control socket for later read-only probes.
+          # Retry only harmless identity reads.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -v -T -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>"$d/ssh-error"; then
+              session_ready=1
+              break
+            fi
+            # -v diagnostics remain ephemeral in runner-only stderr; emit only an allowlisted class.
+          # Never upload/print raw stderr, keys, paths or account identifiers.
+          # Print only a bounded, predefined classification, never raw SSH stderr.
+            echo "S01_PINNED_IDENTITY_FAILURE=$(python3 scripts/s01_ssh_error_classify.py "$d/ssh-error")"
+            echo "S01_PINNED_IDENTITY_PHASE=$(python3 scripts/s01_ssh_error_classify.py --phase "$d/ssh-error")"
+            : > "$d/ssh-error"
+            echo "S01_PINNED_IDENTITY_RETRY=$attempt"
+            if [ "$attempt" -lt 5 ]; then sleep 12; fi
+          done
+          if [ "$session_ready" != 1 ]; then
+            # Non-mutating TCP reachability from the already authenticated VPS
+            # to the pinned cPanel endpoint. No factory process is touched.
+            if timeout 18s ssh -T -F "$d/config" saeit-vps \
+              'timeout 7 bash -c "exec 3<>/dev/tcp/178.239.147.125/1396"' >/dev/null 2>/dev/null; then
+              echo 'S01_CPANEL_RELAY_TCP=OPEN'
+            else
+              echo 'S01_CPANEL_RELAY_TCP=NOT_VERIFIED'
+            fi
+            # Distinguish an accessible cPanel shell from a rejected identity
+            # assertion without printing the account, path or remote output.
+            if timeout 25s ssh -T -F "$d/config" saeit-cpanel 'true' >/dev/null 2>/dev/null; then
+              echo 'S01_CPANEL_REMOTE_SHELL=VERIFIED'
+              echo 'S01_CPANEL_IDENTITY_ASSERTION=BLOCKED'
+            else
+              echo 'S01_CPANEL_REMOTE_SHELL=NOT_VERIFIED'
+            fi
+            echo 'S01_PINNED_SESSION=BLOCKED'
+            exit 1
+          fi
+          echo 'S01_VPS_READONLY_SESSION=VERIFIED_VIA_PINNED_PROXYJUMP'
+          echo 'S01_PINNED_SESSION=VERIFIED'
+      - name: Run hash-only source probe; no DB, order, payment or source export
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          if ! timeout 65s ssh -T -F "$d/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/mpw_trx_live_source_guard_readonly_20261031.py > "$d/trx-guard-result" 2>/dev/null; then
+            echo 'S01_TRX_LIVE_SOURCE_PROBE=BLOCKED_PINNED_RELAY'
+            exit 1
+          fi
+          python3 - "$d/trx-guard-result" <<'PY'
+          import json,sys
+          from pathlib import Path
+          raw=Path(sys.argv[1]).read_text("utf8")
+          prefix="S01_TRX_SOURCE_GUARD="
+          if len(raw)>8000 or not raw.startswith(prefix) or raw.count(prefix)!=1:
+              raise SystemExit("S01_TRX_PROBE_OUTPUT_BLOCKED")
+          doc=json.loads(raw[len(prefix):])
+          states=doc.get("source_states")
+          observed=doc.get("observed_sha256")
+          accepted={"REFERENCE_MATCH","SHA_DRIFT","UNAVAILABLE_OR_UNSAFE","INVALID_DIGEST"}
+          if (not isinstance(states,dict) or set(states)!={"rate","buyer","web","guest","wallet"}
+              or any(x not in accepted for x in states.values())
+              or not isinstance(observed,dict) or set(observed)!=set(states)
+              or any(x is not None and (not isinstance(x,str) or len(x)!=64 or any(c not in "0123456789abcdef" for c in x)) for x in observed.values())
+              or doc.get("release_permitted") is not False
+              or doc.get("cpanel_writes") is not False):
+              raise SystemExit("S01_TRX_PROBE_CONTRACT_BLOCKED")
+          print("S01_TRX_LIVE_READONLY="+json.dumps({
+              "source_states":states,
+              "observed_sha256":observed,
+              "source_identity_all_match":doc.get("source_identity_all_match") is True,
+              "passenger_wsgi_regular_owned":doc.get("passenger_wsgi_regular_owned") is True,
+              "passenger_db_authority_verified":False,
+              "release_permitted":False,"orders_created":0,"payments_created":0,
+          },sort_keys=True))
+          PY
+      - name: Delete runner-only SSH material
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          if [ -d "$d" ]; then
+            if [ -f "$d/config" ]; then ssh -F "$d/config" -O exit saeit-cpanel >/dev/null 2>&1 || true; fi
+            rm -f "$d/trx-guard-result" "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/vps-error" "$d/ssh-error" "$d/config"
+            rmdir "$d"
+          fi
