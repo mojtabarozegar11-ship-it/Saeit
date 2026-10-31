@@ -104,6 +104,8 @@ jobs:
             if apt_plan="$(timeout 35s apt-get --simulate -o Debug::NoLocking=1 upgrade 2>&1)"; then
               echo "HEALTH_APT_SIMULATION=success_local_cache_only"
               printf "%s\n" "$apt_plan" | awk '/^Inst /{i++} /^Remv /{r++} END{printf "HEALTH_APT_SIMULATED_INSTALL_OR_UPGRADE_COUNT=%d\nHEALTH_APT_SIMULATED_REMOVAL_COUNT=%d\n",i+0,r+0}'
+              # Report package names only, never the complete simulated command output.
+              printf "%s\n" "$apt_plan" | awk 'BEGIN{split("openssh-server openssh-client openssl libc6 systemd linux-image-generic linux-headers-generic ca-certificates curl python3",a," ");for(i in a) important[a[i]]=1} /^Inst /{if($2 in important)print "HEALTH_APT_PRIORITY_CANDIDATE="$2}'
             else
               echo "HEALTH_APT_SIMULATION=unavailable"
             fi
