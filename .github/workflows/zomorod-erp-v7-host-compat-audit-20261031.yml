@@ -107,7 +107,7 @@ jobs:
           done
           test -n "$target"
           ssh -F "$d/config" "$target" 'python3 -B -' > "$RUNNER_TEMP/live-erp-inventory.json" <<'PY'
-          import hashlib,json,os,pathlib,subprocess,shutil,sqlite3
+          import hashlib,json,os,pathlib,subprocess,shutil,sqlite3,re
           root=pathlib.Path('/home/zomorod2/.private/zomorod-business')
           if not root.is_dir() or root.is_symlink():
               raise SystemExit('LIVE_PRIVATE_ROOT_UNSAFE')
@@ -122,6 +122,7 @@ jobs:
           app=(root/'app.php').read_text(encoding='utf-8',errors='replace')
           pending=('finance_audit.php','industry_operations.php','payroll_control.php','payroll_ui.php','period_controls.php','workflow_desk.php')
           includes={n:(n in app) for n in pending}
+          live_functions=sorted(set(re.findall(r'\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(',app)))
           bytes_used=db.stat().st_size if db.is_file() else 0
           free_mib=shutil.disk_usage(root).free//1048576
           tables=None
@@ -136,6 +137,7 @@ jobs:
           result={
               'installed_php':installed,
               'live_app_module_references':includes,
+              'live_app_functions':live_functions,
               'database_size_mib':(bytes_used+1048575)//1048576,
               'disk_free_mib':free_mib,
               'existing_database_table_count':tables,
@@ -165,6 +167,13 @@ jobs:
           print('V7_STAGED_CHECKSUM='+('PASS' if actual['v7_staged_package_checksum_verified'] else 'FAIL'))
           print('HOST_DATABASE_EXISTS='+str(actual['original_database_exists']))
           print('LIVE_APP_REFERENCES='+','.join(n for n,used in actual['live_app_module_references'].items() if used))
+          import re
+          v7_app=(source/'app.php').read_text(encoding='utf-8',errors='replace')
+          v7_functions=set(re.findall(r'\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(',v7_app))
+          host_functions=set(actual['live_app_functions'])
+          print('HOST_ONLY_FUNCTIONS='+','.join(sorted(host_functions-v7_functions)))
+          print('V7_ONLY_FUNCTIONS='+','.join(sorted(v7_functions-host_functions)))
+          print('SHARED_FUNCTION_COUNT='+str(len(host_functions & v7_functions)))
           print('LIVE_APP_DOES_NOT_REFERENCE='+','.join(n for n,used in actual['live_app_module_references'].items() if not used))
           print('LIVE_DB_SIZE_MIB='+str(actual['database_size_mib']))
           print('HOST_FREE_SPACE_MIB='+str(actual['disk_free_mib']))
