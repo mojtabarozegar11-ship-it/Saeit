@@ -17,6 +17,7 @@ TEST_STORAGES = {
 @override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"],
                    STORAGES=TEST_STORAGES, COMPANY_MESSAGING_SEND_ENABLED=True,
                    COMPANY_MESSAGING_EMAIL_ENABLED=True)
+@override_settings(COMPANY_OFFICE_REQUIRE_MFA=False)
 class MessagingTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_superuser(username="owner-msg", email="owner@example.org", password="test-only")
