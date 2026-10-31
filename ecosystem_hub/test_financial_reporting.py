@@ -24,6 +24,7 @@ STORE = {
 
 
 @override_settings(STORAGES=STORE, DEBUG=False, ALLOWED_HOSTS=["testserver"])
+@override_settings(COMPANY_OFFICE_REQUIRE_MFA=False)
 class ManagementIncomeTests(TestCase):
     def setUp(self):
         self.owner = get_user_model().objects.create_superuser(
