@@ -13,34 +13,47 @@ MAX_BYTES = 100_000
 
 
 def regular_bytes(path, owner_uid, *, private=False):
-    """Reject links, wrong owner, oversized, unsafe backup and concurrent changes."""
+    """Descriptor-relative read; reject every ancestor symlink and concurrent changes.
+
+    Never opens source through a symlinked application/backup directory.
+    No source content is printed or transferred; this remains diagnostic only.
+    """
     path = Path(path)
-    if path.parent.is_symlink():
+    if not path.is_absolute() or any(part in (".", "..") for part in path.parts):
         return None
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_fd = None
+    file_fd = None
     try:
-        meta = path.lstat()
-        if (not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1 or
-                meta.st_uid != owner_uid or not (0 < meta.st_size <= MAX_BYTES)):
+        directory_fd = os.open("/", directory_flags)
+        for part in path.parts[1:-1]:
+            next_fd = os.open(part, directory_flags, dir_fd=directory_fd)
+            os.close(directory_fd)
+            directory_fd = next_fd
+        file_fd = os.open(
+            path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+            dir_fd=directory_fd,
+        )
+        before = os.fstat(file_fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or
+                before.st_uid != owner_uid or not (0 < before.st_size <= MAX_BYTES) or
+                (private and stat.S_IMODE(before.st_mode) != 0o600)):
             return None
-        if private and stat.S_IMODE(meta.st_mode) != 0o600:
-            return None
-        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-        fd = os.open(path, flags)
-        try:
-            opened = os.fstat(fd)
-            if opened.st_ino != meta.st_ino or opened.st_dev != meta.st_dev:
-                return None
-            with os.fdopen(fd, "rb", closefd=False) as stream:
-                data = stream.read(MAX_BYTES + 1)
-        finally:
-            os.close(fd)
-        after = path.lstat()
-        if (len(data) != meta.st_size or after.st_ino != meta.st_ino or
-                after.st_size != meta.st_size or after.st_mtime_ns != meta.st_mtime_ns):
+        with os.fdopen(os.dup(file_fd), "rb") as stream:
+            data = stream.read(MAX_BYTES + 1)
+        after = os.fstat(file_fd)
+        if (len(data) != before.st_size or
+                (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) !=
+                (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)):
             return None
         return data
     except (OSError, ValueError):
         return None
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+        if directory_fd is not None:
+            os.close(directory_fd)
 
 
 def ast_fingerprint(data):
