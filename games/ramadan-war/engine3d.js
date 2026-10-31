@@ -42,13 +42,10 @@ export function createEngine(canvas) {
   const loader = new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);
   let soldierAsset = null, weaponAsset = null, assetReady = { soldier:false, weapon:false };
   loader.load('./soldier-rigged-ccby.glb', gltf => { soldierAsset = gltf;gltf.scene.traverse(o=>{if(o.geometry)assetGeometries.add(o.geometry);if(o.material)(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>assetMaterials.add(m))}); assetReady.soldier = true; if(world) world.enemies.forEach(e => upgradeEnemy(e)); }, undefined, err => console.warn('Soldier model unavailable; using fallback', err));
-  loader.load('./m24-sniper-ccby.glb', gltf => {
-    weaponAsset = gltf.scene;
-    weaponAsset.traverse(o => {if(o.geometry)assetGeometries.add(o.geometry);if(o.material)(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>assetMaterials.add(m)); if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; if(o.material){ o.material.side = THREE.DoubleSide; } } });
-    assetReady.weapon = true;
-    if(weapon?.g) installWeaponModel(weapon);
-    document.querySelector('#game')?.classList.add('model-weapon-loaded');
-  }, undefined, err => console.warn('Sniper model unavailable; using fallback', err));
+  // R58 rights-safe: self-authored procedural rifle; no third-party M24 model loaded.
+  // makeWeapon() already builds the complete interactive first-person mesh.
+  assetReady.weapon = true;
+  document.querySelector('#game')?.classList.add('model-weapon-loaded');
   let world = null, pitch = 0, time = 0, baseFov = 68, scoped = false, missionMarker=null;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const hitColor=new THREE.Color(0xff4939);
