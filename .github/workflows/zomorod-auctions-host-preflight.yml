@@ -159,6 +159,13 @@ jobs:
               except (OSError,ValueError,subprocess.TimeoutExpired):
                   continue
           result['alternative_php']=alternatives
+          handlers=[]
+          for where,ht in [('site',h/'public_html/.htaccess'),('business',web/'.htaccess')]:
+              if ht.is_file() and not ht.is_symlink():
+                  sample=ht.read_text(encoding='utf-8',errors='replace')
+                  names=sorted(set(re.findall(r'application/x-httpd-(?:ea|alt)-php[0-9]+',sample)))
+                  handlers.append({'scope':where,'versions':names})
+          result['inherited_php_handler_tokens']=handlers
           print(json.dumps(result,sort_keys=True))
           PY
           python3 - "$RUNNER_TEMP/zomorod-auction-host.json" <<'PY'
@@ -181,11 +188,20 @@ jobs:
               print('AUCTION_ALT_PHP='+str(entry.get('binary'))+' version='+str(entry.get('version'))+
                     ' sqlite3='+str(entry.get('sqlite3'))+' fileinfo='+str(entry.get('fileinfo'))+
                     ' sessions='+str(entry.get('sessions')))
+          for entry in data.get('inherited_php_handler_tokens',[]):
+              print('AUCTION_INHERITED_HANDLER_'+str(entry.get('scope')).upper()+'='+','.join(entry.get('versions') or ['unspecified']))
           print('AUCTION_HOST_NEW_ROUTE_PRESENT='+str(data.get('auction_path_preexists')))
           print('AUCTION_HOST_FREE_MIB='+str(data.get('free_mib','unknown')))
           print('AUCTION_DEPLOY_OR_DB_MUTATIONS=NONE')
-          print('AUCTION_RELEASE_AUTHORIZED=NO_BACKUP_RESTORE_OR_WEB_SAPI_EVIDENCE')
-          if not all(data.get(x) for x in check) or not php_ok:
+          def version_ok(version):
+              try:return tuple(map(int,str(version).split('.')[:2])) >= (8,1)
+              except (ValueError,TypeError):return False
+          alternatives=data.get('alternative_php',[])
+          compatible_alternatives=[v for v in alternatives if version_ok(v.get('version'))
+                                   and v.get('sqlite3') and v.get('fileinfo') and v.get('sessions')]
+          print('AUCTION_COMPATIBLE_ALTERNATE_RUNTIME='+('PASS' if compatible_alternatives else 'MISSING'))
+          if not all(data.get(x) for x in check) or not (php_ok or compatible_alternatives):
               sys.exit('AUCTION_HOST_PREFLIGHT=BLOCKED_BY_COMPATIBILITY')
-          print('AUCTION_HOST_PREFLIGHT=PASS_READONLY_DISCOVERY')
+          print('AUCTION_HOST_PREFLIGHT=PASS_RUNTIME_DISCOVERY_ONLY')
+          print('AUCTION_RELEASE_AUTHORIZED=NO_EFFECTIVE_WEB_HANDLER_OR_BACKUP_RESTORE')
           PY
