@@ -60,6 +60,13 @@ jobs:
           echo "HEALTH_FWUPD_LOG_BEGIN"
           journalctl -u fwupd-refresh.service --since '2026-10-29 00:00:00' -n 12 --no-pager -o cat 2>&1 | head -n 22 || true
           echo "HEALTH_FWUPD_LOG_END"
+          echo "HEALTH_FWUPD_PRIVILEGED_LOG_CLASS_BEGIN"
+          if sudo -n true >/dev/null 2>&1; then
+            sudo -n journalctl -u fwupd-refresh.service --since '2026-10-29 00:00:00' -n 80 --no-pager -o cat 2>/dev/null | python3 -c 'import sys,re; s=sys.stdin.read().lower(); keys={"network_dns":r"resolve|dns|connection|network|timed out|temporary failure|could not connect", "http_tls":r"http|ssl|tls|certificate", "permission":r"denied|not authorized|permission", "metadata":r"metadata|lvfs|remote", "daemon_dbus":r"daemon|d-bus|dbus", "unsupported":r"unsupported|no supported|not supported"}; print("HEALTH_FWUPD_PRIV_LOG_LINES="+str(len(s.splitlines()))); print("HEALTH_FWUPD_PRIV_LOG_CATEGORIES="+",".join(k for k,p in keys.items() if re.search(p,s)))'
+          else
+            echo "HEALTH_FWUPD_PRIV_LOG_UNAVAILABLE=no_passwordless_sudo"
+          fi
+          echo "HEALTH_FWUPD_PRIVILEGED_LOG_CLASS_END"
           echo "HEALTH_FWUPD_DETAIL_END"
           echo "HEALTH_READ_ONLY_DONE=true"
           REMOTE
