@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   preview-registration:
-    if: github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.sha == "37b1b92d645812bba9468e4dfd4b9e3ac62ed25c"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
