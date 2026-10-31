@@ -55,7 +55,7 @@ def _run_id(value):
 def section_html():
     posters=[]
     for slug,title,desc in POSTERS:
-        svg=HUB+"posters/"+slug+".svg?v=en-20261028"
+        svg=HUB+"posters/"+slug+".svg?v=en-20261031-photo"
         detail=HUB+"courses/#"+slug
         posters.append(
             '<article class="mpw-course-home-card">'
@@ -77,7 +77,7 @@ border:1px solid #ab8b50;border-radius:18px;box-shadow:0 16px 48px #0006;box-siz
 font-size:12px;letter-spacing:.15em;text-transform:uppercase}
 #mpw-four-course-posters-20261028 h2{color:#f7dbad;font-size:clamp(25px,3.3vw,40px);margin:10px 0}
 #mpw-four-course-posters-20261028 .mpw-course-home-header p{color:#e6dccd;font-size:15px;line-height:1.85}
-#mpw-four-course-posters-20261028 .mpw-course-home-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}
+#mpw-four-course-posters-20261028 .mpw-course-home-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:15px}
 #mpw-four-course-posters-20261028 .mpw-course-home-card{min-width:0;border:1px solid #725d3f;
 border-radius:13px;overflow:hidden;background:#1d2925}
 #mpw-four-course-posters-20261028 .mpw-course-home-card img{width:100%;height:auto;aspect-ratio:3/4;
