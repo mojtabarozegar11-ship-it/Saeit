@@ -55,7 +55,8 @@ class MessagingTests(TestCase):
                 "email_consent_at": "2026-10-31T10:00",
                 "consent_evidence": "signed consent record #410", "active": "on",
             })
-        self.assertRedirects(res, "/company/office/messages/contacts/")
+        self.assertEqual(res.status_code, 302)
+        self.assertEqual(res["Location"], "/company/office/messages/contacts/")
         self.assertEqual(Contact.objects.count(), 1)
         self.assertEqual(Contact.objects.get().consent_evidence, "signed consent record #410")
         self.assertEqual(Message.objects.count(), 0)
