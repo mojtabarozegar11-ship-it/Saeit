@@ -17,6 +17,16 @@ test('invoice history login redirect is expected, not invoice proof', () => {
   assert.equal(v.authRequired,true);
   assert.equal(v.observedSafe,true);
 });
+test('anonymous purchases route accepts only deliberate same-path session denial, never a receipt page', () => {
+  const path='/commerce/trx-easy/purchases/';
+  const denied=classifyNavigation(path,404,path,null);
+  assert.deepEqual(denied,{authRequired:true,unexpectedRedirect:false,observedSafe:true});
+  const page=classifyNavigation(path,200,path,null);
+  assert.deepEqual(page,{authRequired:true,unexpectedRedirect:true,observedSafe:false});
+  assert.equal(classifyNavigation(path,404,'/store/',null).observedSafe,false);
+  assert.equal(classifyNavigation(path,404,path,'TimeoutError').observedSafe,false);
+  assert.equal(classifyNavigation(path,500,path,null).observedSafe,false);
+});
 test('unexpected external redirect fails closed even with HTTP 200', () => {
   const v=classifyNavigation('/store/product/72/checkout/',200,'[external-redirect]',null);
   assert.equal(v.unexpectedRedirect,true);
