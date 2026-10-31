@@ -1,0 +1,14 @@
+# MR-2026-001 — C144 source-adjudication checkpoint (public, non-sensitive)
+
+Status: **CODE / READY_FOR_HUMAN_REVIEW**, not journal-approved, not submitted, not published as an article. This file contains only public bibliographic locators and independent arithmetic; the private full manuscript and author details must not be uploaded to this repository. Edition remains **C144**.
+
+| Source | Reproducible published-value contrast | Admissible interpretation / gate |
+|---|---|---|
+| [Amini et al. 2025, Tables 4–5 F7](https://doi.org/10.1038/s41598-025-26567-z) | DSS/control irrigation 1057.6/764.9 mm; yields 48.9/45.6 t/ha. WP from Y/I: 4.6237/5.9616 kg/m³; Δ −1.3379 kg/m³; relative change −22.44% on control denominator. | Table 5 prints −3.22 in a percentage-labelled column and Conclusion prints −0.1 kg/m³; neither is a verified correction of the other. Need original unrounded data/author-defined estimand. |
+| [Amini et al. 2025, F5](https://doi.org/10.1038/s41598-025-26567-z) | Printed WP 8.4/4.6 kg/m³ implies +3.8 absolute or +82.61% relative; printed yields 30.5/28.2 t/ha imply +8.156% relative. | Published +3.87 and +10.3 percentage-labelled entries are not those conventional ratios. No invented erratum. |
+| [Car et al. 2012, Tables 5–6](https://doi.org/10.1016/j.compag.2012.03.003) | Duration groups 45+13+14=72; Table 5 counts 26+7+3+6+15+17=74; Table 6 categories 11+10+9+8+3=41 versus prose 40. | Input-return engagement is not verified recommendation compliance; exclusive respondent categories unresolved. Need publisher clarification/roster. |
+| [Cvejić et al. 2020, Abstract/Results](https://doi.org/10.3390/agronomy10091238) | Abstract says 35 implementation farms; 2019 Results says 66% responded and separately mentions 46 farmers using e-mail advice; 2020 reports 83% use. Simulated 85%-reservoir strategy yields conditional 25% water / 24% energy / 24% CO₂ reduction. | The 46-person text cannot be silently changed to 46% or treated as a verified 35-farm item denominator. Scenario savings are not metered realization. |
+
+These source checks are an **editorial reconstruction**, not a new experiment, statistical confidence interval, publisher correction, or independent scientific peer review. Manuscript C144 privately includes this audit as native Table 6. Final scientific, IP and author approvals remain open. No factory, VPS, worker, database, payment, merge or public-site publication was performed.
+
+Private package currently assembled and locally QA-checked; off-container Library overwrite is **BLOCKED** by `container_session_unavailable`. Do not claim durable delivery of this revised package until a successful independent Library/Drive upload and SHA readback. Expected new local ZIP SHA-256: `0b3d40d63ae367dd94a7e32dd82940c851c7b1e7d99911ab8fc753e39ef65f23`. Next: persist and independently retrieve exact ZIP; then human review of unresolved source data.
