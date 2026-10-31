@@ -68,9 +68,9 @@ def fetch_trx_only(*, clock: Callable[[], float] = time.time,
     })
     try:
         with opener(req, timeout=8) as response:
-            from urllib.parse import urlparse
-            final = urlparse(response.geturl())
-            if final.scheme != "https" or final.hostname != "api.coingecko.com":
+            # Reject redirects, alternate ports, query changes and untrusted origins.
+            # A TRX-only quote must come from the exact approved endpoint.
+            if response.geturl() != COINGECKO_TRX_ONLY_URL:
                 raise TrustedRateUnavailable("Untrusted market-data origin")
             if getattr(response, "status", 200) != 200:
                 raise TrustedRateUnavailable("Market-data HTTP error")
@@ -81,8 +81,23 @@ def fetch_trx_only(*, clock: Callable[[], float] = time.time,
         raise
     except (OSError, TimeoutError, ValueError) as exc:
         raise TrustedRateUnavailable("TRX rate transport unavailable") from exc
+    def reject_duplicate_keys(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise TrustedRateUnavailable("Ambiguous market-data JSON")
+            result[key] = value
+        return result
+
     try:
-        data = json.loads(raw)
+        data = json.loads(raw, object_pairs_hook=reject_duplicate_keys)
     except (ValueError, UnicodeDecodeError) as exc:
         raise TrustedRateUnavailable("Invalid market-data JSON") from exc
-    return parse_trx_only(data, now=int(clock()))
+    try:
+        instant = clock()
+        if isinstance(instant, bool) or not isinstance(instant, (int, float)) or not math.isfinite(instant):
+            raise TrustedRateUnavailable("Invalid quote clock")
+        now = int(instant)
+    except (OverflowError, ValueError, TypeError) as exc:
+        raise TrustedRateUnavailable("Invalid quote clock") from exc
+    return parse_trx_only(data, now=now)
