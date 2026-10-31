@@ -75,7 +75,7 @@ jobs:
           app = Path('/home/zomorod2/Saeit-staging')
           public = Path('/home/zomorod2/mojplaywin.com')
           backups = Path('/home/zomorod2/.local/share/mpw-guest-checkout-release')
-          known_base = '0db371611ef61b052e368505297af0808cb0108e56c5d99a9f11f66338da19ba'
+          known_base = '7693254e4ed72141b6de7fc283c5a3214159ea49d838318337e47e86953f5f2f'
           result = {
               'scope': 'MPW_GUEST_RECOVERY_READ_ONLY_20261031',
               'host_writes': False, 'db_queries': False,
