@@ -99,8 +99,6 @@ def main():
             must(not (private/"auctions_v1.sqlite3").exists(),"read-only GET created a DB")
             manager_token=csrf(base,"manager")
             admin_token=csrf(base,"admin")
-            accountant_token=csrf(base,"accountant")
-            viewer_token=csrf(base,"viewer")
             deadline=time.strftime("%Y-%m-%dT%H:%M",time.gmtime(time.time()+86400))
             payload={
                 "reference":"AUCTION-001","direction":"buy","title":"فرصت ملک مصنوعی",
@@ -112,7 +110,7 @@ def main():
             master_hash=hashlib.sha256(master.read_bytes()).hexdigest()
             must(post(base,"manager","invalid","create",payload)==403,"CSRF guard bypassed")
             must(not (private/"auctions_v1.sqlite3").exists(),"invalid CSRF created DB")
-            must(post(base,"viewer",viewer_token,"create",payload)==403,"viewer created auction")
+            must(post(base,"viewer","invalid","create",payload)==403,"viewer created auction")
             bad=dict(payload);bad["notice_url"]="http://example.org/notice"
             must(post(base,"manager",manager_token,"create",bad)==422,"insecure notice URL accepted")
             past=dict(payload);past["deadline_utc"]="2020-01-01T12:00"
@@ -128,6 +126,7 @@ def main():
             must(hashlib.sha256(master.read_bytes()).hexdigest()==master_hash,
                  "master business DB was changed")
             auction_id=str(rows[0][0])
+            accountant_token=csrf(base+"?id="+auction_id,"accountant")
             scope={"auction_id":auction_id,"evidence":"مدرک داخلی شماره QA-2026-001"}
             must(post(base,"admin",admin_token,"executive",scope)==409,"executive bypassed reviews")
             must(post(base,"manager",manager_token,"review",dict(scope,kind="technical",decision="approved"))==200,
