@@ -1,3 +1,4 @@
+from django.test import override_settings
 """Security and real-data regression suite for ecosystem extension.
 
 All tests use an isolated ephemeral DB. No external network, real payments,
@@ -40,6 +41,7 @@ STORE = {
 
 
 @override_settings(STORAGES=STORE, DEBUG=False, ALLOWED_HOSTS=["testserver"])
+@override_settings(COMPANY_OFFICE_REQUIRE_MFA=False)
 class HubSuite(TestCase):
     def setUp(self):
         self.hq = BusinessUnit.objects.create(code="hq", name="دفتر مرکزی")
