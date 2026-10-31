@@ -5,14 +5,14 @@ Python 3.10+, standard library only. Read-only local-copy diagnostics; no networ
 Run from repository root:
 
 ```bash
-python scripts/test_s01_r22_offline_gates.py
+python -m unittest scripts.test_s01_r22_offline_gates
 python scripts/s01_r22_offline_gates.py checkout --current /absolute/observed.py --approved /absolute/approved.py --sha256 APPROVED_SHA256
 python scripts/s01_r22_offline_gates.py office-stage --stage /absolute/local-stage --sha256 PACKAGE_TAR_SHA256
 python scripts/s01_r22_offline_gates.py public-routes --evidence /absolute/authorized-observation.json
 python scripts/s01_r22_offline_gates.py game-source --game /absolute/game.js --policy /absolute/moj1-commerce-policy.mjs
 ```
 
-Synthetic offline test suite: 16/16 PASS, Python 3.13.5. Exact file Git blob IDs: source `fb7fb5a11c11045d1edc06dd5273d5206da7410a`; tests `1198829b205565a3c92fd727fd1c4d5ff22b34e8`. Source-only, not an exact-head CI run.
+Synthetic offline test suite: 16/16 PASS, Python 3.13.5. Exact file Git blob IDs: source `fb7fb5a11c11045d1edc06dd5273d5206da7410a`; tests `1198829b205565a3c92fd727fd1c4d5ff22b34e8`. Original local-only fixture result; CI run #41169341915 failed pytest collection on the former unqualified import. Commit 9e8195b8 corrects the import for repo-root pytest collection; verify the new exact-head CI before claiming green.
 
 Scope:
 - Checkout: pinned approved SHA; syntax and AST top-level drift classification; no source text in report.
