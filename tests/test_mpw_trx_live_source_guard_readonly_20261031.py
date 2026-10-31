@@ -11,6 +11,7 @@ class SourceGuardTests(unittest.TestCase):
         self.assertTrue(result["source_identity_all_match"])
         self.assertFalse(result["release_permitted"])
         self.assertFalse(result["passenger_db_authority_verified"])
+        self.assertEqual(result["observed_sha256"]["rate"], REFERENCE_SHA256["rate"])
 
     def test_one_rate_drift_fails_identity(self):
         values = dict(REFERENCE_SHA256)
