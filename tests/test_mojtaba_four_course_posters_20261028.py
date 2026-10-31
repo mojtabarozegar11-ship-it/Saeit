@@ -1,4 +1,4 @@
-"""English-only education SVGs, home section translation and isolated homepage injection, offline regression."""
+"""Ten English education SVGs with authentic owner portrait, isolated homepage upgrade and rollback."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -30,12 +30,12 @@ except ImportError:
 
 class OriginalPostersTests(unittest.TestCase):
     @unittest.skipUnless(DJANGO_AVAILABLE,"Django not installed in offline test runner")
-    def test_all_four_svg_posters_are_real_parseable_vector_images(self):
-        self.assertEqual(len(COURSES),4)
-        self.assertEqual(len({x["slug"] for x in COURSES}),4)
+    def test_all_ten_svg_posters_embed_real_photo_data(self):
+        self.assertEqual(len(COURSES),10)
+        self.assertEqual(len({x["slug"] for x in COURSES}),10)
         for c in COURSES:
             with self.subTest(slug=c["slug"]):
-                xml=svg_for(c["slug"])
+                xml=svg_for(c["slug"], b"RIFF1234WEBPverified-owner-photo-test-data")
                 tree=ElementTree.fromstring(xml)
                 self.assertTrue(tree.tag.endswith("svg"))
                 self.assertEqual(tree.attrib["width"],"900")
@@ -45,11 +45,12 @@ class OriginalPostersTests(unittest.TestCase):
                 self.assertIn(c["lines"][1],xml)
                 self.assertNotIn("<script",xml.lower())
                 self.assertNotIn("javascript:",xml.lower())
-                self.assertNotIn("data:image",xml.lower())
+                self.assertIn("data:image/webp;base64,",xml.lower())
                 self.assertNotIn("dr.mojtaba.rozegar",xml)
-                self.assertNotIn("<image ",xml)
-                self.assertLess(len(xml.encode("utf-8")),40_000)
-                result=poster(RequestFactory().get("/poster/"+c["slug"]),c["slug"])
+                self.assertIn("<image ",xml)
+                self.assertLess(len(xml.encode("utf-8")),460_000)
+                with patch("social_hub.course_showcase.read_owner_photo",return_value=b"RIFF1234WEBPverified-owner-photo-test-data"):
+                    result=poster(RequestFactory().get("/poster/"+c["slug"]),c["slug"])
                 self.assertEqual(result.status_code,200)
                 self.assertTrue(result["Content-Type"].startswith("image/svg+xml"))
                 self.assertIn("sandbox",result["Content-Security-Policy"])
@@ -59,7 +60,7 @@ class OriginalPostersTests(unittest.TestCase):
         self.assertEqual(poster(RequestFactory().get("/nope"),"fake").status_code,404)
 
     @unittest.skipUnless(DJANGO_AVAILABLE,"Django not installed in offline test runner")
-    def test_html_has_four_distinct_posters_details_without_fake_buy_buttons(self):
+    def test_html_has_ten_distinct_posters_details_without_fake_buy_buttons(self):
         resp=gallery(RequestFactory().get("/courses/"))
         html=resp.content.decode("utf-8")
         self.assertEqual(resp.status_code,200)
@@ -70,7 +71,7 @@ class OriginalPostersTests(unittest.TestCase):
         self.assertNotIn("dr.mojtaba.rozegar",html)
         self.assertNotIn("Buy now",html)
         self.assertIsNone(__import__("re").search(r"[\u0600-\u06ff]",html))
-        self.assertEqual(html.count('<article class="mpw-course-card"'),4)
+        self.assertEqual(html.count('<article class="mpw-course-card"'),10)
         for c in COURSES:
             self.assertIn(c["title"],html)
             self.assertIn('/posters/'+c["slug"]+'.svg',html)
@@ -107,9 +108,9 @@ class HomepageInstallationTests(unittest.TestCase):
         content=HOME.patch(self.original)
         self.assertEqual(content.count('<section id="'+ID+'"'),1)
 
-    def test_home_adds_four_with_no_existing_markup_removed_and_rolls_back(self):
+    def test_home_adds_ten_with_no_existing_markup_removed_and_rolls_back(self):
         report=HOME.check(self.app)
-        self.assertEqual(report["posters"],4)
+        self.assertEqual(report["posters"],10)
         new=HOME.patch(self.original)
         self.assertEqual(new.count(HOME.MARKER),1)
         self.assertIn("existing-biography",new)
@@ -149,7 +150,7 @@ class HomepageInstallationTests(unittest.TestCase):
         rendered=self.target.read_text(encoding="utf-8")
         self.assertEqual(rendered.count(HOME.MARKER),1)
         self.assertIn('dir="ltr" lang="en"',rendered)
-        self.assertIn("Four Courses to Build Practical Skills",rendered)
+        self.assertIn("Ten Professional Courses · Practical Skills",rendered)
         self.assertNotIn("OLD LANGUAGE SECTION",rendered)
         self.assertIn("existing-biography",rendered)
         self.assertIn("existing-research",rendered)
@@ -169,6 +170,29 @@ class HomepageInstallationTests(unittest.TestCase):
         self.target.write_text(self.target.read_text()+"\n<!--later legitimate change-->")
         with self.assertRaises(RuntimeError):
             HOME.rollback_english(self.app,self.bak,"123456890")
+
+
+    @unittest.skipUnless(DJANGO_AVAILABLE,"Django unavailable")
+    def test_photo_fail_closed_in_public_poster_route(self):
+        with patch("social_hub.course_showcase.read_owner_photo",side_effect=RuntimeError("missing")):
+            result=poster(RequestFactory().get("/poster/business"),"business")
+        self.assertEqual(result.status_code,503)
+
+    def test_legacy_four_courses_upgrade_to_ten_preserving_unrelated_home(self):
+        import re
+        new_markup=HOME.section_html()
+        cards=re.findall(r'<article class="mpw-course-home-card">.*?</article>',new_markup,re.S)
+        self.assertEqual(len(cards),10)
+        legacy_markup=new_markup
+        for card in cards[4:]:
+            legacy_markup=legacy_markup.replace(card,"",1)
+        self.assertEqual(legacy_markup.count('<article class="mpw-course-home-card"'),4)
+        source=self.original.replace("{% endblock %}",legacy_markup+"{% endblock %}")
+        upgraded=HOME.translate_existing_section(source)
+        self.assertEqual(upgraded.count('<article class="mpw-course-home-card"'),10)
+        self.assertIn("existing-biography",upgraded)
+        self.assertIn("existing-research",upgraded)
+        self.assertIn("Ten Professional Courses",upgraded)
 
     def test_nonapproved_root_rejected_outside_test_mode(self):
         os.environ.pop("MPW_COURSE_POSTERS_TEST",None)
