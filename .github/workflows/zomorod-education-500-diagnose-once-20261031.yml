@@ -1,0 +1,206 @@
+name: Zomorod education directory error 500 read-only diagnostic
+on:
+  push:
+    branches: ['fix/zomorod-education-directory-500-20261031']
+    paths: ['.github/workflows/zomorod-education-500-diagnose-once-20261031.yml']
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-education-500-diagnose-20261031
+  cancel-in-progress: false
+jobs:
+  education-evidence:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm redirect source only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('public/education/index.html').read_text()
+          assert 'saeit-education-redirect' in s
+          assert 'zomorodmelal.ir/amozeshgah/' in s
+          print('EDUCATION_REDIRECT_SOURCE=PASS')
+          PY
+      - name: Prepare pinned cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Read-only cPanel education directory and index resolution evidence
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          ssh -F "$d/config" "$COMMAND_HOST" python3 - <<'PY'
+          import hashlib,os,re,stat
+          from pathlib import Path
+          root=Path.home()/'public_html'
+          for rel in ('education','education/index.html','education/index.php','education/.htaccess','education/passenger_wsgi.py','.htaccess','index.html','index.php','amozeshgah'):
+              p=root/rel
+              if not p.exists() and not p.is_symlink():
+                  print('PATH '+rel+' MISSING')
+                  continue
+              st=p.lstat()
+              kind='link' if stat.S_ISLNK(st.st_mode) else 'dir' if stat.S_ISDIR(st.st_mode) else 'file' if stat.S_ISREG(st.st_mode) else 'other'
+              print('PATH '+rel+' kind='+kind+' size='+str(st.st_size)+' mode='+oct(stat.S_IMODE(st.st_mode))+' owned='+str(st.st_uid==os.geteuid()))
+              if rel=='education' and kind=='dir':
+                  print('EDUCATION_NAMES='+','.join(sorted(x.name for x in p.iterdir())[:40]))
+              if kind=='file' and (rel=='education/index.html' or rel=='education/index.php'):
+                  data=p.read_bytes()
+                  print('CONTENT '+rel+' SHA256='+hashlib.sha256(data).hexdigest()+' REDIRECT_MARKER='+str(b'saeit-education-redirect' in data))
+                  for txt in re.findall(r'<title>[^<]{0,150}</title>',data.decode('utf-8',errors='replace')):
+                      print('PAGE_TITLE '+txt)
+              if kind=='file' and rel.endswith('.htaccess'):
+                  data=p.read_text(encoding='utf-8',errors='replace')
+                  print('HTACCESS_SHA256='+hashlib.sha256(data.encode()).hexdigest())
+                  for line in data.splitlines():
+                      m=re.match(r'^\s*(DirectoryIndex|Options|RewriteRule|RewriteBase|SetHandler|AddHandler|ErrorDocument|PassengerEnabled|PassengerAppRoot)\b',line,re.I)
+                      if m:print('HTACCESS_DIRECTIVE '+rel+' '+m.group(1))
+          print('REMOTE_DIAGNOSIS_READ_ONLY=TRUE')
+          PY
+      - name: Read-only root rewrite rules relevant to legacy directory
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          ssh -F "$d/config" "$COMMAND_HOST" python3 - <<'PY'
+          import re
+          from pathlib import Path
+          path=Path.home()/'public_html/.htaccess'
+          for n,line in enumerate(path.read_text(errors='replace').splitlines(),1):
+              t=line.strip()
+              if re.match(r'^(RewriteRule|RewriteCond|RewriteEngine|DirectoryIndex|PassengerEnabled|PassengerBaseURI|<IfModule|</IfModule)',t,re.I):
+                  # Only route directives. Never print environment, secrets or auth values.
+                  if re.search(r'(secret|password|token|authorization|cookie|api.key)',t,re.I):
+                      print('RULE '+str(n)+' REDACTED')
+                  else:
+                      print('RULE '+str(n)+' '+t[:200])
+          print('ROUTE_CONFIGURATION_READ_ONLY=TRUE')
+          PY
+      - name: Clean temporary runner keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-command-channel"
