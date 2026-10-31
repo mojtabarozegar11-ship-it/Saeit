@@ -64,7 +64,7 @@ def _validate_contract(tree: ast.Module, fn: ast.FunctionDef) -> None:
         body.pop(0)
     if len(body) == 3 and isinstance(body[0], ast.ImportFrom):
         original_import = body.pop(0)
-        if original_import.module != "scripts.mojplaywin_direct_wallet_rates" \
+        if original_import.module != "mpw_commerce.buyer_wallets" \
                 or not any(alias.name == "fetch_server_rate" for alias in original_import.names):
             raise SourceContractChanged("Rate-provider original import changed")
     if len(body) != 2 or not isinstance(body[0], ast.Assign) or not isinstance(body[1], ast.Return):
