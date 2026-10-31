@@ -23,6 +23,7 @@ TARGET = Path("/home/zomorod2/Saeit-staging/services/mpw_trx_commercial_web.py")
 NEW_FUNCTION = '''def _rate_provider():
     """TRX-only fresh USD quote; preserves the existing tuple contract."""
     from decimal import Decimal
+    from scripts.mojplaywin_direct_wallet_rates import RateFeedUnavailable
     from scripts.s01_trx_rate_isolation_candidate import (
         TrustedRateUnavailable, fetch_trx_only,
     )
@@ -61,6 +62,11 @@ def _validate_contract(tree: ast.Module, fn: ast.FunctionDef) -> None:
     if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
             and isinstance(body[0].value.value, str):
         body.pop(0)
+    if len(body) == 3 and isinstance(body[0], ast.ImportFrom):
+        original_import = body.pop(0)
+        if original_import.module != "scripts.mojplaywin_direct_wallet_rates" \
+                or not any(alias.name == "fetch_server_rate" for alias in original_import.names):
+            raise SourceContractChanged("Rate-provider original import changed")
     if len(body) != 2 or not isinstance(body[0], ast.Assign) or not isinstance(body[1], ast.Return):
         raise SourceContractChanged("Rate-provider body changed")
     assign = body[0]
@@ -79,16 +85,8 @@ def _validate_contract(tree: ast.Module, fn: ast.FunctionDef) -> None:
         if not isinstance(expr, ast.Attribute) or expr.attr != attr \
                 or not isinstance(expr.value, ast.Name) or expr.value.id != name:
             raise SourceContractChanged("Return field or order changed")
-    # Existing caller expects RateFeedUnavailable; do not silently change
-    # the error contract. Require an existing top-level import or definition.
-    available = set()
-    for node in tree.body:
-        if isinstance(node, ast.ImportFrom):
-            available.update(alias.asname or alias.name for alias in node.names)
-        elif isinstance(node, ast.ClassDef):
-            available.add(node.name)
-    if "RateFeedUnavailable" not in available:
-        raise SourceContractChanged("Existing rate-error contract unproven")
+    # New provider imports the original RateFeedUnavailable class explicitly.
+    # No fallback to an unrelated exception or unverified payable quote.
 
 
 def build(original: bytes, *, expected_sha256: str = EXPECTED_SOURCE_SHA256) -> bytes:
