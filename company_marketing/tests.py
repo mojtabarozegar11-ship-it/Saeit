@@ -20,6 +20,7 @@ TEST_STORAGES = {
 
 
 @override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"], STORAGES=TEST_STORAGES)
+@override_settings(COMPANY_OFFICE_REQUIRE_MFA=False)
 class MarketingTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_superuser(
