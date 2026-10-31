@@ -144,20 +144,43 @@ def office_stage(stage, pin):
         base = code / top
         if not base.exists():
             continue
+        if base.is_symlink():
+            raise ValueError("UNARCHIVED_SYMLINK")
         for path in base.rglob("*"):
             if path.is_symlink():
                 raise ValueError("UNARCHIVED_SYMLINK")
-            if path.is_file() and path.suffix in EXECUTABLE_EXTENSIONS and path.relative_to(code).as_posix() not in files:
-                raise ValueError("UNARCHIVED_EXECUTABLE")
+            relative = path.relative_to(code).as_posix()
+            if path.is_file() and relative not in files:
+                if path.suffix in EXECUTABLE_EXTENSIONS:
+                    raise ValueError("UNARCHIVED_EXECUTABLE")
+                raise ValueError("UNARCHIVED_ASSET")
     return {"kind": "OFFICE_STAGE_OFFLINE", "status": "ARCHIVE_EXTRACT_MATCH",
             "package_sha256": pin, "verified_file_count": len(files),
             "mfa_verified": False, "passenger_verified": False, "safe_to_deploy": False}
 
 
-def public_route_contract(evidence):
-    """Assess previously collected evidence only; never issue HTTP requests."""
+def public_route_contract(evidence, *, now=None):
+    """Validate a fresh, attributable blocked baseline; never authorize release."""
+    from datetime import datetime, timezone
     if not isinstance(evidence, dict) or evidence.get("source") != "READ_ONLY_HTTP_OBSERVATION":
         raise ValueError("INVALID_OBSERVATION_FORMAT")
+    if evidence.get("origin") != "https://zomorodmelal.ir":
+        raise ValueError("INVALID_OBSERVATION_ORIGIN")
+    raw_time = evidence.get("observed_at")
+    if not isinstance(raw_time, str):
+        raise ValueError("OBSERVATION_TIME_MISSING")
+    try:
+        observed = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+    except ValueError:
+        raise ValueError("OBSERVATION_TIME_INVALID") from None
+    if observed.tzinfo is None:
+        raise ValueError("OBSERVATION_TIME_UNZONED")
+    now = datetime.now(timezone.utc) if now is None else now
+    if now.tzinfo is None:
+        raise ValueError("INVALID_VERIFICATION_CLOCK")
+    age = (now - observed).total_seconds()
+    if age > 900 or age < -60:
+        raise ValueError("OBSERVATION_STALE_OR_FUTURE")
     routes = evidence.get("routes")
     if not isinstance(routes, dict):
         raise ValueError("MISSING_ROUTES")
@@ -168,11 +191,30 @@ def public_route_contract(evidence):
         value = routes.get(route)
         if not isinstance(value, dict) or type(value.get("status")) is not int:
             problems.append({"route": route, "reason": "MISSING_STATUS"})
+        elif value.get("redirected") is not False:
+            problems.append({"route": route, "reason": "REDIRECT_OR_MISSING_REDIRECT_EVIDENCE"})
         elif value["status"] != expected:
             problems.append({"route": route, "reason": "STATUS_DIFFERENT_FROM_BLOCKED_BASELINE"})
     return {"kind": "PUBLIC_ROUTE_EVIDENCE_OFFLINE", "status": "BLOCKED_BASELINE_RECORDED" if not problems else "NEEDS_REVIEW",
             "problems": problems, "observation_timestamp": str(evidence.get("observed_at", "UNSPECIFIED"))[:40],
             "live_verification_performed_here": False, "release_permitted": False}
+
+
+REQUIRED_RELEASE_EVIDENCE = (
+    "source_sha_reconciled", "passenger_db_authority_verified",
+    "durable_offhost_full_restore_verified", "rollback_rehearsal_verified",
+    "public_routes_current_verified", "buyer_flow_accepted",
+)
+
+
+def release_readiness_contract(evidence):
+    """Local completeness triage only. Self-asserted JSON cannot authorize release."""
+    if not isinstance(evidence, dict):
+        raise ValueError("INVALID_RELEASE_EVIDENCE")
+    missing = [name for name in REQUIRED_RELEASE_EVIDENCE if evidence.get(name) is not True]
+    return {"kind": "S01_RELEASE_READINESS_OFFLINE",
+            "status": "BLOCKED" if missing else "INDEPENDENT_ATTESTATION_REQUIRED",
+            "missing": missing, "release_permitted": False, "safe_to_deploy": False}
 
 
 def game_source_gate(game, policy):
@@ -204,14 +246,19 @@ def main():
     c.add_argument("--evidence", required=True)
     d = sub.add_parser("game-source")
     d.add_argument("--game", required=True); d.add_argument("--policy", required=True)
+    e = sub.add_parser("release-evidence")
+    e.add_argument("--evidence", required=True)
     args = p.parse_args()
     try:
         if args.command == "checkout": result = checkout(args.current, args.approved, args.sha256)
         elif args.command == "office-stage": result = office_stage(args.stage, args.sha256)
         elif args.command == "public-routes": result = public_route_contract(json.loads(regular_bytes(args.evidence)))
+        elif args.command == "release-evidence": result = release_readiness_contract(json.loads(regular_bytes(args.evidence)))
         else: result = game_source_gate(args.game, args.policy)
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
-        accepted = ("PIN_MATCH", "FORMAT_ONLY_DRIFT", "ARCHIVE_EXTRACT_MATCH", "BLOCKED_BASELINE_RECORDED", "SOURCE_GUARDS_PRESENT")
+        # Diagnostics may complete successfully without satisfying a release gate.
+        # Format drift, historical blocked routes and self-declared evidence always exit nonzero.
+        accepted = ("PIN_MATCH", "ARCHIVE_EXTRACT_MATCH", "SOURCE_GUARDS_PRESENT")
         return 0 if result["status"] in accepted else 2
     except (OSError, ValueError, tarfile.TarError, UnicodeError, json.JSONDecodeError) as exc:
         print(json.dumps({"status": "BLOCKED", "reason": type(exc).__name__ if isinstance(exc, OSError) else str(exc),
