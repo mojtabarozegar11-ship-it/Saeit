@@ -1,0 +1,19 @@
+name: Zomorod readonly management bridge isolated QA
+on:
+  pull_request:
+    paths:
+      - 'integrations/zomorod_business_readonly/**'
+      - '.github/workflows/zomorod-readonly-bridge-offline-qa.yml'
+permissions:
+  contents: read
+jobs:
+  synthetic_readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pure offline tests (no secrets, SSH, factory or host)
+        run: |
+          set -euo pipefail
+          python3 -m py_compile integrations/zomorod_business_readonly/bridge_app.py
+          python3 -m unittest integrations.zomorod_business_readonly.test_bridge -v
