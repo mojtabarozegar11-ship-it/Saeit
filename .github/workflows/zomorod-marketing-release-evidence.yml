@@ -864,6 +864,11 @@ jobs:
           print("CLOUDLINUX_SELECTOR_ENABLED="+str(parsed.get("selector_enabled","unknown")).lower())
           print("CLOUDLINUX_PASSENGER_ACTIVE="+str(parsed.get("passenger_active","unknown")).lower())
           versions=parsed.get("available_versions",{})
+          known=(sorted(str(v) for v in versions.keys()) if isinstance(versions,dict) else
+                 sorted(str(v) for v in versions) if isinstance(versions,list) else [])
+          print("CLOUDLINUX_AVAILABLE_PYTHON_VERSIONS="+",".join(
+              v for v in known if len(v)<18 and v.replace(".","").isdigit()))
+          print("CLOUDLINUX_DEFAULT_PYTHON_VERSION="+str(parsed.get("default_version","unknown")))
           print("CLOUDLINUX_PY310_AVAILABLE="+str(
               "3.10" in versions if isinstance(versions,(dict,list)) else False).lower())
           # End-user view for the exact domain; do not print application secrets.
