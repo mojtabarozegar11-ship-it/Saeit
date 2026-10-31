@@ -168,3 +168,9 @@ COMPANY_BALE_BOT_TOKEN = env("COMPANY_BALE_BOT_TOKEN", default="")
 COMPANY_EITAA_APP_TOKEN = env("COMPANY_EITAA_APP_TOKEN", default="")
 COMPANY_RUBIKA_BOT_TOKEN = env("COMPANY_RUBIKA_BOT_TOKEN", default="")
 COMPANY_MARKETING_PUBLISH_ENABLED = env.bool("COMPANY_MARKETING_PUBLISH_ENABLED", default=False)
+
+
+# Private PHP→Django single-sign-on remains source-disabled until backup,
+# MFA enrollment, identity approval, replay storage and live rollback gates pass.
+COMPANY_OFFICE_SSO_ENABLED = False
+COMPANY_OFFICE_SSO_KEY_PATH = env("COMPANY_OFFICE_SSO_KEY_PATH", default="")
