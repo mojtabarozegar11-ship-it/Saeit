@@ -1,5 +1,7 @@
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm
+from django.conf import settings
+from django_otp.forms import OTPAuthenticationForm
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from .models import WorkTask, OfficeLetter, BusinessUnit
@@ -13,7 +15,7 @@ def has_office_access(user):
     )
 
 
-class CompanyAuthenticationForm(AuthenticationForm):
+class CompanyAuthenticationForm(OTPAuthenticationForm):
     """Only authorized Django staff can establish a session in this private suite."""
     username = forms.CharField(
         label="نام کاربری",
@@ -36,7 +38,8 @@ class CompanyAuthenticationForm(AuthenticationForm):
         if identifier and login_is_blocked(self.request, identifier):
             raise self.get_invalid_login_error()
         try:
-            result = super().clean()
+            result = (super().clean() if settings.COMPANY_OFFICE_REQUIRE_MFA
+                      else AuthenticationForm.clean(self))
         except ValidationError:
             if identifier:
                 register_failed_login(self.request, identifier)
