@@ -32,7 +32,8 @@ jobs:
           from pathlib import Path
           source = Path(".github/workflows/zomorod-office-root-fallback-release-20261031.yml").read_text(encoding="utf-8")
           body = source.partition("\n  release:\n")[2]
-          if not body or "\n    if: ${{ false }}\n" not in body:
+          expected = "\n    if: " + "$" + "{{ false }}\n"
+          if not body or expected not in body:
               raise SystemExit("OFFICE_RELEASE_DEFAULT_DENY_GUARD_MISSING")
           print("OFFICE_RELEASE_DEFAULT_DENY=PASS_RELEASE_BLOCKED")
           PY
