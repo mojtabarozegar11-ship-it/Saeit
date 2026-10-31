@@ -365,6 +365,14 @@ addEventListener('resize',()=>{if(screen==='game')releaseGameInputs()});
 addEventListener('blur',()=>{releaseGameInputs();if(screen==='game')$('#pause').click()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){releaseGameInputs();if(screen==='game')$('#pause').click()}});
 addEventListener('pageshow',e=>{if(e.persisted){releaseGameInputs();if(screen==='game'){$('#pause').click()}}});
+// Page Lifecycle freeze/pagehide can arrive without blur or visibilitychange.
+// Invalidate held pointer/keyboard state before BFCache or page suspension.
+function suspendOnPageLifecycle(){
+ releaseGameInputs();
+ if(screen==='game')$('#pause').click();
+}
+document.addEventListener('freeze',()=>{suspendOnPageLifecycle();clearBackupCode();save()});
+addEventListener('pagehide',suspendOnPageLifecycle);
 addEventListener('pagehide',()=>{clearBackupCode();save()});addEventListener('storage',observeExternalCampaignSave);addEventListener('beforeunload',warnUnsavedCampaignBeforeExit);addEventListener('visibilitychange',saveCampaignOnHidden);setInterval(save,5000);
 const qaIsLocal=['localhost','127.0.0.1'].includes(location.hostname);
 const debugApi={
