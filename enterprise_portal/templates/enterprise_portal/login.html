@@ -27,10 +27,20 @@
       <label for="{{ form.password.id_for_label }}">رمز عبور</label>
       {{ form.password }}
       {% for error in form.password.errors %}<p class="error">{{ error }}</p>{% endfor %}
+      {% if form.otp_token %}
+        <label for="{{ form.otp_token.id_for_label }}">کد یک‌بارمصرف برنامه احراز هویت</label>
+        {{ form.otp_token }}
+        {% for error in form.otp_token.errors %}<p class="error">{{ error }}</p>{% endfor %}
+      {% endif %}
+      {% if form.get_user and form.otp_device %}
+        <label for="{{ form.otp_device.id_for_label }}">دستگاه تأییدشده</label>
+        {{ form.otp_device }}
+        {% for error in form.otp_device.errors %}<p class="error">{{ error }}</p>{% endfor %}
+      {% endif %}
       {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
       <button type="submit" class="primary-btn">ورود به مدیریت شرکت <span aria-hidden="true">←</span></button>
     </form>
-    <div class="login-notice">رمز عبور فقط از طریق حساب کاربری Django بررسی می‌شود و در این صفحه نمایش یا ذخیره نمی‌شود. اطلاعات حساس را در دستگاه‌های مشترک وارد نکنید.</div>
+    <div class="login-notice">ورود به بخش خصوصی شرکت تنها با رمز عبور و کد یک‌بارمصرف دستگاه از پیش تأییدشده مجاز است. کد یا کلید بازیابی خود را برای دیگران ارسال نکنید.</div>
     <a class="back-link" href="/">بازگشت به سایت اصلی زمرد ملل</a>
   </section>
 </div>
