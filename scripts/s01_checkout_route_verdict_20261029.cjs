@@ -7,8 +7,9 @@ function classifyNavigation(path, http, finalPath, error, finalSearch = '') {
   // denial; it is not evidence that the buyer receipt flow works.
   const anonymousSessionDenied = path === '/commerce/trx-easy/purchases/' &&
     http === 404 && finalPath === path && !finalSearch && !error;
+  const purchasesPath = path === '/commerce/trx-easy/purchases/';
   const authRequired = (authGated && finalPath === '/accounts/login/') ||
-    anonymousSessionDenied;
+    purchasesPath;
   // A login response with a mismatched next target can strand a buyer on
   // another product or an external site. Never count it as a healthy checkout.
   let safeLoginReturn = false;
@@ -24,8 +25,8 @@ function classifyNavigation(path, http, finalPath, error, finalSearch = '') {
   }
   // No query is expected on a directly requested canonical checkout route.
   const expectedDestination = anonymousSessionDenied ||
-    (finalPath === path && !finalSearch) ||
-    (authRequired && safeLoginReturn);
+    (!purchasesPath && finalPath === path && !finalSearch) ||
+    (authRequired && finalPath === '/accounts/login/' && safeLoginReturn);
   const unexpectedRedirect = !expectedDestination;
   // Redirect-only, malformed or missing responses are not successful page observations.
   // page.goto normally returns the final response, but classify defensively.
