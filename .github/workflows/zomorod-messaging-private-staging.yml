@@ -36,7 +36,7 @@ jobs:
           export COPY_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           test "${#COPY_SOURCE_SHA}" -eq 40
           [[ "$COPY_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          for path in company_messaging company_marketing enterprise_portal ecosystem_hub office_runtime core command_center farnaz templates manage.py config/settings.py config/urls.py requirements.txt; do
+          for path in company_messaging company_marketing enterprise_portal ecosystem_hub office_runtime core command_center farnaz templates manage.py office_passenger_wsgi.py config/settings.py config/urls.py requirements.txt; do
             test -e "$path" && test ! -L "$path"
           done
           grep -qx 'django-otp==1.7.5' requirements.txt
@@ -51,7 +51,7 @@ jobs:
           echo "STAGE_OTP_WHEEL_SHA256=$actual"
           tar -cf "$RUNNER_TEMP/zm-msg-package.tar" \
             company_messaging company_marketing enterprise_portal ecosystem_hub office_runtime \
-            core command_center farnaz templates manage.py \
+            core command_center farnaz templates manage.py office_passenger_wsgi.py \
             config requirements.txt -C "$RUNNER_TEMP" zm-msg-deps
           test -s "$RUNNER_TEMP/zm-msg-package.tar"
           find company_messaging company_marketing enterprise_portal ecosystem_hub office_runtime core command_center farnaz templates -type l -print -quit | grep -q . && exit 1 || true
@@ -233,12 +233,14 @@ jobs:
           test -f "$root/code/command_center/models.py"
           test -f "$root/code/farnaz/models.py"
           test -f "$root/code/office_runtime/passenger_wsgi.py"
+          test -f "$root/code/office_passenger_wsgi.py"
           test -f "$root/code/office_runtime/settings.py"
           test -f "$root/code/office_runtime/urls.py"
           test -f "$root/code/manage.py"
           test -f "$root/code/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl"
           test "$(sha256sum "$root/code/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl" | awk '{print $1}')" = "475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc"
           test -z "$(find "$root/code" -type l -print -quit)"
+          python3 -B -m py_compile "$root/code/office_passenger_wsgi.py"
           python3 -B -m compileall -q "$root/code/company_messaging" "$root/code/company_marketing" "$root/code/enterprise_portal" "$root/code/ecosystem_hub" "$root/code/core" "$root/code/command_center" "$root/code/farnaz" "$root/code/office_runtime" "$root/code/config"
           printf 'release=%s\nsha256=%s\nmode=PRIVATE_STAGE_NO_DEPLOY\n' "$sha" "$actual" > "$root/manifest.txt"
           chmod 600 "$root/package.tar" "$root/manifest.txt"
@@ -391,6 +393,47 @@ jobs:
           print("STAGING_MESSAGING_ROUTES=resolved")
           print("STAGING_SCHEMA_TABLE_COUNT="+str(n))
           print("PRODUCTION_SCHEMA_UNMODIFIED=true")
+          PY
+          # Exercise the actual Selector startup module and mounted WSGI path.
+          # This is still the disposable staging DB: never bind the production DB here.
+          export ZM_OFFICE_BASE_PATH="/company/office-preflight-2a8a0f4b9e17"
+          "$py" - <<'PY'
+          import os
+          os.environ.pop("DJANGO_SETTINGS_MODULE", None)
+          from office_passenger_wsgi import application
+          from django.conf import settings
+          from django.urls import reverse, resolve
+          from django.test.utils import override_settings
+          from django.test import Client
+          assert settings.ROOT_URLCONF == "office_runtime.urls"
+          assert settings.FORCE_SCRIPT_NAME == os.environ["ZM_OFFICE_BASE_PATH"]
+          assert settings.SESSION_COOKIE_PATH == settings.FORCE_SCRIPT_NAME + "/"
+          assert settings.CSRF_COOKIE_PATH == settings.FORCE_SCRIPT_NAME + "/"
+          assert reverse("enterprise_portal:login") == settings.FORCE_SCRIPT_NAME + "/secure-login/"
+          assert resolve("/messages/").url_name == "inbox"
+          assert resolve("/marketing/").url_name == "dashboard"
+          storage={
+            "default": settings.STORAGES["default"],
+            "staticfiles": {"BACKEND":"django.contrib.staticfiles.storage.StaticFilesStorage"},
+          }
+          with override_settings(STORAGES=storage):
+              from wsgiref.util import setup_testing_defaults
+              en={}
+              setup_testing_defaults(en)
+              en.update({
+                "REQUEST_METHOD":"GET", "PATH_INFO":"/secure-login/",
+                "SCRIPT_NAME": settings.FORCE_SCRIPT_NAME,
+                "SERVER_NAME":"testserver", "HTTP_HOST":"testserver",
+                "wsgi.url_scheme":"https",
+              })
+              response_status=[]
+              result=application(en,lambda status,headers: response_status.append(status))
+              _=b"".join(result)
+              assert response_status and response_status[0].startswith("200 "), response_status
+          print("STAGING_SIDECAR_PASSENGER_ENTRY=passed")
+          print("STAGING_SIDECAR_SCRIPT_PREFIX=passed")
+          print("STAGING_SIDECAR_WSGI_LOGIN_HTTP=200")
+          print("PUBLIC_OFFICE_ROUTE_UNCHANGED=true")
           PY
           echo "PRIVATE_STAGING_DJANGO_MIGRATION=passed"
           REMOTE
