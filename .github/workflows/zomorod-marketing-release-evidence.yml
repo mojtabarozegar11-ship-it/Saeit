@@ -771,9 +771,18 @@ jobs:
           try:
               r=subprocess.run([str(binary),"--output=json","PassengerApps","list_applications"],
                   capture_output=True,text=True,timeout=35,check=False)
-              obj=json.loads(r.stdout)
-          except (OSError,ValueError,subprocess.TimeoutExpired):
-              print("CPANEL_PASSENGER_UAPI=unparseable")
+              try:obj=json.loads(r.stdout)
+              except ValueError:
+                  print("CPANEL_PASSENGER_UAPI_EXIT_CATEGORY="+("zero" if r.returncode==0 else "nonzero"))
+                  print("CPANEL_PASSENGER_UAPI_STDOUT_BYTES="+str(len(r.stdout.encode("utf8"))))
+                  print("CPANEL_PASSENGER_UAPI_STDERR_BYTES="+str(len(r.stderr.encode("utf8"))))
+                  print("CPANEL_PASSENGER_UAPI_OUTPUT_CLASS="+
+                        ("html" if r.stdout.lstrip().startswith("<") else
+                         "empty" if not r.stdout.strip() else "non_json"))
+                  print("CPANEL_PASSENGER_UAPI=unparseable")
+                  raise SystemExit(0)
+          except (OSError,subprocess.TimeoutExpired):
+              print("CPANEL_PASSENGER_UAPI=unavailable")
               raise SystemExit(0)
           print("CPANEL_PASSENGER_UAPI_COMMAND="+("success" if r.returncode==0 else "nonzero"))
           print("CPANEL_PASSENGER_UAPI_RESPONSE_KEYS="+
