@@ -10,7 +10,7 @@ assert.ok(start>=0&&end>start,'production restore() found');
 const restoreSource=game.slice(start,end);
 
 function harness(previous,raw,options={}){
- const ctx={world:previous,screen:'home',saveKey:'rwNativeCampaign',hero:0,last:0,
+ const ctx={world:previous,screen:'home',saveKey:'rwNativeCampaign',hero:0,last:0,graphicsUnavailable:false,
   hasResumableCampaignInMemory:()=>!!(ctx.world&&!ctx.world.endless&&!ctx.world.victory&&!ctx.world.gameOver),
   storageRead:()=>raw,parseCampaignSave:()=>options.parsed??raw,
   validateCampaignSave:()=>options.valid??false,
