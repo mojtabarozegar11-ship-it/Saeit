@@ -3,10 +3,6 @@ on:
   push:
     branches:
       - feature/zomorod-messaging-main-integration-20261030
-    paths:
-      - .github/workflows/zomorod-office-exact-head-nohost-ci.yml
-      - scripts/zomorod_office_guarded_release_20261031.py
-      - scripts/test_zomorod_office_guarded_release_20261031.py
 permissions:
   contents: read
 concurrency:
@@ -37,8 +33,11 @@ jobs:
           python3 -B - <<'PY'
           from pathlib import Path
           workflow = Path('.github/workflows/zomorod-office-guarded-production-release.yml').read_text(encoding='utf-8')
-          assert "&& false # blocked pending production HTTP 500 root cause" in workflow, 'LIVE_DEPLOY_SAFETY_GATE_CHANGED'
-          assert 'PRODUCTION_DEPLOY_ALLOWED=no' in Path('.github/workflows/zomorod-marketing-release-evidence.yml').read_text(encoding='utf-8')
+          if "&& false # blocked pending production HTTP 500 root cause" not in workflow:
+              raise SystemExit('LIVE_DEPLOY_SAFETY_GATE_CHANGED')
+          evidence = Path('.github/workflows/zomorod-marketing-release-evidence.yml').read_text(encoding='utf-8')
+          if 'PRODUCTION_DEPLOY_ALLOWED=no' not in evidence:
+              raise SystemExit('READONLY_PRODUCTION_GATE_CHANGED')
           print('NO_HOST_EXACT_HEAD=verified')
           print('PRODUCTION_DEPLOY_REMAINS_BLOCKED=true')
           PY
