@@ -49,6 +49,10 @@ jobs:
         run: node --test games/ramadan-war/qa/*.test.mjs
       - name: Validate offline campaign backup export/import and fail-closed inputs
         run: node --test games/ramadan-war/test-campaign-backup.mjs
+      - name: G-01 R58 background entry and cross-game lifecycle regressions (source-only)
+        run: |
+          node --test games/g01-qa/r58-background-entry-rotation.test.mjs
+          node games/g01-handoffs/g01_s01_r58_release_check.mjs
       - name: Full desktop and mobile gameplay with real GLB texture loading
         run: |
           set -euo pipefail
@@ -75,6 +79,7 @@ jobs:
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-result-smoke.cjs
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-restore-fallback-smoke.cjs
           GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-r57-gpu-recovery-smoke.cjs
+          GAME_URL=http://127.0.0.1:8765/ NODE_PATH="$RUNNER_TEMP/ramadan-playwright/node_modules" node games/ramadan-war/site-r58-background-entry-smoke.cjs
       - name: Build SHA-256-verified standalone playable web preview
         run: |
           set -euo pipefail
