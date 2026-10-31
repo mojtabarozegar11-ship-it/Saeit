@@ -638,9 +638,19 @@ jobs:
               )
               try:
                   result=subprocess.run([str(interpreter),"-B","-c",probe],capture_output=True,text=True,timeout=10,check=False)
-                  if result.returncode==0 and all(line.startswith("PASSENGER_EXEC_") for line in result.stdout.splitlines()):
-                      for line in result.stdout.splitlines():print(line)
+                  print('PASSENGER_EXEC_PROBE_STDOUT_BYTES='+str(len(result.stdout.encode('utf8'))))
+                  print('PASSENGER_EXEC_PROBE_STDERR_BYTES='+str(len(result.stderr.encode('utf8'))))
+                  print('PASSENGER_EXEC_PROBE_EXIT_CATEGORY='+('zero' if result.returncode==0 else 'nonzero'))
+                  lines=result.stdout.splitlines()
+                  required=("PASSENGER_EXEC_PYTHON_MINOR=","PASSENGER_EXEC_DJANGO_PRESENT=",
+                            "PASSENGER_EXEC_DJANGO_OTP_PRESENT=","PASSENGER_EXEC_REST_FRAMEWORK_PRESENT=")
+                  if result.returncode==0 and len(lines)==len(required) and all(
+                      line.startswith(prefix) for line,prefix in zip(lines,required)
+                  ):
+                      for line in lines:print(line)
                       print("PASSENGER_EXEC_IMPORT_PROBE=passed")
+                  elif result.returncode==0 and not lines:
+                      print("PASSENGER_EXEC_IMPORT_PROBE=empty_output_not_verified")
                   else:print("PASSENGER_EXEC_IMPORT_PROBE=failed")
               except (OSError,subprocess.TimeoutExpired):
                   print("PASSENGER_EXEC_IMPORT_PROBE=unavailable")
