@@ -313,6 +313,38 @@ jobs:
           assert response.status_code==200, response.status_code
           print("STAGING_SCHEMA_INTEGRITY=passed")
           print("STAGING_AUTH_LOGIN_HTTP=200")
+          # One synthetic, ephemeral account verifies the REAL cPanel interpreter,
+          # ORM and MFA middleware. Never retain credentials or a privileged user.
+          import secrets
+          from django.contrib.auth import get_user_model
+          from django.contrib.sessions.models import Session
+          from django_otp.oath import totp
+          from django_otp.plugins.otp_totp.models import TOTPDevice
+          User=get_user_model()
+          qa_name="zm-staging-qa-"+secrets.token_hex(8)
+          qa_password=secrets.token_urlsafe(32)
+          qa_user=User.objects.create_superuser(username=qa_name,email="qa-stage@example.invalid",password=qa_password)
+          browser=Client()
+          try:
+              device=TOTPDevice.objects.create(user=qa_user,name="Stage-only MFA verification",confirmed=True)
+              otp=str(totp(device.bin_key)).zfill(device.digits)
+              result=browser.post("/company/office/secure-login/",{
+                  "username":qa_name,"password":qa_password,
+                  "otp_device":device.persistent_id,"otp_token":otp,
+              },secure=True)
+              assert result.status_code==302 and result["Location"]=="/company/office/",result.status_code
+              for route in ("/company/office/","/company/office/messages/","/company/office/marketing/"):
+                  res=browser.get(route,secure=True)
+                  assert res.status_code==200,(route,res.status_code)
+              print("STAGING_REAL_MFA_AUTHENTICATION=passed")
+              print("STAGING_AUTHENTICATED_OFFICE_AND_MESSAGE_ROUTES=passed")
+          finally:
+              key=browser.session.session_key
+              if key:
+                  Session.objects.filter(session_key=key).delete()
+              qa_user.delete()
+          assert not User.objects.filter(username=qa_name).exists()
+          print("STAGING_SYNTHETIC_ADMIN_RETAINED=false")
           print("STAGING_MESSAGING_ROUTES=resolved")
           print("STAGING_SCHEMA_TABLE_COUNT="+str(n))
           print("PRODUCTION_SCHEMA_UNMODIFIED=true")
