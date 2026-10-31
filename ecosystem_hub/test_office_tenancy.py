@@ -1,3 +1,4 @@
+from django.test import override_settings
 """Regression checks for legacy office records without business-unit foreign keys."""
 from datetime import timedelta
 
@@ -21,6 +22,7 @@ TEST_STORAGES = {
 
 
 @override_settings(STORAGES=TEST_STORAGES, DEBUG=False, ALLOWED_HOSTS=["testserver"])
+@override_settings(COMPANY_OFFICE_REQUIRE_MFA=False)
 class OfficeTenantPrivacyTests(TestCase):
     def setUp(self):
         users = get_user_model()
