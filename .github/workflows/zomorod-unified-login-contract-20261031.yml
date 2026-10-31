@@ -1,0 +1,33 @@
+name: Zomorod PHP-Django unified sign-in contract (offline only)
+on:
+  push:
+    branches: [feature/zomorod-unified-login-20261031]
+    paths:
+      - "enterprise_portal/sso_contract.py"
+      - "content/zomorod-business/office_sso_ticket.php"
+      - "scripts/test_zomorod_sso_contract.py"
+      - ".github/workflows/zomorod-unified-login-contract-20261031.yml"
+permissions:
+  contents: read
+jobs:
+  cross-language:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+      - name: Validate issuer syntax and independent Python validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/office_sso_ticket.php
+          python3 -B -m unittest -v scripts.test_zomorod_sso_contract
+          echo ZOMOROD_UNIFIED_LOGIN_TOKEN_CONTRACT=OFFLINE_PASS
+          echo PRODUCTION_SSO_ENABLED=false
+          echo DJANGO_SSO_CONSUMER=NOT_CONNECTED
+          echo PHP_LIVE_APP=UNMODIFIED

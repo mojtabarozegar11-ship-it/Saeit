@@ -401,3 +401,34 @@ class AuditEvent(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ValidationError("سوابق حسابرسی حذف نمی‌شود.")
+
+
+class OfficeSsoIdentity(models.Model):
+    """Explicit, independently approved mapping from PHP account to Django office user.
+
+    No user, staff, group, superuser or unit is auto-created by an SSO ticket.
+    """
+    php_uid = models.PositiveBigIntegerField(unique=True)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="zomorod_sso_identity",
+    )
+    role = models.CharField(max_length=12, choices=(
+        ("admin", "مدیر"), ("accountant", "حسابدار"), ("manager", "مسئول"),
+    ))
+    active = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "شناسه تأییدشده ورود یکپارچه"
+        verbose_name_plural = "شناسه‌های تأییدشده ورود یکپارچه"
+
+
+class OfficeSsoNonce(models.Model):
+    """Database-unique replay barrier shared across all WSGI workers."""
+    digest = models.CharField(max_length=64, primary_key=True)
+    expires_at = models.DateTimeField(db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "شناسه یک‌بارمصرف ورود"
+        verbose_name_plural = "شناسه‌های یک‌بارمصرف ورود"

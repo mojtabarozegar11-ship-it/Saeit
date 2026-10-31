@@ -1,10 +1,12 @@
 from django.urls import include, path
-from . import views
+from . import views, sso_views
 from . import trial_balance as reports
 
 app_name = "enterprise_portal"
 
 urlpatterns = [
+    path("sso/consume/", sso_views.consume_ticket, name="sso_consume"),
+    path("sso/otp/", sso_views.CompanySsoOtpStepUp.as_view(), name="sso_step_up"),
     path("assets/app.css", views.office_stylesheet, name="office_css"),
     path("secure-login/", views.CompanyLogin.as_view(), name="login"),
     path("logout/", views.CompanyLogout.as_view(), name="logout"),
