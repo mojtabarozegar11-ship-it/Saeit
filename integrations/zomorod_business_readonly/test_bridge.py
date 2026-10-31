@@ -96,6 +96,37 @@ class ReadOnlyBridgeTests(unittest.TestCase):
         self.assertEqual(self.query(cfg={**self.cfg,"DOCUMENT_ROOT":str(self.path.parent)})[0][0],
                          "404 Not Found")
 
+    def test_document_root_is_mandatory_and_absolute(self):
+        missing_root = dict(self.cfg)
+        missing_root.pop("DOCUMENT_ROOT")
+        self.assertEqual(self.query(cfg=missing_root)[0][0], "404 Not Found")
+        self.assertEqual(self.query(cfg={**self.cfg, "DOCUMENT_ROOT": "relative/root"})[0][0],
+                         "404 Not Found")
+
+    def test_broad_cidr_is_not_accepted_for_financial_records(self):
+        self.assertEqual(self.query(cfg={**self.cfg, "ZM_RO_BRIDGE_ALLOWED_IPS": "127.0.0.0/8"})[0][0],
+                         "404 Not Found")
+        self.assertEqual(self.query(cfg={**self.cfg, "ZM_RO_BRIDGE_ALLOWED_IPS": "0.0.0.0/0"})[0][0],
+                         "404 Not Found")
+        self.assertEqual(self.query(cfg={**self.cfg, "ZM_RO_BRIDGE_ALLOWED_IPS": "::/0"})[0][0],
+                         "404 Not Found")
+
+    def test_symlinked_database_is_rejected(self):
+        alias_dir = self.path.parent / "private_alias"
+        alias_dir.mkdir()
+        alias = alias_dir / "management.sqlite3"
+        alias.symlink_to(self.path)
+        self.assertEqual(self.query(cfg={**self.cfg, "ZM_RO_BRIDGE_DB": str(alias)})[0][0],
+                         "404 Not Found")
+
+    def test_symlinked_document_root_is_rejected(self):
+        actual_root = self.path.parent / "public_html"
+        actual_root.mkdir()
+        alias_root = self.path.parent / "public_alias"
+        alias_root.symlink_to(actual_root, target_is_directory=True)
+        self.assertEqual(self.query(cfg={**self.cfg, "DOCUMENT_ROOT": str(alias_root)})[0][0],
+                         "404 Not Found")
+
 
 if __name__ == "__main__":
     unittest.main()

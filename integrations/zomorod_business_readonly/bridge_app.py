@@ -34,14 +34,24 @@ def create_app(config=None):
     except ValueError:
         networks = []
     db_path = Path(db_name) if db_name else None
-    ready = bool(networks and db_path is not None and db_path.is_absolute()
-                 and db_path.name == "management.sqlite3"
-                 and re.fullmatch("[0-9a-fA-F]{64}", stored_hash))
-    if ready and root:
+    root_path = Path(root) if root else None
+    # The document root is mandatory: omitting it must never disable the
+    # private-DB containment check. Only explicitly approved single IPs
+    # may reach financial and project records.
+    ready = bool(
+        networks and all(net.prefixlen == net.max_prefixlen for net in networks)
+        and db_path is not None and db_path.is_absolute()
+        and root_path is not None and root_path.is_absolute()
+        and db_path.name == "management.sqlite3"
+        and re.fullmatch("[0-9a-fA-F]{64}", stored_hash)
+    )
+    if ready:
         try:
-            if db_path.resolve().is_relative_to(Path(root).resolve()):
+            # Do not follow symlinks for either security boundary.
+            if (db_path.is_symlink() or root_path.is_symlink()
+                    or db_path.resolve().is_relative_to(root_path.resolve())):
                 ready = False
-        except OSError:
+        except (OSError, RuntimeError):
             ready = False
 
     def output(start, status, body):
