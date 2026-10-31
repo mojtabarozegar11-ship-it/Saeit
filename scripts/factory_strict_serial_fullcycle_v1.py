@@ -9,6 +9,7 @@ scientific authorship and human review can finish within sixty seconds.
 import argparse
 from datetime import datetime, timezone
 import fcntl
+import hashlib
 import importlib.util
 import json
 import os
@@ -55,20 +56,29 @@ SHARED_MARKERS = {
     "SAEIT_SCIENCE_REWORK_ALL_20261024": "systemwide-scientific-source-rework-serial.py",
 }
 SERIAL_MARKER = "SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025"
+RECEIVER_CYCLES = frozenset({"R-01", "B-01", "S-01", "G-01"})
+HANDOFF_SCHEMA = "saeit.factory.hourly-cycle-handoff.v1"
 
 
 def verify_cron_partition(contents):
     active = [row for row in contents.splitlines() if row.strip()
               and not row.lstrip().startswith("#")]
-    if sum(SERIAL_MARKER in row for row in active) != 1:
+    serial = [row for row in active if SERIAL_MARKER in row]
+    if len(serial) != 1:
         raise RuntimeError("STRICT_SERIAL_SCHEDULER_MISSING_OR_DUPLICATE")
+    if "--require-scheduler-scope" not in serial[0]:
+        raise RuntimeError("STRICT_SERIAL_SCHEDULER_SCOPE_FLAG_MISSING")
     for line in active:
+        if SERIAL_MARKER in line:
+            continue
         if any(marker in line for marker in EXCLUSIVE_MARKERS):
             raise RuntimeError("STRICT_SERIAL_COMPETING_OWNER_WORKER")
-        for marker, filename in SHARED_MARKERS.items():
-            if marker in line and (line.count("--exclude-owner-agri200") != 1
-                                   or line.count("/"+filename) != 1):
-                raise RuntimeError("STRICT_SERIAL_SHARED_WORKER_UNPARTITIONED:"+marker)
+        # The legacy scope exception still lets *other* products run. The
+        # owner's global singleton rule does not permit that exception.
+        if any(marker in line for marker in SHARED_MARKERS):
+            raise RuntimeError("STRICT_SERIAL_COMPETING_SHARED_FACTORY_WORKER")
+        if re.search(r"(?:factory[_/-]|agri200|stage[2-6][_-])", line, re.I):
+            raise RuntimeError("STRICT_SERIAL_UNKNOWN_FACTORY_CRON")
 
 
 def assert_live_cron_partition():
@@ -81,6 +91,14 @@ def checked_json(path, limit=2_000_000):
     if path.is_symlink() or not path.is_file() or path.stat().st_size > limit:
         raise RuntimeError("UNSAFE_OR_MISSING_SERIAL_EVIDENCE")
     return json.loads(path.read_text("utf8"))
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def atomic(path, document):
@@ -192,6 +210,42 @@ def certified_finished(root, order, governance=None):
         return False
 
 
+def handoff_accepted(root, order):
+    """Require a receiver-side durable copy and order/version-bound acceptance.
+
+    Warehouse certification alone must never advance the serial cursor. This
+    receipt is produced by the receiving hourly cycle, not by this controller.
+    """
+    root = Path(root)
+    for cycle_id in RECEIVER_CYCLES:
+        inbox = root / "product-lifecycle" / "hourly-cycle-handoffs"
+        location = inbox / cycle_id / order
+        receipt = location / "receipt.json"
+        delivered = location / "product.zip"
+        warehouse = root / "product-lifecycle" / "approved-finished-goods" / order / "product.zip"
+        if any(p.is_symlink() for p in (inbox, inbox / cycle_id, location,
+                                        receipt, delivered, warehouse)):
+            continue
+        if not receipt.is_file() or not delivered.is_file() or not warehouse.is_file():
+            continue
+        try:
+            report = checked_json(receipt, 100_000)
+            if (report.get("schema") != HANDOFF_SCHEMA
+                    or report.get("order") != order
+                    or report.get("receiver_cycle") != cycle_id
+                    or report.get("status") != "accepted_by_receiver"
+                    or not isinstance(report.get("acceptance_evidence"), str)
+                    or not report["acceptance_evidence"].strip()):
+                continue
+            expected = sha256_file(warehouse)
+            if (report.get("artifact_sha256") == expected
+                    and sha256_file(delivered) == expected):
+                return True
+        except (OSError, ValueError, TypeError, RuntimeError):
+            continue
+    return False
+
+
 def worker_args(root, ops, order, stage):
     name, file, args, _ = stage
     script = ops / file
@@ -247,7 +301,8 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
     order, index, ticks = selected_order(state, orders)
     governance = load_governance(ops)
     if order is None:
-        if not all(certified_finished(root, item, governance) for item in orders):
+        if not all(certified_finished(root, item, governance) and handoff_accepted(root, item)
+                   for item in orders):
             raise RuntimeError("STRICT_SERIAL_QUEUE_COMPLETION_UNVERIFIED")
         return {"schema":SCHEMA, "all_complete":True, "stages_executed":0,
                 "sites_modified":False, "publications":0}
@@ -256,6 +311,7 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
     if dry_run:
         return {"schema":SCHEMA, "active_order":order, "tick_number":ticks,
                 "certified":certified_finished(root, order, governance),
+                "handoff_accepted":handoff_accepted(root, order),
                 "storage_hold":disk_usage(root).free < RESERVE,
                 "stages_executed":0, "sites_modified":False}
     lock = ops / ".strict-serial-fullcycle.lock"
@@ -270,7 +326,8 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
         # Re-read after locking: even a second scheduler cannot roll forward.
         order, index, ticks = selected_order(state, orders)
         if order is None:
-            if not all(certified_finished(root, item, governance) for item in orders):
+            if not all(certified_finished(root, item, governance) and handoff_accepted(root, item)
+                       for item in orders):
                 raise RuntimeError("STRICT_SERIAL_QUEUE_COMPLETION_UNVERIFIED")
             return {"schema":SCHEMA, "all_complete":True, "stages_executed":0,
                     "publications":0}
@@ -305,7 +362,8 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                 except (OSError, RuntimeError, ValueError) as exc:
                     results[label] = "BLOCKED_" + type(exc).__name__ + ":" + str(exc)[:80]
             certified = certified_finished(root, order, governance)
-        next_index = index + 1 if certified else index
+        delivered_to_cycle = certified and handoff_accepted(root, order)
+        next_index = index + 1 if delivered_to_cycle else index
         # A certified product exits the active slot, without silently
         # distributing it to sites whose buyer-delivery gate is not proven.
         all_complete = next_index == len(orders)
@@ -314,6 +372,7 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                        "index":next_index, "ticks":0 if certified else ticks + 1,
                        "all_complete":all_complete,
                        "last_order":order, "last_order_certified":certified,
+                       "last_order_handoff_accepted":delivered_to_cycle,
                        "last_cycle_utc":datetime.now(timezone.utc).isoformat(),
                        "stage_results":results, "storage_hold":hold,
                        "independent_approval_required":True,
@@ -321,6 +380,7 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
         return {"schema":SCHEMA, "processed_order":order,
                 "active_order_after_cycle":next_order,
                 "certified_to_private_finished_goods":certified,
+                "handoff_accepted":delivered_to_cycle,
                 "stages_executed":sum(v=="EXECUTED" for v in results.values()),
                 "stage_results":results, "storage_hold":hold, "tick_number":ticks+1,
                 "publications":0, "automatic_quality_approvals":0}
