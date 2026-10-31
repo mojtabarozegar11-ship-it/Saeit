@@ -1,5 +1,6 @@
 """No rotation on rework, no fabricated reviews, and strictly one target."""
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -35,6 +36,25 @@ def workspace(parent):
     return root, ops
 
 
+def accepted_handoff(root, order, cycle_id="B-01"):
+    finished = root / "product-lifecycle/approved-finished-goods" / order
+    receiver = root / "product-lifecycle/hourly-cycle-handoffs" / cycle_id / order
+    finished.mkdir(parents=True, exist_ok=True)
+    receiver.mkdir(parents=True, exist_ok=True)
+    data = b"synthetic-private-artifact-for-unit-test"
+    (finished / "product.zip").write_bytes(data)
+    (receiver / "product.zip").write_bytes(data)
+    (receiver / "receipt.json").write_text(json.dumps({
+        "schema": cycle.HANDOFF_SCHEMA,
+        "order": order,
+        "receiver_cycle": cycle_id,
+        "status": "accepted_by_receiver",
+        "artifact_sha256": hashlib.sha256(data).hexdigest(),
+        "acceptance_evidence": "receiver acceptance record in private handoff inbox",
+    }), encoding="utf8")
+    return receiver
+
+
 class Disk:
     free = 4 * 1024**3
 
@@ -52,14 +72,20 @@ class StrictSerialTests(unittest.TestCase):
         valid = (
             "* * * * * /ops/strict-serial-fullcycle-v1.py --require-scheduler-scope # "
             + cycle.SERIAL_MARKER + "\n"
-            "* * * * * /ops/stage2-research-serial.py --exclude-owner-agri200 # "
-            "SAEIT_FACTORY_STAGE2_RESEARCH_V1\n")
+            "0 3 * * * /opt/unrelated-backup\n")
         cycle.verify_cron_partition(valid)
         with self.assertRaisesRegex(RuntimeError, "COMPETING_OWNER_WORKER"):
             cycle.verify_cron_partition(valid +
                 "* * * * * /ops/legacy # SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1\n")
-        with self.assertRaisesRegex(RuntimeError, "UNPARTITIONED"):
-            cycle.verify_cron_partition(valid.replace("--exclude-owner-agri200", ""))
+        with self.assertRaisesRegex(RuntimeError, "COMPETING_SHARED_FACTORY_WORKER"):
+            cycle.verify_cron_partition(valid +
+                "* * * * * /ops/stage2-research-serial.py --exclude-owner-agri200 # "
+                "SAEIT_FACTORY_STAGE2_RESEARCH_V1\n")
+        with self.assertRaisesRegex(RuntimeError, "UNKNOWN_FACTORY_CRON"):
+            cycle.verify_cron_partition(valid +
+                "* * * * * python /opt/factory/another_product.py\n")
+        with self.assertRaisesRegex(RuntimeError, "SCOPE_FLAG_MISSING"):
+            cycle.verify_cron_partition(valid.replace("--require-scheduler-scope", ""))
 
     def test_one_product_holds_across_rework_cycles(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -122,7 +148,7 @@ class StrictSerialTests(unittest.TestCase):
             self.assertFalse(result["certified_to_private_finished_goods"])
             self.assertEqual(result["active_order_after_cycle"], "WO-00000601")
 
-    def test_certified_real_stock_is_only_path_to_next_order(self):
+    def test_certification_alone_never_starts_second_product(self):
         with tempfile.TemporaryDirectory() as folder:
             root, ops = workspace(Path(folder))
             with patch.object(cycle, "certified_finished", return_value=True):
@@ -131,8 +157,14 @@ class StrictSerialTests(unittest.TestCase):
                     disk_usage=lambda _:Disk())
             self.assertTrue(result["certified_to_private_finished_goods"])
             self.assertEqual(result["processed_order"], "WO-00000601")
-            self.assertEqual(result["active_order_after_cycle"], "WO-00000602")
+            self.assertEqual(result["active_order_after_cycle"], "WO-00000601")
+            self.assertFalse(result["handoff_accepted"])
             self.assertEqual(result["stages_executed"], 0)
+            accepted_handoff(root, "WO-00000601")
+            with patch.object(cycle, "certified_finished", return_value=True):
+                delivered = cycle.tick(root, ops, disk_usage=lambda _:Disk())
+            self.assertTrue(delivered["handoff_accepted"])
+            self.assertEqual(delivered["active_order_after_cycle"], "WO-00000602")
             # An arbitrary claim without real governance does not release.
             forged = root / "product-lifecycle/approved-finished-goods/WO-00000602"
             forged.mkdir(parents=True)
@@ -143,6 +175,23 @@ class StrictSerialTests(unittest.TestCase):
                                 disk_usage=lambda _:Disk(),monotonic=lambda:0)
             self.assertEqual(result["processed_order"], "WO-00000602")
             self.assertFalse(result["certified_to_private_finished_goods"])
+
+    def test_handoff_requires_matching_copy_hash_and_receiver_ack(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            receipt_dir = accepted_handoff(root, "WO-00000601")
+            receipt_file = receipt_dir / "receipt.json"
+            receipt = json.loads(receipt_file.read_text())
+            receipt["artifact_sha256"] = "0" * 64
+            receipt_file.write_text(json.dumps(receipt))
+            self.assertFalse(cycle.handoff_accepted(root, "WO-00000601"))
+            with patch.object(cycle, "certified_finished", return_value=True):
+                held = cycle.tick(root, ops, disk_usage=lambda _:Disk())
+            self.assertEqual(held["active_order_after_cycle"], "WO-00000601")
+            receipt["artifact_sha256"] = hashlib.sha256(
+                (receipt_dir / "product.zip").read_bytes()).hexdigest()
+            receipt_file.write_text(json.dumps(receipt))
+            self.assertTrue(cycle.handoff_accepted(root, "WO-00000601"))
 
     def test_budget_does_not_create_false_pass(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -224,11 +273,13 @@ class StrictSerialTests(unittest.TestCase):
             state.write_text(json.dumps({"schema":cycle.SCHEMA,
                                          "active_order":"WO-00000800", "index":199,
                                          "ticks":19}))
+            accepted_handoff(root, "WO-00000800")
             with patch.object(cycle, "certified_finished", return_value=True):
                 done = cycle.tick(root,ops,disk_usage=lambda _:Disk())
             self.assertTrue(done["certified_to_private_finished_goods"])
             self.assertIsNone(done["active_order_after_cycle"])
-            with patch.object(cycle, "certified_finished", return_value=True):
+            with (patch.object(cycle, "certified_finished", return_value=True),
+                  patch.object(cycle, "handoff_accepted", return_value=True)):
                 final=cycle.tick(root,ops,dry_run=True)
             self.assertTrue(final["all_complete"])
 
