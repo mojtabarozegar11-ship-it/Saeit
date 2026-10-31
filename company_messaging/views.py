@@ -7,9 +7,9 @@ from django.db import transaction
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from enterprise_portal.views import office_access, no_cache
-from ecosystem_hub.access import user_units
-from .forms import ComposeForm
-from .models import Message, MessageEvent
+from ecosystem_hub.access import require_unit, user_units
+from .forms import ComposeForm, ContactForm
+from .models import Contact, Message, MessageEvent
 from .services import enqueue
 
 
@@ -87,3 +87,49 @@ def mark_read(request, pk):
             msg.save(update_fields=["read_at"])
             MessageEvent.objects.create(message=msg, code="read_by_recipient")
     return no_cache(redirect("company_messaging:detail", pk=pk))
+
+
+def visible_contacts(user):
+    """Never expose contacts outside the manager's active business units."""
+    return Contact.objects.select_related("unit").filter(unit__in=user_units(user))
+
+
+@office_access
+@require_GET
+def contacts(request):
+    permission(request.user, "manage_company_contacts")
+    from django.core.paginator import Paginator
+    page = Paginator(visible_contacts(request.user).order_by("name", "pk"), 50).get_page(
+        request.GET.get("page")
+    )
+    return no_cache(render(request, "company_messaging/contacts.html", {"contacts": page}))
+
+
+@office_access
+@require_http_methods(["GET", "POST"])
+def contact_create(request):
+    permission(request.user, "manage_company_contacts")
+    form = ContactForm(request.POST or None, user=request.user)
+    if request.method == "POST" and form.is_valid():
+        require_unit(request.user, form.cleaned_data["unit"], write=True)
+        form.save()
+        return no_cache(redirect("company_messaging:contacts"))
+    return no_cache(render(request, "company_messaging/contact_form.html", {
+        "form": form, "editing": False,
+    }))
+
+
+@office_access
+@require_http_methods(["GET", "POST"])
+def contact_edit(request, pk):
+    permission(request.user, "manage_company_contacts")
+    with transaction.atomic():
+        contact = get_object_or_404(visible_contacts(request.user).select_for_update(), pk=pk)
+        require_unit(request.user, contact.unit, write=True)
+        form = ContactForm(request.POST or None, instance=contact, user=request.user)
+        if request.method == "POST" and form.is_valid():
+            form.save()
+            return no_cache(redirect("company_messaging:contacts"))
+    return no_cache(render(request, "company_messaging/contact_form.html", {
+        "form": form, "editing": True,
+    }))
