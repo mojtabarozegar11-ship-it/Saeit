@@ -26,7 +26,7 @@ test('pause never falsely promises a successful save; retry can recover',()=>{
  const source=between('let saveWarningShown=false,saveStatus=', '\nfunction restore(){');
  let allowed=false,writes=0,lastSnapshot=null;const status={textContent:''},retry={hidden:true};const world={endless:false,pickups:[]};
  const resume={disabled:false};const ctx={screen:'game',world,graphicsUnavailable:false,saveKey:'rwNativeCampaign',storageWrite:(key,value)=>{writes++;if(allowed)lastSnapshot=value;return allowed},storageRead:()=>lastSnapshot,storageRemove:()=>true,
-  campaignSaveDisposition:()=>world.endless?'keep':'write',boundedCampaignPickups:()=>[],toast(){},$:(id)=>id==='#pauseSaveStatus'?status:id==='#retrySave'?retry:null};
+  campaignSaveDisposition:()=>world.endless?'keep':'write',boundedCampaignPickups:()=>[],toast(){},$:(id)=>id==='#pauseSaveStatus'?status:id==='#retrySave'?retry:id==='#resume'?resume:null};
  const api=vm.runInNewContext(source+'\n({save,updatePauseSaveStatus})',ctx);
  assert.equal(api.save(),false);api.updatePauseSaveStatus();assert.equal(retry.hidden,false);assert.match(status.textContent,/ذخیرهٔ خودکار انجام نشد/);
  allowed=true;assert.equal(api.save(),true);api.updatePauseSaveStatus();assert.equal(retry.hidden,true);assert.match(status.textContent,/ذخیره شد/);
