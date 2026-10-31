@@ -1,0 +1,177 @@
+name: Zomorod one-use sealed private approval CSV handoff
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/zomorod-approval-sealed-handoff-20261031.yml"
+      - "scripts/zomorod_approval_sealed_receive.php"
+      - "scripts/zomorod_approval_envelope_encrypt.py"
+      - "tests/test_zomorod_approval_envelope.py"
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-sealed-approval-csv-handoff-20261031
+  cancel-in-progress: false
+jobs:
+  offline-crypto:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: openssl,zlib,posix
+      - name: Validate authenticated sealed transfer without production data
+        run: |
+          set -euo pipefail
+          php -l scripts/zomorod_approval_sealed_receive.php
+          python3 -m pip install -q 'cryptography>=44,<51'
+          python3 -B -m unittest discover -s tests -p 'test_zomorod_approval_envelope.py' -v
+          echo SEALED_HANDOFF_OFFLINE_QA=PASS
+          echo REAL_PRIVATE_CSV_TOUCHED=no
+  owner-authorized-receive:
+    if: >-
+      github.event_name == 'issue_comment'
+      && github.ref == 'refs/heads/main'
+      && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+      && github.event.issue.number == 1600
+      && !github.event.issue.pull_request
+      && github.actor == 'mojtabarozegar11-ship-it'
+      && github.event.comment.user.login == 'mojtabarozegar11-ship-it'
+      && github.event.comment.author_association == 'OWNER'
+      && startsWith(github.event.comment.body, 'ZMR-APPROVAL-SEALED-UPLOAD-V1')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify owner issue comment and preserve ciphertext only
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - "$GITHUB_EVENT_PATH" <<'PY'
+          import json,os,re,sys
+          from pathlib import Path
+          event=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          issue=event.get("issue") or {}
+          comment=event.get("comment") or {}
+          user=comment.get("user") or {}
+          if not (
+              event.get("action")=="created"
+              and issue.get("number")==1600 and not issue.get("pull_request")
+              and user.get("login")=="mojtabarozegar11-ship-it"
+              and comment.get("author_association")=="OWNER"
+              and os.environ.get("GITHUB_ACTOR")=="mojtabarozegar11-ship-it"
+              and os.environ.get("GITHUB_REF")=="refs/heads/main"
+          ):
+              raise SystemExit("SEALED_APPROVAL_OWNER_GATE_BLOCKED")
+          body=comment.get("body")
+          marker="ZMR-APPROVAL-SEALED-UPLOAD-V1\n"
+          if not isinstance(body,str) or not body.startswith(marker):
+              raise SystemExit("SEALED_APPROVAL_MARKER_BLOCKED")
+          raw=body[len(marker):].strip()
+          if not 900<=len(raw.encode("ascii"))<=22000:
+              raise SystemExit("SEALED_APPROVAL_SIZE_BLOCKED")
+          obj=json.loads(raw)
+          if not isinstance(obj,dict) or set(obj)!={"alg","ct","ek","issued_at","iv","plain_size","purpose","sha256","tag","v"}:
+              raise SystemExit("SEALED_APPROVAL_SCHEMA_BLOCKED")
+          if (obj.get("v")!=1 or obj.get("purpose")!="zomorod-approval-csv-import-20261031-v1"
+                  or obj.get("alg")!="RSA-OAEP-SHA1+AES-256-GCM+GZIP"
+                  or obj.get("plain_size")!=52072
+                  or obj.get("sha256")!="40c09b1aff17143cf315884177b61a35c6b1d62aa30a445056cfd8303deb3366"):
+              raise SystemExit("SEALED_APPROVAL_SOURCE_BLOCKED")
+          if not isinstance(obj.get("issued_at"),int):
+              raise SystemExit("SEALED_APPROVAL_TIME_BLOCKED")
+          for key in ("ct","ek","iv","tag"):
+              if not isinstance(obj[key],str) or not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}",obj[key]):
+                  raise SystemExit("SEALED_APPROVAL_FORMAT_BLOCKED")
+          target=Path(os.environ["RUNNER_TEMP"])/"approval-sealed-owner.json"
+          fd=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+          with os.fdopen(fd,"w",encoding="ascii") as out:
+              out.write(raw+"\n")
+          print("SEALED_APPROVAL_OWNER_GATE=PASS")
+          print("SEALED_APPROVAL_CIPHERTEXT_ONLY=YES")
+          PY
+      - name: Carry sealed file through verified relay to private cPanel directory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-business-source-readonly"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo "VPS_HOSTKEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # Resolve cPanel from the already pinned VPS, then compare its ED25519
+          # fingerprint before any connection to the production account.
+          scan="$(timeout 35s ssh -T -F "$d/config" saeit-vps 'timeout 10s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOSTKEY=verified"
+          # The original private CSV is never present on GitHub, in runner
+          # checkout, or in Actions logs. Only the opaque sealed envelope moves.
+          inbox="/home/zomorod2/.private/zomorod-business/.approval-sealed-inbox"
+          ssh -F "$d/config" saeit-cpanel "test \"\$(id -un)\" = zomorod2 && test ! -L '$inbox' && install -d -m 700 '$inbox' && test \"\$(stat -c %a '$inbox')\" = 700 && test ! -e /home/zomorod2/.private/zomorod-business/zomorod_projects_import_20261031.csv"
+          scp -F "$d/config" "$RUNNER_TEMP/approval-sealed-owner.json" "saeit-cpanel:$inbox/sealed-$GITHUB_RUN_ID.json"
+          scp -F "$d/config" scripts/zomorod_approval_sealed_receive.php "saeit-cpanel:$inbox/zomorod_approval_sealed_receive.php"
+          timeout 100s ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          run_id="$1"
+          case "$run_id" in *[!0-9]*|"") exit 6 ;; esac
+          private="$HOME/.private/zomorod-business"
+          inbox="$private/.approval-sealed-inbox"
+          target="$private/zomorod_projects_import_20261031.csv"
+          chmod 600 "$inbox/sealed-$run_id.json" "$inbox/zomorod_approval_sealed_receive.php"
+          php -r 'if(!extension_loaded("openssl") || !function_exists("gzdecode"))exit(3);'
+          php -l "$inbox/zomorod_approval_sealed_receive.php" >/dev/null
+          php "$inbox/zomorod_approval_sealed_receive.php" "$inbox/sealed-$run_id.json" "$target"
+          test -s "$target" && test ! -L "$target"
+          test "$(stat -c %s "$target")" = 52072
+          test "$(stat -c %a "$target")" = 600
+          test "$(sha256sum "$target" | awk '{print $1}')" = 40c09b1aff17143cf315884177b61a35c6b1d62aa30a445056cfd8303deb3366
+          echo APPROVAL_PRIVATE_CSV=SEALED_TRANSFER_VERIFIED
+          echo PUBLIC_SOURCE_CSV_COMMITTED=no
+          echo LEGACY_APP_CHANGED=no
+          echo FINANCIAL_DB_CHANGED=no
+          REMOTE
+          echo APPROVAL_SEALED_HANDOFF=COMPLETE
