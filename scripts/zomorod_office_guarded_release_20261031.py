@@ -144,6 +144,73 @@ def require_mfa_provisioned(conn: sqlite3.Connection) -> None:
         fail("OFFICE_ADMIN_MFA_DEVICE_MISSING")
 
 
+
+def require_stage_payload_matches_archive(stage: Path, code: Path) -> int:
+    """Read-only, fail-closed provenance check of extracted stage versus its signed-off tar digest.
+
+    Stage migration may add isolation.sqlite3, staticfiles and __pycache__;
+    archived executable Python/source files must still match the archive.
+    Never extracts the archive or accesses production data.
+    """
+    import tarfile
+    from pathlib import PurePosixPath
+
+    archive = stage / "package.tar"
+    if not regular(archive):
+        fail("STAGE_ARCHIVE_UNSAFE")
+    allowed = set(MODULES) | {"config"}
+    seen, archived_files = set(), set()
+    try:
+        with tarfile.open(archive, mode="r:") as payload:
+            for index, member in enumerate(payload):
+                if index >= 10000:
+                    fail("STAGE_ARCHIVE_TOO_MANY_MEMBERS")
+                name = member.name
+                parts = PurePosixPath(name).parts
+                normalized = name.rstrip("/")
+                if (not parts or name.startswith("/") or "\\\\" in name or
+                    any(p in ("", ".", "..") for p in normalized.split("/")) or
+                    parts[0] not in allowed or normalized in seen):
+                    fail("STAGE_ARCHIVE_PATH_UNSAFE")
+                seen.add(normalized)
+                if not (member.isfile() or member.isdir()):
+                    fail("STAGE_ARCHIVE_MEMBER_UNSAFE")
+                target = code
+                for part in parts:
+                    target = target / part
+                    if target.is_symlink():
+                        fail("STAGE_EXTRACTED_SYMLINK")
+                if member.isdir():
+                    if not target.is_dir():
+                        fail("STAGE_EXTRACTED_DIRECTORY_MISSING")
+                    continue
+                if member.size > 100 * 1024 * 1024 or not regular(target):
+                    fail("STAGE_EXTRACTED_FILE_MISSING")
+                stream = payload.extractfile(member)
+                if stream is None:
+                    fail("STAGE_ARCHIVE_FILE_UNREADABLE")
+                expected = hashlib.sha256()
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    expected.update(chunk)
+                actual = hashlib.sha256()
+                with target.open("rb") as extracted:
+                    for chunk in iter(lambda: extracted.read(1024 * 1024), b""):
+                        actual.update(chunk)
+                if actual.digest() != expected.digest():
+                    fail("STAGE_EXTRACTED_FILE_CHANGED")
+                archived_files.add(normalized)
+    except (OSError, tarfile.TarError) as error:
+        fail("STAGE_ARCHIVE_READ_FAILED " + type(error).__name__)
+    for top in allowed:
+        for path in (code / top).rglob("*"):
+            if path.is_symlink():
+                fail("STAGE_EXTRACTED_SYMLINK")
+            if (path.is_file() and path.suffix in {".py", ".so", ".pth"} and
+                path.relative_to(code).as_posix() not in archived_files):
+                fail("STAGE_EXTRACTED_EXECUTABLE_UNARCHIVED")
+    return len(archived_files)
+
+
 def verify():
     if len(sys.argv) != 2 or len(sys.argv[1]) != 40 or any(x not in ALLOWED_HEAD for x in sys.argv[1]):
         fail("HEAD_SHA_INVALID")
@@ -161,6 +228,7 @@ def verify():
     digest = hashlib.sha256((stage / "package.tar").read_bytes()).hexdigest()
     if digest != manifest.get("sha256"):
         fail("STAGE_PACKAGE_TAMPERED")
+    require_stage_payload_matches_archive(stage, code)
     for module in MODULES:
         if not (code / module / "models.py").is_file() or (APP / module).exists():
             fail("MODULE_MISSING_OR_ALREADY_DEPLOYED " + module)
