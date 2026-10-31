@@ -165,6 +165,8 @@ jobs:
           home=Path.home()
           src=home/".private/zomorod-business/management.sqlite3"
           assert src.is_file() and not src.is_symlink() and 80000<=src.stat().st_size<200000000
+          before=src.stat()
+          source_digest_before=hashlib.sha256(src.read_bytes()).hexdigest()
           base=home/".private/zomorod-messaging-recovery"
           assert not base.is_symlink()
           sha=os.environ["SNAPSHOT_RELEASE_SHA"]
@@ -197,6 +199,10 @@ jobs:
           restored.unlink()
           digest=hashlib.sha256(dest.read_bytes()).hexdigest()
           (root/"manifest.json").write_text(json.dumps({"schema":"zm-recovery.v1","bytes":dest.stat().st_size,"sha256":digest,"tables":len(tables),"user_count":users,"restore_test":"ok","production_db_modified":False}),encoding="utf-8")
+          after=src.stat()
+          assert before.st_size==after.st_size and before.st_mtime_ns==after.st_mtime_ns
+          assert hashlib.sha256(src.read_bytes()).hexdigest()==source_digest_before
+          print("BUSINESS_DB_SOURCE_CONTENT_SHA256_UNCHANGED=true")
           print("BUSINESS_DB_SNAPSHOT=created")
           print("BUSINESS_DB_RESTORE=verified")
           print("BUSINESS_DB_TABLES="+str(len(tables)))
