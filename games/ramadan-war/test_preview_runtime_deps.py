@@ -48,6 +48,13 @@ class RuntimeDependencyTests(unittest.TestCase):
                 self.assertIn(normalized, declared, (name, dependency, normalized))
                 self.assertTrue((ROOT / normalized).is_file(), normalized)
 
+    def test_unverified_m24_is_not_shipped_or_loaded(self):
+        self.assertNotIn('m24-sniper-ccby.glb', ASSETS)
+        engine = (ROOT / 'engine3d.js').read_text('utf-8')
+        self.assertNotIn("loader.load('./m24-sniper-ccby.glb'", engine)
+        self.assertIn('assetReady.weapon = true', engine)
+        self.assertIn('function makeWeapon()', engine)
+
     def test_payment_policy_remains_disabled(self):
         policy = (ROOT / "moj1-commerce-policy.mjs").read_text("utf-8")
         self.assertIn("checkoutEnabled:false", policy)
