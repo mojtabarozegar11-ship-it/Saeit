@@ -56,8 +56,7 @@ def transform(name,original):
             updated=text[:start]+paragraph+text[stop+4:]
             register=re.compile(r'<a\b[^>]*>(?:(?!<a\b).)*?New customer\?\s*Create an account(?:(?!<a\b).)*?</a>',re.S)
             matches=register.findall(updated)
-            if len(matches)>1:fail('Registration links are duplicated')
-            if len(matches)==1:updated=register.sub('',updated,count=1)
+            if matches:updated=register.sub('',updated)
             cta='Secure checkout for this book'
             if updated.count(cta)!=1:fail('Secure checkout link is unknown or duplicated')
             updated=updated.replace(cta,'Buy this book with TRX',1)
