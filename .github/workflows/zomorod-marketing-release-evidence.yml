@@ -539,25 +539,6 @@ jobs:
           print("PASSENGER_CONFIGURED_PYTHON_VERSION="+version)
           print("PASSENGER_CONFIGURED_EXE_STATUS="+configured_executable)
           print("PASSENGER_CONFIGURED_PYTHON_REALPATH_VERSION="+resolved_version)
-          runtime_version="not_proven"
-          if configured_executable=="present_and_executable":
-              import subprocess
-              try:
-                  probe=subprocess.run(
-                      [str(candidate),"-I","-S","-B","-c",
-                       "import sys; print(str(sys.version_info.major)+'.'+str(sys.version_info.minor))"],
-                      cwd="/", capture_output=True, text=True, timeout=8,
-                      env={"PATH":"/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE":"1"}, check=False)
-                  reported=probe.stdout.strip()
-                  if probe.returncode==0 and re.fullmatch(r"3\.\d+",reported):
-                      runtime_version=reported
-                  else:
-                      runtime_version="execution_failed"
-              except (OSError,subprocess.TimeoutExpired):
-                  runtime_version="execution_failed"
-          print("PASSENGER_CONFIGURED_PYTHON_RUNTIME_VERSION="+runtime_version)
-          print("PASSENGER_CONFIGURED_PYTHON_STAGE_310_COMPATIBLE="+str(runtime_version=="3.10").lower())
-          print("PASSENGER_CONFIGURED_PYTHON_LIVE_WORKER_MATCH=not_proven")
           seen=set()
           site_versions=set()
           site_workers=0
