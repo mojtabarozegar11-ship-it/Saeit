@@ -2,7 +2,13 @@
 // Pure classification of anonymous GET navigation; never a buyer-flow proof.
 function classifyNavigation(path, http, finalPath, error, finalSearch = '') {
   const authGated = /\/checkout\/$/.test(path) || path.includes('/purchases/');
-  const authRequired = authGated && finalPath === '/accounts/login/';
+  // This endpoint intentionally hides purchases when no authenticated or guest
+  // purchase session exists. Treat only its exact same-path 404 as safe anonymous
+  // denial; it is not evidence that the buyer receipt flow works.
+  const anonymousSessionDenied = path === '/commerce/trx-easy/purchases/' &&
+    http === 404 && finalPath === path && !finalSearch && !error;
+  const authRequired = (authGated && finalPath === '/accounts/login/') ||
+    anonymousSessionDenied;
   // A login response with a mismatched next target can strand a buyer on
   // another product or an external site. Never count it as a healthy checkout.
   let safeLoginReturn = false;
@@ -17,12 +23,15 @@ function classifyNavigation(path, http, finalPath, error, finalSearch = '') {
     } catch (_) { safeLoginReturn = false; }
   }
   // No query is expected on a directly requested canonical checkout route.
-  const expectedDestination = (finalPath === path && !finalSearch) ||
+  const expectedDestination = anonymousSessionDenied ||
+    (finalPath === path && !finalSearch) ||
     (authRequired && safeLoginReturn);
   const unexpectedRedirect = !expectedDestination;
   // Redirect-only, malformed or missing responses are not successful page observations.
   // page.goto normally returns the final response, but classify defensively.
-  const observedSafe = Number.isInteger(http) && http >= 200 && http < 300 && !error && expectedDestination;
+  const observedSafe = Number.isInteger(http) &&
+    ((http >= 200 && http < 300) || anonymousSessionDenied) &&
+    !error && expectedDestination;
   return {authRequired, unexpectedRedirect, observedSafe};
 }
 // Separate an observable anonymous page contract from paid-buyer delivery.
