@@ -82,5 +82,52 @@ class SingleAssetRateTests(unittest.TestCase):
                 parse_coin_gecko_rates(rates(), NOW, required_assets=requested)
 
 
+    def _isolated_buyer_rate_loader(self):
+        # Compile only the real source function with inert dependencies.
+        # No Django setup, order, database, network, session or wallet.
+        import ast
+        from datetime import datetime, timezone
+        from decimal import Decimal
+        from pathlib import Path
+        from types import SimpleNamespace
+        source = Path(__file__).resolve().parents[1] / "mpw_commerce/buyer_wallets.py"
+        tree = ast.parse(source.read_text("utf8"))
+        nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef)
+                 and n.name == "fetch_server_rate"]
+        self.assertEqual(len(nodes), 1)
+        ns = {"RECEIVERS": {"TRX": ("tron-mainnet", "synthetic", 6)},
+              "WalletLinkRejected": ValueError,
+              "TrustedRate": SimpleNamespace, "datetime": datetime,
+              "utc_timezone": timezone, "Decimal": Decimal}
+        exec(compile(ast.Module(body=nodes, type_ignores=[]),
+                     "<isolated-rate-loader>", "exec"), ns)
+        return ns["fetch_server_rate"]
+
+    def test_buyer_loader_requests_only_trx_and_preserves_source_timestamp(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        from scripts import mojplaywin_direct_wallet_rates as feed
+        calls = []
+        def fake_feed(*, required_assets):
+            calls.append(required_assets)
+            return {"TRX": SimpleNamespace(usd_per_asset="0.25",
+                                         observed_at_epoch=NOW-5,
+                                         provider="coingecko")}
+        with patch.object(feed, "fetch_fresh_rates", fake_feed):
+            quote = self._isolated_buyer_rate_loader()("TRX")
+        self.assertEqual(calls, [("TRX",)])
+        self.assertEqual(str(quote.usd_per_asset), "0.25")
+        self.assertEqual(quote.source, "coingecko")
+        self.assertEqual(int(quote.observed_at.timestamp()), NOW-5)
+
+    def test_buyer_loader_maps_unavailable_trx_to_fail_closed(self):
+        from unittest.mock import patch
+        from scripts import mojplaywin_direct_wallet_rates as feed
+        with patch.object(feed, "fetch_fresh_rates",
+                          side_effect=RateFeedUnavailable("stale TRX")):
+            with self.assertRaisesRegex(ValueError, "Trusted server rate unavailable"):
+                self._isolated_buyer_rate_loader()("TRX")
+
+
 if __name__ == "__main__":
     unittest.main()
