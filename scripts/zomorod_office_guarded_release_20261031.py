@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 import pwd
+import re
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -146,12 +148,26 @@ def require_mfa_provisioned(conn: sqlite3.Connection) -> None:
 
 
 def production_python() -> Path:
-    """Select the same preferred cPanel virtualenv used by post-release checks."""
-    for version in ("3.10", "3.11"):
-        candidate = HOME / "virtualenv" / "Saeit" / version / "bin" / "python"
-        if candidate.is_file():
-            return candidate
-    fail("PASSENGER_PYTHON_MISSING")
+    """Resolve the configured Passenger interpreter, never a guessed venv."""
+    htaccess = APP / ".htaccess"
+    if not regular(htaccess):
+        fail("PASSENGER_PYTHON_UNATTESTED")
+    try:
+        configured = []
+        for line in htaccess.read_text(encoding="utf-8").splitlines():
+            if re.match(r"^\s*PassengerPython(?:\s|$)", line, re.IGNORECASE):
+                fields = shlex.split(line, comments=True)
+                if len(fields) != 2 or fields[0].lower() != "passengerpython":
+                    fail("PASSENGER_PYTHON_UNATTESTED")
+                configured.append(fields[1])
+    except (OSError, UnicodeError, ValueError):
+        fail("PASSENGER_PYTHON_UNATTESTED")
+    if len(configured) != 1:
+        fail("PASSENGER_PYTHON_UNATTESTED")
+    candidate = Path(configured[0])
+    if not candidate.is_absolute() or not candidate.is_file() or not os.access(candidate, os.X_OK):
+        fail("PASSENGER_PYTHON_UNATTESTED")
+    return candidate
 
 
 def require_production_dependencies(py: Path) -> None:
@@ -234,7 +250,7 @@ def verify():
     shell = code / "enterprise_portal" / "templates" / "enterprise_portal" / "shell.html"
     if not regular(shell) or b"enterprise_portal:office_css" not in shell.read_bytes():
         fail("OFFICE_STYLESHEET_ROUTE_REQUIRED")
-    # Inspect the actual production virtualenv before creating backups or
+    # Inspect Passenger's configured interpreter before creating backups or
     # replacing even a single live file. Staging-only dependencies do not count.
     py = production_python()
     require_production_dependencies(py)
