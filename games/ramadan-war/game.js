@@ -7,6 +7,7 @@ import {removeEnemyAndRetargetMissiles,missilePathBlocked,missileMotionValid,bla
 import {canEnemyAct,restoreEnemyRuntime,advanceHostileProjectile,shouldCleanupEnemy,activateTimeStop,advanceTimeStop} from './enemy-action-policy.mjs';
 import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, restoreEnemyPositions, parseCampaignSave, resumeCampaignScreen, readHeroChoice, campaignSaveDisposition, storageRead, storageWrite, storageRemove} from './save-validation.mjs';
 import {makeCampaignBackup,readCampaignBackup,MAX_CAMPAIGN_BACKUP_BYTES} from './campaign-backup.mjs';
+import {readAimSensitivity,aimMultiplier,nextAimSensitivity,aimSensitivityLabel} from './aim-sensitivity.mjs';
 import {objectiveWaypoint,objectiveApproachWaypoint,closestReachableObjective,INTERACT_RANGE,canInteractAt} from './objective-navigation.mjs';
 import {routeGuidance,paintTacticalMap} from './tactical-map.mjs';
 (()=>{'use strict';
@@ -21,6 +22,10 @@ function readSurvivalBest(){const raw=storageRead('rwSurvivalBest');return typeo
 function recordSurvivalBest(){if(!world?.endless)return;const wave=survivalWave(world.mission);if(wave>readSurvivalBest())storageWrite('rwSurvivalBest',String(wave))}
 
 let soundEnabled=storageRead('rwSound')!=='0';
+let aimSensitivity=readAimSensitivity(storageRead('rwAimSensitivity'));
+function syncAimSensitivity(){const b=$('#aimSensitivity');if(b){b.textContent='حساسیت نشانه‌گیری: '+aimSensitivityLabel(aimSensitivity);b.setAttribute('aria-label','تغییر حساسیت نشانه‌گیری افقی و عمودی، '+aimSensitivityLabel(aimSensitivity))}}
+function cycleAimSensitivity(){const next=nextAimSensitivity(aimSensitivity);if(!storageWrite('rwAimSensitivity',next)){toast('حساسیت برای این نشست تغییر کرد؛ ذخیرهٔ مرورگر ناموفق بود')}aimSensitivity=next;syncAimSensitivity()}
+
 function syncSoundControls(){for(const id of ['soundHome','soundPause']){const button=$('#'+id);if(!button)continue;button.setAttribute('aria-pressed',String(soundEnabled));button.textContent=soundEnabled?'🔊 صدا روشن':'🔇 بی‌صدا'}}
 function toggleSound(){soundEnabled=!soundEnabled;storageWrite('rwSound',soundEnabled?'1':'0');syncSoundControls()}
 const sceneFiles=['./scene-sniper-desert-v2.webp','./scene-night.webp','./scene-airbase.webp'];function setMissionScene(m){const el=$('#missionBackdrop'),file=sceneFiles[m%sceneFiles.length];if(el.dataset.scene!==file){el.style.backgroundImage=`url("${file}")`;el.dataset.scene=file}el.style.setProperty('--pan-x','0px');el.style.setProperty('--pan-y','0px')}
@@ -178,7 +183,7 @@ function scheduleFrame(){if(screen!=='game'||frameQueued)return;frameQueued=true
 function frame(ts){frameQueued=false;if(screen!=='game')return;const elapsed=Math.min(.32,Math.max(0,(ts-last)/1000||.016));last=ts;const steps=Math.max(1,Math.ceil(elapsed/.04));for(let i=0;i<steps&&screen==='game';i++)tick(elapsed/steps);render(ts);if(screen==='game')scheduleFrame()}
 function playTone(freq,dur){if(!soundEnabled)return;try{audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='square';o.frequency.value=freq;g.gain.value=.025;o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur)}catch(_){}}
 function modalResultHome(){const keepUnsaved=!!(world&&!world.endless&&world.missionPassed&&saveStatus!=='saved');if(!keepUnsaved)world=null;showScreen('home');if(keepUnsaved)toast('پیشرفت ذخیره نشده است؛ «ادامهٔ نبرد» یا پشتیبان پیشرفت را انتخاب کنید')}
-syncSoundControls();$('#soundHome').onclick=toggleSound;$('#soundPause').onclick=toggleSound;
+syncSoundControls();syncAimSensitivity();$('#soundHome').onclick=toggleSound;$('#soundPause').onclick=toggleSound;$('#aimSensitivity').onclick=cycleAimSensitivity;
 let radarEnabled=storageRead('rwRadar')==='1';
 function syncRadar(){const map=$('#tacticalMap'),button=$('#mapToggle');map.hidden=!radarEnabled;button.setAttribute('aria-pressed',String(radarEnabled));button.setAttribute('aria-label',radarEnabled?'بستن نقشه تاکتیکی':'نمایش نقشه تاکتیکی');if(radarEnabled&&world)paintTacticalMap(map,world,(x,y)=>tile(x,y,world.mission)!==0,objectiveTarget())}
 $('#mapToggle').onclick=()=>{radarEnabled=!radarEnabled;storageWrite('rwRadar',radarEnabled?'1':'0');syncRadar()};syncRadar();
@@ -205,7 +210,7 @@ function exportCampaignBackup(){
  }
 }
 $('#exportSave').onclick=exportCampaignBackup;$('#exportPauseSave').onclick=exportCampaignBackup;$('#resultExport').onclick=exportCampaignBackup;$('#resultRetryClear').onclick=()=>{const ok=save();if(ok){$('#resultRetryClear').hidden=true;$('#resultSaveStatus').textContent='ذخیرهٔ پایان‌یافته پاکسازی و تأیید شد.'}else $('#resultSaveStatus').textContent='پاکسازی ذخیره ناموفق بود؛ ذخیرهٔ قدیمی هنوز ممکن است موجود باشد.'};$('#retrySave').onclick=()=>{save();updatePauseSaveStatus();if(saveStatus==='saved')toast('پیشرفت کارزار اکنون ذخیره شد')};
-$('#importSave').onclick=()=>$('#importSaveFile').click();
+$('#importSave').onclick=()=>$('#importSaveFile').click();$('#importPauseSave').onclick=()=>$('#importSaveFile').click();
 $('#importSaveFile').onchange=async e=>{
  const input=e.currentTarget,file=input.files?.[0];input.value='';
  if(!file)return;
@@ -241,7 +246,7 @@ canvas.addEventListener('pointerdown',e=>{
 canvas.addEventListener('pointermove',e=>{
  if(aimId!==e.pointerId||!world)return;
  recordPointerGestureMovement(aimGesture,e);
- let dx=e.clientX-aimLast,dy=e.clientY-aimY;world.angle-=dx*(W<700?.008:.0045);engine.look(0,dy,W);aimLast=e.clientX;aimY=e.clientY
+ let dx=e.clientX-aimLast,dy=e.clientY-aimY;world.angle-=dx*(W<700?.008:.0045)*aimMultiplier(aimSensitivity);engine.look(0,dy*aimMultiplier(aimSensitivity),W);aimLast=e.clientX;aimY=e.clientY
 });
 canvas.addEventListener('pointerup',e=>{if(e.pointerId!==aimId)return;recordPointerGestureMovement(aimGesture,e);aimId=null;if(aimGesture)aimGesture.finished=true});
 canvas.addEventListener('pointercancel',e=>{if(e.pointerId!==aimId)return;aimId=null;if(aimGesture)aimGesture.cancelled=true});
