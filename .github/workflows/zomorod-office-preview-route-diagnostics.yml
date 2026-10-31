@@ -197,9 +197,29 @@ jobs:
               echo "ROUTING_HTACCESS_$tag=absent"
             fi
           done
+          awk '/^[[:space:]]*PassengerEnabled[[:space:]]/ {
+              val=tolower($2)
+              if(val=="on"||val=="off") print "COMPANY_PARENT_PASSENGER_ENABLED=" val
+              else print "COMPANY_PARENT_PASSENGER_ENABLED=nonstandard"
+          }' "$docroot/company/.htaccess"
+          awk 'NF && $1 !~ /^#/ {print "PREVIEW_URI_HTACCESS_KEY=" $1}' "$docroot/$uri/.htaccess" | sort -u
           for py in "/home/zomorod2/virtualenv/$rel/3.10/bin/python" "/home/zomorod2/virtualenv/$rel/3.10.22/bin/python"; do
             if test -x "$py"; then echo "PREVIEW_SELECTOR_VENV=present"; fi
           done
+          if test -x "/home/zomorod2/virtualenv/$rel/3.10/bin/python"; then
+            (cd "$root" && DJANGO_SETTINGS_MODULE=office_runtime.settings "/home/zomorod2/virtualenv/$rel/3.10/bin/python" - <<'PY'
+          try:
+              from office_passenger_wsgi import application
+              from django.conf import settings
+              assert settings.FORCE_SCRIPT_NAME=="/company/office-preflight-2a8a0f4b9e17"
+              assert settings.ROOT_URLCONF=="office_runtime.urls"
+          except Exception as exc:
+              print("PREVIEW_SELECTOR_WSGI_IMPORT=failed_"+type(exc).__name__)
+          else:
+              print("PREVIEW_SELECTOR_WSGI_IMPORT=passed")
+          PY
+            )
+          fi
           echo "READONLY_PREVIEW_ROUTE_DIAGNOSTIC=complete"
           REMOTE
       - name: Check external routing status without touching server
