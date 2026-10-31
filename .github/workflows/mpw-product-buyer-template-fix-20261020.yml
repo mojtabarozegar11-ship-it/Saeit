@@ -116,6 +116,12 @@ jobs:
                   assert r.status==200
               if f'href="/store/product/{product_id}/checkout/"' not in content:raise RuntimeError('No real checkout CTA for '+str(product_id))
               if 'No account or subscription is required.' not in content:raise RuntimeError('Guest checkout copy missing')
+              checkout_path=f'/store/product/{product_id}/checkout/?buyer_smoke='+str(time.time_ns())
+              with urllib.request.urlopen(origin+checkout_path,timeout=20) as r:
+                  checkout=r.read(250000).decode('utf8','replace')
+                  if r.status!=200 or 'Create invoice and pay with TRX' not in checkout:raise RuntimeError('Anonymous checkout does not offer TRX invoice for '+str(product_id))
+              if 'Sign in to create an order-specific TRX invoice' in checkout or 'name="password"' in checkout:raise RuntimeError('Checkout requires customer account for '+str(product_id))
+              print('MPW_GUEST_CHECKOUT_TRX_AVAILABLE='+str(product_id))
               if 'Sign in to receive an order-specific secure invoice' in content or 'New customer? Create an account' in content or 'href="/accounts/register/' in content:raise RuntimeError('Misleading account requirement remains')
               if ('property="og:title" content="'+product_title+' | MojPlayWin"') not in content:raise RuntimeError('Generic product OG title not fixed')
               if 'Live payment methods appear only after provider' in content:raise RuntimeError('Old incorrect payment message remains')
