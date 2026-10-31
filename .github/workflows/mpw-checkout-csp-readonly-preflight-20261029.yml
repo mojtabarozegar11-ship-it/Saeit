@@ -4,11 +4,13 @@ on:
     paths:
       - scripts/mpw_checkout_csp_zero_script_guard_20261029.py
       - scripts/s01_passenger_runtime_readonly_20261029.py
+      - scripts/s01_passenger_app_config_db_readonly_20261031.py
       - scripts/s01_checkout_invoice_static_readonly_20261029.py
       - scripts/s01_checkout_cpanel_provenance_readonly_20261030.py
       - tests/test_s01_checkout_cpanel_provenance_readonly_20261030.py
       - tests/test_s01_checkout_invoice_static_readonly_20261029.py
       - tests/test_s01_passenger_runtime_readonly_20261029.py
+      - tests/test_s01_passenger_app_config_db_readonly_20261031.py
       - tests/test_mpw_checkout_csp_zero_script_20261029.py
       - scripts/s01_ssh_error_classify.py
       - tests/test_s01_ssh_error_classify.py
@@ -37,6 +39,10 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_passenger_runtime_readonly_20261029.py -v
+      - name: Regression-test Passenger app-config read-only DB probe
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_passenger_app_config_db_readonly_20261031.py -v
       - name: Regression-test bounded invoice source map
         run: |
           set -euo pipefail
@@ -366,6 +372,14 @@ jobs:
           timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
             "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;exec(compile(base64.b64decode(sys.argv[1]),\"s01_passenger_probe\",\"exec\"))' '$script64'"
           echo "S01_PASSENGER_DB_AUTHORITY=NOT_VERIFIED_BY_PROCESS_METADATA"
+      - name: Probe Passenger app database configuration with read-only SELECT 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          script64="$(base64 -w0 scripts/s01_passenger_app_config_db_readonly_20261031.py)"
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;exec(compile(base64.b64decode(sys.argv[1]),\"s01_passenger_app_db_probe\",\"exec\"))' '$script64'"
+          echo 'S01_PASSENGER_APP_CONFIG_DB_PROBE_SCOPE=READ_ONLY_SAME_SETTINGS_NO_MODEL_LOAD'
       - name: Read only invoice code call-shapes without database or customer access
         shell: bash
         run: |
