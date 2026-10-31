@@ -115,10 +115,23 @@ def merge(live: str, v7: str) -> str:
     page_stop = "} elseif($page==='agent_center'){"
     post_block = section(v7, post_start, post_stop, "V7 POST dispatcher")
     page_block = section(v7, page_start, page_stop, "V7 GET dispatcher")
+    # Sensitive payroll and internal procurement/contract desk are never
+    # exposed to a read-only viewer account.
+    for name in ("workflow_desk", "payroll"):
+        old = "} elseif($page==='" + name + "'){\n        authorize('view');"
+        new = "} elseif($page==='" + name + "'){\n        if(!in_array(role(),['admin','manager','accountant'],true))bail('دسترسی کافی ندارید.',403);"
+        if page_block.count(old) != 1:
+            raise UnsafeMerge("Sensitive GET authorization anchor changed: " + name)
+        page_block = page_block.replace(old, new, 1)
     require_once(result, post_stop, "live POST insertion")
     require_once(result, page_stop, "live GET insertion")
     result = result.replace(post_stop, post_block + post_stop, 1)
     result = result.replace(page_stop, page_block + page_stop, 1)
+    # Re-check the authoritative database role on every authenticated request.
+    # A demoted account must not retain a stale elevated session role.
+    page_assignment = "$page=(string)($_GET['page']??'dashboard');"
+    require_once(result, page_assignment, "authenticated page dispatcher")
+    result = result.replace(page_assignment, "$_SESSION['role']=(string)$user['role'];\n    " + page_assignment, 1)
 
     if result == live or len(result) <= len(live):
         raise UnsafeMerge("Candidate did not expand correctly")
