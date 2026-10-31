@@ -63,7 +63,7 @@ test('focus loss releases sticky movement and fire and pauses the active game', 
   assert.match(game, /safeReleaseCapture\(\$\('#fire'\),oldFire\);safeReleaseCapture\(stick,oldJoy\);safeReleaseCapture\(canvas,oldAim\)/);
   assert.match(game, /addEventListener\('blur',\(\)=>\{releaseGameInputs\(\);if\(screen==='game'\)/);
   assert.match(game, /visibilitychange.*document\.hidden/);
-  assert.match(game, /function showScreen\(name\)\{if\(name!=='game'\)releaseGameInputs\(\)/);
+  assert.match(game, /function showScreen\(name\)\{if\(name==='game'&&!canEnterGameplay\(graphicsUnavailable,document\.hidden\)\)name='pausePanel';if\(name!=='game'\)releaseGameInputs\(\)/);
 });
 
 test('reversible release includes the new browser module and checks its import', () => {
