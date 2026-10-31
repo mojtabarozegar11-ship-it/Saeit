@@ -58,6 +58,9 @@ SHARED_MARKERS = {
 SERIAL_MARKER = "SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000_20261025"
 RECEIVER_CYCLES = frozenset({"R-01", "B-01", "S-01", "G-01"})
 HANDOFF_SCHEMA = "saeit.factory.hourly-cycle-handoff.v1"
+# Receiver identities must be provisioned independently by the VPS operator.
+# The factory's writable product tree is NEVER a source of trusted public keys.
+TRUST_ROOT = Path("/etc/saeit/hourly-cycle-receiver-public-keys")
 
 
 def verify_cron_partition(contents):
@@ -66,6 +69,9 @@ def verify_cron_partition(contents):
     serial = [row for row in active if SERIAL_MARKER in row]
     if len(serial) != 1:
         raise RuntimeError("STRICT_SERIAL_SCHEDULER_MISSING_OR_DUPLICATE")
+    if (not serial[0].lstrip().startswith("* * * * * ")
+            or "strict-serial-fullcycle-v1.py" not in serial[0]):
+        raise RuntimeError("STRICT_SERIAL_SCHEDULER_COMMAND_INVALID")
     if "--require-scheduler-scope" not in serial[0]:
         raise RuntimeError("STRICT_SERIAL_SCHEDULER_SCOPE_FLAG_MISSING")
     for line in active:
@@ -211,24 +217,47 @@ def certified_finished(root, order, governance=None):
 
 
 def handoff_accepted(root, order):
-    """Require a receiver-side durable copy and order/version-bound acceptance.
+    """Require a receiver-signed, artifact-bound durable acceptance record.
 
-    Warehouse certification alone must never advance the serial cursor. This
-    receipt is produced by the receiving hourly cycle, not by this controller.
+    The trusted receiver public keys must be installed outside factory-writable
+    paths; unsigned or self-attested JSON cannot unlock another product.
     """
     root = Path(root)
-    for cycle_id in RECEIVER_CYCLES:
+    try:
+        trust_unsafe = (TRUST_ROOT.is_symlink() or TRUST_ROOT.parent.is_symlink()
+                        or not TRUST_ROOT.is_dir()
+                        or TRUST_ROOT.stat().st_mode & 0o022)
+    except OSError:
+        return False
+    if trust_unsafe:
+        return False
+    for cycle_id in sorted(RECEIVER_CYCLES):
         inbox = root / "product-lifecycle" / "hourly-cycle-handoffs"
         location = inbox / cycle_id / order
         receipt = location / "receipt.json"
+        signature = location / "receipt.sig"
         delivered = location / "product.zip"
         warehouse = root / "product-lifecycle" / "approved-finished-goods" / order / "product.zip"
+        public_key = TRUST_ROOT / (cycle_id + ".pem")
         if any(p.is_symlink() for p in (inbox, inbox / cycle_id, location,
-                                        receipt, delivered, warehouse)):
+                                        receipt, signature, delivered, warehouse,
+                                        public_key)):
             continue
-        if not receipt.is_file() or not delivered.is_file() or not warehouse.is_file():
+        if (not receipt.is_file() or not signature.is_file()
+                or not delivered.is_file() or not warehouse.is_file()
+                or not public_key.is_file()):
             continue
         try:
+            if (signature.stat().st_size > 4096 or not signature.stat().st_size
+                    or public_key.stat().st_size > 16384
+                    or public_key.stat().st_mode & 0o022):
+                continue
+            verified = subprocess.run(
+                ["openssl", "dgst", "-sha256", "-verify", str(public_key),
+                 "-signature", str(signature), str(receipt)],
+                capture_output=True, timeout=5, check=False)
+            if verified.returncode != 0:
+                continue
             report = checked_json(receipt, 100_000)
             if (report.get("schema") != HANDOFF_SCHEMA
                     or report.get("order") != order
@@ -241,7 +270,7 @@ def handoff_accepted(root, order):
             if (report.get("artifact_sha256") == expected
                     and sha256_file(delivered) == expected):
                 return True
-        except (OSError, ValueError, TypeError, RuntimeError):
+        except (OSError, ValueError, TypeError, RuntimeError, subprocess.TimeoutExpired):
             continue
     return False
 
