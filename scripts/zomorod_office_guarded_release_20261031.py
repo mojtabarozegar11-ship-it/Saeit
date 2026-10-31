@@ -145,16 +145,28 @@ def require_mfa_provisioned(conn: sqlite3.Connection) -> None:
 
 
 
+def require_no_symlink_ancestors(path: Path) -> None:
+    """Reject symlinked staging ancestors; no data is read or changed."""
+    if not path.is_absolute() or ".." in path.parts:
+        fail("STAGE_PATH_UNSAFE")
+    for parent in (path, *path.parents):
+        if parent.is_symlink():
+            fail("STAGE_ANCESTOR_SYMLINK")
+
+
 def require_stage_payload_matches_archive(stage: Path, code: Path) -> int:
     """Read-only, fail-closed provenance check of extracted stage versus its signed-off tar digest.
 
-    Stage migration may add isolation.sqlite3, staticfiles and __pycache__;
-    archived executable Python/source files must still match the archive.
+    Stage migration may add isolation.sqlite3 and generated staticfiles outside
+    the archived module/config trees. No unarchived source, template, JS, or pyc
+    is accepted within those trees, including under __pycache__.
     Never extracts the archive or accesses production data.
     """
     import tarfile
     from pathlib import PurePosixPath
 
+    require_no_symlink_ancestors(stage)
+    require_no_symlink_ancestors(code)
     archive = stage / "package.tar"
     if not regular(archive):
         fail("STAGE_ARCHIVE_UNSAFE")
@@ -202,12 +214,16 @@ def require_stage_payload_matches_archive(stage: Path, code: Path) -> int:
     except (OSError, tarfile.TarError) as error:
         fail("STAGE_ARCHIVE_READ_FAILED " + type(error).__name__)
     for top in allowed:
-        for path in (code / top).rglob("*"):
+        base = code / top
+        if base.is_symlink():
+            fail("STAGE_EXTRACTED_SYMLINK")
+        for path in base.rglob("*"):
             if path.is_symlink():
                 fail("STAGE_EXTRACTED_SYMLINK")
-            if (path.is_file() and path.suffix in {".py", ".so", ".pth"} and
-                path.relative_to(code).as_posix() not in archived_files):
-                fail("STAGE_EXTRACTED_EXECUTABLE_UNARCHIVED")
+            if path.is_file() and path.relative_to(code).as_posix() not in archived_files:
+                if path.suffix in {".py", ".pyc", ".so", ".pth", ".sh", ".php"}:
+                    fail("STAGE_EXTRACTED_EXECUTABLE_UNARCHIVED")
+                fail("STAGE_EXTRACTED_ASSET_UNARCHIVED")
     return len(archived_files)
 
 
@@ -219,8 +235,12 @@ def verify():
     sha = sys.argv[1]
     stage = PRIVATE / "zomorod-messaging-release-stages" / sha
     code = stage / "code"
-    assert APP.is_dir() and not APP.is_symlink()
-    assert stage.is_dir() and not stage.is_symlink() and code.is_dir() and not code.is_symlink()
+    if not APP.is_dir() or APP.is_symlink():
+        fail("LIVE_APPLICATION_ROOT_UNSAFE")
+    require_no_symlink_ancestors(stage)
+    require_no_symlink_ancestors(code)
+    if not stage.is_dir() or not code.is_dir():
+        fail("STAGE_DIRECTORY_UNSAFE")
     assert regular(stage / "manifest.txt") and regular(stage / "package.tar")
     manifest = dict(line.split("=", 1) for line in (stage / "manifest.txt").read_text().splitlines() if "=" in line)
     if manifest.get("release") != sha or manifest.get("mode") != "PRIVATE_STAGE_NO_DEPLOY":
