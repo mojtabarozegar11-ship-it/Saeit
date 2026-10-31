@@ -50,6 +50,12 @@ def office_access(view):
             ))
         if not has_office_access(request.user):
             raise PermissionDenied("مجوز ورود به میزکار خصوصی شرکت موجود نیست.")
+        if settings.COMPANY_OFFICE_REQUIRE_MFA:
+            verified = getattr(request.user, "is_verified", None)
+            if not callable(verified) or not verified():
+                return no_cache(redirect_to_login(
+                    request.get_full_path(), reverse("enterprise_portal:login"),
+                ))
         return view(request, *args, **kwargs)
     return wrapped
 
