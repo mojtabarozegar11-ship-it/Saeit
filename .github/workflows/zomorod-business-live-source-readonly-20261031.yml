@@ -116,6 +116,29 @@ jobs:
           entry_hash="$(sha256sum "$entry" | awk '{print $1}')"
           if test "$entry_hash" = "$expected_entry"; then echo "LIVE_ENTRY_MATCHES_REPO=true"; else echo "LIVE_ENTRY_MATCHES_REPO=false"; fi
           if test -s "$registry" && test ! -L "$registry"; then echo "LIVE_APPROVAL_SNAPSHOT_PRESENT=true"; else echo "LIVE_APPROVAL_SNAPSHOT_PRESENT=false"; fi
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - "$private" <<'PY'
+          import hashlib,os,pathlib,stat,sys
+          private=pathlib.Path(sys.argv[1])
+          staged=private/"zomorod_projects_import_20261031.csv"
+          inbox=private/".approval-sealed-inbox"
+          if staged.is_file() and not staged.is_symlink():
+              meta=staged.stat()
+              print("LIVE_APPROVAL_STAGED_CSV_PRESENT=true")
+              print("LIVE_APPROVAL_STAGED_CSV_BYTES="+str(meta.st_size))
+              print("LIVE_APPROVAL_STAGED_CSV_OWNER_MATCH="+str(meta.st_uid==os.getuid()).lower())
+              print("LIVE_APPROVAL_STAGED_CSV_STRICT_MODE="+str(meta.st_mode & 0o077==0).lower())
+              if 0<meta.st_size<=2000000:
+                  print("LIVE_APPROVAL_STAGED_CSV_SHA256="+hashlib.sha256(staged.read_bytes()).hexdigest())
+          else:
+              print("LIVE_APPROVAL_STAGED_CSV_PRESENT=false")
+          if inbox.is_dir() and not inbox.is_symlink():
+              meta=inbox.stat()
+              print("LIVE_APPROVAL_INBOX_PRESENT=true")
+              print("LIVE_APPROVAL_INBOX_STRICT_MODE="+str(meta.st_mode & 0o077==0).lower())
+              print("LIVE_APPROVAL_INBOX_OWNER_MATCH="+str(meta.st_uid==os.getuid()).lower())
+          else:
+              print("LIVE_APPROVAL_INBOX_PRESENT=false")
+          PY
           php -r 'echo "LIVE_CLI_SQLITE3_EXTENSION=".(class_exists("SQLite3")?"ready":"missing").PHP_EOL;echo "LIVE_CLI_SESSION_EXTENSION=".(extension_loaded("session")?"ready":"missing").PHP_EOL;'
           PYTHONDONTWRITEBYTECODE=1 python3 -B - "$private" "$live" "$HOME/public_html/business/approvals" <<'PY'
           import os,pathlib,re,stat,sys
