@@ -1,17 +1,27 @@
 from django.contrib.auth.decorators import login_required
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
+from django.db import DatabaseError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from uuid import uuid4
 
+from .public_catalog_guard import missing_public_tables, mark_public_data_unavailable
+
 from .models import (
     EducationTrack, EducationCourse, EducationResource, EducationLesson,
     EducationEnrollment, EducationProgress, EducationBookmark,
-    EducationAssessment, EducationQuestion, EducationAttempt, EducationCertificate,
+    EducationAssessment, EducationQuestion, EducationAttempt, EducationCertificate, Product, Order, OrderItem,
 )
 
 
-def academy(request):
+def unavailable_enrollment_response():
+    """Retryable, non-mutating response when an enrollment dependency is missing."""
+    response = JsonResponse({"ok": False, "error": "education_temporarily_unavailable"}, status=503)
+    response["Retry-After"] = "300"
+    return mark_public_data_unavailable(response)
+
+
+def _academy_with_schema(request):
     # Data-first curriculum registry. Future Master Agent updates must follow
     # the project's owner-approval governance policy.
     tracks = [
@@ -24,23 +34,31 @@ def academy(request):
         {"key": "ai", "title": "هوش مصنوعی", "meta": "AI · Agents · Automation", "text": "مبانی هوش مصنوعی، عامل‌ها، اتوماسیون، طراحی سیستم و استفاده حرفه‌ای و مسئولانه."},
         {"key": "business", "title": "کسب‌وکار و درآمد", "meta": "Business · Commerce", "text": "بازاریابی، فروش، تجارت الکترونیک، برند، مالی و طراحی مدل درآمدی."},
     ]
-    db_tracks = list(EducationTrack.objects.filter(active=True))
-    if db_tracks:
-        tracks = [{"key": x.key, "title": x.title, "meta": x.meta, "text": x.description} for x in db_tracks]
-    course_q = request.GET.get("q", "").strip()
-    track_key = request.GET.get("track", "").strip()
-    access = request.GET.get("access", "").strip()
-    course_qs = EducationCourse.objects.filter(active=True, approved=True).select_related("track")
-    if course_q:
-        from django.db.models import Q
-        course_qs = course_qs.filter(Q(title__icontains=course_q) | Q(summary__icontains=course_q))
-    if track_key:
-        course_qs = course_qs.filter(track__key=track_key)
-    if access == "free":
-        course_qs = course_qs.filter(is_free=True)
-    elif access == "paid":
-        course_qs = course_qs.filter(is_free=False)
-    courses = list(course_qs.order_by("track__sort_order", "title"))
+    # Keep the existing static learning paths usable if the catalog schema
+    # is absent. Never present missing data as an actually empty catalog.
+    catalog_unavailable = missing_public_tables(EducationTrack, EducationCourse)
+    if not catalog_unavailable:
+        db_tracks = list(EducationTrack.objects.filter(active=True).order_by("sort_order", "pk")[:100])
+        if db_tracks:
+            tracks = [{"key": x.key, "title": x.title, "meta": x.meta, "text": x.description} for x in db_tracks]
+    course_q = request.GET.get("q", "").strip()[:120]  # Bound user-controlled DB search cost
+    track_key = request.GET.get("track", "").strip()[:64]
+    access = request.GET.get("access", "").strip()[:16]
+    courses = []
+    if not catalog_unavailable:
+        course_qs = EducationCourse.objects.filter(active=True, approved=True).select_related("track")
+        if course_q:
+            from django.db.models import Q
+            course_qs = course_qs.filter(Q(title__icontains=course_q) | Q(summary__icontains=course_q))
+        if track_key:
+            course_qs = course_qs.filter(track__key=track_key)
+        if access == "free":
+            course_qs = course_qs.filter(is_free=True)
+        elif access == "paid":
+            course_qs = course_qs.filter(is_free=False)
+        # Bound the public page's memory and query work without altering the
+        # first page of its established track/title ordering.
+        courses = list(course_qs.order_by("track__sort_order", "title")[:100])
     resources = [
         {"kind": "جزوه", "title": "کتابخانه جزوه‌های آموزشی", "text": "جزوه‌های سطح‌بندی‌شده، قابل مطالعه و قابل تکمیل برای هر مسیر.", "access": "رایگان محدود"},
         {"kind": "دوره", "title": "دوره‌های جامع مهارتی", "text": "درس‌نامه، ویدئو، تمرین، پروژه، آزمون و گواهی در مسیرهای منتخب.", "access": "رایگان + پولی"},
@@ -59,7 +77,8 @@ def academy(request):
         "تمرین، پروژه و آزمون جامع",
         "گواهی، مسیر مهارتی و محتوای تخصصی",
     ]
-    return render(request, "core/academy.html", {
+    response = render(request, "core/academy.html", {
+        "catalog_temporarily_unavailable": catalog_unavailable,
         "tracks": tracks,
         "resources": resources,
         "courses": courses,
@@ -67,6 +86,26 @@ def academy(request):
         "free_features": free_features,
         "paid_features": paid_features,
     })
+    return mark_public_data_unavailable(response) if catalog_unavailable else response
+
+
+def academy(request):
+    """Preserve healthy academy UI; show a retryable outage on a DB failure."""
+    try:
+        return _academy_with_schema(request)
+    except DatabaseError:
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>آموزشگاه موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>آموزشگاه موقتاً در دسترس نیست</h1>'
+            '<p role="status">دریافت دوره‌ها موقتاً امکان‌پذیر نیست؛ '
+            'ثبت‌نام یا پرداختی انجام نشده است.</p>'
+            '<p><a href="/">بازگشت به صفحه اصلی</a></p>'
+            '</main></body></html>',
+            status=503, content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
 
 
 def education(request):
@@ -74,8 +113,43 @@ def education(request):
     return academy(request)
 
 
+def education_dashboard_progress(enrollment):
+    """Count only currently active course lessons; never show >100% completion.
+
+    Historical progress on archived lessons is retained in the database but
+    excluded from the active-course completion denominator and numerator.
+    """
+    total = enrollment.course.lessons.filter(active=True).count()
+    recorded_done = enrollment.progress.filter(completed=True, lesson__active=True, lesson__course=enrollment.course).count()
+    # Inconsistent or historical progress must not display "5 of 3" lessons
+    # even when the percentage is already capped at 100.
+    done = min(total, recorded_done)
+    percent = round(done * 100 / total) if total else 0
+    return total, done, percent
+
+
 @login_required
 def education_dashboard(request):
+    # Dashboard joins progress, certificates, assessment attempts and bookmarks.
+    # Guard every dependency before a query: missing tables must not look like
+    # a deleted paid enrollment or an unexplained HTTP 500.
+    if missing_public_tables(
+        EducationEnrollment, EducationCourse, EducationTrack, EducationLesson,
+        EducationProgress, EducationCertificate, EducationAttempt,
+        EducationAssessment, EducationBookmark,
+    ):
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>پنل آموزش موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>پنل آموزش موقتاً در دسترس نیست</h1>'
+            '<p role="status">سوابق ثبت‌نام و پیشرفت شما حذف نشده‌اند؛ '
+            'نمایش آن‌ها پس از بازیابی سامانه امکان‌پذیر است.</p>'
+            '<p><a href="/academy/">بازگشت به آموزشگاه</a></p>'
+            '</main></body></html>',
+            status=503, content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
     enrollments = list(
         EducationEnrollment.objects.filter(user=request.user)
         .select_related("course", "course__track")
@@ -84,9 +158,7 @@ def education_dashboard(request):
     )
     cards = []
     for enrollment in enrollments:
-        total = enrollment.course.lessons.filter(active=True).count()
-        done = enrollment.progress.filter(completed=True).count()
-        percent = round(done * 100 / total) if total else 0
+        total, done, percent = education_dashboard_progress(enrollment)
         cards.append({"enrollment": enrollment, "total": total, "done": done, "percent": percent})
     certificates = EducationCertificate.objects.filter(enrollment__user=request.user).select_related("enrollment__course")
     attempts = EducationAttempt.objects.filter(user=request.user).select_related("assessment", "assessment__course").order_by("-submitted_at")[:20]
@@ -103,6 +175,26 @@ def education_dashboard(request):
 
 
 def education_course_detail(request, slug):
+    # A missing schema is not an absent course; never return a misleading 404.
+    required = (
+        EducationCourse, EducationTrack, EducationLesson, EducationResource,
+        EducationAssessment, EducationQuestion, EducationEnrollment, EducationProgress,
+        EducationBookmark, Product,
+    )
+    if missing_public_tables(*required):
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>دوره موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>اطلاعات دوره موقتاً در دسترس نیست</h1>'
+            '<p role="status">اطلاعات این دوره پس از بازیابی سامانه نمایش داده می‌شود؛ '
+            'این وضعیت به معنای حذف دوره یا ثبت‌نام نیست.</p>'
+            '<p><a href="/academy/">بازگشت به آموزشگاه</a></p>'
+            '</main></body></html>',
+            status=503,
+            content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
     course = get_object_or_404(
         EducationCourse.objects.select_related("track", "product").prefetch_related("lessons", "resources"),
         slug=slug,
@@ -114,12 +206,10 @@ def education_course_detail(request, slug):
     assessments = course.assessments.filter(active=True, approved=True).prefetch_related("questions")
     enrollment = None
     progress_map = {}
-    bookmarked = False
     if request.user.is_authenticated:
-        enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status="active").first()
+        enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status__in=("active", "completed")).first()
         if enrollment:
             progress_map = {p.lesson_id: p for p in enrollment.progress.all()}
-        bookmarked = EducationBookmark.objects.filter(user=request.user, lesson=lesson).exists()
     lesson_rows = [{"lesson": lesson, "progress": progress_map.get(lesson.id)} for lesson in lessons]
     return render(request, "core/education_course_detail.html", {
         "course": course,
@@ -136,9 +226,15 @@ def education_course_detail(request, slug):
 def education_enroll(request, slug):
     if request.method != "POST":
         raise Http404
+    # Free enrollment must remain available when unrelated commerce tables are
+    # missing; paid enrollment must check the OrderItem join before any query
+    # or mutation, otherwise a partial rollout raises HTTP 500.
+    if missing_public_tables(EducationCourse, EducationEnrollment):
+        return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     if not course.is_free:
-        from .models import Order
+        if missing_public_tables(Product, Order, OrderItem):
+            return unavailable_enrollment_response()
         paid = Order.objects.filter(
             customer=request.user, status="paid",
             items__product=course.product,
@@ -152,10 +248,29 @@ def education_enroll(request, slug):
         course=course, user=request.user,
         defaults={"source": source},
     )
+    # The unique (course, user) record may already be cancelled. Returning
+    # ok=True here falsely promises access, while the lesson reader rejects
+    # cancelled enrollments. Never silently reinstate a revoked enrollment.
+    if not created and enrollment.status not in ("active", "completed"):
+        return JsonResponse({"ok": False, "error": "enrollment_not_active"}, status=409)
     return JsonResponse({"ok": True, "created": created, "enrollment_id": enrollment.pk})
 
 
 def education_certificate(request, code):
+    # A missing certificate/enrollment schema must never look like a revoked
+    # qualification or a deleted course. Keep the normal healthy path intact.
+    if missing_public_tables(EducationCertificate, EducationEnrollment, EducationCourse):
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>گواهی موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>گواهی موقتاً در دسترس نیست</h1>'
+            '<p role="status">بازیابی اطلاعات گواهی در حال پیگیری است.</p>'
+            '<p><a href="/academy/">بازگشت به آموزشگاه</a></p>'
+            '</main></body></html>',
+            status=503, content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
     certificate = get_object_or_404(
         EducationCertificate.objects.select_related("enrollment__course"),
         code=code,
@@ -167,6 +282,9 @@ def education_certificate(request, code):
 def education_issue_certificate(request, slug):
     if request.method != "POST":
         raise Http404
+    # Never issue a duplicate/partial certificate during a schema outage.
+    if missing_public_tables(EducationCertificate, EducationEnrollment, EducationCourse):
+        return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     enrollment = get_object_or_404(EducationEnrollment, course=course, user=request.user, status="completed")
     certificate, created = EducationCertificate.objects.get_or_create(
@@ -183,6 +301,25 @@ def education_issue_certificate(request, slug):
 
 
 def education_lesson(request, slug, lesson_id):
+    # Fail closed before querying missing lesson/enrollment tables. A temporary
+    # schema outage must not look like a deleted lesson or revoke paid access.
+    if missing_public_tables(
+        EducationCourse, EducationTrack, EducationLesson, EducationEnrollment,
+        EducationProgress, EducationBookmark,
+    ):
+        response = HttpResponse(
+            '<!doctype html><html lang="fa" dir="rtl"><head>'
+            '<meta charset="utf-8"><title>درس موقتاً در دسترس نیست</title>'
+            '</head><body><main><h1>درس موقتاً در دسترس نیست</h1>'
+            '<p role="status">بازیابی اطلاعات درس در حال پیگیری است؛ '
+            'این وضعیت به معنای حذف درس یا ثبت‌نام نیست.</p>'
+            '<p><a href="/academy/">بازگشت به آموزشگاه</a></p>'
+            '</main></body></html>',
+            status=503,
+            content_type="text/html; charset=utf-8",
+        )
+        response["Retry-After"] = "300"
+        return mark_public_data_unavailable(response)
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     lesson = get_object_or_404(EducationLesson, pk=lesson_id, course=course, active=True)
     lessons = list(course.lessons.filter(active=True))
@@ -190,12 +327,18 @@ def education_lesson(request, slug, lesson_id):
     previous_lesson = lessons[position - 1] if position > 0 else None
     next_lesson = lessons[position + 1] if position + 1 < len(lessons) else None
     bookmarked = request.user.is_authenticated and EducationBookmark.objects.filter(user=request.user, lesson=lesson).exists()
-    enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status="active").first()
+    enrollment = None
+    if request.user.is_authenticated:
+        enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status__in=("active", "completed")).first()
     if not enrollment:
-        if not (course.is_free and lesson.is_free_preview):
+        # The editor's explicit is_free_preview flag is the access boundary:
+        # allow that single preview on both free and paid courses, but never
+        # expose other paid lessons or enrollment-only progress/resources.
+        if not lesson.is_free_preview:
             return JsonResponse({"ok": False, "error": "enrollment_required"}, status=403)
         return render(request, "core/education_lesson.html", {"course": course, "lesson": lesson, "enrollment": None, "progress": None, "previous_lesson": previous_lesson, "next_lesson": next_lesson, "lesson_position": position + 1, "lesson_total": len(lessons), "bookmarked": bookmarked})
-    progress, _ = EducationProgress.objects.get_or_create(enrollment=enrollment, lesson=lesson)
+    # GET must not create a progress row; completion POST owns that mutation.
+    progress = EducationProgress.objects.filter(enrollment=enrollment, lesson=lesson).first()
     return render(request, "core/education_lesson.html", {"course": course, "lesson": lesson, "enrollment": enrollment, "progress": progress, "previous_lesson": previous_lesson, "next_lesson": next_lesson, "lesson_position": position + 1, "lesson_total": len(lessons), "bookmarked": bookmarked})
 
 
@@ -203,6 +346,9 @@ def education_lesson(request, slug, lesson_id):
 def education_lesson_complete(request, slug, lesson_id):
     if request.method != "POST":
         raise Http404
+    # Preserve the previous completion state if required tables are unavailable.
+    if missing_public_tables(EducationCourse, EducationLesson, EducationEnrollment, EducationProgress):
+        return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     lesson = get_object_or_404(EducationLesson, pk=lesson_id, course=course, active=True)
     enrollment = get_object_or_404(EducationEnrollment, course=course, user=request.user, status="active")
@@ -212,7 +358,7 @@ def education_lesson_complete(request, slug, lesson_id):
     progress.completed_at = timezone.now()
     progress.save()
     total = lesson.course.lessons.filter(active=True).count()
-    done = enrollment.progress.filter(completed=True).count()
+    done = enrollment.progress.filter(completed=True, lesson__active=True, lesson__course=course).count()
     if total and done >= total:
         enrollment.status = "completed"
         enrollment.completed_at = timezone.now()
@@ -224,7 +370,17 @@ def education_lesson_complete(request, slug, lesson_id):
 def education_bookmark(request, slug, lesson_id):
     if request.method != "POST":
         raise Http404
+    # Bookmark toggles are writes. Missing course/lesson/bookmark tables must
+    # never be misreported as deleted lessons or trigger a partial mutation.
+    if missing_public_tables(EducationCourse, EducationLesson, EducationBookmark, EducationEnrollment):
+        return unavailable_enrollment_response()
     lesson = get_object_or_404(EducationLesson, pk=lesson_id, course__slug=slug, course__active=True, course__approved=True, active=True)
+    # Bookmark endpoints must enforce the same entitlement as lesson reads:
+    # otherwise a signed-in non-buyer can save and reveal paid lesson metadata.
+    if not lesson.is_free_preview and not EducationEnrollment.objects.filter(
+        user=request.user, course=lesson.course, status__in=("active", "completed")
+    ).exists():
+        return JsonResponse({"ok": False, "error": "enrollment_required"}, status=403)
     bookmark = EducationBookmark.objects.filter(user=request.user, lesson=lesson).first()
     if bookmark:
         bookmark.delete()
@@ -235,9 +391,13 @@ def education_bookmark(request, slug, lesson_id):
 
 @login_required
 def education_assessment(request, slug, assessment_id):
+    if missing_public_tables(EducationCourse, EducationAssessment, EducationQuestion, EducationEnrollment):
+        return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     assessment = get_object_or_404(EducationAssessment, pk=assessment_id, course=course, active=True, approved=True)
-    enrollment = EducationEnrollment.objects.filter(course=course, user=request.user).exclude(status="cancelled").first()
+    enrollment = EducationEnrollment.objects.filter(
+        course=course, user=request.user, status__in=("active", "completed")
+    ).first()
     if not enrollment:
         return JsonResponse({"ok": False, "error": "enrollment_required"}, status=403)
     questions = assessment.questions.all()
@@ -248,9 +408,13 @@ def education_assessment(request, slug, assessment_id):
 def education_assessment_submit(request, slug, assessment_id):
     if request.method != "POST":
         raise Http404
+    if missing_public_tables(EducationCourse, EducationAssessment, EducationQuestion, EducationEnrollment, EducationAttempt):
+        return unavailable_enrollment_response()
     course = get_object_or_404(EducationCourse, slug=slug, active=True, approved=True)
     assessment = get_object_or_404(EducationAssessment, pk=assessment_id, course=course, active=True, approved=True)
-    enrollment = EducationEnrollment.objects.filter(course=course, user=request.user).exclude(status="cancelled").first()
+    enrollment = EducationEnrollment.objects.filter(
+        course=course, user=request.user, status__in=("active", "completed")
+    ).first()
     if not enrollment:
         return JsonResponse({"ok": False, "error": "enrollment_required"}, status=403)
     questions = list(assessment.questions.all())
