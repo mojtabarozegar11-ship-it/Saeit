@@ -20,9 +20,15 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Validate both the protected staff login and the root-only fallback source
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
           python3 -m py_compile config/urls.py
           grep -Fq 'path("company/office/login/", RedirectView.as_view(url="/admin/login/?next=/staff/command-center/", permanent=False), name="company_office_login")' config/urls.py
           grep -Fq 'from django.views.generic import RedirectView' config/urls.py
