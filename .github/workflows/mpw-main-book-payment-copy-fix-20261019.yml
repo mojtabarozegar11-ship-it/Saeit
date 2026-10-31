@@ -75,7 +75,7 @@ jobs:
               raise RuntimeError('Unverified app root')
           if "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
               raise RuntimeError('App pin mismatch')
-          if store.read_bytes().count(b'No account is required.') != 2:
+          if store.read_bytes().count(b'No account is required.') != 1:
               raise RuntimeError('Book copy not installed')
           tmp=web/'tmp'
           if tmp.is_symlink():raise RuntimeError('Unsafe cache directory')
@@ -94,7 +94,7 @@ jobs:
           for i in range(18):
               req=urllib.request.Request('https://mojplaywin.com/store/?buyer_notice_fix='+str(i)+'-'+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
               with urllib.request.urlopen(req,timeout=18) as r:html=r.read(950000).decode('utf8','replace')
-              good=html.count('No account is required.')==2 and 'Checkout is not open.' not in html and html.count('href="/store/product/72/checkout/"')==1 and html.count('href="/store/product/225/checkout/"')==1
+              good=html.count('No account is required.')==1 and 'Checkout is not open.' not in html and 'Sign-in is required for the order-specific TRX invoice.' not in html and html.count('href="/store/product/72/checkout/"')==1 and html.count('href="/store/product/225/checkout/"')==1
               if i>=5:
                   if not good:raise RuntimeError('Inconsistent public checkout directions')
                   ok+=1
