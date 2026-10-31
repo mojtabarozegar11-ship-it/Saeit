@@ -86,7 +86,7 @@ jobs:
             echo "HEALTH_REBOOT_REQUIRED_FLAG=absent"
           fi
           fwupd_installed="$(dpkg-query -W -f='${Version}' fwupd 2>/dev/null || true)"
-          fwupd_candidate="$(apt-cache policy fwupd 2>/dev/null | awk '/^[[:space:]]*Candidate:/ {print $2; exit}')"
+          fwupd_candidate="$(apt-cache policy fwupd 2>/dev/null | awk '/^[[:space:]]*Candidate:/ {value=$2} END {if (value != "") print value}')"
           if [ -n "$fwupd_installed" ] && [ -n "$fwupd_candidate" ] && [ "$fwupd_installed" != "$fwupd_candidate" ]; then
             echo "HEALTH_SECURITY_ADVISORY=fwupd_installed_version_differs_from_local_apt_candidate"
           fi
