@@ -1,0 +1,196 @@
+name: Zomorod business tokenless owner guarded release
+on:
+  push:
+    branches: ["fix/zomorod-owner-without-public-setup-token-20261028"]
+    paths: [".github/workflows/zomorod-business-tokenless-upgrade-20261028.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-business-tokenless-release
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify exact candidate and prior version
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/index.php
+          git cat-file -e 15aa2ce99abb4f8f3c41da7695023fd6aad7aaa0^{commit}
+          git show 15aa2ce99abb4f8f3c41da7695023fd6aad7aaa0:content/zomorod-business/app.php > "$RUNNER_TEMP/business-prior.php"
+          grep -Fq "owner-first-login.txt" content/zomorod-business/app.php
+          ! grep -Fq "req('setup_token')" content/zomorod-business/app.php
+          python3 - "$RUNNER_TEMP/business-prior.php" content/zomorod-business/app.php "$RUNNER_TEMP" <<'PY'
+          import pathlib,sys
+          old=pathlib.Path(sys.argv[1]).read_bytes()
+          new=pathlib.Path(sys.argv[2]).read_bytes()
+          target=pathlib.Path(sys.argv[3])
+          begin=b"    if($count===0){"
+          end=b"    if(($_GET['page']??'')==='logout')"
+          def block(source):
+              assert source.count(begin)==1 and source.count(end)==1
+              a=source.index(begin)
+              b=source.index(end,a)
+              assert 200 < b-a < 15000
+              return source[a:b]
+          old_block,new_block=block(old),block(new)
+          assert old_block!=new_block and b"setup_token" in old_block and b"setup_token" not in new_block
+          (target/"zomorod-additive-block.bin").write_bytes(new_block+b"    $count=(int)one($db,'SELECT COUNT(*) FROM users');\n")
+          PY
+      - name: Connect through pinned VPS to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_PRIVATE_RELAY=verified"
+      - name: Verify only the intended live app and create private backups
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; runid="$2"; attempt="$3"
+          private="$HOME/.private/zomorod-business"
+          web="$HOME/public_html/business"
+          stage="$HOME/.backups/zomorod-business-tokenless/$sha-$runid-$attempt"
+          fail() { echo "BUSINESS_PREFLIGHT_BLOCK=$1"; exit 30; }
+          test -d "$private" && test -d "$web" || fail "missing_directories"
+          test -f "$private/app.php" && test ! -L "$private/app.php" || fail "missing_or_symlink_app"
+          test -f "$private/management.sqlite3" && test ! -L "$private/management.sqlite3" || fail "missing_or_symlink_db"
+          test -f "$web/index.php" && test -f "$web/.htaccess" || fail "missing_web_entry"
+          test ! -e "$private/owner-first-login.txt" || fail "private_receipt_already_exists"
+          test ! -e "$stage" || fail "snapshot_path_exists"
+          test "$(stat -c %s "$private/management.sqlite3")" -le 52428800 || fail "database_size_limit"
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin"; then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php"; fi
+          "$phpbin" -r 'exit(extension_loaded("pdo_sqlite")?0:1);' || fail "sqlite_extension_unavailable"
+          test "$(grep -Fc '    if($count===0){' "$private/app.php")" = 1 || fail "setup_branch_not_unique"
+          grep -Fq "req('setup_token')" "$private/app.php" || fail "legacy_token_check_not_found"
+          grep -Fq "layoutStart('setup')" "$private/app.php" || fail "legacy_setup_page_not_found"
+          grep -Fq '$count=(int)one($db' "$private/app.php" || fail "user_count_anchor_not_found"
+          "$phpbin" -l "$private/app.php" >/dev/null || fail "live_php_syntax_invalid"
+          count="$("$phpbin" -r '$d=new PDO("sqlite:".$argv[1]); echo $d->query("SELECT COUNT(*) FROM users")->fetchColumn();' "$private/management.sqlite3")" || fail "user_count_unreadable"
+          test "$count" = 0 || fail "admin_or_other_user_already_exists"
+          mkdir -p "$(dirname "$stage")"
+          mkdir -m 700 "$stage"
+          cp -p "$private/app.php" "$stage/app.php.before"
+          if test -f "$private/setup.token"; then cp -p "$private/setup.token" "$stage/setup.token.before"; chmod 600 "$stage/setup.token.before"; fi
+          "$phpbin" -r '$d=new PDO("sqlite:".$argv[1]);$d->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);$d->exec("VACUUM INTO ".$d->quote($argv[2]));' "$private/management.sqlite3" "$stage/management.sqlite3.snapshot"
+          chmod 600 "$stage/management.sqlite3.snapshot"
+          sha256sum "$HOME/public_html/index.html" "$HOME/public_html/.htaccess" > "$stage/public-unchanged.sha256"
+          for subsite in mohammad ghanadi amozeshgah tala company about; do
+            if test -f "$HOME/public_html/$subsite/index.html"; then sha256sum "$HOME/public_html/$subsite/index.html" >> "$stage/public-unchanged.sha256"; fi
+          done
+          "$phpbin" -l "$stage/app.php.before"
+          echo "BUSINESS_PRECHECK=additive_setup_guard_private_backup_ready"
+          REMOTE
+          stage="/home/zomorod2/.backups/zomorod-business-tokenless/$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          tar -cf - -C "$RUNNER_TEMP" zomorod-additive-block.bin | ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
+      - name: Atomic private app upgrade and isolated functional verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; runid="$2"; attempt="$3"
+          private="$HOME/.private/zomorod-business"
+          stage="$HOME/.backups/zomorod-business-tokenless/$sha-$runid-$attempt"
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin"; then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php"; fi
+          test -s "$stage/zomorod-additive-block.bin"
+          "$phpbin" -r '$live=file_get_contents($argv[1]);$addition=file_get_contents($argv[2]);$needle="    if(\$count===0){";if($live===false||$addition===false||$addition===""||substr_count($live,$needle)!==1||strpos($live,"owner-first-login.txt")!==false||strpos($addition,"owner-first-login.txt")===false)exit(41);$patched=str_replace($needle,$addition.$needle,$live);if(file_put_contents($argv[3],$patched,LOCK_EX)!==strlen($patched))exit(42);' "$private/app.php" "$stage/zomorod-additive-block.bin" "$stage/candidate.php"
+          chmod 600 "$stage/candidate.php"
+          "$phpbin" -l "$stage/candidate.php"
+          newsha="$(sha256sum "$stage/candidate.php" | awk '{print $1}')"
+          install -m 600 "$stage/candidate.php" "$private/app.php.next-$sha"
+          swapped=0
+          rollback() {
+            if test "$swapped" = 1; then
+              cp -p "$stage/app.php.before" "$private/app.php.rollback-$sha"
+              mv -f "$private/app.php.rollback-$sha" "$private/app.php"
+              echo "BUSINESS_APP_ROLLBACK=restored_previous_code"
+            fi
+          }
+          finish() {
+            rc=$?
+            trap - EXIT
+            if test "$rc" -ne 0; then rollback; fi
+            exit "$rc"
+          }
+          trap finish EXIT
+          mv -f "$private/app.php.next-$sha" "$private/app.php"
+          swapped=1
+          test "$(sha256sum "$private/app.php" | awk '{print $1}')" = "$newsha"
+          code="$(curl --silent --show-error --location --max-time 30 -o "$stage/response.html" -w '%{http_code}' "https://zomorodmelal.ir/business/?upgrade=$sha")"
+          test "$code" = 200
+          grep -Fq "ورود مدیر و حسابدار" "$stage/response.html"
+          ! grep -Fq "توکن فعال‌سازی" "$stage/response.html"
+          test -s "$private/owner-first-login.txt"
+          test "$(stat -c %a "$private/owner-first-login.txt")" = 600
+          test ! -e "$private/setup.token"
+          count="$("$phpbin" -r '$d=new PDO("sqlite:".$argv[1]);echo $d->query("SELECT COUNT(*) FROM users")->fetchColumn();' "$private/management.sqlite3")"
+          test "$count" = 1
+          integrity="$("$phpbin" -r '$d=new PDO("sqlite:".$argv[1]);echo $d->query("PRAGMA integrity_check")->fetchColumn();' "$private/management.sqlite3")"
+          test "$integrity" = ok
+          sha256sum -c --status "$stage/public-unchanged.sha256"
+          swapped=0
+          trap - EXIT
+          echo "BUSINESS_TOKENLESS_RELEASE=SUCCESS"
+          echo "OWNER_CREDENTIALS=PRIVATE_CPANEL_ONLY"
+          echo "OTHER_PUBLIC_PAGES=UNCHANGED"
+          REMOTE
+      - name: Remove temporary relay keys
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/zomorod-business-tokenless"
+          if test -d "$d"; then rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known" "$d/host.candidate"; rmdir "$d" || true; fi
