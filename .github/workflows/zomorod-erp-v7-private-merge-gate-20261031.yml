@@ -278,7 +278,7 @@ jobs:
               elif allow:
                   passed='درخواست انجام نشد' not in body and '<nav' in body
               else:
-                  passed='درخواست انجام نشد' in body and '<nav' not in body
+                  passed='درخواست انجام نشد' in body and '<section' not in body
               if not passed:
                   raise SystemExit('ROLE_ROUTE_QA_FAIL_'+role+'_'+page)
               print('ROLE_ROUTE_QA_PASS='+role+':'+page)
