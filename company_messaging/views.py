@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
@@ -35,6 +36,7 @@ def inbox(request):
         "incoming": qs.filter(recipient_user=request.user)[:100],
         "outgoing": qs.filter(sender=request.user)[:100],
         "can_compose": request.user.is_superuser or request.user.has_perm("company_messaging.add_message"),
+        "external_send_enabled": getattr(settings, "COMPANY_MESSAGING_SEND_ENABLED", False),
     }))
 
 
@@ -58,7 +60,7 @@ def compose(request):
                 raise
         else:
             return no_cache(redirect("company_messaging:detail", pk=msg.pk))
-    return no_cache(render(request, "company_messaging/compose.html", {"form": form}))
+    return no_cache(render(request, "company_messaging/compose.html", {"form": form, "external_send_enabled": getattr(settings, "COMPANY_MESSAGING_SEND_ENABLED", False)}))
 
 
 @office_access
