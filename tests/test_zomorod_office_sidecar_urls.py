@@ -33,6 +33,30 @@ class ZomorodOfficeSidecarRouteTests(SimpleTestCase):
         finally:
             set_script_prefix(previous)
 
+    @override_settings(
+        ROOT_URLCONF="office_runtime.urls",
+        FORCE_SCRIPT_NAME="/office-preflight-2a8a0f4b9e17",
+    )
+    def test_independent_top_level_preview_does_not_inherit_company_prefix(self):
+        previous = get_script_prefix()
+        set_script_prefix("/office-preflight-2a8a0f4b9e17/")
+        try:
+            self.assertEqual(
+                reverse("enterprise_portal:login"),
+                "/office-preflight-2a8a0f4b9e17/secure-login/",
+            )
+            self.assertEqual(
+                reverse("company_messaging:inbox"),
+                "/office-preflight-2a8a0f4b9e17/messages/",
+            )
+            self.assertEqual(
+                reverse("company_marketing:dashboard"),
+                "/office-preflight-2a8a0f4b9e17/marketing/",
+            )
+            self.assertEqual(resolve("/messages/").url_name, "inbox")
+        finally:
+            set_script_prefix(previous)
+
     @override_settings(ROOT_URLCONF="office_runtime.urls")
     def test_sidecar_resolves_only_its_relative_routes(self):
         self.assertEqual(resolve("/secure-login/").url_name, "login")
