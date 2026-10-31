@@ -4,6 +4,7 @@ on:
     branches: [feature/zomorod-unified-login-20261031]
     paths:
       - "enterprise_portal/**"
+      - "ecosystem_hub/tests.py"
       - "config/settings.py"
       - ".github/workflows/zomorod-unified-login-django-gate-20261031.yml"
 permissions:
