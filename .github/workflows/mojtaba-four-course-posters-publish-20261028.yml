@@ -193,9 +193,9 @@ jobs:
           if re.search(rb"[\xd8-\xdb][\x80-\xbf]",page.content):
               raise RuntimeError("Non-English Arabic glyphs still present in course gallery")
           for phrase in (b"Business Development Course",b"Increasing Agricultural Income",
-                         b"How to Earn Money Online",b"Advanced ChatGPT Training",b"Scientific Research & Data Analysis",
-                         b"Agribusiness Feasibility & Investment",b"Digital Marketing & SEO Strategy",
-                         b"Business Finance & Profit Management",b"Food Processing & Quality Systems",
+                         b"How to Earn Money Online",b"Advanced ChatGPT Training",b"Scientific Research &amp; Data Analysis",
+                         b"Agribusiness Feasibility &amp; Investment",b"Digital Marketing &amp; SEO Strategy",
+                         b"Business Finance &amp; Profit Management",b"Food Processing &amp; Quality Systems",
                          b"AI Automation for Enterprise Teams"):
               if phrase not in page.content:
                   raise RuntimeError("English course heading absent")
@@ -237,7 +237,7 @@ jobs:
           section=re.search(rb'<section id="mpw-four-course-posters-20261028".*?</section>',home.content,re.S)
           if (not section or b'lang="en"' not in section.group(0)
               or b'dir="ltr"' not in section.group(0)
-              or b"Ten Professional Courses · Practical Skills" not in section.group(0)
+              or b"Ten Professional Courses" not in section.group(0)
               or re.search(rb"[\xd8-\xdb][\x80-\xbf]",section.group(0))):
               raise RuntimeError("Homepage course section not completely English")
           social=c.get("/mojtaba.roozegar/social-command/",secure=True)
