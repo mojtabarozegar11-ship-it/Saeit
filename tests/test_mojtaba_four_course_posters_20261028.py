@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from html import escape
 import importlib.util
 import os
 import tempfile
@@ -73,7 +74,7 @@ class OriginalPostersTests(unittest.TestCase):
         self.assertIsNone(__import__("re").search(r"[\u0600-\u06ff]",html))
         self.assertEqual(html.count('<article class="mpw-course-card"'),10)
         for c in COURSES:
-            self.assertIn(c["title"],html)
+            self.assertIn(escape(c["title"]),html)
             self.assertIn('/posters/'+c["slug"]+'.svg',html)
             self.assertIn('id="'+c["slug"]+'"',html)
         self.assertIn("/mojtaba.roozegar/contact/",html)
