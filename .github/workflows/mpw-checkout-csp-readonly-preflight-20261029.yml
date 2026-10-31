@@ -241,7 +241,18 @@ jobs:
                           'has_try':any(isinstance(n,ast.Try) for n in ast.walk(fn)),
                           'has_except':any(isinstance(n,ast.ExceptHandler) for n in ast.walk(fn)),
                           'has_raise':any(isinstance(n,ast.Raise) for n in ast.walk(fn)),
-                          'body_statement_count':len(fn.body)}
+                          'body_statement_count':len(fn.body),
+                          'body_node_types':[type(n).__name__ for n in fn.body],
+                          'return_tuple_elements':[
+                              [({'kind':type(x).__name__,
+                                 'attribute':x.attr if isinstance(x,ast.Attribute) else None,
+                                 'call_name':x.func.id if isinstance(x,ast.Call) and isinstance(x.func,ast.Name) else None})
+                               for x in n.value.elts]
+                              for n in ast.walk(fn) if isinstance(n,ast.Return)
+                              and isinstance(n.value,ast.Tuple)][:2],
+                          'assignment_target_types':[type(t).__name__
+                              for n in fn.body if isinstance(n,ast.Assign)
+                              for t in n.targets]}
                   else:
                       out['trx_rate_provider_contract']={'function_count':len(funcs)}
               except (SyntaxError,ValueError):
