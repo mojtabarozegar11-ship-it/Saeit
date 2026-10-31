@@ -160,6 +160,24 @@ class GuardedReleaseDependencyPreflightTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "PASSENGER_PYTHON_UNATTESTED"):
                     release.production_python()
 
+    def test_wrong_passenger_app_root_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "Saeit"
+            public_html = root / "public_html"
+            public_html.mkdir()
+            configured = root / "bin/python"
+            configured.parent.mkdir()
+            configured.write_bytes(b"fixture")
+            configured.chmod(0o755)
+            (public_html / ".htaccess").write_text(
+                'PassengerAppRoot "/another-app"\nPassengerPython "' + str(configured) + '"\n',
+                encoding="utf-8",
+            )
+            with patch.object(release, "HOME", root), patch.object(release, "APP", app):
+                with self.assertRaisesRegex(RuntimeError, "PASSENGER_APP_ROOT_UNATTESTED"):
+                    release.production_python()
+
     def test_duplicate_passenger_interpreters_fail_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
