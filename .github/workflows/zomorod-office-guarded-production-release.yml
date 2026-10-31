@@ -221,3 +221,16 @@ jobs:
         if: always()
         shell: bash
         run: rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
+
+  blocked-release-status:
+    needs: [quality, deploy]
+    if: always() && needs.quality.result == 'success' && needs.deploy.result == 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Report truthful non-publication while safety gate is closed
+        shell: bash
+        run: |
+          echo "::error title=Publication not performed::Private office release quality passed, but production deploy is safety-blocked and was not executed. Do not report the suite as live."
+          echo "ZOMOROD_PRIVATE_OFFICE_PUBLICATION=BLOCKED_NOT_DEPLOYED"
+          exit 1
