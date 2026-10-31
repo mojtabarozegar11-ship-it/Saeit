@@ -779,6 +779,17 @@ jobs:
                   print("CPANEL_PASSENGER_UAPI_OUTPUT_CLASS="+
                         ("html" if r.stdout.lstrip().startswith("<") else
                          "empty" if not r.stdout.strip() else "non_json"))
+                  lower=r.stderr.casefold()
+                  patterns={
+                      "permission":("permission denied","not authorized","access denied","insufficient privileges"),
+                      "user_context":("user context","must be root","not logged in","current user"),
+                      "module_missing":("no such module","unknown module","passengerapps","not implemented"),
+                      "binary_dependency":("can't locate","cannot locate","libperl","shared library"),
+                      "service":("connection refused","could not connect","service unavailable"),
+                      "usage":("usage:","unrecognized arguments","unknown option","invalid option"),
+                  }
+                  hints=[name for name,tokens in patterns.items() if any(t in lower for t in tokens)]
+                  print("CPANEL_PASSENGER_UAPI_ERROR_CLASS="+(",".join(hints) if hints else "other"))
                   print("CPANEL_PASSENGER_UAPI=unparseable")
                   raise SystemExit(0)
           except (OSError,subprocess.TimeoutExpired):
