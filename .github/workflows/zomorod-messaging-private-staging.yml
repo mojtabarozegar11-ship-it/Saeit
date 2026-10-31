@@ -36,7 +36,7 @@ jobs:
           export COPY_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           test "${#COPY_SOURCE_SHA}" -eq 40
           [[ "$COPY_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          for path in company_messaging company_marketing enterprise_portal ecosystem_hub core command_center farnaz templates manage.py config/settings.py config/urls.py requirements.txt; do
+          for path in company_messaging company_marketing enterprise_portal ecosystem_hub office_runtime core command_center farnaz templates manage.py config/settings.py config/urls.py requirements.txt; do
             test -e "$path" && test ! -L "$path"
           done
           grep -qx 'django-otp==1.7.5' requirements.txt
@@ -50,11 +50,11 @@ jobs:
           test "$actual" = "475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc"
           echo "STAGE_OTP_WHEEL_SHA256=$actual"
           tar -cf "$RUNNER_TEMP/zm-msg-package.tar" \
-            company_messaging company_marketing enterprise_portal ecosystem_hub \
+            company_messaging company_marketing enterprise_portal ecosystem_hub office_runtime \
             core command_center farnaz templates manage.py \
             config requirements.txt -C "$RUNNER_TEMP" zm-msg-deps
           test -s "$RUNNER_TEMP/zm-msg-package.tar"
-          find company_messaging company_marketing enterprise_portal ecosystem_hub core command_center farnaz templates -type l -print -quit | grep -q . && exit 1 || true
+          find company_messaging company_marketing enterprise_portal ecosystem_hub office_runtime core command_center farnaz templates -type l -print -quit | grep -q . && exit 1 || true
           echo "PRIVATE_STAGE_PACKAGE_SHA256=$(sha256sum "$RUNNER_TEMP/zm-msg-package.tar" | cut -d' ' -f1)"
           echo "PRIVATE_STAGE_SOURCE_SHA=$COPY_SOURCE_SHA"
       - name: Set up pinned GitHub to VPS to cPanel relay
@@ -232,11 +232,14 @@ jobs:
           test -f "$root/code/core/migrations/0001_initial.py"
           test -f "$root/code/command_center/models.py"
           test -f "$root/code/farnaz/models.py"
+          test -f "$root/code/office_runtime/passenger_wsgi.py"
+          test -f "$root/code/office_runtime/settings.py"
+          test -f "$root/code/office_runtime/urls.py"
           test -f "$root/code/manage.py"
           test -f "$root/code/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl"
           test "$(sha256sum "$root/code/zm-msg-deps/django_otp-1.7.5-py3-none-any.whl" | awk '{print $1}')" = "475d4111e07d61616996f098d08d29884da6397273a11f53c1b8e8c75d27e1dc"
           test -z "$(find "$root/code" -type l -print -quit)"
-          python3 -B -m compileall -q "$root/code/company_messaging" "$root/code/company_marketing" "$root/code/enterprise_portal" "$root/code/ecosystem_hub" "$root/code/core" "$root/code/command_center" "$root/code/farnaz" "$root/code/config"
+          python3 -B -m compileall -q "$root/code/company_messaging" "$root/code/company_marketing" "$root/code/enterprise_portal" "$root/code/ecosystem_hub" "$root/code/core" "$root/code/command_center" "$root/code/farnaz" "$root/code/office_runtime" "$root/code/config"
           printf 'release=%s\nsha256=%s\nmode=PRIVATE_STAGE_NO_DEPLOY\n' "$sha" "$actual" > "$root/manifest.txt"
           chmod 600 "$root/package.tar" "$root/manifest.txt"
           echo "PRIVATE_STAGE_TRANSFER=verified"
