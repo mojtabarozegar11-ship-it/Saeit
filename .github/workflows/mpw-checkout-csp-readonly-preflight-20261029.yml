@@ -4,6 +4,8 @@ on:
     paths:
       - scripts/mpw_checkout_csp_zero_script_guard_20261029.py
       - tests/test_mpw_checkout_csp_zero_script_20261029.py
+      - scripts/s01_trx_commerce_source_overlay_20261031.py
+      - tests/test_s01_trx_commerce_source_overlay_20261031.py
       - .github/workflows/mpw-checkout-csp-readonly-preflight-20261029.yml
 permissions: {contents: read}
 concurrency:
