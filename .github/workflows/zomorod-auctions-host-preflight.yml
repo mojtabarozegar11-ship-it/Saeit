@@ -1,0 +1,169 @@
+name: ZM auction cPanel compatibility preflight (read only)
+
+on:
+  push:
+    branches:
+      - feature/zomorod-auction-management-private-20261031
+    paths:
+      - .github/workflows/zomorod-auctions-host-preflight.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zm-auction-host-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 8a93511adbcddb6b228b93d9c5d46064b8ea1a09
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: sqlite3,fileinfo
+          coverage: none
+      - name: Verify exact approved auction source and local syntax
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 8a93511adbcddb6b228b93d9c5d46064b8ea1a09
+          php -l content/zomorod-business/auctions.php
+          python3 scripts/test_zomorod_auctions.py
+      - name: Audit live auction host prerequisites (no host mutations)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$GITHUB_RUN_ID" -gt 0
+          d="$RUNNER_TEMP/zomorod-auction-host-preflight"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 15
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          target=""
+          for host in saeit-cpanel saeit-cpanel-direct; do
+            if timeout 55s ssh -F "$d/config" "$host" 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/business/index.php && test -d /home/zomorod2/.private/zomorod-business' >/dev/null; then
+              target="$host"
+              break
+            fi
+          done
+          test -n "$target"
+          ssh -F "$d/config" "$target" 'python3 -B -' > "$RUNNER_TEMP/zomorod-auction-host.json" <<'PY'
+          import json,os,pathlib,re,shutil,sqlite3,subprocess,stat
+          h=pathlib.Path('/home/zomorod2')
+          web=h/'public_html/business'
+          private=h/'.private/zomorod-business'
+          master=private/'management.sqlite3'
+          app=private/'app.php'
+          result={
+              'private_dir_safe':private.is_dir() and not private.is_symlink(),
+              'web_route_parent_safe':web.is_dir() and not web.is_symlink(),
+              'web_wrapper_present':(web/'index.php').is_file(),
+              'auction_path_preexists':(web/'auctions').exists() or (web/'auctions').is_symlink(),
+              'master_db_safe':master.is_file() and not master.is_symlink(),
+              'app_file_present':app.is_file() and not app.is_symlink(),
+              'free_mib':shutil.disk_usage(h).free//1048576,
+          }
+          if result['private_dir_safe'] and result['master_db_safe']:
+              try:
+                  conn=sqlite3.connect('file:'+str(master)+'?mode=ro',uri=True,timeout=3)
+                  conn.execute('PRAGMA query_only=ON')
+                  u={row[1] for row in conn.execute('PRAGMA table_info(users)').fetchall()}
+                  p={row[1] for row in conn.execute('PRAGMA table_info(projects)').fetchall()}
+                  result['auth_users_schema_ok']={'id','role','active'}.issubset(u)
+                  result['projects_schema_ok']={'id','title'}.issubset(p)
+                  result['master_bytes']=master.stat().st_size
+                  conn.close()
+              except (OSError,sqlite3.Error):
+                  result['auth_users_schema_ok']=False
+                  result['projects_schema_ok']=False
+          else:
+              result['auth_users_schema_ok']=False
+              result['projects_schema_ok']=False
+          if result['app_file_present']:
+              text=app.read_text(encoding='utf-8',errors='replace')
+              wrapper=(web/'index.php').read_text(encoding='utf-8',errors='replace') if result['web_wrapper_present'] else ''
+              combined=text+' '+wrapper
+              result['zm_session_name_present']='ZM_BUSINESS' in combined
+              result['uid_session_field_present']=bool(re.search(r"\$_SESSION\s*\[\s*['\"]uid['\"]\s*\]",combined))
+          else:
+              result['zm_session_name_present']=False
+              result['uid_session_field_present']=False
+          php_code='echo json_encode(["version"=>PHP_VERSION,"sqlite3"=>class_exists("SQLite3"),"fileinfo"=>class_exists("finfo"),"sessions"=>extension_loaded("session"),"upload_max"=>ini_get("upload_max_filesize"),"post_max"=>ini_get("post_max_size")]);'
+          try:
+              p=subprocess.run(['php','-r',php_code],capture_output=True,text=True,timeout=10)
+              result['php_cli']=json.loads(p.stdout) if p.returncode==0 else None
+          except (OSError,ValueError,subprocess.TimeoutExpired):
+              result['php_cli']=None
+          print(json.dumps(result,sort_keys=True))
+          PY
+          python3 - "$RUNNER_TEMP/zomorod-auction-host.json" <<'PY'
+          import json,pathlib,sys
+          data=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          check=['private_dir_safe','web_route_parent_safe','web_wrapper_present',
+                 'master_db_safe','app_file_present','auth_users_schema_ok',
+                 'projects_schema_ok','zm_session_name_present','uid_session_field_present']
+          for name in check:
+              print('AUCTION_HOST_'+name.upper()+'='+('PASS' if data.get(name) else 'BLOCKED'))
+          php=data.get('php_cli') or {}
+          php_ok=bool(php.get('sqlite3') and php.get('fileinfo') and php.get('sessions') and
+                      tuple(map(int,str(php.get('version','0.0')).split('.')[:2])) >= (8,1))
+          print('AUCTION_PHP_CLI_COMPATIBLE='+('PASS' if php_ok else 'BLOCKED'))
+          print('AUCTION_PHP_CLI_VERSION='+str(php.get('version','unknown')))
+          print('AUCTION_PHP_UPLOAD_LIMIT='+str(php.get('upload_max','unknown')))
+          print('AUCTION_HOST_NEW_ROUTE_PRESENT='+str(data.get('auction_path_preexists')))
+          print('AUCTION_HOST_FREE_MIB='+str(data.get('free_mib','unknown')))
+          print('AUCTION_DEPLOY_OR_DB_MUTATIONS=NONE')
+          print('AUCTION_RELEASE_AUTHORIZED=NO_BACKUP_RESTORE_OR_WEB_SAPI_EVIDENCE')
+          if not all(data.get(x) for x in check) or not php_ok:
+              sys.exit('AUCTION_HOST_PREFLIGHT=BLOCKED_BY_COMPATIBILITY')
+          print('AUCTION_HOST_PREFLIGHT=PASS_READONLY_DISCOVERY')
+          PY
