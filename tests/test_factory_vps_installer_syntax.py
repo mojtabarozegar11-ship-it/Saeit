@@ -6,6 +6,23 @@ import unittest
 
 
 class VPSProductInstallerTests(unittest.TestCase):
+    def test_legacy_multiproduct_install_is_unconditionally_fail_closed(self):
+        """Neither a dispatch nor the historical approval token may start SKU 2."""
+        source = Path(__file__).resolve().parents[1]
+        installer = source / "deploy/install_autonomous_factory_products.sh"
+        content = installer.read_text(encoding="utf8")
+        gate = "F01_LEGACY_MULTIPRODUCT_INSTALL_DISABLED_UNTIL_GLOBAL_SINGLETON_PROVEN"
+        self.assertIn(gate, content)
+        self.assertLess(content.index(gate), content.index('repo="$(cd'))
+        self.assertLess(content.index("exit 3"), content.index('--max-products 25'))
+        result = subprocess.run(["bash", str(installer)], capture_output=True,
+                                text=True, timeout=5)
+        self.assertEqual(result.returncode, 3)
+        self.assertIn(gate, result.stderr)
+        wf = (source / ".github/workflows/vps-autonomous-product-install.yml").read_text()
+        deploy = wf.split("\n  deploy:\n", 1)[1]
+        self.assertIn("if: ${{ false }}", deploy)
+
     def test_installer_is_valid_bash(self):
         bash = shutil.which("bash")
         if bash is None:
