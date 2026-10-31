@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   scoped-preview-test:
-    if: github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.sha == '8161c06e9be735081c66c565b1e48c6ea3d32ef5'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
