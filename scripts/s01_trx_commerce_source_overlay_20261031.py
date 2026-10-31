@@ -18,22 +18,59 @@ EXPECTED_SOURCE_SHA256 = "a3015e62d0ae13d49935d1a1bf48a6971ee852599550dda2cd083a
 TARGET = Path("/home/zomorod2/Saeit-staging/services/mpw_trx_commercial_web.py")
 
 # This preserves the live (USD per TRX, Unix timestamp) tuple contract.
-# The already-reviewed TRX-only rate source must be deployed and SHA-verified
-# separately; failure or stale data MUST NOT create a payable invoice.
+# The quote implementation is self-contained in the patched provider and uses
+# only Python standard library plus the existing commerce error class. No new
+# source module needs to be installed; stale data MUST NOT create an invoice.
 NEW_FUNCTION = '''def _rate_provider():
-    """TRX-only fresh USD quote; preserves the existing tuple contract."""
-    from decimal import Decimal
+    """One-file, TRX-only fresh USD quote; original tuple and error contract."""
+    import json
+    import time
+    from decimal import Decimal, InvalidOperation
+    from urllib.request import Request, urlopen
     from scripts.mojplaywin_direct_wallet_rates import RateFeedUnavailable
-    from scripts.s01_trx_rate_isolation_candidate import (
-        TrustedRateUnavailable, fetch_trx_only,
-    )
+
+    url = ("https://api.coingecko.com/api/v3/simple/price"
+           "?ids=tron&vs_currencies=usd&include_last_updated_at=true")
     try:
-        observation = fetch_trx_only()
-    except TrustedRateUnavailable as exc:
-        raise RateFeedUnavailable("Trusted TRX rate unavailable") from exc
-    if not Decimal("0.001") <= observation.usd_per_trx <= Decimal("100"):
-        raise RateFeedUnavailable("TRX quote outside commerce safety range")
-    return observation.usd_per_trx, observation.observed_at
+        request = Request(url, headers={
+            "Accept": "application/json",
+            "User-Agent": "MojPlayWin-RateGate/1.0",
+        })
+        with urlopen(request, timeout=8) as response:
+            if response.geturl() != url or getattr(response, "status", None) != 200:
+                raise ValueError("TRX quote origin or status invalid")
+            raw = response.read(4097)
+        if not raw or len(raw) > 4096:
+            raise ValueError("TRX quote response size invalid")
+
+        def unique_pairs(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError("Duplicate market-data key")
+                result[key] = value
+            return result
+
+        data = json.loads(raw, object_pairs_hook=unique_pairs)
+        item = data.get("tron") if type(data) is dict else None
+        if type(item) is not dict:
+            raise ValueError("Missing TRX market observation")
+        raw_price = item.get("usd")
+        if type(raw_price) not in (int, float, str):
+            raise ValueError("Invalid TRX quote price type")
+        price = Decimal(str(raw_price))
+        if not price.is_finite() or not Decimal("0.001") <= price <= Decimal("100"):
+            raise ValueError("TRX quote outside commerce safety range")
+        observed_at = item.get("last_updated_at")
+        if type(observed_at) is not int or observed_at <= 0:
+            raise ValueError("Invalid TRX quote timestamp")
+        age = int(time.time()) - observed_at
+        if not -45 <= age <= 300:
+            raise ValueError("Stale or future TRX market observation")
+        return price, observed_at
+    except Exception as exc:
+        # No fallback price, invoice or entitlement on any market-data failure.
+        raise RateFeedUnavailable("Trusted TRX quote unavailable") from exc
 '''
 
 
@@ -117,52 +154,64 @@ def build(original: bytes, *, expected_sha256: str = EXPECTED_SOURCE_SHA256) -> 
 
 
 def actual_source_in_memory_smoke(candidate: bytes) -> None:
-    """Execute ONLY the patched provider AST against stub modules, never Django."""
+    """Run patched provider AST with a deterministic fake HTTP response only."""
     from decimal import Decimal
-    from types import ModuleType, SimpleNamespace
+    from types import ModuleType
     from unittest.mock import patch
 
     fn = _function(ast.parse(candidate.decode("utf-8")))
     class OriginalRateError(Exception):
         pass
-    class TrustedRateUnavailable(Exception):
-        pass
+    class FakeResponse:
+        status = 200
+        def __init__(self, body, url):
+            self.body, self.url = body, url
+        def geturl(self):
+            return self.url
+        def read(self, count):
+            return self.body[:count]
+        def __enter__(self):
+            return self
+        def __exit__(self, *_):
+            return False
 
+    url = ("https://api.coingecko.com/api/v3/simple/price"
+           "?ids=tron&vs_currencies=usd&include_last_updated_at=true")
+    import json
+    now = 1793470000
+    def body(price="0.25", timestamp=now):
+        return json.dumps({"tron": {"usd": price,
+                                    "last_updated_at": timestamp}}).encode("utf8")
     fake_scripts = ModuleType("scripts")
     fake_scripts.__path__ = []
     fake_market = ModuleType("scripts.mojplaywin_direct_wallet_rates")
     fake_market.RateFeedUnavailable = OriginalRateError
-    fake_quote = ModuleType("scripts.s01_trx_rate_isolation_candidate")
-    fake_quote.TrustedRateUnavailable = TrustedRateUnavailable
-    fake_quote.fetch_trx_only = lambda: SimpleNamespace(
-        usd_per_trx=Decimal("0.25"), observed_at=1793470000)
     scope = {}
     with patch.dict(sys.modules, {
         "scripts": fake_scripts,
         "scripts.mojplaywin_direct_wallet_rates": fake_market,
-        "scripts.s01_trx_rate_isolation_candidate": fake_quote,
     }):
         exec(compile(ast.Module(body=[fn], type_ignores=[]),
                      "<exact-live-source-memory>", "exec"), scope)
         provider = scope["_rate_provider"]
-        if provider() != (Decimal("0.25"), 1793470000):
-            raise SourceContractChanged("Patched provider tuple smoke failed")
-        fake_quote.fetch_trx_only = lambda: (_ for _ in ()).throw(
-            TrustedRateUnavailable("stale"))
-        try:
-            provider()
-        except OriginalRateError:
-            pass
-        else:
-            raise SourceContractChanged("Stale quote did not fail closed")
-        fake_quote.fetch_trx_only = lambda: SimpleNamespace(
-            usd_per_trx=Decimal("150"), observed_at=1793470000)
-        try:
-            provider()
-        except OriginalRateError:
-            pass
-        else:
-            raise SourceContractChanged("Out-of-range quote did not fail closed")
+        with patch("time.time", return_value=now), patch(
+            "urllib.request.urlopen",
+            return_value=FakeResponse(body(), url)
+        ):
+            if provider() != (Decimal("0.25"), now):
+                raise SourceContractChanged("Patched provider tuple smoke failed")
+        for payload in (body(timestamp=now-301), body(price="150"),
+                        body(timestamp=now+46), b'{"tron":{"usd":0.2,"usd":0.3}}'):
+            with patch("time.time", return_value=now), patch(
+                "urllib.request.urlopen",
+                return_value=FakeResponse(payload, url)
+            ):
+                try:
+                    provider()
+                except OriginalRateError:
+                    pass
+                else:
+                    raise SourceContractChanged("Unsafe TRX quote did not fail closed")
 
 
 def preview() -> None:
