@@ -74,6 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_cpanel_provenance_readonly_20261030.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_provenance_symlink_guard_r21.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_ssh_error_classify.py -v
       - name: Establish pinned VPS relay to cPanel
         env:
