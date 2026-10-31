@@ -1,8 +1,7 @@
-"""Ten English course posters on independent personal website with a verified owner photograph.
+"""Ten English educational posters, with integrated owner-reference photo scenes.
 
-All artwork is deterministic SVG and embeds only the hash-pinned owner-selected
-portrait already approved for the personal website. Do not claim that enrollment,
-payment, credentials, or financial outcomes have been confirmed.
+The full-scene campaign images are hash-pinned, compressed WebP embedded into
+portable SVG response wrappers. No enrollment or earnings claims are implied.
 """
 from __future__ import annotations
 from html import escape
@@ -10,6 +9,7 @@ import math
 import base64
 import hashlib
 from pathlib import Path
+from .course_image_data import BASE64_POSTERS, SHA256_POSTERS
 
 from django.http import HttpResponse, HttpResponseNotFound
 from django.views.decorators.http import require_GET
@@ -255,6 +255,26 @@ def _art(slug, hi, ice):
 def svg_for(slug, portrait_bytes=None):
     course=BY_SLUG[slug]
     owner_photo=read_owner_photo() if portrait_bytes is None else portrait_bytes
+    if not isinstance(owner_photo,bytes) or not owner_photo:
+        raise ValueError("Verified owner-reference portrait required")
+    encoded=BASE64_POSTERS[slug]
+    data=base64.b64decode(encoded,validate=True)
+    if (not 30_000 < len(data) < 280_000 or data[:4]!=b"RIFF" or
+        data[8:12]!=b"WEBP" or hashlib.sha256(data).hexdigest()!=SHA256_POSTERS[slug]):
+        raise ValueError("Course poster image integrity check failed")
+    # The person's face, body, the course environment and the typography are
+    # parts of one photographic scene. There is no inset or pasted portrait.
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" '
+        'viewBox="0 0 900 1200" role="img" direction="ltr" '
+        'aria-labelledby="posterTitle posterDesc">'
+        '<title id="posterTitle">'+escape(course["title"])+'</title>'
+        '<desc id="posterDesc">'+escape(course["alt"]+' '+course["lines"][0]+' '+
+        course["lines"][1]+' MOJTABA ROOZEGAR')+'</desc>'
+        '<image x="0" y="0" width="900" height="1200" '
+        'preserveAspectRatio="xMidYMid slice" href="data:image/webp;base64,'+encoded+'"/>'
+        '</svg>'
+    )
     dark,mid,accent,ivory,secondary=course["palette"]
     l1,l2=course["lines"]
     def text(y,content,size,color,weight="700"):
@@ -363,7 +383,7 @@ footer{color:#d2c8b6}footer p{max-width:850px}
 </style></head><body>
 <header><div class="mpw-kicker">MOJTABA ROOZEGAR / EDUCATION</div>
 <h1>Ten Courses. Practical Skills.</h1>
-<p>Explore ten professional learning paths across business, agribusiness, research, marketing and AI. Every self-contained poster features the owner-approved authentic photograph of Mojtaba Roozegar.</p>
+<p>Explore ten professional learning paths across business, agribusiness, research, marketing and AI. Each course poster is a specially art-directed scene based on owner-selected photos of Mojtaba Roozegar, with his likeness integrated into the setting.</p>
 <nav><a href="/mojtaba.roozegar/">Back to personal website</a><a href="/mojtaba.roozegar/contact/">Contact and inquiries</a></nav>
 </header><main><section class="mpw-course-grid" aria-label="Ten courses and promotional posters">'''+cards+'''</section></main>
 <footer><p>This is an early course preview. Dates, tuition, certificates and enrollment will be announced only when confirmed. No earnings or financial results are guaranteed.</p>
