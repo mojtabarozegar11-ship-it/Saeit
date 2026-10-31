@@ -3,6 +3,8 @@
 No live commerce imports, DB connections, orders, payments or source writes.
 """
 import ast
+import sys
+from types import ModuleType
 from decimal import Decimal
 import unittest
 from unittest.mock import patch
@@ -12,9 +14,8 @@ from scripts.s01_trx_rate_isolation_candidate import (
     TrustedRateUnavailable, TrustedTrxRate,
 )
 
-BASE = '''from scripts.mojplaywin_direct_wallet_rates import RateFeedUnavailable
-def _rate_provider():
-    """Existing live rate adapter."""
+BASE = '''def _rate_provider():
+    from scripts.mojplaywin_direct_wallet_rates import fetch_server_rate
     quote=fetch_server_rate("TRX")
     return quote.usd_per_asset, quote.observed_at
 
@@ -24,6 +25,12 @@ def unrelated(value):
 
 
 class TrxCommerceOverlayTests(unittest.TestCase):
+    @staticmethod
+    def fake_rate_module(error_type):
+        module = ModuleType("scripts.mojplaywin_direct_wallet_rates")
+        module.RateFeedUnavailable = error_type
+        return module
+
     def candidate(self, source=BASE):
         raw = source.encode("utf8")
         return overlay.build(raw, expected_sha256=overlay.digest(raw))
@@ -47,7 +54,9 @@ class TrxCommerceOverlayTests(unittest.TestCase):
         fn = overlay._function(ast.parse(revised))
         exec(compile(ast.Module(body=[fn], type_ignores=[]), "<synthetic>", "exec"), scope)
         observed = TrustedTrxRate(Decimal("0.285"), 1793470000, 30)
-        with patch("scripts.s01_trx_rate_isolation_candidate.fetch_trx_only", return_value=observed):
+        with patch.dict(sys.modules, {"scripts.mojplaywin_direct_wallet_rates":
+                                      self.fake_rate_module(RateFeedUnavailable)}), \
+             patch("scripts.s01_trx_rate_isolation_candidate.fetch_trx_only", return_value=observed):
             amount, timestamp = scope["_rate_provider"]()
         self.assertEqual(amount, Decimal("0.285"))
         self.assertEqual(timestamp, 1793470000)
@@ -59,7 +68,9 @@ class TrxCommerceOverlayTests(unittest.TestCase):
         scope = {"RateFeedUnavailable": RateFeedUnavailable}
         fn = overlay._function(ast.parse(revised))
         exec(compile(ast.Module(body=[fn], type_ignores=[]), "<synthetic>", "exec"), scope)
-        with patch("scripts.s01_trx_rate_isolation_candidate.fetch_trx_only",
+        with patch.dict(sys.modules, {"scripts.mojplaywin_direct_wallet_rates":
+                                      self.fake_rate_module(RateFeedUnavailable)}), \
+             patch("scripts.s01_trx_rate_isolation_candidate.fetch_trx_only",
                    side_effect=TrustedRateUnavailable("stale")):
             with self.assertRaises(RateFeedUnavailable):
                 scope["_rate_provider"]()
@@ -72,7 +83,9 @@ class TrxCommerceOverlayTests(unittest.TestCase):
         fn = overlay._function(ast.parse(revised))
         exec(compile(ast.Module(body=[fn], type_ignores=[]), "<synthetic>", "exec"), scope)
         observed = TrustedTrxRate(Decimal("150"), 1793470000, 30)
-        with patch("scripts.s01_trx_rate_isolation_candidate.fetch_trx_only", return_value=observed):
+        with patch.dict(sys.modules, {"scripts.mojplaywin_direct_wallet_rates":
+                                      self.fake_rate_module(RateFeedUnavailable)}), \
+             patch("scripts.s01_trx_rate_isolation_candidate.fetch_trx_only", return_value=observed):
             with self.assertRaises(RateFeedUnavailable):
                 scope["_rate_provider"]()
 
@@ -95,9 +108,9 @@ class TrxCommerceOverlayTests(unittest.TestCase):
 
     def test_unrecognized_rate_error_contract_refused(self):
         changed = BASE.replace(
-            "from scripts.mojplaywin_direct_wallet_rates import RateFeedUnavailable",
-            "from scripts.mojplaywin_direct_wallet_rates import RateFeedChanged")
-        with self.assertRaisesRegex(overlay.SourceContractChanged, "rate-error"):
+            "from scripts.mojplaywin_direct_wallet_rates import fetch_server_rate",
+            "from scripts.changed_rate_module import fetch_server_rate")
+        with self.assertRaisesRegex(overlay.SourceContractChanged, "original import"):
             self.candidate(changed)
 
     def test_no_install_mode_exists(self):
