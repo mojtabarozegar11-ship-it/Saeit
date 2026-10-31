@@ -64,6 +64,18 @@ class TrxCommerceOverlayTests(unittest.TestCase):
             with self.assertRaises(RateFeedUnavailable):
                 scope["_rate_provider"]()
 
+    def test_unrealistic_quote_fails_closed(self):
+        revised = self.candidate().decode("utf8")
+        class RateFeedUnavailable(Exception):
+            pass
+        scope = {"RateFeedUnavailable": RateFeedUnavailable}
+        fn = overlay._function(ast.parse(revised))
+        exec(compile(ast.Module(body=[fn], type_ignores=[]), "<synthetic>", "exec"), scope)
+        observed = TrustedTrxRate(Decimal("150"), 1793470000, 30)
+        with patch("scripts.s01_trx_rate_isolation_candidate.fetch_trx_only", return_value=observed):
+            with self.assertRaises(RateFeedUnavailable):
+                scope["_rate_provider"]()
+
     def test_source_drift_refused(self):
         with self.assertRaisesRegex(overlay.SourceContractChanged, "SHA drift"):
             overlay.build(BASE.encode("utf8"))
