@@ -141,7 +141,8 @@ def _install_cookie(response, token):
     if token:
         response.set_cookie(COOKIE, token, max_age=COOKIE_AGE, path=COOKIE_PATH,
                             secure=True, httponly=True, samesite="Lax")
-        response["Vary"] = "Cookie"
+        from django.utils.cache import patch_vary_headers
+        patch_vary_headers(response, ("Cookie",))
     response["Cache-Control"] = "private, no-store, max-age=0"
     response["Referrer-Policy"] = "same-origin"
     response["X-Content-Type-Options"] = "nosniff"
