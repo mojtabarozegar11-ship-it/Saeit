@@ -241,7 +241,8 @@ def verify():
     require_no_symlink_ancestors(code)
     if not stage.is_dir() or not code.is_dir():
         fail("STAGE_DIRECTORY_UNSAFE")
-    assert regular(stage / "manifest.txt") and regular(stage / "package.tar")
+    if not regular(stage / "manifest.txt") or not regular(stage / "package.tar"):
+        fail("STAGE_MANIFEST_OR_ARCHIVE_UNSAFE")
     manifest = dict(line.split("=", 1) for line in (stage / "manifest.txt").read_text().splitlines() if "=" in line)
     if manifest.get("release") != sha or manifest.get("mode") != "PRIVATE_STAGE_NO_DEPLOY":
         fail("STAGE_IDENTITY_UNVERIFIED")
