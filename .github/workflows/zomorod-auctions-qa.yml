@@ -1,0 +1,42 @@
+name: ZM private auction management QA (source only)
+
+on:
+  pull_request:
+    paths:
+      - "content/zomorod-business/auctions.php"
+      - "scripts/test_zomorod_auctions.py"
+      - ".github/workflows/zomorod-auctions-qa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-php-http:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: sqlite3
+          coverage: none
+      - name: Validate PHP source syntax
+        run: php -l content/zomorod-business/auctions.php
+      - name: Validate role separation and audit timeline using synthetic SQLite
+        run: python3 scripts/test_zomorod_auctions.py
+      - name: Enforce explicit no-outbound integration
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path("content/zomorod-business/auctions.php").read_text()
+          assert "SQLITE3_OPEN_READONLY" in src
+          assert "BEGIN IMMEDIATE" in src
+          assert "hash_equals($csrf" in src
+          assert "INSERT INTO auction_events" in src
+          assert "move_uploaded_file" not in src
+          for forbidden in ("curl_exec(", "file_get_contents($notice", "shell_exec(", "mail("):
+              assert forbidden not in src
+          print("No auction submission, payments or outbound network")
+          PY
