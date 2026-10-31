@@ -6,6 +6,11 @@ on:
       - ".github/workflows/zomorod-business-synthetic-qa.yml"
       - "content/zomorod-business/app.php"
       - "scripts/zomorod_business_synthetic_qa.py"
+  pull_request:
+    paths:
+      - ".github/workflows/zomorod-business-synthetic-qa.yml"
+      - "content/zomorod-business/app.php"
+      - "scripts/zomorod_business_synthetic_qa.py"
 permissions:
   contents: read
 jobs:
