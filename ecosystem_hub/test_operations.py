@@ -15,6 +15,7 @@ STORE = {
 
 
 @override_settings(DEBUG=False, STORAGES=STORE, ALLOWED_HOSTS=["testserver"])
+@override_settings(COMPANY_OFFICE_REQUIRE_MFA=False)
 class AssistantOperationsTests(TestCase):
     def setUp(self):
         Users = get_user_model()
