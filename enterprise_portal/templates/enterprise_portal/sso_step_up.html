@@ -1,0 +1,20 @@
+{% extends 'enterprise_portal/shell.html' %}
+{% block title %}تأیید دومرحله‌ای ورود یکپارچه{% endblock %}
+{% block content %}
+<section class="login-panel" aria-labelledby="sso-step-up-title">
+  <h1 id="sso-step-up-title">تأیید دومرحله‌ای میز مدیریت</h1>
+  <p>ورود قبلی شما تأیید شده است؛ برای دسترسی به پیام‌ها و اطلاعات شرکت، کد دستگاه ثبت‌شده را وارد کنید.</p>
+  <form method="post" class="login-form" autocomplete="off">
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div role="alert" class="alert">{{ form.non_field_errors }}</div>{% endif %}
+    <label for="{{ form.otp_device.id_for_label }}">دستگاه تأیید</label>
+    {{ form.otp_device }}
+    {% for error in form.otp_device.errors %}<p class="error">{{ error }}</p>{% endfor %}
+    <label for="{{ form.otp_token.id_for_label }}">کد یک‌بارمصرف</label>
+    {{ form.otp_token }}
+    {% for error in form.otp_token.errors %}<p class="error">{{ error }}</p>{% endfor %}
+    <button type="submit" class="primary-btn">تأیید و ورود</button>
+  </form>
+  <a class="back-link" href="/business/">بازگشت به میز مدیریت اصلی</a>
+</section>
+{% endblock %}
