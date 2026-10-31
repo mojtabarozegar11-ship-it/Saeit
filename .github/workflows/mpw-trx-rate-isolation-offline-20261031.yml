@@ -1,0 +1,22 @@
+name: MPW TRX rate isolation offline regression
+on:
+  push:
+    branches:
+      - fix/mpw-trx-single-asset-rate-readonly-20261031
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rate-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Exact-head TRX/ETH quote isolation regression (no network or DB)
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_trx_single_asset_rate_regression.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile scripts/mojplaywin_direct_wallet_rates.py mpw_commerce/buyer_wallets.py
