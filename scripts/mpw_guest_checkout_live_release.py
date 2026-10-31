@@ -55,8 +55,8 @@ def plan(src):
   if live.is_symlink() or not live.is_file(): fail('GUEST_MODULE_MISSING')
   installed=source_from(live)
   if installed==src: return old,old,False
-  # Restrict the first upgrade to the exact version installed in successful run 41109493749.
-  if digest(installed)!='0db371611ef61b052e368505297af0808cb0108e56c5d99a9f11f66338da19ba':
+  # Restrict this upgrade to the exact live version installed by successful run 41120996466.
+  if digest(installed)!='7693254e4ed72141b6de7fc283c5a3214159ea49d838318337e47e86953f5f2f':
    fail('UNRECOGNIZED_GUEST_UPGRADE_BASE')
   return old,old,True
  # A module without both verified caller hooks is never safe to overwrite.
