@@ -125,13 +125,21 @@ def recover(stream, directory):
             except ValueError:
                 raise ValueError("unbacked absolute archive link")
             candidate=str(relative)
-            safe_parts(candidate)
+            try:
+                safe_parts(candidate)
+            except ValueError:
+                # Never allow an unbacked link to escape the restored tenant.
+                raise ValueError('archive link escapes approved roots') from None
             link_target=os.path.relpath(base.joinpath(*relative.parts),start=path.parent)
         else:
             candidate=posixpath.normpath(
                 posixpath.join(*(parts[:-1] if is_symlink else ()),target)
             ) if is_symlink else posixpath.normpath(target)
-            safe_parts(candidate)
+            try:
+                safe_parts(candidate)
+            except ValueError:
+                # Never allow an unbacked link to escape the restored tenant.
+                raise ValueError('archive link escapes approved roots') from None
             link_target=target
         referent=base.joinpath(*PurePosixPath(candidate).parts)
         if referent.is_symlink():
@@ -172,6 +180,7 @@ def safe_failure_code(exc):
         "incomplete restored regular file": "short_member",
         "special file member not permitted in sandbox": "special_member",
         "absolute archive link cannot be restored into sandbox": "absolute_link",
+        "archive link escapes approved roots": "unsafe_link_target",
         "unbacked absolute archive link": "unbacked_absolute_link",
         "nested archive links not restored": "nested_link",
         "link collision": "link_collision",
