@@ -131,6 +131,52 @@ jobs:
           if result['local_release_preflight'] != 'PASS':
               raise SystemExit('LIVE_SOURCE_PRECHECK_BLOCKED')
           PY
+      - name: Identify Django CLI database without modifying rows (Passenger identity remains unproven)
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          timeout 80s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' <<'PY'
+          import json, os, sys
+          os.chdir('/home/zomorod2/Saeit-staging')
+          sys.path.insert(0, os.getcwd())
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+          report = {
+              'scope': 'MPW_DB_CLI_READ_ONLY',
+              'changes': False, 'orders_created': 0, 'payments_created': 0,
+              'passenger_effective_db_proven': False,
+          }
+          try:
+              import django
+              django.setup()
+              from django.db import connections
+              conn = connections['default']
+              settings = conn.settings_dict
+              configured = str(settings.get('NAME', ''))
+              with conn.cursor() as cursor:
+                  cursor.execute('SELECT DATABASE()')
+                  result = cursor.fetchone()
+              active = str(result[0] or '') if result else ''
+              report.update({
+                  'engine_mysql': conn.vendor == 'mysql',
+                  'configured_db_matches_expected': configured == 'zomorod2_sites_main',
+                  'session_db_matches_config': bool(active) and active == configured,
+                  'connection_verified': True,
+              })
+          except Exception as exc:
+              report.update({'connection_verified': False, 'error_class': type(exc).__name__})
+          print('MPW_GUEST_CLI_DB_EVIDENCE=' + json.dumps(report, sort_keys=True))
+          PY
+      - name: Inspect exact independent offhost AES256 SQL-and-files archive pair without restore
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          script64="$(base64 -w0 scripts/mojplaywin_recovery_stream_vps.py)"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-vps \
+            "python3 -B -c '$call' '$script64' check"
       - name: Recheck guest purchases public HTTP without cookies
         shell: bash
         run: |
