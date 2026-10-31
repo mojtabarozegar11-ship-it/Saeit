@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 from scripts.s01_checkout_cpanel_provenance_readonly_20261030 import callable_delta, probe
 
 
@@ -58,7 +59,7 @@ class ProvenanceTests(unittest.TestCase):
         backup = self.private / ("mpw-checkout-csp-preimage-" + self.pin[:16] + ".bak")
         backup.write_bytes(self.approved)
         backup.chmod(0o600)
-        with unittest.mock.patch(
+        with patch(
             "scripts.s01_checkout_cpanel_provenance_readonly_20261030.APPROVED_CANDIDATE_SHA256",
             candidate_sha,
         ):
