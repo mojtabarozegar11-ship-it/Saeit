@@ -9,6 +9,7 @@ import stat
 from pathlib import Path
 
 PIN = "f33d80b7e843a66c9a55d8a8da46d5fb6049fb4c487f8f559c3471cfd42cdf74"
+APPROVED_CANDIDATE_SHA256 = "752d6a621738c20273d1fd53b63e14e069fbac7917488a5a3c8d24e432b48065"
 MAX_BYTES = 100_000
 
 
@@ -100,6 +101,7 @@ def probe(home, *, expected=PIN, owner_uid=None):
         "scope": "S01_CPANEL_CHECKOUT_PROVENANCE_READONLY",
         "source_status": "UNAVAILABLE_OR_UNSAFE",
         "source_matches_pin": False,
+        "source_matches_approved_candidate": False,
         "candidate_states": {},
         "approved_reference_found": False,
         "classification": "BLOCKED",
@@ -118,6 +120,7 @@ def probe(home, *, expected=PIN, owner_uid=None):
     report["source_bytes"] = len(current)
     report["source_syntax_valid"] = ast_fingerprint(current) is not None
     report["source_matches_pin"] = digest == expected
+    report["source_matches_approved_candidate"] = digest == APPROVED_CANDIDATE_SHA256
     candidates = [("production_tree", production, False), ("private_preimage", private_file, True)]
     approved = None
     for label, path, private in candidates:
@@ -137,6 +140,8 @@ def probe(home, *, expected=PIN, owner_uid=None):
     report["approved_reference_found"] = approved is not None
     if digest == expected:
         report["classification"] = "SOURCE_PIN_MATCH_RELEASE_STILL_BLOCKED"
+    elif digest == APPROVED_CANDIDATE_SHA256:
+        report["classification"] = "APPROVED_CANDIDATE_PRESENT_RELEASE_STILL_BLOCKED"
     elif approved is None:
         report["classification"] = "SOURCE_SHA_DRIFT_NO_APPROVED_COPY"
     else:
