@@ -111,11 +111,11 @@ jobs:
             echo "HEALTH_APT_SIMULATION=apt_get_missing"
           fi
           echo "HEALTH_APT_INDEX_AGE_DAYS=$(python3 - <<'PY'
-from pathlib import Path
-import time
-paths=[p for p in Path("/var/lib/apt/lists").glob("*") if p.is_file()]
-print(int(max(0,time.time()-max(p.stat().st_mtime for p in paths))/86400) if paths else "unavailable")
-PY
+          from pathlib import Path
+          import time
+          paths=[p for p in Path("/var/lib/apt/lists").glob("*") if p.is_file()]
+          print(int(max(0,time.time()-max(p.stat().st_mtime for p in paths))/86400) if paths else "unavailable")
+          PY
           )"
           if [ "${ID:-}" = ubuntu ] && [ "${VERSION_ID:-}" = 20.04 ]; then
             echo "HEALTH_SECURITY_RELEASE_GATE=BLOCKED_PENDING_VERIFIED_ESM_OR_SUPPORTED_OS"
