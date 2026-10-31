@@ -21,6 +21,18 @@ function aucFail(int $code,string $message):never{
     exit;
 }
 function aucPost(string $field):string{return trim((string)($_POST[$field]??''));}
+function aucDocumentAccess(string $role,string $category):bool{
+    $roles=[
+        'notice'=>['admin','manager','accountant','viewer'],
+        'valuation'=>['admin','manager','accountant'],
+        'deposit'=>['admin','accountant'],
+        'technical'=>['admin','manager'],
+        'contract'=>['admin','manager'],
+        'receipt'=>['admin','manager','accountant'],
+        'other'=>['admin','manager','accountant']
+    ];
+    return isset($roles[$category])&&in_array($role,$roles[$category],true);
+}
 function aucMinor(string $value):int{
     if(!preg_match('/\A(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,2})?\z/D',$value))aucFail(422,'مبلغ باید عدد مثبت یا صفر با حداکثر دو رقم اعشار باشد.');
     $bits=explode('.',$value,2);return (int)$bits[0]*100+(int)str_pad($bits[1]??'',2,'0');
@@ -118,12 +130,47 @@ try{
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )");
             $db->exec('CREATE INDEX IF NOT EXISTS zm_auction_event_idx ON auction_events(auction_id,id)');
+            if(!$db->exec("CREATE TABLE IF NOT EXISTS auction_documents(
+                id INTEGER PRIMARY KEY, auction_id INTEGER NOT NULL REFERENCES auctions(id),
+                category TEXT NOT NULL CHECK(category IN ('notice','valuation','deposit','technical','contract','receipt','other')),
+                original_name TEXT NOT NULL, mime TEXT NOT NULL, storage_key TEXT NOT NULL UNIQUE,
+                size_bytes INTEGER NOT NULL CHECK(size_bytes>0 AND size_bytes<=8388608),
+                sha256 TEXT NOT NULL, actor_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"))throw new RuntimeException('documents schema failed');
+            if(!$db->exec("CREATE TABLE IF NOT EXISTS auction_scenarios(
+                id INTEGER PRIMARY KEY, auction_id INTEGER NOT NULL REFERENCES auctions(id),
+                proceeds_minor INTEGER NOT NULL CHECK(proceeds_minor>=0),
+                basis_minor INTEGER NOT NULL CHECK(basis_minor>=0),
+                costs_minor INTEGER NOT NULL CHECK(costs_minor>=0),
+                reserve_minor INTEGER NOT NULL CHECK(reserve_minor>=0),
+                rationale TEXT NOT NULL, actor_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"))throw new RuntimeException('scenario schema failed');
         }
     }
 }catch(Throwable $e){error_log('ZM AUCTION OPEN ['.get_class($e).']');aucFail(503,'دفتر خصوصی مزایده قابل بازکردن نیست.');}
+if($method==='GET'&&isset($_GET['document'])){
+    $documentId=filter_var($_GET['document'],FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
+    if(!$db||!$documentId||!$db->querySingle("SELECT 1 FROM sqlite_master WHERE type='table' AND name='auction_documents'"))aucFail(404,'مدرک یافت نشد.');
+    $document=aucRows($db,'SELECT * FROM auction_documents WHERE id=?',[(int)$documentId])[0]??null;
+    if(!$document||!aucDocumentAccess($role,(string)$document['category'])||!preg_match('/\\A[a-f0-9]{32}\\.(pdf|jpg|png)\\z/D',(string)$document['storage_key']))aucFail(404,'مدرک یافت نشد.');
+    $docDir=$private.'/auction-documents';$docFile=$docDir.'/'.(string)$document['storage_key'];
+    if(!is_dir($docDir)||is_link($docDir)||!is_file($docFile)||is_link($docFile))aucFail(404,'فایل سند در دسترس نیست.');
+    $mime=(string)$document['mime'];
+    if(!in_array($mime,['application/pdf','image/jpeg','image/png'],true))aucFail(404,'نوع مدرک مجاز نیست.');
+    $actual=hash_file('sha256',$docFile);
+    if(!hash_equals((string)$document['sha256'],(string)$actual))aucFail(503,'یکپارچگی فایل سند تأیید نشد.');
+    $extension=pathinfo($docFile,PATHINFO_EXTENSION);
+    header('Content-Type: '.$mime);
+    header('Content-Disposition: attachment; filename="zomorod-auction-document-'.(int)$document['id'].'.'.$extension.'"');
+    header('Content-Length: '.(int)filesize($docFile));
+    readfile($docFile);exit;
+}
 if($method==='POST'){
     $action=aucPost('action');
-    if(!in_array($action,['create','review','executive','submission','outcome','cancel'],true))aucFail(403,'عملیات مجاز نیست.');
+    if(!in_array($action,['create','review','executive','submission','outcome','cancel','document','scenario'],true))aucFail(403,'عملیات مجاز نیست.');
+    $pendingUpload=null;
     try{
         if(!$db||!$db->exec('BEGIN IMMEDIATE'))throw new RuntimeException('transaction start failed');
         if($action==='create'){
@@ -156,9 +203,9 @@ if($method==='POST'){
             if(!$auction)aucFail(404,'پرونده مزایده پیدا نشد.');
             $events=aucRows($db,'SELECT * FROM auction_events WHERE auction_id=? ORDER BY id',[$id]);
             $state=aucState($events);
-            if($state['outcome'])aucFail(409,'پرونده مختومه است؛ تغییر جدید مجاز نیست.');
+            if($state['outcome']&&$action!=='document')aucFail(409,'پرونده مختومه است؛ تغییر جدید مجاز نیست.');
             $evidence=aucPost('evidence');
-            if(strlen($evidence)<10||strlen($evidence)>1500)aucFail(422,'توضیح و مرجع تصمیم باید بین ۱۰ تا ۱۵۰۰ بایت باشد.');
+            if(!in_array($action,['document','scenario'],true)&&(strlen($evidence)<10||strlen($evidence)>1500))aucFail(422,'توضیح و مرجع تصمیم باید بین ۱۰ تا ۱۵۰۰ بایت باشد.');
             if($action==='review'){
                 if($state['executive']||$state['submission'])aucFail(409,'پس از تصویب نهایی، بررسی‌های قبلی تغییر نمی‌کنند.');
                 $kind=aucPost('kind');$decision=aucPost('decision');
@@ -166,6 +213,42 @@ if($method==='POST'){
                 if(!isset($permissions[$kind])||!in_array($role,$permissions[$kind],true)||!in_array($decision,['approved','rejected'],true))aucFail(403,'نوع داوری یا نقش مجاز نیست.');
                 if($kind==='financial'&&$uid===(int)$auction['created_by'])aucFail(403,'داور مالی باید مستقل از ثبت‌کننده باشد.');
                 aucSql($db,'INSERT INTO auction_events(auction_id,kind,decision,actor_id,evidence) VALUES(?,?,?,?,?)',[$id,$kind,$decision,$uid,$evidence]);
+            }elseif($action==='scenario'){
+                if(!in_array($role,['admin','manager','accountant'],true))aucFail(403,'مجوز تحلیل اقتصادی ندارید.');
+                $rationale=aucPost('rationale');
+                if(strlen($rationale)<10||strlen($rationale)>1500)aucFail(422,'فرضیات تحلیل اقتصادی باید مستند باشد.');
+                $proceeds=aucMinor(aucPost('proceeds'));
+                $basis=aucMinor(aucPost('basis'));
+                $costs=aucMinor(aucPost('costs'));
+                $reserve=aucMinor(aucPost('reserve'));
+                if($proceeds<=0||$basis<=0)aucFail(422,'جریان ورودی و بهای پایه پیش‌بینی‌شده باید مثبت باشد.');
+                aucSql($db,'INSERT INTO auction_scenarios(auction_id,proceeds_minor,basis_minor,costs_minor,reserve_minor,rationale,actor_id) VALUES(?,?,?,?,?,?,?)',
+                    [$id,$proceeds,$basis,$costs,$reserve,$rationale,$uid]);
+            }elseif($action==='document'){
+                if(!in_array($role,['admin','manager','accountant'],true))aucFail(403,'مجوز ثبت سند ندارید.');
+                $category=aucPost('category');
+                if(!aucDocumentAccess($role,$category))aucFail(403,'دسترسی به این نوع مدرک مجاز نیست.');
+                $upload=$_FILES['document']??null;
+                if(!is_array($upload)||($upload['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK||
+                   !is_string($upload['tmp_name']??null)||!is_uploaded_file($upload['tmp_name']))aucFail(422,'فایل بارگذاری‌شده معتبر نیست.');
+                $size=(int)($upload['size']??0);$original=(string)($upload['name']??'');
+                if($size<1||$size>8388608||strlen($original)<1||strlen($original)>180||
+                   preg_match('/[\\x00-\\x1f\\/\\\\]/',$original))aucFail(422,'اندازه یا نام فایل مجاز نیست.');
+                $mime=(new finfo(FILEINFO_MIME_TYPE))->file($upload['tmp_name']);
+                $allowed=['application/pdf'=>'pdf','image/jpeg'=>'jpg','image/png'=>'png'];
+                if(!is_string($mime)||!isset($allowed[$mime]))aucFail(422,'تنها PDF، JPEG و PNG مجاز است.');
+                $docDir=$private.'/auction-documents';
+                if(!is_dir($docDir)&&!mkdir($docDir,0700))throw new RuntimeException('document directory create failed');
+                if(is_link($docDir)||!is_dir($docDir)||!chmod($docDir,0700))throw new RuntimeException('document directory unsafe');
+                $storageKey=bin2hex(random_bytes(16)).'.'.$allowed[$mime];
+                $target=$docDir.'/'.$storageKey;
+                if(!move_uploaded_file($upload['tmp_name'],$target))throw new RuntimeException('document move failed');
+                $pendingUpload=$target;
+                if(!chmod($target,0600))throw new RuntimeException('document chmod failed');
+                $digest=hash_file('sha256',$target);
+                if(!is_string($digest))throw new RuntimeException('document digest failed');
+                aucSql($db,'INSERT INTO auction_documents(auction_id,category,original_name,mime,storage_key,size_bytes,sha256,actor_id) VALUES(?,?,?,?,?,?,?,?)',
+                    [$id,$category,$original,$mime,$storageKey,$size,$digest,$uid]);
             }elseif($action==='executive'){
                 if($role!=='admin'||$state['executive']||$state['submission'])aucFail(403,'تصویب نهایی فقط یک‌بار توسط مدیر اصلی مجاز است.');
                 foreach($state['reviews'] as $review)if(!$review||$review['decision']!=='approved')aucFail(409,'سه داوری فنی، مالی و حقوقی مثبت لازم است.');
@@ -189,6 +272,7 @@ if($method==='POST'){
         header('Location: /business/auctions/',true,303);exit;
     }catch(Throwable $e){
         $db?->exec('ROLLBACK');
+        if($pendingUpload!==null&&is_file($pendingUpload))@unlink($pendingUpload);
         error_log('ZM AUCTION WRITE ['.get_class($e).']');
         aucFail(503,'ثبت پرونده مزایده انجام نشد؛ تغییرات برگردانده شد.');
     }
@@ -206,6 +290,13 @@ foreach($auctions as $a){
 $selectedId=(int)($_GET['id']??0);
 $selected=null;
 foreach($auctions as $a)if((int)$a['id']===$selectedId)$selected=$a;
+$documents=[];$scenarios=[];
+if($selected&&$db){
+    if($db->querySingle("SELECT 1 FROM sqlite_master WHERE type='table' AND name='auction_documents'"))
+        $documents=aucRows($db,'SELECT * FROM auction_documents WHERE auction_id=? ORDER BY id DESC LIMIT 100',[$selectedId]);
+    if($db->querySingle("SELECT 1 FROM sqlite_master WHERE type='table' AND name='auction_scenarios'"))
+        $scenarios=aucRows($db,'SELECT * FROM auction_scenarios WHERE auction_id=? ORDER BY id DESC LIMIT 30',[$selectedId]);
+}
 $auth->close();$db?->close();
 header('Content-Type: text/html; charset=utf-8');
 echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>زمرد ملل · مدیریت مزایده‌ها</title><style>';
@@ -253,6 +344,38 @@ if($selected){
     echo '<h3>تاریخچه ثبت تصمیم‌ها</h3><div class="scroll"><table><tr><th>مرحله</th><th>تصمیم</th><th>شناسه کاربر</th><th>مرجع/مدرک</th><th>زمان UTC</th></tr>';
     foreach($record['events'] as $e)echo '<tr><td>'.aucEsc($e['kind']).'</td><td>'.aucEsc($e['decision']).'</td><td>'.(int)$e['actor_id'].'</td><td>'.aucEsc($e['evidence']).'</td><td>'.aucEsc($e['created_at']).'</td></tr>';
     echo '</table></div>';
+    echo '<h3>اسناد و قراردادهای پرونده</h3><div class="scroll"><table><tr><th>نوع</th><th>نام فایل</th><th>حجم</th><th>اثر انگشت SHA-256</th><th>ثبت‌کننده</th><th>دریافت امن</th></tr>';
+    foreach($documents as $doc){
+        if(!aucDocumentAccess($role,(string)$doc['category']))continue;
+        echo '<tr><td>'.aucEsc($doc['category']).'</td><td>'.aucEsc($doc['original_name']).'</td><td>'.number_format((int)$doc['size_bytes']).' بایت</td><td><code>'.aucEsc(substr((string)$doc['sha256'],0,16)).'…</code></td><td>'.(int)$doc['actor_id'].'</td><td><a href="?document='.(int)$doc['id'].'">دریافت سند</a></td></tr>';
+    }
+    if(!$documents)echo '<tr><td colspan="6">هنوز مدرکی ثبت نشده است.</td></tr>';
+    echo '</table></div>';
+    if($role!=='viewer'){
+        echo '<form method="post" action="/business/auctions/" enctype="multipart/form-data"><fieldset><legend>افزودن مدرک محرمانه (ثبت داخلی)</legend><input type="hidden" name="csrf" value="'.aucEsc($csrf).'"><input type="hidden" name="action" value="document"><input type="hidden" name="auction_id" value="'.$id.'">';
+        echo '<label for="a-doc-category">نوع مدرک</label><select id="a-doc-category" name="category">';
+        foreach(['notice'=>'آگهی','valuation'=>'کارشناسی ارزش','deposit'=>'مدارک تضمین','technical'=>'فنی و حقوقی','contract'=>'قرارداد','receipt'=>'رسید شرکت','other'=>'سایر'] as $category=>$label)
+            if(aucDocumentAccess($role,$category))echo '<option value="'.aucEsc($category).'">'.aucEsc($label).'</option>';
+        echo '</select>';
+        echo '<label for="a-doc-upload">فایل PDF، JPEG یا PNG تا ۸ مگابایت</label><input id="a-doc-upload" type="file" name="document" accept="application/pdf,image/jpeg,image/png" required aria-describedby="doc-privacy">';
+        echo '<p id="doc-privacy">مدرک فقط در فضای خصوصی سرور ذخیره می‌شود. ثبت فایل هیچ پرداخت یا قرارداد جدیدی ایجاد نمی‌کند.</p><button type="submit">ثبت مدرک و اثر انگشت</button></fieldset></form>';
+    }
+    echo '<h3>سناریوهای تحلیل اقتصادی (صرفاً پیش‌بینی، نه ثبت حسابداری)</h3><div class="scroll"><table><tr><th>ورودی پیش‌بینی</th><th>بهای پایه</th><th>هزینه جانبی</th><th>ذخیره ریسک</th><th>مازاد / کسری</th><th>بازده مبنا</th><th>فرضیات</th><th>تحلیلگر</th></tr>';
+    foreach($scenarios as $sc){
+        $net=(int)$sc['proceeds_minor']-(int)$sc['basis_minor']-(int)$sc['costs_minor']-(int)$sc['reserve_minor'];
+        $base=(int)$sc['basis_minor']+(int)$sc['costs_minor']+(int)$sc['reserve_minor'];
+        $percent=$base>0?number_format(100*$net/$base,1).'%':'—';
+        echo '<tr><td>'.aucFmt((int)$sc['proceeds_minor']).'</td><td>'.aucFmt((int)$sc['basis_minor']).'</td><td>'.aucFmt((int)$sc['costs_minor']).'</td><td>'.aucFmt((int)$sc['reserve_minor']).'</td><td>'.aucFmt($net).' '.aucEsc($selected['currency']).'</td><td>'.aucEsc($percent).'</td><td>'.aucEsc($sc['rationale']).'</td><td>'.(int)$sc['actor_id'].'</td></tr>';
+    }
+    if(!$scenarios)echo '<tr><td colspan="8">هنوز تحلیل مستندی ثبت نشده است.</td></tr>';
+    echo '</table></div>';
+    if($role!=='viewer'&&!$st['outcome']){
+        echo '<form method="post" action="/business/auctions/"><fieldset><legend>ثبت سناریوی جدید و فرضیات اقتصادی</legend><input type="hidden" name="csrf" value="'.aucEsc($csrf).'"><input type="hidden" name="action" value="scenario"><input type="hidden" name="auction_id" value="'.$id.'"><div class="row">';
+        foreach([['proceeds','جریان ورودی / ارزش فروش مورد انتظار'],['basis','بهای پایه / خرید یا ارزش دفتری'],['costs','هزینه‌های انتقال، آماده‌سازی و جانبی'],['reserve','ذخیره ریسک و عدم قطعیت']] as [$field,$label]){
+            echo '<div><label for="s-'.aucEsc($field).'">'.aucEsc($label).' ('.aucEsc($selected['currency']).')</label><input id="s-'.aucEsc($field).'" name="'.aucEsc($field).'" type="text" inputmode="decimal" pattern="[0-9]+(\\.[0-9]{1,2})?" value="0" required></div>';
+        }
+        echo '</div><label for="s-rationale">فرضیات و مستندات تحلیل</label><textarea id="s-rationale" name="rationale" minlength="10" maxlength="1400" required></textarea><button type="submit">ثبت تحلیل اقتصادی بدون اثر مالی</button></fieldset></form>';
+    }
     if($role!=='viewer'&&!$st['outcome']){
         echo '<h3>ثبت تصمیم داخلی با مستندات</h3><form method="post" action="/business/auctions/"><input type="hidden" name="csrf" value="'.aucEsc($csrf).'"><input type="hidden" name="auction_id" value="'.$id.'">';
         echo '<label for="a-action">نوع اقدام</label><select id="a-action" name="action"><option value="review">داوری داخلی</option><option value="executive">تصویب مدیرعامل</option><option value="submission">ثبت دستی رسید شرکت در مزایده</option><option value="outcome">ثبت نتیجه</option><option value="cancel">مختومه بدون شرکت</option></select>';
