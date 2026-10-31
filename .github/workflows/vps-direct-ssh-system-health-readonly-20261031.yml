@@ -54,5 +54,12 @@ jobs:
           cron="$(crontab -l 2>/dev/null || true)"
           count="$(printf '%s\n' "$cron" | awk '!/^ *#/ && /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/{n++} END{print n+0}')"
           echo "HEALTH_FACTORY_HOLD_CRON_ENTRIES=$count"
+          echo "HEALTH_FWUPD_DETAIL_BEGIN"
+          systemctl show fwupd-refresh.service -p LoadState -p ActiveState -p SubState -p Result -p ExecMainCode -p ExecMainStatus -p UnitFileState --no-pager 2>&1 | head -n 20 || true
+          echo "HEALTH_FWUPD_TIMER=$(systemctl is-enabled fwupd-refresh.timer 2>/dev/null || true)"
+          echo "HEALTH_FWUPD_LOG_BEGIN"
+          journalctl -u fwupd-refresh.service --since '2026-10-29 00:00:00' -n 12 --no-pager -o cat 2>&1 | head -n 22 || true
+          echo "HEALTH_FWUPD_LOG_END"
+          echo "HEALTH_FWUPD_DETAIL_END"
           echo "HEALTH_READ_ONLY_DONE=true"
           REMOTE
