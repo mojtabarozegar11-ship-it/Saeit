@@ -1,9 +1,11 @@
 """S-01 guest purchase recovery: no orders or payment in these synthetic tests."""
 import unittest
+import os
 from types import SimpleNamespace
 
 from django.conf import settings
-if not settings.configured:
+# Do not override an existing Django project configuration during CI collection.
+if not settings.configured and not os.environ.get("DJANGO_SETTINGS_MODULE"):
     settings.configure(SECRET_KEY="synthetic-s01-only", DEFAULT_CHARSET="utf-8")
 
 from django.http import Http404, HttpResponse
