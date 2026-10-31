@@ -76,6 +76,21 @@ jobs:
           else
             echo "HEALTH_UBUNTU_PRO_ESM_INFRA=tool_unavailable"
           fi
+          if [ "${ID:-}" = ubuntu ] && [ "${VERSION_ID:-}" = 20.04 ]; then
+            echo "HEALTH_SECURITY_ADVISORY=ubuntu_20_04_standard_support_ended_2025_05"
+            echo "HEALTH_SECURITY_ESM_VERIFICATION=required"
+          fi
+          if test -e /var/run/reboot-required; then
+            echo "HEALTH_REBOOT_REQUIRED_FLAG=present"
+          else
+            echo "HEALTH_REBOOT_REQUIRED_FLAG=absent"
+          fi
+          fwupd_installed="$(dpkg-query -W -f='${Version}' fwupd 2>/dev/null || true)"
+          fwupd_candidate="$(apt-cache policy fwupd 2>/dev/null | awk '/^[[:space:]]*Candidate:/ {print $2; exit}')"
+          if [ -n "$fwupd_installed" ] && [ -n "$fwupd_candidate" ] && [ "$fwupd_installed" != "$fwupd_candidate" ]; then
+            echo "HEALTH_SECURITY_ADVISORY=fwupd_installed_version_differs_from_local_apt_candidate"
+          fi
+          echo "HEALTH_DPKG_AUDIT_LINES=$(dpkg --audit 2>/dev/null | wc -l | tr -d '[:space:]')"
           echo "HEALTH_OS_KERNEL=$(uname -r)"
           echo "HEALTH_VIRTUALIZATION=$(systemd-detect-virt 2>/dev/null || echo unknown)"
           echo "HEALTH_FWUPD_PACKAGE_VERSION=$(dpkg-query -W -f='${Version}' fwupd 2>/dev/null || echo not_available)"
