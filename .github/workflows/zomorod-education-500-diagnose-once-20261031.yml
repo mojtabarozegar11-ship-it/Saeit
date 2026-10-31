@@ -179,6 +179,28 @@ jobs:
                       if m:print('HTACCESS_DIRECTIVE '+rel+' '+m.group(1))
           print('REMOTE_DIAGNOSIS_READ_ONLY=TRUE')
           PY
+      - name: Read-only root rewrite rules relevant to legacy directory
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          ssh -F "$d/config" "$COMMAND_HOST" python3 - <<'PY'
+          import re
+          from pathlib import Path
+          path=Path.home()/'public_html/.htaccess'
+          for n,line in enumerate(path.read_text(errors='replace').splitlines(),1):
+              t=line.strip()
+              if re.match(r'^(RewriteRule|RewriteCond|RewriteEngine|DirectoryIndex|PassengerEnabled|PassengerBaseURI|<IfModule|</IfModule)',t,re.I):
+                  # Only route directives. Never print environment, secrets or auth values.
+                  if re.search(r'(secret|password|token|authorization|cookie|api.key)',t,re.I):
+                      print('RULE '+str(n)+' REDACTED')
+                  else:
+                      print('RULE '+str(n)+' '+t[:200])
+          print('ROUTE_CONFIGURATION_READ_ONLY=TRUE')
+          PY
       - name: Clean temporary runner keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-command-channel"
