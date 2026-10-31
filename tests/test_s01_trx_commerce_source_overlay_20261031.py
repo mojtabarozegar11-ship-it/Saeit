@@ -68,7 +68,7 @@ class TrxCommerceOverlayTests(unittest.TestCase):
 
     def test_preserves_unrelated_source_and_tuple_contract(self):
         candidate = self.candidate()
-        self.assertIn(b"def unrelated(value):\\n    return value * 2", candidate)
+        self.assertIn(b"def unrelated(value):\n    return value * 2", candidate)
         self.assertNotIn(b'fetch_server_rate("TRX")', candidate)
         self.assertNotIn(b"s01_trx_rate_isolation_candidate", candidate)
         fn = overlay._function(ast.parse(candidate))
@@ -141,7 +141,7 @@ class TrxCommerceOverlayTests(unittest.TestCase):
 
     def test_extra_side_effect_refused(self):
         changed = BASE.replace('quote=fetch_server_rate("TRX")',
-                               'print("unexpected")\\n    quote=fetch_server_rate("TRX")')
+                               'print("unexpected")\n    quote=fetch_server_rate("TRX")')
         with self.assertRaisesRegex(overlay.SourceContractChanged, "body changed"):
             self.candidate(changed)
 
