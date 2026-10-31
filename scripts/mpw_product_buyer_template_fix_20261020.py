@@ -12,7 +12,10 @@ FILES={
  'brandbase':APP/'core/templates/brands/mojplaywin/base.html',
  'login':APP/'mpw_commerce/templates/mpw_commerce/customer_login.html',
 }
-OLD_PRODUCT='<p>Live payment methods appear only after provider and market controls are configured.</p><a class="primary" href="/crypto-payments/">Payment options</a>'
+LEGACY_PRODUCT_OLD='<p>Live payment methods appear only after provider and market controls are configured.</p><a class="primary" href="/crypto-payments/">Payment options</a>'
+OLD_PRODUCT='''<p>Sign in to receive an order-specific secure invoice for this verified digital book. Private delivery is granted only after independently confirmed payment.</p>
+<a class="primary" href="/store/product/{{ product.pk }}/checkout/">Secure checkout for this book</a>
+<a href="/accounts/register/">New customer? Create an account</a>'''
 NEW_PRODUCT='''{% if product.pk == 72 or product.pk == 225 %}
 <p>No account or subscription is required. Pay for this digital book with native TRX on the TRON network only. Bank cards, USDT and other networks are not accepted. The invoice displays the exact TRX amount and receiving address; network fees may apply. Your private download unlocks after on-chain payment confirmation.</p>
 <a class="primary" href="/store/product/{{ product.pk }}/checkout/">Buy this book with TRX</a>
@@ -38,8 +41,11 @@ def guard():
 def transform(name,original):
     text=original.decode('utf8')
     if name=='product':
-        if text.count(OLD_PRODUCT)!=1 or 'Secure checkout for this book' in text:fail('Product template unknown or modified')
-        updated=text.replace(OLD_PRODUCT,NEW_PRODUCT,1)
+        current_count=text.count(OLD_PRODUCT)
+        legacy_count=text.count(LEGACY_PRODUCT_OLD)
+        if current_count+legacy_count!=1:fail('Product template unknown, duplicated, or already changed')
+        source=OLD_PRODUCT if current_count else LEGACY_PRODUCT_OLD
+        updated=text.replace(source,NEW_PRODUCT,1)
     elif name=='login':
         if text.count(OLD_LOGIN)!=1 or '<label for="{{ form.username.id_for_label }}">' in text:fail('Login form template drifted')
         updated=text.replace(OLD_LOGIN,NEW_LOGIN,1)
