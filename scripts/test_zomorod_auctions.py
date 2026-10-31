@@ -52,6 +52,27 @@ def post(base,actor,token,action,extra):
     return call(base,cookie=actor,fields=fields)[0]
 
 
+def upload_document(base, actor, token, auction_id, category, filename, content):
+    boundary="----zm-auction-fixture-7f83"
+    parts=[]
+    for key,value in (("csrf",token),("action","document"),
+                      ("auction_id",auction_id),("category",category)):
+        parts.append((f"--{boundary}\r\n"
+                      f'Content-Disposition: form-data; name="{key}"\r\n\r\n'
+                      f"{value}\r\n").encode())
+    parts.append((f"--{boundary}\r\n"
+                  f'Content-Disposition: form-data; name="document"; filename="{filename}"\r\n'
+                  "Content-Type: application/octet-stream\r\n\r\n").encode())
+    parts.extend((content,f"\r\n--{boundary}--\r\n".encode()))
+    request=Request(base,data=b"".join(parts),method="POST",headers={
+        "Cookie":f"ZM_BUSINESS=fixture-{actor}-0001",
+        "Content-Type":f"multipart/form-data; boundary={boundary}",
+    })
+    try:
+        with urlopen(request,timeout=5) as response:return response.status
+    except HTTPError as error:return error.code
+
+
 def main():
     must(SOURCE.is_file(),"PHP source missing")
     with tempfile.TemporaryDirectory(prefix="zm-auction-qa-") as td:
@@ -128,6 +149,44 @@ def main():
             auction_id=str(rows[0][0])
             accountant_token=csrf(base+"?id="+auction_id,"accountant")
             scope={"auction_id":auction_id,"evidence":"مدرک داخلی شماره QA-2026-001"}
+            economics={"auction_id":auction_id,"proceeds":"150000","basis":"90000",
+                       "costs":"5000","reserve":"5000",
+                       "rationale":"برآورد مصنوعی هزینه‌ها و جریان ورودی با فرضیات داخلی"}
+            bad_economics=dict(economics,proceeds="not-a-number")
+            must(post(base,"accountant",accountant_token,"scenario",bad_economics)==422,
+                 "invalid economic forecast accepted")
+            must(post(base,"accountant",accountant_token,"scenario",economics)==200,
+                 "append-only economic scenario failed")
+            must(post(base,"viewer","invalid","scenario",economics)==403,
+                 "viewer wrote an economic scenario")
+            with sqlite3.connect(local) as db:
+                scenario=db.execute("SELECT proceeds_minor-basis_minor-costs_minor-reserve_minor FROM auction_scenarios").fetchone()
+            must(scenario==(5000000,),"forecast arithmetic in private database incorrect")
+            pdf=(b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n"
+                 b"trailer <<>>\n%%EOF\n")
+            invalid=b"<html><body>not a pdf</body></html>"
+            must(upload_document(base,"accountant",accountant_token,auction_id,"notice",
+                                 "bad.html",invalid)==422,"unsafe HTML upload accepted")
+            must(upload_document(base,"accountant",accountant_token,auction_id,"notice",
+                                 "notice.pdf",pdf)==200,"private PDF upload failed")
+            docdir=private/"auction-documents"
+            with sqlite3.connect(local) as db:
+                docs=db.execute("SELECT id,storage_key,sha256 FROM auction_documents").fetchall()
+            must(len(docs)==1,"document audit row missing")
+            must(docdir.stat().st_mode & 0o777 == 0o700,"private document directory permissions incorrect")
+            stored=docdir/docs[0][1]
+            must(stored.is_file() and stored.stat().st_mode & 0o777 == 0o600,
+                 "private uploaded document permissions incorrect")
+            must(stored.read_bytes()==pdf and docs[0][2]==hashlib.sha256(pdf).hexdigest(),
+                 "uploaded document content or integrity signature incorrect")
+            must(call(base+"?document="+str(docs[0][0]))[0]==403,
+                 "anonymous document retrieval allowed")
+            docstatus,document=call(base+"?document="+str(docs[0][0]),cookie="viewer")
+            must(docstatus==200 and document==pdf,"authorized private document download failed")
+            stored.write_bytes(b"tamper"+pdf)
+            must(call(base+"?document="+str(docs[0][0]),cookie="viewer")[0]==503,
+                 "modified private document served without integrity validation")
+            stored.write_bytes(pdf)
             must(post(base,"admin",admin_token,"executive",scope)==409,"executive bypassed reviews")
             must(post(base,"manager",manager_token,"review",dict(scope,kind="technical",decision="approved"))==200,
                  "technical approval failed")
@@ -148,13 +207,31 @@ def main():
             must(post(base,"manager",manager_token,"outcome",dict(scope,decision="won"))==200,
                  "manual auction outcome not recorded")
             must(post(base,"admin",admin_token,"cancel",scope)==409,"closed auction modified")
+            must(post(base,"accountant",accountant_token,"scenario",economics)==409,
+                 "closed auction accepted new economic scenario")
+            must(upload_document(base,"admin",admin_token,auction_id,"contract","contract.pdf",pdf)==200,
+                 "closed auction cannot archive subsequent contract evidence")
+            with sqlite3.connect(local) as db:
+                must(db.execute("SELECT COUNT(*) FROM auction_documents").fetchone()[0]==2,
+                     "post-outcome contract evidence not archived")
+                contract_id=db.execute("SELECT id FROM auction_documents WHERE category='contract'").fetchone()[0]
+            must(call(base+"?document="+str(contract_id),cookie="viewer")[0]==404,
+                 "viewer retrieved restricted contract")
+            must(call(base+"?document="+str(contract_id),cookie="accountant")[0]==404,
+                 "accountant retrieved contract outside role")
+            must(call(base+"?document="+str(contract_id),cookie="manager")[0]==200,
+                 "manager cannot retrieve authorized contract")
+            must(b"contract.pdf" not in call(base+"?id="+auction_id,cookie="viewer")[1],
+                 "viewer can infer restricted contract metadata")
+            must(upload_document(base,"accountant",accountant_token,auction_id,"contract","x.pdf",pdf)==403,
+                 "accountant uploaded contract outside assigned role")
             with sqlite3.connect(local) as db:
                 n=db.execute("SELECT COUNT(*) FROM auction_events").fetchone()[0]
                 status=db.execute("SELECT kind,decision FROM auction_events ORDER BY id DESC LIMIT 1").fetchone()
             must(n==7 and status==("outcome","won"),"audit event timeline incorrect")
             must(hashlib.sha256(master.read_bytes()).hexdigest()==master_hash,
                  "main accounting DB modified during decision workflow")
-            print("ZM auctions: 22 offline HTTP/security/workflow assertions passed; no external bid or payment.")
+            print("ZM auctions: offline HTTP/security/workflow, economic forecast and document-integrity assertions passed; no external bid or payment.")
         finally:
             server.terminate()
             try:server.wait(timeout=5)
