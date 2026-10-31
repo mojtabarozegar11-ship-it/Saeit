@@ -149,7 +149,8 @@ def require_mfa_provisioned(conn: sqlite3.Connection) -> None:
 
 def production_python() -> Path:
     """Resolve the configured Passenger interpreter, never a guessed venv."""
-    htaccess = APP / ".htaccess"
+    # cPanel serves Passenger directives from the document root, not APP.
+    htaccess = HOME / "public_html" / ".htaccess"
     if not regular(htaccess):
         fail("PASSENGER_PYTHON_UNATTESTED")
     try:
