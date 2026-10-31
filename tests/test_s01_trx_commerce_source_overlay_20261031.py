@@ -15,7 +15,7 @@ from scripts.s01_trx_rate_isolation_candidate import (
 )
 
 BASE = '''def _rate_provider():
-    from scripts.mojplaywin_direct_wallet_rates import fetch_server_rate
+    from mpw_commerce.buyer_wallets import fetch_server_rate
     quote=fetch_server_rate("TRX")
     return quote.usd_per_asset, quote.observed_at
 
@@ -108,7 +108,7 @@ class TrxCommerceOverlayTests(unittest.TestCase):
 
     def test_unrecognized_rate_error_contract_refused(self):
         changed = BASE.replace(
-            "from scripts.mojplaywin_direct_wallet_rates import fetch_server_rate",
+            "from mpw_commerce.buyer_wallets import fetch_server_rate",
             "from scripts.changed_rate_module import fetch_server_rate")
         with self.assertRaisesRegex(overlay.SourceContractChanged, "original import"):
             self.candidate(changed)
