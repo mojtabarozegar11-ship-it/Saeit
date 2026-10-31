@@ -56,6 +56,26 @@ jobs:
           cron="$(crontab -l 2>/dev/null || true)"
           count="$(printf '%s\n' "$cron" | awk '!/^ *#/ && /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/{n++} END{print n+0}')"
           echo "HEALTH_FACTORY_HOLD_CRON_ENTRIES=$count"
+          if test -r /etc/os-release; then
+            . /etc/os-release
+            echo "HEALTH_OS_ID=${ID:-unknown}"
+            echo "HEALTH_OS_VERSION_ID=${VERSION_ID:-unknown}"
+          else
+            echo "HEALTH_OS_RELEASE=unreadable"
+          fi
+          echo "HEALTH_FWUPD_PACKAGE_POLICY_BEGIN"
+          apt-cache policy fwupd 2>/dev/null | head -n 8 | sed 's/^/HEALTH_FWUPD_APT_/' || true
+          echo "HEALTH_FWUPD_PACKAGE_POLICY_END"
+          echo "HEALTH_KERNEL_META_PACKAGE=$(dpkg-query -W -f='${Version}' linux-image-generic 2>/dev/null || echo unavailable)"
+          if command -v pro >/dev/null 2>&1; then
+            if pro status 2>/dev/null | grep -Eq 'esm-infra[[:space:]]+yes[[:space:]]+enabled'; then
+              echo "HEALTH_UBUNTU_PRO_ESM_INFRA=enabled"
+            else
+              echo "HEALTH_UBUNTU_PRO_ESM_INFRA=not_verified"
+            fi
+          else
+            echo "HEALTH_UBUNTU_PRO_ESM_INFRA=tool_unavailable"
+          fi
           echo "HEALTH_OS_KERNEL=$(uname -r)"
           echo "HEALTH_VIRTUALIZATION=$(systemd-detect-virt 2>/dev/null || echo unknown)"
           echo "HEALTH_FWUPD_PACKAGE_VERSION=$(dpkg-query -W -f='${Version}' fwupd 2>/dev/null || echo not_available)"
