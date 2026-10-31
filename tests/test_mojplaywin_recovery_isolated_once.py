@@ -94,6 +94,27 @@ class RecoveryIsolationTests(unittest.TestCase):
                 recover(buf,base)
             self.assertFalse((base/"mojplaywin.com"/"outside").exists())
 
+    def test_unbacked_relative_symlink_gets_fixed_code_and_cannot_escape(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "private"
+            base.mkdir(mode=0o700)
+            archive_bytes = io.BytesIO()
+            with tarfile.open(fileobj=archive_bytes, mode="w") as tar:
+                for name in ("Saeit-staging/file", "mojplaywin.com/file"):
+                    item = tarfile.TarInfo(name)
+                    item.size = 1
+                    tar.addfile(item, io.BytesIO(b"x"))
+                link = tarfile.TarInfo("mojplaywin.com/external")
+                link.type = tarfile.SYMTYPE
+                link.linkname = "../../../unbacked-destination"
+                tar.addfile(link)
+            archive_bytes.seek(0)
+            with self.assertRaisesRegex(ValueError, "archive link escapes approved roots") as ctx:
+                recover(archive_bytes, base)
+            self.assertEqual(safe_failure_code(ctx.exception), "unsafe_link_target")
+            self.assertFalse((base / "mojplaywin.com" / "external").exists())
+            self.assertFalse((Path(td) / "unbacked-destination").exists())
+
     def test_failure_diagnostics_are_fixed_codes_without_private_paths(self):
         self.assertEqual(safe_failure_code(ValueError(
             "absolute archive link cannot be restored into sandbox")), "absolute_link")
