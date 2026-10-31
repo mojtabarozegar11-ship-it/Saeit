@@ -566,7 +566,8 @@ class HubSuite(TestCase):
         inventory = self.client.get("/company/office/inventory/", secure=True)
         self.assertEqual(inventory.status_code, 200)
         self.assertContains(inventory, "WHEAT")
-        self.assertNotContains(inventory, "FP")
+        # Assert on scoped inventory records: a two-letter token may occur in a random CSRF value.
+        self.assertNotIn("FP", {row["item"].sku for row in inventory.context["records"]})
 
     def test_legacy_admin_blocks_cross_unit_direct_objects_and_querysets(self):
         from django.contrib import admin as site_admin
