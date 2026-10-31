@@ -1,0 +1,63 @@
+name: Zomorod business dark-text readability regression
+on:
+  pull_request:
+    paths:
+      - 'content/zomorod-business/app.php'
+      - '.github/workflows/zomorod-business-contrast-qa.yml'
+  push:
+    branches: ['fix/zomorod-business-global-readable-text-20261031']
+    paths: ['.github/workflows/zomorod-business-contrast-qa.yml']
+permissions:
+  contents: read
+jobs:
+  private-color-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2','8.3']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite,sqlite3
+      - name: Validate PHP and scoped contrast policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/index.php
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('content/zomorod-business/app.php').read_text()
+          assert s.count('ZM private desk readable text palette')==1
+          assert 'main p:not(.muted), main li, main td' in s
+          assert 'main .muted {color:#bec8b6 !important}' in s
+          assert s.count('</style></head><body>')==1
+          def luminance(h):
+              c=[int(h[i:i+2],16)/255 for i in (0,2,4)]
+              a=[x/12.92 if x<=.04045 else ((x+.055)/1.055)**2.4 for x in c]
+              return .2126*a[0]+.7152*a[1]+.0722*a[2]
+          for fg in ('e9e7d9','bec8b6'):
+              for bg in ('18291e','203b23'):
+                  a,b=luminance(fg),luminance(bg)
+                  ratio=(max(a,b)+.05)/(min(a,b)+.05)
+                  assert ratio>=4.5, (fg,bg,ratio)
+          print('COLOR_CONTRAST_WCAG_AA=PASS')
+          print('SCOPE=PRIVATE_DESK_ONLY')
+          PY
+      - name: Existing business accounting/CSRF synthetic QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.private/zomorod-business" "$HOME/public_html/business"
+          cp content/zomorod-business/app.php "$HOME/.private/zomorod-business/app.php"
+          cp content/zomorod-business/index.php "$HOME/public_html/business/index.php"
+          python3 scripts/zomorod_business_synthetic_qa.py "$GITHUB_SHA"
+          echo PRIVATE_BUSINESS_SYNTHETIC_QA=PASS
+          echo NO_PRODUCTION_CHANGE=TRUE
