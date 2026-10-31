@@ -18,6 +18,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - name: Regression - apt candidate parser must not SIGPIPE under pipefail
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="$(python3 -c 'import sys; sys.stdout.write("Candidate: 1.7.9-1~20.04.3\n" + "metadata\n"*50000)' | awk '/^[[:space:]]*Candidate:/ {value=$2} END {if (value != "") print value}')"
+          test "$candidate" = "1.7.9-1~20.04.3"
+          empty="$(printf 'Installed: 1.3.9-4\n' | awk '/^[[:space:]]*Candidate:/ {value=$2} END {if (value != "") print value}')"
+          test -z "$empty"
+          echo "HEALTH_REGRESSION_APT_PIPEFAIL=PASS"
       - name: Check VPS platform health using fingerprint-pinned direct SSH, read only
         shell: bash
         env:
