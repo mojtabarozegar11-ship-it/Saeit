@@ -204,6 +204,80 @@ jobs:
           fi
           echo "READONLY_PREVIEW_ROUTE_DIAGNOSTIC=complete"
           REMOTE
+      - name: Correlate CloudLinux registered application inventory without exposing configuration
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          test "$COMMAND_HOST" = saeit-cpanel
+          timeout 95s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          root = "zomorod_office_preflight_2a8a0f4b9e17"
+          uri = "company/office-preflight-2a8a0f4b9e17"
+          cmd = ["/usr/sbin/cloudlinux-selector", "get", "--json", "--interpreter", "python"]
+
+          def evidence(args):
+              try:
+                  completed = subprocess.run(cmd + args, capture_output=True, text=True, timeout=18)
+                  parsed = json.loads(completed.stdout)
+              except (OSError, ValueError, subprocess.TimeoutExpired):
+                  return ("unavailable", "unknown", "unknown", "unknown")
+              if not isinstance(parsed, dict) or parsed.get("result") != "success":
+                  return ("invalid_response", "unknown", "unknown", "unknown")
+              registrations = []
+              def visit(node):
+                  if isinstance(node, dict):
+                      for key, value in node.items():
+                          if key in ("applications", "apps") and isinstance(value, dict):
+                              registrations.extend((str(k), v) for k, v in value.items())
+                          visit(value)
+                  elif isinstance(node, list):
+                      for value in node:
+                          visit(value)
+              visit(parsed)
+              exact = any(
+                  k.strip("/") == root or
+                  (isinstance(v, dict) and str(v.get("app_root", "")).strip("/") == root)
+                  for k, v in registrations
+              )
+              correct_uri = any(
+                  (k.strip("/") == root or
+                   (isinstance(v, dict) and str(v.get("app_root", "")).strip("/") == root)) and
+                  isinstance(v, dict) and str(v.get("app_uri", "")).strip("/") == uri
+                  for k, v in registrations
+              )
+              count = "nonzero" if registrations else "zero"
+              return ("success", str(exact).lower(), str(correct_uri).lower(), count)
+
+          for label, args in (("USER", ["--user", "zomorod2"]),
+                              ("DOMAIN", ["--domain", "zomorodmelal.ir"])):
+              status, exact, uri_match, count = evidence(args)
+              print("PREVIEW_SELECTOR_" + label + "_QUERY=" + status)
+              print("PREVIEW_SELECTOR_" + label + "_REGISTRATION_EXACT=" + exact)
+              print("PREVIEW_SELECTOR_" + label + "_URI_EXACT=" + uri_match)
+              print("PREVIEW_SELECTOR_" + label + "_APP_COUNT=" + count)
+
+          child = Path("/home/zomorod2/public_html/company/office-preflight-2a8a0f4b9e17/.htaccess")
+          if child.is_file() and not child.is_symlink():
+              lines = child.read_text(errors="replace").splitlines()
+              print("PREVIEW_CHILD_PASSENGER_ENABLED_ON=" +
+                    str(any(line.strip().lower() == "passengerenabled on" for line in lines)).lower())
+              print("PREVIEW_CHILD_HAS_APP_ROOT=" +
+                    str(any(line.lstrip().startswith("PassengerAppRoot ") for line in lines)).lower())
+          else:
+              print("PREVIEW_CHILD_ROUTING=not_attested")
+          print("SELECTOR_PREVIEW_INVENTORY_AUDIT=read_only")
+          PY
+          REMOTE
       - name: Check external routing status without touching server
         shell: bash
         run: |
