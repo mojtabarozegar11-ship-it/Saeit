@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
 import tempfile
 from pathlib import Path
 import sys
@@ -40,6 +41,10 @@ SLOT_SCHEMA = "saeit.factory.product-slots.v1"
 CLEARANCE_SCHEMA = "saeit.factory.signed-quality-clearance.v1"
 PRODUCT_SLUG = re.compile(r"^[a-z][a-z0-9_]{1,65}$")
 HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+HOURLY_HANDOFF_SCHEMA = "saeit.factory.hourly-cycle-handoff.v1"
+RECEIVER_CYCLES = frozenset({"R-01", "B-01", "S-01", "G-01"})
+# Operator-managed trust anchor: NEVER load keys from factory-writable output.
+RECEIVER_TRUST_ROOT = Path("/etc/saeit/hourly-cycle-receiver-public-keys")
 
 
 def _read_private_json(path):
@@ -113,6 +118,77 @@ def _verified_quality_exit(root, recipe):
             "clearance_sha256": hashlib.sha256(clearance_path.read_bytes()).hexdigest()}
 
 
+def _accepted_hourly_handoff(root, recipe, clearance):
+    """Require receiver-authenticated delivery of the exact QC1000 build.
+
+    A signed quality clearance is necessary but not sufficient to free the
+    singleton slot; the receiver's private key must be controlled independently.
+    """
+    if (not isinstance(clearance, dict) or not PRODUCT_SLUG.fullmatch(recipe)
+            or not HEX_SHA256.fullmatch(str(clearance.get("artifact_sha256", "")))
+            or not HEX_SHA256.fullmatch(str(clearance.get("clearance_sha256", "")))):
+        return False
+    trusted = RECEIVER_TRUST_ROOT
+    try:
+        if (trusted.is_symlink() or trusted.parent.is_symlink() or not trusted.is_dir()
+                or trusted.stat().st_mode & 0o022):
+            return False
+        warehouse = (Path(root) / "digital-products" / recipe
+                     / (recipe + "-internal-qa.zip"))
+        if warehouse.is_symlink() or not warehouse.is_file():
+            return False
+        artifact_hash = hashlib.sha256()
+        with warehouse.open("rb") as stream:
+            for part in iter(lambda: stream.read(1024 * 1024), b""):
+                artifact_hash.update(part)
+        if artifact_hash.hexdigest() != clearance["artifact_sha256"]:
+            return False
+    except (OSError, ValueError, TypeError):
+        return False
+    inbox = Path(root) / "product-lifecycle/hourly-cycle-handoffs"
+    for cycle_id in sorted(RECEIVER_CYCLES):
+        location = inbox / cycle_id / recipe
+        receipt = location / "receipt.json"
+        signature = location / "receipt.sig"
+        delivered = location / "product.zip"
+        public_key = trusted / (cycle_id + ".pem")
+        if any(p.is_symlink() for p in (inbox, inbox / cycle_id, location,
+                                        receipt, signature, delivered, public_key)):
+            continue
+        try:
+            if (not receipt.is_file() or not signature.is_file() or not delivered.is_file()
+                    or not public_key.is_file() or receipt.stat().st_size > 100_000
+                    or signature.stat().st_size not in range(1, 4097)
+                    or public_key.stat().st_size > 16384
+                    or public_key.stat().st_mode & 0o022):
+                continue
+            checked = subprocess.run(
+                ["openssl", "dgst", "-sha256", "-verify", str(public_key),
+                 "-signature", str(signature), str(receipt)],
+                capture_output=True, timeout=5, check=False)
+            if checked.returncode != 0:
+                continue
+            acknowledgment = _read_private_json(receipt)
+            if (not acknowledgment or acknowledgment.get("schema") != HOURLY_HANDOFF_SCHEMA
+                    or acknowledgment.get("product_id") != recipe
+                    or acknowledgment.get("receiver_cycle") != cycle_id
+                    or acknowledgment.get("status") != "accepted_by_receiver"
+                    or acknowledgment.get("artifact_sha256") != clearance["artifact_sha256"]
+                    or acknowledgment.get("clearance_sha256") != clearance["clearance_sha256"]
+                    or not isinstance(acknowledgment.get("acceptance_evidence"), str)
+                    or not acknowledgment["acceptance_evidence"].strip()):
+                continue
+            delivered_hash = hashlib.sha256()
+            with delivered.open("rb") as stream:
+                for part in iter(lambda: stream.read(1024 * 1024), b""):
+                    delivered_hash.update(part)
+            if delivered_hash.hexdigest() == clearance["artifact_sha256"]:
+                return True
+        except (OSError, TypeError, ValueError, subprocess.TimeoutExpired):
+            continue
+    return False
+
+
 def _cleanup_completed_product_extras(root, recipe):
     """Free per-product working files only after exact signed 1000 clearance.
 
@@ -147,7 +223,7 @@ def _cleanup_completed_product_extras(root, recipe):
 
 
 def _maintain_product_slots(root, recipe_names):
-    """Line 41 runs one product at a time; exact signed 1000 exits the line."""
+    """Line 41 releases a product only after QC1000 AND signed cycle delivery."""
     state_path = (Path(root) / "quality-excellence" / "product-flow"
                   / "active-slots" / "current.json")
     if state_path.is_symlink():
@@ -193,7 +269,7 @@ def _maintain_product_slots(root, recipe_names):
     for item in active[:1]:
         recipe = item["recipe"]
         clearance = _verified_quality_exit(root, recipe)
-        if clearance:
+        if clearance and _accepted_hourly_handoff(root, recipe, clearance):
             exited[recipe] = dict(clearance)
             _cleanup_completed_product_extras(root, recipe)
         else:
@@ -210,7 +286,7 @@ def _maintain_product_slots(root, recipe_names):
         if recipe in seen or recipe in queued or any(x["recipe"] == recipe for x in active):
             continue
         clearance = _verified_quality_exit(root, recipe)
-        if clearance:
+        if clearance and _accepted_hourly_handoff(root, recipe, clearance):
             exited[recipe] = dict(clearance)
             continue
         manifest = _read_private_json(Path(root) / "digital-products" / recipe
@@ -224,7 +300,7 @@ def _maintain_product_slots(root, recipe_names):
     while not active and queue:
         next_recipe = queue.pop(0)
         clearance = _verified_quality_exit(root, next_recipe)
-        if clearance:
+        if clearance and _accepted_hourly_handoff(root, next_recipe, clearance):
             exited[next_recipe] = dict(clearance)
             _cleanup_completed_product_extras(root, next_recipe)
             continue
@@ -239,7 +315,7 @@ def _maintain_product_slots(root, recipe_names):
     state = {"schema": SLOT_SCHEMA, "line_id": 41, "capacity": 1,
              "active": active, "waiting": queue, "exited": exited,
              "last_admitted_recipe": cursor,
-             "exit_rule": "exact passed artifact with valid signed 1000/1000 clearance",
+             "exit_rule": "exact signed 1000/1000 clearance plus authenticated hourly-cycle delivery",
              "cleanup_rule": "remove per-product intermediates only; retain certified artifact and proof"}
     _write_private_json(state_path, state)
     return [item["recipe"] for item in active]
