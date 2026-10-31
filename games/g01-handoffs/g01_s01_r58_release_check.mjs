@@ -12,5 +12,5 @@ assert.match(game,/function nextMission\(\)\{if\(!world\|\|!canEnterGameplay\(gr
 assert.match(game,/function resumeInMemoryCampaign\(\)\{if\(!hasResumableCampaignInMemory\(\)\|\|!canEnterGameplay/);
 assert.match(echo,/document\.addEventListener\('freeze',/);
 assert.match(roham,/document\.addEventListener\('freeze',backgroundPause\)/);
-assert.match(policy,/enabled\s*:\s*false/);
+for(const key of ['ownerApproved','checkoutEnabled','verifiedBackend'])assert.match(policy,new RegExp(key+'\\s*:\\s*false'));
 console.log('G01 S01 R58 source-only preflight: 5 checks PASS; NO deployment/backup/rollback acceptance implied');
