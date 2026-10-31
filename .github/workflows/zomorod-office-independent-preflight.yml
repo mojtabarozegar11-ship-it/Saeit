@@ -280,16 +280,23 @@ jobs:
         run: |
           set -euo pipefail
           url="https://zomorodmelal.ir/office-preflight-2a8a0f4b9e17/secure-login/"
+          body="$(mktemp)"
+          trap 'rm -f -- "$body"' EXIT
           code=000
+          valid_template=false
           for attempt in 1 2 3 4 5; do
-            code="$(curl --silent --show-error --max-time 25 --output /dev/null --write-out '%{http_code}' "$url" || true)"
-            if test "$code" = 200; then break; fi
+            code="$(curl --silent --show-error --max-time 25 --max-redirs 0 --output "$body" --write-out '%{http_code}' "$url" || true)"
+            if test "$code" = 200 && grep -Fq 'ZOMOROD MELAL' "$body" && grep -Fq 'name="username"' "$body" && grep -Fq 'login-form' "$body"; then
+              valid_template=true
+              break
+            fi
             sleep 12
           done
           echo "OFFICE_PREVIEW_HTTPS_LOGIN_STATUS=$code"
+          echo "OFFICE_PREVIEW_PRIVATE_LOGIN_TEMPLATE=$valid_template"
           health="$(curl --silent --show-error --location --max-time 25 --output /dev/null --write-out '%{http_code}' 'https://zomorodmelal.ir/api/health/' || true)"
           echo "PUBLIC_SITE_POST_PREVIEW_HEALTH=$health"
-          if test "$code" != 200 || test "$health" != 200; then
+          if test "$code" != 200 || test "$valid_template" != true || test "$health" != 200; then
             d="$RUNNER_TEMP/zm-marketing-ro"
             timeout 80s ssh -F "$d/config" "$COMMAND_HOST" '/usr/sbin/cloudlinux-selector stop --json --interpreter python --domain zomorodmelal.ir --app-root zomorod_office_top_preflight_2a8a0f4b9e17' >/dev/null 2>&1 || true
             echo "OFFICE_PREVIEW=stopped_for_investigation"
