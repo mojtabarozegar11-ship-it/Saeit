@@ -88,6 +88,36 @@ class RateTests(unittest.TestCase):
                 opener=lambda req,timeout:FakeResponse(b'{')
             )
 
+    def test_same_host_redirected_path_fails(self):
+        resp = FakeResponse(
+            b'{"tron":{"usd":0.24,"last_updated_at":1800000000}}',
+            "https://api.coingecko.com/other/path"
+        )
+        with self.assertRaises(TrustedRateUnavailable):
+            fetch_trx_only(clock=lambda: NOW, opener=lambda req, timeout: resp)
+
+    def test_duplicate_tron_keys_fail(self):
+        resp = FakeResponse(
+            b'{"tron":{"usd":0.24,"last_updated_at":1800000000},'
+            b'"tron":{"usd":0.25,"last_updated_at":1800000000}}'
+        )
+        with self.assertRaises(TrustedRateUnavailable):
+            fetch_trx_only(clock=lambda: NOW, opener=lambda req, timeout: resp)
+
+    def test_duplicate_usd_keys_fail(self):
+        resp = FakeResponse(
+            b'{"tron":{"usd":0.24,"usd":0.25,"last_updated_at":1800000000}}'
+        )
+        with self.assertRaises(TrustedRateUnavailable):
+            fetch_trx_only(clock=lambda: NOW, opener=lambda req, timeout: resp)
+
+    def test_nonfinite_clock_fails(self):
+        resp = FakeResponse(
+            b'{"tron":{"usd":0.24,"last_updated_at":1800000000}}'
+        )
+        with self.assertRaises(TrustedRateUnavailable):
+            fetch_trx_only(clock=lambda: float("nan"), opener=lambda req, timeout: resp)
+
     def test_transport_failure_fails(self):
         def bad(*a,**kw): raise TimeoutError()
         with self.assertRaises(TrustedRateUnavailable):
