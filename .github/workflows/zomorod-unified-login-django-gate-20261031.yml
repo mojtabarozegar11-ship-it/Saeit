@@ -36,6 +36,7 @@ jobs:
           python manage.py check
           python manage.py makemigrations --check --dry-run enterprise_portal
           python manage.py test enterprise_portal.test_sso_consumer --verbosity 2
+          python manage.py test company_messaging company_marketing enterprise_portal ecosystem_hub --verbosity 1
           echo ZOMOROD_SSO_DJANGO_OFFLINE_GATE=PASS
           echo ZOMOROD_LIVE_SSO_ENABLED=false
           echo ZOMOROD_LIVE_PHP_UNCHANGED=true
