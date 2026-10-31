@@ -65,9 +65,40 @@ def build(original):
     compile(updated, str(TARGET), "exec")
     return updated.encode("utf8"), source_fn
 
+def _read_only_checkout_sql(execute, sql, params, many, context):
+    """Reject every non-SELECT statement during the synthetic buyer GET proof.
+
+    This is a safety guard, not an invoice-idempotency or live-payment test.
+    In particular, no UPDATE, INSERT, DELETE, PRAGMA or transaction control is
+    authorized by this probe. Fail closed if the view starts writing.
+    """
+    # A SELECT prefix is not a sufficient read-only guarantee: some database
+    # drivers accept multiple statements, and SELECT ... FOR UPDATE/INTO can
+    # acquire locks or create server-side files. Fail closed on these shapes.
+    # This is a conservative acceptance-test sandbox, not a SQL parser.
+    # Reject comments, SELECT INTO, locking reads and side-effect functions:
+    # even a syntactically SELECT-only statement can change session/server
+    # state or stall the worker. A false positive blocks proof, not checkout.
+    forbidden = (
+        r"/\*|\*/|--|#"
+        r"|\bINTO\b"
+        r"|\bFOR\s+(?:UPDATE|SHARE)\b"
+        r"|\bLOCK\s+IN\s+SHARE\s+MODE\b"
+        r"|\b(?:GET_LOCK|RELEASE_LOCK|IS_FREE_LOCK|SLEEP|BENCHMARK|"
+        r"LOAD_FILE|PG_SLEEP|NEXTVAL|SETVAL|DBLINK_EXEC)\s*\("
+    )
+    if (many or not isinstance(sql, str)
+            or not re.match(r"^\s*SELECT\b", sql, re.IGNORECASE)
+            or ";" in sql
+            or re.search(forbidden, sql, re.IGNORECASE)):
+        fail("Checkout proof refused non-SELECT or side-effect SQL operation")
+    return execute(sql, params, many, context)
+
+
 def proof(handler):
     import importlib
     import django
+    from django.db import connection
     from django.test import RequestFactory
     from types import SimpleNamespace
     from unittest.mock import patch
@@ -78,29 +109,47 @@ def proof(handler):
     django.setup()
     module = importlib.import_module("mpw_commerce.product_checkout_page")
     from core.models import Product
-    for pk in (72, 225):
-        req = RequestFactory().get(
-            f"/store/product/{pk}/checkout/", secure=True, HTTP_HOST="mojplaywin.com"
-        )
-        req.user = SimpleNamespace(
-            is_authenticated=True, is_active=True, pk=-1000, username="scoped-checkout-audit"
-        )
-        product = Product.objects.select_related("knowledge_article").get(pk=pk)
-        if module.approved_for_checkout(req, product) is not True:
-            fail(f"Product {pk} is not approved for live checkout")
-        with patch.object(module, "_apply_two_book_strict_csp", handler):
-            response = module.product_checkout_page(req, pk)
-        body = response.content
-        marker = b'<meta http-equiv="Content-Security-Policy" content="'
-        if (response.status_code != 200 or body.count(marker) != 1
-                or body.count(b"'sha256-") != 2
-                or b"unsafe-inline" in body or b"unsafe-eval" in body):
-            fail(f"Buyer checkout CSP proof failed for product {pk}")
-        print("MPW_CHECKOUT_CSP_PROOF=" + json.dumps({
-            "product": pk, "http": 200, "inline_script_hashes": 0,
-            "style_hashes": 2, "customer_orders_created": 0,
-            "real_payment": False
-        }))
+    with connection.execute_wrapper(_read_only_checkout_sql):
+        for pk in (72, 225, 879):
+            req = RequestFactory().get(
+                f"/store/product/{pk}/checkout/", secure=True, HTTP_HOST="mojplaywin.com"
+            )
+            req.user = SimpleNamespace(
+                is_authenticated=True, is_active=True, pk=-1000, username="scoped-checkout-audit"
+            )
+            product = Product.objects.select_related("knowledge_article").get(pk=pk)
+            approved = module.approved_for_checkout(req, product) is True
+            if not approved:
+                if pk in (72, 225):
+                    fail(f"Product {pk} is not approved for live checkout")
+                print("MPW_CHECKOUT_RIGHTS_STATUS=" + json.dumps({
+                    "product": pk, "approved": False, "no_sale_attempted": True
+                }))
+                continue
+            with patch.object(module, "_apply_two_book_strict_csp", handler):
+                response = module.product_checkout_page(req, pk)
+            # SKU879 has a separate product/rights lifecycle: verify its
+            # authenticated GET shape without imposing the two-book CSP hash
+            # contract on a potentially different template.
+            if pk == 879:
+                if response.status_code != 200:
+                    fail("SKU879 authenticated checkout GET did not return 200")
+                print("MPW_CHECKOUT_SKU879_READONLY=" + json.dumps({
+                    "product": 879, "http": 200, "payment": "not_tested",
+                    "invoice": "not_created", "entitlement": "not_verified"
+                }))
+                continue
+            body = response.content
+            marker = b'<meta http-equiv="Content-Security-Policy" content="'
+            if (response.status_code != 200 or body.count(marker) != 1
+                    or body.count(b"'sha256-") != 2
+                    or b"unsafe-inline" in body or b"unsafe-eval" in body):
+                fail(f"Buyer checkout CSP proof failed for product {pk}")
+            print("MPW_CHECKOUT_CSP_PROOF=" + json.dumps({
+                "product": pk, "http": 200, "inline_script_hashes": 0,
+                "style_hashes": 2, "sql_write_attempts_allowed": 0,
+                "real_payment": False
+            }))
 
 def preview():
     guard()
@@ -158,6 +207,14 @@ def release_lock():
 def publish(run):
     if os.environ.get("MPW_CSP_RELEASE_APPROVED") != "YES":
         fail("Production source write blocked without explicit release gate")
+    # A local backup alone cannot authorize a production release. Both
+    # independently checked recovery and effective Passenger DB identity must
+    # be explicitly attested by the release operator; never infer them from
+    # the SSH shell's SQLite configuration or an old workflow run.
+    if os.environ.get("MPW_CSP_OFFHOST_RESTORE_VERIFIED") != "YES":
+        fail("Production source write blocked: independent off-host restore not verified")
+    if os.environ.get("MPW_CSP_PASSENGER_DB_AUTHORITY_VERIFIED") != "YES":
+        fail("Production source write blocked: Passenger database authority not verified")
     guard()
     with release_lock():
         return _publish_locked(run)
@@ -222,7 +279,16 @@ def verify(run):
     }))
 
 def rollback(run):
+    # A rollback is a production write too: serialize it with publish and
+    # require the same explicit owner-controlled release authorization.
+    if os.environ.get("MPW_CSP_RELEASE_APPROVED") != "YES":
+        fail("Production rollback blocked without explicit release gate")
     guard()
+    with release_lock():
+        return _rollback_locked(run)
+
+
+def _rollback_locked(run):
     backup, manifest = ident(run)
     if backup.is_symlink() or manifest.is_symlink() or not backup.is_file() or not manifest.is_file():
         fail("No rollback files")

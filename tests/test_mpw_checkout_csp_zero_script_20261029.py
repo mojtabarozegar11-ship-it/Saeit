@@ -35,5 +35,82 @@ class CheckoutZeroScriptCSPTests(unittest.TestCase):
                 module.publish("40808335828")
 
 
+    def test_publish_requires_independent_offhost_restore_before_guard(self):
+        with patch.dict(os.environ, {
+            "MPW_CSP_RELEASE_APPROVED": "YES",
+            "MPW_CSP_OFFHOST_RESTORE_VERIFIED": "",
+            "MPW_CSP_PASSENGER_DB_AUTHORITY_VERIFIED": "YES",
+        }):
+            with patch.object(module, "guard", side_effect=AssertionError("guard must not run")):
+                with self.assertRaisesRegex(RuntimeError, "off-host restore not verified"):
+                    module.publish("40808335828")
+
+    def test_publish_requires_passenger_db_authority_before_guard(self):
+        with patch.dict(os.environ, {
+            "MPW_CSP_RELEASE_APPROVED": "YES",
+            "MPW_CSP_OFFHOST_RESTORE_VERIFIED": "YES",
+            "MPW_CSP_PASSENGER_DB_AUTHORITY_VERIFIED": "",
+        }):
+            with patch.object(module, "guard", side_effect=AssertionError("guard must not run")):
+                with self.assertRaisesRegex(RuntimeError, "Passenger database authority not verified"):
+                    module.publish("40808335828")
+
+    def test_synthetic_checkout_sql_guard_allows_only_select(self):
+        executed = []
+        def execute(sql, params, many, context):
+            executed.append(sql)
+            return "read-ok"
+        self.assertEqual(
+            module._read_only_checkout_sql(execute, " SELECT 1", (), False, {}),
+            "read-ok",
+        )
+        self.assertEqual(executed, [" SELECT 1"])
+        for statement in (
+            "INSERT INTO orders VALUES (1)", "UPDATE orders SET paid=1",
+            "DELETE FROM orders", "WITH x AS (DELETE FROM orders RETURNING *) SELECT * FROM x",
+            "BEGIN", "PRAGMA writable_schema=ON", "/* hidden */ SELECT 1",
+            "SELECT 1; DELETE FROM orders", "SELECT * FROM orders FOR UPDATE",
+            "SELECT * FROM orders LOCK IN SHARE MODE",
+            "SELECT * INTO OUTFILE '/tmp/leak' FROM orders",
+            "SELECT * INTO DUMPFILE '/tmp/leak' FROM orders",
+            "SELECT * FROM orders FOR SHARE",
+            "SELECT * INTO backup_orders FROM orders",
+            "SELECT GET_LOCK('checkout', 60)",
+            "SELECT SLEEP(5)",
+            "SELECT LOAD_FILE('/etc/passwd')",
+            "SELECT 1 /* unsafe comment */",
+            "SELECT 1 -- hidden",
+            "SELECT 1 # hidden",
+        ):
+            with self.subTest(statement=statement):
+                with self.assertRaisesRegex(RuntimeError, "non-SELECT"):
+                    module._read_only_checkout_sql(execute, statement, (), False, {})
+        self.assertEqual(executed, [" SELECT 1"])
+        with self.assertRaisesRegex(RuntimeError, "side-effect SQL"):
+            module._read_only_checkout_sql(execute, "SELECT 1", (), True, {})
+        self.assertEqual(executed, [" SELECT 1"])
+
+    def test_rollback_requires_authorization_before_any_file_access(self):
+        with patch.dict(os.environ, {"MPW_CSP_RELEASE_APPROVED": ""}):
+            with patch.object(module, "guard", side_effect=AssertionError("guard must not run")):
+                with self.assertRaisesRegex(RuntimeError, "rollback blocked without explicit release gate"):
+                    module.rollback("40808335828")
+
+    def test_rollback_serializes_with_publish_lock(self):
+        with patch.dict(os.environ, {"MPW_CSP_RELEASE_APPROVED": "YES"}):
+            from contextlib import contextmanager
+            calls = []
+            @contextmanager
+            def lock():
+                calls.append("lock-enter")
+                yield
+                calls.append("lock-exit")
+            with patch.object(module, "guard", side_effect=lambda: calls.append("guard")), \
+                 patch.object(module, "release_lock", side_effect=lock), \
+                 patch.object(module, "_rollback_locked", side_effect=lambda run: calls.append("rollback")):
+                module.rollback("40808335828")
+            self.assertEqual(calls, ["guard", "lock-enter", "rollback", "lock-exit"])
+
+
 if __name__ == "__main__":
     unittest.main()

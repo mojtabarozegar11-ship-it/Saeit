@@ -3,11 +3,27 @@ on:
   pull_request:
     paths:
       - scripts/mpw_checkout_csp_zero_script_guard_20261029.py
+      - scripts/s01_passenger_runtime_readonly_20261029.py
+      - scripts/s01_passenger_app_config_db_readonly_20261031.py
+      - scripts/s01_live_passenger_health_readonly_20261031.py
+      - scripts/s01_checkout_invoice_static_readonly_20261029.py
+      - scripts/s01_checkout_cpanel_provenance_readonly_20261030.py
+      - tests/test_s01_checkout_cpanel_provenance_readonly_20261030.py
+      - tests/test_s01_checkout_invoice_static_readonly_20261029.py
+      - tests/test_s01_passenger_runtime_readonly_20261029.py
+      - tests/test_s01_passenger_app_config_db_readonly_20261031.py
+      - tests/test_s01_live_passenger_health_readonly_20261031.py
       - tests/test_mpw_checkout_csp_zero_script_20261029.py
+      - scripts/s01_ssh_error_classify.py
+      - tests/test_s01_ssh_error_classify.py
+      - tests/test_s01_checkout_relay_config_regression.py
+      - scripts/s01_checkout_route_verdict_20261029.cjs
+      - tests/s01_checkout_route_verdict_20261029.test.cjs
+      - ops/s01_private_rollback_recipient_cert.pem
       - .github/workflows/mpw-checkout-csp-readonly-preflight-20261029.yml
 permissions: {contents: read}
 concurrency:
-  group: s01-mpw-checkout-csp-readonly
+  group: s01-pinned-cpanel-relay-single-session
   cancel-in-progress: false
 jobs:
   preflight:
@@ -21,6 +37,65 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_checkout_csp_zero_script_20261029.py -v
+      - name: Regression-test redacted Passenger process evidence
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_passenger_runtime_readonly_20261029.py -v
+      - name: Regression-test Passenger app-config read-only DB probe
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_passenger_app_config_db_readonly_20261031.py -v
+      - name: Regression-test live Passenger health evidence parser
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_live_passenger_health_readonly_20261031.py -v
+      - name: Regression-test bounded invoice source map
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_invoice_static_readonly_20261029.py -v
+      - name: Capture non-transactional public HTTP and sitemap status
+        shell: bash
+        run: |
+          python3 - <<'PY' | tee "$RUNNER_TEMP/s01-public-http.jsonl"
+          import json, urllib.error, urllib.request
+          targets={
+              'mpw':['/','/store/','/store/product/72/','/store/product/225/','/store/product/879/','/sitemap.xml','/robots.txt'],
+              'zm':['/','/academy/','/company-gallery/','/newsletter/','/research/','/sitemap.xml','/robots.txt']
+          }
+          domains={'mpw':'mojplaywin.com','zm':'zomorodmelal.ir'}
+          for site,paths in targets.items():
+              for path in paths:
+                  req=urllib.request.Request('https://'+domains[site]+path,
+                      headers={'User-Agent':'S01SafeReadOnly/20261029','Cache-Control':'no-cache'})
+                  try:
+                      with urllib.request.urlopen(req,timeout=14) as response:
+                          status=response.status
+                          final=response.geturl()
+                  except urllib.error.HTTPError as exc:
+                      status=exc.code
+                      final=exc.geturl()
+                  except Exception as exc:
+                      status='NETWORK_ERROR:'+type(exc).__name__
+                      final=None
+                  print('S01_PUBLIC_HTTP='+json.dumps({'site':site,'path':path,'status':status,
+                      'redirected':bool(final and final.rstrip('/')!=('https://'+domains[site]+path).rstrip('/'))},sort_keys=True))
+          PY
+      - name: Preserve public-only availability evidence independently of VPS
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s01-public-http-no-customer-data
+          path: ${{ runner.temp }}/s01-public-http.jsonl
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Validate checkout provenance probe offline
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_cpanel_provenance_readonly_20261030.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_ssh_error_classify.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_checkout_relay_config_regression.py -v
+      - name: Regression-test anonymous purchase route denial
+        run: node --test tests/s01_checkout_route_verdict_20261029.test.cjs
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -35,8 +110,10 @@ jobs:
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          # Previously observed public host key, pinned and revalidated before auth.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" || { echo 'S01_VPS_HOST_PIN=BLOCKED'; exit 1; }
+          echo 'S01_VPS_HOST_PIN=VERIFIED'
           cat > "$d/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
@@ -45,25 +122,75 @@ jobs:
             IdentityFile $d/vps.key
             UserKnownHostsFile $d/vps.known
           Host saeit-cpanel
-            HostName zohal.pws-dns.net
+            HostName 178.239.147.125
             User zomorod2
             Port 1396
             IdentityFile $d/host.key
             UserKnownHostsFile $d/host.known
             ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
           Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
-            ConnectTimeout 10
-            ConnectionAttempts 1
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
             ForwardAgent no
             RequestTTY no
           EOF
           chmod 600 "$d/config"
-          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          mv "$d/host.candidate" "$d/host.known"
+          # Public 30GB cPanel host key, pinned before any authenticated session.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" || { echo 'S01_CPANEL_HOST_PIN=BLOCKED'; exit 1; }
+          echo 'S01_CPANEL_HOST_PIN=VERIFIED'
+          # Keep raw SSH diagnostics private; print only a bounded failure class.
+          session_ready=0
+          ssh_error="$d/ssh-error"
+          for attempt in 1 2 3 4 5; do
+            : > "$ssh_error"
+            if timeout 55s ssh -v -T -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2"' >/dev/null 2>"$ssh_error"; then
+              session_ready=1
+              break
+            else
+              rc=$?
+              failure_class="$(python3 scripts/s01_ssh_error_classify.py "$ssh_error")"
+              failure_phase="$(python3 scripts/s01_ssh_error_classify.py --phase "$ssh_error")"
+              echo "S01_PINNED_SESSION_ATTEMPT=$attempt RC=$rc CLASS=$failure_class PHASE=$failure_phase"
+              : > "$ssh_error"
+            fi
+            if [ "$attempt" -lt 5 ]; then sleep 12; fi
+          done
+          rm -f "$ssh_error"
+          if [ "$session_ready" != 1 ]; then
+            # Read-only TCP reachability from the authenticated relay VPS to cPanel.
+            if timeout 18s ssh -T -F "$d/config" saeit-vps \
+              'timeout 7 bash -c "exec 3<>/dev/tcp/178.239.147.125/1396"' >/dev/null 2>/dev/null; then
+              echo 'S01_CPANEL_RELAY_TCP=OPEN'
+            else
+              echo 'S01_CPANEL_RELAY_TCP=NOT_VERIFIED'
+            fi
+            if timeout 25s ssh -T -F "$d/config" saeit-cpanel 'true' >/dev/null 2>/dev/null; then
+              echo 'S01_CPANEL_REMOTE_SHELL=VERIFIED'
+              echo 'S01_CPANEL_IDENTITY_ASSERTION=BLOCKED'
+            else
+              echo 'S01_CPANEL_REMOTE_SHELL=NOT_VERIFIED'
+            fi
+          fi
+          test "$session_ready" = 1 || { echo 'S01_PINNED_SESSION=BLOCKED'; exit 1; }
+          echo 'S01_VPS_READONLY_SESSION=VERIFIED_VIA_PINNED_PROXYJUMP'
+          echo 'S01_PINNED_SESSION=VERIFIED'
+      - name: Classify bounded cPanel checkout provenance (read-only; no source transfer)
+        shell: bash
+        run: |
+          set -euo pipefail
+          script64="$(base64 -w0 scripts/s01_checkout_cpanel_provenance_readonly_20261030.py)"
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;exec(compile(base64.b64decode(sys.argv[1]),\"s01_provenance\",\"exec\"))' '$script64'"
+          echo 'S01_PROVENANCE_RELEASE_AUTHORIZATION=BLOCKED'
       - name: Inspect cPanel checkout source and rollback capacity without writes
         shell: bash
         run: |
@@ -100,38 +227,183 @@ jobs:
           result['local_preflight']=('PASS' if all(result.get(x,False) for x in required) else 'BLOCKED')
           print('S01_CSP_READONLY_PREFLIGHT='+json.dumps(result,sort_keys=True))
           PY
-      - name: Capture non-transactional public HTTP and sitemap status
+      - name: Inspect account quota and rollback preimage without modifying cPanel
         shell: bash
         run: |
-          python3 - <<'PY'
-          import json, urllib.error, urllib.request
-          targets={
-              'mpw':['/','/store/','/store/product/72/','/store/product/225/','/store/product/879/','/sitemap.xml','/robots.txt'],
-              'zm':['/','/academy/','/company-gallery/','/newsletter/','/research/','/sitemap.xml','/robots.txt']
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' <<'PY'
+          import hashlib, json, os, shutil, subprocess
+          from pathlib import Path
+          home = Path("/home/zomorod2")
+          source = home / "Saeit-staging/mpw_commerce/product_checkout_page.py"
+          backup_dir = home / ".private_mojplaywin_main_agents"
+          wsgi = home / "mojplaywin.com/passenger_wsgi.py"
+          expected = "f33d80b7e843a66c9a55d8a8da46d5fb6049fb4c487f8f559c3471cfd42cdf74"
+          known_candidate = "752d6a621738c20273d1fd53b63e14e069fbac7917488a5a3c8d24e432b48065"
+          source_sha = hashlib.sha256(source.read_bytes()).hexdigest() if source.is_file() and not source.is_symlink() else None
+          result = {
+              "scope": "S01_CHECKOUT_RELEASE_GATE_READONLY",
+              "source_sha_matches_preimage": source_sha == expected,
+              "source_sha_matches_known_candidate": source_sha == known_candidate,
+              "local_preimage_backup_matches": False,
+              "cpanel_quota_uapi": "not_verified",
+              "account_quota_headroom_verified": False,
+              "passenger_db_authority_verified": False,
+              "independent_offhost_restore_verified": False,
+              "customer_orders_created": 0, "payments_created": 0,
+              "cpanel_writes": False, "passenger_restart": False,
           }
-          domains={'mpw':'mojplaywin.com','zm':'zomorodmelal.ir'}
-          for site,paths in targets.items():
-              for path in paths:
-                  req=urllib.request.Request('https://'+domains[site]+path,
-                      headers={'User-Agent':'S01SafeReadOnly/20261029','Cache-Control':'no-cache'})
+          # Only the deterministic, owner-private, manifest-verified source
+          # preimage qualifies. A random matching .bak or world-readable copy
+          # must never satisfy a production recovery gate.
+          if backup_dir.is_dir() and not backup_dir.is_symlink() and not (backup_dir.stat().st_mode & 0o077):
+              stem = "mpw-checkout-csp-preimage-" + expected[:16]
+              preimage = backup_dir / (stem + ".bak")
+              manifest = backup_dir / (stem + ".json")
+              if (preimage.is_file() and manifest.is_file()
+                      and not preimage.is_symlink() and not manifest.is_symlink()):
                   try:
-                      with urllib.request.urlopen(req,timeout=14) as response:
-                          status=response.status
-                          final=response.geturl()
-                  except urllib.error.HTTPError as exc:
-                      status=exc.code
-                      final=exc.geturl()
-                  except Exception as exc:
-                      status='NETWORK_ERROR:'+type(exc).__name__
-                      final=None
-                  print('S01_PUBLIC_HTTP='+json.dumps({'site':site,'path':path,'status':status,
-                      'redirected':bool(final and final.rstrip('/')!=('https://'+domains[site]+path).rstrip('/'))},sort_keys=True))
+                      bs, ms = preimage.stat(), manifest.stat()
+                      record = json.loads(manifest.read_text("utf8"))
+                      result["local_preimage_backup_matches"] = (
+                          bs.st_uid == os.getuid() and ms.st_uid == os.getuid()
+                          and bs.st_mode & 0o777 == 0o600 and ms.st_mode & 0o777 == 0o600
+                          and hashlib.sha256(preimage.read_bytes()).hexdigest() == expected
+                          and record.get("source_sha256") == expected
+                          and record.get("bytes") == bs.st_size
+                          and record.get("scope") == "mpw_commerce/product_checkout_page.py"
+                          and record.get("release_permitted") is False
+                      )
+                  except (OSError, ValueError, TypeError, KeyError):
+                      result["local_preimage_backup_matches"] = False
+          # cPanel UAPI is queried read-only; neither its raw JSON nor account
+          # identifiers, paths, environment values or credentials are logged.
+          uapi = shutil.which("uapi")
+          if uapi:
+              try:
+                  probe = subprocess.run(
+                      [uapi, "--output=json", "Quota", "get_quota_info"],
+                      capture_output=True, text=True, timeout=12, check=False
+                  )
+                  if probe.returncode == 0:
+                      import math
+                      data = json.loads(probe.stdout)
+                      response = data.get("result", {})
+                      info = response.get("data") or {}
+                      status = response.get("status")
+                      result["cpanel_quota_uapi"] = (
+                          "responded" if status == 1 else "unsupported_or_failed"
+                      )
+                      if status == 1 and isinstance(info, dict):
+                          try:
+                              limit = float(info["megabyte_limit"])
+                              remaining = float(info["megabytes_remain"])
+                              used = float(info["megabytes_used"])
+                              # cPanel reports decimal MB. Require >=25 MB for
+                              # a conservative >=20 MiB source+backup reserve.
+                              result["account_quota_headroom_verified"] = (
+                                  all(math.isfinite(x) for x in (limit, remaining, used))
+                                  and limit > 0 and used >= 0 and remaining >= 25
+                              )
+                          except (KeyError, TypeError, ValueError):
+                              pass
+              except (OSError, ValueError, subprocess.TimeoutExpired):
+                  result["cpanel_quota_uapi"] = "unavailable"
+          # Static WSGI text is NOT equivalent to the live Passenger process
+          # environment. Do not promote shell-selected SQLite to production DB.
+          result["passenger_wsgi_exists"] = wsgi.is_file() and not wsgi.is_symlink()
+          result["safe_to_publish"] = False
+          print("S01_CHECKOUT_RELEASE_GATE=" + json.dumps(result, sort_keys=True))
           PY
+      - name: Verify restore and encrypt private off-host rollback bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$(mktemp -d "$RUNNER_TEMP/s01-restore-XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          stem="/home/zomorod2/.private_mojplaywin_main_agents/mpw-checkout-csp-preimage-f33d80b7e843a66c"
+          # Retry only bounded, read-only copies over the same pinned SSH
+          # configuration. Never accept a partial pair or relax host-key checks.
+          restore_pair=0
+          for attempt in 1 2; do
+            rm -f "$d/preimage.py" "$d/manifest.json"
+            if timeout 35s scp -q -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" "saeit-cpanel:$stem.bak" "$d/preimage.py" \
+              && timeout 35s scp -q -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" "saeit-cpanel:$stem.json" "$d/manifest.json"; then
+              restore_pair=1
+              break
+            fi
+            if [ "$attempt" -eq 1 ]; then sleep 2; fi
+          done
+          if [ "$restore_pair" -ne 1 ]; then
+            echo 'S01_EPHEMERAL_OFFHOST_RESTORE=BLOCKED_PINNED_SCP'
+            exit 1
+          fi
+          python3 - "$d" <<'PY'
+          import hashlib, json, os, stat, sys
+          from pathlib import Path
+          root=Path(sys.argv[1]); source=root/"preimage.py"; manifest=root/"manifest.json"
+          expected="f33d80b7e843a66c9a55d8a8da46d5fb6049fb4c487f8f559c3471cfd42cdf74"
+          for p in (source, manifest):
+              assert p.is_file() and not p.is_symlink() and not (p.stat().st_mode & 0o077)
+          data=source.read_bytes(); record=json.loads(manifest.read_text("utf8"))
+          assert hashlib.sha256(data).hexdigest()==expected
+          assert record.get("source_sha256")==expected and record.get("bytes")==len(data)
+          assert record.get("release_permitted") is False
+          restored=root/"restored.py"; restored.write_bytes(data)
+          assert hashlib.sha256(restored.read_bytes()).hexdigest()==expected
+          compile(restored.read_bytes(), "<isolated-offhost-source-restore>", "exec")
+          print("S01_EPHEMERAL_OFFHOST_RESTORE="+json.dumps({
+              "source_only_restore_drill":True,"exact_sha_match":True,
+              "durable_offhost_backup_verified":False,
+              "passenger_db_authority_verified":False,"safe_to_publish":False,
+              "orders_created":0,"payments_created":0,
+          },sort_keys=True))
+          PY
+          tar -C "$d" -cf "$d/preimage_bundle.tar" preimage.py manifest.json
+          openssl cms -encrypt -binary -aes-256-cbc \
+            -in "$d/preimage_bundle.tar" \
+            -out "$d/preimage_bundle.cms" -outform DER \
+            ops/s01_private_rollback_recipient_cert.pem
+          bundle64="$(base64 -w0 "$d/preimage_bundle.cms")"
+          # This public log contains ciphertext only; the recipient private key
+          # is held separately and never sent to GitHub Actions or cPanel.
+          echo "S01_ENCRYPTED_ROLLBACK_BUNDLE_B64=$bundle64"
+      - name: Read only own Passenger process metadata with redacted output
+        shell: bash
+        run: |
+          set -euo pipefail
+          script64="$(base64 -w0 scripts/s01_passenger_runtime_readonly_20261029.py)"
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;exec(compile(base64.b64decode(sys.argv[1]),\"s01_passenger_probe\",\"exec\"))' '$script64'"
+          echo "S01_PASSENGER_DB_AUTHORITY=NOT_VERIFIED_BY_PROCESS_METADATA"
+      - name: Probe Passenger app database configuration with read-only SELECT 1
+        shell: bash
+        run: |
+          set -euo pipefail
+          script64="$(base64 -w0 scripts/s01_passenger_app_config_db_readonly_20261031.py)"
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;exec(compile(base64.b64decode(sys.argv[1]),\"s01_passenger_app_db_probe\",\"exec\"))' '$script64'"
+          echo 'S01_PASSENGER_APP_CONFIG_DB_PROBE_SCOPE=READ_ONLY_SAME_SETTINGS_NO_MODEL_LOAD'
+      - name: Verify live Passenger DB health via public GET only
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 scripts/s01_live_passenger_health_readonly_20261031.py
+      - name: Read only invoice code call-shapes without database or customer access
+        shell: bash
+        run: |
+          set -euo pipefail
+          script64="$(base64 -w0 scripts/s01_checkout_invoice_static_readonly_20261029.py)"
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import base64,sys;src=base64.b64decode(sys.argv[1]);sys.argv=[\"s01_invoice_static_probe\"];exec(compile(src,\"s01_invoice_static_probe\",\"exec\"))' '$script64'"
       - name: Delete runner-only SSH material
         if: always()
         run: |
           d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
           if [ -d "$d" ]; then
-            rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"
+            if [ -f "$d/config" ]; then ssh -F "$d/config" -O exit saeit-cpanel >/dev/null 2>&1 || true; fi
+            rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/vps-error" "$d/config"
             rmdir "$d"
           fi
