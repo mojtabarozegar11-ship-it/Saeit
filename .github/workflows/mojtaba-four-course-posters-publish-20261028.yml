@@ -3,7 +3,10 @@ on:
   pull_request:
     paths:
       - 'social_hub/course_showcase.py'
+      - 'social_hub/course_image_data.py'
       - 'social_hub/urls.py'
+      - 'scripts/build_mojtaba_course_poster_data.py'
+      - 'assets/mojtaba_course_posters_20261031/**'
       - 'scripts/mojtaba_four_course_posters_home_20261028.py'
       - 'tests/test_mojtaba_four_course_posters_20261028.py'
       - '.github/workflows/mojtaba-four-course-posters-publish-20261028.yml'
@@ -11,7 +14,9 @@ on:
     branches: [main]
     paths:
       - 'social_hub/course_showcase.py'
+      - 'social_hub/course_image_data.py'
       - 'scripts/mojtaba_four_course_posters_home_20261028.py'
+      - 'assets/mojtaba_course_posters_20261031/**'
       - '.github/workflows/mojtaba-four-course-posters-publish-20261028.yml'
 permissions:
   contents: read
@@ -31,10 +36,10 @@ jobs:
           python-version: '3.11'
       - name: Install only Django needed for real vector HTTP regression
         run: python -m pip install -q 'Django>=5.2,<5.3'
-      - name: Check ten original SVGs, single-template additive patch and rollback
+      - name: Check ten integrated-photo posters, single-template patch and rollback
         run: |
           set -euo pipefail
-          python -m compileall -q social_hub/course_showcase.py scripts/mojtaba_four_course_posters_home_20261028.py
+          python -m compileall -q social_hub/course_showcase.py social_hub/course_image_data.py scripts/mojtaba_four_course_posters_home_20261028.py
           python -m unittest discover -s tests -p 'test_mojtaba_four_course_posters_20261028.py' -v
       - name: Existing standalone social package remains compatible
         run: |
@@ -206,8 +211,8 @@ jobs:
               response=c.get(u,secure=True)
               if response.status_code!=200 or not response["Content-Type"].startswith("image/svg+xml"):
                   raise RuntimeError("Course poster route missing: "+course["slug"])
-              if b'data:image/webp;base64,' not in response.content:
-                  raise RuntimeError("Approved real instructor portrait not embedded")
+              if b'data:image/webp;base64,' not in response.content or b'<image x="0" y="0"' not in response.content:
+                  raise RuntimeError("Integrated whole-scene course image missing")
               try: ET.fromstring(response.content)
               except Exception as err: raise RuntimeError("Course artwork invalid XML") from err
               if (re.search(rb"[\xd8-\xdb][\x80-\xbf]",response.content)
@@ -257,7 +262,9 @@ jobs:
             "https://mojplaywin.com/":"preserve",
             "https://zomorodmelal.ir/":"preserve",
           }
-          for key in ("business","agriculture","online-income","chatgpt"):
+          for key in ("business","agriculture","online-income","chatgpt",
+                      "research-methods","feasibility","digital-marketing",
+                      "business-finance","food-quality","ai-automation"):
               urls["https://mojplaywin.com/mojtaba.roozegar/social-command/posters/"+key+".svg"]="svg"
           for attempt in range(5):
               broken=[]
@@ -281,8 +288,8 @@ jobs:
                               or re.search(rb"[\xd8-\xdb][\x80-\xbf]",matched.group(0))):
                               raise RuntimeError("Home course section not English")
                       if kind=="svg":
-                          if b'data:image/webp;base64,' not in blob:
-                              raise RuntimeError("Owner portrait not present in poster")
+                          if b'data:image/webp;base64,' not in blob or b'<image x="0" y="0"' not in blob:
+                              raise RuntimeError("Integrated whole-scene image missing")
                           ET.fromstring(blob)
                   except Exception as exc:
                       broken.append((u,type(exc).__name__))
