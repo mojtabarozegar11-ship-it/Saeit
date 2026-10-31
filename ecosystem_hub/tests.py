@@ -566,7 +566,9 @@ class HubSuite(TestCase):
         inventory = self.client.get("/company/office/inventory/", secure=True)
         self.assertEqual(inventory.status_code, 200)
         self.assertContains(inventory, "WHEAT")
-        self.assertNotContains(inventory, "FP")
+        # Match the forbidden inventory code as a table cell, not as an arbitrary
+        # substring of the randomly generated CSRF token (which may contain FP).
+        self.assertNotContains(inventory, "<td>FP</td>", html=False)
 
     def test_legacy_admin_blocks_cross_unit_direct_objects_and_querysets(self):
         from django.contrib import admin as site_admin
