@@ -258,6 +258,66 @@ jobs:
                       meta=json.loads(manifest.read_text())
                       print('OFFICE_RECENT_RELEASE_STATUS='+str(meta.get('status','unknown')))
           PY
+      - name: Test fresh-process live and private-staged Django imports without database writes
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 100s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          app="/home/zomorod2/Saeit"
+          py="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
+          test -x "$py" || py="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"
+          test -x "$py"
+          for mode in LIVE STAGE; do
+            ZM_INSPECT_MODE="$mode" "$py" -B - <<'PY'
+          import os,pathlib,sys,traceback,importlib.util
+          home=pathlib.Path('/home/zomorod2')
+          app=home/'Saeit'
+          stage=home/'.private/zomorod-messaging-release-stages/fdd628d09813bc9c30e73fdbb25d19960cad9dc0/code'
+          mode=os.environ['ZM_INSPECT_MODE']
+          root=app if mode=='LIVE' else stage
+          if not (root/'config/settings.py').is_file():
+              print('DJANGO_'+mode+'_SOURCE=missing');raise SystemExit(0)
+          for line in (app/'.env').read_text(errors='replace').splitlines() if (app/'.env').is_file() else ():
+              if '=' not in line or line.lstrip().startswith('#'):continue
+              import re
+              key,value=line.split('=',1);key=key.strip()
+              if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*',key):
+                  os.environ.setdefault(key,value.strip().strip('"').strip("'"))
+          os.environ['DJANGO_SETTINGS_MODULE']='config.settings'
+          os.environ['COMPANY_MESSAGING_SEND_ENABLED']='false'
+          os.environ['COMPANY_MARKETING_PUBLISH_ENABLED']='false'
+          os.environ['DATABASE_URL']='sqlite:///'+str(stage/'isolation.sqlite3' if mode=='STAGE' else app/'db.sqlite3')
+          sys.path.insert(0,str(root))
+          if mode=='STAGE':sys.path.insert(1,str(app))
+          print('DJANGO_'+mode+'_PYTHON='+str(sys.version_info.major)+'.'+str(sys.version_info.minor))
+          try:
+              import django
+              django.setup()
+              from django.conf import settings
+              from django.urls import resolve,Resolver404
+              print('DJANGO_'+mode+'_SETUP=pass')
+              for name in ('enterprise_portal','ecosystem_hub','company_messaging','company_marketing'):
+                  print('DJANGO_'+mode+'_REGISTERED_'+name.upper()+'='+str(name in settings.INSTALLED_APPS or any(x.endswith('.'+name.title().replace('_','')+'Config') for x in settings.INSTALLED_APPS)).lower())
+              for route in ('/company/office/','/company/office/secure-login/','/company/office/messages/','/company/office/marketing/'):
+                  try:
+                      m=resolve(route)
+                      print('DJANGO_'+mode+'_RESOLVE='+route+':'+str(m.url_name))
+                  except Resolver404:
+                      print('DJANGO_'+mode+'_RESOLVE='+route+':404')
+          except Exception as exc:
+              print('DJANGO_'+mode+'_SETUP=failed')
+              print('DJANGO_'+mode+'_ERROR_CLASS='+type(exc).__name__)
+              for frame in traceback.extract_tb(exc.__traceback__)[-4:]:
+                  print('DJANGO_'+mode+'_ERROR_FRAME='+pathlib.Path(frame.filename).name+':'+str(frame.lineno)+':'+frame.name)
+          PY
+          done
+          REMOTE
       - name: Erase transient private relay files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
