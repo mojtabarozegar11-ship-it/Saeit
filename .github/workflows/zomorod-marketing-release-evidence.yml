@@ -383,7 +383,8 @@ jobs:
                   configured_root=data.get(b"PASSENGER_APP_ROOT",b"").decode("utf8","strict").rstrip("/")
                   try: process_cwd=os.readlink(pp/"cwd")
                   except OSError: process_cwd=""
-                  if configured_root!=str(live_root) and process_cwd!=str(live_root):continue
+                  if (configured_root!=str(live_root) and process_cwd!=str(live_root)
+                    and b"/home/zomorod2/saeit" not in cmd):continue
                   url=raw_url.decode("utf8","strict")
                   path=pathlib.Path(urllib.parse.unquote(url.split("?",1)[0][len("sqlite:///"):]))
                   if not path.is_absolute() or not path.is_file() or path.is_symlink():continue
