@@ -1,0 +1,41 @@
+name: S-01 R23 strictly offline release regressions
+
+on:
+  pull_request:
+    branches:
+      - s01/r22-offline-release-gates-20261031
+    paths:
+      - .github/workflows/s01-r23-offline-release-gate.yml
+      - scripts/s01_r22_offline_gates.py
+      - scripts/test_s01_r22_offline_gates.py
+      - scripts/s01_trx_rate_isolation_candidate.py
+      - scripts/test_s01_trx_rate_isolation_candidate.py
+      - scripts/S01_R23_READONLY_RELEASE_GATE.md
+
+permissions:
+  contents: read
+
+jobs:
+  exact-head-offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR head without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Prove exact head and run synthetic no-host tests
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          python -m unittest scripts.test_s01_r22_offline_gates -v
+          python -m unittest scripts.test_s01_trx_rate_isolation_candidate -v
+          echo 'S01_R23_OFFLINE_ONLY=PASS_RELEASE_STILL_BLOCKED'
