@@ -43,6 +43,41 @@ jobs:
               raise SystemExit("OFFICE_RELEASE_DEFAULT_DENY_GUARD_MISSING")
           print("OFFICE_RELEASE_DEFAULT_DENY=PASS_RELEASE_BLOCKED")
           PY
+  relay-readonly-diagnostic:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Classify TCP and pinned RSA hostkey without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import socket
+          try:
+              connection = socket.create_connection(('178.239.147.150', 22), timeout=6)
+          except OSError as error:
+              print('S01_VPS_TCP22=UNAVAILABLE:' + type(error).__name__)
+              raise SystemExit(2)
+          else:
+              connection.close()
+          print('S01_VPS_TCP22=REACHABLE')
+          PY
+          candidate="$RUNNER_TEMP/s01-vps-rsa-keyscan"
+          if ! timeout 20s ssh-keyscan -T 10 -p 22 -t rsa 178.239.147.150 > "$candidate" 2>/dev/null; then
+            echo 'S01_VPS_RSA_HOSTKEY_SCAN=FAILED'
+            exit 3
+          fi
+          if [[ ! -s "$candidate" ]]; then
+            echo 'S01_VPS_RSA_HOSTKEY=EMPTY'
+            exit 4
+          fi
+          actual="$(ssh-keygen -lf "$candidate" -E sha256 | awk '{print $2}' | sort -u)"
+          if [[ "$actual" != 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' ]]; then
+            echo 'S01_VPS_RSA_HOSTKEY=PIN_MISMATCH'
+            exit 5
+          fi
+          echo 'S01_VPS_RSA_HOSTKEY=PIN_MATCH'
   release:
     needs: validate
     # No live writes until independent source/DB/restore/rollback authorization.
