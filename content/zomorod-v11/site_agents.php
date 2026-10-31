@@ -157,13 +157,13 @@ function zmAgentChart(array $recent):string {
 function zmAgentRender(PDO $db):void {
     $agents=$db->query('SELECT * FROM agents ORDER BY CASE WHEN code="master" THEN 0 ELSE 1 END,code')->fetchAll();
     $n=(int)$db->query('SELECT COUNT(*) FROM runs')->fetchColumn();
-    echo '<section><h2>مستر ایجنت و ایجنت‌های زمرد ملل</h2><p>این سامانه فقط داخل پنل مدیریت است؛ نسخه سازگار با نقش‌های قبلی و V91، با اندازه‌گیری واقعی HTTP. فعالیت فعلی پایش سایت است، نه تولید خودکار مقاله، تراکنش بانکی یا بازنویسی سایت.</p><p class="muted">گزارش‌های ثبت‌شده: '.(string)$n.' — هر نمودار تنها وضعیت HTTP ثبت‌شده را نشان می‌دهد؛ تولید یا انتشار محتوا را ثابت نمی‌کند.</p></section>';
+    echo '<section><h2>مستر ایجنت و ایجنت‌های زمرد ملل</h2><p style="color:#e9e7d9">این سامانه فقط داخل پنل مدیریت است؛ نسخه سازگار با نقش‌های قبلی و V91، با اندازه‌گیری واقعی HTTP. فعالیت فعلی پایش سایت است، نه تولید خودکار مقاله، تراکنش بانکی یا بازنویسی سایت.</p><p class="muted">گزارش‌های ثبت‌شده: '.(string)$n.' — هر نمودار تنها وضعیت HTTP ثبت‌شده را نشان می‌دهد؛ تولید یا انتشار محتوا را ثابت نمی‌کند.</p></section>';
     echo '<div class="grid">';
     foreach($agents as $a){
         $code=(string)$a['code'];$stmt=$db->prepare('SELECT * FROM runs WHERE agent_code=? ORDER BY id DESC LIMIT 14');$stmt->execute([$code]);$runs=$stmt->fetchAll();
         $total=(int)($db->query('SELECT COUNT(*) FROM runs WHERE agent_code='.$db->quote($code))->fetchColumn());
         $ok=count(array_filter($runs,fn($x)=>$x['status']==='ok'));
-        echo '<section class="card" style="min-width:0"><h3>'.esc($a['title']).'</h3><p>'.esc($a['mission']).'</p><p class="muted">'.($a['enabled']?'فعال':'متوقف').' · مجموع اجرا: '.$total.' · موفق در ۱۴ اجرای آخر: '.$ok.'</p>'.zmAgentChart($runs);
+        echo '<section class="card" style="min-width:0"><h3>'.esc($a['title']).'</h3><p style="color:#e9e7d9">'.esc($a['mission']).'</p><p class="muted">'.($a['enabled']?'فعال':'متوقف').' · مجموع اجرا: '.$total.' · موفق در ۱۴ اجرای آخر: '.$ok.'</p>'.zmAgentChart($runs);
         if($runs)echo '<p class="muted">آخرین نتیجه: '.esc($runs[0]['status']).' — '.esc($runs[0]['detail']).' — '.esc($runs[0]['occurred_at']).'</p>';
         if(role()==='admin'){
             echo '<form method="post">'.tokenInput().'<input type="hidden" name="code" value="'.esc($code).'"><button name="action" value="agent_toggle">'.($a['enabled']?'توقف':'فعال‌سازی').'</button>';
