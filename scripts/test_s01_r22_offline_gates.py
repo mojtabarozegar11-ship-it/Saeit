@@ -6,8 +6,8 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
-from s01_r22_offline_gates import (checkout, game_source_gate, office_stage,
-                                    public_route_contract, regular_bytes)
+from scripts.s01_r22_offline_gates import (checkout, game_source_gate, office_stage,
+                                            public_route_contract, regular_bytes)
 
 class R22Tests(unittest.TestCase):
     def files(self, root, old=b"x=1\n", new=b"x=1\n"):
