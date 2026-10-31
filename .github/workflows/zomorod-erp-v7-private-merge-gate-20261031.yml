@@ -117,6 +117,7 @@ jobs:
           test "$live_hash" = "$expected" || { echo LIVE_APP_DRIFT=BLOCKED; exit 1; }
           scp -q -F "$d/config" "$target:/home/zomorod2/.private/zomorod-business/app.php" "$RUNNER_TEMP/live-app.php"
           chmod 600 "$RUNNER_TEMP/live-app.php"
+          echo V7_MERGE_VALIDATOR_REV=2
           python3 -m py_compile merge-scripts/scripts/zomorod_v7_live_additive_merge.py
           python3 merge-scripts/scripts/zomorod_v7_live_additive_merge.py \
             --live "$RUNNER_TEMP/live-app.php" \
