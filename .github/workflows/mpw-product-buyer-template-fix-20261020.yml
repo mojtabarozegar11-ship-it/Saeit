@@ -92,7 +92,7 @@ jobs:
           p=app/'core/templates/brands/mojplaywin/product.html'
           if root.is_symlink() or wsgi.is_symlink() or not wsgi.is_file() or not p.is_file() or p.is_symlink():raise RuntimeError('Main app identity invalid')
           if "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):raise RuntimeError('App root changed')
-          if 'Secure checkout for this book' not in p.read_text('utf8','replace'):raise RuntimeError('Patch not installed')
+          if 'Buy this book with TRX' not in p.read_text('utf8','replace'):raise RuntimeError('Patch not installed')
           dest=root/'tmp'
           if dest.is_symlink():raise RuntimeError('Unsafe app tmp directory')
           dest.mkdir(exist_ok=True)
@@ -101,7 +101,7 @@ jobs:
           marker.touch()
           print('MPW_MAIN_PASSENGER_CACHED_TEMPLATES_RELOAD=REQUESTED')
           PY
-      - name: Verify public purchase CTAs, product metadata and translated login
+      - name: Verify guest checkout CTAs, product metadata and translated login
         run: |
           python3 - <<'PY'
           import urllib.request,urllib.error,os,json,time,re
@@ -115,7 +115,8 @@ jobs:
                   content=r.read(350000).decode('utf8','replace')
                   assert r.status==200
               if f'href="/store/product/{product_id}/checkout/"' not in content:raise RuntimeError('No real checkout CTA for '+str(product_id))
-              if 'New customer? Create an account' not in content:raise RuntimeError('No sign-up path on branded product')
+              if 'No account or subscription is required.' not in content:raise RuntimeError('Guest checkout copy missing')
+              if 'Sign in to receive an order-specific secure invoice' in content or 'New customer? Create an account' in content or 'href="/accounts/register/' in content:raise RuntimeError('Misleading account requirement remains')
               if ('property="og:title" content="'+product_title+' | MojPlayWin"') not in content:raise RuntimeError('Generic product OG title not fixed')
               if 'Live payment methods appear only after provider' in content:raise RuntimeError('Old incorrect payment message remains')
               print('MPW_PRODUCT_BUYER_REAL_CTA_PUBLIC='+str(product_id))
