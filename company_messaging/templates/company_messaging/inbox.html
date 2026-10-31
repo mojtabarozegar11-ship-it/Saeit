@@ -12,6 +12,7 @@
   <p>مکاتبات داخلی و پیام‌های بیرونی؛ وضعیت «پذیرش سرویس‌دهنده» به معنی تحویل به گیرنده نیست.</p>
   {% if not external_send_enabled %}<p role="status" style="color:#ffe1a3;font-weight:700">ارسال برون‌سازمانی در حال حاضر غیرفعال است؛ پیام‌های خارجی فقط در صف ثبت می‌شوند و به گیرنده ارسال نمی‌شوند. پیام داخلی مستقل از این محدودیت است.</p>{% endif %}
   {% if can_compose %}<a class="msg-action" href="{% url 'company_messaging:compose' %}">+ ایجاد پیام جدید</a>{% endif %}
+  {% if perms.company_messaging.manage_company_contacts %}<a class="msg-action" href="{% url 'company_messaging:contacts' %}">دفترچه مخاطبان</a>{% endif %}
   </div>
   <section class="msg-card"><h2>صندوق دریافتی داخلی</h2>
     <table><thead><tr><th>موضوع</th><th>فرستنده</th><th>تاریخ</th><th>وضعیت</th></tr></thead><tbody>
