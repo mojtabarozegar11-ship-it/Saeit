@@ -1,0 +1,164 @@
+name: MPW guest purchase recovery live source read-only preflight
+on:
+  pull_request:
+    paths:
+      - 'services/mpw_trx_guest_commerce.py'
+      - '.github/workflows/mpw-guest-live-readonly-preflight-20261031.yml'
+permissions: {contents: read}
+concurrency:
+  group: mpw-guest-live-readonly-preflight
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify no production-order, payment or database code is invoked
+        run: |
+          set -euo pipefail
+          python3 -m py_compile services/mpw_trx_guest_commerce.py
+          test -f scripts/test_mpw_guest_purchases_safe_recovery_20261031.py
+      - name: Establish pinned VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect live owner hooks, guest module pin and local rollback headroom without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' <<'PY'
+          import hashlib, json, os, pwd, stat
+          from pathlib import Path
+          app = Path('/home/zomorod2/Saeit-staging')
+          public = Path('/home/zomorod2/mojplaywin.com')
+          backups = Path('/home/zomorod2/.local/share/mpw-guest-checkout-release')
+          known_base = '0db371611ef61b052e368505297af0808cb0108e56c5d99a9f11f66338da19ba'
+          result = {
+              'scope': 'MPW_GUEST_RECOVERY_READ_ONLY_20261031',
+              'host_writes': False, 'db_queries': False,
+              'orders_created': 0, 'payments_created': 0,
+              'off_host_restore_proof': 'NOT_ASSESSED',
+              'host_owner_valid': pwd.getpwuid(os.geteuid()).pw_name == 'zomorod2',
+              'app_regular': app.is_dir() and not app.is_symlink() and app.resolve() == app,
+              'public_regular': public.is_dir() and not public.is_symlink() and public.resolve() == public,
+          }
+          wsgi = public / 'passenger_wsgi.py'
+          result['passenger_pinned'] = (wsgi.is_file() and not wsgi.is_symlink()
+              and "APP='/home/zomorod2/Saeit-staging'" in wsgi.read_text('utf8', 'replace'))
+          hooks = {
+              'pages': ('services/mpw_trx_public_pages.py', 'patch_public'),
+              'web': ('services/mpw_trx_commercial_web.py', 'patch_commercial'),
+          }
+          for kind, (relative, func) in hooks.items():
+              p = app / relative
+              healthy = p.is_file() and not p.is_symlink() and not p.parent.is_symlink()
+              result[kind + '_regular'] = healthy
+              if healthy:
+                  src = p.read_bytes()
+                  expected = ('# MPW_GUEST_CHECKOUT_LIVE_V1\n'
+                      + 'from services.mpw_trx_guest_commerce import '
+                      + func + ' as _mpw_' + func + '\n'
+                      + '_mpw_' + func + '(globals())\n')
+                  result[kind + '_hook_exact'] = (src.decode('utf8', 'replace').count(
+                      '# MPW_GUEST_CHECKOUT_LIVE_V1') == 1
+                      and expected.encode() in src)
+                  result[kind + '_sha256'] = hashlib.sha256(src).hexdigest()
+          guest = app / 'services/mpw_trx_guest_commerce.py'
+          result['guest_regular'] = guest.is_file() and not guest.is_symlink()
+          if result['guest_regular']:
+              src = guest.read_bytes()
+              result['guest_sha256'] = hashlib.sha256(src).hexdigest()
+              result['known_upgrade_base'] = result['guest_sha256'] == known_base
+              result['guest_bytes'] = len(src)
+          parent = backups.parent
+          result['backup_path_safe'] = (not backups.is_symlink()
+              and (not backups.exists() or (backups.is_dir()
+                  and not (stat.S_IMODE(backups.stat().st_mode) & 0o077)))
+              and parent.is_dir() and not parent.is_symlink())
+          if result['app_regular'] and result['backup_path_safe']:
+              free = [os.statvfs(app), os.statvfs(parent)]
+              result['disk_headroom_20m'] = all(
+                  fs.f_bavail * fs.f_frsize >= 20 * 1024 * 1024 for fs in free)
+          required = ('host_owner_valid', 'app_regular', 'public_regular', 'passenger_pinned',
+              'pages_regular', 'pages_hook_exact', 'web_regular', 'web_hook_exact',
+              'guest_regular', 'known_upgrade_base', 'backup_path_safe', 'disk_headroom_20m')
+          result['local_release_preflight'] = (
+              'PASS' if all(result.get(k, False) for k in required) else 'BLOCKED')
+          print('MPW_GUEST_RECOVERY_LIVE_SOURCE=' + json.dumps(result, sort_keys=True))
+          if result['local_release_preflight'] != 'PASS':
+              raise SystemExit('LIVE_SOURCE_PRECHECK_BLOCKED')
+          PY
+      - name: Recheck guest purchases public HTTP without cookies
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, urllib.error, urllib.request
+          target = 'https://mojplaywin.com/commerce/trx-easy/purchases/'
+          request = urllib.request.Request(target, headers={
+              'User-Agent': 'MPWGuestSafePreflight/20261031', 'Cache-Control': 'no-cache'})
+          try:
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  status = response.status
+                  cache = response.headers.get('Cache-Control', '')
+          except urllib.error.HTTPError as error:
+              status = error.code
+              cache = error.headers.get('Cache-Control', '')
+          print('MPW_GUEST_PURCHASES_PUBLIC=' + json.dumps({
+              'path': '/commerce/trx-easy/purchases/',
+              'anonymous': True, 'http_status': status,
+              'cache_control': cache[:120], 'order_created': False,
+              'payment_created': False}, sort_keys=True))
+          if status not in (200, 404):
+              raise RuntimeError('UNEXPECTED_PURCHASES_PUBLIC_STATUS')
+          PY
+      - name: Delete runner-only SSH material
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          if [ -d "$d" ]; then
+            rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"
+            rmdir "$d"
+          fi
