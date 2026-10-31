@@ -861,6 +861,34 @@ jobs:
           print("CLOUDLINUX_SELECTOR_RESULT="+
                 ("success" if str(parsed.get("result","")).lower()=="success" else "not_success"))
           print("CLOUDLINUX_SELECTOR_RESPONSE_KEYS="+",".join(sorted(parsed.keys())))
+          print("CLOUDLINUX_SELECTOR_ENABLED="+str(parsed.get("selector_enabled","unknown")).lower())
+          print("CLOUDLINUX_PASSENGER_ACTIVE="+str(parsed.get("passenger_active","unknown")).lower())
+          versions=parsed.get("available_versions",{})
+          print("CLOUDLINUX_PY310_AVAILABLE="+str(
+              "3.10" in versions if isinstance(versions,(dict,list)) else False).lower())
+          # End-user view for the exact domain; do not print application secrets.
+          domain_report=None
+          try:
+              check=subprocess.run([str(selector),"get","--json","--interpreter","python",
+                  "--domain","zomorodmelal.ir"],capture_output=True,text=True,timeout=25,check=False)
+              domain_report=json.loads(check.stdout)
+          except (OSError,ValueError,subprocess.TimeoutExpired):
+              pass
+          if isinstance(domain_report,dict):
+              print("CLOUDLINUX_DOMAIN_QUERY_RESULT="+str(domain_report.get("result","unknown")))
+              print("CLOUDLINUX_DOMAIN_QUERY_KEYS="+",".join(sorted(domain_report.keys())))
+              apps=domain_report.get("applications",domain_report.get("data",{}))
+              if isinstance(apps,dict):apps=apps.get("applications",[])
+              if isinstance(apps,list):
+                  print("CLOUDLINUX_DOMAIN_APP_COUNT="+str(len(apps)))
+                  for app in apps[:20]:
+                      if not isinstance(app,dict):continue
+                      uri=str(app.get("app_uri") or app.get("app-uri") or "")
+                      print("CLOUDLINUX_DOMAIN_APP_FIELDS="+",".join(sorted(app.keys())))
+                      print("CLOUDLINUX_DOMAIN_APP_ROOT_URI="+str(uri.strip("/")=="").lower())
+                      print("CLOUDLINUX_DOMAIN_APP_OFFICE_URI="+str(
+                          uri.strip("/") in ("company/office","business/office")).lower())
+          else:print("CLOUDLINUX_DOMAIN_QUERY_RESULT=unavailable")
           data=parsed.get("data",{})
           if isinstance(data,dict):
               print("CLOUDLINUX_SELECTOR_DATA_KEYS="+",".join(sorted(data.keys())))
