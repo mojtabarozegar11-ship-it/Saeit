@@ -52,8 +52,8 @@ class ProvenanceTests(unittest.TestCase):
         self.assertFalse(r["ast_equivalent"])
 
     def test_callable_delta_reports_only_bounded_names_and_states(self):
-        approved = b'def invoice():\\n    return "approved-secret"\\nclass Handler: pass\\n'
-        current = b'def invoice():\\n    return "current-secret"\\ndef settle(): return 1\\n'
+        approved = b'def invoice():\n    return "approved-secret"\nclass Handler: pass\n'
+        current = b'def invoice():\n    return "current-secret"\ndef settle(): return 1\n'
         delta = callable_delta(approved, current)
         self.assertEqual(
             {(row["name"], row["state"]) for row in delta},
