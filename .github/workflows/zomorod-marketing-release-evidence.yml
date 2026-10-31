@@ -637,6 +637,19 @@ jobs:
                   "print('PASSENGER_EXEC_REST_FRAMEWORK_PRESENT='+str(importlib.util.find_spec('rest_framework') is not None).lower())"
               )
               try:
+                  # Negative control: a real Python -c invocation MUST exit with 37.
+                  # This detects executables/wrappers that silently ignore Python flags.
+                  control=subprocess.run([str(interpreter),"-B","-c","import sys;sys.exit(37)"],
+                                         capture_output=True,text=True,timeout=10,check=False)
+                  valid_cli=(control.returncode==37)
+                  print("PASSENGER_EXEC_PYTHON_CLI_CONTROL="+("passed" if valid_cli else "failed"))
+                  if valid_cli:
+                      otpcheck=subprocess.run([str(interpreter),"-B","-c",
+                          "import importlib.util,sys;sys.exit(0 if importlib.util.find_spec('django_otp') else 44)"],
+                          capture_output=True,text=True,timeout=10,check=False)
+                      otp_state=("installed" if otpcheck.returncode==0 else
+                                 "missing" if otpcheck.returncode==44 else "unverified")
+                      print("PASSENGER_EXEC_OTP_MODULE="+otp_state)
                   result=subprocess.run([str(interpreter),"-B","-c",probe],capture_output=True,text=True,timeout=10,check=False)
                   print('PASSENGER_EXEC_PROBE_STDOUT_BYTES='+str(len(result.stdout.encode('utf8'))))
                   print('PASSENGER_EXEC_PROBE_STDERR_BYTES='+str(len(result.stderr.encode('utf8'))))
@@ -644,11 +657,13 @@ jobs:
                   lines=result.stdout.splitlines()
                   required=("PASSENGER_EXEC_PYTHON_MINOR=","PASSENGER_EXEC_DJANGO_PRESENT=",
                             "PASSENGER_EXEC_DJANGO_OTP_PRESENT=","PASSENGER_EXEC_REST_FRAMEWORK_PRESENT=")
-                  if result.returncode==0 and len(lines)==len(required) and all(
+                  if valid_cli and result.returncode==0 and len(lines)==len(required) and all(
                       line.startswith(prefix) for line,prefix in zip(lines,required)
                   ):
                       for line in lines:print(line)
                       print("PASSENGER_EXEC_IMPORT_PROBE=passed")
+                  elif not valid_cli:
+                      print("PASSENGER_EXEC_IMPORT_PROBE=python_cli_unverified")
                   elif result.returncode==0 and not lines:
                       print("PASSENGER_EXEC_IMPORT_PROBE=empty_output_not_verified")
                   else:print("PASSENGER_EXEC_IMPORT_PROBE=failed")
