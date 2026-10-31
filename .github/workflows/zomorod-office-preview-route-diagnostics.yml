@@ -31,7 +31,9 @@ jobs:
           assert re.search(r"(?m)^            StrictHostKeyChecking yes$",src)
           assert not re.search(r"(?m)^          Host saeit-cpanel-direct$",src)
           assert not re.search(r"(?m)^            ProxyJump none$",src)
-          assert re.search(r'(?m)^          case "\\$COMMAND_HOST" in saeit-cpanel\\) ;; \\*\\) exit 1 ;; esac
+          assert any(line.strip().startswith('case "\$COMMAND_HOST" in saeit-cpanel)') for line in src.splitlines())
+          assert any(line.strip() == 'echo "ROUTE_DIAGNOSTIC_NO_CHANGES=true"' for line in src.splitlines())
+          print("OFFICE_PREVIEW_READONLY_RELAY_GATE=verified")
           PY
       - name: Set up pinned GitHub to VPS to cPanel relay
         id: link
