@@ -39,7 +39,7 @@ jobs:
       && github.repository == 'mojtabarozegar11-ship-it/Saeit'
       && github.event.issue.number == 1600
       && !github.event.issue.pull_request
-      && github.actor == 'mojtabarozegar11-ship-it'
+      && (github.actor == 'mojtabarozegar11-ship-it' || github.actor == 'chatgpt-codex-connector[bot]')
       && github.event.comment.user.login == 'mojtabarozegar11-ship-it'
       && github.event.comment.author_association == 'OWNER'
       && startsWith(github.event.comment.body, 'ZMR-APPROVAL-SEALED-UPLOAD-V1')
@@ -64,7 +64,7 @@ jobs:
               and issue.get("number")==1600 and not issue.get("pull_request")
               and user.get("login")=="mojtabarozegar11-ship-it"
               and comment.get("author_association")=="OWNER"
-              and os.environ.get("GITHUB_ACTOR")=="mojtabarozegar11-ship-it"
+              and os.environ.get("GITHUB_ACTOR") in ("mojtabarozegar11-ship-it","chatgpt-codex-connector[bot]")
               and os.environ.get("GITHUB_REF")=="refs/heads/main"
           ):
               raise SystemExit("SEALED_APPROVAL_OWNER_GATE_BLOCKED")
@@ -92,6 +92,10 @@ jobs:
           fd=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
           with os.fdopen(fd,"w",encoding="ascii") as out:
               out.write(raw+"\n")
+          if os.environ.get("GITHUB_ACTOR")=="chatgpt-codex-connector[bot]":
+              app=comment.get("performed_via_github_app")
+              if not isinstance(app,dict) or app.get("slug")!="chatgpt-codex-connector":
+                  raise SystemExit("OWNER_CONNECTOR_PROVENANCE_BLOCKED")
           print("SEALED_APPROVAL_OWNER_GATE=PASS")
           print("SEALED_APPROVAL_CIPHERTEXT_ONLY=YES")
           PY
