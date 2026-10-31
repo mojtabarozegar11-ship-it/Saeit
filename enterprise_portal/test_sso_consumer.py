@@ -10,6 +10,7 @@ from pathlib import Path
 import secrets
 import tempfile
 import time
+from urllib.parse import urlencode
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import TestCase, override_settings
@@ -68,7 +69,7 @@ class OfficeSsoConsumerTests(TestCase):
         )
 
     def post(self, ticket, *, secure=True, origin=ORIGIN):
-        return self.client.post(URL, {"ticket": ticket}, secure=secure, HTTP_ORIGIN=origin)
+        return self.client.post(URL, urlencode({"ticket": ticket}), content_type="application/x-www-form-urlencoded", secure=secure, HTTP_ORIGIN=origin)
 
     def test_one_use_ticket_starts_unverified_short_session_only(self):
         ticket = signed_ticket()
