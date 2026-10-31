@@ -28,9 +28,18 @@ jobs:
           grep -Fq 'from django.views.generic import RedirectView' config/urls.py
           grep -Fq 'path("company/office/", RedirectView.as_view(url="/business/", permanent=False), name="company_office_fallback")' config/urls.py
           echo "OFFICE_LOGIN_ROUTE_SOURCE=verified"
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path(".github/workflows/zomorod-office-root-fallback-release-20261031.yml").read_text(encoding="utf-8")
+          body = source.partition("\n  release:\n")[2]
+          if not body or "\n    if: ${{ false }}\n" not in body:
+              raise SystemExit("OFFICE_RELEASE_DEFAULT_DENY_GUARD_MISSING")
+          print("OFFICE_RELEASE_DEFAULT_DENY=PASS_RELEASE_BLOCKED")
+          PY
   release:
     needs: validate
-    if: github.event_name == 'push' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    # No live writes until independent source/DB/restore/rollback authorization.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
