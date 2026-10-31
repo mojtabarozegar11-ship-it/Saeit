@@ -5,6 +5,14 @@
 set -euo pipefail
 umask 077
 
+# F-01 owner's exclusive one-product order (2026-10-31) supersedes this
+# historical installer. It runs a 25-item intake and additional unscoped
+# packagers/builders; it cannot prove global singleton or receiver handoff.
+# Do not re-enable by setting an environment variable or rerunning Actions.
+# A separately audited one-product installer must replace this legacy path.
+echo 'F01_LEGACY_MULTIPRODUCT_INSTALL_DISABLED_UNTIL_GLOBAL_SINGLETON_PROVEN' >&2
+exit 3
+
 repo="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
 base="$HOME/factory-runtime"
 ops="$base/operations"
