@@ -126,22 +126,37 @@ class GuardedReleaseMfaReadinessTests(unittest.TestCase):
 class GuardedReleaseDependencyPreflightTests(unittest.TestCase):
     """No real interpreter or live files are touched by these mocks."""
 
-    def test_missing_cpanel_python_fails_closed(self):
+    def test_missing_passenger_config_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
-            with patch.object(release, "HOME", Path(directory)):
-                with self.assertRaisesRegex(RuntimeError, "PASSENGER_PYTHON_MISSING"):
+            with patch.object(release, "APP", Path(directory)):
+                with self.assertRaisesRegex(RuntimeError, "PASSENGER_PYTHON_UNATTESTED"):
                     release.production_python()
 
-    def test_preferred_python_is_selected_without_mutating_venv(self):
+    def test_uses_explicit_passenger_python_not_guessed_venv(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for version in ("3.10", "3.11"):
-                candidate = root / "virtualenv" / "Saeit" / version / "bin" / "python"
-                candidate.parent.mkdir(parents=True)
-                candidate.write_bytes(b"fixture")
-            with patch.object(release, "HOME", root):
+            configured = root / "virtualenv/Saeit/bin/python"
+            configured.parent.mkdir(parents=True)
+            configured.write_bytes(b"fixture")
+            configured.chmod(0o755)
+            (root / ".htaccess").write_text(
+                '# app config\nPassengerPython "' + str(configured) + '"\n',
+                encoding="utf-8",
+            )
+            with patch.object(release, "APP", root):
                 selected = release.production_python()
-            self.assertEqual(selected, root / "virtualenv/Saeit/3.10/bin/python")
+            self.assertEqual(selected, configured)
+
+    def test_duplicate_passenger_interpreters_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".htaccess").write_text(
+                "PassengerPython /opt/python3\nPassengerPython /opt/python4\n",
+                encoding="utf-8",
+            )
+            with patch.object(release, "APP", root):
+                with self.assertRaisesRegex(RuntimeError, "PASSENGER_PYTHON_UNATTESTED"):
+                    release.production_python()
 
     def test_preflight_uses_isolated_python_and_pinned_otp(self):
         with tempfile.TemporaryDirectory() as directory:
