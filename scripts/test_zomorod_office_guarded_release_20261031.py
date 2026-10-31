@@ -123,5 +123,56 @@ class GuardedReleaseMfaReadinessTests(unittest.TestCase):
             release.require_mfa_provisioned(self.db)
 
 
+class GuardedReleaseDependencyPreflightTests(unittest.TestCase):
+    """No real interpreter or live files are touched by these mocks."""
+
+    def test_missing_cpanel_python_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(release, "HOME", Path(directory)):
+                with self.assertRaisesRegex(RuntimeError, "PASSENGER_PYTHON_MISSING"):
+                    release.production_python()
+
+    def test_preferred_python_is_selected_without_mutating_venv(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for version in ("3.10", "3.11"):
+                candidate = root / "virtualenv" / "Saeit" / version / "bin" / "python"
+                candidate.parent.mkdir(parents=True)
+                candidate.write_bytes(b"fixture")
+            with patch.object(release, "HOME", root):
+                selected = release.production_python()
+            self.assertEqual(selected, root / "virtualenv/Saeit/3.10/bin/python")
+
+    def test_preflight_uses_isolated_python_and_pinned_otp(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            interpreter = root / "bin/python"
+            with patch.object(release, "APP", root), patch.object(
+                release.subprocess, "run", return_value=release.subprocess.CompletedProcess([], 0)
+            ) as runner:
+                release.require_production_dependencies(interpreter)
+            args, kwargs = runner.call_args
+            self.assertEqual(args[0][:4], [str(interpreter), "-I", "-B", "-c"])
+            self.assertIn("django_otp", args[0][4])
+            self.assertIn("1.7.5", args[0][4])
+            self.assertEqual(kwargs["cwd"], root)
+            self.assertEqual(kwargs["capture_output"], True)
+            self.assertEqual(kwargs["check"], False)
+
+    def test_preflight_rejects_missing_or_mismatched_otp(self):
+        with patch.object(
+            release.subprocess, "run", return_value=release.subprocess.CompletedProcess([], 1)
+        ):
+            with self.assertRaisesRegex(RuntimeError, "PRODUCTION_DEPENDENCY_PREFLIGHT_FAILED"):
+                release.require_production_dependencies(Path("/nonexistent/virtualenv/bin/python"))
+
+    def test_preflight_timeout_fails_closed(self):
+        with patch.object(
+            release.subprocess, "run", side_effect=release.subprocess.TimeoutExpired("python", 25)
+        ):
+            with self.assertRaisesRegex(RuntimeError, "PRODUCTION_DEPENDENCY_PREFLIGHT_FAILED"):
+                release.require_production_dependencies(Path("/nonexistent/virtualenv/bin/python"))
+
+
 if __name__ == "__main__":
     unittest.main()
