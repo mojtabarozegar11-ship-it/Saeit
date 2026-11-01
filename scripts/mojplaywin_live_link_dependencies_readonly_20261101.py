@@ -211,7 +211,22 @@ def bounded_asset_tree_metadata(directory, *, max_entries=150_000):
                     elif original.suffix.casefold() not in (
                             web | media | {".json", ".xml", ".txt", ".md", ".csv",
                                            ".webmanifest", ".wasm"}):
-                        shapes["compressed_base_disallowed_extension_shape"] += 1
+                        # Only a closed category leaves cPanel. An unfamiliar
+                        # extension never becomes an automatic backup allowlist.
+                        base_suffix = original.suffix.casefold()
+                        if (original.name.casefold() in secret_names or
+                                base_suffix in sensitive):
+                            shapes["compressed_sensitive_base_shape"] += 1
+                        elif base_suffix in (".zip", ".tar", ".7z"):
+                            shapes["compressed_archive_base_shape"] += 1
+                        elif base_suffix in source:
+                            shapes["compressed_source_base_shape"] += 1
+                        elif base_suffix in (".bin", ".dat", ".data", ".pack", ".bundle"):
+                            shapes["compressed_binary_data_base_shape"] += 1
+                        elif not base_suffix:
+                            shapes["compressed_no_extension_base_shape"] += 1
+                        else:
+                            shapes["compressed_other_unapproved_base_shape"] += 1
                     elif original.stat().st_uid != os.geteuid():
                         shapes["compressed_base_other_owner_shape"] += 1
                     else:
