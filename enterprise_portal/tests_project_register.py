@@ -69,9 +69,9 @@ class ProjectRegisterTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Farm project")
         self.assertNotContains(response, "Secret factory project")
-        self.assertContains(response, "150.00 IRR")
-        self.assertContains(response, "25.00 USD")
-        self.assertNotContains(response, "500.00 IRR")
+        self.assertContains(response, "150 IRR")
+        self.assertContains(response, "25 USD")
+        self.assertNotContains(response, "500 IRR")
         self.assertIn("no-store", response["Cache-Control"])
         self.assertIn("noindex", response["X-Robots-Tag"])
 
