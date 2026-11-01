@@ -456,6 +456,82 @@ jobs:
               exit 1
           fi
           printf '%s\n' "$db_evidence" | grep -E '^(PASSENGER_DB_PROBE_[A-Z_]+|PASSENGER_APP_DB_ATTESTED|PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED)='
+      - name: Inspect configured Passenger interpreter inode and app workers without executing its CLI
+        if: ${{ always() && steps.link.outcome == 'success' }}
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          structure="$(timeout 75s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          import os
+          import shlex
+          from pathlib import Path
+
+          app = Path("/home/zomorod2/Saeit")
+          config = Path("/home/zomorod2/public_html/.htaccess")
+          if not app.is_dir() or app.is_symlink() or not config.is_file() or config.is_symlink():
+              raise SystemExit("CPANEL_PYTHON_PROBE_CONFIG_UNAVAILABLE")
+          values = {"passengerpython": [], "passengerapproot": []}
+          for raw in config.read_text(encoding="utf-8").splitlines():
+              line = raw.strip()
+              if not line or line.startswith("#"):
+                  continue
+              key = line.split(None, 1)[0].lower()
+              if key not in values:
+                  continue
+              fields = shlex.split(line, comments=True)
+              if len(fields) != 2:
+                  raise SystemExit("CPANEL_PYTHON_PROBE_DIRECTIVE_INVALID")
+              values[key].append(fields[1])
+          if len(values["passengerpython"]) != 1 or values["passengerapproot"] != [str(app)]:
+              raise SystemExit("CPANEL_PYTHON_PROBE_CONFIG_UNATTESTED")
+          interpreter = Path(values["passengerpython"][0])
+          if not interpreter.is_absolute() or not interpreter.is_file():
+              raise SystemExit("CPANEL_PYTHON_PROBE_NOT_REGULAR_FILE")
+          target = interpreter.resolve(strict=True)
+          target_stat = target.stat()
+          venv_config = interpreter.parent.parent / "pyvenv.cfg"
+          print("CPANEL_PYTHON_CONFIG_RESOLVED=true")
+          print("CPANEL_PYTHON_IS_SYMLINK=" + str(interpreter.is_symlink()).lower())
+          print("CPANEL_PYTHON_EXECUTABLE=" + str(os.access(interpreter, os.X_OK)).lower())
+          print("CPANEL_PYTHON_VENV_CONFIG_PRESENT=" + str(venv_config.is_file()).lower())
+          app_resolved = app.resolve()
+          cwd_workers = 0
+          exe_matches = 0
+          for process in Path("/proc").iterdir():
+              if not process.name.isdigit():
+                  continue
+              try:
+                  if process.stat().st_uid != os.getuid():
+                      continue
+                  if Path(os.readlink(process / "cwd")).resolve() != app_resolved:
+                      continue
+                  cwd_workers += 1
+                  exe_stat = (process / "exe").stat()
+                  if (exe_stat.st_dev, exe_stat.st_ino) == (target_stat.st_dev, target_stat.st_ino):
+                      exe_matches += 1
+              except (OSError, PermissionError):
+                  continue
+          print("CPANEL_PYTHON_APP_CWD_WORKERS=" + str(cwd_workers))
+          print("CPANEL_PYTHON_EXE_INODE_MATCHES=" + str(exe_matches))
+          print("CPANEL_PYTHON_STRUCTURE_COMPLETE=true")
+          PY
+          REMOTE
+          )"
+          # The relay may disconnect with status zero. Check proof on the
+          # GitHub runner, independently of remote exit status.
+          if ! grep -Fqx 'CPANEL_PYTHON_STRUCTURE_COMPLETE=true' <<< "$structure"; then
+              echo "CPANEL_PYTHON_STRUCTURE_EVIDENCE_INCOMPLETE=true"
+              exit 1
+          fi
+          printf '%s\n' "$structure" | grep -E '^CPANEL_PYTHON_[A-Z_]+=[a-z0-9]+$'
+
       - name: Classify PHP ledger versus Django root DB without writes or row access
         shell: bash
         env:
