@@ -1,0 +1,269 @@
+name: Bootstrap private office stage env and cold-start WSGI only
+on:
+  pull_request:
+    types: [opened]
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-office-stage-wsgi-coldstart-20261101.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-private-office-stage-wsgi-coldstart
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.event.action == 'opened' && github.head_ref == 'ops/zomorod-office-stage-wsgi-coldstart-20261101' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify immutable PR head checkout
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          echo "IMMUTABLE_HEAD_CHECKOUT=verified"
+      - name: Set up pinned GitHub to VPS to cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-office-ro"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-company-office/office.sqlite3' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-company-office/office.sqlite3' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Install exact private env into hidden stage and validate WSGI with rollback on failure
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-office-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 130s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          export PYTHONNOUSERSITE=1
+          test "$(id -un)" = "zomorod2"
+          /home/zomorod2/virtualenv/Saeit/3.10/bin/python -B - <<'PY'
+          import hashlib,os,pathlib,stat,sys
+          root=pathlib.Path("/home/zomorod2")
+          private=root/".private"
+          stage=private/"zomorod-messaging-release-stages/d7342c0fef977aa67b570bebf86b297c93220f23/code"
+          secret=private/"zomorod-company-office/office.env"
+          dbfile=private/"zomorod-company-office/office.sqlite3"
+          target=stage/".env"
+          assert private.is_dir() and not private.is_symlink()
+          assert stat.S_IMODE(private.stat().st_mode)&0o077==0
+          assert stage.is_dir() and not stage.is_symlink()
+          assert not os.path.lexists(target)
+          assert (stage/"office_passenger_wsgi.py").is_file()
+          assert (stage/"office_runtime/passenger_wsgi.py").is_file()
+          assert (stage/".stage-deps").is_dir()
+          for path in (secret,dbfile):
+              assert path.is_file() and not path.is_symlink()
+              assert stat.S_IMODE(path.stat().st_mode)==0o600
+              assert path.stat().st_uid==os.geteuid()
+          assert secret.stat().st_size<100_000
+          raw=secret.read_bytes()
+          parsed={}
+          permitted={"SECRET_KEY","DATABASE_URL","COMPANY_MESSAGING_SEND_ENABLED","COMPANY_MARKETING_PUBLISH_ENABLED","ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED"}
+          for line in raw.decode("utf-8").splitlines():
+              if not line.strip(): continue
+              key,sep,value=line.partition("=")
+              assert sep and key in permitted and key not in parsed and value
+              parsed[key]=value
+          assert set(("SECRET_KEY","DATABASE_URL"))<=set(parsed)
+          assert parsed["DATABASE_URL"]=="sqlite:////home/zomorod2/.private/zomorod-company-office/office.sqlite3"
+          assert parsed["SECRET_KEY"]!="change-me" and len(parsed["SECRET_KEY"])>=32
+          for key in permitted-{"SECRET_KEY","DATABASE_URL"}:
+              if key in parsed: assert parsed[key].lower() in ("false","0","no","off")
+          before=dbfile.stat()
+          before_hash=hashlib.sha256(dbfile.read_bytes()).digest()
+          source_digest=hashlib.sha256(raw).digest()
+          created=False
+          verified=False
+          os.umask(0o077)
+          try:
+              flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,"O_NOFOLLOW",0)
+              fd=os.open(target,flags,0o600)
+              created=True
+              try:
+                  with os.fdopen(fd,"wb") as f:
+                      f.write(raw)
+                      f.flush()
+                      os.fsync(f.fileno())
+              except BaseException:
+                  try: os.close(fd)
+                  except OSError: pass
+                  raise
+              assert not target.is_symlink() and stat.S_IMODE(target.stat().st_mode)==0o600
+              assert hashlib.sha256(target.read_bytes()).digest()==source_digest
+              for key in permitted: os.environ.pop(key,None)
+              os.environ["DJANGO_SETTINGS_MODULE"]="office_runtime.settings"
+              os.environ["DEBUG"]="False"
+              os.environ["ALLOWED_HOSTS"]="localhost,127.0.0.1"
+              os.environ["SECURE_SSL_REDIRECT"]="False"
+              sys.path[:0]=[str(stage/".stage-deps"),str(stage)]
+              os.chdir(stage)
+              import office_passenger_wsgi
+              app=office_passenger_wsgi.application
+              from django.conf import settings
+              assert settings.ROOT_URLCONF=="office_runtime.urls"
+              assert settings.FORCE_SCRIPT_NAME=="/company/office"
+              assert pathlib.Path(settings.DATABASES["default"]["NAME"]).resolve()==dbfile.resolve()
+              assert settings.COMPANY_OFFICE_REQUIRE_MFA is True
+              assert settings.SESSION_COOKIE_SECURE and settings.CSRF_COOKIE_SECURE
+              assert not settings.DEBUG and settings.SECRET_KEY==parsed["SECRET_KEY"]
+              assert not settings.COMPANY_MESSAGING_SEND_ENABLED
+              assert not settings.COMPANY_MARKETING_PUBLISH_ENABLED
+              from wsgiref.util import setup_testing_defaults
+              e={}
+              setup_testing_defaults(e)
+              e.update({"REQUEST_METHOD":"GET","SCRIPT_NAME":"/company/office","PATH_INFO":"/secure-login/","HTTP_HOST":"localhost","SERVER_NAME":"localhost","SERVER_PORT":"443","wsgi.url_scheme":"https","HTTP_X_FORWARDED_PROTO":"https"})
+              result=[]
+              def capture(status,headers,exc_info=None):
+                  result.append(status)
+              response=app(e,capture)
+              try:
+                  _=b"".join(response)
+              finally:
+                  if hasattr(response,"close"): response.close()
+              assert result and result[0].startswith("200 "),result
+              after=dbfile.stat()
+              assert (before.st_size,before.st_mtime_ns)==(after.st_size,after.st_mtime_ns)
+              assert hashlib.sha256(dbfile.read_bytes()).digest()==before_hash
+              verified=True
+              print("PRIVATE_STAGE_ENV_INSTALLED=0600")
+              print("PASSENGER_STARTUP_WSGI_COLD_START=passed")
+              print("COLD_START_EFFECTIVE_DB_BINDING=verified_in_stage_only")
+              print("COLD_START_TLS_LOGIN_RESPONSE=200")
+              print("COLD_START_MFA_AND_OUTBOUND=fail_closed")
+              print("PRIVATE_DB_BYTES_AND_MTIME_UNCHANGED=true")
+              print("LIVE_ROUTING_CHANGED=false")
+              print("LIVE_PASSENGER_EFFECTIVE_DB_STILL=not_attested")
+              print("PRODUCTION_DEPLOY_ALLOWED=no")
+          finally:
+              if created and not verified:
+                  target.unlink(missing_ok=True)
+                  print("FAILED_STAGE_ENV_ROLLBACK=completed")
+          PY
+          REMOTE
+      - name: Remove runner relay credentials
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/zm-office-ro"
