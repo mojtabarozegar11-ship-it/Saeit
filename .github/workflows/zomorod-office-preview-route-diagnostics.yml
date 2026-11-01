@@ -407,22 +407,125 @@ jobs:
           print("HOST_SELECTOR_AND_BACKUP_AUDIT=read_only")
           PY
           REMOTE
-      - name: Check external routing status without touching server
+      - name: Classify root Passenger ownership and rewrite routing read-only
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          test "$COMMAND_HOST" = saeit-cpanel
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          timeout 100s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path("/home/zomorod2/public_html/.htaccess")
+          assert root.is_file() and not root.is_symlink()
+          values=[x.strip() for x in root.read_text(errors="replace").splitlines()
+                  if x.strip() and not x.lstrip().startswith("#")]
+          directives={}
+          for line in values:
+              pieces=line.split(None,1)
+              if len(pieces)==2:
+                  directives.setdefault(pieces[0].lower(),[]).append(pieces[1].strip().strip('"'))
+          uris={"office":"office-preflight-9ab790b15a42/secure-login/",
+                "existing":"company/office/messages/",
+                "health":"api/health/",
+                "missing":"missing-route-canary-11a0c83f/"}
+          base=directives.get("passengerbaseuri",[])
+          print("TRACE_ROOT_PASSENGER_BASE_URI_IS_SLASH="+str(len(base)==1 and base[0]=="/").lower())
+          app=directives.get("passengerapproot",[])
+          print("TRACE_ROOT_HAS_PASSENGER_APP="+str(bool(app)).lower())
+          print("TRACE_ROOT_PASSENGER_APP_IS_SAEIT="+str(len(app)==1 and app[0].rstrip("/").endswith("/Saeit")).lower())
+          rules=directives.get("rewriterule",[])
+          print("TRACE_ROOT_REWRITE_RULE_COUNT="+str(len(rules)))
+          for i,rule in enumerate(rules):
+              parts=rule.split()
+              if len(parts)<2:
+                  print("TRACE_REWRITE_"+str(i)+"_CLASS=unparseable")
+                  continue
+              pattern,target=parts[0],parts[1]
+              try:
+                  flags=re.I if any("NC" in item.upper().split(",") for item in parts[2:]) else 0
+                  compiled=re.compile(pattern,flags)
+                  matches={k:compiled.match(path) is not None for k,path in uris.items()}
+              except re.error:
+                  matches={k:False for k in uris}
+              if target=="-": group="passthrough"
+              elif target.startswith(("http://","https://")): group="external_redirect"
+              elif target.endswith(".php"): group="php"
+              elif target.endswith(".py"): group="python"
+              elif target.startswith("/"): group="absolute_path"
+              else: group="relative_path"
+              for key,value in matches.items():
+                  print("TRACE_REWRITE_"+str(i)+"_MATCH_"+key.upper()+"="+str(value).lower())
+              print("TRACE_REWRITE_"+str(i)+"_DESTINATION_CLASS="+group)
+          print("TRACE_ROOT_HTACCESS_READONLY=true")
+          PY
+          REMOTE
+      - name: Fingerprint external 404 response classes without printing page content
         shell: bash
         run: |
           set -euo pipefail
-          for url in \
-            "https://zomorodmelal.ir/api/health/" \
-            "https://zomorodmelal.ir/company/office-preflight-2a8a0f4b9e17/" \
-            "https://zomorodmelal.ir/company/office-preflight-2a8a0f4b9e17/secure-login/"; do
-            code="$(curl --silent --show-error --location --max-time 25 --output /dev/null --write-out '%{http_code}' "$url" || true)"
-            case "$url" in
-              */api/health/) echo "PUBLIC_HEALTH_STATUS=$code" ;;
-              */secure-login/) echo "PREVIEW_LOGIN_STATUS=$code" ;;
-              *) echo "PREVIEW_ROOT_STATUS=$code" ;;
+          d="$RUNNER_TEMP/zm-route-fingerprint"
+          mkdir -m 700 -p "$d"
+          for key in health office_login office_root missing_canary original_office; do
+            case "$key" in
+              health) url="https://zomorodmelal.ir/api/health/" ;;
+              office_login) url="https://zomorodmelal.ir/office-preflight-9ab790b15a42/secure-login/" ;;
+              office_root) url="https://zomorodmelal.ir/office-preflight-9ab790b15a42/" ;;
+              original_office) url="https://zomorodmelal.ir/company/office/messages/" ;;
+              missing_canary) url="https://zomorodmelal.ir/missing-route-canary-11a0c83f/" ;;
             esac
+            code="$(curl --silent --show-error --max-redirs 0 --max-time 25 --dump-header "$d/$key.headers" --output "$d/$key.body" --write-out '%{http_code}' "$url" || true)"
+            echo "ROUTE_FINGERPRINT_$key"_HTTP="$code"
+            if test -f "$d/$key.body"; then
+              printf 'ROUTE_FINGERPRINT_%s_SHA256=%s\n' "$key" "$(sha256sum "$d/$key.body" | awk '{print $1}')"
+              printf 'ROUTE_FINGERPRINT_%s_BODY_BYTES=%s\n' "$key" "$(wc -c < "$d/$key.body" | tr -d ' ')"
+              if grep -Fq 'ZOMOROD MELAL · PRIVATE ENTERPRISE DESK' "$d/$key.body"; then
+                echo "ROUTE_FINGERPRINT_$key"_PRIVATE_LOGIN=true
+              else
+                echo "ROUTE_FINGERPRINT_$key"_PRIVATE_LOGIN=false
+              fi
+            fi
+            if test -f "$d/$key.headers"; then
+              python3 -B - "$key" "$d/$key.headers" <<'PY'
+          import sys
+          k=sys.argv[1]
+          values={}
+          with open(sys.argv[2],encoding="latin1") as f:
+              for line in f:
+                  if ":" in line:
+                      name,value=line.split(":",1)
+                      if name.lower() in {"server","content-type","x-robots-tag","x-powered-by"}:
+                          values[name.lower()]=value.strip()
+          server=values.get("server","").lower()
+          print("ROUTE_FINGERPRINT_"+k+"_SERVER_CLASS="+
+                ("litespeed" if "litespeed" in server else
+                 "cloudflare" if "cloudflare" in server else
+                 "nginx" if "nginx" in server else
+                 "apache" if "apache" in server else "other_or_hidden"))
+          ctype=values.get("content-type","").lower()
+          print("ROUTE_FINGERPRINT_"+k+"_CONTENT_CLASS="+
+                ("html" if "text/html" in ctype else
+                 "json" if "json" in ctype else "other"))
+          print("ROUTE_FINGERPRINT_"+k+"_X_ROBOTS_NO_INDEX="+str(
+                "noindex" in values.get("x-robots-tag","").lower()).lower())
+          PY
+            fi
           done
-          echo "ROUTE_DIAGNOSTIC_NO_CHANGES=true"
+          if test -f "$d/office_login.body" && test -f "$d/missing_canary.body"; then
+            if cmp -s "$d/office_login.body" "$d/missing_canary.body"; then
+              echo "ROUTE_FINGERPRINT_LOGIN_SAME_AS_MISSING_CANARY=true"
+            else
+              echo "ROUTE_FINGERPRINT_LOGIN_SAME_AS_MISSING_CANARY=false"
+            fi
+          fi
+          rm -rf -- "$d"
+          echo "ROUTE_DIAGNOSTIC_READONLY=true"
       - name: Remove runner transient relay credentials
         if: always()
         shell: bash
