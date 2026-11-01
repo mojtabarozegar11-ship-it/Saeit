@@ -1,0 +1,315 @@
+name: Owner approved PICM isolated runtime and PICM-only backup removal
+on:
+  pull_request:
+    types: [opened]
+    branches: [ops/picm-private-retirement-inventory-20261101]
+    paths:
+      - ".github/workflows/picm-retirement-execute-20261101.yml"
+permissions:
+  contents: read
+concurrency:
+  group: picm-retirement-execute-20261101
+  cancel-in-progress: false
+jobs:
+  inventory:
+    if: github.event.action == 'opened' && github.actor == 'mojtabarozegar11-ship-it' && github.head_ref == 'ops/picm-private-retirement-execute-20261101' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'ops/picm-private-retirement-inventory-20261101'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify immutable PR head checkout
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          echo "IMMUTABLE_HEAD_CHECKOUT=verified"
+      - name: Set up pinned GitHub to VPS to cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging && test -d /home/zomorod2/mojplaywin.com' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging && test -d /home/zomorod2/mojplaywin.com' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Delete only verified isolated PICM VPS engine and worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/picm-retirement-execute"
+          probe64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import os, stat, shutil
+          
+          EXPECTED_HOME = Path("/home/githubops")
+          home = Path.home()
+          if os.geteuid() == 0 or home != EXPECTED_HOME or home.is_symlink() or os.getenv("USER") not in ("githubops", None):
+              raise SystemExit("WRONG_VPS_IDENTITY")
+          if not shutil.rmtree.avoids_symlink_attacks:
+              raise SystemExit("RMTREE_NO_FD_PROTECTION")
+          home_device = home.stat().st_dev
+          markers = (b"comfyui-isolated", b"saeit-picm/worker.py", b"sd-cli", b"sd.cpp/build/bin")
+          active = []
+          for pid in Path("/proc").iterdir():
+              if not pid.name.isdigit():
+                  continue
+              try:
+                  if pid.stat().st_uid != os.geteuid():
+                      continue
+                  cmd = (pid / "cmdline").read_bytes().replace(b"\0", b" ")
+                  if any(marker in cmd for marker in markers):
+                      active.append(pid.name)
+              except (OSError, PermissionError):
+                  continue
+          if active:
+              raise SystemExit("PICM_PROCESS_STILL_ACTIVE_COUNT="+str(len(active)))
+          print("PICM_PROCESS_GATE=PASS", flush=True)
+          
+          def audit(root, max_entries):
+              if root.is_symlink() or not root.is_dir() or root.lstat().st_uid != os.geteuid():
+                  raise SystemExit("UNSAFE_PICM_ROOT")
+              if root.lstat().st_dev != home_device:
+                  raise SystemExit("FOREIGN_MOUNTED_ROOT")
+              stack = [root]
+              seen = 0
+              bytes_total = 0
+              while stack:
+                  cur = stack.pop()
+                  with os.scandir(cur) as entries:
+                      for entry in entries:
+                          seen += 1
+                          if seen > max_entries:
+                              raise SystemExit("PICM_TREE_TOO_LARGE")
+                          s = entry.stat(follow_symlinks=False)
+                          if s.st_uid != os.geteuid() or s.st_dev != home_device:
+                              raise SystemExit("PICM_TREE_SHARED_OR_MOUNTED")
+                          if stat.S_ISDIR(s.st_mode):
+                              stack.append(Path(entry.path))
+                          elif stat.S_ISREG(s.st_mode):
+                              bytes_total += s.st_size
+                          elif not stat.S_ISLNK(s.st_mode):
+                              raise SystemExit("PICM_TREE_SPECIAL_FILE")
+              return seen, bytes_total
+          comfy = home / "comfyui-isolated"
+          worker = home / ".local/share/saeit-picm"
+          if comfy.parent.resolve() != home or worker.parent.resolve() != home / ".local/share":
+              raise SystemExit("PICM_TARGET_MISMATCH")
+          comfy_items, comfy_bytes = audit(comfy, 100000)
+          worker_items, worker_bytes = audit(worker, 1000)
+          if comfy_items < 1000 or comfy_bytes < 500_000_000:
+              raise SystemExit("PICM_ENGINE_FINGERPRINT_CHANGED")
+          if worker_items > 1000:
+              raise SystemExit("PICM_WORKER_CONTENTS_CHANGED")
+          print("PICM_DELETION_TARGETS_AUDITED=2", flush=True)
+          before = shutil.disk_usage(home).free
+          shutil.rmtree(worker)
+          shutil.rmtree(comfy)
+          if worker.exists() or worker.is_symlink() or comfy.exists() or comfy.is_symlink():
+              raise SystemExit("PICM_VPS_REMOVAL_INCOMPLETE")
+          after = shutil.disk_usage(home).free
+          print("PICM_VPS_ENGINE_AND_WORKER_REMOVED=true")
+          print("PICM_VPS_ENGINE_FILE_BYTES_REMOVED="+str(comfy_bytes))
+          print("PICM_VPS_WORKER_FILE_BYTES_REMOVED="+str(worker_bytes))
+          print("VPS_FREE_MIB_BEFORE="+str(before//1048576))
+          print("VPS_FREE_MIB_AFTER="+str(after//1048576))
+          PY
+          )"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 420s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$probe64'"
+      - name: Delete only PICM cPanel private queue and 14 PICM release backups
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/picm-retirement-execute"
+          COMMAND_HOST="${{ steps.link.outputs.command_host }}"
+          probe64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import os, stat, shutil
+          home = Path.home()
+          if os.geteuid() == 0 or home != Path("/home/zomorod2") or home.is_symlink():
+              raise SystemExit("WRONG_CPANEL_IDENTITY")
+          if not shutil.rmtree.avoids_symlink_attacks:
+              raise SystemExit("RMTREE_NO_FD_PROTECTION")
+          dev = home.stat().st_dev
+          queue = home / ".picm-queue"
+          backups = home / ".mojplaywin-backups"
+          if queue.parent != home or queue.is_symlink() or not queue.is_dir() or queue.lstat().st_uid != os.geteuid() or queue.lstat().st_dev != dev:
+              raise SystemExit("UNSAFE_QUEUE_ROOT")
+          if backups.is_symlink() or not backups.is_dir() or backups.lstat().st_uid != os.geteuid() or backups.lstat().st_dev != dev:
+              raise SystemExit("UNSAFE_BACKUP_ROOT")
+          stack = [queue]
+          queue_bytes = 0
+          queue_items = 0
+          while stack:
+              cur = stack.pop()
+              with os.scandir(cur) as entries:
+                  for entry in entries:
+                      queue_items += 1
+                      if queue_items > 10000:
+                          raise SystemExit("QUEUE_GROWTH_GUARD")
+                      st = entry.stat(follow_symlinks=False)
+                      if st.st_uid != os.geteuid() or st.st_dev != dev:
+                          raise SystemExit("QUEUE_SHARED_OR_MOUNTED")
+                      if stat.S_ISDIR(st.st_mode):
+                          stack.append(Path(entry.path))
+                      elif stat.S_ISREG(st.st_mode):
+                          queue_bytes += st.st_size
+                      elif not stat.S_ISLNK(st.st_mode):
+                          raise SystemExit("QUEUE_SPECIAL_FILE")
+          if queue_bytes > 10_000_000:
+              raise SystemExit("QUEUE_CHANGED_SINCE_INVENTORY")
+          all_entries = list(backups.iterdir())
+          if len(all_entries) > 20000:
+              raise SystemExit("BACKUP_ROOT_ENTRY_GUARD")
+          candidates = sorted((p for p in all_entries if p.name.startswith(("picm-", "picm_"))), key=lambda p: p.name)
+          if len(candidates) != 14:
+              raise SystemExit("PICM_BACKUP_COUNT_CHANGED="+str(len(candidates)))
+          total = 0
+          for path in candidates:
+              st = path.lstat()
+              if not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid() or st.st_dev != dev:
+                  raise SystemExit("UNSAFE_PICM_BACKUP_FILE")
+              total += st.st_size
+          if total > 10_000_000:
+              raise SystemExit("PICM_BACKUP_BYTES_CHANGED")
+          print("PICM_CPANEL_DELETION_SCOPE=PRIVATE_QUEUE_AND_14_PICM_PREFIX_FILES", flush=True)
+          shutil.rmtree(queue)
+          for path in candidates:
+              path.unlink()
+          if queue.exists() or queue.is_symlink() or any(p.exists() or p.is_symlink() for p in candidates):
+              raise SystemExit("PICM_CPANEL_REMOVAL_INCOMPLETE")
+          print("PICM_CPANEL_QUEUE_REMOVED=true")
+          print("PICM_CPANEL_PICM_ONLY_RELEASE_BACKUPS_REMOVED="+str(len(candidates)))
+          print("PICM_CPANEL_PICM_ONLY_BACKUP_BYTES_REMOVED="+str(total))
+          print("MOJPLAYWIN_GENERAL_GPG_BACKUPS_UNTOUCHED=true")
+          print("LIVE_SHARED_DJANGO_CODE_UNTOUCHED=true")
+          PY
+          )"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 420s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
+      - name: Confirm deliberate scope boundary
+        shell: bash
+        run: |
+          echo 'LIVE_SHARED_SITE_SOURCE_EDIT=NONE'
+          echo 'GENERAL_SITE_AND_SQL_GPG_BACKUP_DELETION=NONE'
+          echo 'PICM_EXCLUSIVE_RUNTIME_REMOVAL=COMPLETE'
+      - name: Remove temporary SSH identities
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/picm-retirement-execute"
+          test ! -d "$d" || find "$d" -maxdepth 1 -type f -name '*.key' -delete
+          echo 'EPHEMERAL_SSH_KEYS_REMOVED=true'
