@@ -124,6 +124,21 @@ class PHPFinancePrivateViewTests(TestCase):
         self.assertIn("no-store", response["Cache-Control"])
         self.assertNotIn("django_migrations", response.content.decode("utf-8"))
 
+    def test_department_staff_cannot_see_company_wide_ledger(self):
+        from django.contrib.auth.models import Permission
+        staff = get_user_model().objects.create_user(
+            username="department-accountant", password="TestPasswordOnly!123",
+            is_active=True, is_staff=True,
+        )
+        for code in ("view_businessunit", "view_journalentry"):
+            staff.user_permissions.add(Permission.objects.get(
+                content_type__app_label="enterprise_portal", codename=code,
+            ))
+        self.client.force_login(staff)
+        with override_settings(ZM_PHP_LEDGER_READONLY_PATH=""):
+            response = self.client.get(self.url, secure=True)
+        self.assertEqual(response.status_code, 403)
+
     def test_explicit_source_shows_aggregate_without_source_row_details(self):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "management.sqlite3"

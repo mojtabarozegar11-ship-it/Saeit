@@ -192,8 +192,12 @@ def finance(request):
 @office_access
 @require_GET
 def authoritative_finance(request):
-    """Aggregate-only view of the PHP V7 source ledger; no Django finance ORM."""
+    """CEO-only aggregate view until a unit-level access map is independently audited."""
     required_permission(request, "view_journalentry")
+    # PHP V7 has no verified Django business-unit mapping. A model-level view
+    # permission must never reveal every unit's finance to departmental staff.
+    if not request.user.is_superuser:
+        raise PermissionDenied("دفتر مالی اصلی فقط برای مدیرکل مجاز است.")
     try:
         snapshot = read_php_finance_snapshot(settings.ZM_PHP_LEDGER_READONLY_PATH)
     except LedgerUnavailable:
