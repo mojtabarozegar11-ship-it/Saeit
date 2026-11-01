@@ -11,7 +11,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.utils import timezone
 from enterprise_portal.models import (
-    BusinessUnit, InventoryItem, ManagementProject, CompanyAsset,
+    BusinessUnit, InventoryItem, ManagementProject, CompanyAsset, WorkTask,
 )
 
 
@@ -478,6 +478,10 @@ class MasterCommand(Timeline):
         AssistantRun, on_delete=models.PROTECT, null=True, blank=True,
         related_name="master_command",
     )
+    task = models.OneToOneField(
+        WorkTask, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="master_command",
+    )
 
     class Meta:
         ordering = ("-created_at", "-pk")
@@ -490,6 +494,11 @@ class MasterCommand(Timeline):
             raise ValidationError({"instruction": "متن فرمان نمی‌تواند خالی باشد."})
         if (self.status == "draft_ready") != bool(self.report_id):
             raise ValidationError({"status": "وضعیت فرمان و وجود گزارش باید سازگار باشند."})
+        if self.task_id and (
+            self.task.unit_id != self.unit_id or
+            self.task.created_by_id != self.issued_by_id
+        ):
+            raise ValidationError({"task": "مأموریت باید متعلق به همان واحد و صادرکننده فرمان باشد."})
         if self.report_id and (
             self.report.unit_id != self.unit_id or
             self.report.assistant_code != self.assistant_code or
@@ -506,7 +515,8 @@ class MasterCommand(Timeline):
                 self.request_key != before.request_key or
                 self.assistant_code != before.assistant_code or
                 self.instruction != before.instruction or
-                (before.report_id and self.report_id != before.report_id)
+                (before.report_id and self.report_id != before.report_id) or
+                (before.task_id and self.task_id != before.task_id)
             ):
                 raise ValidationError("هویت، متن و نتیجه فرمان ثبت‌شده قابل بازنویسی نیست.")
         self.full_clean()
