@@ -34,6 +34,18 @@
   {% endif %}
 </section>
 <section class="hub-section">
+  <div class="hub-section-title"><h2>چرخه‌های ساعتی دستیارها</h2></div>
+  <p>زمان‌بندی «ساعتی» برای گزارش‌های داخلی قابل انتخاب است؛ فعال‌شدن یک قاعده به‌تنهایی به معنی نصب و اجرای کارگر پس‌زمینه نیست.</p>
+  <div class="hub-links">
+    {% if perms.ecosystem_hub.add_proposedautomation %}
+    <a href="{% url 'admin:ecosystem_hub_proposedautomation_add' %}">ثبت برنامه ساعتی مجاز</a>
+    {% endif %}
+    {% if perms.ecosystem_hub.view_proposedautomation and perms.ecosystem_hub.view_assistantrun %}
+    <a href="{% url 'enterprise_portal:ecosystem_hub:assistant_operations' %}">پایش برنامه‌ها و آخرین گزارش‌ها</a>
+    {% endif %}
+  </div>
+</section>
+<section class="hub-section">
   <div class="hub-section-title"><h2>تاریخچه فرمان‌های واحد</h2></div>
   <div class="table-frame"><table>
     <thead><tr><th>دستور</th><th>دستیار</th><th>صادرکننده</th><th>وضعیت</th><th>ثبت</th><th>خروجی</th></tr></thead>
