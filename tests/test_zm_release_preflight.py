@@ -114,6 +114,50 @@ class ReadOnlySQLitePreflightTests(unittest.TestCase):
         self.assertFalse((self.base / "django.sqlite3-wal").exists())
         self.assertFalse((self.base / "django.sqlite3-shm").exists())
 
+    def test_uncheckpointed_wal_blocks_immutable_stale_schema(self):
+        import sqlite3
+        from scripts.production_db_readonly_preflight import PreflightFailure, inspect_sqlite_file
+        database = self.base / "live.sqlite3"
+        connection = sqlite3.connect(database)
+        try:
+            connection.execute("CREATE TABLE django_migrations (id integer)")
+            connection.execute("CREATE TABLE auth_user (id integer)")
+            connection.commit()
+            self.assertEqual(connection.execute("PRAGMA journal_mode=WAL").fetchone()[0], "wal")
+            connection.execute("INSERT INTO auth_user VALUES (1)")
+            connection.commit()
+            wal = self.base / "live.sqlite3-wal"
+            self.assertTrue(wal.is_file())
+            self.assertGreater(wal.stat().st_size, 0)
+            original = database.read_bytes()
+            with self.assertRaisesRegex(PreflightFailure, "SQLITE_WAL_ACTIVE_OR_UNSAFE"):
+                inspect_sqlite_file(database, self.base)
+            self.assertEqual(database.read_bytes(), original)
+            self.assertGreater(wal.stat().st_size, 0)
+        finally:
+            connection.close()
+
+    def test_wal_symlink_is_rejected_without_following_it(self):
+        import os
+        import sqlite3
+        from scripts.production_db_readonly_preflight import PreflightFailure, inspect_sqlite_file
+        database = self.base / "wal-symlink.sqlite3"
+        with sqlite3.connect(database) as connection:
+            connection.execute("CREATE TABLE django_migrations (id integer)")
+            connection.execute("CREATE TABLE auth_user (id integer)")
+        target = self.base / "unrelated"
+        target.write_bytes(b"private-other-data")
+        wal = self.base / "wal-symlink.sqlite3-wal"
+        try:
+            os.symlink(target, wal)
+        except (OSError, NotImplementedError):
+            self.skipTest("symlink creation unavailable")
+        before = database.read_bytes()
+        with self.assertRaisesRegex(PreflightFailure, "SQLITE_WAL_ACTIVE_OR_UNSAFE"):
+            inspect_sqlite_file(database, self.base)
+        self.assertEqual(database.read_bytes(), before)
+        self.assertEqual(target.read_bytes(), b"private-other-data")
+
     def test_symlink_is_rejected(self):
         import os
         import sqlite3
