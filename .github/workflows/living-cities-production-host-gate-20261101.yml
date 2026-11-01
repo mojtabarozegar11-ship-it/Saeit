@@ -83,6 +83,41 @@ jobs:
           print("VPS_HOME_BACKUP_LOCATION="+str((Path.home()/"backups").is_dir()))
           print("VPS_GATE_READ_ONLY=PASS")
           PY
+      - name: Verify static game routing, Passenger ownership and available private source without reading secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 50s ssh -T -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          import re
+          home=Path("/home/zomorod2")
+          p=home/"public_html/.htaccess"
+          if p.is_file() and not p.is_symlink():
+              rows=p.read_text(errors="replace").splitlines()
+              print("ROOT_HTACCESS_LINES="+str(len(rows)))
+              for name in ("PassengerBaseURI","PassengerAppRoot","PassengerEnabled","RewriteEngine","RewriteRule","RewriteCond","FallbackResource","DirectoryIndex"):
+                  matches=[r.strip() for r in rows if re.match(r"^\s*"+name+r"\s",r,re.I)]
+                  print("ROOT_RULE_"+name.upper()+"_COUNT="+str(len(matches)))
+                  if name in ("PassengerBaseURI","PassengerEnabled","PassengerAppRoot"):
+                      for row in matches:
+                          parts=row.split(None,1)
+                          val=parts[1] if len(parts)>1 else ""
+                          if name=="PassengerAppRoot":val=Path(val).name
+                          print("ROOT_RULE_"+name.upper()+"="+val[:120])
+              print("ROOT_HTACCESS_PRESENT=yes")
+          else:print("ROOT_HTACCESS_PRESENT=no")
+          for path in (home/"public_html/farm-wars/index.html",home/"public_html/games/index.html",home/"public_html/living-cities/play/index.html"):
+              print("STATIC_ROUTE="+str(path.relative_to(home/"public_html"))+" exists="+str(path.is_file()))
+          for base in (home/"Bazei",home/"bazei",home/"Saeit/Bazei",home/"Saeit-staging/Bazei",home/"apps/Bazei"):
+              print("PRIVATE_BAZEI_AT="+str(base.relative_to(home))+" git="+str((base/".git").exists())+" source="+str((base/"apps/living_cities/client.py").is_file()))
+          PY
+          timeout 40s ssh -T -F "$d/config" vps 'python3 -' <<'PY'
+          from pathlib import Path
+          h=Path.home()
+          for p in (h/"Bazei",h/"bazei",h/"factory-runtime/Bazei",h/"projects/Bazei",h/"Saeit"):
+              print("VPS_REPO_PATH="+str(p.relative_to(h))+" git="+str((p/".git").exists())+" source="+str((p/"apps/living_cities/client.py").is_file()))
+          PY
       - name: Remove all temporary SSH materials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
