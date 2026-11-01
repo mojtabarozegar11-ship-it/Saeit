@@ -193,7 +193,7 @@ def bounded_asset_tree_metadata(directory, *, max_entries=150_000):
                     # Presence of an uncompressed sidecar is only a metadata
                     # hint. We never open or decompress either file.
                     original = p.with_suffix("")
-                    if original.is_file() and not original.is_symlink() and original.suffix.casefold() in web:
+                    if not original.is_symlink() and original.is_file() and original.suffix.casefold() in web:
                         shapes["precompressed_web_sidecar_shape"] += 1
                     else:
                         shapes["other_gzip_or_brotli_shape"] += 1
