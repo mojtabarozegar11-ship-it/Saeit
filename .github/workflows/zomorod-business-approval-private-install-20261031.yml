@@ -1,0 +1,232 @@
+name: Zomorod owner-gated private approvals installation
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/zomorod-business-approval-private-install-20261031.yml"
+      - "content/zomorod-business/approvals.php"
+      - "scripts/zomorod_project_approval_snapshot.py"
+      - "tests/test_zomorod_approval_snapshot.py"
+      - "tests/test_zomorod_approval_connector_gates.py"
+  issue_comment:
+    types: [created]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-private-approvals-install-20261031
+  cancel-in-progress: false
+jobs:
+  offline-safety:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate offline source without private data
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/approvals.php
+          python3 -B -m unittest discover -s tests -p test_zomorod_approval_snapshot.py
+          python3 -B -m unittest discover -s tests -p test_zomorod_approval_connector_gates.py
+          echo APPROVAL_INSTALL_OFFLINE_QA=PASS
+  owner-authorized-install:
+    if: >-
+      github.event_name == 'issue_comment'
+      && github.ref == 'refs/heads/main'
+      && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+      && github.event.issue.number == 1600
+      && !github.event.issue.pull_request
+      && (github.actor == 'mojtabarozegar11-ship-it' || github.actor == 'chatgpt-codex-connector[bot]')
+      && github.event.comment.user.login == 'mojtabarozegar11-ship-it'
+      && github.event.comment.author_association == 'OWNER'
+      && github.event.comment.body == 'ZMR-APPROVAL-INSTALL-V1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact owner-only installation command
+        run: |
+          set -euo pipefail
+          python3 - "$GITHUB_EVENT_PATH" <<'PY'
+          import json,os,sys
+          from pathlib import Path
+          event=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          issue=event.get("issue") or {}
+          comment=event.get("comment") or {}
+          user=comment.get("user") or {}
+          if not (
+              event.get("action")=="created"
+              and issue.get("number")==1600
+              and not issue.get("pull_request")
+              and user.get("login")=="mojtabarozegar11-ship-it"
+              and comment.get("author_association")=="OWNER"
+              and comment.get("body")=="ZMR-APPROVAL-INSTALL-V1"
+              and os.environ.get("GITHUB_ACTOR") in ("mojtabarozegar11-ship-it","chatgpt-codex-connector[bot]")
+              and os.environ.get("GITHUB_REF")=="refs/heads/main"
+          ):
+              raise SystemExit("APPROVAL_OWNER_COMMAND_BLOCKED")
+          if os.environ.get("GITHUB_ACTOR")=="chatgpt-codex-connector[bot]":
+              app=comment.get("performed_via_github_app")
+              if not isinstance(app,dict) or app.get("slug")!="chatgpt-codex-connector":
+                  raise SystemExit("OWNER_CONNECTOR_PROVENANCE_BLOCKED")
+          print("APPROVAL_OWNER_COMMAND=verified")
+          PY
+      - name: Preflight, privately install snapshot, and create only a new route
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-business-source-readonly"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo "VPS_HOSTKEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # Resolve cPanel from the already pinned VPS, then compare its ED25519
+          # fingerprint before any connection to the production account.
+          scan="$(timeout 35s ssh -T -F "$d/config" saeit-vps 'timeout 10s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOSTKEY=verified"
+          # Preflight is read-only and exits before any target mutation on mismatch.
+          timeout 105s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          private="$HOME/.private/zomorod-business"
+          incoming="$private/zomorod_projects_import_20261031.csv"
+          live="$private/app.php"
+          database="$private/management.sqlite3"
+          existing="$private/approvals_snapshot.json"
+          route="$HOME/public_html/business/approvals"
+          test -d "$private" && test ! -L "$private"
+          test -d "$HOME/public_html/business" && test ! -L "$HOME/public_html/business"
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - "$private" "$incoming" "$live" "$database" "$existing" "$route" <<'PY'
+          import os,pathlib,re,sqlite3,sys
+          private,incoming,live,database,existing,route=map(pathlib.Path,sys.argv[1:])
+          uid=os.getuid()
+          if private.stat().st_uid!=uid or private.stat().st_mode & 0o077:
+              raise SystemExit("APPROVAL_PRIVATE_DIRECTORY_BLOCKED")
+          if not incoming.is_file() or incoming.is_symlink():
+              raise SystemExit("APPROVAL_OWNER_STAGED_CSV_MISSING")
+          info=incoming.stat()
+          if info.st_uid!=uid or info.st_mode & 0o077 or not 1000<=info.st_size<=2000000:
+              raise SystemExit("APPROVAL_STAGED_CSV_PERMISSIONS_OR_SIZE_BLOCKED")
+          if existing.exists() or existing.is_symlink():
+              raise SystemExit("APPROVAL_SNAPSHOT_EXISTING_BLOCKED")
+          if route.exists() or route.is_symlink():
+              raise SystemExit("APPROVAL_NEW_ROUTE_COLLISION_BLOCKED")
+          if not live.is_file() or live.is_symlink():
+              raise SystemExit("APPROVAL_LIVE_APP_MISSING")
+          source=live.read_text(encoding="utf-8",errors="replace")
+          if not re.search(r"session_name\s*\(\s*['\"]ZM_BUSINESS['\"]",source):
+              raise SystemExit("APPROVAL_LIVE_SESSION_NAME_MISMATCH")
+          if not re.search(r"\$_SESSION\s*\[\s*['\"]uid['\"]\s*\]",source):
+              raise SystemExit("APPROVAL_LIVE_SESSION_UID_MISMATCH")
+          if not database.is_file() or database.is_symlink():
+              raise SystemExit("APPROVAL_PRIVATE_DB_MISSING")
+          conn=sqlite3.connect("file:"+str(database)+"?mode=ro",uri=True,timeout=8)
+          try:
+              conn.execute("PRAGMA query_only=ON")
+              if conn.execute("PRAGMA quick_check(1)").fetchone()[0]!="ok":
+                  raise SystemExit("APPROVAL_PRIVATE_DB_INTEGRITY_BLOCKED")
+              columns={x[1] for x in conn.execute("PRAGMA table_info(users)")}
+              if not {"id","role","active"}.issubset(columns):
+                  raise SystemExit("APPROVAL_LIVE_USERS_SCHEMA_MISMATCH")
+              admins=conn.execute("SELECT COUNT(*) FROM users WHERE active=1 AND role='admin'").fetchone()[0]
+              if admins!=1:
+                  raise SystemExit("APPROVAL_ADMIN_ACCOUNT_AMBIGUOUS")
+          finally:
+              conn.close()
+          print("APPROVAL_PRIVATE_CSV=OWNER_STAGED_AND_PROTECTED")
+          print("APPROVAL_CURRENT_APP=UNCHANGED_COMPATIBLE")
+          print("APPROVAL_NEW_ROUTE=FREE")
+          print("APPROVAL_FINANCIAL_DB=READ_ONLY_PREFLIGHT")
+          PY
+          REMOTE
+          echo APPROVAL_PRIVATE_PREFLIGHT=PASS
+          # Reviewed source is staged in the protected directory; it is never
+          # copied over app.php, index.php or any existing financial code.
+          tool_dir="/home/zomorod2/.private/zomorod-business/.approval-install-20261031"
+          ssh -F "$d/config" saeit-cpanel "test ! -L '$tool_dir' && install -d -m 700 '$tool_dir' && test \"\$(stat -c %a '$tool_dir')\" = 700"
+          scp -F "$d/config" content/zomorod-business/approvals.php scripts/zomorod_project_approval_snapshot.py "saeit-cpanel:$tool_dir/"
+          ssh -F "$d/config" saeit-cpanel "chmod 600 '$tool_dir/approvals.php' '$tool_dir/zomorod_project_approval_snapshot.py' && php -l '$tool_dir/approvals.php' >/dev/null && python3 -B '$tool_dir/zomorod_project_approval_snapshot.py' --help >/dev/null"
+          # Snapshot is new-only and installed atomically before exposing a new
+          # authenticated view path. No CSV contents are logged or committed.
+          timeout 120s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          private="$HOME/.private/zomorod-business"
+          csv="$private/zomorod_projects_import_20261031.csv"
+          snapshot="$private/approvals_snapshot.json"
+          tool="$private/.approval-install-20261031"
+          route="$HOME/public_html/business/approvals"
+          test -s "$csv" && test ! -L "$csv"
+          test ! -e "$snapshot" && test ! -L "$snapshot"
+          test ! -e "$route" && test ! -L "$route"
+          expected_sha="$(sha256sum "$csv" | awk '{print $1}')"
+          test "${#expected_sha}" -eq 64
+          test "$expected_sha" = 40c09b1aff17143cf315884177b61a35c6b1d62aa30a445056cfd8303deb3366
+          test "$(stat -c %s "$csv")" = 52072
+          python3 -B "$tool/zomorod_project_approval_snapshot.py" "$csv" \
+            --expected-sha256 "$expected_sha" \
+            --expected-records 193 \
+            --expected-approved 145 \
+            --expected-rejected 47 \
+            --expected-undetermined 1 \
+            --expected-jobs 1150
+          python3 -B "$tool/zomorod_project_approval_snapshot.py" "$csv" \
+            --install --output "$snapshot" \
+            --expected-sha256 "$expected_sha" \
+            --expected-records 193 \
+            --expected-approved 145 \
+            --expected-rejected 47 \
+            --expected-undetermined 1 \
+            --expected-jobs 1150
+          test -s "$snapshot" && test ! -L "$snapshot"
+          test "$(stat -c %a "$snapshot")" = 600
+          test ! -e "$route" && test ! -L "$route"
+          install -d -m 755 "$route"
+          test ! -e "$route/index.php" && test ! -L "$route/index.php"
+          chmod 644 "$tool/approvals.php"
+          ln "$tool/approvals.php" "$route/index.php"
+          php -l "$route/index.php" >/dev/null
+          echo APPROVAL_SNAPSHOT=PRIVATELY_INSTALLED
+          echo APPROVAL_NEW_ISOLATED_ROUTE=CREATED
+          echo FINANCIAL_SQLITE_MUTATED=no
+          echo LEGACY_ACCOUNTING_APP_REPLACED=no
+          REMOTE
+          echo APPROVAL_OWNER_GATED_INSTALL=COMPLETE

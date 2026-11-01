@@ -1,12 +1,15 @@
-"""Four original English course posters on independent personal website, no paid checkout.
+"""Ten English educational posters, with integrated owner-reference photo scenes.
 
-All artwork is deterministic hand-built SVG. Do not present generated human
-portraits as an actual teacher, use any private owner photos, or claim that
-course enrollment/payment or financial outcomes are already guaranteed.
+The full-scene campaign images are hash-pinned, compressed WebP embedded into
+portable SVG response wrappers. No enrollment or earnings claims are implied.
 """
 from __future__ import annotations
 from html import escape
 import math
+import base64
+import hashlib
+from pathlib import Path
+from .course_image_data import BASE64_POSTERS, SHA256_POSTERS
 
 from django.http import HttpResponse, HttpResponseNotFound
 from django.views.decorators.http import require_GET
@@ -61,9 +64,106 @@ COURSES=(
         "index":"04",
         "alt":"English advanced ChatGPT poster with abstract neural-network illustration in violet.",
     },
+    {
+        "slug":"research-methods",
+        "title":"Scientific Research & Data Analysis",
+        "lines":("DESIGN BETTER RESEARCH","TURN DATA INTO INSIGHT"),
+        "summary":"Research design, data quality, transparent analysis and evidence-based conclusions.",
+        "subtitle":"Methods | Statistics | Evidence",
+        "features":("Build reproducible study plans","Organize and interpret reliable data","Communicate limitations and findings"),
+        "palette":("#0f2431","#276075","#f4c68d","#eaf8fa","#8fe1e1"),
+        "index":"05",
+        "alt":"Research and data analysis course poster with an authentic portrait of Mojtaba Roozegar and analytical graphics.",
+    },
+    {
+        "slug":"feasibility",
+        "title":"Agribusiness Feasibility & Investment",
+        "lines":("ASSESS THE OPPORTUNITY","BEFORE YOU INVEST"),
+        "summary":"A practical framework for agricultural project feasibility, scenarios and investment risk.",
+        "subtitle":"Feasibility | Risk | Cash flow",
+        "features":("Model capital and operating costs","Assess profitability and uncertainty","Build decision-ready feasibility briefs"),
+        "palette":("#18292d","#3d625a","#eed08b","#eef4dc","#8ed8b4"),
+        "index":"06",
+        "alt":"Agribusiness feasibility course poster with an authentic portrait and investment analysis graphics.",
+    },
+    {
+        "slug":"digital-marketing",
+        "title":"Digital Marketing & SEO Strategy",
+        "lines":("REACH THE RIGHT PEOPLE","MEASURE REAL GROWTH"),
+        "summary":"Build discoverable websites, useful content and customer-acquisition strategies.",
+        "subtitle":"SEO | Content | Analytics",
+        "features":("Map audience needs to search intent","Plan ethical digital campaigns","Measure leads and conversions"),
+        "palette":("#10223f","#3458a3","#ffcd82","#f4efff","#a3bbff"),
+        "index":"07",
+        "alt":"Digital marketing and SEO course poster with an authentic portrait and audience network graphics.",
+    },
+    {
+        "slug":"business-finance",
+        "title":"Business Finance & Profit Management",
+        "lines":("KNOW YOUR NUMBERS","PROTECT PROFIT"),
+        "summary":"Read cash flow, cost structures and profitability for sound management decisions.",
+        "subtitle":"Costs | Pricing | Cash flow",
+        "features":("Calculate break-even and margins","Build cash-flow forecasts","Use practical financial dashboards"),
+        "palette":("#251c29","#6b3a62","#f6cd79","#fff0d9","#e9a6d7"),
+        "index":"08",
+        "alt":"Business finance course poster with an authentic portrait and profit dashboard illustration.",
+    },
+    {
+        "slug":"food-quality",
+        "title":"Food Processing & Quality Systems",
+        "lines":("CREATE MORE VALUE","CONTROL EVERY STEP"),
+        "summary":"An introduction to value-added food production, process controls and traceability.",
+        "subtitle":"Processing | Quality | Traceability",
+        "features":("Map production and quality checkpoints","Introduce batch traceability","Evaluate yield and waste reduction"),
+        "palette":("#213224","#496d3c","#f1d08c","#f6f3dc","#b2df9d"),
+        "index":"09",
+        "alt":"Food processing and quality systems course poster with an authentic portrait and process-flow artwork.",
+    },
+    {
+        "slug":"ai-automation",
+        "title":"AI Automation for Enterprise Teams",
+        "lines":("DESIGN SMART WORKFLOWS","KEEP HUMANS IN CONTROL"),
+        "summary":"Apply practical AI assistants and safe workflow automation to everyday operations.",
+        "subtitle":"AI workflows | Controls | Productivity",
+        "features":("Map repeatable business processes","Design guarded AI-assisted tasks","Measure quality and human oversight"),
+        "palette":("#1b193d","#5445a3","#b9ddff","#f2eaff","#98f5e8"),
+        "index":"10",
+        "alt":"Enterprise AI automation course poster with an authentic portrait and connected workflow artwork.",
+    },
 )
 BY_SLUG={c["slug"]:c for c in COURSES}
 ID="mpw-four-course-posters-20261028"
+
+
+OWNER_PORTRAIT=Path("/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17/static/personal_site/official_profile_20261016/portrait.webp")
+OWNER_PORTRAIT_SHA256="482cad022c1739a464d17f0e023c69fcd6971d72bc67881f8ec24218bd2d8e41"
+
+def read_owner_photo():
+    """Use only the owner-selected portrait. A changed/missing asset fails closed."""
+    if OWNER_PORTRAIT.is_symlink() or not OWNER_PORTRAIT.is_file():
+        raise RuntimeError("Approved owner photograph is not installed")
+    blob=OWNER_PORTRAIT.read_bytes()
+    if (not 8000 < len(blob) < 300000 or blob[:4]!=b"RIFF" or
+        blob[8:12]!=b"WEBP" or
+        hashlib.sha256(blob).hexdigest()!=OWNER_PORTRAIT_SHA256):
+        raise RuntimeError("Approved owner portrait checksum or format mismatch")
+    return blob
+
+def portrait_layer(owner_webp):
+    """Portable self-contained poster: no remote image fetch or face synthesis."""
+    if not isinstance(owner_webp,bytes) or not owner_webp:
+        raise ValueError("Verified portrait data required")
+    encoded=base64.b64encode(owner_webp).decode("ascii")
+    return (
+      '<defs><clipPath id="ownerPhoto"><rect x="548" y="508" width="286" height="422" rx="28"/></clipPath></defs>'
+      '<rect x="537" y="497" width="308" height="444" rx="36" fill="#040a12" opacity=".88"/>'
+      '<image x="548" y="508" width="286" height="422" preserveAspectRatio="xMidYMid slice" '
+      'clip-path="url(#ownerPhoto)" href="data:image/webp;base64,'+encoded+'"/>'
+      '<rect x="548" y="508" width="286" height="422" rx="28" fill="none" stroke="#f4d79b" stroke-width="6"/>'
+      '<rect x="542" y="914" width="298" height="49" rx="16" fill="#101c25" opacity=".96"/>'
+      '<text x="691" y="945" font-family="Arial,Helvetica,sans-serif" font-size="19" '
+      'font-weight="700" text-anchor="middle" fill="#fff1cb">MOJTABA ROOZEGAR</text>'
+    )
 
 def _art(slug, hi, ice):
     if slug=="business":
@@ -113,6 +213,29 @@ def _art(slug, hi, ice):
           '<path d="M470 614 L540 604 L535 666" stroke="%s" stroke-width="17" fill="none" stroke-linecap="round"/>'%hi+
           '<rect x="362" y="925" width="176" height="56" rx="28" fill="%s" opacity=".54"/>'%hi
         )
+
+    if slug in ("research-methods","feasibility","digital-marketing","business-finance","food-quality","ai-automation"):
+        # A distinctive SVG visual for each new subject, behind the real portrait.
+        i=("research-methods","feasibility","digital-marketing","business-finance","food-quality","ai-automation").index(slug)
+        bars="".join('<rect x="%d" y="%d" width="56" height="%d" rx="8" fill="%s" opacity=".84"/>'%
+                     (115+n*67,890-h,h,hi if (n+i)%2 else ice)
+                     for n,h in enumerate((90+i*19,170-i*7,126+i*13,270-i*16,205+i*8)))
+        connections="".join('<path d="M%d %d L%d %d" stroke="%s" stroke-width="5" opacity=".6"/>'%
+                            (140+n*69,645+(n%2)*75,205+n*69,710+((n+1)%2)*75,ice)
+                            for n in range(4))
+        glyphs=(
+          '<circle cx="285" cy="680" r="124" fill="none" stroke="%s" stroke-width="12"/>'%hi+
+          '<path d="M225 704 L270 657 L316 694 L366 615" fill="none" stroke="%s" stroke-width="14"/>'%ice,
+          '<path d="M100 900 L180 760 L272 812 L368 630 L460 700" fill="none" stroke="%s" stroke-width="16"/>'%hi,
+          '<circle cx="280" cy="700" r="150" fill="none" stroke="%s" stroke-width="8" stroke-dasharray="22 16"/>'%hi+
+          '<circle cx="280" cy="700" r="76" fill="none" stroke="%s" stroke-width="11"/>'%ice,
+          '<path d="M110 870 C210 835 245 760 335 724 S435 590 500 560" fill="none" stroke="%s" stroke-width="18"/>'%hi,
+          '<rect x="160" y="625" width="255" height="255" rx="24" fill="none" stroke="%s" stroke-width="13"/>'%ice+
+          '<path d="M215 755 L275 816 L378 680" fill="none" stroke="%s" stroke-width="20"/>'%hi,
+          '<circle cx="290" cy="720" r="100" fill="none" stroke="%s" stroke-width="14"/>'%hi+
+          '<path d="M192 720 H395 M290 620 V820" stroke="%s" stroke-width="9"/>'%ice,
+        )
+        return connections+bars+glyphs[i]
     points=[(450+210*math.cos(i*math.pi/6),715+210*math.sin(i*math.pi/6)) for i in range(12)]
     links=[]
     for i,(x,y) in enumerate(points):
@@ -129,8 +252,29 @@ def _art(slug, hi, ice):
        '<circle cx="450" cy="715" r="255" fill="none" stroke="%s" stroke-width="3" stroke-dasharray="10 19" opacity=".3"/>'%hi
     )
 
-def svg_for(slug):
+def svg_for(slug, portrait_bytes=None):
     course=BY_SLUG[slug]
+    owner_photo=read_owner_photo() if portrait_bytes is None else portrait_bytes
+    if not isinstance(owner_photo,bytes) or not owner_photo:
+        raise ValueError("Verified owner-reference portrait required")
+    encoded=BASE64_POSTERS[slug]
+    data=base64.b64decode(encoded,validate=True)
+    if (not 30_000 < len(data) < 280_000 or data[:4]!=b"RIFF" or
+        data[8:12]!=b"WEBP" or hashlib.sha256(data).hexdigest()!=SHA256_POSTERS[slug]):
+        raise ValueError("Course poster image integrity check failed")
+    # The person's face, body, the course environment and the typography are
+    # parts of one photographic scene. There is no inset or pasted portrait.
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" '
+        'viewBox="0 0 900 1200" role="img" direction="ltr" '
+        'aria-labelledby="posterTitle posterDesc">'
+        '<title id="posterTitle">'+escape(course["title"])+'</title>'
+        '<desc id="posterDesc">'+escape(course["alt"]+' '+course["lines"][0]+' '+
+        course["lines"][1]+' MOJTABA ROOZEGAR')+'</desc>'
+        '<image x="0" y="0" width="900" height="1200" '
+        'preserveAspectRatio="xMidYMid slice" href="data:image/webp;base64,'+encoded+'"/>'
+        '</svg>'
+    )
     dark,mid,accent,ivory,secondary=course["palette"]
     l1,l2=course["lines"]
     def text(y,content,size,color,weight="700"):
@@ -164,7 +308,7 @@ def svg_for(slug):
        '<path d="M180 145 H720" stroke="%s" stroke-opacity=".3" stroke-width="2"/>'%accent+
        text(258,l1,56 if len(l1)>16 else 69,ivory)+text(370,l2,50 if len(l2)>17 else 73,accent)+
        text(441,course["subtitle"],29,ivory,"500")+
-       artwork+
+       artwork+portrait_layer(owner_photo)+
        '<rect x="54" y="1006" width="792" height="150" rx="23" '
        'fill="#020c17" fill-opacity=".48" stroke="%s" stroke-opacity=".6"/>'%accent+
        text(1062,"EXPLORE THE COURSE",35,ivory)+
@@ -172,7 +316,7 @@ def svg_for(slug):
        text(1130,"MOJTABA ROOZEGAR | COURSE PREVIEW",23,secondary,"500")+
        '</svg>'
     )
-    if len(svg.encode("utf-8"))>40_000:
+    if len(svg.encode("utf-8"))>460_000:
         raise ValueError("Poster not safely bounded")
     return svg
 
@@ -181,14 +325,14 @@ def _html(course):
     slug=course["slug"]
     url=POSTER_BASE+slug+".svg"
     return ('<article class="mpw-course-card" id="'+slug+'">'
-            '<a class="mpw-course-image" href="'+url+'?v=en-20261028" target="_blank" rel="noopener noreferrer" '
+            '<a class="mpw-course-image" href="'+url+'?v=en-20261031-photo" target="_blank" rel="noopener noreferrer" '
             'aria-label="View poster: '+escape(course["title"])+'">'
-            '<img loading="lazy" decoding="async" width="900" height="1200" src="'+url+'?v=en-20261028" alt="'+
+            '<img loading="lazy" decoding="async" width="900" height="1200" src="'+url+'?v=en-20261031-photo" alt="'+
             escape(course["alt"],quote=True)+'"></a>'
             '<div class="mpw-course-copy"><h2>'+escape(course["title"])+'</h2><p>'+
             escape(course["summary"])+'</p><h3>What you will explore</h3><ul>'+features+
-            '</ul><p class="mpw-course-status">Course preview | Enrollment and payments are not open</p>'
-            '<div class="mpw-course-actions"><a href="'+url+'?v=en-20261028" target="_blank" rel="noopener noreferrer">'
+            '</ul><p class="mpw-course-status">Course overview | Enrollment and payments are not open</p>'
+            '<div class="mpw-course-actions"><a href="'+url+'?v=en-20261031-photo" target="_blank" rel="noopener noreferrer">'
             'View poster</a><a href="'+SITE+'contact/">Ask about this course</a></div></div></article>')
 
 @require_GET
@@ -196,10 +340,15 @@ def poster(request,slug):
     course=BY_SLUG.get(slug)
     if not course:
         return HttpResponseNotFound("Poster not found")
-    out=HttpResponse(svg_for(slug),content_type="image/svg+xml; charset=utf-8")
+    try:
+        picture=read_owner_photo()
+        output=svg_for(slug,picture)
+    except (OSError,RuntimeError,ValueError):
+        return HttpResponse("Owner photograph temporarily unavailable",status=503,content_type="text/plain")
+    out=HttpResponse(output,content_type="image/svg+xml; charset=utf-8")
     out["X-Content-Type-Options"]="nosniff"
     out["Cache-Control"]="public, max-age=120, must-revalidate"
-    out["Content-Security-Policy"]="default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    out["Content-Security-Policy"]="default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox"
     return out
 
 @require_GET
@@ -207,8 +356,8 @@ def gallery(request):
     cards="".join(_html(c) for c in COURSES)
     page='''<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="index,follow">
-<title>Four Professional Courses | Mojtaba Roozegar</title>
-<meta name="description" content="Explore four learning paths in business development, agricultural income, online work and advanced ChatGPT training by Mojtaba Roozegar.">
+<title>Ten Professional Courses | Mojtaba Roozegar</title>
+<meta name="description" content="Explore ten practical learning paths across business, agricultural economics, research, digital marketing, finance, quality management and AI with Mojtaba Roozegar.">
 <link rel="canonical" href="https://mojplaywin.com/mojtaba.roozegar/social-command/courses/">
 <style>
 :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0e1516;color:#f1e9d9;font:15px/1.85 system-ui,Arial,Helvetica,sans-serif}
@@ -233,10 +382,10 @@ footer{color:#d2c8b6}footer p{max-width:850px}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important}}
 </style></head><body>
 <header><div class="mpw-kicker">MOJTABA ROOZEGAR / EDUCATION</div>
-<h1>Four Courses. Practical Skills.</h1>
-<p>Explore business development, improving farm income, online earning skills and advanced ChatGPT training. Every poster uses original vector artwork, with no fabricated instructor portrait.</p>
+<h1>Ten Courses. Practical Skills.</h1>
+<p>Explore ten professional learning paths across business, agribusiness, research, marketing and AI. Each course poster is a specially art-directed scene based on owner-selected photos of Mojtaba Roozegar, with his likeness integrated into the setting.</p>
 <nav><a href="/mojtaba.roozegar/">Back to personal website</a><a href="/mojtaba.roozegar/contact/">Contact and inquiries</a></nav>
-</header><main><section class="mpw-course-grid" aria-label="Four courses and promotional posters">'''+cards+'''</section></main>
+</header><main><section class="mpw-course-grid" aria-label="Ten courses and promotional posters">'''+cards+'''</section></main>
 <footer><p>This is an early course preview. Dates, tuition, certificates and enrollment will be announced only when confirmed. No earnings or financial results are guaranteed.</p>
 <p>© Mojtaba Roozegar · Official Personal Website</p></footer></body></html>'''
     out=HttpResponse(page,content_type="text/html; charset=utf-8")

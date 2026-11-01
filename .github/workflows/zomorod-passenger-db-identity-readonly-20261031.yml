@@ -1,0 +1,184 @@
+name: Zomorod Passenger DB identity attestation (read only)
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/zomorod-passenger-db-identity-readonly-20261031.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-passenger-db-identity-readonly-20261031.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-passenger-db-readonly-20261031
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate current source and guardrail routes
+        run: |
+          set -euo pipefail
+          python3 -m py_compile config/urls.py
+          grep -Fq 'path("company/office/login/", RedirectView.as_view(url="/admin/login/?next=/staff/command-center/", permanent=False), name="company_office_login")' config/urls.py
+          grep -Fq 'from django.views.generic import RedirectView' config/urls.py
+          grep -Fq 'path("company/office/", RedirectView.as_view(url="/business/", permanent=False), name="company_office_fallback")' config/urls.py
+          echo "PASSENGER_DB_PROBE_SOURCE=verified"
+  inspect:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-office-root-fallback"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo "VPS_HOSTKEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # Resolve cPanel from the already pinned VPS, then compare its ED25519
+          # fingerprint before any connection to the production account.
+          scan="$(timeout 35s ssh -T -F "$d/config" saeit-vps 'timeout 10s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOSTKEY=verified"
+          timeout 115s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          app=/home/zomorod2/Saeit
+          test -d "$app" && test ! -L "$app" && test -s "$app/passenger_wsgi.py"
+          py=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
+          test -x "$py"
+          cd "$app"
+          PYTHONDONTWRITEBYTECODE=1 "$py" -B - <<'PY'
+          import os
+          import pathlib
+          import sqlite3
+          import sys
+          from urllib.parse import quote
+
+          app=pathlib.Path("/home/zomorod2/Saeit")
+          if pathlib.Path.cwd().resolve()!=app:
+              raise SystemExit("PASSENGER_DB_PROBE_APP_ROOT_MISMATCH")
+          sys.path.insert(0,str(app))
+          try:
+              import passenger_wsgi
+              from django.conf import settings
+              db=settings.DATABASES["default"]
+          except Exception as exc:
+              print("PASSENGER_DB_PROBE_IMPORT="+type(exc).__name__)
+              print("PASSENGER_APP_DB_ATTESTED=false")
+              print("PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no")
+              raise SystemExit(0)
+
+          engine=str(db.get("ENGINE","")).rsplit(".",1)[-1]
+          print("PASSENGER_DB_PROBE_ENGINE="+engine)
+          print("PASSENGER_DB_PROBE_PYTHON="+str(sys.version_info.major)+"."+str(sys.version_info.minor))
+          name=str(db.get("NAME",""))
+          if engine!="sqlite3" or name in ("",":memory:"):
+              print("PASSENGER_DB_PROBE_SQLITE=not_applicable")
+              print("PASSENGER_APP_DB_ATTESTED=false")
+              print("PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no")
+              raise SystemExit(0)
+
+          path=pathlib.Path(name)
+          if not path.is_absolute():
+              path=app/path
+          path=path.resolve()
+          stat=None
+          try:
+              if path.is_file() and not path.is_symlink():
+                  stat=path.stat()
+          except OSError:
+              pass
+          print("PASSENGER_DB_PROBE_FILE_PRESENT="+str(stat is not None).lower())
+          print("PASSENGER_DB_PROBE_SIZE_NONZERO="+str(bool(stat and stat.st_size>0)).lower())
+          tables=None
+          if stat and stat.st_size>0:
+              try:
+                  uri="file:"+quote(str(path),safe="/")+ "?mode=ro"
+                  conn=sqlite3.connect(uri,uri=True,timeout=3)
+                  conn.execute("PRAGMA query_only=ON")
+                  tables=len(conn.execute(
+                      "SELECT name FROM sqlite_master WHERE type='table'"
+                  ).fetchall())
+                  conn.close()
+              except (OSError,sqlite3.Error):
+                  pass
+          print("PASSENGER_DB_PROBE_READONLY_TABLE_COUNT="+(str(tables) if tables is not None else "unavailable"))
+
+          # Process-file identity is only attested when an app-owned worker has
+          # an open FD to this same database inode. A configured path alone is
+          # insufficient; idle workers often leave no open SQLite descriptor.
+          worker_count=0
+          matching_fd=0
+          for pid_dir in pathlib.Path("/proc").iterdir():
+              if not pid_dir.name.isdigit():continue
+              try:
+                  if pid_dir.stat().st_uid!=os.getuid():continue
+                  cwd=pathlib.Path(os.readlink(pid_dir/"cwd"))
+                  if cwd.resolve()!=app:continue
+                  worker_count+=1
+                  if stat is None:continue
+                  for fd in (pid_dir/"fd").iterdir():
+                      try:
+                          s=fd.stat()
+                          if s.st_dev==stat.st_dev and s.st_ino==stat.st_ino:
+                              matching_fd+=1
+                      except (OSError,PermissionError):
+                          continue
+              except (OSError,PermissionError):
+                  continue
+          print("PASSENGER_DB_PROBE_APP_CWD_PROCESSES="+str(worker_count))
+          print("PASSENGER_DB_PROBE_MATCHING_SQLITE_FD="+str(matching_fd))
+          attested=bool(stat and stat.st_size>0 and tables is not None and matching_fd>0)
+          print("PASSENGER_APP_DB_ATTESTED="+str(attested).lower())
+          # DB identity is necessary, not sufficient: restore/MFA/provider gates
+          # remain independent even if an active worker file match is observed.
+          print("PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no")
+          PY
+          REMOTE
+          echo "PASSENGER_DB_PROBE_READONLY=completed"

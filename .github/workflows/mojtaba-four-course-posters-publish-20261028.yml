@@ -1,9 +1,12 @@
-name: Mojtaba four education posters personal-only live publish
+name: Mojtaba ten education posters personal-only live publish
 on:
   pull_request:
     paths:
       - 'social_hub/course_showcase.py'
+      - 'social_hub/course_image_data.py'
       - 'social_hub/urls.py'
+      - 'scripts/build_mojtaba_course_poster_data.py'
+      - 'assets/mojtaba_course_posters_20261031/**'
       - 'scripts/mojtaba_four_course_posters_home_20261028.py'
       - 'tests/test_mojtaba_four_course_posters_20261028.py'
       - '.github/workflows/mojtaba-four-course-posters-publish-20261028.yml'
@@ -11,7 +14,9 @@ on:
     branches: [main]
     paths:
       - 'social_hub/course_showcase.py'
+      - 'social_hub/course_image_data.py'
       - 'scripts/mojtaba_four_course_posters_home_20261028.py'
+      - 'assets/mojtaba_course_posters_20261031/**'
       - '.github/workflows/mojtaba-four-course-posters-publish-20261028.yml'
 permissions:
   contents: read
@@ -31,10 +36,10 @@ jobs:
           python-version: '3.11'
       - name: Install only Django needed for real vector HTTP regression
         run: python -m pip install -q 'Django>=5.2,<5.3'
-      - name: Check four original SVGs, single-template additive patch and rollback
+      - name: Check ten integrated-photo posters, single-template patch and rollback
         run: |
           set -euo pipefail
-          python -m compileall -q social_hub/course_showcase.py scripts/mojtaba_four_course_posters_home_20261028.py
+          python -m compileall -q social_hub/course_showcase.py social_hub/course_image_data.py scripts/mojtaba_four_course_posters_home_20261028.py
           python -m unittest discover -s tests -p 'test_mojtaba_four_course_posters_20261028.py' -v
       - name: Existing standalone social package remains compatible
         run: |
@@ -107,7 +112,7 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           echo "SOCIAL_SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
-      - name: Transfer only four-course artwork module and reversible homepage patch
+      - name: Transfer only ten-course artwork module and reversible homepage patch
         shell: bash
         run: |
           set -euo pipefail
@@ -121,7 +126,7 @@ jobs:
           for filename in scripts/mojtaba_social_hub_install_personal_20261026.py scripts/mojtaba_social_hub_upgrade_personal_20261026.py scripts/mojtaba_four_course_posters_home_20261028.py; do
             timeout 65s scp -q -F "$SOCIAL_SSH_CONFIG" "$filename" "saeit-host:$stage/$(basename "$filename")"
           done
-      - name: Deploy to independent personal Django ONLY, test four posters and rollback if necessary
+      - name: Deploy to independent personal Django ONLY, test ten posters and rollback if necessary
         shell: bash
         run: |
           set -euo pipefail
@@ -154,6 +159,9 @@ jobs:
           }
           trap finish EXIT
           test -f "$app/manage.py" && test -x "$py" && test -f "$script" && test -f "$upgrader"
+          photo="$app/static/personal_site/official_profile_20261016/portrait.webp"
+          test -f "$photo" && test ! -L "$photo"
+          test "$(sha256sum "$photo" | cut -d' ' -f1)" = "482cad022c1739a464d17f0e023c69fcd6971d72bc67881f8ec24218bd2d8e41"
           test ! -L "$app" && test ! -L "$stage" && test ! -L "$app/templates/personal_site/core/home.html"
           tar -xzf "$stage/mojtaba-courses-social-hub.tgz" -C "$stage" --no-same-owner --no-same-permissions
           test -f "$stage/social_hub/course_showcase.py"
@@ -180,9 +188,9 @@ jobs:
           if endpoint!="/mojtaba.roozegar/social-command/courses/":
               raise RuntimeError("Course gallery not publicly mounted")
           page=c.get(endpoint,secure=True)
-          if page.status_code!=200 or page.content.count(b'<article class="mpw-course-card"')!=4:
-              # class selector is present in style once, plus four cards.
-              raise RuntimeError("Expected four distinct public course cards missing")
+          if page.status_code!=200 or page.content.count(b'<article class="mpw-course-card"')!=10:
+              # class selector is present in style once, plus ten cards.
+              raise RuntimeError("Expected ten distinct public course cards missing")
           if b"Enrollment and payments are not open" not in page.content:
               raise RuntimeError("Course registration is misleading")
           if b'<html lang="en" dir="ltr">' not in page.content:
@@ -190,7 +198,10 @@ jobs:
           if re.search(rb"[\xd8-\xdb][\x80-\xbf]",page.content):
               raise RuntimeError("Non-English Arabic glyphs still present in course gallery")
           for phrase in (b"Business Development Course",b"Increasing Agricultural Income",
-                         b"How to Earn Money Online",b"Advanced ChatGPT Training"):
+                         b"How to Earn Money Online",b"Advanced ChatGPT Training",b"Scientific Research &amp; Data Analysis",
+                         b"Agribusiness Feasibility &amp; Investment",b"Digital Marketing &amp; SEO Strategy",
+                         b"Business Finance &amp; Profit Management",b"Food Processing &amp; Quality Systems",
+                         b"AI Automation for Enterprise Teams"):
               if phrase not in page.content:
                   raise RuntimeError("English course heading absent")
           for course in COURSES:
@@ -200,6 +211,8 @@ jobs:
               response=c.get(u,secure=True)
               if response.status_code!=200 or not response["Content-Type"].startswith("image/svg+xml"):
                   raise RuntimeError("Course poster route missing: "+course["slug"])
+              if b'data:image/webp;base64,' not in response.content or b'<image x="0" y="0"' not in response.content:
+                  raise RuntimeError("Integrated whole-scene course image missing")
               try: ET.fromstring(response.content)
               except Exception as err: raise RuntimeError("Course artwork invalid XML") from err
               if (re.search(rb"[\xd8-\xdb][\x80-\xbf]",response.content)
@@ -223,19 +236,19 @@ jobs:
           except Exception as e:
               print("COURSE_RENDER_DIAG route_error",type(e).__name__,flush=True)
           if home.status_code!=200 or home.content.count(('<section id="'+ID+'"').encode())!=1:
-              raise RuntimeError("Four poster home section missing")
-          if home.content.count(b'<article class="mpw-course-home-card"')!=4:
-              raise RuntimeError("Four poster homepage cards missing")
+              raise RuntimeError("Ten poster home section missing")
+          if home.content.count(b'<article class="mpw-course-home-card"')!=10:
+              raise RuntimeError("Ten poster homepage cards missing")
           section=re.search(rb'<section id="mpw-four-course-posters-20261028".*?</section>',home.content,re.S)
           if (not section or b'lang="en"' not in section.group(0)
               or b'dir="ltr"' not in section.group(0)
-              or b"Four Courses to Build Practical Skills" not in section.group(0)
+              or b"Ten Professional Courses" not in section.group(0)
               or re.search(rb"[\xd8-\xdb][\x80-\xbf]",section.group(0))):
               raise RuntimeError("Homepage course section not completely English")
           social=c.get("/mojtaba.roozegar/social-command/",secure=True)
           if social.status_code not in (302,403):
               raise RuntimeError("Existing social manager became unprotected")
-          print("PERSONAL_FOUR_POSTERS_HOME_DJANGO=PASS",flush=True)
+          print("PERSONAL_TEN_POSTERS_HOME_DJANGO=PASS",flush=True)
           print("SOCIAL_STAFF_LOGIN_AND_DB_UNCHANGED=PASS",flush=True)
           PY
           test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
@@ -249,7 +262,9 @@ jobs:
             "https://mojplaywin.com/":"preserve",
             "https://zomorodmelal.ir/":"preserve",
           }
-          for key in ("business","agriculture","online-income","chatgpt"):
+          for key in ("business","agriculture","online-income","chatgpt",
+                      "research-methods","feasibility","digital-marketing",
+                      "business-finance","food-quality","ai-automation"):
               urls["https://mojplaywin.com/mojtaba.roozegar/social-command/posters/"+key+".svg"]="svg"
           for attempt in range(5):
               broken=[]
@@ -262,8 +277,8 @@ jobs:
                           if r.status!=200:raise RuntimeError("Non-200")
                       if kind=="home" and b'mpw-four-course-posters-20261028' not in blob:
                           raise RuntimeError("Personal home posters missing")
-                      if kind=="courses" and blob.count(b'<article class="mpw-course-card"')!=4:
-                          raise RuntimeError("Four course list cards missing")
+                      if kind=="courses" and blob.count(b'<article class="mpw-course-card"')!=10:
+                          raise RuntimeError("Ten course list cards missing")
                       if kind in ("courses","svg") and re.search(rb"[\xd8-\xdb][\x80-\xbf]",blob):
                           raise RuntimeError("Non-English glyph in public course content")
                       if kind=="home":
@@ -272,19 +287,22 @@ jobs:
                               or b'dir="ltr"' not in matched.group(0)
                               or re.search(rb"[\xd8-\xdb][\x80-\xbf]",matched.group(0))):
                               raise RuntimeError("Home course section not English")
-                      if kind=="svg":ET.fromstring(blob)
+                      if kind=="svg":
+                          if b'data:image/webp;base64,' not in blob or b'<image x="0" y="0"' not in blob:
+                              raise RuntimeError("Integrated whole-scene image missing")
+                          ET.fromstring(blob)
                   except Exception as exc:
                       broken.append((u,type(exc).__name__))
               if not broken:
-                  print("PERSONAL_FOUR_EDUCATION_POSTERS_WEB_LIVE=PASS",flush=True)
+                  print("PERSONAL_TEN_EDUCATION_POSTERS_WEB_LIVE=PASS",flush=True)
                   break
               print("COURSE_POSTERS_SMOKE_RETRY",attempt+1,broken,flush=True)
               if attempt==4:raise RuntimeError("Public education page or site health failed")
               time.sleep(3)
           PY
           verified=1
-          echo 'FOUR_PERSONAL_COURSE_POSTERS_ENGLISH_ONLY=PASS'
-          echo 'FOUR_PERSONAL_COURSE_POSTERS_RELEASE=SUCCESS'
+          echo 'TEN_PERSONAL_COURSE_POSTERS_ENGLISH_ONLY=PASS'
+          echo 'TEN_PERSONAL_COURSE_POSTERS_RELEASE=SUCCESS'
           echo 'OTHER_SITES_UNCHANGED_NO_PAYMENTS_NO_AUTO_PUBLISH=PASS'
           REMOTE
       - name: Remove temporary relay secrets

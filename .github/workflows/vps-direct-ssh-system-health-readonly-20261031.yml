@@ -1,0 +1,166 @@
+name: VPS Direct SSH System Health Read Only 20261031
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/vps-direct-ssh-system-health-readonly-20261031.yml
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-direct-system-health-readonly
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Regression - apt candidate parser must not SIGPIPE under pipefail
+        shell: bash
+        run: |
+          set -euo pipefail
+          candidate="$(python3 -c 'import sys; sys.stdout.write("Candidate: 1.7.9-1~20.04.3\n" + "metadata\n"*50000)' | awk '/^[[:space:]]*Candidate:/ {value=$2} END {if (value != "") print value}')"
+          test "$candidate" = "1.7.9-1~20.04.3"
+          empty="$(printf 'Installed: 1.3.9-4\n' | awk '/^[[:space:]]*Candidate:/ {value=$2} END {if (value != "") print value}')"
+          test -z "$empty"
+          echo "HEALTH_REGRESSION_APT_PIPEFAIL=PASS"
+      - name: Check VPS platform health using fingerprint-pinned direct SSH, read only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-direct-platform-health-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 90s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          echo "HEALTH_UTC=$(date -u +%FT%TZ)"
+          echo "HEALTH_HOSTNAME=$(hostname -f 2>/dev/null || hostname)"
+          echo "HEALTH_UPTIME=$(uptime -p)"
+          awk '{printf "HEALTH_LOAD_1_5_15=%s,%s,%s\n",$1,$2,$3}' /proc/loadavg
+          free -m | awk '/^Mem:/ {printf "HEALTH_RAM_TOTAL_MB=%s AVAILABLE_MB=%s\n",$2,$7}'
+          free -m | awk '/^Swap:/ {printf "HEALTH_SWAP_TOTAL_MB=%s FREE_MB=%s\n",$2,$4}'
+          df -Pk / | awk 'NR==2 {printf "HEALTH_ROOT_DISK_TOTAL_KIB=%s USED_KIB=%s FREE_KIB=%s USE_PCT=%s\n",$2,$3,$4,$5}'
+          df -Pi / | awk 'NR==2 {printf "HEALTH_ROOT_INODES_USED_PCT=%s\n",$5}'
+          echo "HEALTH_SYSTEMD_FAILED_BEGIN"
+          systemctl --failed --no-legend --no-pager --plain 2>/dev/null | awk 'NF {print "HEALTH_FAILED_UNIT=" $1}' | head -n 30 || true
+          echo "HEALTH_SYSTEMD_FAILED_END"
+          for unit in ssh sshd cron crond systemd-journald; do
+            state="$(systemctl is-active "$unit" 2>/dev/null || true)"
+            echo "HEALTH_SERVICE_${unit}=${state:-unknown}"
+          done
+          cron="$(crontab -l 2>/dev/null || true)"
+          count="$(printf '%s\n' "$cron" | awk '!/^ *#/ && /SAEIT_(MASTER_AGENT|FACTORY|AUTONOMOUS_PRODUCTS|PRODUCTION_WAREHOUSE)/{n++} END{print n+0}')"
+          echo "HEALTH_FACTORY_HOLD_CRON_ENTRIES=$count"
+          if test -r /etc/os-release; then
+            . /etc/os-release
+            echo "HEALTH_OS_ID=${ID:-unknown}"
+            echo "HEALTH_OS_VERSION_ID=${VERSION_ID:-unknown}"
+          else
+            echo "HEALTH_OS_RELEASE=unreadable"
+          fi
+          echo "HEALTH_FWUPD_PACKAGE_POLICY_BEGIN"
+          apt-cache policy fwupd 2>/dev/null | head -n 8 | sed 's/^/HEALTH_FWUPD_APT_/' || true
+          echo "HEALTH_FWUPD_PACKAGE_POLICY_END"
+          echo "HEALTH_KERNEL_META_PACKAGE=$(dpkg-query -W -f='${Version}' linux-image-generic 2>/dev/null || echo unavailable)"
+          if command -v pro >/dev/null 2>&1; then
+            if pro status 2>/dev/null | grep -Eq 'esm-infra[[:space:]]+yes[[:space:]]+enabled'; then
+              echo "HEALTH_UBUNTU_PRO_ESM_INFRA=enabled"
+            else
+              echo "HEALTH_UBUNTU_PRO_ESM_INFRA=not_verified"
+            fi
+          else
+            echo "HEALTH_UBUNTU_PRO_ESM_INFRA=tool_unavailable"
+          fi
+          if [ "${ID:-}" = ubuntu ] && [ "${VERSION_ID:-}" = 20.04 ]; then
+            echo "HEALTH_SECURITY_ADVISORY=ubuntu_20_04_standard_support_ended_2025_05"
+            echo "HEALTH_SECURITY_ESM_VERIFICATION=required"
+          fi
+          if test -e /var/run/reboot-required; then
+            echo "HEALTH_REBOOT_REQUIRED_FLAG=present"
+          else
+            echo "HEALTH_REBOOT_REQUIRED_FLAG=absent"
+          fi
+          fwupd_installed="$(dpkg-query -W -f='${Version}' fwupd 2>/dev/null || true)"
+          fwupd_candidate="$(apt-cache policy fwupd 2>/dev/null | awk '/^[[:space:]]*Candidate:/ {value=$2} END {if (value != "") print value}')"
+          if [ -n "$fwupd_installed" ] && [ -n "$fwupd_candidate" ] && [ "$fwupd_installed" != "$fwupd_candidate" ]; then
+            echo "HEALTH_SECURITY_ADVISORY=fwupd_installed_version_differs_from_local_apt_candidate"
+          fi
+          # APT simulation uses the existing local index. Never refresh indexes or install packages here.
+          if command -v apt-get >/dev/null 2>&1; then
+            if apt_plan="$(timeout 35s apt-get --simulate -o Debug::NoLocking=1 upgrade 2>&1)"; then
+              echo "HEALTH_APT_SIMULATION=success_local_cache_only"
+              printf "%s\n" "$apt_plan" | awk '/^Inst /{i++} /^Remv /{r++} END{printf "HEALTH_APT_SIMULATED_INSTALL_OR_UPGRADE_COUNT=%d\nHEALTH_APT_SIMULATED_REMOVAL_COUNT=%d\n",i+0,r+0}'
+              # Report package names only, never the complete simulated command output.
+              printf "%s\n" "$apt_plan" | awk 'BEGIN{split("openssh-server openssh-client openssl libc6 systemd linux-image-generic linux-headers-generic ca-certificates curl python3",a," ");for(i in a) important[a[i]]=1} /^Inst /{if($2 in important)print "HEALTH_APT_PRIORITY_CANDIDATE="$2}'
+            else
+              echo "HEALTH_APT_SIMULATION=unavailable"
+            fi
+          else
+            echo "HEALTH_APT_SIMULATION=apt_get_missing"
+          fi
+          echo "HEALTH_APT_INDEX_AGE_DAYS=$(python3 - <<'PY'
+          from pathlib import Path
+          import time
+          paths=[p for p in Path("/var/lib/apt/lists").glob("*") if p.is_file()]
+          print(int(max(0,time.time()-max(p.stat().st_mtime for p in paths))/86400) if paths else "unavailable")
+          PY
+          )"
+          if [ "${ID:-}" = ubuntu ] && [ "${VERSION_ID:-}" = 20.04 ]; then
+            echo "HEALTH_SECURITY_RELEASE_GATE=BLOCKED_PENDING_VERIFIED_ESM_OR_SUPPORTED_OS"
+          else
+            echo "HEALTH_SECURITY_RELEASE_GATE=NOT_EVALUATED_FOR_THIS_OS"
+          fi
+          echo "HEALTH_DPKG_AUDIT_LINES=$(dpkg --audit 2>/dev/null | wc -l | tr -d '[:space:]')"
+          echo "HEALTH_OS_KERNEL=$(uname -r)"
+          echo "HEALTH_VIRTUALIZATION=$(systemd-detect-virt 2>/dev/null || echo unknown)"
+          echo "HEALTH_FWUPD_PACKAGE_VERSION=$(dpkg-query -W -f='${Version}' fwupd 2>/dev/null || echo not_available)"
+          echo "HEALTH_FWUPD_TIMER_STATE=$(systemctl is-active fwupd-refresh.timer 2>/dev/null || true)"
+          systemctl show fwupd-refresh.timer -p LastTriggerUSec -p NextElapseUSecRealtime --no-pager 2>/dev/null | sed 's/^/HEALTH_FWUPD_TIMER_PROPERTY_/' || true
+          echo "HEALTH_FWUPD_DETAIL_BEGIN"
+          systemctl show fwupd-refresh.service -p LoadState -p ActiveState -p SubState -p Result -p ExecMainCode -p ExecMainStatus -p UnitFileState --no-pager 2>&1 | head -n 20 || true
+          echo "HEALTH_FWUPD_TIMER=$(systemctl is-enabled fwupd-refresh.timer 2>/dev/null || true)"
+          echo "HEALTH_FWUPD_LOG_BEGIN"
+          journalctl -u fwupd-refresh.service --since '2026-10-29 00:00:00' -n 12 --no-pager -o cat 2>&1 | head -n 22 || true
+          echo "HEALTH_FWUPD_LOG_END"
+          echo "HEALTH_FWUPD_PRIVILEGED_LOG_CLASS_BEGIN"
+          if sudo -n true >/dev/null 2>&1; then
+            sudo -n journalctl -u fwupd-refresh.service --since '2026-10-29 00:00:00' -n 80 --no-pager -o cat 2>/dev/null | python3 -c 'import sys,re; s=sys.stdin.read().lower(); keys={"network_dns":r"resolve|dns|connection|network|timed out|temporary failure|could not connect", "http_tls":r"http|ssl|tls|certificate", "permission":r"denied|not authorized|permission", "metadata":r"metadata|lvfs|remote", "daemon_dbus":r"daemon|d-bus|dbus", "unsupported":r"unsupported|no supported|not supported"}; print("HEALTH_FWUPD_PRIV_LOG_LINES="+str(len(s.splitlines()))); print("HEALTH_FWUPD_PRIV_LOG_CATEGORIES="+",".join(k for k,p in keys.items() if re.search(p,s)))'
+          else
+            echo "HEALTH_FWUPD_PRIV_LOG_UNAVAILABLE=no_passwordless_sudo"
+          fi
+          echo "HEALTH_FWUPD_PRIVILEGED_LOG_CLASS_END"
+          echo "HEALTH_FWUPD_DETAIL_END"
+          # Fail closed on critical operating conditions; never mutate services or factory state.
+          gate_fail=0
+          root_free_kib="$(df -Pk / | awk 'NR==2 {print $4}')"
+          root_inode_used_pct="$(df -Pi / | awk 'NR==2 {gsub("%","",$5); print $5}')"
+          ram_available_mb="$(free -m | awk '/^Mem:/ {print $7}')"
+          [[ "$root_free_kib" =~ ^[0-9]+$ && "$root_inode_used_pct" =~ ^[0-9]+$ && "$ram_available_mb" =~ ^[0-9]+$ && "$count" =~ ^[0-9]+$ ]] || { echo "HEALTH_GATE=INVALID_METRICS"; exit 1; }
+          if (( root_free_kib < 2097152 )); then echo "HEALTH_CRITICAL=root_disk_free_below_2GiB"; gate_fail=1; fi
+          if (( root_inode_used_pct >= 95 )); then echo "HEALTH_CRITICAL=root_inodes_95pct_or_more"; gate_fail=1; fi
+          if (( ram_available_mb < 512 )); then echo "HEALTH_CRITICAL=ram_available_below_512MiB"; gate_fail=1; fi
+          if (( count > 0 )); then echo "HEALTH_CRITICAL=factory_hold_cron_violation"; gate_fail=1; fi
+          ssh_active="$(systemctl is-active ssh 2>/dev/null || true)"
+          sshd_active="$(systemctl is-active sshd 2>/dev/null || true)"
+          if [[ "$ssh_active" != active && "$sshd_active" != active ]]; then echo "HEALTH_CRITICAL=ssh_daemon_inactive"; gate_fail=1; fi
+          # A failed fwupd firmware-metadata refresh is advisory until its privileged journal is available.
+          if [[ "$(systemctl is-failed fwupd-refresh.service 2>/dev/null || true)" = failed ]]; then echo "HEALTH_ADVISORY=fwupd_refresh_failed_needs_admin_journal"; fi
+          echo "HEALTH_GATE_CRITICAL_FAILURE_COUNT=$gate_fail"
+          if (( gate_fail != 0 )); then echo "HEALTH_GATE=FAIL"; exit 1; fi
+          echo "HEALTH_GATE=PASS"
+          echo "HEALTH_READ_ONLY_DONE=true"
+          REMOTE

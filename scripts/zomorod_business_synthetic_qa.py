@@ -65,6 +65,48 @@ assert len(entries)==3
 assert all(dr==cr and dr>0 for _,_,dr,cr in entries)
 assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
 assert db.execute('SELECT length(password_hash) FROM users').fetchone()[0]>40
+# Downgrading a user's live role must revoke the old admin session immediately.
+with sqlite3.connect(str(private/'management.sqlite3')) as rw:
+    rw.execute("UPDATE users SET role='viewer' WHERE username='TestOnlyAdmin'")
+blocked=request('POST','projects',{'csrf':csrf,'action':'project','title':'Must not be created','owner':'Synthetic','state':'planned','budget':'0'})
+assert 'درخواست انجام نشد' in blocked
+assert db.execute('SELECT COUNT(*) FROM projects').fetchone()[0]==0
+assert 'درخواست انجام نشد' in request('GET','users')
+with sqlite3.connect(str(private/'management.sqlite3')) as rw:
+    rw.execute("UPDATE users SET role='admin' WHERE username='TestOnlyAdmin'")
+assert 'درخواست انجام نشد' not in request('GET','users')
+# The approvals page reads only a separately controlled private snapshot.
+(private/'approvals_snapshot.json').write_text(json.dumps({
+    'version':1,
+    'summary':{'records':1,'approved':1,'rejected':0,'undetermined':0,'planned_operational_jobs':5},
+    'items':[{'external_key':'ZM-001','title':'SyntheticOnlyProposalTitle',
+              'decision':'approved','execution_state':'planned',
+              'planned_operational_jobs':5,'official_title_verified':True,
+              'review_required':False}]
+},ensure_ascii=False),encoding='utf-8')
+register=request('GET','approval_register')
+assert 'SyntheticOnlyProposalTitle' in register
+assert 'اشتغال برنامه‌ای' in register
+print('APPROVAL_REGISTER_VIEW_SYNTHETIC=PASS')
+# Exercise the new endpoint without replacing or importing production management.php.
+approval_src=pathlib.Path(__file__).resolve().parents[1]/'content/zomorod-business/approvals.php'
+approval_web=web/'approvals'
+approval_web.mkdir()
+shutil.copy2(approval_src,approval_web/'index.php')
+isolated_code="session_id(getenv('SID'));$_SERVER['REQUEST_METHOD']='GET';require getenv('APPROVAL_INDEX');"
+def isolated_approval_page(current_sid):
+    env=os.environ.copy()
+    env.update({'SID':current_sid,'APPROVAL_INDEX':str(approval_web/'index.php')})
+    output=subprocess.run([php,'-d','session.save_path='+str(sessions),'-r',isolated_code],
+                          env=env,capture_output=True,text=True,timeout=25)
+    assert output.returncode==0,output.stderr[-250:]
+    return output.stdout
+assert 'SyntheticOnlyProposalTitle' in isolated_approval_page(sid)
+assert 'SyntheticOnlyProposalTitle' not in isolated_approval_page('anonymous'+sha[:12])
+print('ISOLATED_APPROVAL_ROUTE_AUTH=PASS')
+
+
+print('ROLE_DOWNGRADE_REVOKES_EXISTING_SESSION=PASS')
 print('ZOMOROD_ACCOUNTING_SYNTHETIC_QA=PASS')
 print('TEST_USERS=1 PARTIES=1 INVOICES=1 PAYMENTS=1 JOURNALS=3')
 print('BALANCED_ENTRIES=3')
