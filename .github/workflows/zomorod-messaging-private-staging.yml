@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/zomorod-messaging-private-staging.yml"
       - ".github/workflows/zomorod-office-500-readonly-diagnostic.yml"
+      - "tests/test_zm_release_preflight.py"
   workflow_dispatch:
 permissions:
   contents: read
