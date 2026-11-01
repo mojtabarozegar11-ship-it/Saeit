@@ -47,6 +47,11 @@ class VpsRuntimePrerequisiteTests(unittest.TestCase):
         self.key.symlink_to(ordinary)
         self.assertFalse(self.probe()["owner_armed_backup_runtime_prerequisites_ready"])
 
+    def test_launcher_does_not_pass_encoded_payload_as_cli_argument(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    ".github/workflows/mpw-vps-backup-runtime-preflight-readonly-20261101.yml")
+        self.assertIn("sys.argv=[sys.argv[0]]+sys.argv[2:]", workflow.read_text())
+
     def test_low_capacity_rejected(self):
         report = inspect(self.base, uid=self.uid, gpg_available=True,
                          free_bytes=9 * 1024**3)
