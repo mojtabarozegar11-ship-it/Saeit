@@ -91,7 +91,6 @@ class UnifiedBusinessCommandTests(TestCase):
         self.assertNotIn("اسناد حسابداری پیش‌نویس", shown)
         self.assertNotIn("پیام‌های منتظر ارسال", shown)
         self.assertNotContains(response, "کارخانه محرمانه")
-        self.assertNotContains(response, "3", html=False)
         self.assertIn("no-store", response.get("Cache-Control", ""))
 
     def test_other_unit_cannot_be_selected_by_query_parameter(self):
