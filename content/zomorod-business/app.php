@@ -132,7 +132,7 @@ function layoutStart(string $page,?array $user=null):void {
 function layoutEnd():void {echo '</main><footer>تمام حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل محفوظ است . آبان ۱۳۹۸ مجتبی روزگار</footer></body></html>';}
 function options(PDO $db,string $sql,array $fields,string $selected=''):string{$out='';foreach(q($db,$sql) as $row){$key=(string)$row[$fields[0]];$out.='<option value="'.esc($key).'"'.($selected===$key?' selected':'').'>'.esc((string)$row[$fields[1]]).'</option>';}return $out;}
 function formBegin(string $action):void {echo '<form method="post" autocomplete="off">'.tokenInput().'<input type="hidden" name="action" value="'.esc($action).'">';}
-if(PHP_SAPI==='cli'){
+if(PHP_SAPI==='cli' && realpath((string)($_SERVER['SCRIPT_FILENAME']??''))===__FILE__){
     if(($argv[1]??'')!=='--initialize-private-db'||count($argv)!==2){
         fwrite(STDERR,"Only --initialize-private-db is supported for local private installation.\n");
         exit(64);
