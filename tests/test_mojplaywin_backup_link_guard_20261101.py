@@ -260,5 +260,45 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
                 self.check()
 
 
+
+class MySqlSourcePreflightTests(unittest.TestCase):
+    """No real database, no dump: regression for the CLI-only release blocker."""
+
+    def _mocks(self, output):
+        from types import SimpleNamespace
+        from urllib.parse import urlsplit
+        from unittest.mock import patch
+        import scripts.mojplaywin_backup_stream_cpanel as source
+        connection = (urlsplit("mysql://audit:synthetic@localhost/audit_db"),
+                      "audit_db", "audit", "synthetic-secret-do-not-print")
+        return source, (
+            patch.object(source, "load_connection", return_value=connection),
+            patch.object(source, "database_matches", return_value=True),
+            patch.object(source.shutil, "which", return_value="/synthetic/bin"),
+            patch.object(source.subprocess, "run",
+                         return_value=SimpleNamespace(returncode=0, stdout=output)),
+        )
+
+    def test_only_select_and_no_secret_or_passenger_claim(self):
+        import json
+        source, guards = self._mocks(b"audit_db\t2\t0\n")
+        with guards[0], guards[1], guards[2], guards[3] as run:
+            report = source.preflight_mysql_source()
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "mariadb")
+        self.assertTrue(any(x.startswith("--execute=SELECT ") for x in command))
+        self.assertNotIn("mariadb-dump", command)
+        self.assertFalse(report["dump_executed"])
+        self.assertFalse(report["passenger_effective_database_proven"])
+        self.assertFalse(report["release_permitted"])
+        self.assertNotIn("synthetic-secret", json.dumps(report))
+
+    def test_nontransactional_table_fails_closed(self):
+        source, guards = self._mocks(b"audit_db\t2\t1\n")
+        with guards[0], guards[1], guards[2], guards[3]:
+            with self.assertRaisesRegex(RuntimeError, "MYSQL_BACKUP_SOURCE_UNVERIFIED"):
+                source.preflight_mysql_source()
+
+
 if __name__ == "__main__":
     unittest.main()

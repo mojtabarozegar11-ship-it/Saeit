@@ -101,6 +101,42 @@ def copy_exact_process_stdout(command, *, env=None, verify_after=None):
             proc.wait()
 
 
+
+def preflight_mysql_source():
+    """Check dump source with SELECT only; never write or emit credentials."""
+    p, db, user, password = load_connection()
+    if (not database_matches(db) or not shutil.which("mariadb") or
+            not shutil.which("mariadb-dump")):
+        raise RuntimeError("MYSQL_BACKUP_SOURCE_UNVERIFIED")
+    env = dict(os.environ, MYSQL_PWD=password)
+    query = ("SELECT DATABASE(), COUNT(*), "
+             "COALESCE(SUM(ENGINE <> 'InnoDB'),0) FROM information_schema.TABLES "
+             "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE'")
+    result = subprocess.run(
+        base_cmd(p, db, user) + ["--execute=" + query],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, timeout=15,
+    )
+    if result.returncode or len(result.stdout) > 1024:
+        raise RuntimeError("MYSQL_BACKUP_SOURCE_UNVERIFIED")
+    try:
+        fields = result.stdout.decode("ascii").strip().split()
+        if (len(fields) != 3 or fields[0] != db or
+                int(fields[1]) < 1 or int(fields[2]) != 0):
+            raise RuntimeError("MYSQL_BACKUP_SOURCE_UNVERIFIED")
+    except (UnicodeError, ValueError):
+        raise RuntimeError("MYSQL_BACKUP_SOURCE_UNVERIFIED") from None
+    return {
+        "classification": "MYSQL_BACKUP_SOURCE_CLI_READ_ONLY",
+        "configured_and_session_database_match": True,
+        "all_tables_transactional": True,
+        "dump_executed": False,
+        "orders_created": 0,
+        "payments_created": 0,
+        "passenger_effective_database_proven": False,
+        "release_permitted": False,
+    }
+
+
 def stream_mysql():
     p, db, user, password = load_connection()
     if not database_matches(db) or not shutil.which("mariadb-dump"):
@@ -385,10 +421,13 @@ def scoped_files_tar_command(home=HOME, roots=(APP, DOCROOT)):
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) != 2 or sys.argv[1] not in ("mysql", "files", "preflight-scoped-files"):
+        if len(sys.argv) != 2 or sys.argv[1] not in ("mysql", "files", "preflight-scoped-files", "preflight-mysql"):
             raise RuntimeError("unsupported source mode")
         if sys.argv[1] == "mysql":
             stream_mysql()
+        elif sys.argv[1] == "preflight-mysql":
+            print("MPW_MYSQL_BACKUP_PREFLIGHT=" +
+                  json.dumps(preflight_mysql_source(), sort_keys=True))
         elif sys.argv[1] == "preflight-scoped-files":
             summary = assert_scoped_public_asset_links()
             print("MPW_SCOPED_ASSET_PREFLIGHT=" + json.dumps({
@@ -422,7 +461,9 @@ if __name__ == "__main__":
             "ASSET_TREE_ARCHIVE_FILE_SHAPE",
             "ASSET_COMPRESSED_SIDECAR_UNVERIFIED",
         }
-        if len(sys.argv) == 2 and sys.argv[1] == "preflight-scoped-files":
+        if len(sys.argv) == 2 and sys.argv[1] == "preflight-mysql":
+            print("MYSQL_BACKUP_SOURCE_PREFLIGHT_FAILED_NO_RELEASE", file=sys.stderr)
+        elif len(sys.argv) == 2 and sys.argv[1] == "preflight-scoped-files":
             code = str(exc) if type(exc) is RuntimeError and str(exc) in safe_codes else "unknown"
             print("SCOPED_PUBLIC_ASSET_PREFLIGHT_FAILED_NO_RELEASE category=" + code, file=sys.stderr)
         else:
