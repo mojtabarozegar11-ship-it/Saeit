@@ -1,0 +1,33 @@
+name: MojPlayWin one-time SQL-files pair pinning - synthetic only
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - ".github/workflows/mojplaywin-backup-pair-pinning-synthetic-20261101.yml"
+      - "scripts/mojplaywin_backup_encrypt_vps_gpg.py"
+      - "scripts/mojplaywin_recovery_stream_vps.py"
+      - "tests/test_mojplaywin_backup_pair_pinning.py"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-backup-pair-synthetic-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  validate_synthetic_pair_only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate only artificial GPG data and strict pair identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v gpg
+          python3 -m py_compile scripts/mojplaywin_backup_encrypt_vps_gpg.py scripts/mojplaywin_recovery_stream_vps.py
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_gpg_v2.py'
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_recovery_isolated_once.py'
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_pair_pinning.py'
+          echo 'SYNTHETIC_ONLY=pass; encrypted_production_pair_created=false; isolated_live_restore=false; release_permitted=false'

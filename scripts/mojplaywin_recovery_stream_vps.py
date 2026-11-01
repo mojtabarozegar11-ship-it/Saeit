@@ -24,6 +24,7 @@ VERSION = "gpgv2"
 # One owner-approved run; newer archives get independent timestamp/nonce stems.
 NEW_RUN_DAY = "20261021"
 STEM_RE = re.compile(r"^mojplaywin_(?:20261017|[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16})$")
+PAIR_STEM_RE = re.compile(r"^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}$")
 NEW_MANIFEST_RE = re.compile(r"^(mojplaywin_20261021T[0-9]{6}Z_[0-9a-f]{16})_(mysql|files)_gpgv2[.]manifest[.]json$")
 MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
 MAX_PLAINTEXT_BYTES = 12 * 1024**3
@@ -59,6 +60,7 @@ def load(kind, home=None, stem=None):
         raise RuntimeError("complete encrypted source or private key absent")
     meta = json.loads(manifest.read_text(encoding="ascii"))
     if (meta.get("kind") != kind or meta.get("archive_name", ciphertext.name) != ciphertext.name or
+            meta.get("pair_stem", stem) != stem or
             meta.get("format") != "OpenPGP-AES256-GPGv2" or
             meta.get("ciphertext_roundtrip_integrity_verified") is not True or
             meta.get("source_completion_footer_verified") is not True or
@@ -137,9 +139,15 @@ def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
     return size
 
 
-def readiness(home=None):
+def readiness(home=None, stem=None):
     try:
-        discover(home)
+        if stem is None:
+            discover(home)
+        else:
+            if not isinstance(stem, str) or not PAIR_STEM_RE.fullmatch(stem):
+                raise RuntimeError("invalid fresh pair identity")
+            for kind in ("mysql", "files"):
+                load(kind, home=home, stem=stem)
         return {"classification":"ONE_PASS_RECOVERY_SOURCE_READINESS",
                 "both_primary_archives_complete":True,
                 "isolated_restore_performed":False,
@@ -154,17 +162,23 @@ def readiness(home=None):
 
 
 if __name__=="__main__":
-    if len(sys.argv)!=2:
+    if len(sys.argv) not in (2,3):
         raise SystemExit(2)
     mode=sys.argv[1]
+    requested_stem=sys.argv[2] if len(sys.argv)==3 else None
     if mode=="check":
-        report=readiness()
+        report=readiness(stem=requested_stem)
         print(json.dumps(report,sort_keys=True))
         raise SystemExit(0 if report["both_primary_archives_complete"] else 1)
     try:
         if mode not in ("mysql","files"):
             raise RuntimeError("unsupported operation")
-        stems=discover()
+        if requested_stem is not None:
+            if not PAIR_STEM_RE.fullmatch(requested_stem):
+                raise RuntimeError("invalid fresh pair identity")
+            stems={kind: requested_stem for kind in ("mysql", "files")}
+        else:
+            stems=discover()
         size=decrypt_to_stdout(mode,stem=stems[mode])
         print(json.dumps({"classification":"PRIVATE_STREAM_VERIFIED",
                           "source_kind":mode,"source_verified":True,
