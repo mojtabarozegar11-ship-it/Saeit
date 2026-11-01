@@ -75,7 +75,7 @@
     <tbody>
       {% for item in task_watch.tasks %}
       <tr>
-        <td>{{ item.title }}</td>
+        <td><a href="{% url 'enterprise_portal:task_detail' item.pk %}">{{ item.title }}</a></td>
         <td>{{ item.assigned_to.username }}</td>
         <td>{{ item.get_priority_display }}</td>
         <td>{{ item.due_on|date:"Y/m/d"|default:"تعیین‌نشده" }}</td>
@@ -122,7 +122,7 @@
       </td>
       <td>
         {% if item.task and perms.enterprise_portal.view_worktask %}
-        <a href="{% url 'enterprise_portal:tasks' %}">{{ item.task.get_status_display }} — {{ item.task.due_on|date:"Y/m/d" }}</a>
+        <a href="{% url 'enterprise_portal:task_detail' item.task.pk %}">{{ item.task.get_status_display }} — {{ item.task.due_on|date:"Y/m/d" }}</a>
         {% else %}—{% endif %}
       </td>
     </tr>
