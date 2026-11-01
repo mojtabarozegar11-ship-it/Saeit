@@ -627,6 +627,44 @@ jobs:
           )"
           call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
           timeout 180s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
+      - name: Independently verify all cPanel PICM retirements after deletion read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          COMMAND_HOST="${{ steps.link.outputs.command_host }}"
+          probe64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import hashlib,os
+          home=Path.home()
+          if home!=Path("/home/zomorod2") or os.geteuid()==0: raise SystemExit("WRONG_USER")
+          root=home/"Saeit-staging"
+          entries=[
+            "core/picm_access.py","core/picm_auth.py","core/picm_storyboard.py","core/picm_views.py",
+            "core/__pycache__/picm_access.cpython-311.pyc","core/__pycache__/picm_auth.cpython-311.pyc",
+            "core/__pycache__/picm_storyboard.cpython-311.pyc","core/__pycache__/picm_views.cpython-311.pyc",
+            "templates/picm"]
+          left=[p for p in entries if (root/p).exists() or (root/p).is_symlink()]
+          print("PICM_LIVE_EXCLUSIVE_SOURCE_REMAINING="+str(len(left)))
+          if left: raise SystemExit("PICM_LIVE_SOURCE_NOT_REMOVED")
+          config=root/"config/urls.py"
+          sha=hashlib.sha256(config.read_bytes()).hexdigest()
+          if sha!="5c2ced82baabd7f1951876511ef46813e93fafb158bb62ac3301b4876ebdc786":
+              raise SystemExit("PICM_URL_ROLLBACK_OR_CHANGED")
+          print("PICM_LIVE_13_URL_ROUTES_ABSENT=true")
+          queue=home/".picm-queue"
+          print("PICM_PRIVATE_QUEUE_ABSENT="+str(not queue.exists() and not queue.is_symlink()).lower())
+          if queue.exists() or queue.is_symlink(): raise SystemExit("QUEUE_REAPPEARED")
+          backup=home/".mojplaywin-backups"
+          count=sum(1 for x in backup.iterdir() if x.name.startswith(("picm-","picm_")))
+          print("PICM_OBSOLETE_RELEASE_BACKUPS_REMAINING="+str(count))
+          if count: raise SystemExit("PICM_RELEASE_BACKUP_REAPPEARED")
+          print("PICM_PRODUCTION_POST_RETIREMENT=VERIFIED",flush=True)
+          
+          PY
+          )"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 150s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
       - name: Confirm zero remote modifications or backup deletions
         shell: bash
         run: |
