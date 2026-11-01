@@ -12,7 +12,7 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; img-src \'self\' data:; form-action \'self\'; base-uri \'none\'; frame-ancestors \'none\'');
-if (extension_loaded('session')) {
+if (extension_loaded('session') && !(PHP_SAPI==='cli' && realpath((string)($_SERVER['SCRIPT_FILENAME']??''))===__FILE__)) {
     session_name('ZM_BUSINESS');
     session_set_cookie_params(['lifetime'=>0, 'path'=>'/business/', 'secure'=>true, 'httponly'=>true, 'samesite'=>'Strict']);
     session_start();
@@ -38,8 +38,36 @@ function db(string $private): PDO {
     if(!extension_loaded('pdo_sqlite'))throw new RuntimeException('SQLite driver is not available on this server');
     if(!is_dir($private))throw new RuntimeException('Private data directory not found');
     $file=$private.'/management.sqlite3';
+    // Normal HTTP requests must never silently recreate a lost private accounting DB.
+    if(is_link($file)||!is_file($file)||!is_readable($file)||filesize($file)<4096){
+        throw new RuntimeException('Private accounting database missing or invalid; refusing automatic creation');
+    }
     $db=new PDO('sqlite:'.$file, null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,PDO::ATTR_TIMEOUT=>12]);
-    $db->exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=12000; PRAGMA foreign_keys=ON;');
+    $db->exec('PRAGMA busy_timeout=12000; PRAGMA foreign_keys=ON;');
+    // No CREATE TABLE, ALTER, journal-mode change, or ledger seeding on HTTP GET/POST.
+    $required=['users','ledger_accounts','journal_entries','journal_lines','parties','invoices','invoice_payments','inventory','inventory_movements','employees','documents','projects','audit_events'];
+    $tables=$db->query("SELECT name FROM sqlite_master WHERE type='table'")->fetchAll(PDO::FETCH_COLUMN);
+    if(array_diff($required,$tables))throw new RuntimeException('Private accounting schema incomplete; explicit recovery is required');
+    return $db;
+}
+function initializePrivateDb(string $private): void {
+    if(!extension_loaded('pdo_sqlite'))throw new RuntimeException('SQLite driver is not available on this server');
+    if(!is_dir($private)||is_link($private))throw new RuntimeException('Private data directory missing or unsafe');
+    $file=$private.'/management.sqlite3';
+    $tokenFile=$private.'/setup.token';
+    if(file_exists($file)||is_link($file)||file_exists($tokenFile)||is_link($tokenFile)){
+        throw new RuntimeException('Initialization requires a new private DB path and no existing setup token');
+    }
+    // Exclusive create prevents an installer race from overwriting any existing DB.
+    $handle=@fopen($file,'x');
+    if($handle===false)throw new RuntimeException('Cannot create exclusive private database file');
+    fclose($handle);
+    if(!@chmod($file,0600))throw new RuntimeException('Cannot restrict new database permissions');
+    $db=null;
+    try {
+        $db=new PDO('sqlite:'.$file, null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,PDO::ATTR_TIMEOUT=>12]);
+        $db->exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=12000; PRAGMA foreign_keys=ON;');
+        $db->beginTransaction();
     $db->exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','accountant','manager','viewer')), active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     $db->exec("CREATE TABLE IF NOT EXISTS ledger_accounts (id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, type TEXT NOT NULL CHECK(type IN ('asset','liability','equity','income','expense')), active INTEGER NOT NULL DEFAULT 1)");
     $db->exec("CREATE TABLE IF NOT EXISTS journal_entries (id INTEGER PRIMARY KEY, doc_no TEXT NOT NULL UNIQUE, doc_date TEXT NOT NULL, note TEXT NOT NULL, entered_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
@@ -55,7 +83,20 @@ function db(string $private): PDO {
     $db->exec("CREATE TABLE IF NOT EXISTS audit_events (id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), verb TEXT NOT NULL, subject TEXT NOT NULL, entity_id INTEGER, occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     $seed=['1000'=>['صندوق','asset'],'1010'=>['بانک','asset'],'1100'=>['حساب‌های دریافتنی','asset'],'1200'=>['موجودی کالا','asset'],'1500'=>['دارایی ثابت','asset'],'2000'=>['حساب‌های پرداختنی','liability'],'2100'=>['مالیات پرداختنی','liability'],'3000'=>['سرمایه','equity'],'4000'=>['درآمد فروش','income'],'5000'=>['بهای تمام‌شده','expense'],'5100'=>['هزینه عملیاتی','expense'],'5200'=>['هزینه حقوق','expense']];
     $s=$db->prepare('INSERT OR IGNORE INTO ledger_accounts(code,name,type) VALUES (?,?,?)');foreach($seed as $code=>$parts)$s->execute([$code,$parts[0],$parts[1]]);
-    return $db;
+        $db->commit();
+        $token=bin2hex(random_bytes(32))."\n";
+        $tokenHandle=@fopen($tokenFile,'x');
+        if($tokenHandle===false)throw new RuntimeException('Cannot create private one-time setup token');
+        $written=fwrite($tokenHandle,$token);
+        $closed=fclose($tokenHandle);
+        if($written!==strlen($token)||!$closed||!@chmod($tokenFile,0600)){
+            throw new RuntimeException('Private setup token was not safely written');
+        }
+    } catch(Throwable $e) {
+        if($db instanceof PDO && $db->inTransaction())$db->rollBack();
+        // Deliberately retain partial files for forensic recovery; never overwrite them.
+        throw $e;
+    }
 }
 function q(PDO $db,string $sql,array $args=[]): array {$s=$db->prepare($sql);$s->execute($args);return $s->fetchAll();}
 function one(PDO $db,string $sql,array $args=[]): mixed {$s=$db->prepare($sql);$s->execute($args);return $s->fetchColumn();}
@@ -83,7 +124,7 @@ function layoutStart(string $page,?array $user=null):void {
     $nav=['dashboard'=>'داشبورد','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','documents'=>'مکاتبات','projects'=>'پروژه‌ها','approval_register'=>'دفتر مصوبات','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
     $navHtml='';foreach($nav as $key=>$label){if($key==='users'&&role()!=='admin')continue;$navHtml.='<a class="'.($page===$key?'sel':'').'" href="?page='.esc($key).'">'.esc($label).'</a>';}
     echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.esc(APP_TITLE).'</title><link rel="icon" type="image/webp" href="/static/site/zomorod-v7/company-logo.webp"><style>\n    :root{font-family:Tahoma,Arial,sans-serif;color:#e9e7d9;background:#0c1811}*{box-sizing:border-box}body{margin:0;background:#203b23;min-height:100vh}a{color:#d9bc72;text-decoration:none}header{padding:20px 4%;background:#1a341e;border-bottom:3px double #e5c374;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:21px;color:#edcd79;font-weight:bold}.small{font-size:12px;color:#b9c0ae}nav{display:flex;overflow:auto;gap:8px;padding:16px 4%;background:#1a341e;scrollbar-width:thin}nav a{white-space:nowrap;padding:11px 13px;background:#284c30;border:1px solid #e1c47f;border-radius:12px}nav .sel{color:#081509;background:#d8ba6e;border-color:#f3d590}main{max-width:1260px;margin:auto;padding:26px 20px 70px}h1,h2,h3{color:#edcf88}h1{font-size:clamp(23px,3vw,32px)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:15px;margin:18px 0}.card,section{background:#18291e;border:1px solid #546545;border-radius:18px;padding:20px;margin:16px 0;box-shadow:0 8px 28px #0002}.metric{font-size:28px;color:#f1d68e;font-weight:bold}table{border-collapse:collapse;width:100%;min-width:580px}th,td{padding:12px;text-align:right;border-bottom:1px solid #405243}th{color:#e4cb83}.scroll{overflow:auto}label{display:block;color:#d1dcbf;margin:9px 0 5px}input,textarea,select{font:inherit;color:#f3eedc;background:#0c1a12;border:1px solid #647153;border-radius:9px;padding:11px;width:100%;max-width:440px}textarea{min-height:88px}button{background:linear-gradient(120deg,#a98741,#f3d584);border:1px solid #f8dd9a;color:#15200e;padding:12px 19px;border-radius:12px;cursor:pointer;font-weight:bold;margin-top:13px}button:hover{filter:brightness(1.1)}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 18px}.form .full{grid-column:1/-1}.notice{border:1px solid #b99550;background:#354027;padding:15px;border-radius:12px}.danger{background:#4d1e20;border-color:#c26b6b}.muted{color:#bec8b6}.account-line{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}.sign{max-width:540px;margin:70px auto;padding:30px}footer{padding:24px 4%;border-top:1px solid #52613b;text-align:center;color:#bdc7ae;font-size:12px}.tags{display:flex;flex-wrap:wrap;gap:8px}.tags span{border:1px solid #6b7050;border-radius:15px;padding:4px 10px}@media(max-width:650px){.account-line{grid-template-columns:1fr 1fr}.account-line select{grid-column:1/-1}main{padding:14px 12px}header{padding:15px}}\n    </style></head><body><header><div><div class="brand"><img src="/static/site/zomorod-v7/company-logo.webp" alt="نشان شرکت زمرد ملل" width="48" height="48" style="width:48px;height:48px;border-radius:50%;border:2px solid #e5c377;vertical-align:middle;margin-left:12px;background:#fff">زمرد ملل · مدیریت جامع</div><div class="small">مدیریت سازمان · دفاتر مالی · ثبت عملیات با کنترل دسترسی</div></div><div><a href="https://zomorodmelal.ir/">بازگشت به سایت</a>';
-    if($user)echo ' · <span class="small">'.esc($user['username']).' ('.esc($user['role']).')</span> · <a href="?page=logout">خروج</a>';
+    if($user)echo ' · <span class="small">'.esc($user['username']).' ('.esc($user['role']).')</span> · <form method="post" action="/business/" style="display:inline;margin:0">'.tokenInput().'<input type="hidden" name="action" value="logout"><button type="submit" style="margin:0;padding:8px 13px">خروج امن</button></form>';
     echo '</div></header>';
     if($user)echo '<nav aria-label="پیمایش مدیریت">'.$navHtml.'</nav>';
     echo '<main>';
@@ -91,16 +132,27 @@ function layoutStart(string $page,?array $user=null):void {
 function layoutEnd():void {echo '</main><footer>تمام حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل محفوظ است . آبان ۱۳۹۸ مجتبی روزگار</footer></body></html>';}
 function options(PDO $db,string $sql,array $fields,string $selected=''):string{$out='';foreach(q($db,$sql) as $row){$key=(string)$row[$fields[0]];$out.='<option value="'.esc($key).'"'.($selected===$key?' selected':'').'>'.esc((string)$row[$fields[1]]).'</option>';}return $out;}
 function formBegin(string $action):void {echo '<form method="post" autocomplete="off">'.tokenInput().'<input type="hidden" name="action" value="'.esc($action).'">';}
+if(PHP_SAPI==='cli' && realpath((string)($_SERVER['SCRIPT_FILENAME']??''))===__FILE__){
+    if(($argv[1]??'')!=='--initialize-private-db'||count($argv)!==2){
+        fwrite(STDERR,"Only --initialize-private-db is supported for local private installation.\n");
+        exit(64);
+    }
+    try {
+        initializePrivateDb($private);
+        fwrite(STDOUT,"Private accounting DB initialized; setup token saved privately (not printed).\n");
+        exit(0);
+    } catch(Throwable $e) {
+        fwrite(STDERR,"Initialization refused: ".$e->getMessage()."\n");
+        exit(1);
+    }
+}
 try {
     $db=db($private);
     if(empty($_SESSION['csrf']))doCsrf();
     $count=(int)one($db,'SELECT COUNT(*) FROM users');
     if($count===0){
         $setupFile=$private.'/setup.token';
-        if(!is_file($setupFile)){
-            $fp=@fopen($setupFile,'x');
-            if($fp!==false){fwrite($fp,bin2hex(random_bytes(32))."\n");fclose($fp);@chmod($setupFile,0600);}
-        }
+        if(is_link($setupFile)||!is_file($setupFile))throw new RuntimeException('Private setup token missing; initialization requires local CLI access');
         if($_SERVER['REQUEST_METHOD']==='POST'){
             verifyCsrf();
             $key=$private.'/setup.token';
@@ -117,7 +169,25 @@ try {
         layoutStart('setup');echo '<section class="sign"><h1>راه‌اندازی امن میز مدیریت</h1><p>برای نخستین ورود، توکن یک‌بارمصرف نگهداری‌شده در <code>~/.private/zomorod-business/setup.token</code> را از فایل‌منیجر cPanel یا SSH بخوانید. این رمز در کد یا گزارش GitHub منتشر نمی‌شود.</p>';
         formBegin('setup');echo '<label>توکن فعال‌سازی</label><input name="setup_token" type="password" required autocomplete="off"><label>نام کاربری مدیر</label><input name="username" required minlength="5" maxlength="40"><label>گذرواژه جدید</label><input name="password" type="password" required minlength="14" autocomplete="new-password"><button>ایجاد مدیر و فعال‌سازی</button></form></section>';layoutEnd();exit;
     }
-    if(($_GET['page']??'')==='logout'){$_SESSION=[];session_destroy();header('Location: /business/',true,303);exit;}
+    // Logout must be a CSRF-protected POST; a GET or external link cannot end an accounting session.
+    if($_SERVER['REQUEST_METHOD']==='POST' && req('action')==='logout'){
+        verifyCsrf();
+        $_SESSION=[];
+        if(ini_get('session.use_cookies')){
+            $params=session_get_cookie_params();
+            setcookie(session_name(), '', [
+                'expires'=>time()-42000,
+                'path'=>$params['path'],
+                'domain'=>$params['domain'],
+                'secure'=>$params['secure'],
+                'httponly'=>$params['httponly'],
+                'samesite'=>$params['samesite']??'Strict',
+            ]);
+        }
+        session_destroy();
+        header('Location: /business/',true,303);
+        exit;
+    }
     $uid=actor();$user=$uid?q($db,'SELECT id,username,role,active FROM users WHERE id=?',[$uid])[0]??null:null;
     // A permission downgrade takes effect on the next request, including existing sessions.
     if($user && (int)$user['active']===1)$_SESSION['role']=(string)$user['role'];
@@ -180,21 +250,35 @@ try {
                 $db->prepare('INSERT INTO invoices(invoice_no,kind,party_id,invoice_date,due_date,description,amount,currency,posted_entry,created_by) VALUES(?,?,?,?,?,?,?,?,?,?)')->execute([$no,$kind,$party,$date,$due,$desc,$amount,$cur,$j,actor()]);audit($db,'create','invoice',(int)$db->lastInsertId());$db->commit();
             }catch(Throwable $e){$db->rollBack();throw $e;}
         } elseif($action==='payment'){
-            $invoice=(int)req('invoice_id');$db->beginTransaction();$rows=q($db,'SELECT i.*,COALESCE((SELECT SUM(amount) FROM invoice_payments WHERE invoice_id=i.id),0) AS paid FROM invoices i WHERE i.id=?',[$invoice]);
-            if(!$rows)bail('فاکتور پیدا نشد.');$inv=$rows[0];$amount=cents(req('amount'));$remaining=(int)$inv['amount']-(int)$inv['paid'];
-            if($amount<=0||$amount>$remaining)bail('مبلغ بیشتر از مانده فاکتور یا نامعتبر است.');
-            $on=inputDate('date');
+            $invoice=(int)req('invoice_id');
+            // Acquire the writer lock before reading the outstanding balance.
+            // Validation errors must release it; concurrent payments re-check the latest balance.
+            $db->exec('BEGIN IMMEDIATE');
             try{
+                $rows=q($db,'SELECT i.*,COALESCE((SELECT SUM(amount) FROM invoice_payments WHERE invoice_id=i.id),0) AS paid FROM invoices i WHERE i.id=?',[$invoice]);
+                if(!$rows)bail('فاکتور پیدا نشد.');
+                $inv=$rows[0];$amount=cents(req('amount'));$remaining=(int)$inv['amount']-(int)$inv['paid'];
+                if($amount<=0||$amount>$remaining)bail('مبلغ بیشتر از مانده فاکتور یا نامعتبر است.');
+                $on=inputDate('date');
                 $j=record($db,uniqueNo('PAY'),$on,'تسویه فاکتور '.$inv['invoice_no'],(string)$inv['currency'],$inv['kind']==='sale'?[['1010',$amount,0],['1100',0,$amount]]:[['2000',$amount,0],['1010',0,$amount]]);
-                $db->prepare('INSERT INTO invoice_payments(invoice_id,amount,paid_on,entry_id,created_by) VALUES(?,?,?,?,?)')->execute([$invoice,$amount,$on,$j,actor()]);audit($db,'create','invoice-payment',(int)$db->lastInsertId());$db->commit();
-            }catch(Throwable $e){$db->rollBack();throw $e;}
+                $db->prepare('INSERT INTO invoice_payments(invoice_id,amount,paid_on,entry_id,created_by) VALUES(?,?,?,?,?)')->execute([$invoice,$amount,$on,$j,actor()]);
+                audit($db,'create','invoice-payment',(int)$db->lastInsertId());
+                $db->exec('COMMIT');
+            }catch(Throwable $e){try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}throw $e;}
         } elseif($action==='inventory'){
             $sku=req('sku');$name=req('name');if($sku===''||$name==='')bail('شناسه کالا و نام لازم است.');
             $db->prepare('INSERT INTO inventory(sku,name,unit,reorder_level) VALUES(?,?,?,?)')->execute([$sku,$name,req('unit','عدد'),max(0,(int)req('reorder_level','0'))]);audit($db,'create','inventory',(int)$db->lastInsertId());
         } elseif($action==='stock'){
             $id=(int)req('inventory_id');$qty=(int)req('qty');if(!one($db,'SELECT id FROM inventory WHERE id=?',[$id])||$qty===0||abs($qty)>100000000)bail('مقدار کالا نامعتبر است.');
-            $now=(int)one($db,'SELECT COALESCE(SUM(qty),0) FROM inventory_movements WHERE inventory_id=?',[$id]);if($now+$qty<0)bail('موجودی انبار منفی می‌شود.');
-            $db->prepare('INSERT INTO inventory_movements(inventory_id,movement_date,qty,note,created_by) VALUES(?,?,?,?,?)')->execute([$id,inputDate('date'),$qty,req('note'),actor()]);audit($db,'move','inventory-stock',(int)$db->lastInsertId());
+            // Preserve nonnegative stock even when two requests arrive concurrently.
+            $db->exec('BEGIN IMMEDIATE');
+            try{
+                $now=(int)one($db,'SELECT COALESCE(SUM(qty),0) FROM inventory_movements WHERE inventory_id=?',[$id]);
+                if($now+$qty<0)bail('موجودی انبار منفی می‌شود.');
+                $db->prepare('INSERT INTO inventory_movements(inventory_id,movement_date,qty,note,created_by) VALUES(?,?,?,?,?)')->execute([$id,inputDate('date'),$qty,req('note'),actor()]);
+                audit($db,'move','inventory-stock',(int)$db->lastInsertId());
+                $db->exec('COMMIT');
+            }catch(Throwable $e){try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}throw $e;}
         } elseif($action==='employee'){
             $fullname=req('fullname');$job=req('job_title');if($fullname===''||$job==='')bail('نام و سمت لازم است.');
             $db->prepare('INSERT INTO employees(fullname,job_title,start_date,monthly_salary) VALUES(?,?,?,?)')->execute([$fullname,$job,inputDate('start_date'),cents(req('salary','0'))]);audit($db,'create','employee',(int)$db->lastInsertId());
