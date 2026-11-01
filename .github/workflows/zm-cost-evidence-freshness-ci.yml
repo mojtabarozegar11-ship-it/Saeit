@@ -3,6 +3,7 @@ on:
   pull_request:
     branches:
       - integration/zm-unified-business-command-center-20261101
+      - fix/zm-costing-expired-price-evidence-20261102
     paths:
       - ecosystem_hub/costing.py
       - ecosystem_hub/test_cost_rate_freshness.py
@@ -41,7 +42,7 @@ jobs:
         run: |
           python manage.py check
           python manage.py makemigrations --check --dry-run
-      - name: Verify price freshness and original manufacturing cost regressions
+      - name: Verify price freshness, corrupt-input guards and original cost regressions
         run: |
           python manage.py test ecosystem_hub.test_cost_rate_freshness ecosystem_hub.tests.HubSuite.test_cost_estimate_remains_incomplete_without_verified_material_rate
       - name: Explicit no-production boundary

@@ -103,3 +103,42 @@ class CostRateFreshnessTests(TestCase):
                     )
         self.assertFalse(JournalEntry.objects.exists())
         self.assertFalse(StockMovement.objects.exists())
+
+    def test_bulk_updated_negative_verified_price_cannot_make_a_complete_estimate(self):
+        quote = self.price(1, "5")
+        MaterialPriceReference.objects.filter(pk=quote.pk).update(amount=Decimal("-1"))
+        result = estimate_manufacturing_cost(self.scenario, as_of=self.today)
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["invalid_rate_skus"], ["RAW"])
+        self.assertEqual(result["missing_skus"], ["RAW"])
+        self.assertIsNone(result["total"])
+        self.assertIsNone(result["unit_cost"])
+
+    def test_bulk_updated_blank_evidence_does_not_fall_back_to_old_quote(self):
+        self.price(30, "7")
+        quote = self.price(1, "5")
+        MaterialPriceReference.objects.filter(pk=quote.pk).update(evidence_ref="   ")
+        result = estimate_manufacturing_cost(self.scenario, as_of=self.today)
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["invalid_rate_skus"], ["RAW"])
+        self.assertIsNone(result["components"][0]["rate"])
+        self.assertIsNone(result["total"])
+
+    def test_bulk_updated_negative_labor_is_rejected_without_financial_writes(self):
+        ProductionCostScenario.objects.filter(pk=self.scenario.pk).update(
+            labor_estimate=Decimal("-100"),
+        )
+        self.scenario.refresh_from_db()
+        with self.assertRaisesRegex(ValueError, "Labor and overhead"):
+            estimate_manufacturing_cost(self.scenario, as_of=self.today)
+        self.assertFalse(JournalEntry.objects.exists())
+        self.assertFalse(StockMovement.objects.exists())
+
+    def test_bulk_updated_invalid_bom_scrap_is_rejected(self):
+        MaterialRequirement.objects.filter(formula=self.recipe).update(
+            scrap_percent=Decimal("-50"),
+        )
+        with self.assertRaisesRegex(ValueError, "BOM quantity or scrap"):
+            estimate_manufacturing_cost(self.scenario, as_of=self.today)
+        self.assertFalse(JournalEntry.objects.exists())
+        self.assertFalse(StockMovement.objects.exists())

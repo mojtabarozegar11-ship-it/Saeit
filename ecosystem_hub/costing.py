@@ -25,15 +25,20 @@ def estimate_manufacturing_cost(scenario, *, as_of=None, max_rate_age_days=MAX_R
         raise ValueError("Cost scenario, production order and BOM must belong to the same unit.")
     if recipe.yield_quantity <= 0 or order.quantity <= 0:
         raise ValueError("Production quantity and recipe yield must be positive.")
+    if scenario.labor_estimate < 0 or scenario.overhead_estimate < 0:
+        raise ValueError("Labor and overhead estimates cannot be negative.")
     when = as_of or timezone.localdate()
     components = []
     total_material = Decimal("0.00")
     rows = list(recipe.materials.select_related("item").order_by("item__sku"))
     missing = []
     stale = []
+    invalid = []
     for component in rows:
         if component.item.unit_id != scenario.unit_id:
             raise ValueError("A BOM component belongs to another company unit.")
+        if component.quantity <= 0 or not 0 <= component.scrap_percent <= 100:
+            raise ValueError("BOM quantity or scrap percentage is invalid.")
         scrap = Decimal("1") + component.scrap_percent / Decimal("100")
         needed = ((order.quantity / recipe.yield_quantity) * component.quantity * scrap).quantize(
             MATERIAL_PRECISION, rounding=ROUND_UP,
@@ -45,6 +50,11 @@ def estimate_manufacturing_cost(scenario, *, as_of=None, max_rate_age_days=MAX_R
             status="verified",
             as_of__lte=when,
         ).exclude(evidence_ref="").order_by("-as_of", "-pk").first()
+        # bulk_create / QuerySet.update / legacy imports can bypass model.full_clean.
+        # Never use a malformed newest verified quote or fall back to an older one.
+        if reference and (reference.amount <= 0 or not reference.evidence_ref.strip()):
+            invalid.append(component.item.sku)
+            reference = None
         if reference and reference.as_of < when - timedelta(days=max_rate_age_days):
             stale.append(component.item.sku)
             reference = None  # Expired evidence must not silently price a product.
@@ -80,6 +90,7 @@ def estimate_manufacturing_cost(scenario, *, as_of=None, max_rate_age_days=MAX_R
         "components": components,
         "missing_skus": missing,
         "stale_skus": stale,
+        "invalid_rate_skus": invalid,
         "max_rate_age_days": max_rate_age_days,
         "complete": complete,
         "material_total": total_material if complete else None,
