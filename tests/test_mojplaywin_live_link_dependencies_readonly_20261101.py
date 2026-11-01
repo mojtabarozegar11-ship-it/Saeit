@@ -4,7 +4,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from scripts.mojplaywin_live_link_dependencies_readonly_20261101 import (role_for_target, target_kind, alias_purpose, direct_child_metadata, allowed_private_target_metadata, target_site_affinity)
+from scripts.mojplaywin_live_link_dependencies_readonly_20261101 import (role_for_target, target_kind, alias_purpose, direct_child_metadata, allowed_private_target_metadata, target_site_affinity, bounded_asset_tree_metadata)
 
 
 class LinkRoleTests(unittest.TestCase):
@@ -118,6 +118,37 @@ class PrivateShallowTargetMetadataTests(unittest.TestCase):
             self.assertEqual(result["metadata"]["fixed_marker_categories"], ["javascript_project"])
             self.assertNotIn("not-for-logs", json.dumps(result))
             self.assertNotIn(td, json.dumps(result))
+
+    def test_bounded_tree_metadata_only_reports_fixed_file_shapes(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "nested-private").mkdir()
+            (root / "nested-private" / "customer-secret.css").write_text("SECRET_BYTES", encoding="utf8")
+            (root / ".env").write_text("DATABASE_PASSWORD=TOP_SECRET", encoding="utf8")
+            (root / "photo.jpg").write_bytes(b"synthetic")
+            (root / "main.py").write_text("synthetic", encoding="utf8")
+            (root / "alias").symlink_to(root / "nested-private", target_is_directory=True)
+            report = bounded_asset_tree_metadata(root)
+            self.assertEqual(report["entry_count"], 6)
+            self.assertEqual(report["entry_shapes"], {
+                "directory": 1, "media_file_shape": 1, "nested_symlink": 1,
+                "sensitive_or_backup_file_shape": 1, "source_code_file_shape": 1,
+                "web_asset_file_shape": 1,
+            })
+            self.assertEqual(report["hidden_entry_count"], 1)
+            self.assertTrue(report["walk_completed_without_following_links"])
+            self.assertFalse(report["file_contents_read"])
+            data = json.dumps(report)
+            for private in (td, "customer-secret", "DATABASE_PASSWORD", "TOP_SECRET"):
+                self.assertNotIn(private, data)
+
+    def test_bounded_tree_scan_fails_on_entry_limit(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "first.css").touch()
+            (root / "second.jpg").touch()
+            with self.assertRaisesRegex(RuntimeError, "TARGET_TREE_SCAN_LIMIT"):
+                bounded_asset_tree_metadata(root, max_entries=1)
 
     def test_large_directories_fail_closed(self):
         with tempfile.TemporaryDirectory() as td:
