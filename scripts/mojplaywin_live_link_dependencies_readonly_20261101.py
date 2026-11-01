@@ -45,6 +45,17 @@ def role_for_target(source_relative, link_target):
     return "other_unbacked_account_root"
 
 
+
+def target_kind(resolved):
+    """A fixed type label; never return any part of the target path."""
+    if not resolved.exists():
+        return "missing"
+    if resolved.is_dir():
+        return "directory"
+    if resolved.is_file():
+        return "regular_file"
+    return "other"
+
 def inspect():
     result = {
         "classification": "MPW_LIVE_SYMLINK_DEPENDENCIES_READ_ONLY",
@@ -65,7 +76,7 @@ def inspect():
         p = HOME / name
         if not p.is_dir() or p.is_symlink() or p.resolve() != p:
             raise RuntimeError("PRIMARY_ROOT_DRIFT")
-    categories, resolution = Counter(), Counter()
+    categories, resolution, target_types = Counter(), Counter(), Counter()
     links = entries = 0
     def fail_walk(_error):
         raise RuntimeError("SCAN_UNREADABLE")
@@ -91,6 +102,7 @@ def inspect():
                         state = "dangling"
                     categories[role] += 1
                     resolution[role + "_" + state] += 1
+                    target_types[role + "_" + target_kind(resolved)] += 1
                 except (OSError, RuntimeError, ValueError):
                     categories["unreadable"] += 1
     result.update({
@@ -98,6 +110,7 @@ def inspect():
         "total_symlinks": links,
         "dependency_classes": dict(sorted(categories.items())),
         "dependency_resolution": dict(sorted(resolution.items())),
+        "dependency_target_types": dict(sorted(target_types.items())),
     })
     return result
 
