@@ -142,6 +142,19 @@ class PrivateShallowTargetMetadataTests(unittest.TestCase):
             for private in (td, "customer-secret", "DATABASE_PASSWORD", "TOP_SECRET"):
                 self.assertNotIn(private, data)
 
+    def test_precompressed_asset_sidecar_requires_ordinary_web_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "app.css").write_text("synthetic stylesheet", encoding="utf8")
+            (root / "app.css.gz").write_bytes(b"synthetic compressed")
+            (root / "unknown.tar").write_bytes(b"synthetic archive")
+            (root / "private.bin.br").write_bytes(b"synthetic brotli")
+            result = bounded_asset_tree_metadata(root)
+            self.assertEqual(result["entry_shapes"]["precompressed_web_sidecar_shape"], 1)
+            self.assertEqual(result["entry_shapes"]["download_archive_shape"], 1)
+            self.assertEqual(result["entry_shapes"]["other_gzip_or_brotli_shape"], 1)
+            self.assertNotIn("private.bin", json.dumps(result))
+
     def test_bounded_tree_scan_fails_on_entry_limit(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
