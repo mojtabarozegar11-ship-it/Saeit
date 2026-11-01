@@ -165,6 +165,14 @@ jobs:
           timeout 170s ssh -T -F "$d/config" "$COMMAND_HOST" "python3 -c '$call' '$src64' preflight-scoped-files" >/dev/null
           timeout 140s ssh -T -F "$d/config" "$COMMAND_HOST" 'set -eu; test "$(id -un)" = zomorod2; app=$(du -skL /home/zomorod2/Saeit-staging | cut -f1); web=$(du -skL /home/zomorod2/mojplaywin.com | cut -f1); case "$app:$web" in *[!0-9:]*|"") exit 1;; esac; echo "CPANEL_ROOTS_TOTAL_MIB=$(((app+web)/1024))"; echo "CPANEL_CONTENT_READ=NONE"; echo "CPANEL_SOURCE_MUTATION=NONE"'
           echo "CAPACITY_PLANNING=METADATA_ONLY"
+      - name: Read-only inventory of regenerable VPS user cache footprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-capacity-inventory"
+          code='from pathlib import Path;import subprocess;home=Path.home();entries=(("USER_CACHE_TOTAL","cache"),("PIP_CACHE","cache/pip"),("UV_CACHE","cache/uv"),("NPM_CACHE","npm/_cacache"),("NODE_CACHE","cache/node"),("RUST_CACHE","cargo/registry/cache"));[(lambda p,label:print(label+"_MIB="+str(int(subprocess.run(["du","-skx","--",str(p)],check=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=35).stdout.split()[0])//1024) if p.is_dir() and not p.is_symlink() else label+"_MIB=0"))(home/rel,label) for label,rel in entries]'
+          timeout 95s ssh -T -F "$d/config" saeit-vps "python3 -c '$code'"
+          echo "USER_CACHE_INSPECTION=READ_ONLY"
       - name: Remove temporary SSH keys
         if: always()
         shell: bash
