@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/zomorod-messaging-main-integration-20261030
+      - integration/zm-unified-business-command-center-20261101
 permissions:
   contents: read
 concurrency:
@@ -10,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   offline-release-safety:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/zomorod-messaging-main-integration-20261030'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/feature/zomorod-messaging-main-integration-20261030' || github.ref == 'refs/heads/integration/zm-unified-business-command-center-20261101')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
@@ -47,6 +48,7 @@ jobs:
           set -euo pipefail
           python3 -B -m py_compile scripts/zomorod_office_guarded_release_20261031.py
           python3 -B -m unittest -v scripts/test_zomorod_office_guarded_release_20261031.py
+          python3 -O -B -m unittest -v scripts/test_zomorod_office_guarded_release_20261031.py
           echo 'NO_HOST_RELEASE_REGRESSION=passed'
           echo 'LIVE_HOST_CONTACTED=false'
           echo 'DATABASE_CHANGED=false'
