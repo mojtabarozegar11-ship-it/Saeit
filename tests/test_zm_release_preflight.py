@@ -131,10 +131,12 @@ class ReadOnlySQLitePreflightTests(unittest.TestCase):
 
     def test_deploy_preflight_precedes_django_database_connection(self):
         commands = [line.strip() for line in DEPLOY.read_text(encoding="utf-8").splitlines() if line.strip() and not line.lstrip().startswith("#")]
-        safe = commands.index('"$PYTHON" scripts/production_db_readonly_preflight.py')
+        safe = commands.index('"$PYTHON" -m scripts.production_db_readonly_preflight')
+        system_check = commands.index('"$PYTHON" manage.py check --deploy')
         check = commands.index('"$PYTHON" manage.py migrate --check')
         gate = commands.index('"$PYTHON" manage.py production_gate')
-        self.assertLess(safe, check)
+        self.assertLess(safe, system_check)
+        self.assertLess(system_check, check)
         self.assertLess(check, gate)
 
 if __name__ == "__main__":
