@@ -59,10 +59,37 @@ def link_category(name, target, is_symlink):
     return ("inside_approved_roots" if category == "approved_root"
             else category)
 
+
+def unbacked_link_scope(name, target, is_symlink):
+    """Only coarse dependency role; never disclose root, file or target name."""
+    if not isinstance(target, str):
+        return "unknown"
+    if target.startswith("/"):
+        try:
+            candidate = str(PurePosixPath(target).relative_to("/home/zomorod2"))
+        except ValueError:
+            return "outside_source_account"
+    elif is_symlink:
+        candidate = posixpath.normpath(
+            posixpath.join(*PurePosixPath(name).parts[:-1], target))
+    else:
+        candidate = posixpath.normpath(target)
+    parts = PurePosixPath(candidate).parts
+    if not parts or parts[0] == "..":
+        return "outside_source_account"
+    if parts[0] == "virtualenv":
+        return "python_runtime_dependency"
+    if parts[0] in ("Saeit", "public_html"):
+        return "alternative_site_code_root"
+    if parts[0] in ("tmp", "logs", ".local", ".cache"):
+        return "ephemeral_runtime_path"
+    return "other_unbacked_account_root"
+
 def classify_tar(stream):
     """Consume archive headers, not payload content, then drain to GPG EOF."""
     counts = Counter()
     link_counts = Counter()
+    unbacked_roles = Counter()
     entries = 0
     tar_status = "PASS"
     try:
@@ -75,7 +102,10 @@ def classify_tar(stream):
                 counts[member_category(member.name)] += 1
                 if member.issym() or member.islnk():
                     kind = 'symlink' if member.issym() else 'hardlink'
-                    link_counts[kind + '_' + link_category(member.name, member.linkname, member.issym())] += 1
+                    link_class = link_category(member.name, member.linkname, member.issym())
+                    link_counts[kind + '_' + link_class] += 1
+                    if link_class == 'outside_approved_roots':
+                        unbacked_roles[kind + '_' + unbacked_link_scope(member.name, member.linkname, member.issym())] += 1
     except (tarfile.TarError, OSError, ValueError, UnicodeError):
         tar_status = "TAR_PARSE_FAILURE"
     # The encrypted source has an authenticated footer after the tar end.
@@ -85,6 +115,7 @@ def classify_tar(stream):
     return {"member_count_capped": min(entries, MAX_ENTRIES),
             "categories": dict(sorted(counts.items())),
             "link_target_categories": dict(sorted(link_counts.items())),
+            "unbacked_link_dependency_classes": dict(sorted(unbacked_roles.items())),
             "tar_read_status": tar_status}
 
 
