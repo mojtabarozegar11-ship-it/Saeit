@@ -170,7 +170,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-capacity-inventory"
-          code='from pathlib import Path;import subprocess;home=Path.home();entries=(("USER_CACHE_TOTAL","cache"),("PIP_CACHE","cache/pip"),("UV_CACHE","cache/uv"),("NPM_CACHE","npm/_cacache"),("NODE_CACHE","cache/node"),("RUST_CACHE","cargo/registry/cache"));[(lambda p,label:print(label+"_MIB="+str(int(subprocess.run(["du","-skx","--",str(p)],check=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=35).stdout.split()[0])//1024) if p.is_dir() and not p.is_symlink() else label+"_MIB=0"))(home/rel,label) for label,rel in entries]'
+          code='from pathlib import Path;import subprocess;home=Path.home();entries=(("USER_CACHE_TOTAL",".cache"),("PIP_CACHE",".cache/pip"),("UV_CACHE",".cache/uv"),("NPM_CACHE",".npm/_cacache"),("NODE_CACHE",".cache/node"),("RUST_CACHE",".cargo/registry/cache"));[(lambda p,label:print(label+"_MIB="+str(int(subprocess.run(["du","-skx","--",str(p)],check=True,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=35).stdout.split()[0])//1024) if p.is_dir() and not p.is_symlink() else label+"_MIB=0"))(home/rel,label) for label,rel in entries]'
           timeout 95s ssh -T -F "$d/config" saeit-vps "python3 -c '$code'"
           echo "USER_CACHE_INSPECTION=READ_ONLY"
       - name: Remove temporary SSH keys
