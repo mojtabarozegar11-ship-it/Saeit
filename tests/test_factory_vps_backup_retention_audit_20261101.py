@@ -75,6 +75,24 @@ class FactoryBackupAuditTests(unittest.TestCase):
         )
         self.assertTrue(all(not r["approved_for_deletion"] for r in report["records"]))
 
+    def test_nested_snapshots_are_inventory_only_not_master_keep_candidates(self):
+        top = self.make_database("master-before-20261027T000000Z.sqlite3")
+        nested_dir = self.root / "archive"
+        nested_dir.mkdir()
+        nested = self.make_database("master-before-20261028T000000Z.sqlite3")
+        nested.rename(nested_dir / nested.name)
+        report = audit_module.audit(self.root)
+        self.assertEqual(report["sqlite_count"], 2)
+        self.assertEqual(report["verified_exact_master_count"], 1)
+        self.assertEqual(report["keep_newest_two_verified_master_paths"], [top.name])
+        nested_record = next(
+            row for row in report["records"]
+            if row["path_relative"].startswith("archive/")
+        )
+        self.assertTrue(nested_record["quick_check_ok"])
+        self.assertFalse(nested_record["exact_master_before_name"])
+        self.assertFalse(nested_record["approved_for_deletion"])
+
     def test_newest_selection_uses_exact_mtime_not_rounded_age(self):
         a = self.make_database("master-before-20261025T000000Z.sqlite3")
         b = self.make_database("master-before-20261026T000000Z.sqlite3")
