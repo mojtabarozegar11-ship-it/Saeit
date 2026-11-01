@@ -37,6 +37,8 @@ class OwnerArmedBackupContract(unittest.TestCase):
         self.assertIn("python3 -B -c '$call' '$src64' files", s)
         self.assertIn("python3 -c '$call' '$src64' mysql", s)
         self.assertIn("VPS GPG AES256", s)
+        self.assertIn("mpw_vps_backup_runtime_gate_readonly_20261101.py", s)
+        self.assertIn("--require-ready", s)
 
     def test_isolated_restore_not_a_live_release(self):
         s = self.source
