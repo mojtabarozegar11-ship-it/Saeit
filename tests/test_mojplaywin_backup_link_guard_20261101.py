@@ -127,8 +127,19 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
         (self.targets["assets"] / "example.css.gz").write_bytes(b"synthetic")
         self.assertEqual(set(self.check()), {"static", "assets", "uploads"})
 
-    def test_orphan_compressed_asset_is_blocked(self):
-        (self.targets["assets"] / "unmatched.json.gz").write_bytes(b"synthetic")
+    def test_at_most_two_tiny_orphaned_compressed_assets_are_tolerated(self):
+        (self.targets["assets"] / "unmatched-one.json.gz").write_bytes(b"synthetic")
+        (self.targets["assets"] / "unmatched-two.json.gz").write_bytes(b"synthetic")
+        self.assertEqual(set(self.check()), {"static", "assets", "uploads"})
+
+    def test_third_orphan_compressed_asset_is_blocked(self):
+        for label in ("one", "two", "three"):
+            (self.targets["assets"] / ("unmatched-" + label + ".json.gz")).write_bytes(b"synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_large_orphan_compressed_asset_is_blocked(self):
+        (self.targets["assets"] / "unmatched.json.gz").write_bytes(b"x" * (256 * 1024 + 1))
         with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
             self.check()
 
