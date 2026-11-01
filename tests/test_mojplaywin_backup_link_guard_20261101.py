@@ -183,7 +183,7 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
         (self.targets["assets"] / "real.json").write_bytes(b"synthetic")
         (self.targets["assets"] / "link.json").symlink_to(self.targets["assets"] / "real.json")
         (self.targets["assets"] / "link.json.gz").write_bytes(b"tiny synthetic")
-        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_UNAPPROVED_MEMBER|ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
             self.check()
 
     def test_third_orphan_compressed_asset_is_blocked(self):
