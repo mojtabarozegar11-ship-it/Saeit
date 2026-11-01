@@ -7,10 +7,10 @@ from collections import defaultdict
 from decimal import Decimal, ROUND_UP
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.utils import timezone
 from enterprise_portal.models import (
-    BudgetPlan, CommercialDocument, JournalEntry, InventoryItem,
+    BudgetPlan, CommercialDocument, JournalEntry, JournalLine, InventoryItem,
     StockMovement, WorkTask,
 )
 from enterprise_portal.services import stock_balance
@@ -40,6 +40,8 @@ HANDLER_VIEW_PERMISSIONS = {
     "receivables": ("enterprise_portal.view_commercialdocument",),
     "payables": ("enterprise_portal.view_commercialdocument",),
     "ledger": ("enterprise_portal.view_journalentry",),
+    "reconciliation": ("enterprise_portal.view_journalentry",
+                       "enterprise_portal.view_journalline"),
     "cost": ("ecosystem_hub.view_productioncostscenario",
              "ecosystem_hub.view_materialpricereference"),
     "reorder": ("enterprise_portal.view_inventoryitem",
@@ -146,6 +148,66 @@ def scan(unit, code, *, actor=None):
             findings.append(issue(
                 f"دفتر {currency} — {status}",
                 f"{count} سند ثبت‌شده؛ تحلیل تراز قطعی باید در گزارش حسابداری بررسی شود."))
+    elif mode == "reconciliation":
+        # Internal journal arithmetic only. This does not reconcile bank
+        # statements, confirm payments or mutate a posted accounting entry.
+        total_entries = JournalEntry.objects.filter(unit=unit).count()
+        entries = list(
+            JournalEntry.objects.filter(unit=unit)
+            .order_by("-booked_on", "-pk")[:100]
+        )
+        ids = [entry.pk for entry in entries]
+        totals = {
+            row["entry_id"]: row
+            for row in (
+                JournalLine.objects.filter(entry_id__in=ids)
+                .values("entry_id")
+                .annotate(
+                    debit_sum=Sum("debit"), credit_sum=Sum("credit"),
+                    line_count=Count("pk"),
+                )
+            )
+        }
+        findings.append(issue(
+            "دامنه کنترل داخلی اسناد",
+            f"{len(entries)} سند آخر از {total_entries} سند همین واحد بررسی شد. "
+            "صورت‌حساب بانکی، پرداخت واقعی و داده‌های حساب بانکی بررسی نشده‌اند.",
+        ))
+        problems = 0
+        for entry in entries:
+            amounts = totals.get(entry.pk)
+            count = amounts["line_count"] if amounts else 0
+            debit = (amounts["debit_sum"] or Decimal("0")) if amounts else Decimal("0")
+            credit = (amounts["credit_sum"] or Decimal("0")) if amounts else Decimal("0")
+            if count == 0:
+                problems += 1
+                findings.append(issue(
+                    f"سند بدون ردیف: {entry.reference}",
+                    "هیچ ردیف بدهکار یا بستانکار برای این سند وجود ندارد؛ "
+                    "کنترل و تکمیل انسانی لازم است.",
+                    severity="critical" if entry.status == "posted" else "warning",
+                    source=f"JournalEntry:{entry.pk}",
+                ))
+            elif debit != credit:
+                problems += 1
+                findings.append(issue(
+                    f"عدم توازن سند: {entry.reference}",
+                    f"جمع بدهکار {debit} و بستانکار {credit} به ارز {entry.currency} "
+                    "برابر نیستند. اصلاح خودکار انجام نشده است.",
+                    severity="critical" if entry.status == "posted" else "warning",
+                    source=f"JournalEntry:{entry.pk}",
+                ))
+        if total_entries > len(entries):
+            findings.append(issue(
+                "کنترل نمونه‌ای محدود",
+                "برای تأیید کل دفتر، سایر اسناد نیز باید در گزارش تخصصی بررسی شوند.",
+            ))
+        if not problems:
+            findings.append(issue(
+                "عدم مغایرت در نمونهٔ داخلی",
+                "در اسناد نمونه عدم توازن یا سند بدون ردیف دیده نشد؛ "
+                "این یافته اثبات تسویه بانکی یا صحت همهٔ حساب‌ها نیست.",
+            ))
     elif mode == "risk":
         qs = ManagementRisk.objects.filter(unit=unit).exclude(state="closed")
         for item in qs.order_by("-impact", "-likelihood")[:40]:
