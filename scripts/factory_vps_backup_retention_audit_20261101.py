@@ -7,6 +7,7 @@ an audit, NOT authorization to run the disabled retention workflow.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -117,13 +118,33 @@ def audit(root: Path) -> dict:
     }
 
 
+def public_report(report: dict) -> dict:
+    """Redact private directory and backup names in public Actions logs."""
+    out = dict(report)
+    out["records"] = []
+    for row in report["records"]:
+        entry = {key: value for key, value in row.items() if key != "path_relative"}
+        entry["path_sha256_prefix"] = hashlib.sha256(
+            row["path_relative"].encode("utf-8")
+        ).hexdigest()[:16]
+        entry["filename"] = (
+            Path(row["path_relative"]).name
+            if row["exact_master_before_name"] else "(redacted)"
+        )
+        out["records"].append(entry)
+    out["keep_newest_two_verified_master_paths"] = [
+        Path(name).name for name in report["keep_newest_two_verified_master_paths"]
+    ]
+    return out
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT,
                         help="Read-only source directory; no files are modified.")
     args = parser.parse_args()
     result = audit(args.root)
-    print("FACTORY_BACKUP_AUDIT=" + json.dumps(result, sort_keys=True))
+    print("FACTORY_BACKUP_AUDIT=" + json.dumps(public_report(result), sort_keys=True))
     if not result["sqlite_count"]:
         raise SystemExit("NO_SQLITE_BACKUPS_FOUND")
 
