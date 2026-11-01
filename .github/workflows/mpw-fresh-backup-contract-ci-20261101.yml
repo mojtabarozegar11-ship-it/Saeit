@@ -1,0 +1,35 @@
+name: MojPlayWin fresh private backup owner-armed contract CI
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mpw-fresh-backup-contract-ci-20261101.yml'
+      - '.github/workflows/mpw-fresh-primary-backup-isolated-restore-20261101.yml'
+      - 'scripts/mojplaywin_backup_stream_cpanel.py'
+      - 'scripts/mojplaywin_backup_encrypt_vps_gpg.py'
+      - 'scripts/mojplaywin_recovery_stream_vps.py'
+      - 'tests/test_mojplaywin_backup_link_guard_20261101.py'
+      - 'tests/test_mojplaywin_backup_pair_identity_20261101.py'
+      - 'tests/test_mpw_fresh_backup_approval_contract_20261101.py'
+permissions: {contents: read}
+concurrency:
+  group: mpw-fresh-backup-contract-ci-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  synthetic_only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check owner approval and source guards offline only
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_mpw_fresh_backup_approval_contract_20261101.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_mojplaywin_backup_link_guard_20261101.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_mojplaywin_backup_pair_identity_20261101.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_mojplaywin_backup_gpg_v2.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_mojplaywin_recovery_isolated_once.py -v
+          python3 -B -m py_compile scripts/mojplaywin_backup_stream_cpanel.py scripts/mojplaywin_backup_encrypt_vps_gpg.py scripts/mojplaywin_recovery_stream_vps.py
+          echo 'BACKUP_CONTRACT_TESTS=PASS; LIVE_HOST_READ=NONE; ARCHIVE_WRITTEN=NONE; PUBLIC_RELEASE=NONE'
