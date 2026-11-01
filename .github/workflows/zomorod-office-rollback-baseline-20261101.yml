@@ -1,7 +1,7 @@
 name: Encrypt off-host Zomorod office cutover-sensitive rollback baseline
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
     branches: [main]
     paths:
       - ".github/workflows/zomorod-office-rollback-baseline-20261101.yml"
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   baseline:
-    if: github.event.action == 'opened' && github.head_ref == 'ops/zomorod-office-rollback-baseline-20261101' && github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.event.action == 'opened' || github.event.action == 'synchronize') && github.head_ref == 'ops/zomorod-office-rollback-baseline-20261101' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -207,7 +207,7 @@ jobs:
               archive.addfile(info,io.BytesIO(manifest))
           for rel in rels:
               path=root/rel
-              current=path.stat(follow_symlinks=False)
+              current=path.lstat()
               assert stat.S_ISREG(current.st_mode)
               assert current.st_size==details[rel]["size"] and current.st_mtime_ns==details[rel]["mtime_ns"]
               assert hashlib.sha256(path.read_bytes()).hexdigest()==details[rel]["sha256"]
