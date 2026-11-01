@@ -95,7 +95,9 @@ def audit(root: Path) -> dict:
                 "bytes": pre.st_size,
                 "age_days": round(max(0, time.time() - pre.st_mtime) / 86400, 2),
                 "links": pre.st_nlink,
-                "exact_master_before_name": bool(EXACT_SNAPSHOT.fullmatch(name)),
+                # Only root-level snapshots qualify for future keep recommendations.
+                # Nested copies remain visible but are never promoted as masters.
+                "exact_master_before_name": path.parent == base and bool(EXACT_SNAPSHOT.fullmatch(name)),
                 "stable_during_audit": stable,
                 "quick_check_ok": verified and stable,
                 "check_result": check if stable else "changed_during_audit",
