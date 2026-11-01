@@ -45,7 +45,7 @@ jobs:
           assert 'id="mode-text_image"' in t
           assert 'id="text-image-options"' in t
           assert 'id="photo"' in t
-          assert '{{ picm_daily_limit }}' in t
+          assert '{{ picm_daily_limit }}' not in t
           print('PICM_TEXT_IMAGE_TEMPLATE_CONTRACT_VALID')
           PY
       - name: Install Django project and browser test packages
