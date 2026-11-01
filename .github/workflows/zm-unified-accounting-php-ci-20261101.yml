@@ -1,0 +1,45 @@
+name: Zomorod unified accounting security and HTTP regression
+
+on:
+  push:
+    branches: [integration/zm-unified-business-command-center-20261101]
+    paths:
+      - content/zomorod-business/app.php
+      - tests/test_zm_business_atomicity.py
+      - tests/test_zm_business_sqlite_tx.php
+      - tests/test_zm_business_logout_http.py
+      - tests/test_zm_business_private_db_bootstrap_http.py
+      - .github/workflows/zm-unified-accounting-php-ci-20261101.yml
+  pull_request:
+    paths:
+      - content/zomorod-business/app.php
+      - tests/test_zm_business_atomicity.py
+      - tests/test_zm_business_sqlite_tx.php
+      - tests/test_zm_business_logout_http.py
+      - tests/test_zm_business_private_db_bootstrap_http.py
+      - .github/workflows/zm-unified-accounting-php-ci-20261101.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-php-accounting:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PHP/PDO SQLite on isolated runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq php-cli php-sqlite3
+      - name: Verify PHP syntax
+        run: php -l content/zomorod-business/app.php
+      - name: Native PDO immediate transaction regression
+        run: php tests/test_zm_business_sqlite_tx.php
+      - name: Invoice and stock concurrent writer regression
+        run: python3 tests/test_zm_business_atomicity.py -v
+      - name: Real HTTP login, CSRF and logout regression
+        run: python3 tests/test_zm_business_logout_http.py -v
+      - name: One-time DB initialization and read-only GET regression
+        run: python3 tests/test_zm_business_private_db_bootstrap_http.py -v
