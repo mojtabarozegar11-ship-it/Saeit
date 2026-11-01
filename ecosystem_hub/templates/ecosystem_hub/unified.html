@@ -1,0 +1,54 @@
+{% extends "ecosystem_hub/base.html" %}
+{% block title %}فرماندهی یکپارچه زمرد ملل{% endblock %}
+{% block hub_title %}فرماندهی هوشمند کسب‌وکار زمرد ملل{% endblock %}
+{% block hub_subtitle %}مدیریت، مالی، کارخانه داخلی، بازار، پیام‌ها، دستیارها و تقویم در یک نمای خصوصی{% endblock %}
+{% block hub_content %}
+<div class="hub-notice" role="note">
+ داده‌های این صفحه فقط از رکوردهای همان واحد سازمانی هستند. تعداد گزارش‌ها،
+ قواعد فعال یا سفارش‌های برنامه‌ریزی‌شده، اثبات اجرای مسترایجنت یا تولید واقعی نیست.
+</div>
+{% if selected_unit %}
+{% for group in sections %}
+<section class="hub-section">
+ <div class="hub-section-title"><h2>{{ group.title }}</h2></div>
+ <section class="hub-metrics" aria-label="{{ group.title }}">
+ {% for item in group.metrics %}
+  <article><span>{{ item.label }}</span><strong>{{ item.count }}</strong>
+   <small>فقط واحد {{ selected_unit.name }}</small></article>
+ {% endfor %}
+ </section>
+</section>
+{% empty %}
+<p class="hub-empty">برای نمایش این اطلاعات، مجوز مشاهده ماژول‌های مربوطه لازم است.</p>
+{% endfor %}
+{% else %}
+<p class="hub-empty">واحد سازمانی مجاز برای این حساب ثبت نشده است.</p>
+{% endif %}
+<section class="hub-section">
+ <div class="hub-section-title"><h2>واحدهای اجرایی</h2></div>
+ <div class="hub-feature-grid">
+ {% if perms.enterprise_portal.view_journalentry %}
+ <a class="hub-feature" href="{% url 'enterprise_portal:finance' %}"><b>حسابداری</b><p>اسناد و کنترل مالی</p></a>
+ {% endif %}
+ {% if perms.ecosystem_hub.view_productionorder %}
+ <a class="hub-feature" href="{% url 'enterprise_portal:ecosystem_hub:production' %}"><b>کارخانه داخلی</b><p>فرمول، سفارش، مواد و کنترل کیفیت</p></a>
+ {% endif %}
+ {% if perms.company_marketing.view_campaign %}
+ <a class="hub-feature" href="{% url 'company_marketing:dashboard' %}"><b>بازاریابی و تبلیغات</b><p>کمپین و سرنخ فروش</p></a>
+ {% endif %}
+ {% if perms.company_messaging.view_message %}
+ <a class="hub-feature" href="{% url 'company_messaging:inbox' %}"><b>سامانه پیام</b><p>مکاتبات و وضعیت صف</p></a>
+ {% endif %}
+ {% if perms.ecosystem_hub.view_assistantrun and perms.ecosystem_hub.view_proposedautomation %}
+ <a class="hub-feature" href="{% url 'enterprise_portal:ecosystem_hub:assistant_operations' %}"><b>پایش دستیارها</b><p>برنامه‌ها و پیش‌نویس‌ها</p></a>
+ {% endif %}
+ {% if perms.enterprise_portal.view_worktask %}
+ <a class="hub-feature" href="{% url 'enterprise_portal:tasks' %}"><b>تقویم و وظایف</b><p>کارهای باز و سررسیدها</p></a>
+ {% endif %}
+ </div>
+</section>
+<div class="hub-notice">
+ ۱۱ ایجنت پایش سایت در ذخیره‌گاه مستقل کار می‌کنند؛ تا تأیید اتصال امن،
+ وضعیت آن‌ها در این صفحه به عنوان اجرای وظیفه اقتصادی یا کارخانه ثبت نمی‌شود.
+</div>
+{% endblock %}
