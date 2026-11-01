@@ -219,8 +219,19 @@ jobs:
                       path=pathlib.Path(str(info["NAME"]))
                       if not path.is_absolute():path=pathlib.Path.cwd()/path
                       uri="file:"+urllib.parse.quote(str(path))+"?mode=ro"
+                      # Metadata-only schema attestation; no row contents are accessed.
+                      if not path.is_file() or path.is_symlink():
+                          raise ValueError("Unsafe SQLite database path")
                       with sqlite3.connect(uri,uri=True,timeout=3) as db:
+                          db.execute("PRAGMA query_only=ON")
                           db.execute("SELECT 1")
+                          tables={row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                          integrity=db.execute("PRAGMA quick_check").fetchone()[0]
+                      print("EFFECTIVE_DB_SQLITE_TABLE_COUNT="+str(len(tables)))
+                      print("EFFECTIVE_DB_SQLITE_AUTH_SCHEMA_PRESENT="+str({"auth_user","django_migrations"}.issubset(tables)).lower())
+                      print("EFFECTIVE_DB_SQLITE_INTEGRITY="+("ok" if integrity=="ok" else "not_ok"))
+                      print("EFFECTIVE_DB_SQLITE_IS_DEFAULT="+str(path.resolve()==(pathlib.Path.cwd()/"db.sqlite3").resolve()).lower())
+                      print("EFFECTIVE_DB_SQLITE_SIZE_KIB="+str((path.stat().st_size+1023)//1024))
                   else:
                       with connection.cursor() as cur:
                           cur.execute("SELECT 1")
