@@ -8,6 +8,7 @@ An external, authorized scheduler must separately launch this command.
 No automatic cron installation, outbound requests or hidden external effects.\nOnly explicitly enabled rules can create internal tasks for human review.
 """
 from calendar import monthrange
+import json
 from datetime import date, timedelta
 
 from django.conf import settings
@@ -97,6 +98,8 @@ class Command(BaseCommand):
         parser.add_argument("--commit", action="store_true", help="ثبت پیش‌نویس‌ها پس از مجوز صریح")
         parser.add_argument("--unit", default=None, help="کد واحد سازمانی (اختیاری)")
         parser.add_argument("--limit", type=int, default=25, help="حداکثر برنامه‌های بررسی‌شده، ۱ تا ۱۰۰")
+        parser.add_argument("--json-receipt", action="store_true", help="رسید شمارشی ماشین‌خوان برای چرخهٔ مدیریت")
+        parser.add_argument("--strict", action="store_true", help="خروج ناموفق در صورت رد هر برنامه")
 
     def handle(self, *args, **options):
         if options["limit"] < 1 or options["limit"] > MAX_BATCH:
@@ -111,6 +114,7 @@ class Command(BaseCommand):
             qs = qs.filter(unit__code=options["unit"])
         now = timezone.now()
         checked = scheduled = skipped = errors = 0
+        drafts_created = followup_tasks_created = 0
         for rule in qs[:options["limit"]]:
             checked += 1
             if not is_due(rule, now=now):
@@ -128,10 +132,35 @@ class Command(BaseCommand):
             else:
                 if report:
                     scheduled += 1
-                    self.stdout.write(f"DRAFT_CREATED rule_id={rule.pk} report_id={report.pk} followups={report.agent_followups.count()}")
+                    drafts_created += 1
+                    followup_count = report.agent_followups.count()
+                    followup_tasks_created += followup_count
+                    self.stdout.write(f"DRAFT_CREATED rule_id={rule.pk} report_id={report.pk} followups={followup_count}")
                 else:
                     skipped += 1
         self.stdout.write(
             f"ECOSYSTEM_ANALYSIS commit={int(commit)} checked={checked} "
             f"due_or_created={scheduled} skipped={skipped} errors={errors}"
         )
+        if options["json_receipt"]:
+            # Expose only counters and operational state: no private financial,
+            # employee, customer, instruction or report content reaches CI logs.
+            receipt = {
+                "schema_version": 1,
+                "source": "zomorod_office_scheduler",
+                "mode": "commit" if commit else "preview",
+                "rules_checked": checked,
+                "due_or_created": scheduled,
+                "drafts_created": drafts_created,
+                "human_followups_created": followup_tasks_created,
+                "skipped": skipped,
+                "errors": errors,
+                "outcome": "partial_failure" if errors else "ok",
+                "external_actions_executed": False,
+            }
+            self.stdout.write(
+                "ECOSYSTEM_CYCLE_RECEIPT_JSON=" +
+                json.dumps(receipt, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+            )
+        if options["strict"] and errors:
+            raise CommandError(f"ECOSYSTEM_CYCLE_INCOMPLETE errors={errors}")
