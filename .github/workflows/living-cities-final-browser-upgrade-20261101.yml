@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/living-cities-final-browser-upgrade-20261101.yml
+      - scripts/living_cities_static_upgrade.py
   workflow_dispatch:
 permissions: {contents: read}
 concurrency: {group: zomorod-living-cities-final-upgrade, cancel-in-progress: false}
@@ -106,8 +107,13 @@ jobs:
           test ! -L "$HOME/.private/living-cities-app"
           install -d -m 700 "$HOME/.private/living-cities-app/upgrades"
           dest="$HOME/.private/living-cities-app/upgrades/50a44804d1b90df1bd6098ca75da2c3af6632e18"
-          test ! -e "$dest" && test ! -L "$dest"
+          test ! -L "$dest"
           install -d -m 700 "$dest"
+          if [ -e "$dest/source.tgz" ]; then
+            test -f "$dest/source.tgz" && test ! -L "$dest/source.tgz"
+            test "$(sha256sum "$dest/source.tgz" | awk '{print $1}')" = 2ecbf786cee3c6d4f5bf3897fa3ee65bbb110929d9865d1883ef83e4d6b88df8
+            echo PRIVATE_SOURCE_EXISTING_SHA=PASS
+          fi
           REMOTE
           timeout 110s ssh -T -F "$d/config" vps 'cat "$HOME/.private/living-cities-transport/final-50a44804d1b90df1bd6098ca75da2c3af6632e18.tgz"' |
             timeout 110s ssh -T -F "$d/config" host 'umask 077; cat > "$HOME/.private/living-cities-app/upgrades/50a44804d1b90df1bd6098ca75da2c3af6632e18/source.pending"'
@@ -115,6 +121,7 @@ jobs:
           set -euo pipefail
           dest="$HOME/.private/living-cities-app/upgrades/50a44804d1b90df1bd6098ca75da2c3af6632e18"
           test -s "$dest/source.pending" && test ! -L "$dest/source.pending"
+          test "$(sha256sum "$dest/source.pending" | awk '{print $1}')" = 2ecbf786cee3c6d4f5bf3897fa3ee65bbb110929d9865d1883ef83e4d6b88df8
           chmod 600 "$dest/source.pending"
           mv -T "$dest/source.pending" "$dest/source.tgz"
           echo LIVING_CITIES_ENCRYPTED_TRANSPORT_TO_CPANEL=PASS
