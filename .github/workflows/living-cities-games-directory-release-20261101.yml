@@ -1,0 +1,70 @@
+name: Publish Living Cities on Zomorod games directory
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/living-cities-games-directory-release-20261101.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency: {group: living-cities-zomorod-games-directory, cancel-in-progress: false}
+jobs:
+  publish-entry:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Review isolated link installer before server access
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/living_cities_games_index_link.py
+          grep -Fq "LC-STATIC-BROWSER-PUBLIC-50a44804" scripts/living_cities_games_index_link.py
+          echo SAFE_INDEX_LINK_SCRIPT=PASS
+      - name: Establish pinned VPS-cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Preserve existing games directory and insert game once
+        id: edit
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 60s ssh -T -F "$d/config" host 'python3 - prepare' < scripts/living_cities_games_index_link.py
+      - name: Verify game listing, exact original backup and live main routes
+        id: smoke
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 45s ssh -T -F "$d/config" host 'python3 - verify' < scripts/living_cities_games_index_link.py
+          timeout 70s ssh -T -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          ip="$(getent ahostsv4 zomorodmelal.ir | awk 'NR==1{print $1}')"
+          test -n "$ip"
+          for path in /games/ /living-cities/play/ /; do
+            tmp="$(mktemp)"
+            code="$(curl -skS -4 --connect-timeout 7 --max-time 16 --resolve "zomorodmelal.ir:443:$ip" -o "$tmp" -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "ZOMOROD_DISCOVERY_ROUTE=$path HTTP=$code"
+            if [ "$code" != 200 ]; then rm -f "$tmp";exit 1; fi
+            if [ "$path" = /games/ ]; then
+              grep -Fq 'id="zm-living-cities"' "$tmp"
+              grep -Fq 'href="/living-cities/play/"' "$tmp"
+            fi
+            if [ "$path" = /living-cities/play/ ]; then
+              grep -Fq 'data-lc-edition="browser"' "$tmp"
+            fi
+            rm -f "$tmp"
+          done
+          echo LIVING_CITIES_PUBLIC_GAME_DISCOVERY=PASS
+          REMOTE
+      - name: Restore original games directory only if new link fails
+        if: failure() && steps.edit.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          if [ -f "$d/config" ]; then
+            timeout 60s ssh -T -F "$d/config" host 'python3 - rollback' < scripts/living_cities_games_index_link.py
+          fi
+      - name: Remove temporary SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
