@@ -104,14 +104,21 @@ jobs:
           digest="${{ steps.decrypt.outputs.sha }}"
           timeout 45s ssh -T -F "$d/config" host 'bash -se' <<'REMOTE'
           set -euo pipefail
-          test "$(id -un)" = zomorod2
-          test ! -L "$HOME/.private" && test ! -L "$HOME/mojplaywin.com"
-          test -d "$HOME/mojplaywin.com/living-cities" && test ! -L "$HOME/mojplaywin.com/living-cities"
-          test "$(cat "$HOME/mojplaywin.com/living-cities/LC-OWNER.txt")" = "MPW-LIVING-CITIES-GLOBAL-20-LANG-27111d39d96f44638554233b8fcc129bea33752a"
-          target="$HOME/.private/mpw-living-cities-global/releases/813629da154b8cb541641eaddf3b143007db4d4e"
-          test ! -L "$HOME/.private/mpw-living-cities-global"
+          test "$(id -un)" = zomorod2 || { echo MPW_TRANSFER_BAD_ACCOUNT; exit 1; }
+          test ! -L "$HOME/.private" && test ! -L "$HOME/mojplaywin.com" || { echo MPW_TRANSFER_LINKED_ROOT; exit 1; }
+          game="$HOME/mojplaywin.com/living-cities"
+          test -d "$game" && test ! -L "$game" || { echo MPW_TRANSFER_OLD_GAME_NOT_DIR; exit 1; }
+          test -f "$game/LC-OWNER.txt" && test ! -L "$game/LC-OWNER.txt" || { echo MPW_TRANSFER_OLD_GAME_MARKER_ABSENT; exit 1; }
+          owner="$(cat "$game/LC-OWNER.txt")"
+          printf 'MPW_TRANSFER_CURRENT_GAME_OWNER=%s\n' "$owner"
+          test "$owner" = "MPW-LIVING-CITIES-GLOBAL-20-LANG-27111d39d96f44638554233b8fcc129bea33752a" || { echo MPW_TRANSFER_OLD_GAME_NOT_EXPECTED; exit 1; }
+          base="$HOME/.private/mpw-living-cities-global"
+          test ! -L "$base" || { echo MPW_TRANSFER_PRIVATE_SYMLINK; exit 1; }
+          target="$base/releases/813629da154b8cb541641eaddf3b143007db4d4e"
           install -d -m 700 "$target"
-          test ! -L "$target"
+          test ! -L "$target" || { echo MPW_TRANSFER_RELEASE_DIR_SYMLINK; exit 1; }
+          test ! -L "$target/source.tgz" && test ! -L "$target/source.pending" || { echo MPW_TRANSFER_RELEASE_SOURCE_LINK; exit 1; }
+          echo MPW_VERIFIED_SOURCE_DESTINATION_READY=PASS
           REMOTE
           timeout 100s ssh -T -F "$d/config" vps 'cat "$HOME/.private/living-cities-transport/mpw-global-813629da154b8cb541641eaddf3b143007db4d4e.tgz"' |
             timeout 100s ssh -T -F "$d/config" host 'umask 077; cat > "$HOME/.private/mpw-living-cities-global/releases/813629da154b8cb541641eaddf3b143007db4d4e/source.pending"'
