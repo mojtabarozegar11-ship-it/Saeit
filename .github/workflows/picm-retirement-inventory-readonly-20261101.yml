@@ -368,6 +368,33 @@ jobs:
           )"
           call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
           timeout 120s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
+      - name: Verify PICM cPanel post-deletion and live route references read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          COMMAND_HOST="${{ steps.link.outputs.command_host }}"
+          probe64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import os
+          home=Path.home()
+          if home!=Path("/home/zomorod2") or os.geteuid()==0:
+              raise SystemExit("INVALID_IDENTITY")
+          root=home/"Saeit-staging"
+          for label,path in (("CONFIG_URLS",root/"config/urls.py"),("CORE_URLS",root/"core/urls.py"),("PICM_VIEWS",root/"core/picm_views.py"),("PICM_TEMPLATES",root/"templates/picm")):
+              print("LIVE_"+label+"_PRESENT="+str(path.exists()).lower())
+              if path.is_file() and not path.is_symlink() and path.stat().st_size<300000:
+                  source=path.read_text(encoding="utf-8",errors="replace").lower()
+                  print("LIVE_"+label+"_PICM_REFERENCE_COUNT="+str(source.count("picm")))
+          queue=home/".picm-queue"
+          backups=home/".mojplaywin-backups"
+          print("POST_DELETE_CPANEL_QUEUE_ABSENT="+str(not queue.exists() and not queue.is_symlink()).lower())
+          print("POST_DELETE_CPANEL_PICM_BACKUP_COUNT="+str(sum(1 for p in backups.iterdir() if p.name.startswith(("picm-","picm_")))))
+          
+          PY
+          )"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 120s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
       - name: Confirm zero remote modifications or backup deletions
         shell: bash
         run: |
