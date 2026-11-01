@@ -26,7 +26,7 @@ MAX_BATCH = 100
 
 
 def is_due(rule, *, now=None):
-    """Local calendar semantics: daily, seven days, same day next month."""
+    """Hourly elapsed-time semantics; longer cadences follow the local calendar."""
     if not rule.active or not rule.requires_human_review:
         return False
     if rule.assistant_code not in CATALOG or not CATALOG[rule.assistant_code]["handler"]:
@@ -34,6 +34,8 @@ def is_due(rule, *, now=None):
     if rule.last_checked_at is None:
         return True
     now = now or timezone.now()
+    if rule.cadence == "hourly":
+        return now >= rule.last_checked_at + timedelta(hours=1)
     current = timezone.localtime(now).date()
     last = timezone.localtime(rule.last_checked_at).date()
     if rule.cadence == "daily":
