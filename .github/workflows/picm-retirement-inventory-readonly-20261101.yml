@@ -475,6 +475,43 @@ jobs:
           )"
           call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
           timeout 120s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
+      - name: Scan cross-feature PICM imports and navigation references read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          COMMAND_HOST="${{ steps.link.outputs.command_host }}"
+          probe64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import os, re
+          home=Path.home()
+          if home!=Path("/home/zomorod2") or os.geteuid()==0:
+              raise SystemExit("WRONG_USER")
+          root=home/"Saeit-staging"
+          scanned=0
+          total=0
+          for folder in ("core","config","templates"):
+              for p in (root/folder).rglob("*"):
+                  if not p.is_file() or p.is_symlink() or p.suffix not in (".py",".html",".txt",".js",".css") or p.stat().st_size>300000:
+                      continue
+                  scanned+=1
+                  if scanned>5000:
+                      raise SystemExit("TOO_MANY_FILES")
+                  rel=str(p.relative_to(root))
+                  if rel.startswith(("core/picm_","templates/picm/")):
+                      continue
+                  data=p.read_text(errors="replace").lower()
+                  refs=data.count("picm")
+                  if refs:
+                      total+=refs
+                      print("PICM_EXTERNAL_CODE_REFERENCE="+rel+"|count="+str(refs))
+          print("PICM_EXTERNAL_CODE_FILES_SCANNED="+str(scanned))
+          print("PICM_EXTERNAL_CODE_REFERENCE_TOTAL="+str(total))
+          
+          PY
+          )"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 180s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
       - name: Confirm zero remote modifications or backup deletions
         shell: bash
         run: |
