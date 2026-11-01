@@ -261,7 +261,7 @@ def rollback():
     htaccess=PUBLIC/".htaccess"
     require(marker.is_file() and marker.read_text().strip()==OWNER_MARKER,"game_marker_mismatch")
     require(htaccess.is_file() and OWNER_MARKER in htaccess.read_text(),"game_route_changed_by_another_owner")
-    quarantine=ROOT/"quarantine"/("rolled-back-"+SOURCE_SHA)
+    quarantine=ROOT/"quarantine"/("rolled-back-"+SOURCE_SHA+"-"+secrets.token_hex(6))
     quarantine.parent.mkdir(parents=True,mode=0o700,exist_ok=True)
     require(not quarantine.exists(),"quarantine_already_exists")
     PUBLIC.rename(quarantine)
