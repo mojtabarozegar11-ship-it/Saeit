@@ -253,8 +253,20 @@ def assert_scoped_public_asset_links(roots=(APP, DOCROOT), home=HOME,
                                        ".sql", ".sqlite", ".sqlite3", ".db",
                                        ".bak", ".gpg", ".age")):
                         raise RuntimeError("ASSET_TREE_SENSITIVE_FILE_SHAPE")
-                    if suffix in (".zip", ".tar", ".gz", ".7z"):
+                    if suffix in (".zip", ".tar", ".7z"):
                         raise RuntimeError("ASSET_TREE_ARCHIVE_FILE_SHAPE")
+                    if suffix in (".gz", ".br"):
+                        source = item.with_suffix("")
+                        allowed = {".css", ".js", ".mjs", ".html", ".svg",
+                                   ".woff", ".woff2", ".ttf", ".otf", ".ico", ".map",
+                                   ".png", ".jpg", ".jpeg", ".gif", ".webp",
+                                   ".avif", ".pdf", ".mp3", ".mp4", ".webm",
+                                   ".wav", ".ogg", ".json", ".xml", ".txt",
+                                   ".md", ".csv", ".webmanifest", ".wasm"}
+                        if (source.is_symlink() or not source.is_file() or
+                                source.suffix.casefold() not in allowed or
+                                source.stat().st_uid != os.geteuid()):
+                            raise RuntimeError("ASSET_COMPRESSED_SIDECAR_UNVERIFIED")
                     regular_bytes += info.st_size
                 elif not stat.S_ISDIR(info.st_mode):
                     raise RuntimeError("ASSET_TREE_SPECIAL_FILE")
@@ -315,6 +327,7 @@ if __name__ == "__main__":
             "ASSET_TREE_UNAPPROVED_FILE_SHAPE", "ASSET_TREE_SPECIAL_FILE",
             "ASSET_TREE_BYTE_LIMIT", "ASSET_TREE_SENSITIVE_FILE_SHAPE",
             "ASSET_TREE_ARCHIVE_FILE_SHAPE",
+            "ASSET_COMPRESSED_SIDECAR_UNVERIFIED",
         }
         if len(sys.argv) == 2 and sys.argv[1] == "preflight-scoped-files":
             code = str(exc) if type(exc) is RuntimeError and str(exc) in safe_codes else "unknown"
