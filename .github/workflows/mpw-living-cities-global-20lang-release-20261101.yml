@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/mpw-living-cities-global-20lang-release-20261101.yml
+      - scripts/mpw_living_cities_global_20lang_publish.py
   workflow_dispatch:
 permissions: {contents: read}
 concurrency: {group: mpw-living-cities-global-20lang-release, cancel-in-progress: false}
