@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 from enterprise_portal.views import office_access, no_cache
+from enterprise_portal.models import AuditEvent
 from ecosystem_hub.access import require_unit, user_units
 from .forms import ComposeForm, ContactForm
 from .models import Contact, Message, MessageEvent
@@ -112,7 +113,21 @@ def contact_create(request):
     form = ContactForm(request.POST or None, user=request.user)
     if request.method == "POST" and form.is_valid():
         require_unit(request.user, form.cleaned_data["unit"], write=True)
-        form.save()
+        with transaction.atomic():
+            contact = form.save()
+            AuditEvent.objects.create(
+                actor=request.user,
+                action="messaging_contact_created",
+                target=f"Contact:{contact.pk}",
+                detail={
+                    "unit_id": contact.unit_id,
+                    "consent_channels_recorded": sorted(
+                        field.removesuffix("_consent_at")
+                        for field in form.fields
+                        if field.endswith("_consent_at") and getattr(contact, field)
+                    ),
+                },
+            )
         return no_cache(redirect("company_messaging:contacts"))
     return no_cache(render(request, "company_messaging/contact_form.html", {
         "form": form, "editing": False,
@@ -128,7 +143,24 @@ def contact_edit(request, pk):
         require_unit(request.user, contact.unit, write=True)
         form = ContactForm(request.POST or None, instance=contact, user=request.user)
         if request.method == "POST" and form.is_valid():
-            form.save()
+            # Record changes without copying phone numbers, addresses, messages,
+            # consent timestamps or evidence text into the audit journal.
+            changed_fields = sorted(form.changed_data)
+            if changed_fields:
+                form.save()
+                AuditEvent.objects.create(
+                    actor=request.user,
+                    action="messaging_contact_updated",
+                    target=f"Contact:{contact.pk}",
+                    detail={
+                        "unit_id": contact.unit_id,
+                        "changed_fields": changed_fields,
+                        "consent_changed": any(
+                            field.endswith("_consent_at") or field == "consent_evidence"
+                            for field in changed_fields
+                        ),
+                    },
+                )
             return no_cache(redirect("company_messaging:contacts"))
     return no_cache(render(request, "company_messaging/contact_form.html", {
         "form": form, "editing": True,
