@@ -1,0 +1,278 @@
+name: ZM auction cPanel compatibility preflight (read only)
+
+on:
+  push:
+    branches:
+      - feature/zomorod-auction-management-private-20261031
+    paths:
+      - .github/workflows/zomorod-auctions-host-preflight.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zm-auction-host-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 8a93511adbcddb6b228b93d9c5d46064b8ea1a09
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: sqlite3,fileinfo
+          coverage: none
+      - name: Verify exact approved auction source and local syntax
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 8a93511adbcddb6b228b93d9c5d46064b8ea1a09
+          php -l content/zomorod-business/auctions.php
+          python3 scripts/test_zomorod_auctions.py
+      - name: Audit live auction host prerequisites (no host mutations)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test "$GITHUB_RUN_ID" -gt 0
+          d="$RUNNER_TEMP/zomorod-auction-host-preflight"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 15
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          target=""
+          for host in saeit-cpanel saeit-cpanel-direct; do
+            if timeout 55s ssh -F "$d/config" "$host" 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/business/index.php && test -d /home/zomorod2/.private/zomorod-business' >/dev/null; then
+              target="$host"
+              break
+            fi
+          done
+          test -n "$target"
+          ssh -F "$d/config" "$target" 'python3 -B -' > "$RUNNER_TEMP/zomorod-auction-host.json" <<'PY'
+          import json,os,pathlib,re,shutil,sqlite3,subprocess,stat
+          h=pathlib.Path('/home/zomorod2')
+          web=h/'public_html/business'
+          private=h/'.private/zomorod-business'
+          master=private/'management.sqlite3'
+          app=private/'app.php'
+          result={
+              'private_dir_safe':private.is_dir() and not private.is_symlink(),
+              'web_route_parent_safe':web.is_dir() and not web.is_symlink(),
+              'web_wrapper_present':(web/'index.php').is_file(),
+              'auction_path_preexists':(web/'auctions').exists() or (web/'auctions').is_symlink(),
+              'master_db_safe':master.is_file() and not master.is_symlink(),
+              'app_file_present':app.is_file() and not app.is_symlink(),
+              'free_mib':shutil.disk_usage(h).free//1048576,
+          }
+          if result['private_dir_safe'] and result['master_db_safe']:
+              try:
+                  conn=sqlite3.connect('file:'+str(master)+'?mode=ro',uri=True,timeout=3)
+                  conn.execute('PRAGMA query_only=ON')
+                  u={row[1] for row in conn.execute('PRAGMA table_info(users)').fetchall()}
+                  p={row[1] for row in conn.execute('PRAGMA table_info(projects)').fetchall()}
+                  result['auth_users_schema_ok']={'id','role','active'}.issubset(u)
+                  result['projects_schema_ok']={'id','title'}.issubset(p)
+                  result['master_bytes']=master.stat().st_size
+                  conn.close()
+              except (OSError,sqlite3.Error):
+                  result['auth_users_schema_ok']=False
+                  result['projects_schema_ok']=False
+          else:
+              result['auth_users_schema_ok']=False
+              result['projects_schema_ok']=False
+          if result['app_file_present']:
+              text=app.read_text(encoding='utf-8',errors='replace')
+              wrapper=(web/'index.php').read_text(encoding='utf-8',errors='replace') if result['web_wrapper_present'] else ''
+              combined=text+' '+wrapper
+              result['zm_session_name_present']='ZM_BUSINESS' in combined
+              result['uid_session_field_present']=bool(re.search(r"\$_SESSION\s*\[\s*['\"]uid['\"]\s*\]",combined))
+          else:
+              result['zm_session_name_present']=False
+              result['uid_session_field_present']=False
+          php_code='echo json_encode(["version"=>PHP_VERSION,"sqlite3"=>class_exists("SQLite3"),"pdo_sqlite"=>extension_loaded("pdo_sqlite"),"fileinfo"=>class_exists("finfo"),"sessions"=>extension_loaded("session"),"upload_max"=>ini_get("upload_max_filesize"),"post_max"=>ini_get("post_max_size")]);'
+          try:
+              p=subprocess.run(['php','-r',php_code],capture_output=True,text=True,timeout=10)
+              result['php_cli']=json.loads(p.stdout) if p.returncode==0 else None
+          except (OSError,ValueError,subprocess.TimeoutExpired):
+              result['php_cli']=None
+          alternatives=[]
+          candidate_paths=list(pathlib.Path('/opt/cpanel').glob('ea-php*/root/usr/bin/php')) if pathlib.Path('/opt/cpanel').is_dir() else []
+          candidate_paths+=list(pathlib.Path('/opt/alt').glob('php*/usr/bin/php')) if pathlib.Path('/opt/alt').is_dir() else []
+          for executable in candidate_paths[:20]:
+              try:
+                  probe=subprocess.run([str(executable),'-r',php_code],capture_output=True,text=True,timeout=6)
+                  if probe.returncode==0:
+                      summary=json.loads(probe.stdout)
+                      alternatives.append({'binary':executable.parts[3] if len(executable.parts)>3 else executable.name,
+                                           'version':summary.get('version'),
+                                           'sqlite3':summary.get('sqlite3'),
+                                           'fileinfo':summary.get('fileinfo'),
+                                           'sessions':summary.get('sessions')})
+              except (OSError,ValueError,subprocess.TimeoutExpired):
+                  continue
+          result['alternative_php']=alternatives
+          handlers=[]
+          for where,ht in [('site',h/'public_html/.htaccess'),('business',web/'.htaccess')]:
+              if ht.is_file() and not ht.is_symlink():
+                  sample=ht.read_text(encoding='utf-8',errors='replace')
+                  names=sorted(set(re.findall(r'application/x-httpd-(?:ea|alt)-php[0-9]+',sample)))
+                  handlers.append({'scope':where,'versions':names})
+          result['inherited_php_handler_tokens']=handlers
+          result['effective_domain_php']={'uapi_status':'not_run','version':'unknown','php_fpm':'unknown','userdata_version':'unknown'}
+          uapi=pathlib.Path('/usr/local/cpanel/bin/uapi')
+          if uapi.is_file() and not uapi.is_symlink():
+              try:
+                  p=subprocess.run([str(uapi),'--output=json','LangPHP','php_get_vhost_versions','vhost=zomorodmelal.ir'],
+                                   capture_output=True,text=True,timeout=25)
+                  result['effective_domain_php']['uapi_status']='returned' if p.returncode==0 else 'error'
+                  if p.returncode==0 and len(p.stdout)<300000:
+                      payload=json.loads(p.stdout)
+                      result['effective_domain_php']['uapi_status']='parsed'
+                      def match_domain(obj,depth=0):
+                          if depth>8:return
+                          if isinstance(obj,dict):
+                              if str(obj.get('vhost',obj.get('domain',''))).lower().rstrip('.')=='zomorodmelal.ir':
+                                  v=obj.get('version',obj.get('phpversion'))
+                                  if v is not None and re.fullmatch(r'(?:ea|alt)-php\d+|inherit',str(v)):
+                                      result['effective_domain_php']['version']=str(v)
+                                  if 'php_fpm' in obj and str(obj['php_fpm']) in ('0','1','True','False'):
+                                      result['effective_domain_php']['php_fpm']=str(obj['php_fpm'])
+                              for v in obj.values():match_domain(v,depth+1)
+                          elif isinstance(obj,list):
+                              for v in obj[:100]:match_domain(v,depth+1)
+                      match_domain(payload)
+              except (OSError,ValueError,subprocess.TimeoutExpired):
+                  result['effective_domain_php']['uapi_status']='unavailable'
+          config=pathlib.Path('/var/cpanel/userdata/zomorod2/zomorodmelal.ir')
+          if config.is_file() and not config.is_symlink():
+              try:
+                  for line in config.read_text(encoding='utf-8',errors='replace').splitlines():
+                      m=re.fullmatch(r'\s*phpversion:\s*(\S+)\s*',line)
+                      if m and re.fullmatch(r'(?:ea|alt)-php\d+|inherit',m.group(1)):
+                          result['effective_domain_php']['userdata_version']=m.group(1)
+              except OSError:pass
+          backup={'scanned_files':0,'erp_named':0,'sqlite_named':0,'archive_named':0,
+                  'roots_accessible':0,'latest_erp_named_days':None,'offhost_restore_verified':False}
+          now=__import__('time').time()
+          for root in (h/'.backups',h/'backup',h/'backups'):
+              if not root.is_dir() or root.is_symlink():continue
+              backup['roots_accessible']+=1
+              try:
+                  for current,dirs,files in os.walk(root,followlinks=False):
+                      depth=len(pathlib.Path(current).relative_to(root).parts)
+                      dirs[:]=[d for d in dirs if not (pathlib.Path(current)/d).is_symlink() and depth<3]
+                      for name in files:
+                          if backup['scanned_files']>=4000:break
+                          item=pathlib.Path(current)/name
+                          if item.is_symlink() or not item.is_file():continue
+                          backup['scanned_files']+=1
+                          low=name.lower()
+                          if ('management' in low or 'zomorod-business' in low or 'office' in low) and item.stat().st_size>0:
+                              backup['erp_named']+=1
+                              age=max(0,int((now-item.stat().st_mtime)//86400))
+                              prior=backup['latest_erp_named_days']
+                              backup['latest_erp_named_days']=age if prior is None else min(prior,age)
+                          if low.endswith(('.sqlite','.sqlite3','.db','.db3')):backup['sqlite_named']+=1
+                          if low.endswith(('.gz','.zip','.zst','.tar','.tgz')):backup['archive_named']+=1
+                      if backup['scanned_files']>=4000:break
+              except OSError:continue
+          result['local_backup_metadata']=backup
+          print(json.dumps(result,sort_keys=True))
+          PY
+          python3 - "$RUNNER_TEMP/zomorod-auction-host.json" <<'PY'
+          import json,pathlib,sys
+          data=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          check=['private_dir_safe','web_route_parent_safe','web_wrapper_present',
+                 'master_db_safe','app_file_present','auth_users_schema_ok',
+                 'projects_schema_ok','zm_session_name_present','uid_session_field_present']
+          for name in check:
+              print('AUCTION_HOST_'+name.upper()+'='+('PASS' if data.get(name) else 'BLOCKED'))
+          php=data.get('php_cli') or {}
+          php_ok=bool(php.get('sqlite3') and php.get('fileinfo') and php.get('sessions') and
+                      tuple(map(int,str(php.get('version','0.0')).split('.')[:2])) >= (8,1))
+          print('AUCTION_PHP_CLI_COMPATIBLE='+('PASS' if php_ok else 'BLOCKED'))
+          print('AUCTION_PHP_CLI_VERSION='+str(php.get('version','unknown')))
+          for name in ('sqlite3','pdo_sqlite','fileinfo','sessions'):
+              print('AUCTION_PHP_'+name.upper()+'='+('PASS' if php.get(name) else 'BLOCKED'))
+          print('AUCTION_PHP_UPLOAD_LIMIT='+str(php.get('upload_max','unknown')))
+          for entry in data.get('alternative_php',[]):
+              print('AUCTION_ALT_PHP='+str(entry.get('binary'))+' version='+str(entry.get('version'))+
+                    ' sqlite3='+str(entry.get('sqlite3'))+' fileinfo='+str(entry.get('fileinfo'))+
+                    ' sessions='+str(entry.get('sessions')))
+          for entry in data.get('inherited_php_handler_tokens',[]):
+              print('AUCTION_INHERITED_HANDLER_'+str(entry.get('scope')).upper()+'='+','.join(entry.get('versions') or ['unspecified']))
+          print('AUCTION_HOST_NEW_ROUTE_PRESENT='+str(data.get('auction_path_preexists')))
+          print('AUCTION_HOST_FREE_MIB='+str(data.get('free_mib','unknown')))
+          domain=data.get('effective_domain_php') or {}
+          print('AUCTION_DOMAIN_PHP_UAPI='+str(domain.get('uapi_status','unknown')))
+          print('AUCTION_DOMAIN_PHP_VERSION='+str(domain.get('version','unknown')))
+          print('AUCTION_DOMAIN_PHP_FPM='+str(domain.get('php_fpm','unknown')))
+          print('AUCTION_DOMAIN_PHP_USERDATA='+str(domain.get('userdata_version','unknown')))
+          backups=data.get('local_backup_metadata') or {}
+          print('AUCTION_BACKUP_SCAN_FILES='+str(backups.get('scanned_files',0)))
+          print('AUCTION_BACKUP_ERP_NAMED='+str(backups.get('erp_named',0)))
+          print('AUCTION_BACKUP_SQLITE_NAMED='+str(backups.get('sqlite_named',0)))
+          print('AUCTION_BACKUP_ARCHIVE_NAMED='+str(backups.get('archive_named',0)))
+          print('AUCTION_BACKUP_LATEST_ERP_NAMED_DAYS='+str(backups.get('latest_erp_named_days','unknown')))
+          print('AUCTION_BACKUP_OFFHOST_RESTORE_VERIFIED=NO')
+          print('AUCTION_DEPLOY_OR_DB_MUTATIONS=NONE')
+          def version_ok(version):
+              try:return tuple(map(int,str(version).split('.')[:2])) >= (8,1)
+              except (ValueError,TypeError):return False
+          alternatives=data.get('alternative_php',[])
+          compatible_alternatives=[v for v in alternatives if version_ok(v.get('version'))
+                                   and v.get('sqlite3') and v.get('fileinfo') and v.get('sessions')]
+          print('AUCTION_COMPATIBLE_ALTERNATE_RUNTIME='+('PASS' if compatible_alternatives else 'MISSING'))
+          if not all(data.get(x) for x in check) or not (php_ok or compatible_alternatives):
+              sys.exit('AUCTION_HOST_PREFLIGHT=BLOCKED_BY_COMPATIBILITY')
+          print('AUCTION_HOST_PREFLIGHT=PASS_RUNTIME_DISCOVERY_ONLY')
+          print('AUCTION_RELEASE_AUTHORIZED=NO_EFFECTIVE_WEB_HANDLER_OR_BACKUP_RESTORE')
+          PY
