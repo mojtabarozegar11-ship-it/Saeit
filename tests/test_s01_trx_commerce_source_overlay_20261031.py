@@ -57,9 +57,12 @@ class TrxCommerceOverlayTests(unittest.TestCase):
         namespace = {}
         exec(compile(ast.Module(body=[fn], type_ignores=[]),
                      "<synthetic-quote-provider>", "exec"), namespace)
+        package = ModuleType("mpw_commerce")
+        package.__path__ = []
         wallets = ModuleType("mpw_commerce.buyer_wallets")
         wallets.WalletLinkRejected = WalletLinkRejected
-        with patch.dict(sys.modules, {"mpw_commerce.buyer_wallets": wallets}), \
+        with patch.dict(sys.modules, {"mpw_commerce": package,
+                                      "mpw_commerce.buyer_wallets": wallets}), \
              patch("time.time", return_value=NOW), \
              patch("urllib.request.urlopen", side_effect=error,
                    return_value=FakeResponse(quote() if body is None else body,
