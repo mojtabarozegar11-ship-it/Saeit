@@ -202,8 +202,20 @@ def bounded_asset_tree_metadata(directory, *, max_entries=150_000):
                           original.suffix.casefold() in (".json", ".xml", ".txt", ".md",
                                                         ".csv", ".webmanifest", ".wasm")):
                         shapes["precompressed_data_sidecar_shape"] += 1
+                    elif original.is_symlink():
+                        shapes["compressed_base_symlink_shape"] += 1
+                    elif not original.exists():
+                        shapes["compressed_base_missing_shape"] += 1
+                    elif not original.is_file():
+                        shapes["compressed_base_nonfile_shape"] += 1
+                    elif original.suffix.casefold() not in (
+                            web | media | {".json", ".xml", ".txt", ".md", ".csv",
+                                           ".webmanifest", ".wasm"}):
+                        shapes["compressed_base_disallowed_extension_shape"] += 1
+                    elif original.stat().st_uid != os.geteuid():
+                        shapes["compressed_base_other_owner_shape"] += 1
                     else:
-                        shapes["other_gzip_or_brotli_shape"] += 1
+                        shapes["compressed_base_other_unverified_shape"] += 1
                 elif suffix in (".zip", ".tar", ".7z"):
                     shapes["download_archive_shape"] += 1
                 elif suffix in (".json", ".xml", ".txt", ".md", ".csv", ".webmanifest"):
