@@ -180,7 +180,6 @@ def _public_shop_page(request, pages_namespace):
     from types import SimpleNamespace
     from django.conf import settings
     from django.db import connection
-    from django.http import Http404
     from core.models import Product
     from mpw_commerce.buyer_orders import _eligible
     from mpw_commerce.downloads import _private_file
