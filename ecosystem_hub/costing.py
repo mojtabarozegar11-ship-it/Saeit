@@ -4,15 +4,21 @@ Price references must have verification and a documentary source. Every material
 needs a price in the scenario's single currency and from the same company unit.
 Missing prices produce total=None, never a misleading partial total.
 """
+from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP, ROUND_UP
 from django.utils import timezone
 from .models import MaterialPriceReference
 
 MATERIAL_PRECISION = Decimal("0.001")
 MONEY_PRECISION = Decimal("0.01")
+# A documented historical supplier quote is not indefinitely current.
+MAX_RATE_AGE_DAYS = 90
 
 
-def estimate_manufacturing_cost(scenario, *, as_of=None):
+def estimate_manufacturing_cost(scenario, *, as_of=None, max_rate_age_days=MAX_RATE_AGE_DAYS):
+    """Fail closed if a verified input quote is older than the review window."""
+    if type(max_rate_age_days) is not int or not 1 <= max_rate_age_days <= 3650:
+        raise ValueError("Rate review window must be an integer from 1 to 3650 days.")
     order = scenario.order
     recipe = order.formula
     if not scenario.unit_id or scenario.unit_id != order.unit_id or recipe.unit_id != scenario.unit_id:
@@ -24,6 +30,7 @@ def estimate_manufacturing_cost(scenario, *, as_of=None):
     total_material = Decimal("0.00")
     rows = list(recipe.materials.select_related("item").order_by("item__sku"))
     missing = []
+    stale = []
     for component in rows:
         if component.item.unit_id != scenario.unit_id:
             raise ValueError("A BOM component belongs to another company unit.")
@@ -38,6 +45,9 @@ def estimate_manufacturing_cost(scenario, *, as_of=None):
             status="verified",
             as_of__lte=when,
         ).exclude(evidence_ref="").order_by("-as_of", "-pk").first()
+        if reference and reference.as_of < when - timedelta(days=max_rate_age_days):
+            stale.append(component.item.sku)
+            reference = None  # Expired evidence must not silently price a product.
         if reference:
             line_total = (needed * reference.amount).quantize(
                 MONEY_PRECISION, rounding=ROUND_HALF_UP,
@@ -69,6 +79,8 @@ def estimate_manufacturing_cost(scenario, *, as_of=None):
         "as_of": when,
         "components": components,
         "missing_skus": missing,
+        "stale_skus": stale,
+        "max_rate_age_days": max_rate_age_days,
         "complete": complete,
         "material_total": total_material if complete else None,
         "labor_estimate": scenario.labor_estimate,
