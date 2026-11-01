@@ -12,7 +12,7 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; img-src \'self\' data:; form-action \'self\'; base-uri \'none\'; frame-ancestors \'none\'');
-if (extension_loaded('session')) {
+if (PHP_SAPI!=='cli' && extension_loaded('session')) {
     session_name('ZM_BUSINESS');
     session_set_cookie_params(['lifetime'=>0, 'path'=>'/business/', 'secure'=>true, 'httponly'=>true, 'samesite'=>'Strict']);
     session_start();
@@ -38,8 +38,36 @@ function db(string $private): PDO {
     if(!extension_loaded('pdo_sqlite'))throw new RuntimeException('SQLite driver is not available on this server');
     if(!is_dir($private))throw new RuntimeException('Private data directory not found');
     $file=$private.'/management.sqlite3';
+    // Normal HTTP requests must never silently recreate a lost private accounting DB.
+    if(is_link($file)||!is_file($file)||!is_readable($file)||filesize($file)<4096){
+        throw new RuntimeException('Private accounting database missing or invalid; refusing automatic creation');
+    }
     $db=new PDO('sqlite:'.$file, null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,PDO::ATTR_TIMEOUT=>12]);
-    $db->exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=12000; PRAGMA foreign_keys=ON;');
+    $db->exec('PRAGMA busy_timeout=12000; PRAGMA foreign_keys=ON;');
+    // No CREATE TABLE, ALTER, journal-mode change, or ledger seeding on HTTP GET/POST.
+    $required=['users','ledger_accounts','journal_entries','journal_lines','parties','invoices','invoice_payments','inventory','inventory_movements','employees','documents','projects','audit_events'];
+    $tables=$db->query("SELECT name FROM sqlite_master WHERE type='table'")->fetchAll(PDO::FETCH_COLUMN);
+    if(array_diff($required,$tables))throw new RuntimeException('Private accounting schema incomplete; explicit recovery is required');
+    return $db;
+}
+function initializePrivateDb(string $private): void {
+    if(!extension_loaded('pdo_sqlite'))throw new RuntimeException('SQLite driver is not available on this server');
+    if(!is_dir($private)||is_link($private))throw new RuntimeException('Private data directory missing or unsafe');
+    $file=$private.'/management.sqlite3';
+    $tokenFile=$private.'/setup.token';
+    if(file_exists($file)||is_link($file)||file_exists($tokenFile)||is_link($tokenFile)){
+        throw new RuntimeException('Initialization requires a new private DB path and no existing setup token');
+    }
+    // Exclusive create prevents an installer race from overwriting any existing DB.
+    $handle=@fopen($file,'x');
+    if($handle===false)throw new RuntimeException('Cannot create exclusive private database file');
+    fclose($handle);
+    if(!@chmod($file,0600))throw new RuntimeException('Cannot restrict new database permissions');
+    $db=null;
+    try {
+        $db=new PDO('sqlite:'.$file, null,null,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,PDO::ATTR_TIMEOUT=>12]);
+        $db->exec('PRAGMA journal_mode=WAL; PRAGMA busy_timeout=12000; PRAGMA foreign_keys=ON;');
+        $db->beginTransaction();
     $db->exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','accountant','manager','viewer')), active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     $db->exec("CREATE TABLE IF NOT EXISTS ledger_accounts (id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, type TEXT NOT NULL CHECK(type IN ('asset','liability','equity','income','expense')), active INTEGER NOT NULL DEFAULT 1)");
     $db->exec("CREATE TABLE IF NOT EXISTS journal_entries (id INTEGER PRIMARY KEY, doc_no TEXT NOT NULL UNIQUE, doc_date TEXT NOT NULL, note TEXT NOT NULL, entered_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
@@ -55,7 +83,20 @@ function db(string $private): PDO {
     $db->exec("CREATE TABLE IF NOT EXISTS audit_events (id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), verb TEXT NOT NULL, subject TEXT NOT NULL, entity_id INTEGER, occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     $seed=['1000'=>['صندوق','asset'],'1010'=>['بانک','asset'],'1100'=>['حساب‌های دریافتنی','asset'],'1200'=>['موجودی کالا','asset'],'1500'=>['دارایی ثابت','asset'],'2000'=>['حساب‌های پرداختنی','liability'],'2100'=>['مالیات پرداختنی','liability'],'3000'=>['سرمایه','equity'],'4000'=>['درآمد فروش','income'],'5000'=>['بهای تمام‌شده','expense'],'5100'=>['هزینه عملیاتی','expense'],'5200'=>['هزینه حقوق','expense']];
     $s=$db->prepare('INSERT OR IGNORE INTO ledger_accounts(code,name,type) VALUES (?,?,?)');foreach($seed as $code=>$parts)$s->execute([$code,$parts[0],$parts[1]]);
-    return $db;
+        $db->commit();
+        $token=bin2hex(random_bytes(32))."\n";
+        $tokenHandle=@fopen($tokenFile,'x');
+        if($tokenHandle===false)throw new RuntimeException('Cannot create private one-time setup token');
+        $written=fwrite($tokenHandle,$token);
+        $closed=fclose($tokenHandle);
+        if($written!==strlen($token)||!$closed||!@chmod($tokenFile,0600)){
+            throw new RuntimeException('Private setup token was not safely written');
+        }
+    } catch(Throwable $e) {
+        if($db instanceof PDO && $db->inTransaction())$db->rollBack();
+        // Deliberately retain partial files for forensic recovery; never overwrite them.
+        throw $e;
+    }
 }
 function q(PDO $db,string $sql,array $args=[]): array {$s=$db->prepare($sql);$s->execute($args);return $s->fetchAll();}
 function one(PDO $db,string $sql,array $args=[]): mixed {$s=$db->prepare($sql);$s->execute($args);return $s->fetchColumn();}
@@ -91,16 +132,27 @@ function layoutStart(string $page,?array $user=null):void {
 function layoutEnd():void {echo '</main><footer>تمام حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل محفوظ است . آبان ۱۳۹۸ مجتبی روزگار</footer></body></html>';}
 function options(PDO $db,string $sql,array $fields,string $selected=''):string{$out='';foreach(q($db,$sql) as $row){$key=(string)$row[$fields[0]];$out.='<option value="'.esc($key).'"'.($selected===$key?' selected':'').'>'.esc((string)$row[$fields[1]]).'</option>';}return $out;}
 function formBegin(string $action):void {echo '<form method="post" autocomplete="off">'.tokenInput().'<input type="hidden" name="action" value="'.esc($action).'">';}
+if(PHP_SAPI==='cli'){
+    if(($argv[1]??'')!=='--initialize-private-db'||count($argv)!==2){
+        fwrite(STDERR,"Only --initialize-private-db is supported for local private installation.\n");
+        exit(64);
+    }
+    try {
+        initializePrivateDb($private);
+        fwrite(STDOUT,"Private accounting DB initialized; setup token saved privately (not printed).\n");
+        exit(0);
+    } catch(Throwable $e) {
+        fwrite(STDERR,"Initialization refused: ".$e->getMessage()."\n");
+        exit(1);
+    }
+}
 try {
     $db=db($private);
     if(empty($_SESSION['csrf']))doCsrf();
     $count=(int)one($db,'SELECT COUNT(*) FROM users');
     if($count===0){
         $setupFile=$private.'/setup.token';
-        if(!is_file($setupFile)){
-            $fp=@fopen($setupFile,'x');
-            if($fp!==false){fwrite($fp,bin2hex(random_bytes(32))."\n");fclose($fp);@chmod($setupFile,0600);}
-        }
+        if(is_link($setupFile)||!is_file($setupFile))throw new RuntimeException('Private setup token missing; initialization requires local CLI access');
         if($_SERVER['REQUEST_METHOD']==='POST'){
             verifyCsrf();
             $key=$private.'/setup.token';
