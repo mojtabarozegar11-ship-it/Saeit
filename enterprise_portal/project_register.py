@@ -1,7 +1,7 @@
-"""Read-only, permission-scoped management project register.
+"""Permission-scoped project register and audited idea intake.
 
-This page displays recorded data only. It does not approve projects, post
-financial entries, infer profitability, or contact external services.
+Existing records are read-only; new projects enter idea status only. No approval,
+financial posting, inferred profitability, or external service calls.
 """
 from django.db import transaction
 from django.db.models import F, Sum
