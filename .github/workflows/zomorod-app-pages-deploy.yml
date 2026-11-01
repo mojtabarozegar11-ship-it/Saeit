@@ -293,8 +293,22 @@ jobs:
               raise SystemExit("SELECTOR_ROOT_APP_MAPPING_CHANGED")
           print("SELECTOR_ROOT_APP_MAPPING=verified")
           PY
-          rm -rf -- "$backup"
-          mkdir -p "$backup"
+          # A deploy backup is immutable for a commit SHA: never erase a prior rollback point.
+          test "$HOME" = "/home/zomorod2" && test "$(id -un)" = "zomorod2"
+          backup_root="$HOME/.backups/zomorodmelal-app"
+          # ZM_DEPLOY_BACKUP_EXCLUSIVE_BEGIN
+          test -d "$HOME/.backups" && test ! -L "$HOME/.backups"
+          test ! -L "$backup_root"
+          if test ! -e "$backup_root"; then
+            mkdir -m 700 -- "$backup_root"
+          fi
+          test -d "$backup_root" && test ! -L "$backup_root"
+          if test -e "$backup" || test -L "$backup"; then
+            echo "EXISTING_DEPLOY_BACKUP_PRESERVED=$backup" >&2
+            exit 1
+          fi
+          mkdir -m 700 -- "$backup"
+          # ZM_DEPLOY_BACKUP_EXCLUSIVE_END
           : > "$backup/existing.txt"
           htaccess="$public_root/.htaccess"
           htaccess_backup="$backup/public_html/.htaccess"
