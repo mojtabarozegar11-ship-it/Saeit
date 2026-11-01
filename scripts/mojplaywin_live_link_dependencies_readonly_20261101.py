@@ -189,8 +189,16 @@ def bounded_asset_tree_metadata(directory, *, max_entries=150_000):
                 suffix = p.suffix.casefold()
                 if lower in secret_names or suffix in sensitive:
                     shapes["sensitive_or_backup_file_shape"] += 1
-                elif suffix in (".zip", ".tar", ".gz", ".7z", ".br"):
-                    shapes["compressed_archive_file_shape"] += 1
+                elif suffix in (".gz", ".br"):
+                    # Presence of an uncompressed sidecar is only a metadata
+                    # hint. We never open or decompress either file.
+                    original = p.with_suffix("")
+                    if original.is_file() and not original.is_symlink() and original.suffix.casefold() in web:
+                        shapes["precompressed_web_sidecar_shape"] += 1
+                    else:
+                        shapes["other_gzip_or_brotli_shape"] += 1
+                elif suffix in (".zip", ".tar", ".7z"):
+                    shapes["download_archive_shape"] += 1
                 elif suffix in (".json", ".xml", ".txt", ".md", ".csv", ".webmanifest"):
                     shapes["generic_text_or_data_file_shape"] += 1
                 elif suffix in source:
