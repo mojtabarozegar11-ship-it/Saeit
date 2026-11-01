@@ -159,6 +159,74 @@ def _dispatch(request, view, args, kwargs, *, create=False):
     return _install_cookie(response, token)
 
 
+
+def _public_price_ok(value):
+    """Only real public products at or above the owner-approved USD $4 floor."""
+    from decimal import Decimal, InvalidOperation
+    if isinstance(value, bool):
+        return False
+    try:
+        amount = Decimal(str(value))
+    except (TypeError, ValueError, InvalidOperation):
+        return False
+    return amount.is_finite() and amount >= Decimal("4.00")
+
+
+def _public_shop_page(request, pages_namespace):
+    """Guest-only public catalog; diagnostics never become payable public SKUs."""
+    from html import escape
+    from types import SimpleNamespace
+    from django.conf import settings
+    from django.db import connection
+    from django.http import Http404
+    from core.models import Product
+    from mpw_commerce.buyer_orders import _eligible
+    from mpw_commerce.downloads import _private_file
+    from services.mpw_trx_commercial_context import rights_cleared_for_sale
+    from services.mpw_trx_commercial_web import _configured_receiver
+    from services.mpw_trx_walletless_core import PaymentHold
+    from services.mpw_walletless_commercial_intent import _commercial_db
+
+    if not _host_ok(request):
+        raise Http404
+    try:
+        _commercial_db(settings, connection)
+        _configured_receiver()
+    except PaymentHold as exc:
+        raise Http404("TRX catalog temporarily unavailable") from exc
+
+    cards = []
+    ids = getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ())
+    for product in Product.objects.filter(pk__in=ids, active=True).order_by("pk"):
+        if (not _public_price_ok(product.price) or not _eligible(product)
+                or not rights_cleared_for_sale(product)):
+            continue
+        try:
+            file = _private_file(SimpleNamespace(product=product))
+            if file.is_symlink() or not file.is_file() or file.stat().st_size <= 0:
+                continue
+        except (OSError, ValueError):
+            continue
+        cards.append(
+            f'<article><h2>{escape(product.title)}</h2>'
+            f'<p>${escape(str(product.price))} USD · Pay the quoted amount in TRX</p>'
+            f'<a class="button" href="/store/product/{product.pk}/checkout/">'
+            'Buy with TRX</a></article>'
+        )
+    intro = (
+        "<p>No account is required. Create your invoice, then pay the exact "
+        "quoted TRX amount using Trust Wallet on the TRON network. "
+        "Keep this browser to retrieve your purchase. If you already paid "
+        "and cannot see your receipt, do not pay again; contact "
+        '<a href="/support/">purchase support</a>.</p>'
+    )
+    return pages_namespace["_page"](
+        "Buy digital products with TRX",
+        intro + "".join(cards) if cards else
+        "<p>No products are currently cleared for TRX checkout.</p>"
+    )
+
+
 def _checkout_page(request, product_id, pages_namespace):
     from django.conf import settings
     from django.db import connection
@@ -183,7 +251,8 @@ def _checkout_page(request, product_id, pages_namespace):
         raise Http404
     product = Product.objects.select_related("knowledge_article").filter(
         pk=product_id, active=True).first()
-    if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
+    if (product is None or not _public_price_ok(product.price)
+            or not _eligible(product) or not rights_cleared_for_sale(product)):
         raise Http404
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
@@ -245,6 +314,10 @@ def patch_public(namespace):
         return _dispatch(request, old_purchases, (), {})
 
     namespace["product_checkout"] = never_cache(require_GET(product_checkout))
+    if callable(namespace.get("public_shop")) and callable(namespace.get("_page")):
+        def public_shop(request):
+            return _public_shop_page(request, namespace)
+        namespace["public_shop"] = never_cache(require_GET(public_shop))
     namespace["purchases"] = purchases
 
 
