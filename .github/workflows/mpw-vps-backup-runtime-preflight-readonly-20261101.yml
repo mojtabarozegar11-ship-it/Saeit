@@ -1,0 +1,61 @@
+name: MojPlayWin VPS new-backup capacity and recovery-key preflight read-only
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mpw-vps-backup-runtime-preflight-readonly-20261101.yml'
+      - 'scripts/mpw_vps_backup_runtime_gate_readonly_20261101.py'
+      - 'tests/test_mpw_vps_backup_runtime_gate_readonly_20261101.py'
+permissions: {contents: read}
+concurrency:
+  group: mpw-vps-backup-runtime-readonly-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify synthetic key, symlink and disk guards without VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_mpw_vps_backup_runtime_gate_readonly_20261101.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile scripts/mpw_vps_backup_runtime_gate_readonly_20261101.py
+      - name: Establish fingerprint-pinned SSH to VPS without leaking credentials
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/mpw-vps-backup-readonly"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          chmod 600 "$d/vps.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keyscan -T 12 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+      - name: Inspect only VPS free capacity, GPG executable and existing recovery-key stat
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-vps-backup-readonly"
+          script64="$(base64 -w0 scripts/mpw_vps_backup_runtime_gate_readonly_20261101.py)"
+          call='import base64,sys;exec(base64.b64decode(sys.argv[1]))'
+          timeout 65s ssh -T -i "$d/vps.key" \
+            -o UserKnownHostsFile="$d/vps.known" -o StrictHostKeyChecking=yes \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 \
+            -o ForwardAgent=no githubops@178.239.147.150 \
+            "PYTHONDONTWRITEBYTECODE=1 python3 -B -c '$call' '$script64'"
+      - name: Remove runner-only SSH material
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-vps-backup-readonly"
+          if [ -d "$d" ]; then
+            rm -f "$d/vps.key" "$d/vps.known"
+            rmdir "$d"
+          fi
