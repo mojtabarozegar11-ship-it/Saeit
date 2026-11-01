@@ -920,6 +920,63 @@ jobs:
           print("CLOUDLINUX_SELECTOR_DISCOVERY=read_only")
           PY
           REMOTE
+      - name: Compare private office DB, local initial backup and root defaults read-only
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 75s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import pathlib, sqlite3, os, stat
+          base=pathlib.Path("/home/zomorod2/.private/zomorod-company-office")
+          office=base/"office.sqlite3"
+          initial=base/"office.initial.backup.sqlite3"
+          default=pathlib.Path("/home/zomorod2/Saeit/db.sqlite3")
+          targets={"office":office,"initial":initial}
+          present=all(p.is_file() and not p.is_symlink() for p in targets.values())
+          print("PRIVATE_OFFICE_DB_AND_LOCAL_BACKUP_PRESENT="+str(present).lower())
+          if not present:
+              print("PRIVATE_OFFICE_DB_RELEASE_GATE=blocked_missing_file")
+          else:
+              results={}
+              for key,p in targets.items():
+                  mode=stat.S_IMODE(p.stat().st_mode)
+                  uri="file:"+str(p)+"?mode=ro"
+                  with sqlite3.connect(uri,uri=True,timeout=4) as conn:
+                      conn.execute("PRAGMA query_only=ON")
+                      integrity=conn.execute("PRAGMA quick_check").fetchone()[0]
+                      tables={row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                      users=conn.execute("SELECT COUNT(*) FROM auth_user").fetchone()[0] if "auth_user" in tables else -1
+                  results[key]=(tables,users,integrity,mode)
+                  print("PRIVATE_OFFICE_"+key.upper()+"_SCHEMA_TABLES="+str(len(tables)))
+                  print("PRIVATE_OFFICE_"+key.upper()+"_INTEGRITY="+("ok" if integrity=="ok" else "not_ok"))
+                  print("PRIVATE_OFFICE_"+key.upper()+"_FILE_MODE_0600="+str(mode==0o600).lower())
+                  print("PRIVATE_OFFICE_"+key.upper()+"_USER_COUNT="+str(users))
+              required={"auth_user","django_migrations","company_messaging_message","enterprise_portal_businessunit"}
+              office_tables,office_users,office_integrity,office_mode=results["office"]
+              back_tables,back_users,back_integrity,back_mode=results["initial"]
+              print("PRIVATE_OFFICE_REQUIRED_TABLES_PRESENT="+str(required.issubset(office_tables)).lower())
+              print("PRIVATE_OFFICE_LOCAL_BACKUP_SCHEMA_MATCH="+str(office_tables==back_tables).lower())
+              print("PRIVATE_OFFICE_LOCAL_BACKUP_USERCOUNT_MATCH="+str(office_users==back_users).lower())
+              print("PRIVATE_OFFICE_USER_ACCOUNT_PRESENT="+str(office_users>0).lower())
+              print("PRIVATE_OFFICE_OWNER_MFA_ATTESTED=false")
+              distinct=default.is_file() and not default.is_symlink() and not os.path.samefile(default,office)
+              print("PRIVATE_OFFICE_DB_DISTINCT_FROM_ROOT_DEFAULT="+str(distinct).lower())
+              ok=(len(office_tables)>=120 and required.issubset(office_tables)
+                  and office_tables==back_tables and office_users==back_users
+                  and office_integrity=="ok" and back_integrity=="ok"
+                  and office_mode==0o600 and back_mode==0o600 and distinct)
+              print("PRIVATE_OFFICE_LOCAL_SCHEMA_GATE="+("passed" if ok else "blocked"))
+          print("PRIVATE_OFFICE_EFFECTIVE_PASSENGER_BINDING=not_attested")
+          print("PRIVATE_OFFICE_OFFSITE_RESTORE=not_attested")
+          print("PRODUCTION_DEPLOY_ALLOWED=no")
+          PY
+          REMOTE
       - name: Require restore proof and provider rights before any deployment
         run: |
           echo "RESTORE_VERIFIED=not-established-by-this-readonly-probe"
