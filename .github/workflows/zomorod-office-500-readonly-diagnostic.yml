@@ -287,7 +287,7 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/zm-marketing-ro"
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
-          timeout 80s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          db_evidence="$(timeout 80s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
           set -euo pipefail
           test "$(id -un)" = zomorod2
           app=/home/zomorod2/Saeit
@@ -442,6 +442,20 @@ jobs:
           fi
           printf '%s\n' "$probe_output"
           REMOTE
+          )"
+          # SSH relays can terminate early yet return status zero. Only complete,
+          # locally validated output is admissible as a database attestation.
+          if ! grep -Eq '^PASSENGER_APP_DB_ATTESTED=(true|false)$' <<< "$db_evidence"; then
+              echo "::error title=Passenger DB attestation::Remote response incomplete"
+              echo "PASSENGER_DB_PROBE_TRANSPORT_OR_RUNTIME_INCOMPLETE=true"
+              exit 1
+          fi
+          if ! grep -Fqx 'PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no' <<< "$db_evidence"; then
+              echo "::error title=Passenger DB attestation::Release gate evidence missing"
+              echo "PASSENGER_DB_PROBE_REMOTE_GATE_MISSING=true"
+              exit 1
+          fi
+          printf '%s\n' "$db_evidence" | grep -E '^(PASSENGER_DB_PROBE_[A-Z_]+|PASSENGER_APP_DB_ATTESTED|PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED)='
       - name: Classify PHP ledger versus Django root DB without writes or row access
         shell: bash
         env:
