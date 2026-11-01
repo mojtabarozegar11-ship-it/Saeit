@@ -1,0 +1,54 @@
+name: ZM marketing dashboard permission isolation CI
+
+on:
+  push:
+    branches:
+      - fix/zm-marketing-dashboard-permission-isolation-20261101
+  pull_request:
+    branches:
+      - integration/zm-unified-business-command-center-20261101
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zm-marketing-permissions-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  marketing-permission-isolation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "ci-only-not-production"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,testserver"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact proposed source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Assert exact source head
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Django system check
+        run: python manage.py check
+      - name: Migration consistency
+        run: python manage.py makemigrations --check --dry-run
+      - name: Scoped CRM and marketing permission regressions
+        run: python manage.py test company_marketing.test_dashboard_permissions company_marketing.test_crm_business_os
+      - name: Explicit offline boundary
+        run: |
+          echo "CI_ONLY=1"
+          echo "NO_HOST_CONTACT=1"
+          echo "NO_MERGE_DEPLOY_DB_CHANGE=1"
