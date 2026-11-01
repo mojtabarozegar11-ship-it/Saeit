@@ -1,12 +1,14 @@
 from django.urls import path
 from . import views
 from . import operations as assistant_operations
+from . import unified
 from . import financial_reporting as income
 
 app_name = "ecosystem_hub"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("command/", unified.overview, name="unified_command"),
     path("modules/", views.modules, name="modules"),
     path("group/", views.group_overview, name="group_overview"),
     path("finance/income/", income.income_report, name="income_report"),
