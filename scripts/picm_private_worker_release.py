@@ -84,18 +84,19 @@ def release(run_id, expected_sha):
         childfile = Path("/proc") / str(old_pid) / "task" / str(old_pid) / "children"
         if childfile.read_text().strip():
             raise RuntimeError("PICM_WORKER_CHILD_PROCESS_ACTIVE")
-    # Enforce PICM-only renderer readiness, not factory liveness.
+    # Reject any unpinned candidate before importing or replacing a worker.
     import importlib.util
+    from importlib.machinery import SourceFileLoader
     candidate = ROOT / ("worker.py.candidate." + run_id)
     guard_regular(candidate)
-    spec = importlib.util.spec_from_file_location("picm_candidate", candidate)
+    if hashlib.sha256(candidate.read_bytes()).hexdigest() != expected_sha:
+        raise RuntimeError("PICM_CANDIDATE_HASH_MISMATCH")
+    loader = SourceFileLoader("picm_candidate", str(candidate))
+    spec = importlib.util.spec_from_loader("picm_candidate", loader)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     if not module.picm_resource_ok() or not module.direct_cpu_ready():
         raise RuntimeError("PICM_PRIVATE_RESOURCE_OR_MODEL_NOT_READY")
-
-    if hashlib.sha256(candidate.read_bytes()).hexdigest() != expected_sha:
-        raise RuntimeError("PICM_CANDIDATE_HASH_MISMATCH")
     backup_dir = ROOT / ".release-backups"
     if backup_dir.is_symlink():
         raise RuntimeError("PICM_BACKUP_DIR_UNSAFE")
