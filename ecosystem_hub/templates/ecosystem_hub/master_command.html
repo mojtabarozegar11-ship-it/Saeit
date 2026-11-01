@@ -27,7 +27,31 @@
       <option value="{{ item.code }}">{{ item.title }} — {{ item.description }}</option>
       {% endfor %}
     </select>
-    <button type="submit">ثبت فرمان و تولید گزارش پیش‌نویس</button>
+    {% if perms.enterprise_portal.add_worktask %}
+    <fieldset class="hub-command-task">
+      <legend>تبدیل فرمان به کار اجرایی تقویم</legend>
+      <label class="hub-task-choice">
+        <input type="checkbox" name="create_task" value="1" checked>
+        یک مأموریت پیگیری برای خودم در میز مدیریت ثبت شود
+      </label>
+      <div class="hub-task-fields">
+        <div>
+          <label for="master-due">سررسید پیگیری</label>
+          <input id="master-due" name="due_on" type="date" value="{{ default_due_on }}">
+        </div>
+        <div>
+          <label for="master-priority">اولویت</label>
+          <select id="master-priority" name="priority">
+            <option value="normal">عادی</option>
+            <option value="high">مهم</option>
+            <option value="urgent">فوری</option>
+          </select>
+        </div>
+      </div>
+      <p class="hub-command-hint">مسئول اولیه خودِ صادرکننده فرمان است. متن محرمانه فرمان در وظیفه عمومی کپی نمی‌شود؛ فقط شناسه گزارش و ارجاع مدیریتی ثبت می‌شود.</p>
+    </fieldset>
+    {% endif %}
+    <button type="submit">ثبت فرمان و ایجاد خروجی قابل‌پیگیری</button>
     <p class="hub-command-hint">هر فرمان یک شناسه یکتا و سابقه حسابرسی دارد. تکرار ارسال همان فرم، گزارش را دوباره تولید نمی‌کند.</p>
   </form>
   {% else %}
@@ -49,7 +73,7 @@
 <section class="hub-section">
   <div class="hub-section-title"><h2>تاریخچه فرمان‌های واحد</h2></div>
   <div class="table-frame"><table>
-    <thead><tr><th>دستور</th><th>دستیار</th><th>صادرکننده</th><th>وضعیت</th><th>ثبت</th><th>خروجی</th></tr></thead>
+    <thead><tr><th>دستور</th><th>دستیار</th><th>صادرکننده</th><th>وضعیت</th><th>ثبت</th><th>گزارش</th><th>مأموریت</th></tr></thead>
     <tbody>
     {% for item in commands %}
     <tr>
@@ -63,9 +87,14 @@
         <a href="{% url 'enterprise_portal:ecosystem_hub:report' item.report.pk %}">مشاهده گزارش</a>
         {% else %}—{% endif %}
       </td>
+      <td>
+        {% if item.task and perms.enterprise_portal.view_worktask %}
+        <a href="{% url 'enterprise_portal:tasks' %}">{{ item.task.get_status_display }} — {{ item.task.due_on|date:"Y/m/d" }}</a>
+        {% else %}—{% endif %}
+      </td>
     </tr>
     {% empty %}
-    <tr><td colspan="6">هنوز فرمانی برای این واحد ثبت نشده است.</td></tr>
+    <tr><td colspan="7">هنوز فرمانی برای این واحد ثبت نشده است.</td></tr>
     {% endfor %}
     </tbody>
   </table></div>

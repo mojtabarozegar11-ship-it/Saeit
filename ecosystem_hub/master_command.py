@@ -4,17 +4,19 @@ Natural-language instruction is preserved exactly. A conservative local topic
 router may select one eligible specialist or require explicit selection. No LLM,
 external delivery, finance posting, factory control or hidden job execution.
 """
+from datetime import date, timedelta
 from uuid import UUID, uuid4
 
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect
+from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
-from enterprise_portal.models import AuditEvent
+from enterprise_portal.models import AuditEvent, WorkTask
 from enterprise_portal.views import office_access, no_cache
 from .analysis import generate_report
 from .catalog import CATALOG
@@ -52,6 +54,7 @@ def _render_room(request, unit, units, specialists, eligible, *,
         "request_key": request_key or uuid4(),
         "routing_error": error,
         "prefill_instruction": instruction,
+        "default_due_on": (timezone.localdate() + timedelta(days=1)).isoformat(),
         "section": "master_command",
     })
     result.status_code = response_status
@@ -110,6 +113,23 @@ def room(request):
         if code not in eligible:
             raise PermissionDenied("دستیار انتخاب‌شده فعال نیست یا اجازه بررسی منبع وجود ندارد.")
 
+        create_task = request.POST.get("create_task") == "1"
+        priority, due_on = "normal", None
+        if create_task:
+            if not (request.user.is_superuser or
+                    request.user.has_perm("enterprise_portal.add_worktask")):
+                raise PermissionDenied("مجوز ایجاد مأموریت در تقویم این واحد موجود نیست.")
+            priority = (request.POST.get("priority") or "normal").strip()
+            if priority not in ("normal", "high", "urgent"):
+                return no_cache(HttpResponse("اولویت وظیفه نامعتبر است.", status=400))
+            try:
+                due_on = date.fromisoformat(request.POST.get("due_on", ""))
+            except (TypeError, ValueError):
+                return no_cache(HttpResponse("تاریخ سررسید معتبر نیست.", status=400))
+            today = timezone.localdate()
+            if due_on < today or due_on > today + timedelta(days=1826):
+                return no_cache(HttpResponse("سررسید باید در بازه پنج سال آینده باشد.", status=400))
+
         with transaction.atomic():
             command, created = MasterCommand.objects.get_or_create(
                 request_key=key,
@@ -124,6 +144,11 @@ def room(request):
                     command.instruction != instruction or
                     command.assistant_code != code):
                     return no_cache(HttpResponse("شناسه فرمان قبلاً استفاده شده است.", status=409))
+                if bool(command.task_id) != create_task:
+                    return no_cache(HttpResponse("نوع درخواست این شناسه قبلاً ثبت شده است.", status=409))
+                if create_task and (command.task.due_on != due_on or
+                                    command.task.priority != priority):
+                    return no_cache(HttpResponse("جزئیات مأموریت شناسه قبلی متفاوت است.", status=409))
                 if command.report_id:
                     return no_cache(redirect(
                         "enterprise_portal:ecosystem_hub:report", pk=command.report_id,
@@ -132,10 +157,29 @@ def room(request):
             # The existing report generator checks source permissions again,
             # requires this unit and records deterministic, local-only findings.
             report = generate_report(request.user, unit, code)
+            task = None
+            if create_task:
+                task = WorkTask(
+                    unit=unit,
+                    assigned_to=request.user,
+                    created_by=request.user,
+                    title="پیگیری " + CATALOG[code]["title"],
+                    description=(
+                        f"ارجاع مدیریتی MasterCommand:{command.pk}؛ "
+                        f"گزارش AssistantRun:{report.pk}. "
+                        "متن محرمانه فرمان فقط در میز خصوصی مسترایجنت نگهداری می‌شود."
+                    ),
+                    status="todo",
+                    priority=priority,
+                    due_on=due_on,
+                )
+                task.full_clean()
+                task.save()
             command.report = report
+            command.task = task
             command.status = "draft_ready"
             command.full_clean()
-            command.save(update_fields=("report", "status", "updated_at"))
+            command.save(update_fields=("report", "task", "status", "updated_at"))
             AuditEvent.objects.create(
                 actor=request.user,
                 action="ecosystem_master_command_draft",
@@ -143,6 +187,7 @@ def room(request):
                 detail={
                     "unit_id": unit.pk, "assistant_code": code,
                     "report_id": report.pk,
+                    "task_id": task.pk if task else None,
                     "routing_mode": routing_mode,
                     "no_external_side_effects": True,
                     "requires_human_review": True,

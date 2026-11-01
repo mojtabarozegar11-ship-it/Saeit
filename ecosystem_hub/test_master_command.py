@@ -1,14 +1,17 @@
 """Private master-command authorization, unit privacy and idempotency checks."""
+from datetime import timedelta
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.test import Client, TestCase, override_settings
+from django.utils import timezone
 
-from enterprise_portal.models import AuditEvent, BusinessUnit, JournalEntry, StockMovement
+from enterprise_portal.models import AuditEvent, BusinessUnit, JournalEntry, StockMovement, WorkTask
 from company_marketing.models import Campaign
 from .models import AssistantRun, MasterCommand, UnitMembership
+from .unified import snapshot_for_unit
 
 
 STORE = {
@@ -160,6 +163,102 @@ class MasterCommandSecurityTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(MasterCommand.objects.get().assistant_code, "marketing-performance")
+
+    def test_explicit_command_creates_real_scoped_calendar_task(self):
+        self.client.force_login(self.owner)
+        due = timezone.localdate() + timedelta(days=1)
+        payload = {
+            **self.command(instruction="مأموریت محرمانه بررسی ریسک شرکت"),
+            "create_task": "1", "due_on": due.isoformat(), "priority": "high",
+        }
+        response = self.client.post(PATH, payload, secure=True)
+        self.assertEqual(response.status_code, 302)
+        command = MasterCommand.objects.select_related("task", "report").get()
+        task = WorkTask.objects.get()
+        self.assertEqual(command.task, task)
+        self.assertEqual(task.unit, self.farm)
+        self.assertEqual(task.created_by, self.owner)
+        self.assertEqual(task.assigned_to, self.owner)
+        self.assertEqual(task.priority, "high")
+        self.assertEqual(task.due_on, due)
+        self.assertEqual(task.status, "todo")
+        metrics = {item["label"]: item["count"] for section in snapshot_for_unit(self.owner, self.farm) for item in section["metrics"]}
+        self.assertEqual(metrics["کارهای باز"], 1)
+        self.assertIn(str(command.pk), task.description)
+        self.assertIn(str(command.report_id), task.description)
+        self.assertNotIn("محرمانه بررسی ریسک شرکت", task.description)
+        self.assertNotIn("محرمانه", task.title)
+        self.assertEqual(AuditEvent.objects.get().detail["task_id"], task.pk)
+
+    def test_calendar_task_requires_separate_enterprise_permission(self):
+        self.client.force_login(self.manager)
+        payload = {
+            **self.command(),
+            "create_task": "1",
+            "priority": "normal",
+            "due_on": (timezone.localdate() + timedelta(days=1)).isoformat(),
+        }
+        result = self.client.post(PATH, payload, secure=True)
+        self.assertEqual(result.status_code, 403)
+        self.assertFalse(MasterCommand.objects.exists())
+        self.assertFalse(AssistantRun.objects.exists())
+        self.assertFalse(WorkTask.objects.exists())
+
+    def test_calendar_task_and_report_are_idempotent_on_replay(self):
+        self.client.force_login(self.owner)
+        key = uuid4()
+        payload = {
+            **self.command(key=key),
+            "create_task": "1",
+            "priority": "urgent",
+            "due_on": timezone.localdate().isoformat(),
+        }
+        self.assertEqual(self.client.post(PATH, payload, secure=True).status_code, 302)
+        self.assertEqual(self.client.post(PATH, payload, secure=True).status_code, 302)
+        self.assertEqual(WorkTask.objects.count(), 1)
+        self.assertEqual(AssistantRun.objects.count(), 1)
+        self.assertEqual(AuditEvent.objects.count(), 1)
+        changed = self.client.post(
+            PATH, {**payload, "priority": "normal"}, secure=True,
+        )
+        self.assertEqual(changed.status_code, 409)
+        self.assertEqual(WorkTask.objects.count(), 1)
+
+    def test_invalid_calendar_inputs_never_create_report_or_task(self):
+        self.client.force_login(self.owner)
+        for priority, due in (
+            ("critical", timezone.localdate().isoformat()),
+            ("normal", "not-a-date"),
+            ("normal", (timezone.localdate() - timedelta(days=1)).isoformat()),
+        ):
+            response = self.client.post(
+                PATH, {
+                    **self.command(), "create_task": "1",
+                    "priority": priority, "due_on": due,
+                }, secure=True,
+            )
+            self.assertEqual(response.status_code, 400)
+        self.assertFalse(MasterCommand.objects.exists())
+        self.assertFalse(AssistantRun.objects.exists())
+        self.assertFalse(WorkTask.objects.exists())
+
+    def test_linked_calendar_task_cannot_be_swapped_after_recording(self):
+        self.client.force_login(self.owner)
+        payload = {
+            **self.command(), "create_task": "1", "priority": "normal",
+            "due_on": timezone.localdate().isoformat(),
+        }
+        self.assertEqual(self.client.post(PATH, payload, secure=True).status_code, 302)
+        command = MasterCommand.objects.get()
+        replacement = WorkTask.objects.create(
+            unit=self.farm, title="جایگزین غیرمجاز",
+            assigned_to=self.owner, created_by=self.owner,
+        )
+        command.task = replacement
+        with self.assertRaises(ValidationError):
+            command.save()
+        command.refresh_from_db()
+        self.assertNotEqual(command.task, replacement)
 
     def test_recorded_command_instruction_cannot_be_rewritten(self):
         self.client.force_login(self.owner)
