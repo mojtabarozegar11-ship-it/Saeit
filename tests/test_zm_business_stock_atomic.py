@@ -35,8 +35,8 @@ class StockMovementRegression(unittest.TestCase):
         self.assertIn("$db->exec('BEGIN IMMEDIATE')", block)
         self.assertIn("if($now+$qty<0)", block)
         self.assertIn("audit($db,'move','inventory-stock'", block)
-        self.assertLess(block.index("audit($db,'move'"), block.index("$db->commit()"))
-        self.assertIn("if($db->inTransaction())$db->rollBack()", block)
+        self.assertLess(block.index("audit($db,'move'"), block.index("$db->exec('COMMIT')"))
+        self.assertIn("$db->exec('ROLLBACK')", block)
         self.assertIn("preg_match('/^-?(?:0|[1-9][0-9]{0,8})$/D'", block)
         if PHP:
             result = subprocess.run([PHP, "-l", str(SOURCE)], capture_output=True, text=True)
@@ -110,7 +110,7 @@ class StockMovementRegression(unittest.TestCase):
                 audits = db.execute(
                     "SELECT COUNT(*) FROM audit_events WHERE subject='inventory-stock'"
                 ).fetchone()[0]
-            self.assertEqual(stock, 2)
+            self.assertEqual(stock, 2, [(p.stdout[-600:], p.stderr[-600:]) for p in outcomes])
             self.assertEqual(moves, 1)
             self.assertEqual(audits, 1)
 
