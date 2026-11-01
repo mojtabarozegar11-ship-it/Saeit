@@ -66,7 +66,7 @@ def issue(title, detail, *, severity="info", source=None):
             "severity": severity, "source": source or "داده داخلی واحد"}
 
 
-def scan(unit, code, *, actor):
+def scan(unit, code, *, actor=None):
     """Return at most 30 visible findings, always within the selected unit."""
     definition = CATALOG[code]
     mode = definition["handler"]
