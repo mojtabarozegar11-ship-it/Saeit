@@ -526,6 +526,9 @@ jobs:
               raise SystemExit("WRONG_USER")
           p=home/"Saeit-staging/config/urls.py"
           original=p.read_text(encoding="utf-8")
+          if hashlib.sha256(original.encode()).hexdigest()=="5c2ced82baabd7f1951876511ef46813e93fafb158bb62ac3301b4876ebdc786":
+              print("PICM_ROUTE_REMOVAL_LIVE_POST_SUCCESS=PASS")
+              raise SystemExit(0)
           if hashlib.sha256(original.encode()).hexdigest()!="20a497210ce9f8a488bea8693b5624e3110728fc5d37cdb166f246c265229c09":
               raise SystemExit("CONFIG_SHA_MISMATCH")
           lines=original.splitlines(keepends=True)
