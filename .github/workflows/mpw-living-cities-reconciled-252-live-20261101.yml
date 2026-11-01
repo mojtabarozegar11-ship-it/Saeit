@@ -179,7 +179,7 @@ jobs:
               /living-cities/static/living_cities/app.mjs) grep -Fq 'import "./global-shell.mjs";' "$tmp";;
               /living-cities/static/living_cities/global-campaign.mjs) grep -Fq 'CAMPAIGN_TOTAL' "$tmp";;
               /living-cities/static/living_cities/weekly-expeditions.mjs) grep -Fq 'YEARLY_CONTRACTS' "$tmp";;
-              /living-cities/static/living_cities/gameplay-i18n.mjs) grep -Fq 'EXTRA_KEYS' "$tmp";;
+              /living-cities/static/living_cities/gameplay-i18n.mjs) grep -Fq 'UI_GAMEPLAY_KEYS' "$tmp";;
               /living-cities/static/living_cities/global-i18n.mjs) grep -Fq 'LANGUAGES' "$tmp";;
             esac
             rm -f "$tmp"
