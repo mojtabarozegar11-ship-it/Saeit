@@ -28,3 +28,14 @@
 .hub-back{display:inline-block;color:#efd48a;margin:14px 0}
 @media(max-width:680px){.hub{padding-top:17px}.hub-top{padding:23px}.hub-mark{display:none}.hub-section-title h2{font-size:18px}.hub-assistant-grid,.hub-feature-grid{grid-template-columns:1fr}.hub-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.hub-units{gap:7px}.hub-nav{flex-wrap:nowrap;overflow-x:auto;white-space:nowrap}.hub-nav a{flex-shrink:0}.hub-top h1{font-size:26px}}
 @media(prefers-reduced-motion:reduce){.hub *{scroll-behavior:auto;animation:none!important;transition:none!important}}
+
+/* Scoped master-command intake: RTL, accessible form, mobile-safe table. */
+.hub-command-form{display:grid;gap:12px;background:linear-gradient(155deg,#244b38,#193629);border:1px solid #927c4c;border-radius:18px;padding:clamp(18px,3vw,32px);box-shadow:0 16px 35px #10281b6b}
+.hub-command-form label{font-weight:700;font-size:14px;color:#f4d992}
+.hub-command-form textarea,.hub-command-form select{box-sizing:border-box;width:100%;border:1px solid #8ba789;border-radius:12px;padding:13px 15px;color:#f5f6e7;background:#162d23;font:inherit;line-height:1.9;direction:rtl}
+.hub-command-form textarea:focus-visible,.hub-command-form select:focus-visible{outline:3px solid #edcd78;outline-offset:2px}
+.hub-command-form button{background:#e9cd7d;color:#193124;border:0;border-radius:12px;font:inherit;font-weight:800;cursor:pointer;min-height:48px;padding:12px 20px}
+.hub-command-form button:hover{background:#ffe7a1}.hub-command-hint{font-size:12px;color:#d5dfce;margin:0}
+.hub-command-instruction{max-width:340px;white-space:pre-wrap;overflow-wrap:anywhere}
+.hub-section .table-frame{overflow-x:auto}
+@media(max-width:680px){.hub-command-form{padding:16px}.hub-command-instruction{max-width:200px}}
