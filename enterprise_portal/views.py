@@ -24,6 +24,7 @@ from .models import (
 )
 from .task_workflow import TRANSITIONS, available_actions
 from .services import stock_balance
+from .php_ledger_bridge import LedgerUnavailable, read_php_finance_snapshot
 from ecosystem_hub.access import user_units, require_unit
 
 
@@ -185,6 +186,24 @@ def finance(request):
         "draft_count": JournalEntry.objects.filter(status="draft", unit__in=user_units(request.user)).count(),
     })
 
+
+
+@never_cache
+@office_access
+@require_GET
+def authoritative_finance(request):
+    """Aggregate-only view of the PHP V7 source ledger; no Django finance ORM."""
+    required_permission(request, "view_journalentry")
+    try:
+        snapshot = read_php_finance_snapshot(settings.ZM_PHP_LEDGER_READONLY_PATH)
+    except LedgerUnavailable:
+        return no_cache(HttpResponse(
+            "دفتر مالی مرجع در دسترس نیست؛ هیچ دادهٔ جایگزینی نمایش داده نمی‌شود.",
+            status=503, content_type="text/plain; charset=utf-8",
+        ))
+    return page(request, "php_finance", {
+        "section": "finance", "snapshot": snapshot,
+    })
 
 
 @never_cache

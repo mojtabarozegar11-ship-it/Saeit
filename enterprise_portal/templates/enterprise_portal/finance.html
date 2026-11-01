@@ -1,13 +1,13 @@
 {% extends 'enterprise_portal/shell.html' %}
 {% block title %}گزارش دفتر کل{% endblock %}{% block crumb %}حسابداری{% endblock %}
 {% block content %}
-<div class="page-head"><div class="eyebrow">FINANCIAL CONTROL</div><h1>حسابداری و دفتر کل شرکت</h1><p>نمای وضعیت اسناد قطعی‌شده؛ ارقام بدون تبدیل ارز و تنها بر اساس داده‌های ثبت‌شده.</p></div>
+<div class="page-head"><div class="eyebrow">FINANCIAL CONTROL · INTERNAL DJANGO LEDGER</div><h1>دفتر داخلی جنگو ـ غیرمرجع</h1><p>این اطلاعات متعلق به دفتر داخلی جنگو هستند و <strong>دفتر مالی مرجع PHP زمرد ملل نیستند</strong>. ثبت سند مالی جدید در این دفتر تا تطبیق و تأیید رسمی نباید انجام شود.</p><p><a href="{% url 'enterprise_portal:authoritative_finance' %}">مشاهدهٔ گزارش فقط‌خواندنی دفتر مالی اصلی ←</a></p></div>
 <div class="stats-grid">
 <div class="stat"><span>اسناد قطعی</span><strong>{{ posted_count }}</strong><small>ثبت‌شده پس از کنترل تراز</small></div>
 <div class="stat"><span>اسناد پیش‌نویس</span><strong>{{ draft_count }}</strong><small>هنوز در محاسبات قطعی نیستند</small></div>
 </div>
 <div class="section-heading"><h2>گردش کل به تفکیک واحد و ارز</h2>
-<div class="toolbar">{% if perms.enterprise_portal.add_journalentry %}<a class="primary-link" href="{% url 'admin:enterprise_portal_journalentry_add' %}">سند جدید +</a>{% endif %}
+<div class="toolbar">
 {% if perms.enterprise_portal.view_journalentry %}<a href="{% url 'admin:enterprise_portal_journalentry_changelist' %}">فهرست اسناد</a>{% endif %}
 {% if perms.enterprise_portal.view_ledgeraccount %}<a href="{% url 'admin:enterprise_portal_ledgeraccount_changelist' %}">کدینگ حساب‌ها</a>{% endif %}
 {% if perms.enterprise_portal.view_ledgeraccount %}<a href="{% url 'enterprise_portal:trial_balance' %}">تراز آزمایشی حساب‌ها و خروجی CSV ←</a>{% endif %}</div></div>

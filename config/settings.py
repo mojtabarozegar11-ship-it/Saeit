@@ -60,6 +60,9 @@ MIDDLEWARE = [
 # Fail closed for all non-test private company sessions.
 # Do not expose a production environment toggle that can disable office MFA.
 COMPANY_OFFICE_REQUIRE_MFA = True
+# PHP V7 remains the financial source of truth until a separately approved cutover.
+# The aggregate bridge is disabled unless its private SQLite source is explicit.
+ZM_PHP_LEDGER_READONLY_PATH = env("ZM_PHP_LEDGER_READONLY_PATH", default="")
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
