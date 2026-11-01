@@ -332,6 +332,28 @@ jobs:
           )"
           test -x "$configured_python"
           echo "PASSENGER_DB_PROBE_INTERPRETER_SOURCE=CPANEL_HTACCESS"
+          # A configured Passenger executable can be LiteSpeed's WSGI/LSAPI
+          # processor rather than a CPython CLI. Invoking it with -c reads an
+          # LSAPI packet from stdin and cannot attest Django database identity.
+          if PYTHONDONTWRITEBYTECODE=1 python3 -B - "$configured_python" <<'LSAPI_CLASSIFY'
+          import pathlib
+          import sys
+          binary = pathlib.Path(sys.argv[1])
+          with binary.open("rb") as stream:
+              for _ in range(32):
+                  chunk = stream.read(1024 * 1024)
+                  if not chunk:
+                      break
+                  if b"lsapi" in chunk.lower() or b"lswsgi" in chunk.lower():
+                      raise SystemExit(0)
+          raise SystemExit(1)
+          LSAPI_CLASSIFY
+          then
+              echo "PASSENGER_DB_PROBE_LSAPI_CLI_UNSUPPORTED=true"
+              echo "PASSENGER_APP_DB_ATTESTED=false"
+              echo "PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no"
+              exit 0
+          fi
           # Prove the cPanel-selected executable actually runs Python code,
           # separately from app imports or the stdin-based database probe.
           cli_output="$(PYTHONDONTWRITEBYTECODE=1 "$configured_python" -B -c 'import sys; print("PASSENGER_DB_PROBE_CLI_READY="+str(sys.version_info.major)+"."+str(sys.version_info.minor))')"
@@ -462,6 +484,10 @@ jobs:
               exit 1
           fi
           printf '%s\n' "$db_evidence" | grep -E '^(PASSENGER_DB_PROBE_[A-Z_]+|PASSENGER_APP_DB_ATTESTED|PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED)='
+          if ! grep -Fqx 'PASSENGER_APP_DB_ATTESTED=true' <<< "$db_evidence"; then
+              echo "::error title=Passenger DB attestation::Configured worker DB identity not proven"
+              exit 1
+          fi
       - name: Inspect configured Passenger interpreter inode and app workers without executing its CLI
         if: ${{ always() && steps.link.outcome == 'success' }}
         shell: bash
