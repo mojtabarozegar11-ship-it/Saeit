@@ -1,6 +1,7 @@
 name: Provision isolated Zomorod Django office database safely (no live binding)
 on:
   pull_request:
+    types: [opened]
     branches: [main]
     paths:
       - ".github/workflows/zomorod-cpanel-office-db-provision-20261031.yml"
@@ -11,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   provision-office-db:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.action == 'opened' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 14
     steps:

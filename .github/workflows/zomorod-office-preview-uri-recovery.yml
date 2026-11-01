@@ -1,6 +1,7 @@
 name: Restore stopped office preview Selector URI after inconclusive alternate test
 on:
   pull_request:
+    types: [opened]
     branches: [main]
     paths:
       - ".github/workflows/zomorod-office-preview-uri-recovery.yml"
@@ -8,7 +9,7 @@ permissions:
   contents: read
 jobs:
   recover-preview-only:
-    if: github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.action == 'opened' && github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 9
     steps:

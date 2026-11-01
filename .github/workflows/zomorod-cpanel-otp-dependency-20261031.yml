@@ -1,6 +1,7 @@
 name: Add verified Django OTP dependency to cPanel 3.10 (no app deploy)
 on:
   pull_request:
+    types: [opened]
     branches: [main]
     paths:
       - ".github/workflows/zomorod-cpanel-otp-dependency-20261031.yml"
@@ -11,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   otp-dependency:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.action == 'opened' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
