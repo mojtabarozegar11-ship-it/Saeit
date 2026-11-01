@@ -23,6 +23,7 @@ urlpatterns = [
     path("calendar/", calendar_views.calendar_view, name="calendar"),
     path("calendar/meetings/new/", calendar_views.new_meeting, name="new_meeting"),
     path("calendar/meetings/<int:pk>.ics", calendar_views.meeting_ics, name="meeting_ics"),
+    path("chatgpt-reports/", views.chatgpt_reports, name="chatgpt_reports"),
     path("tasks/", views.tasks, name="tasks"),
     path("tasks/new/", views.new_task, name="new_task"),
     path("tasks/<int:pk>/", views.task_detail, name="task_detail"),

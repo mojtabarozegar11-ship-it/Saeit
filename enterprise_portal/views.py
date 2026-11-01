@@ -20,7 +20,7 @@ from .forms import CompanyAuthenticationForm, TaskForm, LetterForm, has_office_a
 from .models import (
     AuditEvent, BudgetPlan, BusinessUnit, CommercialDocument, CompanyAsset,
     InventoryItem, JournalEntry, JournalLine, ManagementProject, Meeting,
-    OfficeLetter, OfficeAttachment, Partner, StockMovement, WorkTask,
+    OfficeLetter, OfficeAttachment, Partner, StockMovement, WorkTask, ChatGPTActionReport,
 )
 from .task_workflow import TRANSITIONS, available_actions
 from .services import stock_balance
@@ -125,6 +125,10 @@ MODULES = [
     {"key": "message_center", "title": "سامانه پیام و مکاتبات داخلی", "text": "صندوق پیام، مخاطبان و تاریخچه ارسال با رضایت و مجوز", "icon": "✉", "permission_app": "company_messaging", "permission": "view_message", "url": "company_messaging:inbox"},
     {"key": "marketing", "title": "تبلیغات و بازاریابی", "text": "کمپین، برنامه انتشار، سنجش عملکرد و هزینه", "icon": "◎", "permission_app": "company_marketing", "permission": "view_campaign", "url": "company_marketing:dashboard"},
     {"key": "crm", "title": "مدیریت ارتباط مشتریان", "text": "سرنخ، مراحل فروش و درآمد مستند به تفکیک واحد", "icon": "◇", "permission_app": "company_marketing", "permission": "view_lead", "url": "company_marketing:crm"},
+    {"key": "chatgpt_reports", "title": "گزارش‌های متنی اقدامات ChatGPT",
+     "text": "گزارش شماره‌دار، نتیجه، زمان و مدرک اقدامات ثبت‌شده در چرخه‌ها",
+     "icon": "≡", "permission": "view_chatgptactionreport",
+     "superuser_only": True, "url": "enterprise_portal:chatgpt_reports"},
     {"key": "master_agent", "title": "مسترایجنت و فرماندهی", "text": "تحلیل، صف کارها و چرخه‌های کنترل‌شده با تأیید و ردپا", "icon": "✦", "permission_app": "ecosystem_hub", "permission": "view_organization", "url": "enterprise_portal:ecosystem_hub:master_command"},
 ]
 
@@ -135,7 +139,9 @@ MODULES = [
 def dashboard(request):
     user = request.user
     modules = [item for item in MODULES
-               if user.is_superuser or user.has_perm(item.get("permission_app", "enterprise_portal") + "." + item["permission"])]
+               if (not item.get("superuser_only") or user.is_superuser)
+               and (user.is_superuser or user.has_perm(
+                   item.get("permission_app", "enterprise_portal") + "." + item["permission"]))]
     summary = []
     if user.is_superuser or user.has_perm("enterprise_portal.view_businessunit"):
         summary.append(("واحدهای شرکت", user_units(user).filter(active=True).count()))
@@ -401,3 +407,38 @@ def download_office_attachment(request, pk):
     )
     from .private_uploads import download_attachment
     return download_attachment(record)
+
+
+@never_cache
+@office_access
+@require_GET
+def chatgpt_reports(request):
+    """Private read-only text ledger: only recorded receipts, not chat history."""
+    if not request.user.is_superuser:
+        raise PermissionDenied("سوابق جامع اقدامات ChatGPT فقط برای مدیر ارشد مجاز است.")
+    from django.core.paginator import Paginator
+    from django.http import HttpResponseBadRequest
+
+    state = (request.GET.get("outcome") or "").strip()
+    cycle = (request.GET.get("cycle") or "").strip()
+    valid_states = {code for code, _ in ChatGPTActionReport._meta.get_field("outcome").choices}
+    if state and state not in valid_states:
+        return no_cache(HttpResponseBadRequest("وضعیت گزارش نامعتبر است."))
+    if len(cycle) > 16 or (cycle and not cycle.isascii()):
+        return no_cache(HttpResponseBadRequest("شناسه چرخه نامعتبر است."))
+    reports = ChatGPTActionReport.objects.select_related("unit", "evidence_reviewed_by")
+    if state:
+        reports = reports.filter(outcome=state)
+    if cycle:
+        reports = reports.filter(cycle_code=cycle)
+    page_obj = Paginator(reports.order_by("-occurred_at", "-pk"), 25).get_page(
+        request.GET.get("page", "1")
+    )
+    return page(request, "chatgpt_reports", {
+        "section": "chatgpt_reports",
+        "records": page_obj.object_list,
+        "page_obj": page_obj,
+        "outcome": state,
+        "cycle": cycle,
+        "outcome_choices": ChatGPTActionReport._meta.get_field("outcome").choices,
+    })
