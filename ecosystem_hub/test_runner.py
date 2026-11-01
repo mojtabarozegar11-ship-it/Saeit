@@ -17,6 +17,20 @@ from .models import AssistantRun, ProposedAutomation, UnitMembership
 
 
 class CalendarDueRulesTests(SimpleTestCase):
+    def test_hourly_requires_full_elapsed_hour_not_a_clock_boundary(self):
+        now = datetime(2026, 11, 1, 14, 0, tzinfo=utc_timezone.utc)
+        rule = SimpleNamespace(
+            assistant_code="risk-analyst", active=True,
+            requires_human_review=True, cadence="hourly",
+            last_checked_at=now - timedelta(minutes=59),
+        )
+        with override_settings(TIME_ZONE="UTC"):
+            self.assertFalse(is_due(rule, now=now))
+            rule.last_checked_at = now - timedelta(minutes=60)
+            self.assertTrue(is_due(rule, now=now))
+            rule.requires_human_review = False
+            self.assertFalse(is_due(rule, now=now))
+
     def test_weekly_requires_seven_elapsed_calendar_days(self):
         now = datetime(2026, 10, 17, 14, tzinfo=utc_timezone.utc)
         rule = SimpleNamespace(
@@ -128,6 +142,21 @@ class AssistantRunnerIsolationTests(TestCase):
         call_command("run_ecosystem_assistants", "--commit", stdout=StringIO())
         self.assertEqual(AssistantRun.objects.count(), 1)
         self.assertEqual(AuditEvent.objects.count(), 1)
+
+    @override_settings(ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED=True)
+    def test_hourly_rule_produces_one_draft_per_elapsed_interval(self):
+        rule = self.rule(cadence="hourly")
+        call_command("run_ecosystem_assistants", "--commit", stdout=StringIO())
+        self.assertEqual(AssistantRun.objects.count(), 1)
+        self.assertEqual(AuditEvent.objects.count(), 1)
+        call_command("run_ecosystem_assistants", "--commit", stdout=StringIO())
+        self.assertEqual(AssistantRun.objects.count(), 1)
+        rule.refresh_from_db()
+        rule.last_checked_at = timezone.now() - timedelta(hours=2)
+        rule.save(update_fields=("last_checked_at",))
+        call_command("run_ecosystem_assistants", "--commit", stdout=StringIO())
+        self.assertEqual(AssistantRun.objects.count(), 2)
+        self.assertEqual(AuditEvent.objects.count(), 2)
 
     @override_settings(ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED=True)
     def test_unit_filter_and_invalid_batch_size_are_enforced(self):

@@ -1,0 +1,54 @@
+name: Zomorod Master Command offline Django verification
+
+on:
+  push:
+    branches:
+      - feature/zm-master-agent-hourly-command-20261101
+  pull_request:
+    branches:
+      - feature/zm-business-os-unified-dashboard-20261101
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zm-master-command-offline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  private-command-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "ci-only-not-production"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,testserver"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact proposed source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install project dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Django system check
+        run: python manage.py check
+      - name: Migration consistency against model definitions
+        run: python manage.py makemigrations --check --dry-run
+      - name: Integrated ERP, factory management, marketing and messaging regression
+        run: |
+          python manage.py test \
+            ecosystem_hub \
+            enterprise_portal \
+            company_marketing \
+            company_messaging
+      - name: Release boundary
+        run: |
+          echo "CI_ONLY=1"
+          echo "NO_HOST_CONTACT=1"
+          echo "NO_MERGE_DEPLOY_DB_CHANGE=1"

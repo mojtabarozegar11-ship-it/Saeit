@@ -3,6 +3,7 @@
 No model creates accounting postings, real payments, stock postings or external
 content. Link to the existing ERP records rather than duplicating their balances.
 """
+import uuid
 from decimal import Decimal
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -441,7 +442,8 @@ class ProposedAutomation(Timeline):
     unit = models.ForeignKey(BusinessUnit, on_delete=models.PROTECT)
     assistant_code = models.SlugField(max_length=60)
     cadence = models.CharField(max_length=16, choices=(
-        ("daily", "روزانه"), ("weekly", "هفتگی"), ("monthly", "ماهانه"),
+        ("hourly", "ساعتی"), ("daily", "روزانه"),
+        ("weekly", "هفتگی"), ("monthly", "ماهانه"),
     ), default="daily")
     active = models.BooleanField(default=False)
     requires_human_review = models.BooleanField(default=True)
@@ -455,3 +457,57 @@ class ProposedAutomation(Timeline):
     def clean(self):
         if not self.requires_human_review:
             raise ValidationError({"requires_human_review": "کنترل انسانی برای اقدامات مدیریتی الزامی است."})
+
+
+class MasterCommand(Timeline):
+    """Private text instruction routed to a scoped read-only assistant report.
+
+    This record is a durable command receipt, never permission to execute a
+    payment, send a message, change inventory or act outside the company.
+    """
+    unit = models.ForeignKey(BusinessUnit, on_delete=models.PROTECT)
+    issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    request_key = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    instruction = models.TextField(max_length=2000)
+    assistant_code = models.SlugField(max_length=60)
+    status = models.CharField(max_length=16, choices=(
+        ("received", "فرمان دریافت شد"),
+        ("draft_ready", "گزارش پیش‌نویس آماده است"),
+    ), default="received")
+    report = models.OneToOneField(
+        AssistantRun, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="master_command",
+    )
+
+    class Meta:
+        ordering = ("-created_at", "-pk")
+        indexes = [models.Index(fields=("unit", "created_at"), name="zm_master_unit_time_idx")]
+        verbose_name = "فرمان مسترایجنت"
+        verbose_name_plural = "فرمان‌های مسترایجنت"
+
+    def clean(self):
+        if not self.instruction or not self.instruction.strip():
+            raise ValidationError({"instruction": "متن فرمان نمی‌تواند خالی باشد."})
+        if (self.status == "draft_ready") != bool(self.report_id):
+            raise ValidationError({"status": "وضعیت فرمان و وجود گزارش باید سازگار باشند."})
+        if self.report_id and (
+            self.report.unit_id != self.unit_id or
+            self.report.assistant_code != self.assistant_code or
+            self.report.requested_by_id != self.issued_by_id
+        ):
+            raise ValidationError({"report": "گزارش باید با واحد، دستیار و صادرکننده فرمان یکسان باشد."})
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            before = type(self).objects.get(pk=self.pk)
+            if (
+                self.unit_id != before.unit_id or
+                self.issued_by_id != before.issued_by_id or
+                self.request_key != before.request_key or
+                self.assistant_code != before.assistant_code or
+                self.instruction != before.instruction or
+                (before.report_id and self.report_id != before.report_id)
+            ):
+                raise ValidationError("هویت، متن و نتیجه فرمان ثبت‌شده قابل بازنویسی نیست.")
+        self.full_clean()
+        return super().save(*args, **kwargs)
