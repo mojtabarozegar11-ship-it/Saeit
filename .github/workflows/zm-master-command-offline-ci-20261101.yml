@@ -6,11 +6,13 @@ on:
       - feature/zm-master-agent-hourly-command-20261101
       - feature/zm-intent-router-marketing-agent-20261101
       - feature/zm-command-to-calendar-tasks-20261101
+      - feature/zm-hourly-smart-task-watch-20261101
   pull_request:
     branches:
       - feature/zm-business-os-unified-dashboard-20261101
       - feature/zm-master-agent-hourly-command-20261101
       - feature/zm-intent-router-marketing-agent-20261101
+      - feature/zm-command-to-calendar-tasks-20261101
 
 permissions:
   contents: read
