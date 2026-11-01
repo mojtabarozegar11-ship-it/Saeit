@@ -123,5 +123,64 @@ class ReleaseInterlockTests(unittest.TestCase):
         self.assertIn("if: ${{ false }}", workflow)
 
 
+class ReleaseRollbackSandboxTests(unittest.TestCase):
+    """Exercise an actual publish/rollback cycle on throwaway files only."""
+
+    def _run_fixture(self, tamper=False):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from scripts import mpw_guest_checkout_live_release as release
+
+        original_pages = (
+            b"def product_checkout(request, product_id):\\n    return None\\n"
+            b"def purchases(request):\\n    return None\\n"
+        ).replace(b"\\n", b"\n")
+        original_web = (
+            b"def _views():\\n    return None\\n"
+            b"COMMERCIAL_URLPATTERNS=()\\n"
+        ).replace(b"\\n", b"\n")
+        source = (
+            b"def patch_public(namespace):\\n    pass\\n"
+            b"def patch_commercial(namespace):\\n    pass\\n"
+        ).replace(b"\\n", b"\n")
+        with tempfile.TemporaryDirectory(prefix="mpw-guest-rollback-ci-") as temp:
+            root = Path(temp)
+            paths = {
+                "pages": root / "pages.py",
+                "web": root / "web.py",
+                "guest": root / "guest.py",
+            }
+            paths["pages"].write_bytes(original_pages)
+            paths["web"].write_bytes(original_web)
+            candidate = root / "candidate.py"
+            candidate.write_bytes(source)
+            run_id = "41270000000"
+            with (patch.object(release, "TARGETS", paths),
+                  patch.object(release, "BACKUPS", root / "backups"),
+                  patch.object(release, "guard", lambda: None),
+                  patch.object(release, "restart", lambda: None)):
+                release.publish(run_id, str(candidate))
+                self.assertEqual(paths["guest"].read_bytes(), source)
+                self.assertNotEqual(paths["pages"].read_bytes(), original_pages)
+                if tamper:
+                    paths["guest"].write_bytes(source + b"# unexpected drift\\n")
+                    before = {k: p.read_bytes() for k, p in paths.items()}
+                    with self.assertRaisesRegex(RuntimeError, "ROLLBACK_DRIFT:guest"):
+                        release.rollback(run_id)
+                    self.assertEqual(before, {k: p.read_bytes() for k, p in paths.items()})
+                else:
+                    release.rollback(run_id)
+                    self.assertFalse(paths["guest"].exists())
+                    self.assertEqual(paths["pages"].read_bytes(), original_pages)
+                    self.assertEqual(paths["web"].read_bytes(), original_web)
+
+    def test_synthetic_publish_rollback_restores_exact_prior_modules(self):
+        self._run_fixture()
+
+    def test_synthetic_rollback_refuses_changed_adapter(self):
+        self._run_fixture(tamper=True)
+
+
 if __name__ == "__main__":
     unittest.main()
