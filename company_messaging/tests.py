@@ -195,6 +195,73 @@ class MessagingTests(TestCase):
         self.client.force_login(self.staff)
         self.assertEqual(self.client.get("/company/office/messages/", secure=True).status_code, 403)
 
+    def test_message_audit_events_require_separate_permission(self):
+        self.staff.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="enterprise_portal",
+                codename="view_businessunit",
+            ),
+            Permission.objects.get(
+                content_type__app_label="company_messaging", codename="view_message"
+            ),
+        )
+        UnitMembership.objects.create(
+            user=self.staff, unit=self.unit, role="viewer", active=True,
+        )
+        message = enqueue(Message(
+            unit=self.unit, channel="internal", sender=self.owner,
+            recipient_user=self.staff, subject="Private message", body="Private body",
+        ))
+        url = f"/company/office/messages/{message.pk}/"
+        self.client.force_login(self.staff)
+        detail = self.client.get(url, secure=True)
+        self.assertEqual(detail.status_code, 200)
+        self.assertContains(detail, "Private body")
+        self.assertNotContains(detail, "internal_created")
+        self.assertNotContains(detail, "تاریخچه وضعیت")
+        # The independent event permission is intentionally not implied by
+        # access to the message or by staff status.
+        self.staff.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="company_messaging",
+                codename="view_company_message_audit",
+            ),
+        )
+        self.client.logout()
+        self.client.force_login(self.staff)
+        allowed = self.client.get(url, secure=True)
+        self.assertEqual(allowed.status_code, 200)
+        self.assertContains(allowed, "Private body")
+        self.assertContains(allowed, "تاریخچه وضعیت")
+        self.assertContains(allowed, "internal_created")
+
+    def test_message_detail_never_discloses_other_user_or_unit(self):
+        self.staff.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="enterprise_portal",
+                codename="view_businessunit",
+            ),
+            Permission.objects.get(
+                content_type__app_label="company_messaging", codename="view_message",
+            ),
+            Permission.objects.get(
+                content_type__app_label="company_messaging",
+                codename="view_company_message_audit",
+            ),
+        )
+        UnitMembership.objects.create(
+            user=self.staff, unit=self.unit, role="viewer", active=True,
+        )
+        other_message = enqueue(Message(
+            unit=self.unit2, channel="internal", sender=self.owner,
+            recipient_user=self.owner, subject="Other unit", body="Other unit body",
+        ))
+        self.client.force_login(self.staff)
+        result = self.client.get(
+            f"/company/office/messages/{other_message.pk}/", secure=True,
+        )
+        self.assertEqual(result.status_code, 404)
+
     def test_internal_inbox_read_only_on_explicit_post(self):
         msg = self.internal()
         self.assertEqual(msg.status, "internal")
