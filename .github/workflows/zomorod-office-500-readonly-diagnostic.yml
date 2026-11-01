@@ -476,6 +476,33 @@ jobs:
           print("FINANCIAL_VALUES_OR_PRIVATE_ROWS_LOGGED=false")
           PY
           REMOTE
+      - name: Reject any anonymous live finance report exposure
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No cookies, authorization headers, redirects, or response body.
+          # A redirect to login or a 404 on the still-unpublished route is safe;
+          # an unsolicited 200 must block the private-office release.
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \\
+            --proto '=https' --tlsv1.2 --max-time 25 --max-redirs 0 \\
+            --retry 2 --retry-delay 2 \\
+            'https://zomorodmelal.ir/company/office/finance/authoritative/')"
+          case "$status" in
+            301|302|303|307|308|401|403|404|503)
+              echo "LIVE_ANONYMOUS_FINANCE_EXPOSURE=no"
+              echo "LIVE_FINANCE_HTTP_CLASS=guarded_or_unpublished"
+              ;;
+            200)
+              echo "::error title=Private finance access check::Anonymous HTTP 200 requires manual verification before release"
+              echo "LIVE_ANONYMOUS_FINANCE_EXPOSURE=possible"
+              exit 1
+              ;;
+            *)
+              echo "::error title=Private finance access check::Unexpected HTTP status; unable to attest anonymous safety"
+              echo "LIVE_ANONYMOUS_FINANCE_EXPOSURE=unattested"
+              exit 1
+              ;;
+          esac
       - name: Erase transient private relay files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
