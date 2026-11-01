@@ -53,4 +53,4 @@ class ManualAssistantGuidanceTests(SimpleTestCase):
         self.assertGreaterEqual(len(steps), 4)
         details = " ".join(detail for _, detail in steps)
         self.assertIn("صورتحساب بانک", details)
-        self.assertIn("تأیید", details)
+        self.assertIn("امضای حسابدار مسئول", details)
