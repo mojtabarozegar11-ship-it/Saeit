@@ -170,6 +170,44 @@ jobs:
               for p,size,mtime in sorted(html,key=lambda x:x[1],reverse=True)[:12]:
                   print("TEMPLATE_SAMPLE="+json.dumps({"root":label,"file":safe_name(p,root),
                     "bytes":size,"age_days":round(max(0,now-mtime)/86400,1)},ensure_ascii=True))
+          # Only review/playground URLs under Zomorod's document root are candidates.
+          web=HOME/"public_html"
+          named=[]
+          if web.is_dir() and not web.is_symlink():
+              for child in sorted(web.iterdir()):
+                  if child.is_dir() and not child.is_symlink() and child.name.startswith("__zm_") and (
+                      "preview" in child.name or "review" in child.name):
+                      files,state=entries(child,3,300)
+                      idx=child/"index.html"
+                      h=""
+                      if idx.is_file() and not idx.is_symlink() and idx.stat().st_size<4*1048576:
+                          h=hashlib.sha256(idx.read_bytes()).hexdigest()[:20]
+                      named.append((child,files,state,h))
+              reference_files=[]
+              for p,size,mtime in entries(web,4,9000)[0]:
+                  if any(bit.startswith("__zm_") for bit in p.relative_to(web).parts):
+                      continue
+                  if p.suffix.lower() not in (".html",".htm",".js",".css",".xml",".json") and p.name!=".htaccess":
+                      continue
+                  if size>4*1048576:
+                      continue
+                  reference_files.append(p)
+              for child,files,state,digest in named:
+                  hits=[]
+                  needle=child.name.encode("utf-8")
+                  for p in reference_files:
+                      try:
+                          if needle in p.read_bytes():
+                              hits.append(str(p.relative_to(web))[:120])
+                      except OSError:
+                          continue
+                  print("OLD_PREVIEW_CANDIDATE="+json.dumps({
+                      "directory":child.name,"files":len(files),"scan":state,
+                      "mib":round(sum(v[1] for v in files)/1048576,2),
+                      "index_sha256_prefix":digest,
+                      "referenced_by_live_documents":hits[:15],
+                      "references_total":len(hits)},ensure_ascii=True))
+          print("REVIEW_PREVIEW_DIRECTORIES="+str(len(named)))
           print("HOST_CHANGES=none")
           print("DELETION_AUTHORIZED_THIS_RUN=no")
           PY
