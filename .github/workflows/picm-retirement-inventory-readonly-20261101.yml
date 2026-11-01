@@ -443,6 +443,38 @@ jobs:
           )"
           call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
           timeout 120s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
+      - name: Inspect only PICM-route source block and Passenger pointer read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          COMMAND_HOST="${{ steps.link.outputs.command_host }}"
+          probe64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import os, re
+          home=Path.home()
+          if home!=Path("/home/zomorod2") or os.geteuid()==0:
+              raise SystemExit("WRONG_USER")
+          p=home/"Saeit-staging/config/urls.py"
+          lines=p.read_text(encoding="utf-8").splitlines()
+          for i in range(165,min(len(lines),256)):
+              line=lines[i]
+              if re.search(r"secret|password|private.key|api.key|token|credential|client.secret",line,re.I):
+                  line="<REDACTED>"
+              print("PICM_ROUTE_STAGING_DETAIL_"+str(i+1)+"="+line[:220])
+          startup=home/"mojplaywin.com/passenger_wsgi.py"
+          print("PICM_APP_STARTUP_PRESENT="+str(startup.is_file() and not startup.is_symlink()).lower())
+          if startup.is_file() and startup.stat().st_size<10000:
+              for i,line in enumerate(startup.read_text(errors="replace").splitlines(),1):
+                  if re.search(r"secret|password|private.key|api.key|token|credential|client.secret",line,re.I):
+                      continue
+                  if "Saeit" in line or "sys.path" in line or "DJANGO_SETTINGS_MODULE" in line or "get_wsgi_application" in line or "activate" in line or "core" in line:
+                      print("PICM_APP_STARTUP_ROUTE_"+str(i)+"="+line[:200])
+          
+          PY
+          )"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 120s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
       - name: Confirm zero remote modifications or backup deletions
         shell: bash
         run: |
