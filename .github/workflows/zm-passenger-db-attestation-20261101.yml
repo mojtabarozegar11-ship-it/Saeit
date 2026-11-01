@@ -294,6 +294,83 @@ jobs:
           print("ZM_ROUTE_LIVE_APP_HANDOFF_ATTESTED=false")
           PY
           REMOTE
+      - name: Attest all 13 live private accounting tables without SQL writes or page execution
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 80s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          import sqlite3
+          from pathlib import Path
+          from urllib.parse import quote
+          home=Path("/home/zomorod2")
+          assert Path.home()==home
+          private=home/".private/zomorod-business"
+          path=private/"management.sqlite3"
+          assert private.is_dir() and not private.is_symlink()
+          assert path.is_file() and not path.is_symlink()
+          assert path.stat().st_size>=4096
+          before=(path.stat().st_size,path.stat().st_mtime_ns)
+          wal=Path(str(path)+"-wal")
+          wal_size=wal.stat().st_size if wal.is_file() and not wal.is_symlink() else 0
+          # immutable=1 never creates WAL/SHM or locks the live writer; a
+          # nonempty WAL means the main-file schema may be a stale view.
+          uri="file:"+quote(str(path),safe="/")+"?mode=ro&immutable=1"
+          required={
+            "users":{"id","username","password_hash","role","active"},
+            "ledger_accounts":{"id","code","name","type","active"},
+            "journal_entries":{"id","doc_no","doc_date","note","entered_by"},
+            "journal_lines":{"id","entry_id","account_id","debit","credit","currency"},
+            "parties":{"id","name","kind","phone","details"},
+            "invoices":{"id","invoice_no","kind","party_id","invoice_date","due_date","description","amount","currency","posted_entry","created_by"},
+            "invoice_payments":{"id","invoice_id","amount","paid_on","entry_id","created_by"},
+            "inventory":{"id","sku","name","unit","reorder_level"},
+            "inventory_movements":{"id","inventory_id","movement_date","qty","note","created_by"},
+            "employees":{"id","fullname","job_title","start_date","monthly_salary","active"},
+            "documents":{"id","title","category","body","created_by"},
+            "projects":{"id","title","owner","state","budget"},
+            "audit_events":{"id","user_id","verb","subject","entity_id","occurred_at"},
+          }
+          seeds={"1000","1010","1100","1200","1500","2000","2100","3000","4000","5000","5100","5200"}
+          with sqlite3.connect(uri,uri=True,timeout=6) as conn:
+              conn.execute("PRAGMA query_only=ON")
+              ok=conn.execute("PRAGMA quick_check").fetchone()[0]=="ok"
+              tables={r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              matched=len(required.keys() & tables)
+              missing_columns={}
+              for table,need in required.items():
+                  if table not in tables:
+                      missing_columns[table]=len(need)
+                      continue
+                  got={r[1] for r in conn.execute('PRAGMA table_info("'+table+'")')}
+                  if not need<=got:
+                      missing_columns[table]=len(need-got)
+              ledger_codes={r[0] for r in conn.execute("SELECT code FROM ledger_accounts") if isinstance(r[0],str)} if "ledger_accounts" in tables and not missing_columns.get("ledger_accounts") else set()
+              users_present=bool(conn.execute("SELECT 1 FROM users LIMIT 1").fetchone()) if "users" in tables and not missing_columns.get("users") else False
+              fks_violated=sum(1 for _ in conn.execute("PRAGMA foreign_key_check"))
+          after=(path.stat().st_size,path.stat().st_mtime_ns)
+          print("ZM_PRIVATE_DB_RESTORED_SCHEMA_READ_ONLY=true")
+          print("ZM_PRIVATE_DB_MAIN_FILE_UNCHANGED="+str(before==after).lower())
+          print("ZM_PRIVATE_DB_WAL_NONEMPTY="+str(wal_size>0).lower())
+          print("ZM_PRIVATE_DB_QUICK_CHECK="+("ok" if ok else "failed"))
+          print("ZM_PRIVATE_DB_REQUIRED_TABLES="+str(matched)+"/13")
+          print("ZM_PRIVATE_DB_REQUIRED_COLUMNS_COMPLETE="+str(not missing_columns).lower())
+          print("ZM_PRIVATE_DB_MISSING_COLUMN_TABLE_COUNT="+str(len(missing_columns)))
+          print("ZM_PRIVATE_DB_STARTER_LEDGER_CODES="+str(len(seeds & ledger_codes))+"/12")
+          print("ZM_PRIVATE_DB_HAS_USERS="+str(users_present).lower())
+          print("ZM_PRIVATE_DB_FOREIGN_KEY_VIOLATIONS="+str(fks_violated))
+          print("ZM_PRIVATE_SCHEMA_ATTESTED="+str(ok and matched==13 and not missing_columns and fks_violated==0 and wal_size==0).lower())
+          print("ZM_PRIVATE_SCHEMA_PROBE_EXECUTED_PHP=false")
+          print("ZM_PRIVATE_SCHEMA_PROBE_SQL_WRITES=0")
+          assert ok and matched==13 and not missing_columns
+          PY
+          REMOTE
       - name: Clear temporary credentials on GitHub runner only
         if: always()
         shell: bash
