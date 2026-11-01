@@ -92,6 +92,23 @@ class FactoryBackupAuditTests(unittest.TestCase):
             {b.name, c.name},
         )
 
+    def test_wal_or_journal_sidecar_blocks_snapshot_verification(self):
+        path = self.make_database("master-before-20261027T121212Z.sqlite3")
+        wal = Path(str(path) + "-wal")
+        wal.write_bytes(b"uncheckpointed-placeholder")
+        before = wal.read_bytes()
+        report = audit_module.audit(self.root)
+        self.assertFalse(report["records"][0]["quick_check_ok"])
+        self.assertEqual(report["records"][0]["check_result"], "sqlite_sidecar_present")
+        self.assertEqual(wal.read_bytes(), before)
+
+    def test_immutable_quick_check_creates_no_sidecar_files(self):
+        path = self.make_database("master-before-20261027T131313Z.sqlite3")
+        report = audit_module.audit(self.root)
+        self.assertTrue(report["records"][0]["quick_check_ok"])
+        for suffix in ("-wal", "-shm", "-journal"):
+            self.assertFalse(Path(str(path) + suffix).exists())
+
     def test_public_report_redacts_root_and_relative_paths(self):
         path = self.make_database("master-before-20261027T000000Z.sqlite3")
         report = audit_module.audit(self.root)
