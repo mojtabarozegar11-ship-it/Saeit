@@ -395,6 +395,54 @@ jobs:
           )"
           call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
           timeout 120s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
+      - name: Inspect current production versus staging PICM URL imports without changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          COMMAND_HOST="${{ steps.link.outputs.command_host }}"
+          probe64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import os, re, hashlib
+          home=Path.home()
+          if os.geteuid()==0 or home!=Path("/home/zomorod2"):
+              raise SystemExit("WRONG_USER")
+          for label, root in (("PRODUCTION",home/"Saeit"),("STAGING",home/"Saeit-staging")):
+              p=root/"config/urls.py"
+              print("PICM_ROUTE_"+label+"_ROOT_PRESENT="+str(root.is_dir()).lower())
+              if not p.is_file() or p.is_symlink():
+                  print("PICM_ROUTE_"+label+"_CONFIG_PRESENT=false")
+                  continue
+              data=p.read_bytes()
+              if len(data)>300000:
+                  raise SystemExit("URL_FILE_UNEXPECTED_SIZE")
+              lines=data.decode("utf-8",errors="replace").splitlines()
+              print("PICM_ROUTE_"+label+"_CONFIG_PRESENT=true")
+              print("PICM_ROUTE_"+label+"_CONFIG_SHA256="+hashlib.sha256(data).hexdigest())
+              print("PICM_ROUTE_"+label+"_CONFIG_PICM_OCCURRENCES="+str(sum(l.lower().count("picm") for l in lines)))
+              limit=0
+              for i,line in enumerate(lines,1):
+                  if "picm" not in line.lower():
+                      continue
+                  if limit>=90:
+                      print("PICM_ROUTE_"+label+"_MORE_LINES=true")
+                      break
+                  limit+=1
+                  if re.search(r"secret|password|private.key|api.key|token|credential|client.secret",line,re.I):
+                      print("PICM_ROUTE_"+label+"_LINE_"+str(i)+"=<REDACTED>")
+                  else:
+                      print("PICM_ROUTE_"+label+"_LINE_"+str(i)+"="+line[:170].replace("\t"," "))
+          for label,p in (("DOMAIN_HTACCESS",home/"mojplaywin.com/.htaccess"),("ROOT_HTACCESS",home/"public_html/.htaccess")):
+              print("PICM_"+label+"_PRESENT="+str(p.is_file() and not p.is_symlink()).lower())
+              if p.is_file() and not p.is_symlink() and p.stat().st_size<40000:
+                  for line in p.read_text(errors="replace").splitlines():
+                      if re.match(r"^\s*Passenger(AppRoot|BaseURI|Python|StartupFile)",line,re.I):
+                          print("PICM_"+label+"_PASSENGER="+line[:160])
+          
+          PY
+          )"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 120s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
       - name: Confirm zero remote modifications or backup deletions
         shell: bash
         run: |
