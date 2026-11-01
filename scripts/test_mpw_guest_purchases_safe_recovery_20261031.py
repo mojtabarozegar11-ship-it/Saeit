@@ -48,6 +48,7 @@ class GuestRecoveryLandingTests(unittest.TestCase):
         self.assertIn(b"do not send another payment", result.content)
         self.assertEqual(result["X-Robots-Tag"], "noindex, nofollow")
         self.assertIn("no-store", result["Cache-Control"])
+        self.assertIn("Cookie", result["Vary"])
         self.assertIn("default-src 'none'", result["Content-Security-Policy"])
 
     def test_invalid_signed_cookie_does_not_disclose_invoice(self):
@@ -71,6 +72,32 @@ class GuestRecoveryLandingTests(unittest.TestCase):
         self.assertEqual(result.content, b"PRIVATE_INVOICE_SENTINEL")
         self.assertEqual(result["X-Robots-Tag"], "noindex, nofollow")
         self.assertIn("no-store", result["Cache-Control"])
+
+    def test_original_authorization_wrapper_is_not_unwrapped(self):
+        # The guest adapter must not discard authorization or other decorators
+        # owned by the original purchases route.
+        from functools import wraps
+        observed = []
+        def protect(view):
+            @wraps(view)
+            def wrapped(req):
+                observed.append("checked")
+                if not req.user.is_authenticated:
+                    return HttpResponse("DENIED", status=403)
+                return view(req)
+            return wrapped
+        namespace = {
+            "product_checkout": lambda req, product_id: HttpResponse("checkout"),
+            "purchases": protect(lambda req: HttpResponse("PRIVATE_PURCHASE")),
+        }
+        patch_public(namespace)
+        owner = SimpleNamespace(pk=777, is_authenticated=True)
+        with patch("services.mpw_trx_guest_commerce._read_user", return_value=owner):
+            result = namespace["purchases"](request(cookie="signed-guest"))
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.content, b"PRIVATE_PURCHASE")
+        self.assertEqual(observed, ["checked"])
+        self.assertIn("cookie", result["Vary"].lower())
 
     def test_plain_http_is_not_accepted(self):
         with self.assertRaises(Http404):
@@ -97,7 +124,8 @@ class GuestRecoveryLandingTests(unittest.TestCase):
         response = HttpResponse("recovery")
         response["Vary"] = "Accept-Encoding"
         result = _install_cookie(response, None)
-        self.assertEqual(result["Vary"], "Accept-Encoding")
+        self.assertEqual({part.strip().lower() for part in result["Vary"].split(",")},
+                         {"accept-encoding", "cookie"})
         self.assertNotIn(COOKIE, result.cookies)
 
 class StorefrontRecoveryCopyTests(unittest.TestCase):
