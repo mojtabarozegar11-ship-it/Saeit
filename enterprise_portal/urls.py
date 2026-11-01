@@ -16,6 +16,7 @@ urlpatterns = [
     path("inventory/", views.inventory, name="inventory"),
     path("tasks/", views.tasks, name="tasks"),
     path("tasks/new/", views.new_task, name="new_task"),
+    path("tasks/<int:pk>/", views.task_detail, name="task_detail"),
     path("letters/", views.letters, name="letters"),
     path("letters/new/", views.new_letter, name="new_letter"),
 ]
