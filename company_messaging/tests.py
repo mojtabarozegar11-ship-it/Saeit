@@ -70,6 +70,24 @@ class MessagingTests(TestCase):
         sender.assert_not_called()
         self.assertContains(self.client.get("/company/office/messages/contacts/", secure=True), "مشتری امن")
 
+    def test_contact_creation_and_audit_are_one_atomic_transaction(self):
+        # A failed audit write must not leave a contact without provenance.
+        url = "/company/office/messages/contacts/new/"
+        data = {
+            "unit": self.unit.pk,
+            "name": "Atomic audit",
+            "email": "atomic@example.org",
+            "active": "on",
+        }
+        with patch(
+            "company_messaging.views.AuditEvent.objects.create",
+            side_effect=RuntimeError("audit storage unavailable"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(url, data=data, secure=True)
+        self.assertFalse(Contact.objects.filter(email="atomic@example.org").exists())
+        self.assertFalse(AuditEvent.objects.filter(action="messaging_contact_created").exists())
+
     def test_contact_missing_evidence_rejected_and_never_sent(self):
         res = self.client.post("/company/office/messages/contacts/new/", secure=True, data={
             "unit": self.unit.pk, "name": "بدون مجوز", "email": "no@example.org",
