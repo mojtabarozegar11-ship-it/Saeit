@@ -1,0 +1,44 @@
+name: ZM finance unit-integrity isolated regression
+on:
+  push:
+    branches:
+      - fix/zm-finance-cross-unit-posted-journal-20261102
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zm-finance-unit-integrity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-integrity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      SECRET_KEY: ci-only-not-production
+      DEBUG: "true"
+      ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install declared dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Check source and migrations without applying any
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+      - name: Unit-scoped financial report regression
+        run: |
+          python manage.py test ecosystem_hub.test_financial_unit_integrity ecosystem_hub.test_financial_reporting
+      - name: Safety receipt
+        run: |
+          echo "NO_HOST_CONTACT=1"
+          echo "NO_MERGE_DEPLOY_DB_CHANGE=1"
+          echo "NO_FINANCIAL_POSTING=1"

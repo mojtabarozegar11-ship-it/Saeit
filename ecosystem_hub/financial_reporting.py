@@ -9,8 +9,8 @@ from collections import OrderedDict
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.core.exceptions import PermissionDenied
-from django.db.models import Sum
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.db.models import F, Sum
 from django.http import HttpResponse, HttpResponseBadRequest, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -75,6 +75,10 @@ def calculate_management_income(*, allowed_units, start, end, currency="", unit=
         records = records.filter(entry__unit=unit)
     if currency:
         records = records.filter(entry__currency=currency)
+    # Imported/bulk-inserted rows may bypass JournalLine.full_clean(). Never
+    # show another unit's account or silently calculate incomplete totals.
+    if records.exclude(account__unit_id=F("entry__unit_id")).exists():
+        raise ValidationError("Posted journal contains cross-unit account rows.")
 
     grouped = records.values(
         "entry__unit__code", "entry__unit__name", "entry__currency",
@@ -112,11 +116,19 @@ def _report(request):
         selected = _parameters(request)
     except ValueError as error:
         return None, no_cache(HttpResponseBadRequest(str(error)))
-    details, totals = calculate_management_income(
-        allowed_units=selected["allowed_units"],
-        start=selected["start"], end=selected["end"],
-        currency=selected["currency"], unit=selected["unit"],
-    )
+    try:
+        details, totals = calculate_management_income(
+            allowed_units=selected["allowed_units"],
+            start=selected["start"], end=selected["end"],
+            currency=selected["currency"], unit=selected["unit"],
+        )
+    except ValidationError:
+        # A corrupted posted ledger is a conflict, not a valid zero or partial
+        # financial statement. Do not disclose cross-unit account details.
+        return None, no_cache(HttpResponse(
+            "Journal unit integrity requires reconciliation.", status=409,
+            content_type="text/plain; charset=utf-8",
+        ))
     return {**selected, "details": details, "totals": totals}, None
 
 
