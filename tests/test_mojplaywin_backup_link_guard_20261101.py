@@ -123,6 +123,15 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_ARCHIVE_FILE_SHAPE"):
             self.check()
 
+    def test_gzip_sidecar_with_matching_web_file_is_allowed(self):
+        (self.targets["assets"] / "example.css.gz").write_bytes(b"synthetic")
+        self.assertEqual(set(self.check()), {"static", "assets", "uploads"})
+
+    def test_orphan_compressed_asset_is_blocked(self):
+        (self.targets["assets"] / "unmatched.json.gz").write_bytes(b"synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
     def test_hidden_asset_entry_blocks(self):
         (self.targets["assets"] / ".env").write_text("synthetic", encoding="utf8")
         with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_UNAPPROVED_MEMBER"):
