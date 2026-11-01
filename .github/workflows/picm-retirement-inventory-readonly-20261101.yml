@@ -570,6 +570,60 @@ jobs:
           )"
           call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
           timeout 150s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
+      - name: List obsolete PICM files after live route retirement read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          COMMAND_HOST="${{ steps.link.outputs.command_host }}"
+          probe64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import os,re,stat
+          home=Path.home()
+          if home!=Path("/home/zomorod2") or os.geteuid()==0:
+              raise SystemExit("WRONG_USER")
+          root=home/"Saeit-staging"
+          paths=[]
+          for sub in ("core","templates","ops","scripts"):
+              p=root/sub
+              if not p.is_dir() or p.is_symlink():
+                  continue
+              for entry in p.rglob("*"):
+                  if "picm" not in entry.name.lower():
+                      continue
+                  if len(paths)>=120:
+                      raise SystemExit("TOO_MANY_PICM_ENTRIES")
+                  st=entry.lstat()
+                  typ="dir" if stat.S_ISDIR(st.st_mode) else "file" if stat.S_ISREG(st.st_mode) else "link" if stat.S_ISLNK(st.st_mode) else "other"
+                  paths.append((str(entry.relative_to(root)),typ,st.st_uid==os.geteuid()))
+          for p,t,own in sorted(paths):
+              print("PICM_ACTIVE_SOURCE_ENTRY="+p+"|"+t+"|owned="+str(own).lower())
+          print("PICM_ACTIVE_SOURCE_ENTRY_COUNT="+str(len(paths)))
+          config=root/"config/urls.py"
+          print("PICM_ACTIVE_URL_REFERENCE_COUNT="+str(config.read_text(errors="replace").lower().count("picm")))
+          refs=[]
+          for sub in ("core","config","services","templates"):
+              folder=root/sub
+              if not folder.is_dir():
+                  continue
+              n=0
+              for p in folder.rglob("*"):
+                  if not p.is_file() or p.is_symlink() or p.suffix not in (".py",".html",".js") or p.stat().st_size>250000:
+                      continue
+                  n+=1
+                  if n>5000: raise SystemExit("SOURCE_SCAN_TOO_LARGE")
+                  if p.name=="private_media_library.py": continue
+                  data=p.read_text(errors="replace")
+                  if "private_media_library" in data:
+                      refs.append(str(p.relative_to(root)))
+          print("PRIVATE_MEDIA_LIBRARY_EXTERNAL_REFERENCES="+str(len(refs)))
+          for p in sorted(refs)[:25]:
+              print("PRIVATE_MEDIA_LIBRARY_USED_BY="+p)
+          
+          PY
+          )"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 180s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
       - name: Confirm zero remote modifications or backup deletions
         shell: bash
         run: |
