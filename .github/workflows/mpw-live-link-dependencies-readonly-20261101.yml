@@ -9,6 +9,8 @@ on:
       - 'scripts/mojplaywin_backup_encrypt_vps_gpg.py'
       - 'scripts/mojplaywin_recovery_stream_vps.py'
       - 'tests/test_mojplaywin_backup_pair_identity_20261101.py'
+      - '.github/workflows/mpw-fresh-primary-backup-isolated-restore-20261101.yml'
+      - 'tests/test_mpw_fresh_backup_approval_contract_20261101.py'
       - '.github/workflows/mpw-live-link-dependencies-readonly-20261101.yml'
 permissions: {contents: read}
 concurrency:
@@ -28,6 +30,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mojplaywin_live_link_dependencies_readonly_20261101.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mojplaywin_backup_link_guard_20261101.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mojplaywin_backup_pair_identity_20261101.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_fresh_backup_approval_contract_20261101.py -v
           python3 -B -m py_compile scripts/mojplaywin_live_link_dependencies_readonly_20261101.py scripts/mojplaywin_backup_encrypt_vps_gpg.py scripts/mojplaywin_recovery_stream_vps.py
       - name: Establish pinned VPS relay to cPanel
         env:
