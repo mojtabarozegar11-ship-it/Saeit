@@ -16,7 +16,7 @@
 {% if perms.ecosystem_hub.view_proposedautomation %}<a href="{% url 'admin:ecosystem_hub_proposedautomation_changelist' %}">تنظیمات مجاز Django ←</a>{% endif %}
 </div>
 <div class="table-frame"><table>
-<thead><tr><th>دستیار</th><th>صاحب برنامه</th><th>دوره</th><th>تنظیم در پایگاه داده</th><th>آخرین بررسی ثبت‌شده</th><th>نیاز به اجرای بعدی</th><th>موتور تحلیل</th></tr></thead>
+<thead><tr><th>دستیار</th><th>صاحب برنامه</th><th>دوره</th><th>تنظیم در پایگاه داده</th><th>ایجاد مأموریت داخلی</th><th>آخرین بررسی ثبت‌شده</th><th>نیاز به اجرای بعدی</th><th>موتور تحلیل</th></tr></thead>
 <tbody>
 {% for item in schedules %}
 <tr>
@@ -24,11 +24,12 @@
 <td>{{ item.owner.get_username }}</td>
 <td>{{ item.cadence }}</td>
 <td>{% if item.active %}فعال در تنظیمات{% else %}غیرفعال{% endif %}</td>
+<td>{% if item.auto_create_tasks %}مجاز، مشروط به اجرای زمان‌بند{% else %}غیرفعال (پیش‌فرض امن){% endif %}</td>
 <td>{{ item.last_checked|default:"ثبت نشده" }}</td>
 <td>{% if item.due %}<span class="status status-warning">موعد بررسی رسیده</span>{% else %}خیر{% endif %}</td>
 <td>{% if item.engine_available %}تحلیل داخلی قاعده‌محور{% else %}موتور متصل نیست{% endif %}</td>
 </tr>
-{% empty %}<tr><td colspan="7">برنامه زمان‌بندی قابل مشاهده‌ای برای این واحد ثبت نشده است.</td></tr>{% endfor %}
+{% empty %}<tr><td colspan="8">برنامه زمان‌بندی قابل مشاهده‌ای برای این واحد ثبت نشده است.</td></tr>{% endfor %}
 </tbody></table></div>
 <div class="hub-section-title"><div><span class="eyebrow">AUTHORIZED REVIEW HISTORY</span><h2>آخرین گزارش‌های قابل بررسی</h2></div>
 <a href="{% url 'enterprise_portal:ecosystem_hub:assistants' %}{% if selected_unit %}?unit={{ selected_unit.code|urlencode }}{% endif %}">فهرست همه دستیارها ←</a></div>

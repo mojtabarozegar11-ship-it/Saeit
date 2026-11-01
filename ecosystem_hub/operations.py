@@ -51,6 +51,7 @@ def operations(request):
                 "owner": rule.owner,
                 "cadence": rule.get_cadence_display(),
                 "active": rule.active,
+                "auto_create_tasks": rule.auto_create_tasks,
                 "last_checked": rule.last_checked_at,
                 "due": is_due(rule, now=now),
                 "engine_available": bool(item and item["handler"]),

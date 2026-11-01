@@ -1,11 +1,11 @@
-"""Opt-in, read-only management-agent scheduler. No site or bank integration.
+"""Opt-in management scheduler: read-only reports and capped internal follow-ups.
 
 Usage:
   python manage.py run_ecosystem_assistants                    # preview only
   ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED=True python manage.py run_ecosystem_assistants --commit
 
 An external, authorized scheduler must separately launch this command.
-No automatic cron installation, outbound requests or hidden side effects.
+No automatic cron installation, outbound requests or hidden external effects.\nOnly explicitly enabled rules can create internal tasks for human review.
 """
 from calendar import monthrange
 from datetime import date, timedelta
@@ -19,6 +19,7 @@ from django.utils import timezone
 from enterprise_portal.models import AuditEvent
 from ecosystem_hub.analysis import generate_report
 from ecosystem_hub.catalog import CATALOG
+from ecosystem_hub.followups import create_followups
 from ecosystem_hub.models import ProposedAutomation
 from ecosystem_hub.task_watch import watch_for_unit
 
@@ -69,8 +70,10 @@ def process_rule(rule_id, *, now):
     # generate_report verifies both unit membership and all handler's source
     # permissions. On any exception this transaction rolls back claimed time.
     report = generate_report(actor, rule.unit, rule.assistant_code)
+    followups = create_followups(rule, report, now=now)
     detail = {"unit_id": rule.unit_id, "automation_id": rule.pk,
               "method": "read-only deterministic", "no_external_side_effects": True}
+    detail["followups"] = followups
     # generate_report has already checked view_worktask for these handler types.
     # Record an auditable due-date snapshot, never change task status or send.
     if CATALOG[rule.assistant_code]["handler"] in ("tasks", "executive"):
@@ -87,8 +90,8 @@ def process_rule(rule_id, *, now):
 
 
 class Command(BaseCommand):
-    help = ("پیش‌نمایش یا اجرای کنترل‌شده گزارش‌های داخلی دستیارها؛"
-            " خروجی فقط پیش‌نویس است و هیچ پرداخت/انتشاری انجام نمی‌شود.")
+    help = ("اجرای کنترل‌شده گزارش‌های داخلی و پیگیری‌های انسانیِ اختیاری؛"
+            " هیچ پرداخت، پیام یا انتشاری انجام نمی‌شود.")
 
     def add_arguments(self, parser):
         parser.add_argument("--commit", action="store_true", help="ثبت پیش‌نویس‌ها پس از مجوز صریح")
@@ -115,7 +118,7 @@ class Command(BaseCommand):
                 continue
             if not commit:
                 scheduled += 1
-                self.stdout.write(f"PREVIEW id={rule.pk} unit={rule.unit.code} assistant={rule.assistant_code}")
+                self.stdout.write(f"PREVIEW id={rule.pk} unit={rule.unit.code} assistant={rule.assistant_code} auto_tasks={int(rule.auto_create_tasks)}")
                 continue
             try:
                 report = process_rule(rule.pk, now=now)
@@ -125,7 +128,7 @@ class Command(BaseCommand):
             else:
                 if report:
                     scheduled += 1
-                    self.stdout.write(f"DRAFT_CREATED rule_id={rule.pk} report_id={report.pk}")
+                    self.stdout.write(f"DRAFT_CREATED rule_id={rule.pk} report_id={report.pk} followups={report.agent_followups.count()}")
                 else:
                     skipped += 1
         self.stdout.write(

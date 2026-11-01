@@ -447,6 +447,7 @@ class ProposedAutomation(Timeline):
     ), default="daily")
     active = models.BooleanField(default=False)
     requires_human_review = models.BooleanField(default=True)
+    auto_create_tasks = models.BooleanField(default=False)
     last_checked_at = models.DateTimeField(null=True, blank=True)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
 
@@ -457,6 +458,48 @@ class ProposedAutomation(Timeline):
     def clean(self):
         if not self.requires_human_review:
             raise ValidationError({"requires_human_review": "کنترل انسانی برای اقدامات مدیریتی الزامی است."})
+
+
+
+class AgentFollowUp(Timeline):
+    """One durable human follow-up per source and authorized scheduled rule."""
+
+    rule = models.ForeignKey(
+        ProposedAutomation, on_delete=models.PROTECT, related_name="agent_followups",
+    )
+    report = models.ForeignKey(
+        AssistantRun, on_delete=models.PROTECT, related_name="agent_followups",
+    )
+    task = models.OneToOneField(
+        WorkTask, on_delete=models.PROTECT, related_name="agent_followup",
+    )
+    source_ref = models.CharField(max_length=160)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("rule", "source_ref"), name="zm_agent_followup_source_unique",
+            ),
+        ]
+        verbose_name = "پیگیری مستند دستیار"
+        verbose_name_plural = "مأموریت‌های پیشنهادی دستیارها"
+
+    def clean(self):
+        if (
+            self.rule.unit_id != self.report.unit_id or
+            self.rule.unit_id != self.task.unit_id or
+            self.report.assistant_code != self.rule.assistant_code or
+            self.report.requested_by_id != self.rule.owner_id or
+            self.task.created_by_id != self.rule.owner_id or
+            self.task.assigned_to_id != self.rule.owner_id
+        ):
+            raise ValidationError("گزارش، پیگیری و زمان‌بندی باید متعلق به همان واحد و مسئول باشند.")
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError("پیوند مستند پیگیری ایجنت پس از ثبت قابل تغییر نیست.")
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class MasterCommand(Timeline):

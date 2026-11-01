@@ -13,7 +13,7 @@ from .models import (
     MaterialRequirement, ProductionOrder, ProcurementNeed, QualityInspection,
     MaintenanceTicket, StaffAssignment, Timesheet, ManagementRisk,
     PerformanceIndicator, ReviewApproval, ReferenceEvidence, AssistantRun,
-    ProposedAutomation, MaterialPriceReference, ProductionCostScenario,
+    ProposedAutomation, AgentFollowUp, MaterialPriceReference, ProductionCostScenario,
 )
 
 
@@ -276,7 +276,7 @@ class AssistantRunAdmin(ScopedAdmin):
 
 @admin.register(ProposedAutomation)
 class ProposedAutomationAdmin(ScopedAdmin):
-    list_display = ("assistant_code", "unit", "cadence", "active", "requires_human_review", "last_checked_at")
+    list_display = ("assistant_code", "unit", "cadence", "active", "auto_create_tasks", "requires_human_review", "last_checked_at")
     readonly_fields = ("last_checked_at",)
 
     def get_queryset(self, request):
@@ -313,5 +313,41 @@ class ProposedAutomationAdmin(ScopedAdmin):
             previous = ProposedAutomation.objects.get(pk=obj.pk)
             if obj.last_checked_at != previous.last_checked_at:
                 raise PermissionDenied("زمان آخرین بررسی فقط توسط اجرای واقعی سامانه تنظیم می‌شود.")
+        if obj.auto_create_tasks:
+            actor = obj.owner
+            if not actor.is_active or not actor.is_staff:
+                raise PermissionDenied("مسئول ایجاد مأموریت باید کاربر فعال سازمانی باشد.")
+            if not (actor.is_superuser or (
+                actor.has_perm("enterprise_portal.add_worktask") and
+                actor.has_perm("enterprise_portal.view_worktask")
+            )):
+                raise PermissionDenied("ساخت مأموریت توسط ایجنت به مجوز ثبت و مشاهده کار نیاز دارد.")
+            require_unit(actor, obj.unit, write=True)
         obj.requires_human_review = True
         super().save_model(request, obj, form, change)
+
+
+@admin.register(AgentFollowUp)
+class AgentFollowUpAdmin(admin.ModelAdmin):
+    """Inspect immutable internal follow-up evidence without mutation."""
+
+    list_display = ("created_at", "rule", "source_ref", "task", "report")
+    list_select_related = ("rule", "task", "report")
+    readonly_fields = ("created_at", "updated_at", "rule", "source_ref", "task", "report")
+    search_fields = ("source_ref",)
+    list_per_page = 40
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(rule__unit__in=user_units(request.user), rule__owner=request.user)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
