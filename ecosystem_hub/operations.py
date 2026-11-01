@@ -13,6 +13,7 @@ from .catalog import CATALOG
 from .management.commands.run_ecosystem_assistants import is_due
 from .models import AssistantRun, ProposedAutomation, UnitMembership
 from .report_policy import permitted_assistant_codes
+from .task_watch import watch_for_unit
 from .views import require_hub, permission, select_unit, page
 
 
@@ -64,6 +65,10 @@ def operations(request):
                 "findings": len(saved.findings) if isinstance(saved.findings, list) else 0,
             })
 
+    task_watch = None
+    if unit and (request.user.is_superuser or request.user.has_perm("enterprise_portal.view_worktask")):
+        task_watch = watch_for_unit(unit, actor=request.user, limit=8)
+
     return page(request, "operations", {
         "selected_unit": unit,
         "units": units,
@@ -73,4 +78,5 @@ def operations(request):
         "report_count": len(reports),
         "section": "assistant_operations",
         "worker_verified": False,
+        "task_watch": task_watch,
     })

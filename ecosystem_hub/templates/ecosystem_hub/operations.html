@@ -12,6 +12,28 @@
 <article><span>گزارش قابل مشاهده</span><strong>{{ report_count }}</strong><small>آخرین ۴۰ پرونده مجاز این واحد</small></article>
 <article><span>تأیید اجرای مداوم خارجی</span><strong>—</strong><small>هنوز شواهد معتبر اجرا وجود ندارد</small></article>
 </div>
+{% if task_watch %}
+<section class="hub-section" aria-label="صف اقدامات واقعی">
+<div class="hub-section-title"><div><span class="eyebrow">AUTHORIZED WORK QUEUE</span><h2>کارهای قابل پیگیری همین واحد</h2></div>
+<a href="{% url 'enterprise_portal:tasks' %}">میز مأموریت‌ها و ثبت نتیجه ←</a></div>
+<div class="hub-metrics">
+<article><span>کارهای باز</span><strong>{{ task_watch.counts.open }}</strong><small>به‌جز کارهای تأییدشده و پایان‌یافته</small></article>
+<article><span>عقب‌افتاده</span><strong>{{ task_watch.counts.overdue }}</strong><small>سررسید پیش از امروز</small></article>
+<article><span>موعد امروز</span><strong>{{ task_watch.counts.due_today }}</strong><small>طبق تاریخ همین سامانه</small></article>
+</div>
+<div class="hub-assistant-grid">
+{% for task in task_watch.tasks %}
+<article class="hub-assistant">
+<h3><a href="{% url 'enterprise_portal:task_detail' task.pk %}">{{ task.title }}</a></h3>
+<p>{{ task.get_status_display }} — {{ task.get_priority_display }}؛ سررسید: {{ task.due_on|default:"ثبت نشده" }}</p>
+</article>
+{% empty %}
+<div class="hub-empty">در بازهٔ هفتهٔ جاری، مأموریت سررسیددار یا فوری قابل مشاهده‌ای ثبت نشده است؛ این به معنی پایان همهٔ کارها نیست.</div>
+{% endfor %}
+</div>
+<p>این صف فقط داده‌های مجاز را نشان می‌دهد. مشاهده کار به معنی اجرا یا تکمیل خودکار آن نیست.</p>
+</section>
+{% endif %}
 <div class="hub-section-title"><div><span class="eyebrow">SCHEDULE CONFIGURATION — NOT WORKER HEARTBEAT</span><h2>قواعد زمان‌بندی</h2></div>
 {% if perms.ecosystem_hub.view_proposedautomation %}<a href="{% url 'admin:ecosystem_hub_proposedautomation_changelist' %}">تنظیمات مجاز Django ←</a>{% endif %}
 </div>

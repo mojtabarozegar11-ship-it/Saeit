@@ -1,10 +1,12 @@
 """Private assistant operations reporting never means autonomous execution."""
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from enterprise_portal.models import BusinessUnit, JournalEntry, StockMovement
+from enterprise_portal.models import BusinessUnit, JournalEntry, StockMovement, WorkTask
 from .models import AssistantRun, ProposedAutomation, UnitMembership
 from .analysis import generate_report
 
@@ -66,6 +68,52 @@ class AssistantOperationsTests(TestCase):
         self.assertFalse(StockMovement.objects.exists())
         rule.refresh_from_db()
         self.assertIsNone(rule.last_checked_at)
+
+    def test_hourly_management_queue_is_unit_scoped_and_permission_scoped(self):
+        WorkTask.objects.create(
+            title="پیگیری ضروری کشاورزی", unit=self.farm,
+            assigned_to=self.owner, created_by=self.owner,
+            priority="urgent", due_on=timezone.localdate() - timedelta(days=1),
+        )
+        WorkTask.objects.create(
+            title="اطلاعات خصوصی کارخانه", unit=self.factory,
+            assigned_to=self.owner, created_by=self.owner,
+            priority="urgent", due_on=timezone.localdate() - timedelta(days=1),
+        )
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            "/company/office/ecosystem/assistants/operations/?unit=farm", secure=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "پیگیری ضروری کشاورزی")
+        self.assertNotContains(response, "اطلاعات خصوصی کارخانه")
+        self.assertEqual(response.context["task_watch"]["counts"]["overdue"], 1)
+        self.assertContains(response, "/company/office/tasks/")
+
+        self.client.force_login(self.analyst)
+        response = self.client.get(
+            "/company/office/ecosystem/assistants/operations/?unit=farm", secure=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["task_watch"])
+        self.assertNotContains(response, "پیگیری ضروری کشاورزی")
+
+        self.analyst.user_permissions.add(Permission.objects.get(
+            content_type__app_label="enterprise_portal", codename="view_worktask",
+        ))
+        WorkTask.objects.create(
+            title="ماموریت شخصی تحلیلگر", unit=self.farm,
+            assigned_to=self.analyst, created_by=self.owner,
+            priority="urgent", due_on=timezone.localdate(),
+        )
+        response = self.client.get(
+            "/company/office/ecosystem/assistants/operations/?unit=farm", secure=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ماموریت شخصی تحلیلگر")
+        self.assertNotContains(response, "پیگیری ضروری کشاورزی")
+        self.assertNotContains(response, "اطلاعات خصوصی کارخانه")
+        self.assertEqual(response.context["task_watch"]["counts"]["open"], 1)
 
     def test_scoped_staff_sees_only_own_schedule_and_reports(self):
         ProposedAutomation.objects.create(
