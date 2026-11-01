@@ -39,6 +39,7 @@ class OwnerArmedBackupContract(unittest.TestCase):
         self.assertIn("VPS GPG AES256", s)
         self.assertIn("mpw_vps_backup_runtime_gate_readonly_20261101.py", s)
         self.assertIn("--require-ready", s)
+        self.assertIn("sys.argv=[sys.argv[0]]+sys.argv[2:]", s)
 
     def test_isolated_restore_not_a_live_release(self):
         s = self.source
