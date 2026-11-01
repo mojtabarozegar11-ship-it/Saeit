@@ -50,6 +50,7 @@ jobs:
           from pathlib import Path
           try:
               from cryptography.hazmat.primitives import hashes,serialization
+              from cryptography.hazmat.backends import default_backend
               from cryptography.hazmat.primitives.asymmetric import padding
               from cryptography.hazmat.primitives.ciphers.aead import AESGCM
           except ImportError:
@@ -64,7 +65,7 @@ jobs:
           expected_sha="b3fe1b772368f3f0874481ab88ad82862bd24de2"
           assert data["schema"]==1 and data["source_commit"]==expected_sha
           assert data["algorithm"]=="RSA3072-OAEP-SHA256+A256GCM"
-          key=serialization.load_pem_private_key(private_key.read_bytes(),password=None).decrypt(
+          key=serialization.load_pem_private_key(private_key.read_bytes(),password=None,backend=default_backend()).decrypt(
             base64.b64decode(data["key"]),padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
           aad=b"living-cities-20261101:"+bytes.fromhex(expected_sha)
           raw=AESGCM(key).decrypt(base64.b64decode(data["nonce"]),base64.b64decode(data["ciphertext"]),aad)
