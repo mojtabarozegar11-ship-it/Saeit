@@ -163,6 +163,29 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
         (self.targets["assets"] / "unmatched-two.json.gz").write_bytes(b"synthetic")
         self.assertEqual(set(self.check()), {"static", "assets", "uploads"})
 
+    def test_sensitive_compressed_orphan_does_not_use_small_file_exception(self):
+        (self.targets["assets"] / "private.db.gz").write_bytes(b"tiny synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_archive_compressed_orphan_is_rejected(self):
+        (self.targets["assets"] / "archive.tar.gz").write_bytes(b"tiny synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_compressed_sidecar_of_directory_is_rejected(self):
+        (self.targets["assets"] / "app.json").mkdir()
+        (self.targets["assets"] / "app.json.gz").write_bytes(b"tiny synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_compressed_sidecar_of_symlink_is_rejected(self):
+        (self.targets["assets"] / "real.json").write_bytes(b"synthetic")
+        (self.targets["assets"] / "link.json").symlink_to(self.targets["assets"] / "real.json")
+        (self.targets["assets"] / "link.json.gz").write_bytes(b"tiny synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
     def test_third_orphan_compressed_asset_is_blocked(self):
         for label in ("one", "two", "three"):
             (self.targets["assets"] / ("unmatched-" + label + ".json.gz")).write_bytes(b"synthetic")
