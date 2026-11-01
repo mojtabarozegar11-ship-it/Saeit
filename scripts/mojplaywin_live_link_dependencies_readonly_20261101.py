@@ -146,6 +146,77 @@ def direct_child_metadata(directory, *, max_entries=10_000):
     }
 
 
+def bounded_asset_tree_metadata(directory, *, max_entries=150_000):
+    """Inspect *metadata* of link-reachable tree without dereferencing nested links.
+
+    This is NOT content inspection, malware scanning, privacy certification,
+    an approved backup allowlist, or evidence of site ownership.
+    """
+    import stat
+
+    shapes = Counter()
+    total_bytes = total_entries = hidden_entries = 0
+    web = {".css", ".js", ".mjs", ".html", ".svg", ".woff", ".woff2",
+           ".ttf", ".otf", ".ico", ".map"}
+    media = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif",
+             ".pdf", ".mp3", ".mp4", ".webm", ".wav", ".ogg"}
+    source = {".py", ".php", ".sh", ".rb", ".go", ".java", ".jsx",
+              ".tsx", ".ts", ".vue", ".yml", ".yaml", ".toml"}
+    sensitive = {".pem", ".key", ".p12", ".pfx", ".sql", ".sqlite",
+                 ".sqlite3", ".db", ".bak", ".gpg", ".age"}
+    secret_names = {".env", ".env.production", ".htpasswd", "id_rsa",
+                    "wp-config.php", "secrets.yml", "secrets.yaml"}
+
+    def walk_error(_error):
+        raise RuntimeError("TARGET_TREE_METADATA_UNREADABLE")
+
+    for dirname, dirs, files in os.walk(
+            directory, followlinks=False, onerror=walk_error):
+        total_entries += len(dirs) + len(files)
+        if total_entries > max_entries:
+            raise RuntimeError("TARGET_TREE_SCAN_LIMIT")
+        for entry in dirs + files:
+            if entry.startswith("."):
+                hidden_entries += 1
+            p = Path(dirname) / entry
+            try:
+                st = p.lstat()  # No symlink target opened or followed.
+            except OSError:
+                raise RuntimeError("TARGET_TREE_METADATA_UNREADABLE") from None
+            if stat.S_ISLNK(st.st_mode):
+                shapes["nested_symlink"] += 1
+            elif stat.S_ISDIR(st.st_mode):
+                shapes["directory"] += 1
+            elif stat.S_ISREG(st.st_mode):
+                total_bytes += st.st_size
+                lower = entry.casefold()
+                suffix = p.suffix.casefold()
+                if lower in secret_names or suffix in sensitive:
+                    shapes["sensitive_or_backup_file_shape"] += 1
+                elif suffix in source:
+                    shapes["source_code_file_shape"] += 1
+                elif suffix in web:
+                    shapes["web_asset_file_shape"] += 1
+                elif suffix in media:
+                    shapes["media_file_shape"] += 1
+                else:
+                    shapes["other_regular_file_shape"] += 1
+            else:
+                shapes["special_file"] += 1
+    size_band = ("below_100_mib" if total_bytes < 100 * 1024**2
+                 else "below_1_gib" if total_bytes < 1024**3
+                 else "below_10_gib" if total_bytes < 10 * 1024**3
+                 else "10_gib_or_more")
+    return {
+        "walk_completed_without_following_links": True,
+        "entry_count": total_entries,
+        "entry_shapes": dict(sorted(shapes.items())),
+        "hidden_entry_count": hidden_entries,
+        "size_band": size_band,
+        "file_contents_read": False,
+    }
+
+
 def allowed_private_target_metadata(resolved, home=HOME):
     """Explicitly reject other tenants, entire account home, and other owners."""
     account_home = home.resolve(strict=True)
@@ -155,7 +226,8 @@ def allowed_private_target_metadata(resolved, home=HOME):
     if not target.is_dir() or target.stat().st_uid != os.geteuid():
         return {"inspection": "rejected_type_or_owner"}
     return {"inspection": "one_level_completed",
-            "metadata": direct_child_metadata(target)}
+            "metadata": direct_child_metadata(target),
+            "tree_metadata": bounded_asset_tree_metadata(target)}
 
 
 def inspect():
