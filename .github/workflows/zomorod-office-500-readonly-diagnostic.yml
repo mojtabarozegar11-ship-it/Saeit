@@ -332,6 +332,14 @@ jobs:
           )"
           test -x "$configured_python"
           echo "PASSENGER_DB_PROBE_INTERPRETER_SOURCE=CPANEL_HTACCESS"
+          # Prove the cPanel-selected executable actually runs Python code,
+          # separately from app imports or the stdin-based database probe.
+          cli_output="$(PYTHONDONTWRITEBYTECODE=1 "$configured_python" -B -c 'import sys; print("PASSENGER_DB_PROBE_CLI_READY="+str(sys.version_info.major)+"."+str(sys.version_info.minor))')"
+          if ! printf '%s\n' "$cli_output" | grep -Eq '^PASSENGER_DB_PROBE_CLI_READY=[0-9]+[.][0-9]+$'; then
+              echo "PASSENGER_DB_PROBE_CLI_UNAVAILABLE=true"
+              exit 1
+          fi
+          printf '%s\n' "$cli_output"
           cd "$app"
           probe_output="$(PYTHONDONTWRITEBYTECODE=1 "$configured_python" -B - <<'PY'
           import os
@@ -340,6 +348,7 @@ jobs:
           import sys
           from urllib.parse import quote
 
+          print("PASSENGER_DB_PROBE_SCRIPT_STARTED=true",flush=True)
           app=pathlib.Path("/home/zomorod2/Saeit")
           if pathlib.Path.cwd().resolve()!=app:
               raise SystemExit("PASSENGER_DB_PROBE_APP_ROOT_MISMATCH")
