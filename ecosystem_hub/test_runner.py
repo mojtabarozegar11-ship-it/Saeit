@@ -1,5 +1,6 @@
 """No false 24/7-agent claims: opt-in, unit-safe, audited deterministic drafts."""
 from datetime import datetime, timedelta, timezone as utc_timezone
+import json
 from io import StringIO
 from types import SimpleNamespace
 
@@ -112,6 +113,86 @@ class AssistantRunnerIsolationTests(TestCase):
         self.assertFalse(AuditEvent.objects.exists())
         rule.refresh_from_db()
         self.assertIsNone(rule.last_checked_at)
+
+    def test_hourly_bridge_preview_receipt_is_machine_readable_and_read_only(self):
+        rule = self.rule(cadence="hourly")
+        out = StringIO()
+        call_command(
+            "run_ecosystem_assistants", "--json-receipt", "--strict", stdout=out,
+        )
+        receipts = [
+            line.split("=", 1)[1]
+            for line in out.getvalue().splitlines()
+            if line.startswith("ECOSYSTEM_CYCLE_RECEIPT_JSON=")
+        ]
+        self.assertEqual(len(receipts), 1)
+        receipt = json.loads(receipts[0])
+        self.assertEqual(receipt["source"], "zomorod_office_scheduler")
+        self.assertEqual(receipt["mode"], "preview")
+        self.assertEqual(receipt["due_or_created"], 1)
+        self.assertEqual(receipt["drafts_created"], 0)
+        self.assertEqual(receipt["human_followups_created"], 0)
+        self.assertEqual(receipt["errors"], 0)
+        self.assertEqual(receipt["outcome"], "ok")
+        self.assertFalse(receipt["external_actions_executed"])
+        self.assertNotIn("owner@example.org", receipts[0])
+        self.assertFalse(AssistantRun.objects.exists())
+        self.assertFalse(AuditEvent.objects.exists())
+        rule.refresh_from_db()
+        self.assertIsNone(rule.last_checked_at)
+
+    @override_settings(ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED=True)
+    def test_hourly_bridge_receipt_counts_one_real_draft_without_duplicate(self):
+        self.rule(cadence="hourly")
+        first = StringIO()
+        call_command(
+            "run_ecosystem_assistants", "--commit", "--json-receipt",
+            "--strict", stdout=first,
+        )
+        receipt = json.loads(next(
+            line.split("=", 1)[1] for line in first.getvalue().splitlines()
+            if line.startswith("ECOSYSTEM_CYCLE_RECEIPT_JSON=")
+        ))
+        self.assertEqual(receipt["mode"], "commit")
+        self.assertEqual(receipt["drafts_created"], 1)
+        self.assertEqual(receipt["human_followups_created"], 0)
+        self.assertEqual(receipt["outcome"], "ok")
+        self.assertEqual(AssistantRun.objects.count(), 1)
+
+        second = StringIO()
+        call_command(
+            "run_ecosystem_assistants", "--commit", "--json-receipt",
+            "--strict", stdout=second,
+        )
+        repeated = json.loads(next(
+            line.split("=", 1)[1] for line in second.getvalue().splitlines()
+            if line.startswith("ECOSYSTEM_CYCLE_RECEIPT_JSON=")
+        ))
+        self.assertEqual(repeated["drafts_created"], 0)
+        self.assertEqual(AssistantRun.objects.count(), 1)
+        self.assertEqual(AuditEvent.objects.count(), 1)
+
+    @override_settings(ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED=True)
+    def test_hourly_bridge_strict_rejects_incomplete_job_and_preserves_due_time(self):
+        invalid = self.rule(owner=self.alice, unit=self.factory)
+        out, errors = StringIO(), StringIO()
+        with self.assertRaisesMessage(CommandError, "ECOSYSTEM_CYCLE_INCOMPLETE errors=1"):
+            call_command(
+                "run_ecosystem_assistants", "--commit", "--json-receipt",
+                "--strict", stdout=out, stderr=errors,
+            )
+        self.assertIn("DENIED", errors.getvalue())
+        receipt = json.loads(next(
+            line.split("=", 1)[1] for line in out.getvalue().splitlines()
+            if line.startswith("ECOSYSTEM_CYCLE_RECEIPT_JSON=")
+        ))
+        self.assertEqual(receipt["outcome"], "partial_failure")
+        self.assertEqual(receipt["errors"], 1)
+        self.assertEqual(receipt["drafts_created"], 0)
+        invalid.refresh_from_db()
+        self.assertIsNone(invalid.last_checked_at)
+        self.assertFalse(AssistantRun.objects.exists())
+        self.assertFalse(AuditEvent.objects.exists())
 
     def test_live_execution_is_disabled_without_explicit_kill_switch(self):
         self.rule()
