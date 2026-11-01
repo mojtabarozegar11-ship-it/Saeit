@@ -10,6 +10,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from .models import AuditEvent, OfficeAttachment, OfficeLetter
+from .private_uploads import _private_root
 
 PDF = b"%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n"
 
@@ -62,6 +63,25 @@ class PrivateOfficeAttachmentTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(OfficeAttachment.objects.count(), 1)
         return OfficeAttachment.objects.get()
+
+    def test_distant_symlink_ancestor_cannot_redirect_private_uploads(self):
+        outside = Path(self.temp.name) / "outside"
+        outside.mkdir()
+        redirect = Path(self.temp.name) / "redirect"
+        redirect.symlink_to(outside, target_is_directory=True)
+        # The symlink is more than two parent directories above the root.
+        unsafe_root = redirect / "nested" / "office" / "storage" / "files"
+        with override_settings(COMPANY_OFFICE_ATTACHMENT_ROOT=unsafe_root):
+            with self.assertRaisesRegex(RuntimeError, "Symlinked"):
+                _private_root(create=True)
+        self.assertFalse((outside / "nested").exists())
+
+    def test_parent_traversal_in_configured_private_root_is_rejected(self):
+        unsafe_root = Path(self.temp.name) / "secure" / ".." / "other" / "files"
+        with override_settings(COMPANY_OFFICE_ATTACHMENT_ROOT=unsafe_root):
+            with self.assertRaisesRegex(RuntimeError, "Unsafe"):
+                _private_root(create=True)
+        self.assertFalse((Path(self.temp.name) / "other").exists())
 
     def test_authorized_upload_download_hash_and_private_cache_controls(self):
         attachment = self._create()
