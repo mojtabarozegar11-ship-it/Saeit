@@ -219,7 +219,7 @@ jobs:
         shell: bash
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
-          SOURCE_SHA: fdd628d09813bc9c30e73fdbb25d19960cad9dc0
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zm-marketing-ro"
@@ -229,8 +229,19 @@ jobs:
           sha="$1"
           [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
           stage="/home/zomorod2/.private/zomorod-messaging-release-stages/$sha/code"
-          test -f "$stage/config/settings.py"
-          test -s "$stage/isolation.sqlite3"
+          # Staging and this read-only diagnostic can run concurrently.
+          # Report missing exact-head stage without claiming production readiness.
+          if test ! -f "$stage/config/settings.py" || test ! -s "$stage/isolation.sqlite3"; then
+            echo "EXACT_HEAD_PRIVATE_STAGE=missing"
+            echo "PRODUCTION_SIMULATOR=not_run"
+            exit 0
+          fi
+          if ! grep -Fqx "release=$sha" "$stage/../manifest.txt"; then
+            echo "EXACT_HEAD_PRIVATE_STAGE=manifest_mismatch"
+            echo "PRODUCTION_SIMULATOR=not_run"
+            exit 0
+          fi
+          echo "EXACT_HEAD_PRIVATE_STAGE=verified"
           for py in /home/zomorod2/virtualenv/Saeit/3.10/bin/python /home/zomorod2/virtualenv/Saeit/3.11/bin/python; do
             if test ! -x "$py"; then continue; fi
             STAGE="$stage" PYTHONDONTWRITEBYTECODE=1 "$py" - <<'PY'
@@ -243,6 +254,9 @@ jobs:
                   key,value=line.split("=",1);key=key.strip();value=value.strip()
                   if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*",key):
                       os.environ.setdefault(key,value.strip(chr(34)+chr(39)))
+          os.environ["COMPANY_MESSAGING_SEND_ENABLED"]="false"
+          os.environ["COMPANY_MARKETING_PUBLISH_ENABLED"]="false"
+          os.environ["ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED"]="false"
           os.environ["DATABASE_URL"]="sqlite:///"+str(stage/"isolation.sqlite3")
           os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
           sys.path.insert(0,str(stage))

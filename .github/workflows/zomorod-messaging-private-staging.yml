@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/zomorod-messaging-private-staging.yml"
+      - ".github/workflows/zomorod-office-500-readonly-diagnostic.yml"
   workflow_dispatch:
 permissions:
   contents: read

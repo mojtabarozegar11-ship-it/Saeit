@@ -39,5 +39,25 @@ class SafeOfficeDeployOrder(unittest.TestCase):
         self.assertNotIn("|| true", self.script)
 
 
+class PrivateOfficeReleaseWorkflowRegression(unittest.TestCase):
+    """The old staff login fallback must never patch live Passenger on merge."""
+
+    def test_legacy_login_patcher_removed(self):
+        workflow = (ROOT / ".github/workflows/zomorod-office-login-route-release.yml").read_text(encoding="utf-8")
+        self.assertNotIn("\n  release:\n", workflow)
+        self.assertNotIn("passenger.touch()", workflow)
+        self.assertNotIn("/admin/login/?next=/staff/command-center/", workflow)
+        self.assertIn("HOST_OR_DB_MUTATION=none", workflow)
+
+    def test_readonly_diagnostic_targets_exact_head_and_tolerates_stage_race(self):
+        diag = (ROOT / ".github/workflows/zomorod-office-500-readonly-diagnostic.yml").read_text(encoding="utf-8")
+        stage = (ROOT / ".github/workflows/zomorod-messaging-private-staging.yml").read_text(encoding="utf-8")
+        self.assertIn("SOURCE_SHA: ${{ github.event.pull_request.head.sha }}", diag)
+        self.assertIn("EXACT_HEAD_PRIVATE_STAGE=missing", diag)
+        self.assertIn("EXACT_HEAD_PRIVATE_STAGE=verified", diag)
+        self.assertIn('os.environ["COMPANY_MESSAGING_SEND_ENABLED"]="false"', diag)
+        self.assertIn('".github/workflows/zomorod-office-500-readonly-diagnostic.yml"', stage)
+
+
 if __name__ == "__main__":
     unittest.main()
