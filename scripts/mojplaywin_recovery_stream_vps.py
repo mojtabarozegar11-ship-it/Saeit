@@ -59,6 +59,7 @@ def load(kind, home=None, stem=None):
         raise RuntimeError("complete encrypted source or private key absent")
     meta = json.loads(manifest.read_text(encoding="ascii"))
     if (meta.get("kind") != kind or meta.get("archive_name", ciphertext.name) != ciphertext.name or
+            meta.get("pair_stem", stem) != stem or
             meta.get("format") != "OpenPGP-AES256-GPGv2" or
             meta.get("ciphertext_roundtrip_integrity_verified") is not True or
             meta.get("source_completion_footer_verified") is not True or
@@ -137,9 +138,13 @@ def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
     return size
 
 
-def readiness(home=None):
+def readiness(home=None, stem=None):
     try:
-        discover(home)
+        if stem is None:
+            discover(home)
+        else:
+            for kind in ("mysql", "files"):
+                load(kind, home=home, stem=stem)
         return {"classification":"ONE_PASS_RECOVERY_SOURCE_READINESS",
                 "both_primary_archives_complete":True,
                 "isolated_restore_performed":False,
@@ -154,17 +159,23 @@ def readiness(home=None):
 
 
 if __name__=="__main__":
-    if len(sys.argv)!=2:
+    if len(sys.argv) not in (2,3):
         raise SystemExit(2)
     mode=sys.argv[1]
+    requested_stem=sys.argv[2] if len(sys.argv)==3 else None
     if mode=="check":
-        report=readiness()
+        report=readiness(stem=requested_stem)
         print(json.dumps(report,sort_keys=True))
         raise SystemExit(0 if report["both_primary_archives_complete"] else 1)
     try:
         if mode not in ("mysql","files"):
             raise RuntimeError("unsupported operation")
-        stems=discover()
+        if requested_stem is not None:
+            if not STEM_RE.fullmatch(requested_stem):
+                raise RuntimeError("invalid pair identity")
+            stems={kind: requested_stem for kind in ("mysql", "files")}
+        else:
+            stems=discover()
         size=decrypt_to_stdout(mode,stem=stems[mode])
         print(json.dumps({"classification":"PRIVATE_STREAM_VERIFIED",
                           "source_kind":mode,"source_verified":True,
