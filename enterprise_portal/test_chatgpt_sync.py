@@ -95,8 +95,43 @@ class ReportSyncCommandTests(TestCase):
             with self.assertRaisesMessage(CommandError, "REPORT_NUMBER_SOURCE_CONFLICT"):
                 call_command("sync_chatgpt_action_reports", "--commit",
                              "--unit-code=zm-sync", "--recorder-id=" + str(self.owner.pk))
-        existing = ChatGPTActionReport.objects.get()
-        self.assertEqual(existing.evidence_url.split("-")[-1], "101")
+        # Conflict in a later item must roll back the *entire* batch.
+        self.assertFalse(ChatGPTActionReport.objects.exists())
+
+    @patch("enterprise_portal.management.commands.sync_chatgpt_action_reports.fetch_issue_comments")
+    def test_late_source_failure_never_leaves_partial_import(self, fetch):
+        def broken_page_stream():
+            yield comment(101)
+            raise CommandError("GITHUB_REPORT_SOURCE_UNAVAILABLE")
+
+        fetch.side_effect = lambda **kwargs: broken_page_stream()
+        with patch.dict(os.environ, {
+            "ZM_CHATGPT_REPORT_SYNC_ENABLED": "1",
+            "ZM_CHATGPT_REPORT_DB_ATTESTED": "1",
+        }):
+            with self.assertRaisesMessage(CommandError, "GITHUB_REPORT_SOURCE_UNAVAILABLE"):
+                call_command("sync_chatgpt_action_reports", "--commit",
+                             "--unit-code=zm-sync", "--recorder-id=" + str(self.owner.pk))
+        self.assertFalse(ChatGPTActionReport.objects.exists())
+
+    @patch("enterprise_portal.management.commands.sync_chatgpt_action_reports.fetch_issue_comments")
+    def test_existing_number_conflict_rolls_back_other_new_receipts(self, fetch):
+        fetch.return_value = [comment(101)]
+        gates = {
+            "ZM_CHATGPT_REPORT_SYNC_ENABLED": "1",
+            "ZM_CHATGPT_REPORT_DB_ATTESTED": "1",
+        }
+        with patch.dict(os.environ, gates):
+            call_command("sync_chatgpt_action_reports", "--commit",
+                         "--unit-code=zm-sync", "--recorder-id=" + str(self.owner.pk),
+                         stdout=io.StringIO())
+            new_body = BODY.replace("۰۵-۰۰۰۱", "۰۵-۰۰۰۲")
+            fetch.return_value = [comment(102, body=new_body), comment(999)]
+            with self.assertRaisesMessage(CommandError, "REPORT_NUMBER_SOURCE_CONFLICT"):
+                call_command("sync_chatgpt_action_reports", "--commit",
+                             "--unit-code=zm-sync", "--recorder-id=" + str(self.owner.pk))
+        self.assertEqual(list(ChatGPTActionReport.objects.values_list("report_code", flat=True)),
+                         ["05-0001"])
 
     def test_page_limits_cannot_be_bypassed(self):
         with self.assertRaisesMessage(CommandError, "PAGES_OUT_OF_RANGE"):
