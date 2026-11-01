@@ -65,7 +65,7 @@ NEW_FUNCTION = '''def _rate_provider():
         if type(observed_at) is not int or observed_at <= 0:
             raise ValueError("Invalid TRX quote timestamp")
         age = int(time.time()) - observed_at
-        if not -45 <= age <= 300:
+        if not 0 <= age <= 90:
             raise ValueError("Stale or future TRX market observation")
         return price, observed_at
     except Exception as exc:
@@ -203,8 +203,8 @@ def actual_source_in_memory_smoke(candidate: bytes) -> None:
         ):
             if provider() != (Decimal("0.25"), now):
                 raise SourceContractChanged("Patched provider tuple smoke failed")
-        for payload in (body(timestamp=now-301), body(price="150"),
-                        body(timestamp=now+46), b'{"tron":{"usd":0.2,"usd":0.3}}'):
+        for payload in (body(timestamp=now-91), body(price="150"),
+                        body(timestamp=now+1), b'{"tron":{"usd":0.2,"usd":0.3}}'):
             with patch("time.time", return_value=now), patch(
                 "urllib.request.urlopen",
                 return_value=FakeResponse(payload, url)
