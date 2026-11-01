@@ -66,7 +66,7 @@ def issue(title, detail, *, severity="info", source=None):
             "severity": severity, "source": source or "داده داخلی واحد"}
 
 
-def scan(unit, code):
+def scan(unit, code, *, actor):
     """Return at most 30 visible findings, always within the selected unit."""
     definition = CATALOG[code]
     mode = definition["handler"]
@@ -169,7 +169,7 @@ def scan(unit, code):
                 f"آخرین نتیجه {check.get_result_display()}؛ بررسی علت و اقدام اصلاحی ضروری است.",
                 severity="warning", source=f"QualityInspection:{check.pk}"))
     elif mode == "tasks":
-        watch = watch_for_unit(unit, today=today, limit=8)
+        watch = watch_for_unit(unit, actor=actor, today=today, limit=8)
         counts = watch["counts"]
         findings.extend((
             issue("وظایف معوق", f'{counts["overdue"]} کار باز از موعد گذشته است.',
@@ -258,7 +258,7 @@ def scan(unit, code):
             f"{rules.count()} تعریف شده، {rules.filter(active=True).count()} نشان‌گذاری‌شده فعال؛ "
             "وجود نشان فعال، به‌معنای راه‌اندازی واقعی زمان‌بند نیست."))
     elif mode == "executive":
-        watch = watch_for_unit(unit, today=today, limit=5)
+        watch = watch_for_unit(unit, actor=actor, today=today, limit=5)
         counts = watch["counts"]
         risks = ManagementRisk.objects.filter(unit=unit).exclude(state="closed").count()
         orders = ProductionOrder.objects.filter(unit=unit).exclude(state__in=("closed", "cancelled")).count()
@@ -309,7 +309,7 @@ def generate_report(actor, unit, code):
     for permission_code in HANDLER_VIEW_PERMISSIONS.get(CATALOG[code]["handler"], ()):
         if not (actor.is_superuser or actor.has_perm(permission_code)):
             raise PermissionDenied("برای تحلیل داده‌های این دستیار، مجوز مشاهده اطلاعات منبع لازم است.")
-    findings = scan(unit, code)
+    findings = scan(unit, code, actor=actor)
     report = AssistantRun.objects.create(
         unit=unit, requested_by=actor, assistant_code=code,
         state="draft", findings=findings,
