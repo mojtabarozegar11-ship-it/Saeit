@@ -1,9 +1,10 @@
 """Fail-closed primary backup link guards, using only private synthetic files."""
 import tempfile
+import json
 import unittest
 from pathlib import Path
 
-from scripts.mojplaywin_backup_stream_cpanel import assert_no_unbacked_symlinks
+from scripts.mojplaywin_backup_stream_cpanel import (assert_no_unbacked_symlinks, assert_scoped_public_asset_links)
 
 
 class BackupLinkGuardTests(unittest.TestCase):
@@ -44,6 +45,76 @@ class BackupLinkGuardTests(unittest.TestCase):
     def test_unbounded_walk_is_rejected(self):
         with self.assertRaisesRegex(RuntimeError, "BACKUP_LINK_SCAN_LIMIT"):
             assert_no_unbacked_symlinks((self.app, self.site), max_entries=1)
+
+
+
+class ScopedPublicAssetsPreflightTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.account = Path(tmp.name)
+        self.app = self.account / "Saeit-staging"
+        self.site = self.account / "mojplaywin.com"
+        self.app.mkdir()
+        self.site.mkdir()
+        (self.app / "main.py").write_text("synthetic", encoding="utf8")
+        self.targets = {}
+        for label in ("static", "assets", "uploads"):
+            t = self.account / "external-assets" / label
+            t.mkdir(parents=True)
+            (t / "example.css").write_text("synthetic", encoding="utf8")
+            (self.site / label).symlink_to(t, target_is_directory=True)
+            self.targets[label] = t
+
+    def check(self, **overrides):
+        args = {"roots": (self.app, self.site), "home": self.account}
+        args.update(overrides)
+        return assert_scoped_public_asset_links(**args)
+
+    def test_only_three_reachable_alias_subtrees_accepted(self):
+        report = self.check()
+        self.assertEqual(set(report), {"static", "assets", "uploads"})
+        self.assertTrue(all(v[2] == 1 for v in report.values()))
+        self.assertTrue(all(v[3] == len("synthetic") for v in report.values()))
+        self.assertNotIn(str(self.account), json.dumps(report))
+        self.assertTrue((self.app / "main.py").exists())
+
+    def test_missing_alias_blocks(self):
+        (self.site / "uploads").unlink()
+        with self.assertRaisesRegex(RuntimeError, "REQUIRED_PUBLIC_ASSET_ALIAS_MISSING"):
+            self.check()
+
+    def test_unlisted_primary_symlink_blocks(self):
+        (self.app / "unexpected").symlink_to(self.targets["assets"])
+        with self.assertRaisesRegex(RuntimeError, "UNSCOPED_PRIMARY_SYMLINK"):
+            self.check()
+
+    def test_nested_target_symlink_blocks(self):
+        (self.targets["assets"] / "nested").symlink_to(self.targets["uploads"])
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_UNAPPROVED_MEMBER"):
+            self.check()
+
+    def test_sensitive_alias_member_blocks(self):
+        (self.targets["assets"] / "database.sql").write_text("secret synthetic", encoding="utf8")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_UNAPPROVED_FILE_SHAPE"):
+            self.check()
+
+    def test_hidden_asset_entry_blocks(self):
+        (self.targets["assets"] / ".env").write_text("synthetic", encoding="utf8")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_UNAPPROVED_MEMBER"):
+            self.check()
+
+    def test_byte_budget_blocks(self):
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_BYTE_LIMIT"):
+            self.check(max_asset_bytes=1)
+
+    def test_other_account_target_blocks(self):
+        with tempfile.TemporaryDirectory() as external:
+            link = self.site / "assets"
+            link.unlink()
+            link.symlink_to(Path(external), target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, "ASSET_LINK_TARGET_OUT_OF_SCOPE"):
+                self.check()
 
 
 if __name__ == "__main__":
