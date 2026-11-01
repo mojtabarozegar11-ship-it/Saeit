@@ -138,11 +138,13 @@ def _identity(request, *, create=False):
 
 
 def _install_cookie(response, token):
+    # All purchase responses are personalized by a signed guest cookie or login.
+    # Preserve pre-existing Vary values even when no new cookie is issued.
+    from django.utils.cache import patch_vary_headers
+    patch_vary_headers(response, ("Cookie",))
     if token:
         response.set_cookie(COOKIE, token, max_age=COOKIE_AGE, path=COOKIE_PATH,
                             secure=True, httponly=True, samesite="Lax")
-        from django.utils.cache import patch_vary_headers
-        patch_vary_headers(response, ("Cookie",))
     response["Cache-Control"] = "private, no-store, max-age=0"
     response["Referrer-Policy"] = "same-origin"
     response["X-Content-Type-Options"] = "nosniff"
@@ -198,7 +200,6 @@ def _checkout_page(request, product_id, pages_namespace):
 def patch_public(namespace):
     from django.views.decorators.cache import never_cache
     from django.views.decorators.http import require_GET
-    import inspect
 
     old_checkout = namespace.get("product_checkout")
     old_purchases = namespace.get("purchases")
@@ -239,7 +240,9 @@ def patch_public(namespace):
                 "default-src 'none'; base-uri 'none'; form-action 'none'; "
                 "frame-ancestors 'none'")
             return _install_cookie(response, None)
-        return _dispatch(request, inspect.unwrap(old_purchases), (), {})
+        # Keep the original authentication, permission and cache decorators.
+        # _dispatch installs the verified guest principal before they run.
+        return _dispatch(request, old_purchases, (), {})
 
     namespace["product_checkout"] = never_cache(require_GET(product_checkout))
     namespace["purchases"] = purchases
