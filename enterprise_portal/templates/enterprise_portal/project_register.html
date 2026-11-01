@@ -1,0 +1,57 @@
+{% extends 'enterprise_portal/shell.html' %}
+{% block title %}دفتر پروژه‌های شرکت{% endblock %}
+{% block crumb %}مدیریت / دفتر پروژه‌ها{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="eyebrow">PRIVATE PROJECT REGISTER · READ ONLY</div>
+  <h1>{% if item %}{{ item.title }}{% else %}دفتر پروژه‌های مدیریتی{% endif %}</h1>
+  <p>فقط داده‌های ثبت‌شده در واحدهای مجاز نمایش داده می‌شود؛ این صفحه سند تأیید مالی یا اثبات سودآوری نیست.</p>
+</div>
+{% if item %}
+<div class="toolbar"><a href="{% url 'enterprise_portal:project_register' %}">بازگشت به دفتر پروژه‌ها</a></div>
+<section class="stat-grid">
+  <div class="stat-card"><span>شناسه</span><strong>{{ item.unit.code }}/{{ item.code }}</strong></div>
+  <div class="stat-card"><span>وضعیت ثبت‌شده</span><strong>{{ item.get_status_display }}</strong></div>
+  <div class="stat-card"><span>مسئول</span><strong>{{ item.owner.get_username }}</strong></div>
+  <div class="stat-card"><span>واحد</span><strong>{{ item.unit.name }}</strong></div>
+</section>
+<section class="panel">
+  <h2>هدف و برنامه</h2>
+  <p>{{ item.objective|linebreaksbr }}</p>
+  <p>شروع برنامه: {{ item.planned_start|default:"ثبت نشده" }} | پایان برنامه: {{ item.planned_finish|default:"ثبت نشده" }}</p>
+  <p>آخرین ویرایش ثبت‌شده: {{ item.updated_at|date:"Y/m/d H:i" }}</p>
+</section>
+<section class="panel">
+  <h2>بودجه‌های مرتبط با همین پروژه و واحد</h2>
+  <div class="table-frame"><table>
+    <thead><tr><th>عنوان</th><th>سال مالی</th><th>وضعیت</th><th>مبلغ</th><th>ارز</th></tr></thead>
+    <tbody>
+      {% for budget in budgets %}
+      <tr><td>{{ budget.title }}</td><td>{{ budget.fiscal_year }}</td><td>{{ budget.get_status_display }}</td><td>{{ budget.amount }}</td><td>{{ budget.currency }}</td></tr>
+      {% empty %}<tr><td colspan="5">بودجه‌ای برای این پروژه ثبت نشده است.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  <p>NPV، IRR، هزینه واقعی، سود نقدی و نرخ بازگشت سرمایه: بدون داده‌های مستند جریان نقدی و هزینه، محاسبه یا ادعا نمی‌شوند.</p>
+</section>
+{% else %}
+<section class="panel">
+  <h2>پروژه‌های ثبت‌شده</h2>
+  <p>حداکثر {{ record_limit }} پرونده اول به ترتیب واحد و شناسه؛ وضعیت و بودجه‌ها از پایگاه داده فعلی خوانده می‌شوند.</p>
+  <div class="table-frame"><table>
+    <thead><tr><th>شناسه</th><th>پروژه</th><th>واحد</th><th>مسئول</th><th>وضعیت</th><th>بودجه مصوب به تفکیک ارز</th></tr></thead>
+    <tbody>
+      {% for project in projects %}
+      <tr>
+        <td>{{ project.unit.code }}/{{ project.code }}</td>
+        <td><a href="{% url 'enterprise_portal:project_detail' project.pk %}">{{ project.title }}</a></td>
+        <td>{{ project.unit.name }}</td>
+        <td>{{ project.owner.get_username }}</td>
+        <td>{{ project.get_status_display }}</td>
+        <td>{% for budget in project.approved_budgets %}{{ budget.total }} {{ budget.currency }}{% if not forloop.last %}؛ {% endif %}{% empty %}بودجه مصوب ثبت نشده{% endfor %}</td>
+      </tr>
+      {% empty %}<tr><td colspan="6">هیچ پروژه مجازی برای نمایش ثبت نشده است.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+{% endblock %}
