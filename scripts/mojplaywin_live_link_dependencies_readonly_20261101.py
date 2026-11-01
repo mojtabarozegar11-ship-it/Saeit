@@ -189,6 +189,10 @@ def bounded_asset_tree_metadata(directory, *, max_entries=150_000):
                 suffix = p.suffix.casefold()
                 if lower in secret_names or suffix in sensitive:
                     shapes["sensitive_or_backup_file_shape"] += 1
+                elif suffix in (".zip", ".tar", ".gz", ".7z", ".br"):
+                    shapes["compressed_archive_file_shape"] += 1
+                elif suffix in (".json", ".xml", ".txt", ".md", ".csv", ".webmanifest"):
+                    shapes["generic_text_or_data_file_shape"] += 1
                 elif suffix in source:
                     shapes["source_code_file_shape"] += 1
                 elif suffix in web:
