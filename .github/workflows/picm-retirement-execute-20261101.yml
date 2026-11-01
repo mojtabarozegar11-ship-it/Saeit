@@ -207,6 +207,9 @@ jobs:
           worker = home / ".local/share/saeit-picm"
           if comfy.parent.resolve() != home or worker.parent.resolve() != home / ".local/share":
               raise SystemExit("PICM_TARGET_MISMATCH")
+          if not comfy.exists() and not comfy.is_symlink() and not worker.exists() and not worker.is_symlink():
+              print("PICM_VPS_ALREADY_REMOVED_IN_PRIOR_SUCCESS=true")
+              raise SystemExit(0)
           comfy_items, comfy_bytes = audit(comfy, 100000)
           worker_items, worker_bytes = audit(worker, 1000)
           if comfy_items < 1000 or comfy_bytes < 500_000_000:
@@ -278,17 +281,34 @@ jobs:
           if len(candidates) != 14:
               raise SystemExit("PICM_BACKUP_COUNT_CHANGED="+str(len(candidates)))
           total = 0
+          total_entries = 0
           for path in candidates:
               st = path.lstat()
-              if not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid() or st.st_dev != dev:
-                  raise SystemExit("UNSAFE_PICM_BACKUP_FILE")
-              total += st.st_size
-          if total > 10_000_000:
+              if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.geteuid() or st.st_dev != dev:
+                  raise SystemExit("UNSAFE_PICM_BACKUP_DIRECTORY")
+              stack = [path]
+              while stack:
+                  cur = stack.pop()
+                  with os.scandir(cur) as entries:
+                      for entry in entries:
+                          total_entries += 1
+                          if total_entries > 10000:
+                              raise SystemExit("PICM_ARCHIVE_TREE_TOO_LARGE")
+                          item = entry.stat(follow_symlinks=False)
+                          if item.st_uid != os.geteuid() or item.st_dev != dev:
+                              raise SystemExit("PICM_ARCHIVE_SHARED_OR_MOUNTED")
+                          if stat.S_ISDIR(item.st_mode):
+                              stack.append(Path(entry.path))
+                          elif stat.S_ISREG(item.st_mode):
+                              total += item.st_size
+                          elif not stat.S_ISLNK(item.st_mode):
+                              raise SystemExit("PICM_ARCHIVE_SPECIAL_FILE")
+          if total > 15_000_000:
               raise SystemExit("PICM_BACKUP_BYTES_CHANGED")
-          print("PICM_CPANEL_DELETION_SCOPE=PRIVATE_QUEUE_AND_14_PICM_PREFIX_FILES", flush=True)
+          print("PICM_CPANEL_DELETION_SCOPE=PRIVATE_QUEUE_AND_14_VERIFIED_PICM_DIRECTORIES", flush=True)
           shutil.rmtree(queue)
           for path in candidates:
-              path.unlink()
+              shutil.rmtree(path)
           if queue.exists() or queue.is_symlink() or any(p.exists() or p.is_symlink() for p in candidates):
               raise SystemExit("PICM_CPANEL_REMOVAL_INCOMPLETE")
           print("PICM_CPANEL_QUEUE_REMOVED=true")
