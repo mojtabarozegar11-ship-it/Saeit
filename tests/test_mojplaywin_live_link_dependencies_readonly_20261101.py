@@ -4,7 +4,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
-from scripts.mojplaywin_live_link_dependencies_readonly_20261101 import (role_for_target, target_kind, alias_purpose, direct_child_metadata, allowed_private_target_metadata)
+from scripts.mojplaywin_live_link_dependencies_readonly_20261101 import (role_for_target, target_kind, alias_purpose, direct_child_metadata, allowed_private_target_metadata, target_site_affinity)
 
 
 class LinkRoleTests(unittest.TestCase):
@@ -48,7 +48,9 @@ class LinkRoleTests(unittest.TestCase):
 
 class PrivateShallowTargetMetadataTests(unittest.TestCase):
     def test_alias_purpose_uses_only_fixed_labels(self):
-        self.assertEqual(alias_purpose("mojplaywin.com/hidden/media"), "site_asset_alias")
+        self.assertEqual(alias_purpose("mojplaywin.com/hidden/media"), "media_upload_alias")
+        self.assertEqual(alias_purpose("mojplaywin.com/static"), "static_asset_alias")
+        self.assertEqual(alias_purpose("mojplaywin.com/assets"), "general_asset_alias")
         self.assertEqual(alias_purpose("Saeit-staging/unknown-private"), "unclassified_alias")
 
     def test_target_direct_children_no_contents_or_private_names(self):
@@ -65,6 +67,22 @@ class PrivateShallowTargetMetadataTests(unittest.TestCase):
             self.assertNotIn("secret-customer", data)
             self.assertNotIn("CUSTOMER_SECRET", data)
             self.assertNotIn(td, data)
+
+    def test_site_affinity_is_only_hint_and_leaks_no_target_name(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            home = root / "account"
+            home.mkdir()
+            known = home / "Saeit" / "private-assets"
+            known.mkdir(parents=True)
+            unknown = home / "unrelated-customer-project" / "media"
+            unknown.mkdir(parents=True)
+            a = target_site_affinity(known, home)
+            b = target_site_affinity(unknown, home)
+            self.assertEqual(a, {"hint": "known_site_named_root", "depth": 2})
+            self.assertEqual(b, {"hint": "unverified_account_root", "depth": 2})
+            self.assertNotIn("unrelated-customer-project", json.dumps(b))
+            self.assertNotIn(td, json.dumps(a))
 
     def test_shallow_scan_never_descends_or_follows_nested_link(self):
         with tempfile.TemporaryDirectory() as td:
