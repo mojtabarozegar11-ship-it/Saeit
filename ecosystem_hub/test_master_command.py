@@ -3,6 +3,7 @@ from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.core.exceptions import ValidationError
 from django.test import Client, TestCase, override_settings
 
 from enterprise_portal.models import AuditEvent, BusinessUnit, JournalEntry, StockMovement
@@ -85,6 +86,17 @@ class MasterCommandSecurityTests(TestCase):
         )
         self.assertEqual(tampered.status_code, 409)
         self.assertEqual(AssistantRun.objects.count(), 1)
+
+    def test_recorded_command_instruction_cannot_be_rewritten(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(PATH, self.command(), secure=True)
+        self.assertEqual(response.status_code, 302)
+        command = MasterCommand.objects.get()
+        command.instruction = "تغییر متن پس از ثبت"
+        with self.assertRaises(ValidationError):
+            command.save()
+        command.refresh_from_db()
+        self.assertNotEqual(command.instruction, "تغییر متن پس از ثبت")
 
     def test_cross_unit_access_and_analyst_commands_are_denied(self):
         self.client.force_login(self.manager)
