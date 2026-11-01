@@ -174,6 +174,8 @@ def _public_price_ok(value):
 
 def _public_shop_page(request, pages_namespace):
     """Guest-only public catalog; diagnostics never become payable public SKUs."""
+    if not _host_ok(request):
+        raise Http404
     from html import escape
     from types import SimpleNamespace
     from django.conf import settings
@@ -187,8 +189,6 @@ def _public_shop_page(request, pages_namespace):
     from services.mpw_trx_walletless_core import PaymentHold
     from services.mpw_walletless_commercial_intent import _commercial_db
 
-    if not _host_ok(request):
-        raise Http404
     try:
         _commercial_db(settings, connection)
         _configured_receiver()
