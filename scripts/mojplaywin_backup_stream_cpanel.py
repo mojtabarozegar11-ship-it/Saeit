@@ -55,7 +55,10 @@ def database_matches(db):
         return False
     result = json.loads(q.stdout).get("result", {})
     data = result.get("data")
-    return result.get("status") == 1 and isinstance(data, list) and len(data) == 1 and data[0].get("database") == db
+    return (result.get("status") == 1 and isinstance(data, list)
+            and len(data) <= 1000
+            and sum(1 for row in data if isinstance(row, dict)
+                    and row.get("database") == db) == 1)
 
 
 def base_cmd(p, db, user):

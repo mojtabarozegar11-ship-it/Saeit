@@ -303,6 +303,21 @@ class MySqlSourcePreflightTests(unittest.TestCase):
         self.assertEqual(run.call_args.args[0][0], "uapi")
         self.assertFalse(any("--execute" in item for item in run.call_args.args[0]))
 
+    def test_two_account_databases_require_one_exact_requested_match(self):
+        import json
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import scripts.mojplaywin_backup_stream_cpanel as source
+        def check(names):
+            payload = json.dumps({"result": {"status": 1, "data": [
+                {"database": name} for name in names]}}).encode()
+            with patch.object(source.subprocess, "run",
+                              return_value=SimpleNamespace(returncode=0, stdout=payload)):
+                return source.database_matches("audit_db")
+        self.assertTrue(check(["other_database", "audit_db"]))
+        self.assertFalse(check(["other_database", "unrelated_database"]))
+        self.assertFalse(check(["audit_db", "audit_db"]))
+
     def test_account_inventory_summary_is_aggregate_only(self):
         import json
         from types import SimpleNamespace
