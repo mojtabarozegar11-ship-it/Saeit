@@ -20,6 +20,7 @@ from enterprise_portal.models import AuditEvent
 from ecosystem_hub.analysis import generate_report
 from ecosystem_hub.catalog import CATALOG
 from ecosystem_hub.models import ProposedAutomation
+from ecosystem_hub.task_watch import watch_for_unit
 
 
 MAX_BATCH = 100
@@ -68,13 +69,19 @@ def process_rule(rule_id, *, now):
     # generate_report verifies both unit membership and all handler's source
     # permissions. On any exception this transaction rolls back claimed time.
     report = generate_report(actor, rule.unit, rule.assistant_code)
+    detail = {"unit_id": rule.unit_id, "automation_id": rule.pk,
+              "method": "read-only deterministic", "no_external_side_effects": True}
+    # generate_report has already checked view_worktask for these handler types.
+    # Record an auditable due-date snapshot, never change task status or send.
+    if CATALOG[rule.assistant_code]["handler"] in ("tasks", "executive"):
+        detail["task_watch"] = watch_for_unit(
+            rule.unit, today=timezone.localdate(now), limit=1,
+        )["counts"]
     AuditEvent.objects.create(
         actor=actor,
         action="ecosystem_scheduled_draft",
         target=f"AssistantRun:{report.pk}",
-        detail={"unit_id":rule.unit_id,"automation_id":rule.pk,
-                "method":"read-only deterministic",
-                "no_external_side_effects":True},
+        detail=detail,
     )
     return report
 
