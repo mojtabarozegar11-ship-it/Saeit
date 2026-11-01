@@ -18,7 +18,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from enterprise_portal.models import AuditEvent
-from ecosystem_hub.analysis import generate_report
+from ecosystem_hub.access import require_unit
+from ecosystem_hub.analysis import HANDLER_VIEW_PERMISSIONS, generate_report
 from ecosystem_hub.catalog import CATALOG
 from ecosystem_hub.followups import create_followups
 from ecosystem_hub.models import ProposedAutomation
@@ -26,6 +27,31 @@ from ecosystem_hub.task_watch import watch_for_unit
 
 
 MAX_BATCH = 100
+
+
+def validate_preview_authorization(rule):
+    """Read-only permission gate so preview cannot claim a forbidden run is ready.
+
+    The commit path still rechecks authorization inside process_rule's atomic
+    transaction. This preflight does not generate reports or advance due time.
+    """
+    actor = rule.owner
+    if not actor.is_active or not actor.is_staff:
+        raise PermissionDenied("صاحب برنامه باید کاربر فعال دارای مجوز باشد.")
+    require_unit(actor, rule.unit)
+    if not (actor.is_superuser or actor.has_perm("ecosystem_hub.add_assistantrun")):
+        raise PermissionDenied("مجوز ایجاد گزارش دستیار موجود نیست.")
+    handler = CATALOG[rule.assistant_code]["handler"]
+    for permission in HANDLER_VIEW_PERMISSIONS.get(handler, ()):
+        if not (actor.is_superuser or actor.has_perm(permission)):
+            raise PermissionDenied("مجوز مشاهده داده‌های منبع دستیار موجود نیست.")
+    if rule.auto_create_tasks:
+        if not (actor.is_superuser or (
+            actor.has_perm("enterprise_portal.add_worktask") and
+            actor.has_perm("enterprise_portal.view_worktask")
+        )):
+            raise PermissionDenied("مجوز ایجاد و مشاهده پیگیری داخلی موجود نیست.")
+        require_unit(actor, rule.unit, write=True)
 
 
 def is_due(rule, *, now=None):
@@ -119,6 +145,14 @@ class Command(BaseCommand):
             checked += 1
             if not is_due(rule, now=now):
                 skipped += 1
+                continue
+            try:
+                validate_preview_authorization(rule)
+            except (PermissionDenied, ValidationError) as error:
+                errors += 1
+                self.stderr.write(
+                    f"DENIED rule_id={rule.pk} reason={type(error).__name__}"
+                )
                 continue
             if not commit:
                 scheduled += 1
