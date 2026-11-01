@@ -1,0 +1,200 @@
+name: MojPlayWin 252 weekly quests with current live localization safeguarded release
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-living-cities-reconciled-252-live-20261101.yml
+      - scripts/mpw_living_cities_252_reconciled_upgrade.py
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency: {group: mpw-living-cities-global-252-reconciled, cancel-in-progress: false}
+jobs:
+  deploy-global:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify pinned game bundle and isolated deployment boundaries
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_living_cities_252_reconciled_upgrade.py
+          test -s secure-artifacts/mpw-living-cities-reconciled-eca666c.b64
+          grep -Fq 'eca666cbb730a6fcf70d284328893a78ad966881' scripts/mpw_living_cities_252_reconciled_upgrade.py
+          grep -Fq 'mojplaywin.com' scripts/mpw_living_cities_252_reconciled_upgrade.py
+          grep -Fq 'cannot_upgrade_unrecognized_public_build' scripts/mpw_living_cities_252_reconciled_upgrade.py
+          echo MOJPLAYWIN_EXACT_SOURCE_RELEASE_GATE=PASS
+      - name: Connect using host-key-pinned GitHub VPS cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Encrypted handoff into VPS-only release directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 65s scp -q -F "$d/config" secure-artifacts/mpw-living-cities-reconciled-eca666c.b64 vps:.private/living-cities-transport/mpw-global-eca666c.b64
+          timeout 35s ssh -T -F "$d/config" vps 'chmod 600 "$HOME/.private/living-cities-transport/mpw-global-eca666c.b64"'
+      - name: AES-GCM authenticate and decrypt pinned private game on VPS only
+        id: decrypt
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          output="$(timeout 80s ssh -T -F "$d/config" vps 'python3 -' <<'PY'
+          import base64,hashlib,io,json,os,tarfile
+          from pathlib import Path
+          from cryptography.hazmat.backends import default_backend
+          from cryptography.hazmat.primitives import hashes,serialization
+          from cryptography.hazmat.primitives.asymmetric import padding
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+          sha="eca666cbb730a6fcf70d284328893a78ad966881"
+          root=Path.home()/".private/living-cities-transport"
+          enc=root/"mpw-global-eca666c.b64"; private=root/"private.pem"
+          assert enc.is_file() and not enc.is_symlink() and enc.stat().st_size<800000
+          assert private.is_file() and not private.is_symlink()
+          obj=json.loads(base64.b64decode(enc.read_bytes().strip(),validate=True))
+          assert obj["schema"]==1 and obj["algorithm"]=="RSA3072-OAEP-SHA256+A256GCM"
+          assert obj["source_commit"]==sha
+          key=serialization.load_pem_private_key(private.read_bytes(),password=None,backend=default_backend()).decrypt(
+            base64.b64decode(obj["key"]),
+            padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
+          aad=b"living-cities-20261101:"+bytes.fromhex(sha)
+          raw=AESGCM(key).decrypt(base64.b64decode(obj["nonce"]),base64.b64decode(obj["ciphertext"]),aad)
+          digest=hashlib.sha256(raw).hexdigest()
+          assert digest==obj["payload_sha256"] and 10000<len(raw)<4194304
+          with tarfile.open(fileobj=io.BytesIO(raw),mode="r:gz") as tar:
+              items=tar.getmembers();names={m.name for m in items}
+              assert all(not m.name.startswith("/") and ".." not in Path(m.name).parts and
+                         (m.isfile() or m.isdir()) for m in items)
+              assert {"apps/living_cities/static/living_cities/global-shell.mjs",
+                      "apps/living_cities/static/living_cities/global-i18n.mjs",
+                      "apps/living_cities/static/living_cities/global-campaign.mjs",
+                      "apps/living_cities/static/living_cities/global-theme.css",
+                      "apps/living_cities/templates/living_cities/play.html"}.issubset(names)
+          target=root/("mpw-global-"+sha+".tgz")
+          if target.exists():
+              assert not target.is_symlink() and hashlib.sha256(target.read_bytes()).hexdigest()==digest
+          else:
+              pending=root/("mpw-global-"+sha+".pending")
+              assert not pending.exists()
+              with pending.open("xb") as f:
+                  f.write(raw);f.flush();os.fsync(f.fileno())
+              pending.chmod(0o600);pending.replace(target)
+          print("MPW_252_WORLDWIDE_GAME_DECRYPTED=PASS")
+          print("MPW_252_SOURCE_COMMIT="+sha)
+          print("MPW_252_ARCHIVE_HASH="+digest)
+          print("MPW_252_SOURCE_FILES="+str(len(items)))
+          PY
+          )"
+          printf '%s\n' "$output"
+          digest="$(printf '%s\n' "$output" | sed -n 's/^MPW_252_ARCHIVE_HASH=//p' | tail -1)"
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || { echo 'Decryption digest invalid';exit 1; }
+          echo "sha=$digest" >> "$GITHUB_OUTPUT"
+      - name: Private direct source transfer to scoped MojPlayWin staging
+        id: transfer
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          digest="${{ steps.decrypt.outputs.sha }}"
+          timeout 45s ssh -T -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          test ! -L "$HOME/.private" && test ! -L "$HOME/mojplaywin.com"
+          test -d "$HOME/mojplaywin.com/living-cities" && test ! -L "$HOME/mojplaywin.com/living-cities"
+          test "$(cat "$HOME/mojplaywin.com/living-cities/LC-OWNER.txt")" = "MPW-LIVING-CITIES-GLOBAL-20-LANG-0ece041b207f633a583d6fa80a1fa83dbc5d0265"
+          target="$HOME/.private/mpw-living-cities-global/releases/eca666cbb730a6fcf70d284328893a78ad966881"
+          test ! -L "$HOME/.private/mpw-living-cities-global"
+          install -d -m 700 "$target"
+          test ! -L "$target"
+          REMOTE
+          timeout 100s ssh -T -F "$d/config" vps 'cat "$HOME/.private/living-cities-transport/mpw-global-eca666cbb730a6fcf70d284328893a78ad966881.tgz"' |
+            timeout 100s ssh -T -F "$d/config" host 'umask 077; cat > "$HOME/.private/mpw-living-cities-global/releases/eca666cbb730a6fcf70d284328893a78ad966881/source.pending"'
+          timeout 45s ssh -T -F "$d/config" host 'bash -se' <<REMOTE
+          set -euo pipefail
+          p="\$HOME/.private/mpw-living-cities-global/releases/eca666cbb730a6fcf70d284328893a78ad966881"
+          test -f "\$p/source.pending" && test ! -L "\$p/source.pending"
+          test "\$(sha256sum "\$p/source.pending" | awk '{print \$1}')" = "$digest"
+          chmod 600 "\$p/source.pending"
+          mv -T "\$p/source.pending" "\$p/source.tgz"
+          echo MPW_GLOBAL_CPANEL_PRIVATE_TRANSFER=PASS
+          REMOTE
+      - name: Construct international static release privately
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          digest="${{ steps.decrypt.outputs.sha }}"
+          timeout 90s ssh -T -F "$d/config" host "env LC_GAME_ARCHIVE_SHA256=$digest python3 - prepare" < scripts/mpw_living_cities_252_reconciled_upgrade.py
+      - name: Atomically replace only owned MojPlayWin Living Cities folder and retain old build
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 65s ssh -T -F "$d/config" host 'python3 - publish' < scripts/mpw_living_cities_252_reconciled_upgrade.py
+      - name: Verify 20 languages, 200 world missions, 52 weekly quests and protected site routes
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 190s ssh -T -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          ip="$(getent ahostsv4 mojplaywin.com | awk 'NR==1{print $1}')"
+          test -n "$ip"
+          for path in /living-cities/ /living-cities/play/ \
+                      /living-cities/static/living_cities/app.mjs \
+                      /living-cities/static/living_cities/global-shell.mjs \
+                      /living-cities/static/living_cities/global-i18n.mjs \
+                      /living-cities/static/living_cities/global-missions-i18n.mjs \
+                      /living-cities/static/living_cities/global-campaign.mjs \
+                      /living-cities/static/living_cities/global-theme.css \
+                      /living-cities/static/living_cities/gameplay-i18n.mjs \
+                      /living-cities/static/living_cities/weekly-expeditions.mjs \
+                      /living-cities/static/living_cities/tycoon-panel.mjs \
+                      /living-cities/static/living_cities/sim.mjs \
+                      /living-cities/static/living_cities/render.mjs \
+                      / /studio/ /store/; do
+            tmp="$(mktemp)"
+            code=000
+            for i in 1 2 3; do
+              code="$(curl -ksS -4 --connect-timeout 7 --max-time 20 \
+                   --resolve "mojplaywin.com:443:$ip" -H 'Cache-Control: no-cache' \
+                   -o "$tmp" -w '%{http_code}' "https://mojplaywin.com$path" || true)"
+              test "$code" = 200 && break
+              sleep 2
+            done
+            echo "MPW_GLOBAL_LIVE=$path HTTP=$code"
+            if [ "$code" != 200 ]; then rm -f "$tmp";exit 1;fi
+            case "$path" in
+              /living-cities/) grep -Fq '200 evolving world missions' "$tmp";;
+              /living-cities/play/) grep -Fq 'data-lc-edition="browser"' "$tmp";grep -Fq 'MOJPLAYWIN WORLD EDITION' "$tmp";;
+              /living-cities/static/living_cities/app.mjs) grep -Fq 'import "./global-shell.mjs";' "$tmp";;
+              /living-cities/static/living_cities/global-campaign.mjs) grep -Fq 'CAMPAIGN_TOTAL' "$tmp";;
+              /living-cities/static/living_cities/weekly-expeditions.mjs) grep -Fq 'YEARLY_CONTRACTS' "$tmp";;
+              /living-cities/static/living_cities/gameplay-i18n.mjs) grep -Fq 'EXTRA_KEYS' "$tmp";;
+              /living-cities/static/living_cities/global-i18n.mjs) grep -Fq 'LANGUAGES' "$tmp";;
+            esac
+            rm -f "$tmp"
+          done
+          echo MPW_RECONCILED_20_LANGUAGES_252_MISSIONS_PUBLIC=PASS
+          REMOTE
+          timeout 45s ssh -T -F "$d/config" host 'python3 - verify' < scripts/mpw_living_cities_252_reconciled_upgrade.py
+      - name: Restore previous MojPlayWin game from private backup if smoke fails
+        if: failure() && steps.publish.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          if [ -f "$d/config" ]; then
+            timeout 90s ssh -T -F "$d/config" host 'python3 - rollback' < scripts/mpw_living_cities_252_reconciled_upgrade.py
+          fi
+      - name: Erase temporary runner credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
