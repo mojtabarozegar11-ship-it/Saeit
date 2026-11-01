@@ -44,7 +44,7 @@ jobs:
           python manage.py check
           python manage.py makemigrations --check --dry-run
       - name: Test route, data integrity and confidentiality
-        run: python manage.py test enterprise_portal.test_chatgpt_reports -v 2
+        run: python manage.py test enterprise_portal.test_chatgpt_reports enterprise_portal.test_chatgpt_sync -v 2
       - name: Verify release boundary
         run: |
           echo "EXACT_HEAD_CI=1"
