@@ -1,5 +1,5 @@
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Sum, Q
+from django.db.models import Count, Sum, Q
 from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -51,6 +51,35 @@ def dashboard(request):
         "can_add_metric": request.user.is_superuser or request.user.has_perm("company_marketing.add_performancemetric"),
         "can_manage_campaigns": request.user.is_superuser or request.user.has_perm("company_marketing.manage_company_campaigns"),
         "can_verify_channel": request.user.is_superuser,
+    }))
+
+
+@office_access
+@require_GET
+def crm(request):
+    """Unit-scoped customer pipeline; no outbound messages or fake paid sales."""
+    require_perm(request.user, "view_lead")
+    units = user_units(request.user)
+    records = Lead.objects.filter(unit__in=units).select_related("unit", "contact", "campaign", "owner")
+    stage = (request.GET.get("stage") or "").strip()
+    allowed_stages = {key for key, _ in Lead.STAGES}
+    if stage and stage not in allowed_stages:
+        return no_cache(HttpResponseBadRequest("مرحله فروش نامعتبر است."))
+    filtered = records.filter(stage=stage) if stage else records
+    by_stage = {
+        row["stage"]: row["count"]
+        for row in records.values("stage").annotate(count=Count("id"))
+    }
+    return no_cache(render(request, "company_marketing/crm.html", {
+        "leads": filtered.order_by("-created_at", "-pk")[:150],
+        "stages": [(key, label, by_stage.get(key, 0)) for key, label in Lead.STAGES],
+        "current_stage": stage,
+        "pipeline_count": records.count(),
+        "closed_won_irr": records.filter(stage="won").aggregate(
+            total=Sum("verified_sale_irr"),
+        )["total"] or 0,
+        "can_add_lead": request.user.is_superuser or request.user.has_perm("company_marketing.add_lead"),
+        "can_view_contact": request.user.is_superuser or request.user.has_perm("company_messaging.view_contact"),
     }))
 
 
