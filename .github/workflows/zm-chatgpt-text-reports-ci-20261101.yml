@@ -45,6 +45,22 @@ jobs:
           python manage.py makemigrations --check --dry-run
       - name: Test route, data integrity and confidentiality
         run: python manage.py test enterprise_portal.test_chatgpt_reports enterprise_portal.test_chatgpt_sync -v 2
+      - name: Verify real numbered issue source without DB changes
+        env:
+          ZM_GITHUB_REPORTS_READ_TOKEN: ${{ github.token }}
+        run: |
+          python manage.py sync_chatgpt_action_reports --pages=1 > "$RUNNER_TEMP/zm-report-preview.jsonlog"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          output = Path(os.environ["RUNNER_TEMP"], "zm-report-preview.jsonlog").read_text()
+          record = json.loads(output.split("ZM_REPORT_SYNC_JSON=", 1)[1])
+          if record["mode"] != "preview" or record["created"] != 0 or record["eligible"] < 1:
+              raise SystemExit("GITHUB_ISSUE_REPORT_PREVIEW_NOT_CONFIRMED")
+          print("GITHUB_ISSUE_REPORT_PREVIEW=passed")
+          print("NUMBERED_REPORTS_FOUND=" + str(record["eligible"]))
+          print("DATABASE_REPORT_WRITES=0")
+          PY
       - name: Verify release boundary
         run: |
           echo "EXACT_HEAD_CI=1"
