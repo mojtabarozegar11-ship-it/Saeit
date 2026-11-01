@@ -263,6 +263,11 @@ def task_detail(request, pk):
                     "to": task.status,
                     "note": note,
                     "human_action": True,
+                    "superuser_self_review_override": bool(
+                        request.user.is_superuser and
+                        request.user.pk == task.assigned_to_id and
+                        code in ("approve", "rework")
+                    ),
                     "no_external_side_effects": True,
                 },
             )
