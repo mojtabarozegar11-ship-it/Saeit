@@ -80,7 +80,7 @@ class TrxCommerceOverlayTests(unittest.TestCase):
 
     def test_original_wallet_exception_contract_is_preserved(self):
         with self.assertRaises(WalletLinkRejected) as context:
-            self.invoke(body=quote(timestamp=NOW-301))
+            self.invoke(body=quote(timestamp=NOW-91))
         self.assertIn("Trusted server rate unavailable", str(context.exception))
 
     def test_fresh_trx_preserves_decimal_and_timestamp(self):
@@ -88,11 +88,19 @@ class TrxCommerceOverlayTests(unittest.TestCase):
 
     def test_stale_trx_fails_closed(self):
         with self.assertRaises(WalletLinkRejected):
-            self.invoke(body=quote(timestamp=NOW-301))
+            self.invoke(body=quote(timestamp=NOW-91))
 
     def test_future_trx_fails_closed(self):
         with self.assertRaises(WalletLinkRejected):
-            self.invoke(body=quote(timestamp=NOW+46))
+            self.invoke(body=quote(timestamp=NOW+1))
+
+    def test_exact_90_second_invoice_contract_boundary(self):
+        self.assertEqual(self.invoke(body=quote(timestamp=NOW-90)),
+                         (Decimal("0.285"), NOW-90))
+        with self.assertRaises(WalletLinkRejected):
+            self.invoke(body=quote(timestamp=NOW-91))
+        with self.assertRaises(WalletLinkRejected):
+            self.invoke(body=quote(timestamp=NOW+1))
 
     def test_out_of_range_trx_fails_closed(self):
         for price in ("0", "-0.2", "150", "NaN", "Infinity"):
