@@ -27,7 +27,10 @@ fi
 
 "$PYTHON" --version
 "$PYTHON" manage.py check --deploy
-"$PYTHON" manage.py migrate --noinput
+# Fail closed before all database mutations: schema migrations require a separately
+# authorized, backed-up and independently restorable release workflow.
+# Generic cPanel updates must never auto-apply an unreviewed migration.
+"$PYTHON" manage.py migrate --check
 "$PYTHON" manage.py production_gate
 "$PYTHON" manage.py collectstatic --noinput
 touch passenger_wsgi.py

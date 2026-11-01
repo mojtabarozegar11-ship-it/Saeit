@@ -117,7 +117,7 @@ MODULES = [
     {"key": "office", "title": "دبیرخانه و مکاتبات", "text": "نامه‌های وارده، صادره، داخلی و محرمانه", "icon": "✉", "permission": "view_officeletter", "url": "enterprise_portal:letters"},
     {"key": "tasks", "title": "اتوماسیون وظایف", "text": "ارجاع کار، اولویت، پیگیری، سررسید و مسئولیت", "icon": "✓", "permission": "view_worktask", "url": "enterprise_portal:tasks"},
     {"key": "meetings", "title": "جلسات و صورت‌جلسات", "text": "تقویم، دستور جلسه، افراد حاضر و مصوبات", "icon": "◷", "permission": "view_meeting", "admin": "admin:enterprise_portal_meeting_changelist"},
-    {"key": "projects", "title": "برنامه‌ها و پروژه‌ها", "text": "مدیریت طرح‌های صنعتی، تجاری و پژوهشی شرکت", "icon": "◇", "permission": "view_managementproject", "admin": "admin:enterprise_portal_managementproject_changelist"},
+    {"key": "projects", "title": "برنامه‌ها و پروژه‌ها", "text": "مدیریت طرح‌های صنعتی، تجاری و پژوهشی شرکت", "icon": "◇", "permission": "view_managementproject", "url": "enterprise_portal:project_register"},
     {"key": "budgets", "title": "بودجه و برنامه مالی", "text": "اعتبار مصوب و پیشنهادی در واحدها و ارزهای جداگانه", "icon": "▤", "permission": "view_budgetplan", "admin": "admin:enterprise_portal_budgetplan_changelist"},
     {"key": "assets", "title": "اموال و دارایی ثابت", "text": "ثبت تجهیزات، محل، تاریخ خرید و مسئول نگهداری", "icon": "⬡", "permission": "view_companyasset", "admin": "admin:enterprise_portal_companyasset_changelist"},
     {"key": "audit", "title": "گزارش حسابرسی داخلی", "text": "سوابق قطعی‌سازی اسناد و گردش انبار", "icon": "≡", "permission": "view_auditevent", "admin": "admin:enterprise_portal_auditevent_changelist"},

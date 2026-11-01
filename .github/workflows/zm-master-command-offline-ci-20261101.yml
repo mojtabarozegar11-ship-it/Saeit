@@ -9,8 +9,11 @@ on:
       - feature/zm-hourly-smart-task-watch-20261101
       - feature/zm-task-review-approval-workflow-20261101
       - feature/zm-agent-warning-followup-20261101
+      - c01/private-project-register-20261101
+      - integration/zm-business-os-onepass-20261101
   pull_request:
     branches:
+      - main
       - feature/zm-business-os-unified-dashboard-20261101
       - feature/zm-master-agent-hourly-command-20261101
       - feature/zm-intent-router-marketing-agent-20261101
@@ -38,7 +41,12 @@ jobs:
       - name: Checkout exact proposed source
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+      - name: Assert exact source head
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -48,6 +56,8 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Django system check
         run: python manage.py check
+      - name: Ensure generic deploy has no automatic DB migration
+        run: python -m unittest discover -s tests -p 'test_zm_release_preflight.py' -v
       - name: Migration consistency against model definitions
         run: python manage.py makemigrations --check --dry-run
       - name: Integrated ERP, factory management, marketing and messaging regression
