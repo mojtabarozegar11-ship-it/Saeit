@@ -19,6 +19,7 @@ from .access import require_unit
 from .catalog import CATALOG
 from .manual_guides import MANUAL_GUIDES
 from .costing import estimate_manufacturing_cost
+from .task_watch import watch_for_unit
 from .models import (
     AssistantRun, BillOfMaterials, MaintenanceTicket, ManagementRisk,
     PerformanceIndicator, ProductionOrder, ProposedAutomation, ProcurementNeed,
@@ -168,11 +169,26 @@ def scan(unit, code):
                 f"آخرین نتیجه {check.get_result_display()}؛ بررسی علت و اقدام اصلاحی ضروری است.",
                 severity="warning", source=f"QualityInspection:{check.pk}"))
     elif mode == "tasks":
-        q = WorkTask.objects.filter(unit=unit, due_on__lt=today).exclude(status="done")
-        count = q.count()
-        if count:
-            findings.append(issue("وظایف معوق", f"{count} کار ثبت‌شده از موعد خود عبور کرده است.",
-                severity="warning", source="WorkTask"))
+        watch = watch_for_unit(unit, today=today, limit=8)
+        counts = watch["counts"]
+        findings.extend((
+            issue("وظایف معوق", f'{counts["overdue"]} کار باز از موعد گذشته است.',
+                  severity="warning" if counts["overdue"] else "info", source="WorkTask"),
+            issue("سررسیدهای نزدیک", f'امروز {counts["due_today"]} و هفت روز آینده {counts["due_soon"]} کار باز؛ '
+                  f'{counts["no_due"]} کار بدون سررسید.', source="WorkTask"),
+            issue("وظایف فوری", f'{counts["urgent"]} کار فوریِ باز نیازمند اولویت‌بندی مدیر است.',
+                  severity="warning" if counts["urgent"] else "info", source="WorkTask"),
+        ))
+        for task in watch["tasks"]:
+            due = task.due_on.isoformat() if task.due_on else "بدون سررسید"
+            findings.append(issue(
+                "پیگیری: " + task.title,
+                f"مسئول: {task.assigned_to.username}؛ سررسید: {due}؛ "
+                f"اولویت: {task.get_priority_display()}؛ وضعیت: {task.get_status_display()}. "
+                "تغییر وضعیت و اقدام اجرایی نیازمند ثبت انسانی است.",
+                severity="warning" if task.due_on and task.due_on < today else "info",
+                source=f"WorkTask:{task.pk}",
+            ))
     elif mode == "people":
         totals = defaultdict(Decimal)
         for person, hours in Timesheet.objects.filter(
@@ -242,14 +258,28 @@ def scan(unit, code):
             f"{rules.count()} تعریف شده، {rules.filter(active=True).count()} نشان‌گذاری‌شده فعال؛ "
             "وجود نشان فعال، به‌معنای راه‌اندازی واقعی زمان‌بند نیست."))
     elif mode == "executive":
-        count = WorkTask.objects.filter(unit=unit).exclude(status="done").count()
+        watch = watch_for_unit(unit, today=today, limit=5)
+        counts = watch["counts"]
         risks = ManagementRisk.objects.filter(unit=unit).exclude(state="closed").count()
         orders = ProductionOrder.objects.filter(unit=unit).exclude(state__in=("closed", "cancelled")).count()
         findings.extend((
-            issue("کارهای باز واحد", f"{count} مورد"),
+            issue("کارهای باز واحد", f'{counts["open"]} مورد'),
+            issue("هشدار تقویم هوشمند",
+                  f'معوق {counts["overdue"]}، امروز {counts["due_today"]}، '
+                  f'هفت روز آینده {counts["due_soon"]}، فوری {counts["urgent"]}.',
+                  severity="warning" if counts["overdue"] else "info", source="WorkTask"),
             issue("ریسک‌های باز", f"{risks} مورد"),
             issue("سفارش‌های باز تولید", f"{orders} مورد"),
         ))
+        for task in watch["tasks"]:
+            findings.append(issue(
+                "پیگیری مدیریتی: " + task.title,
+                f"مسئول: {task.assigned_to.username}؛ "
+                f"سررسید: {task.due_on.isoformat() if task.due_on else 'تعیین‌نشده'}؛ "
+                f"وضعیت: {task.get_status_display()}.",
+                severity="warning" if task.due_on and task.due_on < today else "info",
+                source=f"WorkTask:{task.pk}",
+            ))
     else:
         findings.append(issue(
             "موتور تخصصی هنوز وصل نشده است",
