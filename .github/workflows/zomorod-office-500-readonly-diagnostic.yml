@@ -445,7 +445,220 @@ jobs:
           )"
           # SSH relays can terminate early yet return status zero. Only complete,
           # locally validated output is admissible as a database attestation.
-          if ! grep -Eq '^PASSENGER_APP_DB_ATTESTED=(true|false)$' <<< "$db_evidence"; then
+          if ! grep -Eq '^PASSENGER_APP_DB_ATTESTED=(true|false)
+          if ! grep -Fqx 'PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no' <<< "$db_evidence"; then
+              echo "::error title=Passenger DB attestation::Release gate evidence missing"
+              echo "PASSENGER_DB_PROBE_REMOTE_GATE_MISSING=true"
+              exit 1
+          fi
+          printf '%s\n' "$db_evidence" | grep -E '^(PASSENGER_DB_PROBE_[A-Z_]+|PASSENGER_APP_DB_ATTESTED|PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED)='
+      - name: Inspect configured Passenger interpreter inode and app workers without executing its CLI
+        if: ${{ always() && steps.link.outcome == 'success' }}
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          structure="$(timeout 75s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          import os
+          import shlex
+          from pathlib import Path
+
+          app = Path("/home/zomorod2/Saeit")
+          config = Path("/home/zomorod2/public_html/.htaccess")
+          if not app.is_dir() or app.is_symlink() or not config.is_file() or config.is_symlink():
+              raise SystemExit("CPANEL_PYTHON_PROBE_CONFIG_UNAVAILABLE")
+          values = {"passengerpython": [], "passengerapproot": []}
+          for raw in config.read_text(encoding="utf-8").splitlines():
+              line = raw.strip()
+              if not line or line.startswith("#"):
+                  continue
+              key = line.split(None, 1)[0].lower()
+              if key not in values:
+                  continue
+              fields = shlex.split(line, comments=True)
+              if len(fields) != 2:
+                  raise SystemExit("CPANEL_PYTHON_PROBE_DIRECTIVE_INVALID")
+              values[key].append(fields[1])
+          if len(values["passengerpython"]) != 1 or values["passengerapproot"] != [str(app)]:
+              raise SystemExit("CPANEL_PYTHON_PROBE_CONFIG_UNATTESTED")
+          interpreter = Path(values["passengerpython"][0])
+          if not interpreter.is_absolute() or not interpreter.is_file():
+              raise SystemExit("CPANEL_PYTHON_PROBE_NOT_REGULAR_FILE")
+          target = interpreter.resolve(strict=True)
+          target_stat = target.stat()
+          venv_config = interpreter.parent.parent / "pyvenv.cfg"
+          print("CPANEL_PYTHON_CONFIG_RESOLVED=true")
+          print("CPANEL_PYTHON_IS_SYMLINK=" + str(interpreter.is_symlink()).lower())
+          print("CPANEL_PYTHON_EXECUTABLE=" + str(os.access(interpreter, os.X_OK)).lower())
+          print("CPANEL_PYTHON_VENV_CONFIG_PRESENT=" + str(venv_config.is_file()).lower())
+          app_resolved = app.resolve()
+          cwd_workers = 0
+          exe_matches = 0
+          for process in Path("/proc").iterdir():
+              if not process.name.isdigit():
+                  continue
+              try:
+                  if process.stat().st_uid != os.getuid():
+                      continue
+                  if Path(os.readlink(process / "cwd")).resolve() != app_resolved:
+                      continue
+                  cwd_workers += 1
+                  exe_stat = (process / "exe").stat()
+                  if (exe_stat.st_dev, exe_stat.st_ino) == (target_stat.st_dev, target_stat.st_ino):
+                      exe_matches += 1
+              except (OSError, PermissionError):
+                  continue
+          print("CPANEL_PYTHON_APP_CWD_WORKERS=" + str(cwd_workers))
+          print("CPANEL_PYTHON_EXE_INODE_MATCHES=" + str(exe_matches))
+          print("CPANEL_PYTHON_STRUCTURE_COMPLETE=true")
+          PY
+          REMOTE
+          )"
+          # The relay may disconnect with status zero. Check proof on the
+          # GitHub runner, independently of remote exit status.
+          if ! grep -Fqx 'CPANEL_PYTHON_STRUCTURE_COMPLETE=true' <<< "$structure"; then
+              echo "CPANEL_PYTHON_STRUCTURE_EVIDENCE_INCOMPLETE=true"
+              exit 1
+          fi
+          printf '%s\n' "$structure" | grep -E '^CPANEL_PYTHON_[A-Z_]+=[a-z0-9]+$'
+
+      - name: Classify PHP ledger versus Django root DB without writes or row access
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 75s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import pathlib
+          import sqlite3
+          import stat
+          from urllib.parse import quote
+
+          candidates = (
+              ("PHP_LEDGER", pathlib.Path("/home/zomorod2/.private/zomorod-business/management.sqlite3")),
+              ("DJANGO_DEFAULT", pathlib.Path("/home/zomorod2/Saeit/db.sqlite3")),
+          )
+          for label, path in candidates:
+              try:
+                  meta = path.stat() if not path.is_symlink() else None
+              except OSError:
+                  meta = None
+              regular = bool(meta and stat.S_ISREG(meta.st_mode))
+              nonzero = bool(regular and meta.st_size >= 4096)
+              print(label + "_REGULAR=" + str(regular).lower())
+              print(label + "_NONEMPTY_SQLITE_SIZE=" + str(nonzero).lower())
+              if not nonzero:
+                  print(label + "_BASE_SCHEMA=unavailable")
+                  continue
+              try:
+                  with path.open("rb") as handle:
+                      if handle.read(16) != b"SQLite format 3\x00":
+                          print(label + "_BASE_SCHEMA=invalid_header")
+                          continue
+                  uri = "file:" + quote(str(path.resolve(strict=True)), safe="/") + "?mode=ro&immutable=1"
+                  with sqlite3.connect(uri, uri=True, timeout=3) as connection:
+                      connection.execute("PRAGMA query_only=ON")
+                      tables = {row[0] for row in connection.execute(
+                          "SELECT name FROM sqlite_master WHERE type='table'"
+                      )}
+                  print(label + "_BASE_SCHEMA_TABLES=" + str(len(tables)))
+                  print(label + "_HAS_DJANGO_SCHEMA=" + str(
+                      {"django_migrations", "auth_user"}.issubset(tables)
+                  ).lower())
+              except (OSError, sqlite3.Error):
+                  print(label + "_BASE_SCHEMA=read_only_unavailable")
+          print("DB_CLASSIFICATION_READONLY=true")
+          print("ACCOUNTING_SOURCE_OF_TRUTH_NOT_ATTESTED=true")
+          PY
+          REMOTE
+      - name: Attest the staged read-only PHP ledger bridge against the live schema
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 80s ssh -F "$d/config" "$COMMAND_HOST" bash -se -- "$SOURCE_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          stage="/home/zomorod2/.private/zomorod-messaging-release-stages/$sha"
+          if test ! -f "$stage/code/enterprise_portal/php_ledger_bridge.py" || ! grep -Fqx "release=$sha" "$stage/manifest.txt"; then
+            echo "PHP_LEDGER_BRIDGE_SCHEMA=not_run_stage_missing"
+            exit 0
+          fi
+          py="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
+          if test ! -x "$py"; then py="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"; fi
+          test -x "$py"
+          STAGE="$stage/code" PYTHONDONTWRITEBYTECODE=1 "$py" -B - <<'PY'
+          import os
+          import sys
+          sys.path.insert(0, os.environ["STAGE"])
+          from enterprise_portal.php_ledger_bridge import read_php_finance_snapshot
+          result = read_php_finance_snapshot(
+              "/home/zomorod2/.private/zomorod-business/management.sqlite3"
+          )
+          assert result["authority"] == "PHP V7 (read-only)"
+          assert result["document_count"] >= 0 and result["invoice_count"] >= 0
+          assert result["imbalance_count"] >= 0
+          assert all(row["currency"] in {"IRR", "USD", "EUR", "AED"} for row in result["turnovers"])
+          print("PHP_LEDGER_BRIDGE_SCHEMA=verified")
+          print("PHP_LEDGER_BRIDGE_AGGREGATE_ONLY=true")
+          print("FINANCIAL_VALUES_OR_PRIVATE_ROWS_LOGGED=false")
+          PY
+          REMOTE
+      - name: Reject any anonymous live finance report exposure
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No cookies, authorization headers, redirects, or response body.
+          # A redirect to login or a 404 on the still-unpublished route is safe;
+          # an unsolicited 200 must block the private-office release.
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --proto '=https' --tlsv1.2 --max-time 25 --max-redirs 0 \
+            --retry 2 --retry-delay 2 \
+            'https://zomorodmelal.ir/company/office/finance/authoritative/')"
+          case "$status" in
+            301|302|303|307|308|401|403|404|503)
+              echo "LIVE_ANONYMOUS_FINANCE_EXPOSURE=no"
+              echo "LIVE_FINANCE_HTTP_CLASS=guarded_or_unpublished"
+              ;;
+            200)
+              echo "::error title=Private finance access check::Anonymous HTTP 200 requires manual verification before release"
+              echo "LIVE_ANONYMOUS_FINANCE_EXPOSURE=possible"
+              exit 1
+              ;;
+            *)
+              echo "::error title=Private finance access check::Unexpected HTTP status; unable to attest anonymous safety"
+              echo "LIVE_ANONYMOUS_FINANCE_EXPOSURE=unattested"
+              exit 1
+              ;;
+          esac
+      - name: Erase transient private relay files
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
+ <<< "$db_evidence"; then
+              # Preserve only predeclared, non-secret stage markers from the
+              # partial SSH response. A cPanel relay may return exit=0 even
+              # after losing the Python CLI channel; never mark DB attested.
+              printf '%s\n' "$db_evidence" | grep -E '^PASSENGER_DB_PROBE_[A-Z_]+=' || true
+              if ! grep -Eq '^PASSENGER_DB_PROBE_[A-Z_]+=' <<< "$db_evidence"; then
+                  echo "PASSENGER_DB_PROBE_NO_STAGE_MARKER=true"
+              fi
               echo "::error title=Passenger DB attestation::Remote response incomplete"
               echo "PASSENGER_DB_PROBE_TRANSPORT_OR_RUNTIME_INCOMPLETE=true"
               exit 1
