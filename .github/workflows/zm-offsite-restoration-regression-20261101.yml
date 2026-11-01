@@ -1,0 +1,92 @@
+name: Zomorod offline encrypted recovery drill regression
+on:
+  push:
+    branches: [audit/zm-offsite-restoration-gate-20261101]
+    paths:
+      - .github/workflows/zm-offsite-restoration-regression-20261101.yml
+      - scripts/zm_offsite_restore_drill.py
+      - tests/test_zm_offsite_restore_drill.py
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/zm-offsite-restoration-regression-20261101.yml
+      - scripts/zm_offsite_restore_drill.py
+      - tests/test_zm_offsite_restore_drill.py
+permissions:
+  contents: read
+jobs:
+  synthetic-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install crypto dependency for synthetic offline checks
+        run: python3 -m pip install --disable-pip-version-check cryptography
+      - name: Test encrypted zip restore, GCM tamper, SHA, SQL schema and cleanup
+        run: python3 -m unittest discover -s tests -p test_zm_offsite_restore_drill.py -v
+
+  actual-artifact-envelope-preflight:
+    # Only trusted owner-branch push may fetch the existing encrypted artifact.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/audit/zm-offsite-restoration-gate-20261101'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Download the real encrypted Zomorod management backup, never decrypt it
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_CIPHER_SHA256: 1a7749d36936a8b5721d61bb6609b8ae0918488dd0878c759f8bd6f15e869452
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zm-real-artifact-only"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$RUNNER_TEMP/zm-real-artifact-only"' EXIT
+          gh run download 41293910313 --repo "$GITHUB_REPOSITORY" --name "zm-business-recovery-41293910313" --dir "$d"
+          python3 - "$d" "$EXPECTED_CIPHER_SHA256" <<'PY'
+          import base64, hashlib, json, pathlib, re, struct, sys
+          root=pathlib.Path(sys.argv[1])
+          expected=sys.argv[2]
+          expected_files={"business.sqlite3.f01enc","manifest.txt"}
+          assert {p.name for p in root.iterdir()}==expected_files, "ARTIFACT_ENTRIES"
+          cipher=root/"business.sqlite3.f01enc"
+          manifest=root/"manifest.txt"
+          assert not cipher.is_symlink() and cipher.is_file(), "CIPHER_FILE"
+          assert not manifest.is_symlink() and manifest.is_file(), "MANIFEST_FILE"
+          actual=hashlib.sha256(cipher.read_bytes()).hexdigest()
+          assert actual==expected, "CIPHERTEXT_SHA_MISMATCH"
+          lines=manifest.read_text("ascii").splitlines()
+          assert len(lines)==2
+          props=dict(line.split("=",1) for line in lines)
+          assert set(props)=={"format","snapshot_sha256"}
+          assert props["format"]=="F01ENC-RSA3072-AES256GCM-V1"
+          assert re.fullmatch(r"[a-f0-9]{64}",props["snapshot_sha256"])
+          magic=b"F01ENC-RSA3072-AES256GCM-V1\n"
+          with cipher.open("rb") as fd:
+              assert fd.read(len(magic))==magic, "MAGIC"
+              n_bytes=fd.read(4)
+              assert len(n_bytes)==4
+              n=struct.unpack(">I",n_bytes)[0]
+              assert 1<=n<=8192, "HEADER_SIZE"
+              raw=fd.read(n)
+              assert len(raw)==n
+              header=json.loads(raw)
+              assert header["schema"]=="f01-encrypted-offhost.v1"
+              assert header["cipher"]=="AES-256-GCM"
+              assert header["kek"]=="RSA-OAEP-SHA256"
+              assert len(base64.b64decode(header["nonce"],validate=True))==12
+              assert len(base64.b64decode(header["wrapped_key"],validate=True))==384
+              plain_size=header["plain_size"]
+              assert isinstance(plain_size,int) and 80000<=plain_size<=200000000
+              assert cipher.stat().st_size==len(magic)+4+n+plain_size+16, "ENVELOPE_SIZE"
+          print("REAL_ENCRYPTED_ARTIFACT_PRESENT=true")
+          print("REAL_CIPHERTEXT_SHA256_VERIFIED=true")
+          print("REAL_F01_ENVELOPE_STRUCTURALLY_VALID=true")
+          print("REAL_OFFSITE_GCM_DECRYPT_RESTORE=not_proven")
+          print("SITE_PRODUCTION_MODIFIED=false")
+          PY
