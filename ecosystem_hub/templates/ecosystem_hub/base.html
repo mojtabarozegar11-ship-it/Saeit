@@ -16,6 +16,7 @@
 <nav class="hub-nav" aria-label="ابزارهای مدیریت اکوسیستم">
 <a href="{% url 'enterprise_portal:ecosystem_hub:dashboard' %}">مرکز مدیریت</a>
 <a href="{% url 'enterprise_portal:ecosystem_hub:unified_command' %}">فرماندهی یکپارچه</a>
+{% if perms.ecosystem_hub.add_mastercommand and perms.ecosystem_hub.view_mastercommand %}<a href="{% url 'enterprise_portal:ecosystem_hub:master_command' %}">چت مسترایجنت</a>{% endif %}
 {% if request.user.is_superuser %}<a href="{% url 'enterprise_portal:ecosystem_hub:group_overview' %}">گزارش کل گروه</a>{% endif %}
 <a href="{% url 'enterprise_portal:ecosystem_hub:modules' %}">واحدهای تخصصی</a>
 <a href="{% url 'enterprise_portal:ecosystem_hub:assistants' %}">دستیارهای مدیریت</a>
