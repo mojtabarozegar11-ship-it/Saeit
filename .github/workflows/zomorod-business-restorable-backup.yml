@@ -159,49 +159,49 @@ jobs:
           umask 077
           export PYTHONDONTWRITEBYTECODE=1
           export SNAPSHOT_RELEASE_SHA="$1"
-          python3 -B - <<'PY'
+          python3 -O -B - <<'PY'
           from pathlib import Path
           import os,sqlite3,hashlib,urllib.parse,json
           home=Path.home()
           src=home/".private/zomorod-business/management.sqlite3"
-          assert src.is_file() and not src.is_symlink() and 80000<=src.stat().st_size<200000000
+          if not (src.is_file() and not src.is_symlink() and 80000<=src.stat().st_size<200000000): raise RuntimeError("SOURCE_DB_INVALID")
           before=src.stat()
           source_digest_before=hashlib.sha256(src.read_bytes()).hexdigest()
           base=home/".private/zomorod-messaging-recovery"
-          assert not base.is_symlink()
+          if not (not base.is_symlink()): raise RuntimeError("PRIVATE_BACKUP_ROOT_UNSAFE")
           sha=os.environ["SNAPSHOT_RELEASE_SHA"]
-          assert len(sha)==40 and all(x in "0123456789abcdef" for x in sha)
+          if not (len(sha)==40 and all(x in "0123456789abcdef" for x in sha)): raise RuntimeError("SOURCE_SHA_INVALID")
           root=base/sha
-          assert not root.exists()
+          if not (not root.exists()): raise RuntimeError("BACKUP_TARGET_EXISTS")
           base.mkdir(mode=0o700,parents=True,exist_ok=True)
           root.mkdir(mode=0o700)
           dest=root/"business.snapshot.sqlite3"
           restored=root/"restore-verify.sqlite3"
           uri="file:"+urllib.parse.quote(str(src))+"?mode=ro"
           with sqlite3.connect(uri,uri=True,timeout=8) as source:
-              assert source.execute("PRAGMA quick_check").fetchone()[0]=="ok"
+              if not (source.execute("PRAGMA quick_check").fetchone()[0]=="ok"): raise RuntimeError("SOURCE_DB_QUICK_CHECK_FAILED")
               tables={r[0] for r in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-              assert {"users","journal_entries","journal_lines","invoices"} <= tables
+              if not ({"users","journal_entries","journal_lines","invoices"} <= tables): raise RuntimeError("REQUIRED_LEDGER_TABLES_MISSING")
               users=source.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-              assert users>=1
+              if not (users>=1): raise RuntimeError("LEDGER_USERS_MISSING")
               with sqlite3.connect(str(dest),timeout=10) as output:
                   source.backup(output,pages=64,sleep=0.03)
           dest.chmod(0o600)
-          assert dest.stat().st_size>=80000
+          if not (dest.stat().st_size>=80000): raise RuntimeError("SNAPSHOT_SIZE_INVALID")
           with sqlite3.connect(str(dest),timeout=4) as db:
-              assert db.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+              if not (db.execute("PRAGMA integrity_check").fetchone()[0]=="ok"): raise RuntimeError("SNAPSHOT_INTEGRITY_FAILED")
               with sqlite3.connect(str(restored)) as check:
                   db.backup(check)
           with sqlite3.connect(str(restored)) as check:
-              assert check.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
-              assert {r[0] for r in check.execute("SELECT name FROM sqlite_master WHERE type='table'")}==tables
-              assert check.execute("SELECT COUNT(*) FROM users").fetchone()[0]==users
+              if not (check.execute("PRAGMA integrity_check").fetchone()[0]=="ok"): raise RuntimeError("RESTORE_INTEGRITY_FAILED")
+              if not ({r[0] for r in check.execute("SELECT name FROM sqlite_master WHERE type='table'")}==tables): raise RuntimeError("RESTORE_TABLE_SET_MISMATCH")
+              if not (check.execute("SELECT COUNT(*) FROM users").fetchone()[0]==users): raise RuntimeError("RESTORE_USER_COUNT_MISMATCH")
           restored.unlink()
           digest=hashlib.sha256(dest.read_bytes()).hexdigest()
           (root/"manifest.json").write_text(json.dumps({"schema":"zm-recovery.v1","bytes":dest.stat().st_size,"sha256":digest,"tables":len(tables),"user_count":users,"restore_test":"ok","production_db_modified":False}),encoding="utf-8")
           after=src.stat()
-          assert before.st_size==after.st_size and before.st_mtime_ns==after.st_mtime_ns
-          assert hashlib.sha256(src.read_bytes()).hexdigest()==source_digest_before
+          if not (before.st_size==after.st_size and before.st_mtime_ns==after.st_mtime_ns): raise RuntimeError("SOURCE_STAT_CHANGED")
+          if not (hashlib.sha256(src.read_bytes()).hexdigest()==source_digest_before): raise RuntimeError("SOURCE_DIGEST_CHANGED")
           print("BUSINESS_DB_SOURCE_CONTENT_SHA256_UNCHANGED=true")
           print("BUSINESS_DB_SNAPSHOT=created")
           print("BUSINESS_DB_RESTORE=verified")
