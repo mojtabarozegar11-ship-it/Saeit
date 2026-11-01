@@ -3,6 +3,7 @@
 No file is served from MEDIA_URL or public_html. Allowed formats are PDF,
 PNG, and JPEG up to 8 MiB. Every download re-verifies the saved SHA-256.
 """
+from contextlib import contextmanager
 import hashlib
 import os
 import re
@@ -27,22 +28,54 @@ MAGIC = {
 SAFE_KEY = re.compile(r"^[a-f0-9]{32}\.(?:pdf|png|jpg)$")
 
 
-def _private_root(*, create=False):
+def _private_root_path():
+    """Validate the configured path without trusting any pathname lookup."""
     default = Path(settings.BASE_DIR).parent / ".private/zomorod-business/office-files"
     root = Path(getattr(settings, "COMPANY_OFFICE_ATTACHMENT_ROOT", default))
-    if not root.is_absolute() or "public_html" in root.parts or root == Path("/"):
+    if (not root.is_absolute() or "public_html" in root.parts
+            or root == Path("/") or ".." in root.parts):
         raise RuntimeError("Unsafe office attachment storage directory")
-    # Reject redirects through an attacker-controlled symlink on the private path.
-    for candidate in (root, root.parent, root.parent.parent):
-        if candidate.is_symlink():
-            raise RuntimeError("Symlinked office attachment directory")
-    if create:
-        root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if not root.is_dir() or not stat.S_ISDIR(root.stat().st_mode):
-        raise RuntimeError("Private attachment directory is not available")
-    if root.stat().st_mode & 0o077:
-        raise RuntimeError("Private attachment directory permissions are too broad")
     return root
+
+
+@contextmanager
+def _private_dir_fd(*, create=False):
+    """Pin each ancestor with openat(O_NOFOLLOW), preventing path-swap escapes.
+
+    Every file operation must use the yielded descriptor, never re-resolve the
+    pathname after validation. Linux/cPanel support is required, fail closed.
+    """
+    root = _private_root_path()
+    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+        raise RuntimeError("Private attachment storage requires secure directory descriptors")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    current_fd = os.open("/", flags)
+    try:
+        for component in root.parts[1:]:
+            try:
+                if create:
+                    try:
+                        os.mkdir(component, mode=0o700, dir_fd=current_fd)
+                    except FileExistsError:
+                        pass
+                next_fd = os.open(component, flags, dir_fd=current_fd)
+            except OSError as exc:
+                raise RuntimeError("Symlinked or unavailable office attachment directory") from exc
+            os.close(current_fd)
+            current_fd = next_fd
+        mode = os.fstat(current_fd).st_mode
+        if not stat.S_ISDIR(mode) or mode & 0o077:
+            raise RuntimeError("Private attachment directory permissions are too broad")
+        yield current_fd
+    finally:
+        os.close(current_fd)
+
+
+def _private_root(*, create=False):
+    """Compatibility helper; file I/O must use _private_dir_fd instead."""
+    root = _private_root_path()
+    with _private_dir_fd(create=create):
+        return root
 
 
 def _validated_file(upload):
@@ -63,74 +96,78 @@ def _validated_file(upload):
     return name, content_type, ".jpg" if ext == ".jpeg" else ext
 
 
-def _path_for(key, *, create=False):
+def _validated_key(key):
     if not SAFE_KEY.fullmatch(str(key)):
         raise Http404("شناسه فایل نامعتبر است.")
-    return _private_root(create=create) / key
+    return str(key)
 
 
 def store_attachment(letter, actor, upload):
-    """Save a single new immutable blob and metadata; remove our blob on failure."""
+    """Save an immutable blob through a pinned directory descriptor."""
     original, content_type, ext = _validated_file(upload)
-    key = uuid.uuid4().hex + ext
-    target = _path_for(key, create=True)
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    key = _validated_key(uuid.uuid4().hex + ext)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     digest = hashlib.sha256()
     length = 0
-    fd = os.open(target, flags, 0o600)
-    try:
-        with os.fdopen(fd, "wb") as output:
-            for part in upload.chunks():
-                length += len(part)
-                if length > MAX_BYTES:
-                    raise ValidationError("حجم پیوست بیش از حد مجاز است.")
-                digest.update(part)
-                output.write(part)
-            output.flush()
-            os.fsync(output.fileno())
-        if length == 0:
-            raise ValidationError("فایل پیوست خالی است.")
-        return OfficeAttachment.objects.create(
-            letter=letter, uploaded_by=actor, storage_key=key,
-            original_name=original, content_type=content_type,
-            size_bytes=length, sha256=digest.hexdigest(),
-        )
-    except BaseException:
+    with _private_dir_fd(create=True) as directory_fd:
+        fd = os.open(key, flags, 0o600, dir_fd=directory_fd)
         try:
-            target.unlink()
-        except OSError:
-            pass
-        raise
+            with os.fdopen(fd, "wb") as output:
+                for part in upload.chunks():
+                    length += len(part)
+                    if length > MAX_BYTES:
+                        raise ValidationError("حجم پیوست بیش از حد مجاز است.")
+                    digest.update(part)
+                    output.write(part)
+                output.flush()
+                os.fsync(output.fileno())
+            if length == 0:
+                raise ValidationError("فایل پیوست خالی است.")
+            return OfficeAttachment.objects.create(
+                letter=letter, uploaded_by=actor, storage_key=key,
+                original_name=original, content_type=content_type,
+                size_bytes=length, sha256=digest.hexdigest(),
+            )
+        except BaseException:
+            try:
+                os.unlink(key, dir_fd=directory_fd)
+            except OSError:
+                pass
+            raise
 
 
 def remove_only_new_attachment(key):
-    """Rollback cleanup only for an exact UUID file created by this request."""
+    """Rollback cleanup in the pinned private directory only."""
     if not SAFE_KEY.fullmatch(str(key)):
         return
     try:
-        _path_for(key).unlink()
-    except OSError:
+        with _private_dir_fd() as directory_fd:
+            os.unlink(str(key), dir_fd=directory_fd)
+    except (OSError, RuntimeError):
         pass
 
 
 def download_attachment(record):
-    target = _path_for(record.storage_key)
-    fd = None
-    try:
-        fd = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-        meta = os.fstat(fd)
-        if not stat.S_ISREG(meta.st_mode) or meta.st_size != record.size_bytes or meta.st_size > MAX_BYTES:
-            raise Http404("فایل پیوست قابل بازیابی نیست.")
-        with os.fdopen(fd, "rb") as source:
-            fd = None
-            data = source.read(MAX_BYTES + 1)
-        if len(data) != record.size_bytes or hashlib.sha256(data).hexdigest() != record.sha256:
-            raise Http404("یکپارچگی فایل پیوست تأیید نشد.")
-    except OSError as exc:
-        raise Http404("فایل پیوست پیدا نشد.") from exc
-    finally:
-        if fd is not None:
-            os.close(fd)
+    key = _validated_key(record.storage_key)
+    with _private_dir_fd() as directory_fd:
+        fd = None
+        try:
+            fd = os.open(key, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+            meta = os.fstat(fd)
+            if (not stat.S_ISREG(meta.st_mode) or meta.st_size != record.size_bytes
+                    or meta.st_size > MAX_BYTES or meta.st_mode & 0o077
+                    or meta.st_nlink != 1):
+                raise Http404("فایل پیوست قابل بازیابی نیست.")
+            with os.fdopen(fd, "rb") as source:
+                fd = None
+                data = source.read(MAX_BYTES + 1)
+            if len(data) != record.size_bytes or hashlib.sha256(data).hexdigest() != record.sha256:
+                raise Http404("یکپارچگی فایل پیوست تأیید نشد.")
+        except OSError as exc:
+            raise Http404("فایل پیوست پیدا نشد.") from exc
+        finally:
+            if fd is not None:
+                os.close(fd)
     response = HttpResponse(data, content_type=record.content_type)
     response["Content-Disposition"] = content_disposition_header(True, record.original_name)
     response["X-Content-Type-Options"] = "nosniff"

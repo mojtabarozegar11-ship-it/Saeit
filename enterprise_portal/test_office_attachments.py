@@ -1,4 +1,5 @@
 """Security and integrity regression for private correspondence attachments."""
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -10,6 +11,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from .models import AuditEvent, OfficeAttachment, OfficeLetter
+from .private_uploads import _private_root
 
 PDF = b"%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n"
 
@@ -62,6 +64,99 @@ class PrivateOfficeAttachmentTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(OfficeAttachment.objects.count(), 1)
         return OfficeAttachment.objects.get()
+
+    def test_upload_ancestor_swap_cannot_redirect_to_external_directory(self):
+        # An attacker swaps the path *after* the directory has been opened.
+        _private_root(create=True)
+        outside = Path(self.temp.name) / "external"
+        outside.mkdir()
+        moved = Path(self.temp.name) / "pinned-original"
+        original_open = os.open
+        swapped = False
+
+        def swap_before_blob_open(path, *args, **kwargs):
+            nonlocal swapped
+            if (not swapped and kwargs.get("dir_fd") is not None
+                    and len(str(path)) >= 36 and str(path).endswith(".pdf")):
+                self.root.rename(moved)
+                self.root.symlink_to(outside, target_is_directory=True)
+                swapped = True
+            return original_open(path, *args, **kwargs)
+
+        try:
+            with patch("enterprise_portal.private_uploads.os.open",
+                       side_effect=swap_before_blob_open):
+                attachment = self._create()
+        finally:
+            if swapped:
+                self.root.unlink()
+                moved.rename(self.root)
+        self.assertTrue(swapped)
+        self.assertEqual(list(outside.iterdir()), [])
+        self.assertEqual((self.root / attachment.storage_key).read_bytes(), PDF)
+
+    def test_download_ancestor_swap_reads_pinned_original_not_redirect(self):
+        attachment = self._create()
+        outside = Path(self.temp.name) / "external-download"
+        outside.mkdir()
+        (outside / attachment.storage_key).write_bytes(b"forged outside file")
+        moved = Path(self.temp.name) / "pinned-download"
+        original_open = os.open
+        swapped = False
+
+        def swap_before_blob_open(path, *args, **kwargs):
+            nonlocal swapped
+            if (not swapped and path == attachment.storage_key
+                    and kwargs.get("dir_fd") is not None):
+                self.root.rename(moved)
+                self.root.symlink_to(outside, target_is_directory=True)
+                swapped = True
+            return original_open(path, *args, **kwargs)
+
+        try:
+            with patch("enterprise_portal.private_uploads.os.open",
+                       side_effect=swap_before_blob_open):
+                response = self.client.get(
+                    reverse("enterprise_portal:download_office_attachment",
+                            args=[attachment.pk]), secure=True,
+                )
+        finally:
+            if swapped:
+                self.root.unlink()
+                moved.rename(self.root)
+        self.assertTrue(swapped)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, PDF)
+
+    def test_world_readable_or_hardlinked_private_blob_is_refused(self):
+        attachment = self._create()
+        target = self.root / attachment.storage_key
+        target.chmod(0o644)
+        url = reverse("enterprise_portal:download_office_attachment",
+                      args=[attachment.pk])
+        self.assertEqual(self.client.get(url, secure=True).status_code, 404)
+        target.chmod(0o600)
+        os.link(target, Path(self.temp.name) / "external-hardlink.pdf")
+        self.assertEqual(self.client.get(url, secure=True).status_code, 404)
+
+    def test_distant_symlink_ancestor_cannot_redirect_private_uploads(self):
+        outside = Path(self.temp.name) / "outside"
+        outside.mkdir()
+        redirect = Path(self.temp.name) / "redirect"
+        redirect.symlink_to(outside, target_is_directory=True)
+        # The symlink is more than two parent directories above the root.
+        unsafe_root = redirect / "nested" / "office" / "storage" / "files"
+        with override_settings(COMPANY_OFFICE_ATTACHMENT_ROOT=unsafe_root):
+            with self.assertRaisesRegex(RuntimeError, "Symlinked"):
+                _private_root(create=True)
+        self.assertFalse((outside / "nested").exists())
+
+    def test_parent_traversal_in_configured_private_root_is_rejected(self):
+        unsafe_root = Path(self.temp.name) / "secure" / ".." / "other" / "files"
+        with override_settings(COMPANY_OFFICE_ATTACHMENT_ROOT=unsafe_root):
+            with self.assertRaisesRegex(RuntimeError, "Unsafe"):
+                _private_root(create=True)
+        self.assertFalse((Path(self.temp.name) / "other").exists())
 
     def test_authorized_upload_download_hash_and_private_cache_controls(self):
         attachment = self._create()
