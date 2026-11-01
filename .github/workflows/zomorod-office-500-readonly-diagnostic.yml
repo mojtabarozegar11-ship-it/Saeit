@@ -507,6 +507,20 @@ jobs:
           print("CPANEL_PYTHON_IS_SYMLINK=" + str(interpreter.is_symlink()).lower())
           print("CPANEL_PYTHON_EXECUTABLE=" + str(os.access(interpreter, os.X_OK)).lower())
           print("CPANEL_PYTHON_VENV_CONFIG_PRESENT=" + str(venv_config.is_file()).lower())
+          # Binary bytes only: no interpreter execution and no secret/env read.
+          # An LSAPI signature is a diagnostic hint, not runtime attestation.
+          with target.open("rb") as binary:
+              header = binary.read(4)
+              lsapi_signature = b"lsapi" in header.lower()
+              for _ in range(32):
+                  chunk = binary.read(1024 * 1024)
+                  if not chunk:
+                      break
+                  if b"lsapi" in chunk.lower() or b"lswsgi" in chunk.lower():
+                      lsapi_signature = True
+                      break
+          print("CPANEL_PYTHON_ELF_HEADER=" + str(header == b"\\x7fELF").lower())
+          print("CPANEL_PYTHON_LSAPI_SIGNATURE=" + str(lsapi_signature).lower())
           app_resolved = app.resolve()
           cwd_workers = 0
           exe_matches = 0
