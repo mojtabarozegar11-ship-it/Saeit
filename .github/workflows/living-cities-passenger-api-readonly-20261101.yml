@@ -1,0 +1,45 @@
+name: Living Cities cPanel Passenger API shape read only
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/living-cities-passenger-api-readonly-20261101.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Pinned relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Enumerate only PassengerApps UAPI return shapes without private values
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 55s ssh -T -F "$d/config" host '/usr/local/cpanel/bin/uapi --output=json PassengerApps list_applications' | python3 -c '
+          import json,sys
+          x=json.load(sys.stdin)
+          print("CPANEL_UAPI_TOP_KEYS="+",".join(sorted(x.keys())))
+          r=x.get("result") if isinstance(x,dict) else {}
+          if isinstance(r,dict):
+            print("CPANEL_UAPI_STATUS="+str(r.get("status")))
+            print("CPANEL_UAPI_RESULT_KEYS="+",".join(sorted(r.keys())))
+            items=r.get("data")
+            if isinstance(items,list):
+              print("CPANEL_UAPI_APPS_COUNT="+str(len(items)))
+              print("CPANEL_UAPI_APP_FIELD_NAMES="+(",".join(sorted(items[0].keys())) if items and isinstance(items[0],dict) else "none"))
+            elif isinstance(items,dict):
+              print("CPANEL_UAPI_DATA_KEYS="+",".join(sorted(items.keys())))
+            else:
+              print("CPANEL_UAPI_DATA_TYPE="+str(type(items).__name__))
+          '
+      - name: Wipe keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
