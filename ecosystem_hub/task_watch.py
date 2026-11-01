@@ -32,8 +32,8 @@ def watch_for_unit(unit, *, today=None, limit=8):
         active.filter(Q(due_on__lte=week_end) | Q(priority="urgent"))
         .annotate(watch_order=Case(
             When(due_on__lt=today, then=Value(0)),
-            When(due_on=today, then=Value(1)),
-            When(priority="urgent", then=Value(2)),
+            When(priority="urgent", then=Value(1)),
+            When(due_on=today, then=Value(2)),
             default=Value(3),
             output_field=IntegerField(),
         ))
