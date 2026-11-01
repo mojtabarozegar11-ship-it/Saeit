@@ -67,7 +67,7 @@ def base_cmd(p, db, user):
     return cmd
 
 
-def copy_exact_process_stdout(command, *, env=None):
+def copy_exact_process_stdout(command, *, env=None, verify_after=None):
     proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                             env=env, bufsize=0)
     total = 0
@@ -90,6 +90,8 @@ def copy_exact_process_stdout(command, *, env=None):
             sys.stdout.buffer.write(b)
         if proc.wait(timeout=30):
             raise RuntimeError("source archive or transactional DB dump failed")
+        if verify_after is not None:
+            verify_after()  # Before trusted footer; failing streams cannot be accepted.
         sys.stdout.buffer.write(MARKER)
         sys.stdout.buffer.flush()
         print("BACKUP_SOURCE_STREAM_COMPLETED", file=sys.stderr, flush=True)
@@ -290,12 +292,23 @@ def stream_files():
             raise RuntimeError("missing main site source folder")
     if not shutil.which("tar"):
         raise RuntimeError("tar unavailable")
-    # Paths are relative to one fixed hosting account. GNU tar preserves links
-    # as link entries; does NOT silently follow them to unapproved other sites.
-    assert_no_unbacked_symlinks()
-    cmd = ["nice", "-n", "15", "tar", "-C", str(HOME), "-cf", "-",
-           APP.name, DOCROOT.name]
-    copy_exact_process_stdout(cmd)
+    # This entire-tree preflight rejects every link except the three
+    # pinned public aliases. Only the contents reachable from those aliases
+    # are copied; unrelated parent projects and siblings are never traversed.
+    snapshot = assert_scoped_public_asset_links()
+    def verify_after():
+        if assert_scoped_public_asset_links() != snapshot:
+            raise RuntimeError("SCOPED_PUBLIC_ASSET_DRIFT_DURING_BACKUP")
+    # -h makes all three aliases ordinary archive subdirectories, so isolated
+    # restoration never needs access to other account roots.
+    cmd = ["nice", "-n", "15"] + scoped_files_tar_command()
+    copy_exact_process_stdout(cmd, verify_after=verify_after)
+
+
+def scoped_files_tar_command(home=HOME, roots=(APP, DOCROOT)):
+    """Exact TAR argv for a standalone archive; use only after scoped guard."""
+    return ["tar", "--dereference", "-C", str(home), "-cf", "-",
+            roots[0].name, roots[1].name]
 
 
 if __name__ == "__main__":
