@@ -43,12 +43,14 @@ class MarketingDashboardPermissionTests(TestCase):
             impressions=17, clicks=3, leads=2, cost_irr=3456789,
             evidence_reference="OFFLINE-METRIC-REF",
         )
-        self._grant("view_campaign")
+        # Base office access requires business-unit visibility, not CRM access.
+        self._grant("view_businessunit", "view_campaign")
         self.client.force_login(self.owner)
 
     def _grant(self, *codenames):
         permissions = Permission.objects.filter(
-            content_type__app_label="company_marketing", codename__in=codenames,
+            content_type__app_label__in=("company_marketing", "enterprise_portal"),
+            codename__in=codenames,
         )
         self.owner.user_permissions.add(*permissions)
         self.owner = get_user_model().objects.get(pk=self.owner.pk)
