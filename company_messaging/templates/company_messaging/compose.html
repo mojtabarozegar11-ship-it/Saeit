@@ -1,0 +1,22 @@
+{% extends "enterprise_portal/shell.html" %}
+{% block title %}پیام جدید{% endblock %}
+{% block crumb %}ارسال پیام{% endblock %}
+{% block extra_head %}<style>
+.msg-form{max-width:850px;background:rgba(17,42,31,.86);border:1px solid #927c45;border-radius:20px;padding:1.3rem}
+.msg-form label{display:block;margin:.8rem 0 .2rem}.msg-form input,.msg-form textarea,.msg-form select{width:100%;max-width:100%;padding:.6rem;border-radius:9px;border:1px solid #9d8c64}
+.msg-form button{padding:.8rem 1.5rem;border:0;border-radius:10px;background:#d2b673;color:#182d21;cursor:pointer}
+.msg-errors{color:#ffcbcb}
+</style>{% endblock %}
+{% block content %}
+<div class="msg-form">
+<h1>ثبت پیام جدید</h1>
+{% if not external_send_enabled %}<p role="status" style="color:#ffe1a3;font-weight:700">ارسال برون‌سازمانی در حال حاضر غیرفعال است؛ ثبت پیام خارجی به معنی ارسال نیست و پیام تا فعال‌شدن مجاز سرویس‌دهنده در صف باقی می‌ماند. پیام‌های داخلی قابل ثبت‌اند.</p>{% endif %}
+<p>برای پیام داخلی «کارمند گیرنده» و برای کانال بیرونی «مخاطب دفترچه» انتخاب شود. کانال‌های بیرونی تنها با رضایت ثبت‌شده به صف می‌روند؛ ارسال واقعی در پردازشگر مجاز انجام می‌شود.</p>
+<form method="post">{% csrf_token %}
+{% if form.non_field_errors %}<div class="msg-errors">{{ form.non_field_errors }}</div>{% endif %}
+{% for field in form %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+{% if field.errors %}<div class="msg-errors">{{ field.errors }}</div>{% endif %}{% endfor %}
+<p><small>در صورت عدم انتخاب زمان، پیام فوراً وارد صف می‌شود. پیام بدون رضایت معتبر رد خواهد شد.</small></p>
+<button type="submit">ثبت امن پیام</button>
+<a href="{% url 'company_messaging:inbox' %}">بازگشت</a>
+</form></div>{% endblock %}

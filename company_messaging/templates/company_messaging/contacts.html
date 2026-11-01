@@ -1,0 +1,29 @@
+{% extends "enterprise_portal/shell.html" %}
+{% block title %}دفترچه مخاطبان{% endblock %}
+{% block crumb %}مخاطبان شرکت{% endblock %}
+{% block extra_head %}<style>
+.contacts-panel{background:#142b20;color:#f5e9c8;border:1px solid #b9a068;border-radius:16px;padding:1.2rem;overflow:auto}
+.contacts-panel table{width:100%;border-collapse:collapse}.contacts-panel th,.contacts-panel td{padding:.7rem;border-bottom:1px solid #6c6b4a;text-align:right}
+.contacts-panel a{color:#f6db96;text-decoration:underline}.contacts-panel .action{display:inline-block;background:#d2b673;color:#182d21;padding:.65rem 1rem;border-radius:9px;font-weight:bold;text-decoration:none}
+</style>{% endblock %}
+{% block content %}
+<section class="contacts-panel">
+<h1>دفترچه مخاطبان شرکت</h1>
+<p>اطلاعات مخاطبان محرمانه است. رضایت هر کانال باید جداگانه و با مرجع قابل پیگیری ثبت شود. تغییر اطلاعات یک مخاطب ممکن است پیام‌های قبلی در صف را برای حفاظت از گیرنده مسدود کند.</p>
+<p><a class="action" href="{% url 'company_messaging:contact_create' %}">ثبت مخاطب جدید</a> <a href="{% url 'company_messaging:inbox' %}">بازگشت به پیام‌ها</a></p>
+<table>
+<thead><tr><th>نام</th><th>واحد</th><th>وضعیت</th><th>مدیریت</th></tr></thead>
+<tbody>
+{% for contact in contacts %}
+<tr><td>{{ contact.name }}</td><td>{{ contact.unit.name }}</td>
+<td>{% if not contact.active %}غیرفعال{% elif contact.suppressed %}مسدود{% else %}فعال{% endif %}</td>
+<td><a href="{% url 'company_messaging:contact_edit' contact.pk %}">ویرایش امن</a></td></tr>
+{% empty %}<tr><td colspan="4">مخاطبی در واحدهای مجاز ثبت نشده است.</td></tr>{% endfor %}
+</tbody></table>
+{% if contacts.has_other_pages %}<nav aria-label="صفحه‌بندی مخاطبان">
+{% if contacts.has_previous %}<a href="?page={{ contacts.previous_page_number }}">صفحه قبل</a>{% endif %}
+<span>صفحه {{ contacts.number }} از {{ contacts.paginator.num_pages }}</span>
+{% if contacts.has_next %}<a href="?page={{ contacts.next_page_number }}">صفحه بعد</a>{% endif %}
+</nav>{% endif %}
+</section>
+{% endblock %}

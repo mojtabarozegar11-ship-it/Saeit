@@ -1,0 +1,26 @@
+{% extends "enterprise_portal/shell.html" %}
+{% block title %}مخاطب شرکت{% endblock %}
+{% block crumb %}ثبت و ویرایش مخاطب{% endblock %}
+{% block extra_head %}<style>
+.contact-form{max-width:920px;background:#142b20;color:#f5e9c8;border:1px solid #b9a068;border-radius:16px;padding:1.2rem}
+.contact-form label{display:block;margin:1rem 0 .25rem}.contact-form input,.contact-form select,.contact-form textarea{box-sizing:border-box;width:100%;max-width:100%;padding:.7rem;background:#f8f4e9;color:#203629;border:1px solid #b9a068;border-radius:8px}
+.contact-form input[type=checkbox]{width:auto}.contact-form button{background:#d2b673;color:#15271d;padding:.75rem 1.2rem;border:0;border-radius:8px;font-weight:bold}
+.contact-form a{color:#f6db96}.contact-form .errors{color:#ffd1cc}
+</style>{% endblock %}
+{% block content %}
+<section class="contact-form">
+<h1>{% if editing %}ویرایش مخاطب{% else %}ثبت مخاطب جدید{% endif %}</h1>
+<p>ثبت اطلاعات تماس به معنای رضایت برای دریافت پیام نیست. تاریخ رضایت را تنها بر اساس سند معتبر وارد کنید و شناسه سند را در «مرجع رضایت» بنویسید. هیچ پیام خارجی از این فرم ارسال نمی‌شود.</p>
+{% if editing %}<p>واحد سازمانی مخاطب موجود قابل انتقال نیست؛ برای واحد دیگر مخاطب جدید ثبت کنید.</p>{% endif %}
+<form method="post">{% csrf_token %}
+{% if form.non_field_errors %}<div class="errors">{{ form.non_field_errors }}</div>{% endif %}
+{% for field in form %}
+<label for="{{ field.id_for_label }}">{{ field.label }}</label>
+{{ field }}
+{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+{% if field.errors %}<div class="errors">{{ field.errors }}</div>{% endif %}
+{% endfor %}
+<p><button type="submit">ذخیره امن مخاطب</button> <a href="{% url 'company_messaging:contacts' %}">انصراف و بازگشت</a></p>
+</form>
+</section>
+{% endblock %}

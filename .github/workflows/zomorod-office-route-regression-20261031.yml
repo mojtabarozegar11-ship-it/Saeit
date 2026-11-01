@@ -1,0 +1,44 @@
+name: Zomorod private-office route security regression
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "tests/test_zomorod_company_office_fallback.py"
+      - "tests/test_zomorod_office_sidecar_urls.py"
+      - "office_runtime/**"
+      - "enterprise_portal/**"
+      - "config/urls.py"
+      - ".github/workflows/zomorod-office-route-regression-20261031.yml"
+permissions:
+  contents: read
+jobs:
+  route-regression:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      SECRET_KEY: "nonproduction-zomorod-office-route-test-only"
+      DEBUG: "False"
+      ALLOWED_HOSTS: "testserver,localhost"
+      COMPANY_MESSAGING_SEND_ENABLED: "false"
+      COMPANY_MARKETING_PUBLISH_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install project test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Assert exact private-office route behavior without a production DB
+        run: |
+          set -euo pipefail
+          python -m pytest -q tests/test_zomorod_company_office_fallback.py tests/test_zomorod_office_sidecar_urls.py
+          echo ZOMOROD_OFFICE_ROUTE_SECURITY=PASS
+      - name: No live deploy or external send
+        run: |
+          echo PRODUCTION_FILES_CHANGED=false
+          echo PRODUCTION_DB_MUTATED=false
+          echo EXTERNAL_MESSAGES_SENT=false

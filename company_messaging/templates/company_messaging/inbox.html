@@ -1,0 +1,36 @@
+{% extends "enterprise_portal/shell.html" %}
+{% block title %}مرکز ارتباطات{% endblock %}
+{% block crumb %}پیام‌ها{% endblock %}
+{% block extra_head %}<style>
+.msg-layout{display:grid;gap:1.2rem}.msg-card{background:rgba(16,37,26,.74);border:1px solid rgba(188,157,82,.4);border-radius:18px;padding:1.1rem;overflow:auto}
+.msg-card table{width:100%;border-collapse:collapse}.msg-card td,.msg-card th{text-align:right;border-bottom:1px solid rgba(178,163,117,.2);padding:.8rem}
+.msg-link{color:#f1d89a;text-decoration:underline}.msg-action{display:inline-block;padding:.65rem 1rem;border-radius:10px;background:#c4a35c;color:#172519;font-weight:700}
+</style>{% endblock %}
+{% block content %}
+<div class="msg-layout">
+  <div class="msg-card"><h1>مرکز ارتباطات هوشمند شرکت</h1>
+  <p>مکاتبات داخلی و پیام‌های بیرونی؛ وضعیت «پذیرش سرویس‌دهنده» به معنی تحویل به گیرنده نیست.</p>
+  {% if not external_send_enabled %}<p role="status" style="color:#ffe1a3;font-weight:700">ارسال برون‌سازمانی در حال حاضر غیرفعال است؛ پیام‌های خارجی فقط در صف ثبت می‌شوند و به گیرنده ارسال نمی‌شوند. پیام داخلی مستقل از این محدودیت است.</p>{% endif %}
+  {% if can_compose %}<a class="msg-action" href="{% url 'company_messaging:compose' %}">+ ایجاد پیام جدید</a>{% endif %}
+  {% if perms.company_messaging.manage_company_contacts %}<a class="msg-action" href="{% url 'company_messaging:contacts' %}">دفترچه مخاطبان</a>{% endif %}
+  </div>
+  <section class="msg-card"><h2>صندوق دریافتی داخلی</h2>
+    <table><thead><tr><th>موضوع</th><th>فرستنده</th><th>تاریخ</th><th>وضعیت</th></tr></thead><tbody>
+    {% for msg in incoming %}<tr><td><a class="msg-link" href="{% url 'company_messaging:detail' msg.pk %}">{{ msg.subject|default:"پیام بدون موضوع" }}</a></td>
+    <td>{{ msg.sender.get_username }}</td><td>{{ msg.created_at|date:"Y/m/d H:i" }}</td>
+    <td>{% if msg.read_at %}خوانده‌شده{% else %}خوانده‌نشده{% endif %}</td></tr>
+    {% empty %}<tr><td colspan="4">پیامی دریافت نشده است.</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+  <section class="msg-card"><h2>ارسالی‌های من</h2>
+    <table><thead><tr><th>موضوع</th><th>کانال</th><th>گیرنده</th><th>ثبت</th><th>وضعیت</th></tr></thead><tbody>
+    {% for msg in outgoing %}<tr>
+    <td><a class="msg-link" href="{% url 'company_messaging:detail' msg.pk %}">{{ msg.subject|default:"پیام بدون موضوع" }}</a></td>
+    <td>{{ msg.get_channel_display }}</td>
+    <td>{% if msg.contact %}{{ msg.contact.name }}{% else %}{{ msg.recipient_user.get_username }}{% endif %}</td>
+    <td>{{ msg.created_at|date:"Y/m/d H:i" }}</td><td>{{ msg.get_status_display }}</td></tr>
+    {% empty %}<tr><td colspan="5">هنوز پیامی ایجاد نشده است.</td></tr>{% endfor %}
+    </tbody></table>
+  </section>
+</div>
+{% endblock %}

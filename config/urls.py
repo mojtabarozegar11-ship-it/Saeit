@@ -54,9 +54,9 @@ urlpatterns = [
     path("company-gallery/", company_gallery, name="company_gallery"),
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),
     path("company/office/login/", RedirectView.as_view(url="/admin/login/?next=/staff/command-center/", permanent=False), name="company_office_login"),
-    # Temporary root-only fallback while the private Django office is release-blocked.
-    # Replace this route at the validated private-office cutover.
-    path("company/office/", RedirectView.as_view(url="/business/", permanent=False), name="company_office_fallback"),
+    path("company/office/messages/", include("company_messaging.urls")),
+    path("company/office/marketing/", include("company_marketing.urls")),
+    path("company/office/", include("enterprise_portal.urls")),
     path("company/", lambda request: company_portal_home(request) if request.method == "POST" else platform_page(request, "company"), name="company"),
     path("company/<slug:slug>/", lambda request, slug: platform_page(request, "company"), name="company_detail"),
     path("about/", RedirectView.as_view(pattern_name="company", permanent=True), name="about"),

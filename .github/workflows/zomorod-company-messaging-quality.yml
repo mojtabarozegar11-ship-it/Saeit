@@ -1,0 +1,52 @@
+name: Zomorod private messaging tests (no deployment)
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "company_messaging/**"
+      - "company_marketing/**"
+      - "enterprise_portal/templates/enterprise_portal/shell.html"
+      - "config/settings.py"
+      - "config/urls.py"
+      - "requirements.txt"
+      - ".github/workflows/zomorod-company-messaging-quality.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      SECRET_KEY: "nonproduction-company-messaging-tests-only"
+      ALLOWED_HOSTS: "testserver,localhost"
+      DATABASE_URL: "sqlite:///company_messaging_ci.sqlite3"
+      DEBUG: "False"
+      COMPANY_MESSAGING_SEND_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Django schema and safety checks
+        run: |
+          python manage.py makemigrations --check --dry-run company_messaging company_marketing
+          python manage.py check
+      - name: Messaging isolation and security tests
+        run: python manage.py test company_messaging company_marketing --verbosity 2
+      - name: Parent ERP and ecosystem regression tests
+        run: python manage.py test enterprise_portal ecosystem_hub --verbosity 1
+      - name: No public route removal
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          url=Path("config/urls.py").read_text()
+          assert 'path("company/office/", include("enterprise_portal.urls"))' in url
+          assert 'path("company/office/messages/", include("company_messaging.urls"))' in url
+          assert 'path("company/office/marketing/", include("company_marketing.urls"))' in url
+          assert url.index('path("company/office/messages/"') < url.index('path("company/office/"')
+          assert 'path("ghanadi/"' in url and 'path("amozeshgah/"' in url
+          print("MESSAGING_PRIVATE_ROUTE_ISOLATION=PASS")
+          PY

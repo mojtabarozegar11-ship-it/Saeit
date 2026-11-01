@@ -1,0 +1,615 @@
+name: Diagnose isolated Zomorod office preview routing (read-only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-office-preview-route-diagnostics.yml"
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Set up pinned GitHub to VPS to cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            exit 1
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Inspect Selector registration and Passenger mapping without changes
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel) ;; *) exit 1 ;; esac
+          timeout 100s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          selector="/usr/sbin/cloudlinux-selector"
+          rel="zomorod_office_preflight_2a8a0f4b9e17"
+          uri="company/office-preflight-2a8a0f4b9e17"
+          root="/home/zomorod2/$rel"
+          docroot="/home/zomorod2/public_html"
+          protected="/home/zomorod2/.private/zomorod-company-office"
+          test -d "$root" && test ! -L "$root"
+          test -f "$root/.preview-registered" && test ! -L "$root/.preview-registered"
+          test -f "$root/office_passenger_wsgi.py"
+          test -f "$root/.env" && test "$(stat -c '%a' "$root/.env")" = 600
+          test -f "$root/office-preview.sqlite3"
+          echo "PREVIEW_APP_ROOT=preserved_verified"
+          test -f "$root/.selector-create.json"
+          python3 - "$root/.selector-create.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1]))
+          print("SELECTOR_CREATE_RESULT="+str(x.get("result")))
+          print("SELECTOR_CREATE_RESPONSE_KEYS="+",".join(sorted(x.keys())))
+          print("SELECTOR_CREATE_DATA_TYPE="+type(x.get("data")).__name__)
+          PY
+          "$selector" get --json --interpreter python --domain zomorodmelal.ir | python3 -c '
+          import json,sys
+          x=json.load(sys.stdin)
+          print("SELECTOR_GET_RESULT="+str(x.get("result")))
+          print("SELECTOR_GET_DATA_TYPE="+type(x.get("data")).__name__)
+          if isinstance(x.get("data"),(dict,list)):
+              print("SELECTOR_GET_HAS_DATA=true")
+          '
+          backup="$protected/preflight-public-html-htaccess-20261031.bak"
+          test -f "$backup"
+          if cmp -s -- "$docroot/.htaccess" "$backup"; then
+            echo "ROOT_PASSENGER_HTACCESS_AFTER_PREVIEW=unchanged"
+          else
+            echo "ROOT_PASSENGER_HTACCESS_AFTER_PREVIEW=changed"
+          fi
+          for folder in "$docroot" "$docroot/company" "$docroot/$uri" "$root"; do
+            case "$folder" in
+              "$docroot") tag=site_root ;;
+              "$docroot/company") tag=company_directory ;;
+              "$docroot/$uri") tag=preview_uri_directory ;;
+              "$root") tag=preview_app_root ;;
+              *) exit 1 ;;
+            esac
+            if test -d "$folder"; then
+              echo "ROUTING_DIRECTORY_$tag=present"
+            else
+              echo "ROUTING_DIRECTORY_$tag=absent"
+            fi
+            file="$folder/.htaccess"
+            if test -f "$file" && test ! -L "$file"; then
+              echo "ROUTING_HTACCESS_$tag=present"
+              awk '/^[[:space:]]*Passenger/ {print "ROUTING_" t "_DIRECTIVE=" $1}' t="$tag" "$file" | sort -u
+              if grep -Eq '^[[:space:]]*PassengerBaseURI[[:space:]]+/' "$file"; then
+                echo "ROUTING_PASSENGER_BASE_URI_$tag=present"
+              fi
+            else
+              echo "ROUTING_HTACCESS_$tag=absent"
+            fi
+          done
+          awk '/^[[:space:]]*PassengerEnabled[[:space:]]/ {
+              val=tolower($2)
+              if(val=="on"||val=="off") print "COMPANY_PARENT_PASSENGER_ENABLED=" val
+              else print "COMPANY_PARENT_PASSENGER_ENABLED=nonstandard"
+          }' "$docroot/company/.htaccess"
+          awk 'NF && $1 !~ /^#/ {print "PREVIEW_URI_HTACCESS_KEY=" $1}' "$docroot/$uri/.htaccess" | sort -u
+          for py in "/home/zomorod2/virtualenv/$rel/3.10/bin/python" "/home/zomorod2/virtualenv/$rel/3.10.22/bin/python"; do
+            if test -x "$py"; then echo "PREVIEW_SELECTOR_VENV=present"; fi
+          done
+          if test -x "/home/zomorod2/virtualenv/$rel/3.10/bin/python"; then
+            (cd "$root" && DJANGO_SETTINGS_MODULE=office_runtime.settings "/home/zomorod2/virtualenv/$rel/3.10/bin/python" - <<'PY'
+          try:
+              from office_passenger_wsgi import application
+              from django.conf import settings
+              assert settings.FORCE_SCRIPT_NAME=="/company/office-preflight-2a8a0f4b9e17"
+              assert settings.ROOT_URLCONF=="office_runtime.urls"
+          except Exception as exc:
+              print("PREVIEW_SELECTOR_WSGI_IMPORT=failed_"+type(exc).__name__)
+          else:
+              print("PREVIEW_SELECTOR_WSGI_IMPORT=passed")
+          PY
+            )
+          fi
+          echo "READONLY_PREVIEW_ROUTE_DIAGNOSTIC=complete"
+          REMOTE
+      - name: Correlate CloudLinux registered application inventory without exposing configuration
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          test "$COMMAND_HOST" = saeit-cpanel
+          timeout 95s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          root = "zomorod_office_preflight_2a8a0f4b9e17"
+          uri = "company/office-preflight-2a8a0f4b9e17"
+          cmd = ["/usr/sbin/cloudlinux-selector", "get", "--json", "--interpreter", "python"]
+
+          def evidence(args):
+              try:
+                  completed = subprocess.run(cmd + args, capture_output=True, text=True, timeout=18)
+                  parsed = json.loads(completed.stdout)
+              except (OSError, ValueError, subprocess.TimeoutExpired):
+                  return ("unavailable", "unknown", "unknown", "unknown")
+              if not isinstance(parsed, dict) or parsed.get("result") != "success":
+                  return ("invalid_response", "unknown", "unknown", "unknown")
+              registrations = []
+              def visit(node):
+                  if isinstance(node, dict):
+                      for key, value in node.items():
+                          if key in ("applications", "apps") and isinstance(value, dict):
+                              registrations.extend((str(k), v) for k, v in value.items())
+                          visit(value)
+                  elif isinstance(node, list):
+                      for value in node:
+                          visit(value)
+              visit(parsed)
+              exact = any(
+                  k.strip("/") == root or
+                  (isinstance(v, dict) and str(v.get("app_root", "")).strip("/") == root)
+                  for k, v in registrations
+              )
+              correct_uri = any(
+                  (k.strip("/") == root or
+                   (isinstance(v, dict) and str(v.get("app_root", "")).strip("/") == root)) and
+                  isinstance(v, dict) and str(v.get("app_uri", "")).strip("/") == uri
+                  for k, v in registrations
+              )
+              count = "nonzero" if registrations else "zero"
+              return ("success", str(exact).lower(), str(correct_uri).lower(), count)
+
+          for label, args in (("USER", ["--user", "zomorod2"]),
+                              ("DOMAIN", ["--domain", "zomorodmelal.ir"])):
+              status, exact, uri_match, count = evidence(args)
+              print("PREVIEW_SELECTOR_" + label + "_QUERY=" + status)
+              print("PREVIEW_SELECTOR_" + label + "_REGISTRATION_EXACT=" + exact)
+              print("PREVIEW_SELECTOR_" + label + "_URI_EXACT=" + uri_match)
+              print("PREVIEW_SELECTOR_" + label + "_APP_COUNT=" + count)
+
+          child = Path("/home/zomorod2/public_html/company/office-preflight-2a8a0f4b9e17/.htaccess")
+          if child.is_file() and not child.is_symlink():
+              lines = child.read_text(errors="replace").splitlines()
+              print("PREVIEW_CHILD_PASSENGER_ENABLED_ON=" +
+                    str(any(line.strip().lower() == "passengerenabled on" for line in lines)).lower())
+              print("PREVIEW_CHILD_HAS_APP_ROOT=" +
+                    str(any(line.lstrip().startswith("PassengerAppRoot ") for line in lines)).lower())
+          else:
+              print("PREVIEW_CHILD_ROUTING=not_attested")
+          print("SELECTOR_PREVIEW_INVENTORY_AUDIT=read_only")
+          PY
+          REMOTE
+      - name: Inspect independent preview ownership, rewrite hierarchy and app stderr read-only
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          test "$COMMAND_HOST" = saeit-cpanel
+          timeout 105s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import re
+          import os
+
+          home = Path("/home/zomorod2")
+          docroot = home / "public_html"
+          stem = "office-preflight-9ab790b15a42"
+          app = home / "zomorod_office_top_preflight_9ab790b15a42"
+          route = docroot / stem
+          rootHt = docroot / ".htaccess"
+          companyHt = docroot / "company" / ".htaccess"
+          routeHt = route / ".htaccess"
+
+          for label, path in (("ROOT", rootHt),
+                              ("COMPANY_PARENT", companyHt),
+                              ("INDEPENDENT_ROUTE", routeHt)):
+              print("OFFICE_TRACE_"+label+"_HTACCESS_PRESENT="+str(path.is_file() and not path.is_symlink()).lower())
+              if not path.is_file() or path.is_symlink():
+                  continue
+              rows = path.read_text(encoding="utf-8", errors="replace").splitlines()
+              active = [line.strip() for line in rows if line.strip() and not line.lstrip().startswith("#")]
+              directives = Counter(re.split(r"\s+",line,1)[0].lower() for line in active)
+              print("OFFICE_TRACE_"+label+"_ACTIVE_ROWS="+str(len(active)))
+              for key in ("rewriteengine", "rewritecond", "rewriterule", "passengerenabled",
+                          "passengerapproot", "passengerbaseuri", "passengerpython", "passengerstartupfile",
+                          "directoryindex", "fallbackresource", "errordocument", "sethandler"):
+                  print("OFFICE_TRACE_"+label+"_"+key.upper()+"_COUNT="+str(directives[key]))
+              if any(re.fullmatch(r"PassengerEnabled\s+off",line,re.I) for line in active):
+                  print("OFFICE_TRACE_"+label+"_PASSENGER_DISABLED=true")
+              if any(re.fullmatch(r"PassengerEnabled\s+on",line,re.I) for line in active):
+                  print("OFFICE_TRACE_"+label+"_PASSENGER_ENABLED=true")
+              if label == "INDEPENDENT_ROUTE":
+                  expected = {
+                      "passengerapproot":str(app),
+                      "passengerbaseuri":"/"+stem,
+                      "passengerstartupfile":"office_passenger_wsgi.py"
+                  }
+                  for key,val in expected.items():
+                      actual=[line.split(None,1)[1].strip().strip('"') for line in active
+                              if len(line.split(None,1))==2 and line.split(None,1)[0].lower()==key]
+                      print("OFFICE_TRACE_CHILD_"+key.upper()+"_EXACT="+
+                            ("true" if len(actual)==1 and actual[0]==val else "false"))
+                  python_path=[line.split(None,1)[1].strip().strip('"') for line in active
+                               if len(line.split(None,1))==2 and line.split(None,1)[0].lower()=="passengerpython"]
+                  print("OFFICE_TRACE_CHILD_PASSENGER_PYTHON_EXECUTABLE="+
+                        str(len(python_path)==1 and os.access(python_path[0],os.X_OK)).lower())
+              if label == "ROOT":
+                  print("OFFICE_TRACE_ROOT_PHP_ROUTER_REFERENCED="+str(
+                      any(re.search(r"(?:index|app)\.php",line,re.I) for line in active)).lower())
+                  print("OFFICE_TRACE_ROOT_CATCHALL_REWRITE="+str(
+                      any(line.lower().startswith("rewriterule") and re.search(r"\s(?:index|app)\.php",line,re.I)
+                          for line in active)).lower())
+          print("OFFICE_TRACE_INDEPENDENT_ROUTE_DIR_EXISTS="+str(route.is_dir()).lower())
+          print("OFFICE_TRACE_INDEPENDENT_ROUTE_IS_SYMLINK="+str(route.is_symlink()).lower())
+          print("OFFICE_TRACE_INDEPENDENT_APP_ROOT_EXISTS="+str(app.is_dir()).lower())
+          print("OFFICE_TRACE_INDEPENDENT_APP_MARKER_EXISTS="+str((app/".preview-registered").is_file()).lower())
+          print("OFFICE_TRACE_INDEPENDENT_STARTUP_EXISTS="+str((app/"office_passenger_wsgi.py").is_file()).lower())
+          for label,filename in (("APP_STDERR",app/"stderr.log"),("APP_ERROR",app/"error.log"),
+                                 ("ROUTE_ERROR",route/"error_log")):
+              regular=filename.is_file() and not filename.is_symlink()
+              print("OFFICE_TRACE_"+label+"_PRESENT="+str(regular).lower())
+              if regular:
+                  data=filename.read_bytes()[-32768:]
+                  patterns={
+                      "IMPORT_ERROR":rb"(?:ImportError|ModuleNotFoundError)",
+                      "DJANGO_ERROR":rb"(?:ImproperlyConfigured|DisallowedHost|django\.core)",
+                      "WSGI_ERROR":rb"(?:WSGI|Traceback|Exception)",
+                      "PERMISSION_ERROR":rb"(?:PermissionError|Permission denied)",
+                  }
+                  for name,regex in patterns.items():
+                      print("OFFICE_TRACE_"+label+"_"+name+"="+str(bool(re.search(regex,data,re.I))).lower())
+          print("OFFICE_TRACE_READONLY=true")
+          PY
+          REMOTE
+      - name: Audit CloudLinux Selector ownership and LiteSpeed integration read-only
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          test "$COMMAND_HOST" = saeit-cpanel
+          timeout 90s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import os,stat
+          home=Path("/home/zomorod2")
+          selector=home/".cl.selector"
+          cache=selector/"htaccess_cache"
+          docroot=home/"public_html"
+          route=docroot/"office-preflight-9ab790b15a42"
+          print("HOST_READONLY_SELECTOR_DIR_EXISTS="+str(selector.is_dir() and not selector.is_symlink()).lower())
+          print("HOST_READONLY_HTACCESS_CACHE_EXISTS="+str(cache.is_file() and not cache.is_symlink()).lower())
+          for name,path in (("SELECTOR_DIR",selector),("HTACCESS_CACHE",cache),("PUBLIC_ROOT",docroot),("PREVIEW_ROUTE",route)):
+              try:
+                  meta=path.lstat()
+              except (OSError,ValueError):
+                  print("HOST_READONLY_"+name+"_STAT=unavailable")
+                  continue
+              print("HOST_READONLY_"+name+"_STAT=ok")
+              print("HOST_READONLY_"+name+"_OWNED_BY_CPANEL_USER="+str(meta.st_uid==os.geteuid()).lower())
+              print("HOST_READONLY_"+name+"_IS_SYMLINK="+str(stat.S_ISLNK(meta.st_mode)).lower())
+          script=Path("/usr/local/lsws/admin/misc/enable_ruby_python_selector.sh")
+          print("HOST_READONLY_LSWS_SELECTOR_INTEGRATION_SCRIPT_EXISTS="+str(script.is_file()).lower())
+          print("HOST_READONLY_LSWS_SELECTOR_INTEGRATION_SCRIPT_EXECUTABLE="+str(os.access(script,os.X_OK)).lower())
+          good=home/"zomorod_office_top_preflight_9ab790b15a42"/".public-html-htaccess.original"
+          wrong=home/".private"/"zomorod-company-office"/".public-html-htaccess.original"
+          print("HOST_READONLY_CORRECT_ROOT_HTACCESS_BACKUP_PRESENT="+str(good.is_file()).lower())
+          print("HOST_READONLY_OBSOLETE_BACKUP_PATH_PRESENT="+str(wrong.is_file()).lower())
+          print("HOST_SELECTOR_AND_BACKUP_AUDIT=read_only")
+          PY
+          REMOTE
+      - name: Classify root Passenger ownership and rewrite routing read-only
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          test "$COMMAND_HOST" = saeit-cpanel
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          timeout 100s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path("/home/zomorod2/public_html/.htaccess")
+          assert root.is_file() and not root.is_symlink()
+          values=[x.strip() for x in root.read_text(errors="replace").splitlines()
+                  if x.strip() and not x.lstrip().startswith("#")]
+          directives={}
+          for line in values:
+              pieces=line.split(None,1)
+              if len(pieces)==2:
+                  directives.setdefault(pieces[0].lower(),[]).append(pieces[1].strip().strip('"'))
+          uris={"office":"office-preflight-9ab790b15a42/secure-login/",
+                "existing":"company/office/messages/",
+                "health":"api/health/",
+                "missing":"missing-route-canary-11a0c83f/"}
+          base=directives.get("passengerbaseuri",[])
+          print("TRACE_ROOT_PASSENGER_BASE_URI_IS_SLASH="+str(len(base)==1 and base[0]=="/").lower())
+          app=directives.get("passengerapproot",[])
+          print("TRACE_ROOT_HAS_PASSENGER_APP="+str(bool(app)).lower())
+          print("TRACE_ROOT_PASSENGER_APP_IS_SAEIT="+str(len(app)==1 and app[0].rstrip("/").endswith("/Saeit")).lower())
+          rules=directives.get("rewriterule",[])
+          print("TRACE_ROOT_REWRITE_RULE_COUNT="+str(len(rules)))
+          for i,rule in enumerate(rules):
+              parts=rule.split()
+              if len(parts)<2:
+                  print("TRACE_REWRITE_"+str(i)+"_CLASS=unparseable")
+                  continue
+              pattern,target=parts[0],parts[1]
+              try:
+                  flags=re.I if any("NC" in item.upper().split(",") for item in parts[2:]) else 0
+                  compiled=re.compile(pattern,flags)
+                  matches={k:compiled.match(path) is not None for k,path in uris.items()}
+              except re.error:
+                  matches={k:False for k in uris}
+              if target=="-": group="passthrough"
+              elif target.startswith(("http://","https://")): group="external_redirect"
+              elif target.endswith(".php"): group="php"
+              elif target.endswith(".py"): group="python"
+              elif target.startswith("/"): group="absolute_path"
+              else: group="relative_path"
+              for key,value in matches.items():
+                  print("TRACE_REWRITE_"+str(i)+"_MATCH_"+key.upper()+"="+str(value).lower())
+              print("TRACE_REWRITE_"+str(i)+"_DESTINATION_CLASS="+group)
+          print("TRACE_ROOT_HTACCESS_READONLY=true")
+          PY
+          REMOTE
+      - name: Inspect active root Django URL declarations without importing or changing production
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          test "$COMMAND_HOST" = saeit-cpanel
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          timeout 90s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          from pathlib import Path
+          import ast
+          root=Path("/home/zomorod2/Saeit")
+          urls=root/"config"/"urls.py"
+          settings=root/"config"/"settings.py"
+          print("ROOT_SOURCE_DIR_EXISTS="+str(root.is_dir() and not root.is_symlink()).lower())
+          print("ROOT_URLCONF_SOURCE_EXISTS="+str(urls.is_file() and not urls.is_symlink()).lower())
+          print("ROOT_SETTINGS_SOURCE_EXISTS="+str(settings.is_file() and not settings.is_symlink()).lower())
+          if urls.is_file() and not urls.is_symlink():
+              source=urls.read_text(encoding="utf-8",errors="replace")
+              tree=ast.parse(source)
+              literals={node.value for node in ast.walk(tree)
+                        if isinstance(node,ast.Constant) and isinstance(node.value,str)}
+              for name,value in (
+                  ("PRIVATE_MESSAGE_ROUTE","company/office/messages/"),
+                  ("PRIVATE_MARKETING_ROUTE","company/office/marketing/"),
+                  ("PRIVATE_OFFICE_ROUTE","company/office/"),
+                  ("PRIVATE_LOGIN_LEGACY_ROUTE","company/office/login/"),
+                  ("INDEPENDENT_PREVIEW_ROUTE","office-preflight-9ab790b15a42/"),
+                  ("HEALTH_ROOT_ROUTE","api/"),
+              ):
+                  print("ROOT_URLCONF_"+name+"_DECLARED="+str(value in literals).lower())
+              office_imports=any(
+                  isinstance(node,ast.ImportFrom) and node.module in
+                  ("company_messaging", "company_marketing", "enterprise_portal")
+                  for node in ast.walk(tree)
+              )
+              print("ROOT_URLCONF_OFFICE_MODULE_DIRECT_IMPORT="+str(office_imports).lower())
+          for name in ("company_messaging","company_marketing","enterprise_portal"):
+              path=root/name/"__init__.py"
+              print("ROOT_SOURCE_PACKAGE_"+name.upper()+"_EXISTS="+str(
+                  path.is_file() and not path.is_symlink()).lower())
+          if settings.is_file() and not settings.is_symlink():
+              source=settings.read_text(encoding="utf-8",errors="replace")
+              tree=ast.parse(source)
+              constants={}
+              for node in tree.body:
+                  if isinstance(node,ast.Assign):
+                      for target in node.targets:
+                          if isinstance(target,ast.Name) and target.id in (
+                              "COMPANY_OFFICE_REQUIRE_MFA","ROOT_URLCONF"):
+                              try:constants[target.id]=ast.literal_eval(node.value)
+                              except (TypeError,ValueError):pass
+              print("ROOT_SOURCE_MFA_FAIL_CLOSED="+str(constants.get("COMPANY_OFFICE_REQUIRE_MFA") is True).lower())
+              print("ROOT_SOURCE_URLCONF_CONFIG="+str(constants.get("ROOT_URLCONF")=="config.urls").lower())
+          print("ROOT_SOURCE_INSPECTION_READONLY=true")
+          PY
+          REMOTE
+      - name: Fingerprint external 404 response classes without printing page content
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-route-fingerprint"
+          mkdir -m 700 -p "$d"
+          for key in health office_login office_root missing_canary original_office root_api_unknown; do
+            case "$key" in
+              health) url="https://zomorodmelal.ir/api/health/" ;;
+              office_login) url="https://zomorodmelal.ir/office-preflight-9ab790b15a42/secure-login/" ;;
+              office_root) url="https://zomorodmelal.ir/office-preflight-9ab790b15a42/" ;;
+              original_office) url="https://zomorodmelal.ir/company/office/messages/" ;;
+              root_api_unknown) url="https://zomorodmelal.ir/api/office-404-route-probe-11a0c83f/" ;;
+              missing_canary) url="https://zomorodmelal.ir/missing-route-canary-11a0c83f/" ;;
+            esac
+            code="$(curl --silent --show-error --max-redirs 0 --max-time 25 --dump-header "$d/$key.headers" --output "$d/$key.body" --write-out '%{http_code}' "$url" || true)"
+            echo "ROUTE_FINGERPRINT_$key"_HTTP="$code"
+            if test -f "$d/$key.body"; then
+              printf 'ROUTE_FINGERPRINT_%s_SHA256=%s\n' "$key" "$(sha256sum "$d/$key.body" | awk '{print $1}')"
+              printf 'ROUTE_FINGERPRINT_%s_BODY_BYTES=%s\n' "$key" "$(wc -c < "$d/$key.body" | tr -d ' ')"
+              if grep -Fq 'ZOMOROD MELAL · PRIVATE ENTERPRISE DESK' "$d/$key.body"; then
+                echo "ROUTE_FINGERPRINT_$key"_PRIVATE_LOGIN=true
+              else
+                echo "ROUTE_FINGERPRINT_$key"_PRIVATE_LOGIN=false
+              fi
+            fi
+            if test -f "$d/$key.headers"; then
+              python3 -B - "$key" "$d/$key.headers" <<'PY'
+          import sys
+          k=sys.argv[1]
+          values={}
+          with open(sys.argv[2],encoding="latin1") as f:
+              for line in f:
+                  if ":" in line:
+                      name,value=line.split(":",1)
+                      if name.lower() in {"server","content-type","x-robots-tag","x-powered-by"}:
+                          values[name.lower()]=value.strip()
+          server=values.get("server","").lower()
+          print("ROUTE_FINGERPRINT_"+k+"_SERVER_CLASS="+
+                ("litespeed" if "litespeed" in server else
+                 "cloudflare" if "cloudflare" in server else
+                 "nginx" if "nginx" in server else
+                 "apache" if "apache" in server else "other_or_hidden"))
+          ctype=values.get("content-type","").lower()
+          print("ROUTE_FINGERPRINT_"+k+"_CONTENT_CLASS="+
+                ("html" if "text/html" in ctype else
+                 "json" if "json" in ctype else "other"))
+          print("ROUTE_FINGERPRINT_"+k+"_X_ROBOTS_NO_INDEX="+str(
+                "noindex" in values.get("x-robots-tag","").lower()).lower())
+          PY
+            fi
+          done
+          if test -f "$d/office_login.body" && test -f "$d/missing_canary.body"; then
+            if cmp -s "$d/office_login.body" "$d/missing_canary.body"; then
+              echo "ROUTE_FINGERPRINT_LOGIN_SAME_AS_MISSING_CANARY=true"
+            else
+              echo "ROUTE_FINGERPRINT_LOGIN_SAME_AS_MISSING_CANARY=false"
+            fi
+          fi
+          python3 -B - "$d" <<'PY'
+          from pathlib import Path
+          from hashlib import sha256
+          import sys
+          folder=Path(sys.argv[1])
+          canonical="\n<!doctype html>\n<html lang=\"en\">\n<head>\n  <title>Not Found</title>\n</head>\n<body>\n  <h1>Not Found</h1><p>The requested resource was not found on this server.</p>\n</body>\n</html>\n".encode("utf-8")
+          assert len(canonical)==179
+          expected=sha256(canonical).hexdigest()
+          for name in ("office_login","office_root","original_office",
+                       "missing_canary","root_api_unknown"):
+              file=folder/(name+".body")
+              if file.is_file():
+                  digest=sha256(file.read_bytes()).hexdigest()
+                  print("ROUTE_DIAG_"+name.upper()+"_EXACT_DJANGO_DEFAULT_404="+str(digest==expected).lower())
+          left=folder/"office_login.body"
+          right=folder/"root_api_unknown.body"
+          if left.is_file() and right.is_file():
+              print("ROUTE_DIAG_LOGIN_MATCHES_ROOT_DJANGO_API_CANARY="+str(
+                  left.read_bytes()==right.read_bytes()).lower())
+          print("ROUTE_DIAG_STOCK_DJANGO_REFERENCE_SHA256="+expected)
+          PY
+          rm -rf -- "$d"
+          echo "ROUTE_DIAGNOSTIC_READONLY=true"
+      - name: Remove runner transient relay credentials
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
