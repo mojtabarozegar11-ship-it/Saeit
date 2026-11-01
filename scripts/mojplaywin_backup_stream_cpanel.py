@@ -126,6 +126,42 @@ def stream_mysql():
     copy_exact_process_stdout(cmd, env=env)
 
 
+
+def assert_no_unbacked_symlinks(roots=(APP, DOCROOT), max_entries=200_000):
+    """Reject a misleading 'complete' file archive with external dependencies.
+
+    Pure metadata check: no file content read, no link followed during walk,
+    and no private path or link target included in any error.
+    """
+    for root in roots:
+        if root.is_symlink() or not root.is_dir():
+            raise RuntimeError("UNSAFE_PRIMARY_BACKUP_ROOT")
+    roots = tuple(root.resolve() for root in roots)
+    entries = links = 0
+
+    def onerror(_error):
+        raise RuntimeError("BACKUP_LINK_SCAN_INCOMPLETE")
+
+    for root in roots:
+        for directory, dirs, files in os.walk(
+                root, followlinks=False, onerror=onerror):
+            entries += len(dirs) + len(files)
+            if entries > max_entries:
+                raise RuntimeError("BACKUP_LINK_SCAN_LIMIT")
+            for entry in dirs + files:
+                path = Path(directory) / entry
+                if not path.is_symlink():
+                    continue
+                links += 1
+                try:
+                    destination = path.resolve(strict=True)
+                except (OSError, RuntimeError):
+                    raise RuntimeError("BACKUP_LINK_UNRESOLVABLE") from None
+                if not any(destination == allowed or allowed in destination.parents
+                           for allowed in roots):
+                    raise RuntimeError("BACKUP_LINK_OUTSIDE_APPROVED_ROOTS")
+    return {"checked_entries": entries, "symlinks_inside_roots": links}
+
 def stream_files():
     for p in (APP, DOCROOT):
         if p.is_symlink() or not p.is_dir():
@@ -134,6 +170,7 @@ def stream_files():
         raise RuntimeError("tar unavailable")
     # Paths are relative to one fixed hosting account. GNU tar preserves links
     # as link entries; does NOT silently follow them to unapproved other sites.
+    assert_no_unbacked_symlinks()
     cmd = ["nice", "-n", "15", "tar", "-C", str(HOME), "-cf", "-",
            APP.name, DOCROOT.name]
     copy_exact_process_stdout(cmd)
