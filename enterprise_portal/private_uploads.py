@@ -32,8 +32,12 @@ def _private_root(*, create=False):
     root = Path(getattr(settings, "COMPANY_OFFICE_ATTACHMENT_ROOT", default))
     if not root.is_absolute() or "public_html" in root.parts or root == Path("/"):
         raise RuntimeError("Unsafe office attachment storage directory")
-    # Reject redirects through an attacker-controlled symlink on the private path.
-    for candidate in (root, root.parent, root.parent.parent):
+    # Inspect every ancestor before mkdir: a symlink farther than two parents
+    # above the root can otherwise redirect private uploads outside this tree.
+    # The setting must also be a canonical absolute path (no dot segments).
+    if ".." in root.parts:
+        raise RuntimeError("Unsafe office attachment storage directory")
+    for candidate in (root, *root.parents):
         if candidate.is_symlink():
             raise RuntimeError("Symlinked office attachment directory")
     if create:
