@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.test import Client, TestCase, override_settings
 
 from enterprise_portal.models import AuditEvent, BusinessUnit, JournalEntry, StockMovement
+from company_marketing.models import Campaign
 from .models import AssistantRun, MasterCommand, UnitMembership
 
 
@@ -86,6 +87,79 @@ class MasterCommandSecurityTests(TestCase):
         )
         self.assertEqual(tampered.status_code, 409)
         self.assertEqual(AssistantRun.objects.count(), 1)
+
+    def test_automatic_marketing_command_reads_only_selected_business_unit(self):
+        Campaign.objects.create(
+            unit=self.farm, code="farm-ads", title="کمپین کشاورزی",
+            objective="فروش", status="active", owner=self.owner,
+        )
+        for number in range(3):
+            Campaign.objects.create(
+                unit=self.factory, code=f"private-factory-{number}",
+                title=f"محرمانه کارخانه {number}",
+                objective="تولید", status="active", owner=self.owner,
+            )
+        self.client.force_login(self.owner)
+        result = self.client.post(
+            PATH,
+            self.command(
+                code="auto",
+                instruction="کمپین‌های تبلیغات و سرنخ فروش این واحد را بررسی کن",
+            ),
+            secure=True,
+        )
+        self.assertEqual(result.status_code, 302)
+        record = MasterCommand.objects.select_related("report").get()
+        self.assertEqual(record.assistant_code, "marketing-performance")
+        self.assertEqual(record.report.unit, self.farm)
+        findings = record.report.findings
+        self.assertTrue(any(
+            item["source"] == "Campaign" and "1 فعال" in item["detail"]
+            for item in findings
+        ))
+        self.assertNotIn("محرمانه کارخانه", str(findings))
+        self.assertEqual(AuditEvent.objects.get().detail["routing_mode"], "keyword-scope-v1")
+
+    def test_ambiguous_or_unknown_auto_command_creates_nothing(self):
+        self.client.force_login(self.owner)
+        for instruction in (
+            "ریسک و بودجه را با هم ارزیابی کن",
+            "لطفاً یک بررسی انجام بده",
+        ):
+            response = self.client.post(
+                PATH,
+                self.command(code="auto", instruction=instruction),
+                secure=True,
+            )
+            self.assertEqual(response.status_code, 422)
+            self.assertContains(response, "انتخاب", status_code=422)
+        self.assertFalse(MasterCommand.objects.exists())
+        self.assertFalse(AssistantRun.objects.exists())
+        self.assertFalse(AuditEvent.objects.exists())
+
+    def test_automatic_route_cannot_bypass_marketing_source_permissions(self):
+        self.client.force_login(self.manager)
+        result = self.client.post(
+            PATH, self.command(code="auto", instruction="بازاریابی و کمپین"),
+            secure=True,
+        )
+        self.assertEqual(result.status_code, 403)
+        self.assertFalse(MasterCommand.objects.exists())
+        self.assertFalse(AssistantRun.objects.exists())
+
+    def test_marketing_permissions_can_authorize_manager_auto_analysis(self):
+        allowed = Permission.objects.filter(
+            content_type__app_label="company_marketing",
+            codename__in=("view_campaign", "view_lead", "view_publication"),
+        )
+        self.manager.user_permissions.add(*allowed)
+        self.client.force_login(self.manager)
+        response = self.client.post(
+            PATH, self.command(code="auto", instruction="بازاریابی این واحد"),
+            secure=True,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(MasterCommand.objects.get().assistant_code, "marketing-performance")
 
     def test_recorded_command_instruction_cannot_be_rewritten(self):
         self.client.force_login(self.owner)

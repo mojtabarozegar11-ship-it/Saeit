@@ -14,6 +14,7 @@ from enterprise_portal.models import (
     StockMovement, WorkTask,
 )
 from enterprise_portal.services import stock_balance
+from company_marketing.models import Campaign, Lead, Publication
 from .access import require_unit
 from .catalog import CATALOG
 from .manual_guides import MANUAL_GUIDES
@@ -53,6 +54,9 @@ HANDLER_VIEW_PERMISSIONS = {
     "tasks": ("enterprise_portal.view_worktask",),
     "sites": ("ecosystem_hub.view_managedsite",),
     "agents": ("ecosystem_hub.view_proposedautomation",),
+    "marketing": ("company_marketing.view_campaign",
+                  "company_marketing.view_lead",
+                  "company_marketing.view_publication"),
 }
 
 
@@ -192,6 +196,39 @@ def scan(unit, code):
             else:
                 findings.append(issue(k.label, f"هدف {k.target}؛ عملکرد ثبت‌شده {k.actual} {k.measurement_unit}.",
                     source=f"PerformanceIndicator:{k.pk}"))
+    elif mode == "marketing":
+        campaigns = Campaign.objects.filter(unit=unit)
+        active = campaigns.filter(status="active")
+        leads = Lead.objects.filter(unit=unit)
+        open_leads = leads.exclude(stage__in=("won", "lost"))
+        queued = Publication.objects.filter(campaign__unit=unit, status="approved")
+        due_posts = queued.filter(scheduled_at__lte=timezone.now())
+        findings.extend((
+            issue("وضعیت کمپین‌ها",
+                  f"{campaigns.count()} کمپین ثبت‌شده؛ {active.count()} فعال. "
+                  "بودجه سقف برنامه است، نه هزینه واقعی.", source="Campaign"),
+            issue("قیف سرنخ‌های فروش",
+                  f"{leads.count()} سرنخ ثبت‌شده؛ {open_leads.count()} باز و نیازمند پیگیری. "
+                  "سرنخ، فروش قطعی نیست.", source="Lead"),
+            issue("انتشارهای بازاریابی در صف",
+                  f"{queued.count()} محتوای تأییدشده و هنوز پذیرش‌نشده؛ "
+                  f"{due_posts.count()} موعدرسیده. انتشار خودکار انجام نشد.",
+                  severity="warning" if due_posts.exists() else "info",
+                  source="Publication"),
+        ))
+        for campaign in active.filter(ends_on__lt=today).order_by("ends_on", "pk")[:10]:
+            findings.append(issue(
+                "کمپین فعال با پایان گذشته: " + campaign.title,
+                f"موعد پایان ثبت‌شده {campaign.ends_on} گذشته است؛ وضعیت دستی نیازمند بررسی است.",
+                severity="warning", source=f"Campaign:{campaign.pk}",
+            ))
+        for publication in due_posts.order_by("scheduled_at", "pk")[:8]:
+            findings.append(issue(
+                "انتشار موعدرسیده: " + publication.title,
+                f"برنامه انتشار {publication.scheduled_at.isoformat()}؛ وضعیت هنوز تأییدشده است. "
+                "برای ارسال به سرویس‌دهنده اقدام خودکاری انجام نشد.",
+                severity="warning", source=f"Publication:{publication.pk}",
+            ))
     elif mode == "sites":
         for site in ManagedSite.objects.filter(unit=unit):
             status = site.get_status_display()
