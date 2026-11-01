@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""Read-only inventory of VPS factory SQLite backup candidates.
+
+This tool can never delete, rename, compress or modify a backup. Its output is
+an audit, NOT authorization to run the disabled retention workflow.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sqlite3
+import stat
+import time
+from pathlib import Path
+from urllib.parse import quote
+
+DEFAULT_ROOT = Path("/home/githubops/factory-runtime/operations/backups")
+EXACT_SNAPSHOT = re.compile(r"master-before-[0-9]{8}T[0-9]{6}Z\.sqlite3")
+SQLITE_MAGIC = b"SQLite format 3\x00"
+MAX_WALK_FILES = 30_000
+MAX_DEPTH = 8
+MAX_CHECK_SECONDS = 75
+
+
+def check_database(path: Path, seconds: int = MAX_CHECK_SECONDS) -> tuple[bool, str]:
+    try:
+        with path.open("rb") as stream:
+            if stream.read(16) != SQLITE_MAGIC:
+                return False, "not_sqlite_header"
+        url = "file:" + quote(str(path.absolute()), safe="/") + "?mode=ro"
+        conn = sqlite3.connect(url, uri=True, timeout=5)
+        try:
+            conn.execute("PRAGMA query_only=ON")
+            deadline = time.monotonic() + seconds
+            conn.set_progress_handler(lambda: int(time.monotonic() > deadline), 10_000)
+            result = conn.execute("PRAGMA quick_check").fetchone()
+            conn.set_progress_handler(None, 0)
+            if result and result[0] == "ok":
+                return True, "quick_check_ok"
+            return False, "quick_check_failed"
+        finally:
+            conn.close()
+    except (OSError, sqlite3.DatabaseError) as exc:
+        return False, type(exc).__name__
+
+
+def audit(root: Path) -> dict:
+    root = Path(root)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("BACKUP_ROOT_MISSING_OR_UNSAFE")
+    base = root.resolve(strict=True)
+    device = os.lstat(base).st_dev
+    seen = 0
+    records = []
+    for directory, folders, files in os.walk(base, topdown=True, followlinks=False):
+        here = Path(directory)
+        depth = len(here.relative_to(base).parts)
+        if depth > MAX_DEPTH:
+            raise ValueError("BACKUP_TREE_TOO_DEEP")
+        folders[:] = sorted(
+            name for name in folders
+            if not (here / name).is_symlink()
+            and os.lstat(here / name).st_dev == device
+        )
+        for name in sorted(files):
+            seen += 1
+            if seen > MAX_WALK_FILES:
+                raise ValueError("BACKUP_TREE_LIMIT_EXCEEDED")
+            if not name.endswith(".sqlite3"):
+                continue
+            path = here / name
+            pre = os.lstat(path)
+            if not stat.S_ISREG(pre.st_mode) or pre.st_dev != device:
+                continue
+            stable_link = pre.st_nlink == 1
+            verified, check = check_database(path) if stable_link else (False, "hardlinked")
+            post = os.lstat(path)
+            stable = (
+                pre.st_dev == post.st_dev and pre.st_ino == post.st_ino
+                and pre.st_size == post.st_size and pre.st_mtime_ns == post.st_mtime_ns
+                and pre.st_nlink == post.st_nlink
+            )
+            records.append({
+                "path_relative": path.relative_to(base).as_posix(),
+                "bytes": pre.st_size,
+                "age_days": round(max(0, time.time() - pre.st_mtime) / 86400, 2),
+                "links": pre.st_nlink,
+                "exact_master_before_name": bool(EXACT_SNAPSHOT.fullmatch(name)),
+                "stable_during_audit": stable,
+                "quick_check_ok": verified and stable,
+                "check_result": check if stable else "changed_during_audit",
+                "approved_for_deletion": False,
+            })
+    records.sort(key=lambda r: (r["age_days"], r["path_relative"]))
+    verified_master = [r for r in records if (
+        r["exact_master_before_name"] and r["quick_check_ok"]
+    )]
+    keep = [r["path_relative"] for r in verified_master[:2]]
+    return {
+        "schema": "factory.vps.sqlite.backup.audit.v1",
+        "observed_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "backup_root": str(base),
+        "read_only": True,
+        "files_changed_or_deleted": 0,
+        "factory_hold_preserved": True,
+        "offsite_functional_restore_verified": False,
+        "active_references_verified": False,
+        "deletion_gate": "BLOCKED_PENDING_OFFSITE_RESTORE_AND_SEPARATE_APPROVAL",
+        "files_scanned": seen,
+        "sqlite_count": len(records),
+        "sqlite_total_bytes": sum(r["bytes"] for r in records),
+        "verified_exact_master_count": len(verified_master),
+        "keep_newest_two_verified_master_paths": keep,
+        "records": records,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, default=DEFAULT_ROOT,
+                        help="Read-only source directory; no files are modified.")
+    args = parser.parse_args()
+    result = audit(args.root)
+    print("FACTORY_BACKUP_AUDIT=" + json.dumps(result, sort_keys=True))
+    if not result["sqlite_count"]:
+        raise SystemExit("NO_SQLITE_BACKUPS_FOUND")
+
+
+if __name__ == "__main__":
+    main()
