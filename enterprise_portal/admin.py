@@ -216,8 +216,7 @@ class OfficeLetterAdmin(admin.ModelAdmin):
     list_display = ("number", "subject", "direction", "classification", "assigned_to", "sent_on")
     list_filter = ("direction", "classification", "sent_on")
     search_fields = ("number", "subject")
-    # Status is only changed by the private audited workflow, never a raw admin edit.
-    readonly_fields = ("created_by", "created_at", "updated_at", "status")
+    readonly_fields = ("created_by", "created_at", "updated_at")
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -265,7 +264,8 @@ class WorkTaskAdmin(OwnedByAdmin):
     list_display = ("title", "unit", "assigned_to", "priority", "status", "due_on")
     list_filter = ("priority", "status", "unit")
     search_fields = ("title", "description")
-    readonly_fields = ("created_by", "created_at", "updated_at")
+    # Status changes require the audited private task workflow.
+    readonly_fields = ("created_by", "created_at", "updated_at", "status")
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
