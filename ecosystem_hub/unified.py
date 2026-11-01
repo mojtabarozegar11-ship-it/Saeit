@@ -3,6 +3,7 @@
 Counts are not evidence of autonomous execution. No payments, inventory posting,
 external messages, factory machines, or deployments are triggered here.
 """
+from django.core.exceptions import PermissionDenied
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
@@ -10,6 +11,7 @@ from enterprise_portal.views import office_access
 from enterprise_portal.models import CommercialDocument, JournalEntry, ManagementProject, WorkTask
 from company_marketing.models import Campaign, Lead, Publication
 from company_messaging.models import Message
+from .access import can_view_unit
 from .models import AssistantRun, ProcurementNeed, ProductionOrder, ProposedAutomation, QualityInspection
 from .views import page, require_hub, select_unit
 
@@ -30,6 +32,8 @@ def snapshot_for_unit(user, unit, *, today=None):
     """The caller must pass a business unit returned by select_unit()."""
     if unit is None:
         return []
+    if not can_view_unit(user, unit):
+        raise PermissionDenied("Access to this business unit is not allowed.")
     today = today or timezone.localdate()
     scope = {"unit": unit}
     sections = (
