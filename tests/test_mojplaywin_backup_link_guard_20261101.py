@@ -1,0 +1,346 @@
+"""Fail-closed primary backup link guards, using only private synthetic files."""
+import tempfile
+import io
+import subprocess
+import tarfile
+import shutil
+import json
+import unittest
+from pathlib import Path
+
+from scripts.mojplaywin_backup_stream_cpanel import (assert_no_unbacked_symlinks, assert_scoped_public_asset_links, scoped_files_tar_command)
+from scripts.mojplaywin_restore_files_isolated_runner import recover
+
+
+class BackupLinkGuardTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.app = self.root / "Saeit-staging"
+        self.site = self.root / "mojplaywin.com"
+        self.app.mkdir()
+        self.site.mkdir()
+        (self.app / "main.py").write_text("synthetic", encoding="utf-8")
+        (self.site / "index.html").write_text("synthetic", encoding="utf-8")
+
+    def test_regular_roots_without_symlinks_pass(self):
+        report = assert_no_unbacked_symlinks((self.app, self.site))
+        self.assertEqual(report["symlinks_inside_roots"], 0)
+
+    def test_internal_symlink_only_passes(self):
+        (self.site / "alias").symlink_to(self.app / "main.py")
+        report = assert_no_unbacked_symlinks((self.app, self.site))
+        self.assertEqual(report["symlinks_inside_roots"], 1)
+
+    def test_existing_external_target_blocks_archive(self):
+        private = self.root / "other-private-root"
+        private.mkdir()
+        (private / "external").write_text("private synthetic", encoding="utf-8")
+        (self.site / "outside").symlink_to(private / "external")
+        with self.assertRaisesRegex(RuntimeError, "BACKUP_LINK_OUTSIDE_APPROVED_ROOTS"):
+            assert_no_unbacked_symlinks((self.app, self.site))
+        self.assertTrue((private / "external").exists())
+
+    def test_dangling_symlink_blocks_archive(self):
+        (self.site / "broken").symlink_to(self.root / "missing")
+        with self.assertRaisesRegex(RuntimeError, "BACKUP_LINK_UNRESOLVABLE"):
+            assert_no_unbacked_symlinks((self.app, self.site))
+
+    def test_unbounded_walk_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "BACKUP_LINK_SCAN_LIMIT"):
+            assert_no_unbacked_symlinks((self.app, self.site), max_entries=1)
+
+
+
+class ScopedPublicAssetsPreflightTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.account = Path(tmp.name)
+        self.app = self.account / "Saeit-staging"
+        self.site = self.account / "mojplaywin.com"
+        self.app.mkdir()
+        self.site.mkdir()
+        (self.app / "main.py").write_text("synthetic", encoding="utf8")
+        self.nested_site = self.site / "one-synthetic-nested-directory"
+        self.nested_site.mkdir()
+        self.targets = {}
+        for label in ("static", "assets", "uploads"):
+            t = self.account / "external-assets" / label
+            t.mkdir(parents=True)
+            (t / "example.css").write_text("synthetic", encoding="utf8")
+            source_root = self.site if label == "static" else self.nested_site
+            (source_root / label).symlink_to(t, target_is_directory=True)
+            self.targets[label] = t
+
+    def check(self, **overrides):
+        args = {"roots": (self.app, self.site), "home": self.account}
+        args.update(overrides)
+        return assert_scoped_public_asset_links(**args)
+
+    def test_only_three_reachable_alias_subtrees_accepted(self):
+        report = self.check()
+        self.assertEqual(set(report), {"static", "assets", "uploads"})
+        self.assertTrue(all(v[2] == 1 for v in report.values()))
+        self.assertTrue(all(v[3] == len("synthetic") for v in report.values()))
+        self.assertNotIn(str(self.account), json.dumps(report))
+        self.assertTrue((self.app / "main.py").exists())
+
+    def test_synthetic_tar_materializes_aliases_inside_only_primary_roots(self):
+        if not shutil.which("tar"):
+            self.skipTest("GNU tar unavailable")
+        private = self.account / "unlinked-independent-project"
+        private.mkdir()
+        (private / "unlinked-private-data.bin").write_bytes(b"synthetic")
+        self.check()
+        proc = subprocess.run(
+            scoped_files_tar_command(self.account, (self.app, self.site)),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
+        )
+        with tarfile.open(fileobj=io.BytesIO(proc.stdout), mode="r:") as archive:
+            members = {m.name: m for m in archive.getmembers()}
+            source = self.nested_site.name
+            expected = (
+                "Saeit-staging/main.py",
+                "mojplaywin.com/static/example.css",
+                "mojplaywin.com/" + source + "/assets/example.css",
+                "mojplaywin.com/" + source + "/uploads/example.css",
+            )
+            for name in expected:
+                self.assertIn(name, members)
+                self.assertTrue(members[name].isfile())
+            self.assertFalse(any(m.issym() or m.islnk() for m in members.values()))
+            self.assertFalse(any("unlinked-independent-project" in name for name in members))
+            self.assertFalse(any(name.startswith("external-assets") for name in members))
+
+    def test_synthetic_self_contained_tar_isolates_and_recovers(self):
+        if not shutil.which("tar"):
+            self.skipTest("GNU tar unavailable")
+        self.check()
+        archive = subprocess.run(
+            scoped_files_tar_command(self.account, (self.app, self.site)),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
+        ).stdout
+        sandbox = self.account / "fresh-private-restore"
+        sandbox.mkdir(mode=0o700)
+        result = recover(io.BytesIO(archive), sandbox)
+        self.assertTrue(result["restore_complete"])
+        self.assertEqual(result["symlinks_restored"], 0)
+        self.assertEqual(result["root_count_restored"], 2)
+        self.assertTrue((sandbox / "mojplaywin.com" / "static" / "example.css").is_file())
+        self.assertTrue((sandbox / "mojplaywin.com" / self.nested_site.name / "assets" / "example.css").is_file())
+        self.assertTrue((sandbox / "mojplaywin.com" / self.nested_site.name / "uploads" / "example.css").is_file())
+
+    def test_missing_alias_blocks(self):
+        (self.nested_site / "uploads").unlink()
+        with self.assertRaisesRegex(RuntimeError, "REQUIRED_PUBLIC_ASSET_ALIAS_MISSING"):
+            self.check()
+
+    def test_unlisted_primary_symlink_blocks(self):
+        (self.app / "unexpected").symlink_to(self.targets["assets"])
+        with self.assertRaisesRegex(RuntimeError, "UNKNOWN_PUBLIC_ALIAS"):
+            self.check()
+
+    def test_nested_asset_aliases_must_share_one_direct_child_parent(self):
+        other = self.site / "another-synthetic-subsite"
+        other.mkdir()
+        (self.nested_site / "uploads").unlink()
+        (other / "uploads").symlink_to(self.targets["uploads"], target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "NESTED_ASSET_PARENT_MISMATCH"):
+            self.check()
+
+    def test_deeper_nested_asset_alias_fails(self):
+        deeper = self.nested_site / "deeper"
+        deeper.mkdir()
+        (self.nested_site / "assets").unlink()
+        (deeper / "assets").symlink_to(self.targets["assets"], target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "UNEXPECTED_ASSET_ALIAS_DEPTH"):
+            self.check()
+
+    def test_nested_target_symlink_blocks(self):
+        (self.targets["assets"] / "nested").symlink_to(self.targets["uploads"])
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_UNAPPROVED_MEMBER"):
+            self.check()
+
+    def test_sensitive_alias_member_blocks(self):
+        (self.targets["assets"] / "database.sql").write_text("secret synthetic", encoding="utf8")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_SENSITIVE_FILE_SHAPE"):
+            self.check()
+
+    def test_archive_like_asset_is_flagged_without_name_disclosure(self):
+        (self.targets["assets"] / "ordinary-download.zip").write_bytes(b"synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_ARCHIVE_FILE_SHAPE"):
+            self.check()
+
+    def test_gzip_sidecar_with_matching_web_file_is_allowed(self):
+        (self.targets["assets"] / "example.css.gz").write_bytes(b"synthetic")
+        self.assertEqual(set(self.check()), {"static", "assets", "uploads"})
+
+    def test_at_most_two_tiny_orphaned_compressed_assets_are_tolerated(self):
+        (self.targets["assets"] / "unmatched-one.json.gz").write_bytes(b"synthetic")
+        (self.targets["assets"] / "unmatched-two.json.gz").write_bytes(b"synthetic")
+        self.assertEqual(set(self.check()), {"static", "assets", "uploads"})
+
+    def test_sensitive_compressed_orphan_does_not_use_small_file_exception(self):
+        (self.targets["assets"] / "private.db.gz").write_bytes(b"tiny synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_archive_compressed_orphan_is_rejected(self):
+        (self.targets["assets"] / "archive.tar.gz").write_bytes(b"tiny synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_compressed_sidecar_of_directory_is_rejected(self):
+        (self.targets["assets"] / "app.json").mkdir()
+        (self.targets["assets"] / "app.json.gz").write_bytes(b"tiny synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_compressed_sidecar_of_symlink_is_rejected(self):
+        (self.targets["assets"] / "real.json").write_bytes(b"synthetic")
+        (self.targets["assets"] / "link.json").symlink_to(self.targets["assets"] / "real.json")
+        (self.targets["assets"] / "link.json.gz").write_bytes(b"tiny synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_UNAPPROVED_MEMBER|ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_nonstandard_base_sidecar_requires_exact_local_gzip_bytes(self):
+        import gzip
+        source = self.targets["assets"] / "copyright.notice"
+        source.write_bytes(b"synthetic existing public asset")
+        (self.targets["assets"] / "copyright.notice.gz").write_bytes(
+            gzip.compress(source.read_bytes()))
+        self.assertEqual(set(self.check()), {"static", "assets", "uploads"})
+
+    def test_mismatching_nonstandard_compressed_content_is_blocked(self):
+        import gzip
+        source = self.targets["assets"] / "copyright.notice"
+        source.write_bytes(b"known public asset")
+        (self.targets["assets"] / "copyright.notice.gz").write_bytes(
+            gzip.compress(b"DIFFERENT SECRET BYTES"))
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_nonstandard_compression_expansion_is_bounded(self):
+        import gzip
+        source = self.targets["assets"] / "bulk.notice"
+        source.write_bytes(b"A" * (2 * 1024 * 1024 + 1))
+        (self.targets["assets"] / "bulk.notice.gz").write_bytes(
+            gzip.compress(source.read_bytes()))
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_third_orphan_compressed_asset_is_blocked(self):
+        for label in ("one", "two", "three"):
+            (self.targets["assets"] / ("unmatched-" + label + ".json.gz")).write_bytes(b"synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_large_orphan_compressed_asset_is_blocked(self):
+        (self.targets["assets"] / "unmatched.json.gz").write_bytes(b"x" * (256 * 1024 + 1))
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_hidden_asset_entry_blocks(self):
+        (self.targets["assets"] / ".env").write_text("synthetic", encoding="utf8")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_UNAPPROVED_MEMBER"):
+            self.check()
+
+    def test_byte_budget_blocks(self):
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_BYTE_LIMIT"):
+            self.check(max_asset_bytes=1)
+
+    def test_other_account_target_blocks(self):
+        with tempfile.TemporaryDirectory() as external:
+            link = self.nested_site / "assets"
+            link.unlink()
+            link.symlink_to(Path(external), target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, "ASSET_LINK_TARGET_OUT_OF_SCOPE"):
+                self.check()
+
+
+
+class MySqlSourcePreflightTests(unittest.TestCase):
+    """No real database, no dump: regression for the CLI-only release blocker."""
+
+    def _mocks(self, output):
+        from types import SimpleNamespace
+        from urllib.parse import urlsplit
+        from unittest.mock import patch
+        import scripts.mojplaywin_backup_stream_cpanel as source
+        connection = (urlsplit("mysql://audit:synthetic@localhost/audit_db"),
+                      "audit_db", "audit", "synthetic-secret-do-not-print")
+        return source, (
+            patch.object(source, "load_connection", return_value=connection),
+            patch.object(source, "database_matches", return_value=True),
+            patch.object(source.shutil, "which", return_value="/synthetic/bin"),
+            patch.object(source.subprocess, "run",
+                         return_value=SimpleNamespace(returncode=0, stdout=output)),
+        )
+
+    def test_only_select_and_no_secret_or_passenger_claim(self):
+        import json
+        source, guards = self._mocks(b"audit_db\t2\t0\n")
+        with guards[0], guards[1], guards[2], guards[3] as run:
+            report = source.preflight_mysql_source()
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "mariadb")
+        self.assertTrue(any(x.startswith("--execute=SELECT ") for x in command))
+        self.assertNotIn("mariadb-dump", command)
+        self.assertFalse(report["dump_executed"])
+        self.assertFalse(report["passenger_effective_database_proven"])
+        self.assertFalse(report["release_permitted"])
+        self.assertNotIn("synthetic-secret", json.dumps(report))
+
+    def test_account_scope_mismatch_blocks_before_any_sql(self):
+        from unittest.mock import patch
+        source, guards = self._mocks(b"audit_db\\t2\\t0\\n")
+        with (guards[0], patch.object(source, "database_matches", return_value=False),
+              guards[2], guards[3] as run):
+            with self.assertRaisesRegex(RuntimeError, "MYSQL_ACCOUNT_DB_UNVERIFIED"):
+                source.preflight_mysql_source()
+        self.assertEqual(run.call_args.args[0][0], "uapi")
+        self.assertFalse(any("--execute" in item for item in run.call_args.args[0]))
+
+    def test_two_account_databases_require_one_exact_requested_match(self):
+        import json
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import scripts.mojplaywin_backup_stream_cpanel as source
+        def check(names):
+            payload = json.dumps({"result": {"status": 1, "data": [
+                {"database": name} for name in names]}}).encode()
+            with patch.object(source.subprocess, "run",
+                              return_value=SimpleNamespace(returncode=0, stdout=payload)):
+                return source.database_matches("audit_db")
+        self.assertTrue(check(["other_database", "audit_db"]))
+        self.assertFalse(check(["other_database", "unrelated_database"]))
+        self.assertFalse(check(["audit_db", "audit_db"]))
+
+    def test_account_inventory_summary_is_aggregate_only(self):
+        import json
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import scripts.mojplaywin_backup_stream_cpanel as source
+        payload = json.dumps({"result": {"status": 1, "data": [
+            {"database": "other_database"}, {"database": "audit_db"}]}}).encode()
+        with patch.object(source.subprocess, "run",
+                          return_value=SimpleNamespace(returncode=0, stdout=payload)):
+            report = source.mysql_account_inventory_summary("audit_db")
+        self.assertTrue(report["response_wellformed"])
+        self.assertTrue(report["result_status_ok"])
+        self.assertEqual(report["listed_database_count_capped"], 2)
+        self.assertEqual(report["expected_exact_matches"], 1)
+        self.assertNotIn("audit_db", json.dumps(report))
+        self.assertNotIn("other_database", json.dumps(report))
+
+    def test_nontransactional_table_fails_closed(self):
+        source, guards = self._mocks(b"audit_db\t2\t1\n")
+        with guards[0], guards[1], guards[2], guards[3]:
+            with self.assertRaisesRegex(RuntimeError, "MYSQL_TABLE_ENGINE_UNSAFE"):
+                source.preflight_mysql_source()
+
+
+if __name__ == "__main__":
+    unittest.main()
