@@ -512,6 +512,64 @@ jobs:
           )"
           call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
           timeout 180s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
+      - name: Compile deterministic PICM route removal and prove unrelated routes unchanged in memory
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          COMMAND_HOST="${{ steps.link.outputs.command_host }}"
+          probe64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import os, ast, hashlib
+          home=Path.home()
+          if home!=Path("/home/zomorod2") or os.geteuid()==0:
+              raise SystemExit("WRONG_USER")
+          p=home/"Saeit-staging/config/urls.py"
+          original=p.read_text(encoding="utf-8")
+          if hashlib.sha256(original.encode()).hexdigest()!="20a497210ce9f8a488bea8693b5624e3110728fc5d37cdb166f246c265229c09":
+              raise SystemExit("CONFIG_SHA_MISMATCH")
+          lines=original.splitlines(keepends=True)
+          def at(marker):
+              matches=[i for i,x in enumerate(lines) if x.startswith(marker)]
+              if len(matches)!=1:
+                  raise SystemExit("MARKER_COUNT_"+marker)
+              return matches[0]
+          start=at("# SAEIT_PICM_V1_OWNER_SCOPED_ROUTES")
+          stop=at("# Crown Defender V120 read-only account fleet.")
+          if start>=stop or stop-start>60:
+              raise SystemExit("PICM_BLOCK_BOUNDS")
+          begin_media=at("# MOJPLAYWIN_PRIVATE_MEDIA_OWNER_V1")
+          if not lines[begin_media+1].startswith("from core.private_media_library import private_media_library") or "path(\"picm/media/\"" not in lines[begin_media+2]:
+              raise SystemExit("MEDIA_BLOCK_CHANGED")
+          candidate="".join(lines[:start]+lines[stop:begin_media]+lines[begin_media+3:])
+          if candidate.lower().count("picm")!=0:
+              raise SystemExit("PICM_REFS_SURVIVE")
+          old=ast.parse(original)
+          new=ast.parse(candidate)
+          def path_literals(tree):
+              out=[]
+              for node in ast.walk(tree):
+                  if isinstance(node,ast.Call) and isinstance(node.func,ast.Name) and node.func.id in ("path","mpw_commerce_path","_mpw_ayaar_path") and node.args and isinstance(node.args[0],ast.Constant) and isinstance(node.args[0].value,str):
+                      out.append(node.args[0].value)
+              return out
+          before=path_literals(old)
+          after=path_literals(new)
+          non_picm=[x for x in before if not x.startswith("picm/")]
+          if non_picm!=after:
+              raise SystemExit("OTHER_ROUTES_CHANGED")
+          removed=[x for x in before if x.startswith("picm/")]
+          if len(removed)!=13:
+              raise SystemExit("PICM_PATH_COUNT_CHANGED_"+str(len(removed)))
+          print("PICM_ROUTE_REMOVAL_PREVIEW=PASS")
+          print("PICM_ROUTE_REMOVAL_PICM_PATHS="+str(len(removed)))
+          print("PICM_ROUTE_REMOVAL_UNRELATED_PATHS_UNCHANGED="+str(len(after)))
+          print("PICM_ROUTE_REMOVAL_NEW_SHA256="+hashlib.sha256(candidate.encode()).hexdigest())
+          print("PICM_ROUTE_REMOVAL_REMOTE_WRITES=ZERO")
+          
+          PY
+          )"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 150s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
       - name: Confirm zero remote modifications or backup deletions
         shell: bash
         run: |
