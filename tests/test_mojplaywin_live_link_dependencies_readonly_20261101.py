@@ -48,9 +48,9 @@ class LinkRoleTests(unittest.TestCase):
 
 class PrivateShallowTargetMetadataTests(unittest.TestCase):
     def test_alias_purpose_uses_only_fixed_labels(self):
-        self.assertEqual(alias_purpose("mojplaywin.com/hidden/media"), "media_upload_alias")
-        self.assertEqual(alias_purpose("mojplaywin.com/static"), "static_asset_alias")
-        self.assertEqual(alias_purpose("mojplaywin.com/assets"), "general_asset_alias")
+        self.assertEqual(alias_purpose("mojplaywin.com/hidden/media"), "media_alias")
+        self.assertEqual(alias_purpose("mojplaywin.com/static"), "static_alias")
+        self.assertEqual(alias_purpose("mojplaywin.com/assets"), "assets_alias")
         self.assertEqual(alias_purpose("Saeit-staging/unknown-private"), "unclassified_alias")
 
     def test_target_direct_children_no_contents_or_private_names(self):
