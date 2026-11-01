@@ -72,12 +72,8 @@ MARKER_NAMES = {
 def alias_purpose(source_relative):
     """Return a label from a controlled vocabulary, never the link's name."""
     name = PurePosixPath(source_relative).name.casefold()
-    if name in ("media", "uploads"):
-        return "media_upload_alias"
-    if name in ("static",):
-        return "static_asset_alias"
-    if name in ("assets", "images"):
-        return "general_asset_alias"
+    if name in ("static", "media", "uploads", "assets", "images"):
+        return name + "_alias"
     if name in ("venv", ".venv", "virtualenv", "site-packages"):
         return "python_runtime_alias"
     if name in ("src", "core", "templates", "app", "modules", "plugins"):
