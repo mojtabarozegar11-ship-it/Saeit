@@ -293,10 +293,19 @@ class MySqlSourcePreflightTests(unittest.TestCase):
         self.assertFalse(report["release_permitted"])
         self.assertNotIn("synthetic-secret", json.dumps(report))
 
+    def test_account_scope_mismatch_blocks_before_any_sql(self):
+        from unittest.mock import patch
+        source, guards = self._mocks(b"audit_db\\t2\\t0\\n")
+        with (guards[0], patch.object(source, "database_matches", return_value=False),
+              guards[2], guards[3] as run):
+            with self.assertRaisesRegex(RuntimeError, "MYSQL_ACCOUNT_DB_UNVERIFIED"):
+                source.preflight_mysql_source()
+        run.assert_not_called()
+
     def test_nontransactional_table_fails_closed(self):
         source, guards = self._mocks(b"audit_db\t2\t1\n")
         with guards[0], guards[1], guards[2], guards[3]:
-            with self.assertRaisesRegex(RuntimeError, "MYSQL_BACKUP_SOURCE_UNVERIFIED"):
+            with self.assertRaisesRegex(RuntimeError, "MYSQL_TABLE_ENGINE_UNSAFE"):
                 source.preflight_mysql_source()
 
 

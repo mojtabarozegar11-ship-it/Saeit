@@ -103,28 +103,42 @@ def copy_exact_process_stdout(command, *, env=None, verify_after=None):
 
 
 def preflight_mysql_source():
-    """Check dump source with SELECT only; never write or emit credentials."""
-    p, db, user, password = load_connection()
-    if (not database_matches(db) or not shutil.which("mariadb") or
-            not shutil.which("mariadb-dump")):
-        raise RuntimeError("MYSQL_BACKUP_SOURCE_UNVERIFIED")
+    """Bounded source-only SELECT. Errors use fixed codes, never secret values."""
+    try:
+        p, db, user, password = load_connection()
+    except Exception:
+        raise RuntimeError("MYSQL_SOURCE_CONFIG_UNVERIFIED") from None
+    try:
+        account_match = database_matches(db)
+    except Exception:
+        account_match = False
+    if not account_match:
+        raise RuntimeError("MYSQL_ACCOUNT_DB_UNVERIFIED")
+    if not shutil.which("mariadb") or not shutil.which("mariadb-dump"):
+        raise RuntimeError("MYSQL_CLIENT_UNAVAILABLE")
     env = dict(os.environ, MYSQL_PWD=password)
     query = ("SELECT DATABASE(), COUNT(*), "
              "COALESCE(SUM(ENGINE <> 'InnoDB'),0) FROM information_schema.TABLES "
              "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE'")
-    result = subprocess.run(
-        base_cmd(p, db, user) + ["--execute=" + query],
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, timeout=15,
-    )
+    try:
+        result = subprocess.run(
+            base_cmd(p, db, user) + ["--execute=" + query],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise RuntimeError("MYSQL_SOURCE_SELECT_UNAVAILABLE") from None
     if result.returncode or len(result.stdout) > 1024:
-        raise RuntimeError("MYSQL_BACKUP_SOURCE_UNVERIFIED")
+        raise RuntimeError("MYSQL_SOURCE_SELECT_UNAVAILABLE")
     try:
         fields = result.stdout.decode("ascii").strip().split()
-        if (len(fields) != 3 or fields[0] != db or
-                int(fields[1]) < 1 or int(fields[2]) != 0):
-            raise RuntimeError("MYSQL_BACKUP_SOURCE_UNVERIFIED")
+        if len(fields) != 3:
+            raise RuntimeError("MYSQL_SOURCE_SELECT_UNEXPECTED")
+        if fields[0] != db:
+            raise RuntimeError("MYSQL_SESSION_DB_MISMATCH")
+        if int(fields[1]) < 1 or int(fields[2]) != 0:
+            raise RuntimeError("MYSQL_TABLE_ENGINE_UNSAFE")
     except (UnicodeError, ValueError):
-        raise RuntimeError("MYSQL_BACKUP_SOURCE_UNVERIFIED") from None
+        raise RuntimeError("MYSQL_SOURCE_SELECT_UNEXPECTED") from None
     return {
         "classification": "MYSQL_BACKUP_SOURCE_CLI_READ_ONLY",
         "configured_and_session_database_match": True,
@@ -462,7 +476,15 @@ if __name__ == "__main__":
             "ASSET_COMPRESSED_SIDECAR_UNVERIFIED",
         }
         if len(sys.argv) == 2 and sys.argv[1] == "preflight-mysql":
-            print("MYSQL_BACKUP_SOURCE_PREFLIGHT_FAILED_NO_RELEASE", file=sys.stderr)
+            fixed = {
+                "MYSQL_SOURCE_CONFIG_UNVERIFIED", "MYSQL_ACCOUNT_DB_UNVERIFIED",
+                "MYSQL_CLIENT_UNAVAILABLE", "MYSQL_SOURCE_SELECT_UNAVAILABLE",
+                "MYSQL_SOURCE_SELECT_UNEXPECTED", "MYSQL_SESSION_DB_MISMATCH",
+                "MYSQL_TABLE_ENGINE_UNSAFE",
+            }
+            code = str(exc) if type(exc) is RuntimeError and str(exc) in fixed else "UNCLASSIFIED"
+            print("MYSQL_BACKUP_SOURCE_PREFLIGHT_FAILED_NO_RELEASE category=" + code,
+                  file=sys.stderr)
         elif len(sys.argv) == 2 and sys.argv[1] == "preflight-scoped-files":
             code = str(exc) if type(exc) is RuntimeError and str(exc) in safe_codes else "unknown"
             print("SCOPED_PUBLIC_ASSET_PREFLIGHT_FAILED_NO_RELEASE category=" + code, file=sys.stderr)
