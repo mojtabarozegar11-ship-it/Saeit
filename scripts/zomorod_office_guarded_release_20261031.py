@@ -188,8 +188,8 @@ def require_production_dependencies(py: Path) -> None:
     """
     expression = (
         "import importlib.metadata as metadata; "
-        "import django, django_otp; "
-        "assert metadata.version('django-otp') == '1.7.5'"
+        "import django, django_otp, sys; "
+        "sys.exit(0 if metadata.version('django-otp') == '1.7.5' else 21)"
     )
     try:
         completed = subprocess.run(
