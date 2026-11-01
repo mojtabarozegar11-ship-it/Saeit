@@ -7,10 +7,11 @@
 این گفت‌وگوی خصوصی به داده‌های ثبت‌شده شرکت متصل است. متن فرمان به‌صورت قابل پیگیری ذخیره می‌شود،
 اما در این نسخه تنها تحلیل داخلیِ دستیار انتخاب‌شده اجرا می‌شود؛ هیچ دستور پرداخت،
 ارسال پیام، انتشار تبلیغ، جابه‌جایی انبار یا کنترل تجهیزات کارخانه از این صفحه اجرا نمی‌شود.
-متن فرمان برای مستندسازی ذخیره می‌شود و نوع تحلیل را انتخاب دستیار تعیین می‌کند؛ هنوز تفسیر خودکار متن با مدل هوش مصنوعی فعال نیست. خروجی همیشه پیش‌نویسِ نیازمند بازبینی است.
+متن فرمان ثبت و با قواعد موضوعی محلی به دستیار مناسب ارجاع می‌شود. در دستورهای مبهم، انتخاب تخصصی مدیر الزامی است؛ استفاده از مدل زبانی بیرونی فعال نیست. خروجی همیشه پیش‌نویسِ نیازمند بازبینی است.
 </div>
 <section class="hub-section">
   <div class="hub-section-title"><h2>فرمان جدید برای {{ selected_unit.name }}</h2></div>
+  {% if routing_error %}<p class="hub-empty" role="alert">{{ routing_error }}</p>{% endif %}
   {% if specialists %}
   <form class="hub-command-form" method="post" action="{% url 'enterprise_portal:ecosystem_hub:master_command' %}" autocomplete="off">
     {% csrf_token %}
@@ -18,10 +19,10 @@
     <input type="hidden" name="request_key" value="{{ request_key }}">
     <label for="master-command-text">دستور یا پرسش مدیریتی</label>
     <textarea id="master-command-text" name="instruction" maxlength="2000" minlength="1"
-      required rows="5" placeholder="مثلاً: ریسک‌های باز و ضرورت‌های اصلاحی این واحد را بررسی و گزارش کن."></textarea>
+      required rows="5" placeholder="مثلاً: کمپین‌های تبلیغاتی و سرنخ‌های فروش این واحد را تحلیل کن.">{{ prefill_instruction }}</textarea>
     <label for="master-command-agent">دستیار مسئول بررسی</label>
     <select id="master-command-agent" name="assistant_code" required>
-      <option value="">انتخاب دستیار تخصصی</option>
+      <option value="auto" selected>تشخیص خودکار موضوع (در صورت اطمینان)</option>
       {% for item in specialists %}
       <option value="{{ item.code }}">{{ item.title }} — {{ item.description }}</option>
       {% endfor %}
