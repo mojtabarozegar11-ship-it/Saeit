@@ -13,6 +13,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -31,6 +32,7 @@ MIN_START_FREE = 10 * 1024**3
 BLOCK = 128 * 1024
 STEM = "mojplaywin_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + token_hex(8)
 VERSION = "gpgv2"
+PAIR_STEM_RE = re.compile(r"^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}$")
 
 
 def make_private(p: Path):
@@ -158,9 +160,12 @@ def verify_stream(target: Path, gpg_home: Path, key: bytes):
 
 
 def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None = None,
-          minimum_free: int = MIN_START_FREE):
+          minimum_free: int = MIN_START_FREE, stem: str | None = None):
     if kind not in ("mysql", "files"):
         raise RuntimeError("unsupported kind")
+    selected_stem = STEM if stem is None else stem
+    if not isinstance(selected_stem, str) or not PAIR_STEM_RE.fullmatch(selected_stem):
+        raise RuntimeError("invalid pinned backup pair identity")
     root = Path.home() if root is None else root
     keyroot = Path.home() if keyroot is None else keyroot
     backups = root / ".private-mojplaywin-offhost-backups"
@@ -172,9 +177,9 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
     if shutil.which("gpg") is None or disk_free(backups) < minimum_free:
         raise RuntimeError("GPG unavailable or destination capacity insufficient")
     key = recovery_key(secrets / "recovery-key.bin")
-    partial = backups / (STEM + "_" + kind + "_" + VERSION + ".gpg.partial")
-    complete = backups / (STEM + "_" + kind + "_" + VERSION + ".gpg")
-    manifest = backups / (STEM + "_" + kind + "_" + VERSION + ".manifest.json")
+    partial = backups / (selected_stem + "_" + kind + "_" + VERSION + ".gpg.partial")
+    complete = backups / (selected_stem + "_" + kind + "_" + VERSION + ".gpg")
+    manifest = backups / (selected_stem + "_" + kind + "_" + VERSION + ".manifest.json")
     if any(x.exists() or x.is_symlink() for x in (partial,complete,manifest)):
         raise RuntimeError("one-time output already exists; refusing overwrite")
     total, digest = encrypt_stream_to_file(stream, partial, gnupg, key)
@@ -184,6 +189,7 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
     os.rename(partial, complete)
     summary = {
         "kind": kind, "format": "OpenPGP-AES256-GPGv2",
+        "pair_stem": selected_stem,
         "archive_name": complete.name,
         "encrypted_bytes": complete.stat().st_size,
         "plaintext_bytes": total, "plaintext_sha256": digest,
@@ -227,15 +233,18 @@ def selftest():
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) != 2:
+        if len(sys.argv) not in (2, 3):
             raise RuntimeError("missing operation")
         if sys.argv[1] == "selftest":
+            if len(sys.argv) != 2:
+                raise RuntimeError("selftest does not accept pair identity")
             good = selftest()
             print(json.dumps({"classification": "VPS_GPG_AES256_SYNTHETIC_SELFTEST",
                               "pass": good, "backup_written": False,
                               "release_permitted": False}))
             raise SystemExit(0 if good else 1)
-        result = store(sys.stdin.buffer, sys.argv[1])
+        result = store(sys.stdin.buffer, sys.argv[1],
+                       stem=sys.argv[2] if len(sys.argv) == 3 else None)
         print(json.dumps(result, sort_keys=True))
     except SystemExit:
         raise
