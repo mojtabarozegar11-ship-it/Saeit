@@ -1,7 +1,7 @@
 name: Owner approved PICM isolated runtime and PICM-only backup removal
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
     branches: [ops/picm-private-retirement-inventory-20261101]
     paths:
       - ".github/workflows/picm-retirement-execute-20261101.yml"
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inventory:
-    if: github.event.action == 'opened' && github.actor == 'mojtabarozegar11-ship-it' && github.head_ref == 'ops/picm-private-retirement-execute-20261101' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'ops/picm-private-retirement-inventory-20261101'
+    if: (github.event.action == 'opened' || github.event.action == 'synchronize') && github.actor == 'mojtabarozegar11-ship-it' && github.head_ref == 'ops/picm-private-retirement-execute-20261101' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'ops/picm-private-retirement-inventory-20261101'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           umask 077
           test -n "$VPS_KEY" && test -n "$HOST_KEY"
-          d="$RUNNER_TEMP/picm-retirement-inventory"
+          d="$RUNNER_TEMP/picm-retirement-execute"
           install -d -m 700 "$d"
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
