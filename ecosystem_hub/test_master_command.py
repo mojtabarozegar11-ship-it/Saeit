@@ -11,6 +11,7 @@ from django.utils import timezone
 from enterprise_portal.models import AuditEvent, BusinessUnit, JournalEntry, StockMovement, WorkTask
 from company_marketing.models import Campaign
 from .models import AssistantRun, MasterCommand, UnitMembership
+from .unified import snapshot_for_unit
 
 
 STORE = {
@@ -181,6 +182,8 @@ class MasterCommandSecurityTests(TestCase):
         self.assertEqual(task.priority, "high")
         self.assertEqual(task.due_on, due)
         self.assertEqual(task.status, "todo")
+        metrics = {item["label"]: item["count"] for section in snapshot_for_unit(self.owner, self.farm) for item in section["metrics"]}
+        self.assertEqual(metrics["کارهای باز"], 1)
         self.assertIn(str(command.pk), task.description)
         self.assertIn(str(command.report_id), task.description)
         self.assertNotIn("محرمانه بررسی ریسک شرکت", task.description)
