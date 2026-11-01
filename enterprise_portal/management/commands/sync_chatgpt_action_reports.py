@@ -84,7 +84,10 @@ class Command(BaseCommand):
                 raise CommandError("REPORT_IMPORT_IDENTITY_INVALID") from exc
 
         counters = {"seen": 0, "eligible": 0, "created": 0, "duplicate": 0, "skipped": 0}
-        seen_codes = {}
+        # Fetch and validate the *entire* remote snapshot before any database
+        # write. A timeout on page N or a collision on a later comment must not
+        # leave a misleading partial history.
+        staged = {}
         for item in fetch_issue_comments(pages=pages):
             counters["seen"] += 1
             receipt = extract_receipt(item)
@@ -92,36 +95,48 @@ class Command(BaseCommand):
                 counters["skipped"] += 1
                 continue
             counters["eligible"] += 1
-            code, evidence = receipt["report_code"], receipt["evidence_url"]
-            # Detect a conflict even in dry-run. An existing number can never
-            # silently acquire a new source reference, including within one run.
-            if code in seen_codes:
-                if seen_codes[code] != evidence:
+            code = receipt["report_code"]
+            if code in staged:
+                # A numbered receipt cannot silently move source or change text,
+                # even when the GitHub comment ID remains the same.
+                if staged[code] != receipt:
                     raise CommandError("REPORT_NUMBER_SOURCE_CONFLICT")
                 counters["duplicate"] += 1
                 continue
-            seen_codes[code] = evidence
-            if not commit:
-                continue
+            staged[code] = receipt
 
+        if commit:
             try:
+                # All-or-nothing DB insertion, including validation of existing
+                # receipts and unique constraints. Never fetch over HTTP inside
+                # this transaction: remote latency must not hold a DB lock.
                 with transaction.atomic():
-                    existing = ChatGPTActionReport.objects.filter(report_code=code).first()
-                    if existing:
-                        if existing.evidence_url != evidence:
-                            raise CommandError("REPORT_NUMBER_SOURCE_CONFLICT")
-                        counters["duplicate"] += 1
-                        continue
-                    # Imported status remains deliberately unreviewed regardless
-                    # of claimed completion inside the source comment.
-                    record = ChatGPTActionReport(
-                        unit=unit, recorded_by=recorder, evidence_reviewed=False,
-                        evidence_reviewed_by=None, outcome="partial", **receipt,
-                    )
-                    record.save()
-                    counters["created"] += 1
+                    for code, receipt in staged.items():
+                        existing = (ChatGPTActionReport.objects
+                                    .select_for_update()
+                                    .filter(report_code=code).first())
+                        if existing:
+                            same_source = (
+                                existing.unit_id == unit.pk
+                                and existing.evidence_url == receipt["evidence_url"]
+                                and existing.body == receipt["body"]
+                                and existing.run_reference == receipt["run_reference"]
+                                and existing.occurred_at == receipt["occurred_at"]
+                                and existing.cycle_code == receipt["cycle_code"]
+                            )
+                            if not same_source:
+                                raise CommandError("REPORT_NUMBER_SOURCE_OR_TEXT_CONFLICT")
+                            counters["duplicate"] += 1
+                            continue
+                        # A GitHub comment is an unreviewed action claim, not
+                        # verified payment, release or completed operations.
+                        ChatGPTActionReport.objects.create(
+                            unit=unit, recorded_by=recorder, evidence_reviewed=False,
+                            evidence_reviewed_by=None, outcome="partial", **receipt,
+                        )
+                        counters["created"] += 1
             except IntegrityError as exc:
-                # Concurrent inserts should be reported, not treated as success.
+                # Concurrent inserts must fail closed, not be asserted as success.
                 raise CommandError("REPORT_IMPORT_CONCURRENT_CONFLICT") from exc
 
         # Never log raw reports, names, addresses or any private credentials.
