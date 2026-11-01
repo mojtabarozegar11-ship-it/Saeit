@@ -2,7 +2,7 @@
 """Browser proof of actual PICM text-image JS flow; simulated private API only.
 
 A real Chromium exercises: text-only request (no file), CSRF, status polling,
-private PNG download, and quota error. Does NOT prove GPU or AI image quality.
+private PNG download, and capacity error. Does NOT prove GPU or AI image quality.
 """
 import asyncio
 import base64
@@ -80,8 +80,8 @@ async def main():
                         credentials:options.credentials||null});
                     if(path==="/picm/api/submit/"){
                         if(window.proof.code!==202)
-                            return new Response(JSON.stringify({error:"daily_limit_reached"}),{
-                                status:429,headers:{"Content-Type":"application/json"}});
+                            return new Response(JSON.stringify({error:"queue_full"}),{
+                                status:503,headers:{"Content-Type":"application/json"}});
                         return new Response(JSON.stringify({id,state:"queued"}),{
                             status:202,headers:{"Content-Type":"application/json"}});
                     }
@@ -127,12 +127,12 @@ async def main():
             assert len(posts)==1 and posts[0]["csrf"]=="test-csrf",data
             assert all(v["credentials"]=="same-origin" for v in data["requests"]),data
             print("PICM_REAL_TEXT_IMAGE_BROWSER_REQUEST_AND_DOWNLOAD_OK")
-            # A second request must show a truthful quota error, not fake completion.
-            await page.evaluate("window.proof.code=429")
+            # A capacity error must be displayed honestly, not as fake completion.
+            await page.evaluate("window.proof.code=503")
             await page.locator("#submit").click()
             await page.wait_for_function("""() => document.querySelector("#status")
-                .textContent.includes("سقف دو تصویر")""",timeout=5000)
-            print("PICM_TEXT_IMAGE_QUOTA_ERROR_VISIBLE")
+                .textContent.includes("صف تولید")""",timeout=5000)
+            print("PICM_TEXT_IMAGE_CAPACITY_ERROR_VISIBLE")
         finally:
             await browser.close()
 
