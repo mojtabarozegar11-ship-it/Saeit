@@ -27,7 +27,7 @@ SOURCE=RELEASE/"source.tgz"
 STAGE=SCOPE/("stage-"+SHA)
 TARGET=SITE/"living-cities"
 OWNER="MPW-LIVING-CITIES-GLOBAL-20-LANG-"+SHA
-EXPECTED_SOURCE_HASH="SET_FROM_VERIFIED_ENCRYPTED_BUNDLE"
+EXPECTED_SOURCE_HASH=os.environ.get("LC_GLOBAL_ARCHIVE_SHA256","")
 GAME_ROOT="apps/living_cities/static/living_cities"
 SOURCE_PAGE="apps/living_cities/templates/living_cities/play.html"
 ALLOWED_EXT={".mjs",".css"}
@@ -55,6 +55,7 @@ def guard():
 
 def read_allowed():
     source=SOURCE.read_bytes()
+    demand(len(EXPECTED_SOURCE_HASH)==64 and all(c in "0123456789abcdef" for c in EXPECTED_SOURCE_HASH),"no_pinned_archive_digest")
     demand(hashlib.sha256(source).hexdigest()==EXPECTED_SOURCE_HASH,
            "signed_release_archive_hash_mismatch")
     files={}
