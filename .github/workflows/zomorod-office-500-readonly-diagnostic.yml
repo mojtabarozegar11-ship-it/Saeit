@@ -519,7 +519,7 @@ jobs:
                   if b"lsapi" in chunk.lower() or b"lswsgi" in chunk.lower():
                       lsapi_signature = True
                       break
-          print("CPANEL_PYTHON_ELF_HEADER=" + str(header == b"\\x7fELF").lower())
+          print("CPANEL_PYTHON_ELF_HEADER=" + str(header == bytes((0x7f,)) + b"ELF").lower())
           print("CPANEL_PYTHON_LSAPI_SIGNATURE=" + str(lsapi_signature).lower())
           app_resolved = app.resolve()
           cwd_workers = 0
