@@ -23,7 +23,7 @@ jobs:
           test -s secure-artifacts/mpw-living-cities-global-hardening-813629d.b64
           grep -Fq '813629da154b8cb541641eaddf3b143007db4d4e' scripts/mpw_living_cities_252_global_upgrade.py
           grep -Fq 'mojplaywin.com' scripts/mpw_living_cities_252_global_upgrade.py
-          grep -Fq 'target_route_already_exists_do_not_overwrite' scripts/mpw_living_cities_252_global_upgrade.py
+          grep -Fq 'cannot_upgrade_unrecognized_public_build' scripts/mpw_living_cities_252_global_upgrade.py
           echo MOJPLAYWIN_EXACT_SOURCE_RELEASE_GATE=PASS
       - name: Connect using host-key-pinned GitHub VPS cPanel relay
         env:
@@ -107,7 +107,7 @@ jobs:
           test "$(id -un)" = zomorod2
           test ! -L "$HOME/.private" && test ! -L "$HOME/mojplaywin.com"
           test -d "$HOME/mojplaywin.com/living-cities" && test ! -L "$HOME/mojplaywin.com/living-cities"
-          test "$(cat "$HOME/mojplaywin.com/living-cities/LC-OWNER.txt")" = "MPW-LIVING-CITIES-GLOBAL-20-LANG-813629da154b8cb541641eaddf3b143007db4d4e"
+          test "$(cat "$HOME/mojplaywin.com/living-cities/LC-OWNER.txt")" = "MPW-LIVING-CITIES-GLOBAL-20-LANG-27111d39d96f44638554233b8fcc129bea33752a"
           target="$HOME/.private/mpw-living-cities-global/releases/813629da154b8cb541641eaddf3b143007db4d4e"
           test ! -L "$HOME/.private/mpw-living-cities-global"
           install -d -m 700 "$target"
