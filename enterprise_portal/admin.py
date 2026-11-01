@@ -216,7 +216,8 @@ class OfficeLetterAdmin(admin.ModelAdmin):
     list_display = ("number", "subject", "direction", "classification", "assigned_to", "sent_on")
     list_filter = ("direction", "classification", "sent_on")
     search_fields = ("number", "subject")
-    readonly_fields = ("created_by", "created_at", "updated_at")
+    # Status is only changed by the private audited workflow, never a raw admin edit.
+    readonly_fields = ("created_by", "created_at", "updated_at", "status")
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
