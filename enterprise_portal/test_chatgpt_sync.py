@@ -95,8 +95,63 @@ class ReportSyncCommandTests(TestCase):
             with self.assertRaisesMessage(CommandError, "REPORT_NUMBER_SOURCE_CONFLICT"):
                 call_command("sync_chatgpt_action_reports", "--commit",
                              "--unit-code=zm-sync", "--recorder-id=" + str(self.owner.pk))
-        existing = ChatGPTActionReport.objects.get()
-        self.assertEqual(existing.evidence_url.split("-")[-1], "101")
+        # A conflict later in the feed must never partially import the first.
+        self.assertFalse(ChatGPTActionReport.objects.exists())
+
+    @patch("enterprise_portal.management.commands.sync_chatgpt_action_reports.fetch_issue_comments")
+    def test_edited_existing_comment_is_detected_and_retained(self, fetch):
+        fetch.return_value = [comment(101)]
+        env = {"ZM_CHATGPT_REPORT_SYNC_ENABLED": "1",
+               "ZM_CHATGPT_REPORT_DB_ATTESTED": "1"}
+        args = ("--commit", "--unit-code=zm-sync", "--recorder-id=" + str(self.owner.pk))
+        with patch.dict(os.environ, env):
+            call_command("sync_chatgpt_action_reports", *args, stdout=io.StringIO())
+            fetch.return_value = [comment(101, body=BODY + "later edit")]
+            with self.assertRaisesMessage(CommandError, "REPORT_NUMBER_SOURCE_OR_TEXT_CONFLICT"):
+                call_command("sync_chatgpt_action_reports", *args, stdout=io.StringIO())
+        item = ChatGPTActionReport.objects.get()
+        self.assertEqual(item.body, BODY)
+
+    @patch("enterprise_portal.management.commands.sync_chatgpt_action_reports.fetch_issue_comments")
+    def test_source_failure_after_first_receipt_is_atomic(self, fetch):
+        def broken_feed(*, pages=5):
+            yield comment(101)
+            raise CommandError("GITHUB_REPORT_SOURCE_UNAVAILABLE")
+        fetch.side_effect = broken_feed
+        with patch.dict(os.environ, {"ZM_CHATGPT_REPORT_SYNC_ENABLED": "1",
+                                     "ZM_CHATGPT_REPORT_DB_ATTESTED": "1"}):
+            with self.assertRaisesMessage(CommandError, "GITHUB_REPORT_SOURCE_UNAVAILABLE"):
+                call_command("sync_chatgpt_action_reports", "--commit",
+                             "--unit-code=zm-sync", "--recorder-id=" + str(self.owner.pk))
+        self.assertEqual(ChatGPTActionReport.objects.count(), 0)
+
+    @patch("enterprise_portal.management.commands.sync_chatgpt_action_reports.fetch_issue_comments")
+    def test_late_existing_conflict_rolls_back_new_receipt(self, fetch):
+        args = ("--commit", "--unit-code=zm-sync", "--recorder-id=" + str(self.owner.pk))
+        with patch.dict(os.environ, {"ZM_CHATGPT_REPORT_SYNC_ENABLED": "1",
+                                     "ZM_CHATGPT_REPORT_DB_ATTESTED": "1"}):
+            fetch.return_value = [comment(101)]
+            call_command("sync_chatgpt_action_reports", *args, stdout=io.StringIO())
+            fetch.return_value = [
+                comment(102, body=BODY.replace("۰۰۰۱", "۰۰۰۲")),
+                comment(101, body=BODY + "changed text"),
+            ]
+            with self.assertRaisesMessage(CommandError, "REPORT_NUMBER_SOURCE_OR_TEXT_CONFLICT"):
+                call_command("sync_chatgpt_action_reports", *args, stdout=io.StringIO())
+        self.assertEqual(
+            list(ChatGPTActionReport.objects.values_list("report_code", flat=True)),
+            ["05-0001"],
+        )
+
+    @patch("enterprise_portal.management.commands.sync_chatgpt_action_reports.fetch_issue_comments")
+    def test_conflict_within_single_comment_identity_is_rejected(self, fetch):
+        fetch.return_value = [comment(101), comment(101, body=BODY + "edited")]
+        with patch.dict(os.environ, {"ZM_CHATGPT_REPORT_SYNC_ENABLED": "1",
+                                     "ZM_CHATGPT_REPORT_DB_ATTESTED": "1"}):
+            with self.assertRaisesMessage(CommandError, "REPORT_NUMBER_SOURCE_CONFLICT"):
+                call_command("sync_chatgpt_action_reports", "--commit",
+                             "--unit-code=zm-sync", "--recorder-id=" + str(self.owner.pk))
+        self.assertFalse(ChatGPTActionReport.objects.exists())
 
     def test_page_limits_cannot_be_bypassed(self):
         with self.assertRaisesMessage(CommandError, "PAGES_OUT_OF_RANGE"):
