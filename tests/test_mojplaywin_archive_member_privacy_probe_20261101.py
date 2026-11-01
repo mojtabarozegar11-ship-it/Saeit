@@ -4,7 +4,7 @@ import tarfile
 import unittest
 
 from scripts.mojplaywin_archive_member_privacy_probe_20261101 import (
-    classify_tar, link_category, member_category,
+    classify_tar, link_category, member_category, unbacked_link_scope,
 )
 
 
@@ -77,6 +77,19 @@ class MemberCategoryTests(unittest.TestCase):
         self.assertEqual(report["link_target_categories"][
             "hardlink_inside_approved_roots"], 1)
         self.assertNotIn("secret-link-target", str(report))
+
+    def test_unbacked_link_dependency_roles_reveal_no_private_path(self):
+        examples = (
+            ("../../virtualenv/site/bin/python", "python_runtime_dependency"),
+            ("../../Saeit/core/file", "alternative_site_code_root"),
+            ("../../tmp/restart.txt", "ephemeral_runtime_path"),
+            ("../../custom-private-folder/file", "other_unbacked_account_root"),
+        )
+        for target, expected in examples:
+            with self.subTest(role=expected):
+                self.assertEqual(
+                    unbacked_link_scope("Saeit-staging/sub/link", target, True),
+                    expected)
 
 
 if __name__ == "__main__":
