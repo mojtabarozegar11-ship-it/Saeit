@@ -161,6 +161,29 @@ jobs:
               print("QUARANTINE_POSTCHECK="+json.dumps({"folders":len(names),
                   "absent_from_live":all_absent,"has_manifest":(quarantine/"manifest.json").is_file()},
                   ensure_ascii=True))
+          # Identify whole historical release snapshots (not individual static assets).
+          # A repeated asset inside separate restore points is NOT safe to prune alone.
+          releases={}
+          for label,root,p,size,mtime in allbackups:
+              if label!="private":
+                  continue
+              rel=p.relative_to(root).parts
+              if len(rel)<2 or rel[0] not in ("zomorodmelal-complete","zomorodmelal-app"):
+                  continue
+              if len(rel)>=3 and len(rel[1])==40 and all(c in "0123456789abcdef" for c in rel[1]):
+                  key="/".join(rel[:3])
+              else:
+                  key="/".join(rel[:2])
+              b=releases.setdefault(key,{"files":0,"bytes":0,"oldest":mtime,"newest":mtime})
+              b["files"]+=1
+              b["bytes"]+=size
+              b["oldest"]=min(b["oldest"],mtime)
+              b["newest"]=max(b["newest"],mtime)
+          for key,b in sorted(releases.items(),key=lambda kv:kv[1]["bytes"],reverse=True)[:45]:
+              print("RELEASE_SNAPSHOT="+json.dumps({
+                  "snapshot":key,"files":b["files"],"mib":round(b["bytes"]/1048576,2),
+                  "oldest_file_days":round((now-b["oldest"])/86400,1),
+                  "newest_file_days":round((now-b["newest"])/86400,1)},ensure_ascii=True))
           # Hash only same-size non-database archive candidates; never expose contents.
           archives=(".zip",".tar",".tgz",".tar.gz",".gz",".7z",".rar")
           bysize={}
