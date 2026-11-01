@@ -128,6 +128,101 @@ class GuestRecoveryLandingTests(unittest.TestCase):
                          {"accept-encoding", "cookie"})
         self.assertNotIn(COOKIE, result.cookies)
 
+
+class PublicSalesFloorTests(unittest.TestCase):
+    def test_public_price_floor_blocks_micro_trials_and_invalid_prices(self):
+        from decimal import Decimal
+        from services.mpw_trx_guest_commerce import _public_price_ok
+        for value in (Decimal("0.03"), 0, -4, "3.999", "NaN",
+                      "Infinity", "-Infinity", None, True, "not-a-price"):
+            with self.subTest(value=value):
+                self.assertFalse(_public_price_ok(value))
+        for value in (Decimal("4.00"), "4.00", Decimal("6.80"), 7.5):
+            with self.subTest(value=value):
+                self.assertTrue(_public_price_ok(value))
+
+    def test_public_trx_catalog_filters_micro_trial_and_links_real_checkouts(self):
+        from decimal import Decimal
+        from types import ModuleType
+        from unittest.mock import patch
+        import sys
+        from services.mpw_trx_guest_commerce import _public_shop_page
+
+        products = [
+            SimpleNamespace(pk=72, title="<Chess>", price=Decimal("7.50")),
+            SimpleNamespace(pk=225, title="Taniya", price=Decimal("4.00")),
+            SimpleNamespace(pk=779, title="Micro trial", price=Decimal("0.03")),
+        ]
+
+        class ProductQuery:
+            def filter(self, **kwargs):
+                self.assertion = kwargs
+                return self
+            def order_by(self, field):
+                if field != "pk":
+                    raise AssertionError("Unexpected catalog ordering")
+                return products
+
+        class Product:
+            objects = ProductQuery()
+
+        def module(name, **members):
+            obj = ModuleType(name)
+            obj.__dict__.update(members)
+            return obj
+
+        good_file = SimpleNamespace(
+            is_symlink=lambda: False,
+            is_file=lambda: True,
+            stat=lambda: SimpleNamespace(st_size=100),
+        )
+        fakes = {
+            "core.models": module("core.models", Product=Product),
+            "mpw_commerce.buyer_orders": module("mpw_commerce.buyer_orders",
+                                                 _eligible=lambda p: True),
+            "mpw_commerce.downloads": module("mpw_commerce.downloads",
+                                              _private_file=lambda order: good_file),
+            "services.mpw_trx_commercial_context": module(
+                "services.mpw_trx_commercial_context",
+                rights_cleared_for_sale=lambda p: True),
+            "services.mpw_trx_commercial_web": module(
+                "services.mpw_trx_commercial_web", _configured_receiver=lambda: "receiver"),
+            "services.mpw_trx_walletless_core": module(
+                "services.mpw_trx_walletless_core",
+                PaymentHold=type("PaymentHold", (Exception,), {})),
+            "services.mpw_walletless_commercial_intent": module(
+                "services.mpw_walletless_commercial_intent",
+                _commercial_db=lambda *args: None),
+        }
+        ns = {"_page": lambda title, body: HttpResponse(title + body)}
+        with (patch.dict(sys.modules, fakes),
+              patch.object(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS",
+                           (72, 225, 779), create=True)):
+            result = _public_shop_page(request(), ns)
+        self.assertEqual(result.status_code, 200)
+        self.assertIn(b"/store/product/72/checkout/", result.content)
+        self.assertIn(b"/store/product/225/checkout/", result.content)
+        self.assertNotIn(b"/store/product/779/checkout/", result.content)
+        self.assertNotIn(b"Micro trial", result.content)
+        self.assertNotIn(b"sign in", result.content.lower())
+        self.assertIn(b"No account is required", result.content)
+        self.assertIn(b"Trust Wallet", result.content)
+        self.assertIn(b"&lt;Chess&gt;", result.content)
+
+    def test_public_shop_is_patched_only_when_original_helpers_exist(self):
+        from services.mpw_trx_guest_commerce import patch_public
+        namespace = {
+            "_page": lambda title, body: HttpResponse(title + body),
+            "public_shop": lambda req: HttpResponse("OLD_PUBLIC_CATALOG"),
+            "product_checkout": lambda req, product_id: HttpResponse("checkout"),
+            "purchases": lambda req: HttpResponse("purchases"),
+        }
+        patch_public(namespace)
+        self.assertEqual(namespace["public_shop"](request(method="POST")).status_code, 405)
+        with self.assertRaises(Http404):
+            namespace["public_shop"](request(secure=False))
+
+
 class StorefrontRecoveryCopyTests(unittest.TestCase):
     def test_purchase_support_fallback_is_explicit(self):
         from pathlib import Path
@@ -154,6 +249,8 @@ class ReleasePurchasesSmokeContractTests(unittest.TestCase):
         self.assertIn("'" + route + "'", workflow)
         self.assertIn("GUEST_RECOVERY_NOINDEX_MISSING", workflow)
         self.assertIn("GUEST_RECOVERY_NOSTORE_MISSING", workflow)
+        self.assertIn("PUBLIC_TRX_MICRO_TRIAL_EXPOSED", workflow)
+        self.assertIn("PUBLIC_TRX_CATALOG_MISSING_REAL_SKU", workflow)
 
 
 class ReleaseInterlockTests(unittest.TestCase):
