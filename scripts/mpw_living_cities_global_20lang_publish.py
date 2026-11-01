@@ -203,7 +203,7 @@ def verify():
            "global_browser_mode_missing")
     demand(b'200 evolving world missions' in (TARGET/"index.html").read_bytes(),
            "mpw_global_landing_not_found")
-    demand(b"20 languages" in (TARGET/"index.html").read_bytes().lower(),"localized_game_landing_incomplete")
+    demand(b"20 global interface languages" in (TARGET/"index.html").read_bytes().lower(),"localized_game_landing_incomplete")
     print("MPW_GLOBAL_RELEASE_FILES_AND_ROUTE=PASS")
 
 def rollback():
