@@ -7,13 +7,13 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: zomorod-office-top-passenger-smoke
+  group: zomorod-office-independent-preflight-once
   cancel-in-progress: false
 jobs:
   preview-only-fix:
     if: github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'integration/zomorod-office-messaging-current-main-20261031'
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    timeout-minutes: 12
     steps:
       - name: Set up pinned GitHub to VPS to cPanel relay
         id: link
@@ -113,162 +113,182 @@ jobs:
             exit 1
           fi
           printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
-      - name: Verify production HTTP health before preview-only change
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(curl -fsSL --max-time 25 --output /dev/null --write-out '%{http_code}' https://zomorodmelal.ir/api/health/)" = 200
-          echo "PUBLIC_HEALTH_BEFORE_ROUTE_FIX=200"
-      - name: Restore Passenger mapping in isolated preview directory only
+      - name: Scoped Passenger and login smoke with in-session rollback
         shell: bash
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zm-marketing-ro"
-          case "$COMMAND_HOST" in saeit-cpanel) ;; *) exit 1 ;; esac
-          timeout 120s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          test "$COMMAND_HOST" = saeit-cpanel
+          timeout 240s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
           set -euo pipefail
           umask 077
+          test "$(id -un)" = zomorod2
           rel="zomorod_office_top_preflight_9ab790b15a42"
           uri="/office-preflight-9ab790b15a42"
-          root="/home/zomorod2/$rel"
-          child="/home/zomorod2/public_html$uri"
-          parent="/home/zomorod2/public_html/company/.htaccess"
-          main="/home/zomorod2/public_html/.htaccess"
-          initial="/home/zomorod2/.private/zomorod-company-office/.public-html-htaccess.original"
-          py="/home/zomorod2/virtualenv/$rel/3.10/bin/python"
+          home="/home/zomorod2"
+          root="$home/$rel"
+          web="$home/public_html"
+          target="$web$uri/.htaccess"
+          initial="$root/.public-html-htaccess.original"
+          backup="$root/.top-level-passenger-original"
+          marker="# ZOMOROD_PREVIEW_PASSENGER_ROUTE_BEGIN"
+          py="$home/virtualenv/$rel/3.10/bin/python"
           selector="/usr/sbin/cloudlinux-selector"
-          test -d "$root" && test ! -L "$root" && test -f "$root/.preview-registered"
-          test -x "$selector"
+          test -d "$root" && test ! -L "$root"
+          test -f "$root/.preview-registered" && test ! -L "$root/.preview-registered"
+          grep -Fxq 'source=9ab790b15a42b3ea24e46982b361e9596d0ec828' "$root/.preview-registered"
+          grep -Fxq 'uri=office-preflight-9ab790b15a42' "$root/.preview-registered"
           test -f "$root/office_passenger_wsgi.py"
           test -f "$root/.env" && test "$(stat -c '%a' "$root/.env")" = 600
           grep -Fxq 'COMPANY_MESSAGING_SEND_ENABLED=false' "$root/.env"
           grep -Fxq 'COMPANY_MARKETING_PUBLISH_ENABLED=false' "$root/.env"
           grep -Fxq 'ZM_OFFICE_BASE_PATH=/office-preflight-9ab790b15a42' "$root/.env"
-          grep -Fxq 'uri=office-preflight-9ab790b15a42' "$root/.preview-registered"
-          grep -Fxq 'source=9ab790b15a42b3ea24e46982b361e9596d0ec828' "$root/.preview-registered"
           grep -Fxq "DATABASE_URL=sqlite:///$root/office-preview.sqlite3" "$root/.env"
-          python3 -B - "$root/office-preview.sqlite3" <<'PY'
+          test -x "$py" && test -x "$selector"
+          test -f "$target" && test ! -L "$target"
+          test -d "$web$uri" && test ! -L "$web$uri"
+          test -f "$initial" && test ! -L "$initial"
+          test -f "$web/.htaccess" && test ! -L "$web/.htaccess"
+          cmp -s "$web/.htaccess" "$initial"
+          grep -Eq '^[[:space:]]*PassengerEnabled[[:space:]]+off[[:space:]]*$' "$web/company/.htaccess"
+          test ! -e "$backup" && test ! -L "$backup"
+          python3 -B - "$root/office-preview.sqlite3" "$target" <<'PY'
           import sqlite3,sys
-          with sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True) as db:
-              assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-              assert db.execute("SELECT COUNT(*) FROM auth_user").fetchone()[0] == 0
-          print("TOP_LEVEL_ISOLATED_DB=zero_users_verified")
-          PY
-          test -x "$py"
-          echo "PREVIEW_SELECTOR_PYTHON=verified"
-          test -d "$child" && test ! -L "$child"
-          test -f "$child/.htaccess" && test ! -L "$child/.htaccess"
-          test -f "$parent" && test -f "$initial" && test -f "$main"
-          cmp -s -- "$main" "$initial"
-          grep -Eq '^[[:space:]]*PassengerEnabled[[:space:]]+off[[:space:]]*$' "$parent"
-          echo "PRODUCTION_ROOT_AND_COMPANY_RULES=unchanged_verified"
-          test ! -e "$root/.top-level-passenger-original" && test ! -L "$root/.top-level-passenger-original"
-          python3 -B - "$child/.htaccess" <<'PY'
           from pathlib import Path
-          import sys
-          lines=[x.strip() for x in Path(sys.argv[1]).read_text().splitlines() if x.strip() and not x.lstrip().startswith("#")]
+          with sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True) as db:
+              assert db.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+              assert db.execute("SELECT COUNT(*) FROM auth_user").fetchone()[0]==0
+          lines=[line.strip() for line in Path(sys.argv[2]).read_text().splitlines()
+                 if line.strip() and not line.lstrip().startswith("#")]
           assert len(lines)==2 and lines[0].startswith("<IfModule ") and lines[1]=="</IfModule>"
-          print("TOP_LEVEL_ROUTE_PLACEHOLDER=verified")
+          print("OFFICE_TOP_SMOKE_ISOLATION=zero_users_no_external_send")
+          print("OFFICE_TOP_SMOKE_TARGET=unmodified_placeholder")
           PY
-          backup="$root/.top-level-passenger-original"
-          marker="# ZOMOROD_PREVIEW_PASSENGER_ROUTE_BEGIN"
-          if grep -Fqx "$marker" "$child/.htaccess"; then
-            echo "PREVIEW_ONLY_HTACCESS=already_configured"
-          else
-            test ! -e "$backup" && test ! -L "$backup"
-            test -z "$(grep -E '^[[:space:]]*(PassengerAppRoot|PassengerBaseURI|PassengerPython|PassengerStartupFile)' "$child/.htaccess" || true)"
-            cp -p -- "$child/.htaccess" "$backup"
-            chmod 600 "$backup"
-            tmp="$child/.htaccess.office-new"
-            test ! -e "$tmp" && test ! -L "$tmp"
-            cp -p -- "$child/.htaccess" "$tmp"
-            printf '%s\n' \
-              "$marker" \
-              'PassengerEnabled on' \
-              "PassengerAppRoot $root" \
-              "PassengerBaseURI $uri" \
-              "PassengerPython $py" \
-              'PassengerAppType wsgi' \
-              'PassengerStartupFile office_passenger_wsgi.py' \
-              '# ZOMOROD_PREVIEW_PASSENGER_ROUTE_END' >> "$tmp"
-            chmod 644 "$tmp"
-            mv -T -- "$tmp" "$child/.htaccess"
-            echo "PREVIEW_ONLY_HTACCESS=created_with_private_backup"
-          fi
-          test "$(grep -c '^PassengerAppRoot ' "$child/.htaccess")" = 1
-          test "$(grep -c '^PassengerBaseURI ' "$child/.htaccess")" = 1
-          if "$selector" start --json --interpreter python --domain zomorodmelal.ir --app-root "$rel" > "$root/.selector-route-start.json" 2> "$root/.selector-route-start.stderr"; then
-            python3 - "$root/.selector-route-start.json" <<'PY'
+          health="$(curl -fsS --max-time 20 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/api/health/)"
+          test "$health" = 200
+          echo "OFFICE_TOP_SMOKE_PUBLIC_BEFORE=200"
+          cp -p -- "$target" "$backup"
+          chmod 600 "$backup"
+          original_sha="$(sha256sum "$target" | awk '{print $1}')"
+          tmp="$web$uri/.htaccess.office-scoped.$$"
+          response="$root/.login-smoke-body.$$"
+          cleanup() {
+            result=$?
+            trap - EXIT HUP INT TERM
+            set +e
+            "$selector" stop --json --interpreter python --domain zomorodmelal.ir --app-root "$rel" >/dev/null 2>&1
+            stopped=$?
+            if test -f "$backup" && test ! -L "$backup" && test ! -L "$target"; then
+              cp -p -- "$backup" "$tmp"
+              restored_copy=$?
+              if test "$restored_copy" = 0; then mv -fT -- "$tmp" "$target"; fi
+            fi
+            rm -f -- "$response" "$tmp"
+            final_sha="$(sha256sum "$target" 2>/dev/null | awk '{print $1}')"
+            if test "$final_sha" = "$original_sha" && cmp -s -- "$target" "$backup"; then
+              echo "OFFICE_TOP_SMOKE_TARGET_ROLLBACK=exact_verified"
+            else
+              echo "OFFICE_TOP_SMOKE_TARGET_ROLLBACK=FAILED"
+              result=1
+            fi
+            if cmp -s -- "$web/.htaccess" "$initial"; then
+              echo "OFFICE_TOP_SMOKE_PUBLIC_HTACCESS=unchanged"
+            else
+              echo "OFFICE_TOP_SMOKE_PUBLIC_HTACCESS=FAILED"
+              result=1
+            fi
+            if test "$stopped" = 0; then
+              echo "OFFICE_TOP_SMOKE_SELECTOR_STOP=confirmed"
+            else
+              echo "OFFICE_TOP_SMOKE_SELECTOR_STOP=unverified"
+              result=1
+            fi
+            if test "$result" = 0; then rm -f -- "$backup"; fi
+            exit "$result"
+          }
+          trap cleanup EXIT
+          trap 'exit 143' HUP INT TERM
+          cp -p -- "$target" "$tmp"
+          printf '%s\n' \
+            "$marker" \
+            'PassengerEnabled on' \
+            "PassengerAppRoot $root" \
+            "PassengerBaseURI $uri" \
+            "PassengerPython $py" \
+            'PassengerAppType wsgi' \
+            'PassengerStartupFile office_passenger_wsgi.py' \
+            '# ZOMOROD_PREVIEW_PASSENGER_ROUTE_END' >> "$tmp"
+          chmod 644 "$tmp"
+          mv -T -- "$tmp" "$target"
+          test "$(grep -c '^PassengerAppRoot ' "$target")" = 1
+          test "$(grep -c '^PassengerBaseURI ' "$target")" = 1
+          echo "OFFICE_TOP_SMOKE_PASSENGER_MAPPING=temporary"
+          "$selector" start --json --interpreter python --domain zomorodmelal.ir --app-root "$rel" > "$root/.selector-top-smoke-start.json"
+          python3 -B - "$root/.selector-top-smoke-start.json" <<'PY'
           import json,sys
-          assert json.load(open(sys.argv[1])).get("result")=="success"
-          print("PREVIEW_SELECTOR_START=success")
+          with open(sys.argv[1]) as f: result=json.load(f)
+          assert result.get("result")=="success"
+          print("OFFICE_TOP_SMOKE_SELECTOR_START=success")
           PY
-          else
-            cp -p -- "$backup" "$child/.htaccess"
-            echo "PREVIEW_SELECTOR_START=failed_rollback_applied"
-            exit 1
-          fi
-          echo "PREVIEW_ONLY_PASSENGER_MAPPING=applied"
-          echo "MAIN_OFFICE_ROUTE_UNCHANGED=true"
-          echo "TOP_LEVEL_ROUTE_ONLY=true"
+          code=000
+          passed=false
+          for try_number in 1 2 3 4; do
+            code="$(curl -sS --max-redirs 0 --max-time 18 --output "$response" --write-out '%{http_code}' "https://zomorodmelal.ir$uri/secure-login/" || true)"
+            if test "$code" = 200 &&
+                grep -Fq 'ZOMOROD MELAL' "$response" &&
+                grep -Fq 'login-form' "$response" &&
+                grep -Fq 'name="username"' "$response"; then
+              passed=true
+              break
+            fi
+            sleep 6
+          done
+          echo "OFFICE_TOP_SMOKE_HTTPS_LOGIN_STATUS=$code"
+          echo "OFFICE_TOP_SMOKE_DJANGO_LOGIN_CONFIRMED=$passed"
+          health_after="$(curl -sS --max-time 20 --output /dev/null --write-out '%{http_code}' https://zomorodmelal.ir/api/health/ || true)"
+          echo "OFFICE_TOP_SMOKE_PUBLIC_HEALTH_AFTER=$health_after"
+          test "$passed" = true && test "$health_after" = 200
           REMOTE
-      - name: Verify preview HTTPS and perform fail-closed rollback if needed
+      - name: Always verify and restore isolated preview rollback
+        if: always() && steps.link.outcome == 'success'
         shell: bash
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
-          code=000
-          for attempt in 1 2 3 4 5; do
-            code="$(curl --silent --show-error --location --max-time 25 --output /dev/null --write-out '%{http_code}' 'https://zomorodmelal.ir/office-preflight-9ab790b15a42/secure-login/' || true)"
-            if test "$code" = 200; then break; fi
-            sleep 10
-          done
-          echo "PREVIEW_ROUTE_FIX_HTTPS_LOGIN_STATUS=$code"
-          if test "$code" = 200; then
-            echo "TOP_LEVEL_DJANGO_LOGIN_BODY=needs_confirmation"
-          fi
-          health="$(curl --silent --show-error --location --max-time 25 --output /dev/null --write-out '%{http_code}' 'https://zomorodmelal.ir/api/health/' || true)"
-          echo "PUBLIC_HEALTH_AFTER_ROUTE_FIX=$health"
-          if test "$code" != 200 || test "$health" != 200; then
-            d="$RUNNER_TEMP/zm-marketing-ro"
-            timeout 90s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE' || true
+          test "$COMMAND_HOST" = saeit-cpanel
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          timeout 125s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
           set -euo pipefail
+          test "$(id -un)" = zomorod2
           rel="zomorod_office_top_preflight_9ab790b15a42"
           root="/home/zomorod2/$rel"
-          child="/home/zomorod2/public_html/office-preflight-9ab790b15a42/.htaccess"
+          target="/home/zomorod2/public_html/office-preflight-9ab790b15a42/.htaccess"
           backup="$root/.top-level-passenger-original"
-          if test -f "$backup" && grep -Fqx '# ZOMOROD_PREVIEW_PASSENGER_ROUTE_BEGIN' "$child"; then
-            tmp="$child.office-rollback"
+          test ! -L "$target" && test ! -L "$backup"
+          if test -f "$backup"; then
+            tmp="$target.always-rollback.$$"
             test ! -e "$tmp" && test ! -L "$tmp"
             cp -p -- "$backup" "$tmp"
-            mv -T -- "$tmp" "$child"
-            echo "PREVIEW_ONLY_HTACCESS_ROLLBACK=restored_original"
+            mv -T -- "$tmp" "$target"
+            cmp -s -- "$backup" "$target"
+            /usr/sbin/cloudlinux-selector stop --json --interpreter python --domain zomorodmelal.ir --app-root "$rel" >/dev/null
+            echo "OFFICE_TOP_ALWAYS_ROLLBACK=verified"
+          else
+            # An absent backup is safe only if the original placeholder is intact.
+            python3 -B - "$target" <<'PY'
+          from pathlib import Path
+          import sys
+          lines=[x.strip() for x in Path(sys.argv[1]).read_text().splitlines()
+                 if x.strip() and not x.lstrip().startswith("#")]
+          assert len(lines)==2 and lines[0].startswith("<IfModule ") and lines[1]=="</IfModule>"
+          print("OFFICE_TOP_ALWAYS_TARGET=untouched_placeholder")
+          PY
           fi
-          /usr/sbin/cloudlinux-selector stop --json --interpreter python --domain zomorodmelal.ir --app-root "$rel" >/dev/null 2>&1 || true
-          echo "PREVIEW_SELECTOR_STATE=stopped_after_failed_smoke"
-          REMOTE
-            echo "PREVIEW_ROUTE_FIX=failed_rolled_back_or_requires_review"
-            exit 1
-          fi
-          echo "PREVIEW_ROUTE_FIX_HTTPS_LOGIN=200"
-          echo "PUBLIC_SITE_UNCHANGED=true"
-          # Even successful preview must be stopped and restored exactly.
-          d="$RUNNER_TEMP/zm-marketing-ro"
-          timeout 100s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
-          set -euo pipefail
-          root="/home/zomorod2/zomorod_office_top_preflight_9ab790b15a42"
-          child="/home/zomorod2/public_html/office-preflight-9ab790b15a42/.htaccess"
-          backup="$root/.top-level-passenger-original"
-          test -f "$backup" && test ! -L "$backup" && test ! -L "$child"
-          /usr/sbin/cloudlinux-selector stop --json --interpreter python --domain zomorodmelal.ir --app-root zomorod_office_top_preflight_9ab790b15a42 >/dev/null
-          cp -p -- "$backup" "$child"
-          cmp -s -- "$backup" "$child"
           cmp -s -- /home/zomorod2/public_html/.htaccess "$root/.public-html-htaccess.original"
-          echo "TOP_LEVEL_PASSENGER_ROLLBACK=exact_verified"
-          echo "TOP_LEVEL_PREVIEW_STOP=confirmed"
+          echo "OFFICE_TOP_ALWAYS_PUBLIC_ROOT=exact_verified"
           REMOTE
       - name: Remove runner transient relay credentials
         if: always()
