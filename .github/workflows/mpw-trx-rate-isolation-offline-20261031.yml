@@ -23,6 +23,7 @@ jobs:
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_trx_single_asset_rate_regression.py' -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_trx_live_source_guard_readonly_20261031.py' -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_mpw_trx_live_runtime_shape_readonly_20261101.py' -v
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile scripts/mojplaywin_direct_wallet_rates.py mpw_commerce/buyer_wallets.py
   live-source-readonly:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
@@ -162,12 +163,45 @@ jobs:
               "release_permitted":False,"orders_created":0,"payments_created":0,
           },sort_keys=True))
           PY
+      - name: Classify live TRX-only quote call graph without revealing source
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          if ! timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' \
+            < scripts/mpw_trx_live_runtime_shape_readonly_20261101.py > "$d/trx-source-shape" 2>/dev/null; then
+            echo 'MPW_TRX_SHAPE_PROBE=UNAVAILABLE'
+            exit 1
+          fi
+          python3 - "$d/trx-source-shape" <<'PY'
+          import json,sys
+          from pathlib import Path
+          raw=Path(sys.argv[1]).read_text("utf8")
+          prefix="MPW_TRX_SOURCE_SHAPE="
+          if len(raw)>2000 or not raw.startswith(prefix) or raw.count(prefix)!=1:
+              raise SystemExit("MPW_TRX_SHAPE_OUTPUT_INVALID")
+          doc=json.loads(raw[len(prefix):])
+          positive={
+              "buyer_requests_asset_only", "rate_fetch_accepts_assets",
+              "rate_parser_accepts_assets", "rate_parser_checks_observed_at",
+              "web_requests_native_trx",
+          }
+          negative={
+              "passenger_effective_source_proven", "payment_created",
+              "db_accessed", "release_permitted",
+          }
+          if (set(doc)!=positive|negative
+              or any(type(doc[k]) is not bool for k in positive)
+              or any(doc[k] is not False for k in negative)):
+              raise SystemExit("MPW_TRX_SHAPE_CONTRACT_INVALID")
+          print("MPW_TRX_SHAPE_LIVE_READONLY="+json.dumps(doc,sort_keys=True))
+          PY
       - name: Delete runner-only SSH material
         if: always()
         run: |
           d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
           if [ -d "$d" ]; then
             if [ -f "$d/config" ]; then ssh -F "$d/config" -O exit saeit-cpanel >/dev/null 2>&1 || true; fi
-            rm -f "$d/trx-guard-result" "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/vps-error" "$d/ssh-error" "$d/config"
+            rm -f "$d/trx-source-shape" "$d/trx-guard-result" "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/vps-error" "$d/ssh-error" "$d/config"
             rmdir "$d"
           fi
