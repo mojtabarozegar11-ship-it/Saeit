@@ -27,9 +27,10 @@ fi
 
 "$PYTHON" --version
 "$PYTHON" manage.py check --deploy
-# Fail closed before all database mutations: schema migrations require a separately
-# authorized, backed-up and independently restorable release workflow.
-# Generic cPanel updates must never auto-apply an unreviewed migration.
+# Prevent Django's SQLite connection from creating a missing/default empty DB.
+# This probe uses immutable read-only SQLite and never initializes a database.
+"$PYTHON" scripts/production_db_readonly_preflight.py
+# Schema migrations require a separately authorized, independently restorable release.
 "$PYTHON" manage.py migrate --check
 "$PYTHON" manage.py production_gate
 "$PYTHON" manage.py collectstatic --noinput

@@ -383,6 +383,61 @@ jobs:
           print("PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no")
           PY
           REMOTE
+      - name: Classify PHP ledger versus Django root DB without writes or row access
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 75s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import pathlib
+          import sqlite3
+          import stat
+          from urllib.parse import quote
+
+          candidates = (
+              ("PHP_LEDGER", pathlib.Path("/home/zomorod2/.private/zomorod-business/management.sqlite3")),
+              ("DJANGO_DEFAULT", pathlib.Path("/home/zomorod2/Saeit/db.sqlite3")),
+          )
+          for label, path in candidates:
+              try:
+                  meta = path.stat() if not path.is_symlink() else None
+              except OSError:
+                  meta = None
+              regular = bool(meta and stat.S_ISREG(meta.st_mode))
+              nonzero = bool(regular and meta.st_size >= 4096)
+              print(label + "_REGULAR=" + str(regular).lower())
+              print(label + "_NONEMPTY_SQLITE_SIZE=" + str(nonzero).lower())
+              if not nonzero:
+                  print(label + "_BASE_SCHEMA=unavailable")
+                  continue
+              try:
+                  with path.open("rb") as handle:
+                      if handle.read(16) != b"SQLite format 3\x00":
+                          print(label + "_BASE_SCHEMA=invalid_header")
+                          continue
+                  uri = "file:" + quote(str(path.resolve(strict=True)), safe="/") + "?mode=ro&immutable=1"
+                  with sqlite3.connect(uri, uri=True, timeout=3) as connection:
+                      connection.execute("PRAGMA query_only=ON")
+                      tables = {row[0] for row in connection.execute(
+                          "SELECT name FROM sqlite_master WHERE type='table'"
+                      )}
+                  print(label + "_BASE_SCHEMA_TABLES=" + str(len(tables)))
+                  print(label + "_HAS_DJANGO_SCHEMA=" + str(
+                      {"django_migrations", "auth_user"}.issubset(tables)
+                  ).lower())
+              except (OSError, sqlite3.Error):
+                  print(label + "_BASE_SCHEMA=read_only_unavailable")
+          print("DB_CLASSIFICATION_READONLY=true")
+          print("ACCOUNTING_SOURCE_OF_TRUTH_NOT_ATTESTED=true")
+          PY
+          REMOTE
       - name: Erase transient private relay files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
