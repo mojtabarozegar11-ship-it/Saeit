@@ -16,7 +16,6 @@ from django.http import Http404, HttpResponse
 from django.utils.http import content_disposition_header
 
 from .models import OfficeAttachment
-from .views import no_cache
 
 MAX_BYTES = 8 * 1024 * 1024
 MAGIC = {
@@ -135,4 +134,8 @@ def download_attachment(record):
     response = HttpResponse(data, content_type=record.content_type)
     response["Content-Disposition"] = content_disposition_header(True, record.original_name)
     response["X-Content-Type-Options"] = "nosniff"
-    return no_cache(response)
+    response["Cache-Control"] = "private, no-store, no-cache, must-revalidate, max-age=0"
+    response["Pragma"] = "no-cache"
+    response["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    response["Referrer-Policy"] = "same-origin"
+    return response
