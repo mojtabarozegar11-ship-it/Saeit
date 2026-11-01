@@ -1,0 +1,28 @@
+name: Zomorod offline encrypted recovery drill regression
+on:
+  push:
+    branches: [audit/zm-offsite-restoration-gate-20261101]
+    paths:
+      - .github/workflows/zm-offsite-restoration-regression-20261101.yml
+      - scripts/zm_offsite_restore_drill.py
+      - tests/test_zm_offsite_restore_drill.py
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/zm-offsite-restoration-regression-20261101.yml
+      - scripts/zm_offsite_restore_drill.py
+      - tests/test_zm_offsite_restore_drill.py
+permissions:
+  contents: read
+jobs:
+  synthetic-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install crypto dependency for synthetic offline checks
+        run: python3 -m pip install --disable-pip-version-check cryptography
+      - name: Test encrypted zip restore, GCM tamper, SHA, SQL schema and cleanup
+        run: python3 -m unittest discover -s tests -p test_zm_offsite_restore_drill.py -v
