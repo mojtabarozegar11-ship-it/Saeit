@@ -232,8 +232,7 @@ jobs:
           named=[]
           if web.is_dir() and not web.is_symlink():
               for child in sorted(web.iterdir()):
-                  if child.is_dir() and not child.is_symlink() and child.name.startswith("__zm_") and (
-                      "preview" in child.name or "review" in child.name):
+                  if child.is_dir() and not child.is_symlink() and child.name.startswith("__zm_"):
                       files,state=entries(child,3,300)
                       idx=child/"index.html"
                       h=""
@@ -258,13 +257,13 @@ jobs:
                               hits.append(str(p.relative_to(web))[:120])
                       except OSError:
                           continue
-                  print("OLD_PREVIEW_CANDIDATE="+json.dumps({
+                  print("REMAINING_ZM_EXTRA_DIRECTORY="+json.dumps({
                       "directory":child.name,"files":len(files),"scan":state,
                       "mib":round(sum(v[1] for v in files)/1048576,2),
                       "index_sha256_prefix":digest,
                       "referenced_by_live_documents":hits[:15],
                       "references_total":len(hits)},ensure_ascii=True))
-          print("REVIEW_PREVIEW_DIRECTORIES="+str(len(named)))
+          print("REMAINING_ZM_EXTRA_DIRECTORIES="+str(len(named)))
           # Exact whole-tree equality proof for failed release copies; no mutation.
           import hashlib
           release_root=HOME/".backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b"
