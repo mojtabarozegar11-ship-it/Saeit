@@ -1,0 +1,104 @@
+name: Living Cities independent cPanel private installation and QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/living-cities-cpanel-private-install-20261101.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: living-cities-cpanel-private-install
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile isolated install tool before host access
+        run: |
+          python3 -m py_compile scripts/living_cities_isolated_install.py
+          echo GAME_PRIVATE_INSTALLER_SYNTAX=PASS
+      - name: Establish pinned cPanel relay
+        env:
+          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: \${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Check ownership, state and empty live route before preparing
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 45s ssh -T -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          test ! -e "$HOME/public_html/living-cities" && test ! -L "$HOME/public_html/living-cities"
+          test ! -L "$HOME/.private"
+          install -d -m 700 "$HOME/.private" "$HOME/.private/living-cities-app"
+          test ! -e "$HOME/.private/living-cities-app/source.tgz"
+          echo SAFE_NEW_PRIVATE_RELEASE_TARGET=PASS
+          REMOTE
+          timeout 30s ssh -T -F "$d/config" vps 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          src="$HOME/.private/living-cities-transport/source-b3fe1b772368f3f0874481ab88ad82862bd24de2.tgz"
+          test -f "$src" && test ! -L "$src"
+          test "$(sha256sum "$src" | awk '{print $1}')" = aab0387619fecaf2ed5c181abab5ef775142ff1512c39c2a015de135775c744c
+          echo PRIVATE_SOURCE_SHA_PINNED=PASS
+          REMOTE
+      - name: Copy source directly over two authenticated SSH transports - no public payload
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 100s ssh -T -F "$d/config" vps 'cat "$HOME/.private/living-cities-transport/source-b3fe1b772368f3f0874481ab88ad82862bd24de2.tgz"' |
+            timeout 100s ssh -T -F "$d/config" host 'umask 077; cat > "$HOME/.private/living-cities-app/source.pending"'
+          timeout 35s ssh -T -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          dest="$HOME/.private/living-cities-app"
+          test "$(sha256sum "$dest/source.pending" | awk '{print $1}')" = aab0387619fecaf2ed5c181abab5ef775142ff1512c39c2a015de135775c744c
+          chmod 600 "$dest/source.pending"
+          mv -T "$dest/source.pending" "$dest/source.tgz"
+          echo CPANEL_SECURE_SOURCE_RECEIVED=PASS
+          REMOTE
+      - name: Isolate and install Bazei Django with new game-only database
+        id: prepare
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 480s ssh -T -F "$d/config" host 'python3 - prepare' < scripts/living_cities_isolated_install.py
+      - name: Record recoverable SQLite backup outside cPanel before publication
+        id: backup
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 45s ssh -T -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          import sqlite3
+          state=Path("/home/zomorod2/.private/living-cities-app/state")
+          db=state/"game.sqlite3"; out=state/"pre-publication.sqlite3"
+          assert db.is_file() and not db.is_symlink() and not out.exists()
+          with sqlite3.connect(str(db)) as src, sqlite3.connect(str(out)) as dst:
+              src.backup(dst)
+          out.chmod(0o600)
+          with sqlite3.connect("file:"+str(out)+"?mode=ro",uri=True) as check:
+              assert check.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+          print("CPANEL_BACKUP_RESTORE_TEST=PASS")
+          PY
+          timeout 70s ssh -T -F "$d/config" host 'cat "$HOME/.private/living-cities-app/state/pre-publication.sqlite3"' |
+            timeout 70s ssh -T -F "$d/config" vps 'umask 077; cat > "$HOME/.private/living-cities-transport/pre-publication-b3fe1b7.sqlite3"'
+          timeout 30s ssh -T -F "$d/config" vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import sqlite3
+          db=Path.home()/".private/living-cities-transport/pre-publication-b3fe1b7.sqlite3"
+          assert db.is_file() and db.stat().st_size>0
+          with sqlite3.connect("file:"+str(db)+"?mode=ro",uri=True) as c:
+              assert c.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+          print("VPS_OFFHOST_GAME_BACKUP_INTEGRITY=PASS")
+          PY
+      - name: Destroy runner SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
