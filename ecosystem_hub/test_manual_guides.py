@@ -17,7 +17,7 @@ class ManualAssistantGuidanceTests(SimpleTestCase):
         )
         self.assertEqual(
             {code for code in MANUAL_GUIDES if CATALOG[code]["handler"] is not None},
-            {"financial-reconciliation"},
+            {"financial-reconciliation", "supplier-review"},
         )
         self.assertGreaterEqual(len(unsupported), 12)
         for code in unsupported:
@@ -46,6 +46,14 @@ class ManualAssistantGuidanceTests(SimpleTestCase):
             text = " ".join(x["detail"] for x in output)
             self.assertIn("هوش مصنوعی", text)
             self.assertTrue(all(x["severity"] == "info" for x in output))
+
+    def test_connected_supplier_review_preserves_independent_quality_checklist(self):
+        self.assertEqual(CATALOG["supplier-review"]["handler"], "supplier")
+        steps = MANUAL_GUIDES["supplier-review"]
+        self.assertGreaterEqual(len(steps), 4)
+        details = " ".join(detail for _, detail in steps)
+        self.assertIn("تعارض", details)
+        self.assertIn("تحویل", details)
 
     def test_connected_journal_control_does_not_replace_bank_reconciliation(self):
         self.assertEqual(CATALOG["financial-reconciliation"]["handler"], "reconciliation")

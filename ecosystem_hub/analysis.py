@@ -11,7 +11,7 @@ from django.db.models import Count, Sum
 from django.utils import timezone
 from enterprise_portal.models import (
     BudgetPlan, CommercialDocument, JournalEntry, JournalLine, InventoryItem,
-    StockMovement, WorkTask,
+    Partner, StockMovement, WorkTask,
 )
 from enterprise_portal.services import stock_balance
 from company_marketing.models import Campaign, Lead, Publication
@@ -42,6 +42,8 @@ HANDLER_VIEW_PERMISSIONS = {
     "ledger": ("enterprise_portal.view_journalentry",),
     "reconciliation": ("enterprise_portal.view_journalentry",
                        "enterprise_portal.view_journalline"),
+    "supplier": ("enterprise_portal.view_partner",
+                 "enterprise_portal.view_commercialdocument"),
     "cost": ("ecosystem_hub.view_productioncostscenario",
              "ecosystem_hub.view_materialpricereference"),
     "reorder": ("enterprise_portal.view_inventoryitem",
@@ -148,6 +150,48 @@ def scan(unit, code, *, actor=None):
             findings.append(issue(
                 f"دفتر {currency} — {status}",
                 f"{count} سند ثبت‌شده؛ تحلیل تراز قطعی باید در گزارش حسابداری بررسی شود."))
+    elif mode == "supplier":
+        # Operational signals from the unit's own supplier and purchase records.
+        # No external supplier validation, quality score, payment or procurement.
+        suppliers = Partner.objects.filter(
+            unit=unit, kind__in=("supplier", "both"),
+        )
+        past_due = CommercialDocument.objects.filter(
+            unit=unit, partner__unit=unit,
+            partner__kind__in=("supplier", "both"),
+            kind="purchase", due_on__lt=today,
+        ).exclude(status__in=("settled", "cancelled"))
+        supplier_count = suppliers.count()
+        overdue_count = past_due.count()
+        findings.append(issue(
+            "دامنه بازبینی داخلی تأمین‌کنندگان",
+            f"{supplier_count} طرف تجاری تأمین‌کننده و {overdue_count} سند خرید "
+            "با موعد گذشته و وضعیت باز در همین واحد ثبت شده است. "
+            "کیفیت کالا، تحویل واقعی، اعتبار مالیاتی و رتبه مستقل بررسی نشده‌اند.",
+        ))
+        for doc in past_due.select_related("partner").order_by("due_on", "pk")[:20]:
+            findings.append(issue(
+                f"بازبینی موعد خرید {doc.number}",
+                f"تأمین‌کننده: {doc.partner.name}؛ سررسید {doc.due_on}؛ "
+                f"مبلغ سند {doc.total} {doc.currency}؛ وضعیت داخلی "
+                f"{doc.get_status_display()}. موعد پیش‌نویس یا تأیید "
+                "به‌تنهایی بدهی قطعی یا پرداخت تأییدشده نیست.",
+                severity="warning", source=f"CommercialDocument:{doc.pk}",
+            ))
+        for supplier in suppliers.order_by("pk")[:40]:
+            if not supplier.contact.strip() and not supplier.email.strip():
+                findings.append(issue(
+                    f"اطلاعات تماس ناکامل: {supplier.name}",
+                    "شماره تماس و نشانی ایمیل در پرونده داخلی ثبت نشده‌اند؛ "
+                    "تکمیل پرونده نیازمند بررسی انسانی است.",
+                    severity="warning", source=f"Partner:{supplier.pk}",
+                ))
+        if overdue_count > 20 or supplier_count > 40:
+            findings.append(issue(
+                "محدودیت دامنه نمونه",
+                "حداکثر ۲۰ سند خرید موعدگذشته و ۴۰ پرونده تأمین‌کننده "
+                "در این پیش‌نویس پیمایش شده؛ گزارش جامع نیازمند بررسی بیشتر است.",
+            ))
     elif mode == "reconciliation":
         # Internal journal arithmetic only. This does not reconcile bank
         # statements, confirm payments or mutate a posted accounting entry.
