@@ -24,5 +24,7 @@ jobs:
           persist-credentials: false
       - name: PHP syntax check (no web execution)
         run: php -l content/zomorod-business/app.php
+      - name: Execute synthetic PHP PDO BEGIN IMMEDIATE, COMMIT and ROLLBACK
+        run: php tests/test_zm_business_sqlite_tx.php
       - name: Simulate concurrent stock withdrawals and invoice settlement with SQLite
         run: python3 -m unittest discover -s tests -p test_zm_business_atomicity.py -v
