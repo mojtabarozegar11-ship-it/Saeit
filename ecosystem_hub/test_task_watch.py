@@ -63,7 +63,7 @@ class SmartCalendarWatchTests(TestCase):
         self.task("بدون سررسید")
         self.task("انجام شده", due=self.today - timedelta(days=3), status="done")
         self.task("نام دیگر محرمانه", unit=self.factory, due=self.today - timedelta(days=3))
-        snapshot = watch_for_unit(self.farm, today=self.today)
+        snapshot = watch_for_unit(self.farm, actor=self.owner, today=self.today)
         self.assertEqual(snapshot["counts"], {
             "open": 5, "overdue": 1, "due_today": 1,
             "due_soon": 1, "urgent": 1, "no_due": 1,
@@ -77,12 +77,12 @@ class SmartCalendarWatchTests(TestCase):
         self.task("فوری آینده دور", due=self.today + timedelta(days=60), priority="urgent")
         for i in range(20):
             self.task(f"کار پیگیری {i:02d}", due=self.today)
-        snapshot = watch_for_unit(self.farm, today=self.today, limit=1000)
+        snapshot = watch_for_unit(self.farm, actor=self.owner, today=self.today, limit=1000)
         self.assertEqual(len(snapshot["tasks"]), 12)
         self.assertIn("فوری بدون موعد", [task.title for task in snapshot["tasks"]])
         self.assertIn("فوری آینده دور", [task.title for task in snapshot["tasks"]])
         self.assertEqual(snapshot["counts"]["open"], 22)
-        urgent_only = watch_for_unit(self.farm, today=self.today, limit=30)
+        urgent_only = watch_for_unit(self.farm, actor=self.owner, today=self.today, limit=30)
         self.assertEqual(urgent_only["counts"]["urgent"], 2)
 
     def test_authorized_agent_report_contains_actionable_task_sources_not_other_unit(self):
@@ -122,6 +122,11 @@ class SmartCalendarWatchTests(TestCase):
     def test_manager_without_view_task_permission_cannot_see_private_task_watch(self):
         self.task("یادداشت اختصاصی کشاورزی", due=self.today)
         self.task("محرمانه کارخانه", unit=self.factory, due=self.today)
+        colleague = get_user_model().objects.create_user(username="watch-colleague", is_staff=True)
+        WorkTask.objects.create(
+            unit=self.farm, title="کار همکار دیگر", assigned_to=colleague,
+            created_by=self.owner, due_on=self.today,
+        )
         self.client.force_login(self.manager)
         denied = self.client.get(ROOM + "?unit=farm", secure=True)
         self.assertEqual(denied.status_code, 200)
@@ -138,3 +143,5 @@ class SmartCalendarWatchTests(TestCase):
         self.assertContains(permitted, "تقویم هوشمند پیگیری")
         self.assertContains(permitted, "یادداشت اختصاصی کشاورزی")
         self.assertNotContains(permitted, "محرمانه کارخانه")
+        self.assertNotContains(permitted, "کار همکار دیگر")
+        self.assertEqual(watch_for_unit(self.farm, actor=self.manager)["counts"]["open"], 1)
