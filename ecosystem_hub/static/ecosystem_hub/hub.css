@@ -50,3 +50,9 @@
 .hub-command-form input[type=date]{box-sizing:border-box;width:100%;border:1px solid #8ba789;border-radius:12px;padding:13px 15px;color:#f5f6e7;background:#162d23;font:inherit;direction:ltr}
 .hub-command-form input[type=date]:focus-visible{outline:3px solid #edcd78;outline-offset:2px}
 @media(max-width:680px){.hub-task-fields{grid-template-columns:1fr}}
+
+/* Private calendar watch: olive-gold, responsive snapshot chips. */
+.hub-task-watch-summary{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 18px}
+.hub-task-watch-summary span{display:inline-flex;gap:8px;align-items:center;min-width:112px;justify-content:space-between;background:#203e30;color:#eff2e4;border:1px solid #8d9d77;border-radius:12px;padding:10px 14px;font-size:14px}
+.hub-task-watch-summary strong{color:#ffe39b;font-size:19px;font-variant-numeric:tabular-nums}
+@media(max-width:680px){.hub-task-watch-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.hub-task-watch-summary span{min-width:0;padding:9px}}
