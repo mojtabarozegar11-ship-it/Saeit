@@ -54,7 +54,7 @@ def audit(root: Path) -> dict:
     base = root.resolve(strict=True)
     device = os.lstat(base).st_dev
     seen = 0
-    records = []
+    records_with_mtime = []
     for directory, folders, files in os.walk(base, topdown=True, followlinks=False):
         here = Path(directory)
         depth = len(here.relative_to(base).parts)
@@ -83,7 +83,7 @@ def audit(root: Path) -> dict:
                 and pre.st_size == post.st_size and pre.st_mtime_ns == post.st_mtime_ns
                 and pre.st_nlink == post.st_nlink
             )
-            records.append({
+            records_with_mtime.append((pre.st_mtime_ns, {
                 "path_relative": path.relative_to(base).as_posix(),
                 "bytes": pre.st_size,
                 "age_days": round(max(0, time.time() - pre.st_mtime) / 86400, 2),
@@ -93,8 +93,9 @@ def audit(root: Path) -> dict:
                 "quick_check_ok": verified and stable,
                 "check_result": check if stable else "changed_during_audit",
                 "approved_for_deletion": False,
-            })
-    records.sort(key=lambda r: (r["age_days"], r["path_relative"]))
+            }))
+    records_with_mtime.sort(key=lambda item: (-item[0], item[1]["path_relative"]))
+    records = [record for _, record in records_with_mtime]
     verified_master = [r for r in records if (
         r["exact_master_before_name"] and r["quick_check_ok"]
     )]
@@ -119,8 +120,13 @@ def audit(root: Path) -> dict:
 
 
 def public_report(report: dict) -> dict:
-    """Redact private directory and backup names in public Actions logs."""
+    """Redact private directory and backup paths in public Actions logs."""
     out = dict(report)
+    root = report.get("backup_root", "")
+    out["backup_root"] = "(redacted-fixed-root)"
+    out["backup_root_sha256_prefix"] = hashlib.sha256(
+        root.encode("utf-8")
+    ).hexdigest()[:16]
     out["records"] = []
     for row in report["records"]:
         entry = {key: value for key, value in row.items() if key != "path_relative"}

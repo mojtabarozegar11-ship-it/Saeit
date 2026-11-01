@@ -1,5 +1,6 @@
 """Synthetic regression tests for read-only factory backup inventory."""
 import importlib.util
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -73,6 +74,34 @@ class FactoryBackupAuditTests(unittest.TestCase):
             {b.name, c.name},
         )
         self.assertTrue(all(not r["approved_for_deletion"] for r in report["records"]))
+
+    def test_newest_selection_uses_exact_mtime_not_rounded_age(self):
+        a = self.make_database("master-before-20261025T000000Z.sqlite3")
+        b = self.make_database("master-before-20261026T000000Z.sqlite3")
+        c = self.make_database("master-before-20261027T000000Z.sqlite3")
+        import os
+        import time
+        now = time.time() - 60
+        os.utime(a, (now - 3, now - 3))
+        os.utime(b, (now - 2, now - 2))
+        os.utime(c, (now - 1, now - 1))
+        report = audit_module.audit(self.root)
+        self.assertEqual(len({r["age_days"] for r in report["records"]}), 1)
+        self.assertEqual(
+            set(report["keep_newest_two_verified_master_paths"]),
+            {b.name, c.name},
+        )
+
+    def test_public_report_redacts_root_and_relative_paths(self):
+        path = self.make_database("master-before-20261027T000000Z.sqlite3")
+        report = audit_module.audit(self.root)
+        public = audit_module.public_report(report)
+        encoded = json.dumps(public, sort_keys=True)
+        self.assertEqual(public["backup_root"], "(redacted-fixed-root)")
+        self.assertNotIn(str(self.root.resolve()), encoded)
+        self.assertNotIn("path_relative", encoded)
+        self.assertEqual(len(public["backup_root_sha256_prefix"]), 16)
+        self.assertEqual(public["records"][0]["filename"], path.name)
 
 
 if __name__ == "__main__":
