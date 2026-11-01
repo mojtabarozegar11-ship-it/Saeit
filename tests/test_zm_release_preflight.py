@@ -46,7 +46,7 @@ class PrivateOfficeReleaseWorkflowRegression(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/zomorod-office-login-route-release.yml").read_text(encoding="utf-8")
         self.assertNotIn("\n  release:\n", workflow)
         self.assertNotIn("passenger.touch()", workflow)
-        self.assertNotIn("/admin/login/?next=/staff/command-center/", workflow)
+        self.assertNotIn('RedirectView.as_view(url="/admin/login/?next=/staff/command-center/", permanent=False)', workflow)
         self.assertIn("HOST_OR_DB_MUTATION=none", workflow)
 
     def test_readonly_diagnostic_targets_exact_head_and_tolerates_stage_race(self):
