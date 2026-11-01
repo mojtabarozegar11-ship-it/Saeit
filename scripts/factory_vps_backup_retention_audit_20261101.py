@@ -30,7 +30,14 @@ def check_database(path: Path, seconds: int = MAX_CHECK_SECONDS) -> tuple[bool, 
         with path.open("rb") as stream:
             if stream.read(16) != SQLITE_MAGIC:
                 return False, "not_sqlite_header"
-        url = "file:" + quote(str(path.absolute()), safe="/") + "?mode=ro"
+        # Even read-only SQLite can create a shared-memory sidecar for WAL.
+        # A snapshot with any sidecar needs a separate consistency review.
+        if any(os.path.lexists(str(path) + suffix)
+               for suffix in ("-wal", "-shm", "-journal")):
+            return False, "sqlite_sidecar_present"
+        # immutable=1 guarantees the quick check does not create SQLite
+        # journal/shared-memory files or acquire write-oriented locks.
+        url = "file:" + quote(str(path.absolute()), safe="/") + "?mode=ro&immutable=1"
         conn = sqlite3.connect(url, uri=True, timeout=5)
         try:
             conn.execute("PRAGMA query_only=ON")
