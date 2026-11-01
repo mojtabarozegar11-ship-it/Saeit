@@ -69,8 +69,13 @@ def compose(request):
 def detail(request, pk):
     permission(request.user, "view_message")
     msg = get_object_or_404(visible_messages(request.user), pk=pk)
+    can_view_audit = request.user.is_superuser or request.user.has_perm(
+        "company_messaging.view_company_message_audit"
+    )
     return no_cache(render(request, "company_messaging/detail.html", {
-        "message": msg, "events": msg.events.all()[:30]
+        "message": msg,
+        "events": msg.events.all()[:30] if can_view_audit else (),
+        "can_view_audit": can_view_audit,
     }))
 
 
