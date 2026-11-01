@@ -151,6 +151,7 @@ class PublicSalesFloorTests(unittest.TestCase):
         products = [
             SimpleNamespace(pk=72, title="<Chess>", price=Decimal("7.50")),
             SimpleNamespace(pk=225, title="Taniya", price=Decimal("4.00")),
+            SimpleNamespace(pk=879, title="Atelier", price=Decimal("6.80")),
             SimpleNamespace(pk=779, title="Micro trial", price=Decimal("0.03")),
         ]
 
@@ -197,11 +198,12 @@ class PublicSalesFloorTests(unittest.TestCase):
         ns = {"_page": lambda title, body: HttpResponse(title + body)}
         with (patch.dict(sys.modules, fakes),
               patch.object(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS",
-                           (72, 225, 779), create=True)):
+                           (72, 225, 879, 779), create=True)):
             result = _public_shop_page(request(), ns)
         self.assertEqual(result.status_code, 200)
         self.assertIn(b"/store/product/72/checkout/", result.content)
         self.assertIn(b"/store/product/225/checkout/", result.content)
+        self.assertIn(b"/store/product/879/checkout/", result.content)
         self.assertNotIn(b"/store/product/779/checkout/", result.content)
         self.assertNotIn(b"Micro trial", result.content)
         self.assertNotIn(b"sign in", result.content.lower())
@@ -232,6 +234,17 @@ class StorefrontRecoveryCopyTests(unittest.TestCase):
         self.assertIn('href="/support/"', storefront)
         self.assertIn("do not pay a second time", storefront)
         self.assertIn("Never share your wallet recovery phrase", storefront)
+
+    def test_all_three_listings_offer_direct_separate_checkout(self):
+        from pathlib import Path
+        storefront = (Path(__file__).resolve().parents[1] / "core" / "templates" /
+                      "mojplaywin" / "store.html").read_text("utf8")
+        for product_id in (72, 225, 879):
+            with self.subTest(product_id=product_id):
+                self.assertIn('href="/store/product/' + str(product_id) + '/checkout/"',
+                              storefront)
+        self.assertIn('href="/store/product/879/"', storefront)
+        self.assertNotIn('href="/store/product/779/checkout/"', storefront)
 
 
 class ReleasePurchasesSmokeContractTests(unittest.TestCase):
