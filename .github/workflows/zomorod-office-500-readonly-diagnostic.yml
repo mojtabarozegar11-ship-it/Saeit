@@ -604,7 +604,7 @@ jobs:
               echo "CPANEL_PYTHON_STRUCTURE_EVIDENCE_INCOMPLETE=true"
               exit 1
           fi
-          printf '%s\n' "$structure" | grep -E '^CPANEL_PYTHON_[A-Z_]+=[a-z0-9]+$'
+          printf '%s\n' "$structure" | grep -E '^CPANEL_PYTHON_[A-Z0-9_]+=[a-z0-9]+$'
 
       - name: Classify PHP ledger versus Django root DB without writes or row access
         shell: bash
