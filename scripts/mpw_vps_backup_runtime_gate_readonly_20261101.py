@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 import stat
 from pathlib import Path
 
@@ -76,4 +77,9 @@ def inspect(home: Path | None = None, *, free_bytes: int | None = None,
 
 
 if __name__ == "__main__":
-    print("MPW_VPS_BACKUP_RUNTIME_PREFLIGHT=" + json.dumps(inspect(), sort_keys=True))
+    report = inspect()
+    print("MPW_VPS_BACKUP_RUNTIME_PREFLIGHT=" + json.dumps(report, sort_keys=True))
+    if sys.argv[1:] == ["--require-ready"]:
+        raise SystemExit(0 if report["owner_armed_backup_runtime_prerequisites_ready"] else 1)
+    if sys.argv[1:]:
+        raise SystemExit(2)
