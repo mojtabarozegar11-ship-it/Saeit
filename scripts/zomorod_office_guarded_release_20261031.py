@@ -214,9 +214,17 @@ def verify():
     sha = sys.argv[1]
     stage = PRIVATE / "zomorod-messaging-release-stages" / sha
     code = stage / "code"
-    assert APP.is_dir() and not APP.is_symlink()
-    assert stage.is_dir() and not stage.is_symlink() and code.is_dir() and not code.is_symlink()
-    assert regular(stage / "manifest.txt") and regular(stage / "package.tar")
+    # Security checks must still run under python -O; never use assert here.
+    if not APP.is_dir() or APP.is_symlink():
+        fail("MAIN_APPLICATION_DIRECTORY_UNSAFE")
+    if (
+        any(path.is_symlink() for path in (PRIVATE, stage.parent, stage, code))
+        or not stage.is_dir()
+        or not code.is_dir()
+    ):
+        fail("STAGE_DIRECTORY_UNSAFE")
+    if not regular(stage / "manifest.txt") or not regular(stage / "package.tar"):
+        fail("STAGE_MANIFEST_OR_ARCHIVE_MISSING")
     manifest = dict(line.split("=", 1) for line in (stage / "manifest.txt").read_text().splitlines() if "=" in line)
     if manifest.get("release") != sha or manifest.get("mode") != "PRIVATE_STAGE_NO_DEPLOY":
         fail("STAGE_IDENTITY_UNVERIFIED")
