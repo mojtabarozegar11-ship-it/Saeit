@@ -102,6 +102,36 @@ def copy_exact_process_stdout(command, *, env=None, verify_after=None):
 
 
 
+def mysql_account_inventory_summary(db):
+    """Aggregate-only cPanel database-list diagnostic; never log database names."""
+    report = {
+        "classification": "MYSQL_ACCOUNT_INVENTORY_READ_ONLY",
+        "uapi_executed": True, "response_wellformed": False,
+        "result_status_ok": False, "database_list_is_array": False,
+        "listed_database_count_capped": 0, "expected_exact_matches": 0,
+    }
+    try:
+        q = subprocess.run(
+            ["uapi", "--output=json", "Mysql", "list_databases"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=15,
+        )
+        if q.returncode or len(q.stdout) > 300000:
+            return report
+        document = json.loads(q.stdout)
+        result = document.get("result", {})
+        rows = result.get("data")
+        report["response_wellformed"] = True
+        report["result_status_ok"] = result.get("status") == 1
+        report["database_list_is_array"] = isinstance(rows, list)
+        if isinstance(rows, list):
+            report["listed_database_count_capped"] = min(len(rows), 1000)
+            report["expected_exact_matches"] = sum(
+                1 for row in rows if isinstance(row, dict) and row.get("database") == db)
+    except Exception:
+        pass
+    return report
+
+
 def preflight_mysql_source():
     """Bounded source-only SELECT. Errors use fixed codes, never secret values."""
     try:
@@ -113,6 +143,9 @@ def preflight_mysql_source():
     except Exception:
         account_match = False
     if not account_match:
+        print("MPW_MYSQL_ACCOUNT_INVENTORY=" +
+              json.dumps(mysql_account_inventory_summary(db), sort_keys=True),
+              file=sys.stderr)
         raise RuntimeError("MYSQL_ACCOUNT_DB_UNVERIFIED")
     if not shutil.which("mariadb") or not shutil.which("mariadb-dump"):
         raise RuntimeError("MYSQL_CLIENT_UNAVAILABLE")

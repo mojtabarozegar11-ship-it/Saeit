@@ -300,7 +300,25 @@ class MySqlSourcePreflightTests(unittest.TestCase):
               guards[2], guards[3] as run):
             with self.assertRaisesRegex(RuntimeError, "MYSQL_ACCOUNT_DB_UNVERIFIED"):
                 source.preflight_mysql_source()
-        run.assert_not_called()
+        self.assertEqual(run.call_args.args[0][0], "uapi")
+        self.assertFalse(any("--execute" in item for item in run.call_args.args[0]))
+
+    def test_account_inventory_summary_is_aggregate_only(self):
+        import json
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import scripts.mojplaywin_backup_stream_cpanel as source
+        payload = json.dumps({"result": {"status": 1, "data": [
+            {"database": "other_database"}, {"database": "audit_db"}]}}).encode()
+        with patch.object(source.subprocess, "run",
+                          return_value=SimpleNamespace(returncode=0, stdout=payload)):
+            report = source.mysql_account_inventory_summary("audit_db")
+        self.assertTrue(report["response_wellformed"])
+        self.assertTrue(report["result_status_ok"])
+        self.assertEqual(report["listed_database_count_capped"], 2)
+        self.assertEqual(report["expected_exact_matches"], 1)
+        self.assertNotIn("audit_db", json.dumps(report))
+        self.assertNotIn("other_database", json.dumps(report))
 
     def test_nontransactional_table_fails_closed(self):
         source, guards = self._mocks(b"audit_db\t2\t1\n")
