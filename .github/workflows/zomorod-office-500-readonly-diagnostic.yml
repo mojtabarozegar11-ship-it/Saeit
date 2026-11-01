@@ -606,6 +606,66 @@ jobs:
           fi
           printf '%s\n' "$structure" | grep -E '^CPANEL_PYTHON_[A-Z0-9_]+=[a-z0-9]+$'
 
+      - name: Inspect production settings with verified standalone Python 3.10 (advisory only)
+        if: ${{ always() && steps.link.outcome == 'success' }}
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          evidence="$(timeout 75s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          app=/home/zomorod2/Saeit
+          test -d "$app" && test ! -L "$app"
+          cd "$app"
+          cli=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
+          test -x "$cli"
+          PYTHONDONTWRITEBYTECODE=1 "$cli" -B - <<'PY'
+          import os
+          import pathlib
+          import sys
+          print("PASSENGER_STANDALONE_PYTHON=" + str(sys.version_info.major) + str(sys.version_info.minor))
+          try:
+              import config.settings as settings
+          except Exception as exc:
+              print("PASSENGER_STANDALONE_SETTINGS_IMPORT=" + type(exc).__name__)
+              print("PASSENGER_STANDALONE_ACTIVE_DB_ATTESTED=false")
+              print("PASSENGER_STANDALONE_COMPLETE=true")
+              raise SystemExit(0)
+          app = pathlib.Path("/home/zomorod2/Saeit").resolve()
+          settings_file = pathlib.Path(settings.__file__).resolve()
+          print("PASSENGER_STANDALONE_SETTINGS_SOURCE_MATCH=" +
+                str(settings_file == app / "config" / "settings.py").lower())
+          db = settings.DATABASES.get("default", {})
+          engine = str(db.get("ENGINE", "")).rsplit(".", 1)[-1]
+          print("PASSENGER_STANDALONE_DB_ENGINE=" +
+                (engine if engine in ("sqlite3", "mysql", "postgresql", "oracle") else "unknown"))
+          print("PASSENGER_STANDALONE_DB_URL_CONFIGURED=" +
+                str(bool(os.environ.get("DATABASE_URL"))).lower())
+          if engine == "sqlite3":
+              name = db.get("NAME", "")
+              candidate = pathlib.Path(name) if str(name) else pathlib.Path("/nonexistent")
+              if not candidate.is_absolute():
+                  candidate = app / candidate
+              candidate = candidate.resolve()
+              print("PASSENGER_STANDALONE_SQLITE_FILE_PRESENT=" +
+                    str(candidate.is_file() and not candidate.is_symlink()).lower())
+          # CLI-loaded configuration cannot prove the running LSAPI worker's
+          # effective process environment or live database file identity.
+          print("PASSENGER_STANDALONE_ACTIVE_DB_ATTESTED=false")
+          print("PASSENGER_STANDALONE_COMPLETE=true")
+          PY
+          REMOTE
+          )"
+          if ! grep -Fqx 'PASSENGER_STANDALONE_COMPLETE=true' <<< "$evidence"; then
+              echo "PASSENGER_STANDALONE_OUTPUT_INCOMPLETE=true"
+              exit 1
+          fi
+          printf '%s\n' "$evidence" | grep -E '^PASSENGER_STANDALONE_[A-Z0-9_]+=[a-zA-Z0-9_]+$'
+
       - name: Classify PHP ledger versus Django root DB without writes or row access
         shell: bash
         env:
