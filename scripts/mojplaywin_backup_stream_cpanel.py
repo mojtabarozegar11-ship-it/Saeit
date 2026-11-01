@@ -288,8 +288,22 @@ if __name__ == "__main__":
             }, sort_keys=True))
         else:
             stream_files()
-    except Exception:
-        # Never log database names, source URLs, errors containing secrets,
-        # tar filenames or customer contents.
-        print("SOURCE_BACKUP_STREAM_FAILED_NO_RELEASE", file=sys.stderr)
+    except Exception as exc:
+        # Only hard-coded categories. Never echo arbitrary exceptions, paths,
+        # DB credentials, target names or customer data into CI logs.
+        safe_codes = {
+            "BACKUP_PRIMARY_ROOT_COUNT", "UNSAFE_PRIMARY_BACKUP_ROOT",
+            "BACKUP_LINK_SCAN_INCOMPLETE", "BACKUP_LINK_SCAN_LIMIT",
+            "BACKUP_PRIMARY_SPECIAL_FILE", "UNSCOPED_PRIMARY_SYMLINK",
+            "ASSET_LINK_UNRESOLVABLE", "ASSET_LINK_TARGET_OUT_OF_SCOPE",
+            "REQUIRED_PUBLIC_ASSET_ALIAS_MISSING", "ASSET_TREE_UNREADABLE",
+            "ASSET_TREE_ENTRY_LIMIT", "ASSET_TREE_UNAPPROVED_MEMBER",
+            "ASSET_TREE_UNAPPROVED_FILE_SHAPE", "ASSET_TREE_SPECIAL_FILE",
+            "ASSET_TREE_BYTE_LIMIT",
+        }
+        if len(sys.argv) == 2 and sys.argv[1] == "preflight-scoped-files":
+            code = str(exc) if type(exc) is RuntimeError and str(exc) in safe_codes else "unknown"
+            print("SCOPED_PUBLIC_ASSET_PREFLIGHT_FAILED_NO_RELEASE category=" + code, file=sys.stderr)
+        else:
+            print("SOURCE_BACKUP_STREAM_FAILED_NO_RELEASE", file=sys.stderr)
         raise SystemExit(1)
