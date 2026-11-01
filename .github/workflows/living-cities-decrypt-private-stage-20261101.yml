@@ -1,0 +1,111 @@
+name: Living Cities restore private verified release bundle on VPS
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/living-cities-decrypt-private-stage-20261101.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: living-cities-encrypted-private-stage
+  cancel-in-progress: false
+jobs:
+  private-stage:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify encrypted-only handoff exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s secure-artifacts/living-cities-20261101-b3fe1b7.b64
+          ! grep -Eq -- '-----BEGIN (RSA|OPENSSH|EC) PRIVATE KEY-----' secure-artifacts/living-cities-20261101-b3fe1b7.b64
+          echo OPAQUE_ENCRYPTED_ASSET=present
+      - name: Establish pinned access to private VPS and cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Deliver only encrypted source into VPS private storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 40s scp -q -F "$d/config" secure-artifacts/living-cities-20261101-b3fe1b7.b64 vps:.private/living-cities-transport/encrypted-incoming.b64
+          timeout 40s ssh -T -F "$d/config" vps 'test ! -L "$HOME/.private/living-cities-transport/encrypted-incoming.b64" && chmod 600 "$HOME/.private/living-cities-transport/encrypted-incoming.b64"'
+      - name: Authenticate-decrypt into private release archive (no web writes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 85s ssh -T -F "$d/config" vps 'python3 -' <<'PY'
+          import base64,hashlib,io,json,os,sys,tarfile
+          from pathlib import Path
+          try:
+              from cryptography.hazmat.primitives import hashes,serialization
+              from cryptography.hazmat.primitives.asymmetric import padding
+              from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+          except ImportError:
+              print("VPS_DECRYPT_DEPENDENCY=cryptography_not_installed")
+              sys.exit(3)
+          root=Path.home()/".private/living-cities-transport"
+          source=root/"encrypted-incoming.b64"
+          private_key=root/"private.pem"
+          assert source.is_file() and not source.is_symlink()
+          assert private_key.is_file() and not private_key.is_symlink()
+          data=json.loads(base64.b64decode(source.read_bytes().strip(),validate=True))
+          expected_sha="b3fe1b772368f3f0874481ab88ad82862bd24de2"
+          assert data["schema"]==1 and data["source_commit"]==expected_sha
+          assert data["algorithm"]=="RSA3072-OAEP-SHA256+A256GCM"
+          key=serialization.load_pem_private_key(private_key.read_bytes(),password=None).decrypt(
+            base64.b64decode(data["key"]),padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
+          aad=b"living-cities-20261101:"+bytes.fromhex(expected_sha)
+          raw=AESGCM(key).decrypt(base64.b64decode(data["nonce"]),base64.b64decode(data["ciphertext"]),aad)
+          assert hashlib.sha256(raw).hexdigest()==data["payload_sha256"]
+          assert 4096<len(raw)<4194304
+          with tarfile.open(fileobj=io.BytesIO(raw),mode="r:gz") as tar:
+              names={m.name for m in tar.getmembers()}
+              assert all(not m.name.startswith("/") and ".." not in Path(m.name).parts and (m.isfile() or m.isdir()) for m in tar.getmembers())
+              assert {"manage.py","requirements.txt","config/settings.py","apps/living_cities/tycoon_server.py","apps/living_cities/static/living_cities/app.mjs"}.issubset(names)
+              print("PRIVATE_PAYLOAD_FILES="+str(len(names)))
+          target=root/("source-"+expected_sha+".tgz")
+          temp=root/("source-"+expected_sha+".pending")
+          with temp.open("wb") as f:
+              f.write(raw); f.flush();os.fsync(f.fileno())
+          os.chmod(temp,0o600);temp.replace(target)
+          print("PRIVATE_GAME_ARTIFACT_DECRYPTED=PASS")
+          print("PRIVATE_GAME_SOURCE_SHA="+expected_sha)
+          print("PRIVATE_GAME_ARCHIVE_BYTES="+str(len(raw)))
+          print("PRIVATE_GAME_ARCHIVE_SHA256="+hashlib.sha256(raw).hexdigest())
+          PY
+      - name: Inspect independent hosting environment and Python versions (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 50s ssh -T -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          import shutil,os,re
+          h=Path("/home/zomorod2")
+          for q in (h/"Saeit/passenger_wsgi.py",h/"public_html/.htaccess"):
+              print("HOST_CONFIG_FILE_PRESENT="+q.name+"="+str(q.is_file()))
+              if q.is_file():
+                  for row in q.read_text(errors="replace").splitlines():
+                      if re.search(r"PassengerPython|python[0-9]?\.[0-9]+|virtualenv",row,re.I):
+                          print("HOST_PYTHON_ROUTING_HINT="+re.sub(r"(/home/zomorod2/)[^\s\"']+",r"\1[private-path]",row)[:190])
+          for path in ("python3.11","python3.12","python3","virtualenv"):
+              executable=shutil.which(path)
+              print("CPANEL_PYTHON_CANDIDATE="+path+" available="+str(bool(executable)))
+          print("CPANEL_PUBLIC_TARGET_EMPTY="+str(not (h/"public_html/living-cities").exists()))
+          print("CPANEL_FREE_MIB="+str(shutil.disk_usage(str(h)).free//1048576))
+          PY
+      - name: Wipe temporary runner SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
