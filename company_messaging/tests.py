@@ -5,7 +5,7 @@ from ecosystem_hub.models import UnitMembership
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.utils import timezone
-from enterprise_portal.models import BusinessUnit
+from enterprise_portal.models import AuditEvent, BusinessUnit
 from .models import Contact, Message, MessageEvent
 from .services import dispatch_one, enqueue
 
@@ -59,6 +59,13 @@ class MessagingTests(TestCase):
         self.assertEqual(res["Location"], "/company/office/messages/contacts/")
         self.assertEqual(Contact.objects.count(), 1)
         self.assertEqual(Contact.objects.get().consent_evidence, "signed consent record #410")
+        audit = AuditEvent.objects.get(action="messaging_contact_created")
+        self.assertEqual(audit.actor, self.owner)
+        self.assertEqual(audit.target, f"Contact:{Contact.objects.get().pk}")
+        self.assertEqual(audit.detail["unit_id"], self.unit.pk)
+        self.assertEqual(audit.detail["consent_channels_recorded"], ["email"])
+        self.assertNotIn("contact@example.org", str(audit.detail))
+        self.assertNotIn("signed consent record #410", str(audit.detail))
         self.assertEqual(Message.objects.count(), 0)
         sender.assert_not_called()
         self.assertContains(self.client.get("/company/office/messages/contacts/", secure=True), "مشتری امن")
@@ -71,6 +78,7 @@ class MessagingTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertContains(res, "مرجع")
         self.assertEqual(Contact.objects.count(), 0)
+        self.assertFalse(AuditEvent.objects.filter(action="messaging_contact_created").exists())
 
     def test_contact_must_have_destination(self):
         res = self.client.post("/company/office/messages/contacts/new/", secure=True, data={
@@ -126,9 +134,33 @@ class MessagingTests(TestCase):
         msg.contact.refresh_from_db()
         self.assertEqual(msg.contact.unit_id, self.unit.pk)
         self.assertEqual(msg.contact.email, "changed@example.org")
+        audit = AuditEvent.objects.get(action="messaging_contact_updated")
+        self.assertEqual(audit.actor, self.owner)
+        self.assertEqual(audit.detail["unit_id"], self.unit.pk)
+        self.assertTrue(audit.detail["consent_changed"])
+        self.assertIn("email", audit.detail["changed_fields"])
+        self.assertNotIn("changed@example.org", str(audit.detail))
+        self.assertNotIn("documented opt-in ticket #42", str(audit.detail))
         with patch("company_messaging.services._deliver") as sender:
             self.assertEqual(dispatch_one(msg.pk), "blocked")
             sender.assert_not_called()
+
+    def test_contact_unchanged_submission_does_not_generate_false_audit_event(self):
+        contact = Contact.objects.create(
+            unit=self.unit, name="No change", email="stable@example.org",
+        )
+        result = self.client.post(
+            f"/company/office/messages/contacts/{contact.pk}/edit/",
+            secure=True,
+            data={
+                "unit": self.unit.pk, "name": contact.name,
+                "email": contact.email, "active": "on",
+            },
+        )
+        self.assertEqual(result.status_code, 302)
+        self.assertEqual(
+            AuditEvent.objects.filter(action="messaging_contact_updated").count(), 0
+        )
 
     def test_contact_urls_never_expose_without_office_login(self):
         self.client.logout()
