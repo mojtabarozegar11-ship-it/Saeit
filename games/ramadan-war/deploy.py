@@ -3,10 +3,15 @@
 from pathlib import Path
 import hashlib, json, os, re, sys
 
+# Security invariants below use assertions: never run a release with -O/PYTHONOPTIMIZE.
+# Fail at module load, before any stage or production filesystem access.
+if sys.flags.optimize:
+    raise SystemExit('RAMADAN_RELEASE_REFUSED: optimized Python disables security assertions')
+
 ROOT=Path('/home/zomorod2/public_html')
 ROW='ZM-R25'; GAME_ID='ZM-R25-GAME-RAMADAN-WAR-20261022'; GAME=ROOT/'ramadan-war'
 MARK='ZM-RAMADAN-WAR-WEB-CARD-20261022'
-ASSETS=['index.html','game.js','game.css','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt','ASSET-CREDITS.md','weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-sniper-desert-v2.webp','scene-night.webp','scene-airbase.webp','soldier-rigged-ccby.glb','m24-sniper-ccby.glb','arms_basecolor.webp','arms_normal.webp','three-addons/loaders/GLTFLoader.js','three-addons/utils/BufferGeometryUtils.js','three-addons/utils/SkeletonUtils.js','three-addons/libs/meshopt_decoder.module.js']
+ASSETS=['index.html','game.js','game.css','upgrade-policy.mjs','moj1-commerce-policy.mjs','input-guard.mjs','missile-targets.mjs','enemy-action-policy.mjs','save-validation.mjs','campaign-backup.mjs','objective-navigation.mjs','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt','ASSET-CREDITS.md','weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-sniper-desert-v2.webp','scene-night.webp','scene-airbase.webp','soldier-rigged-ccby.glb','m24-sniper-ccby.glb','arms_basecolor.webp','arms_normal.webp','three-addons/loaders/GLTFLoader.js','three-addons/utils/BufferGeometryUtils.js','three-addons/utils/SkeletonUtils.js','three-addons/libs/meshopt_decoder.module.js']
 
 def digest(data): return hashlib.sha256(data).hexdigest()
 def atomic(path,data,run):
@@ -19,13 +24,97 @@ def atomic(path,data,run):
     assert not GAME.is_symlink(),f'symlink directory refused: {GAME}'
     path.parent.mkdir(parents=True,exist_ok=True)
     tmp=path.with_name('.'+path.name+'.ramadan-'+run)
-    assert not tmp.exists() and not tmp.is_symlink(),f'temporary path exists: {tmp}'
-    tmp.write_bytes(data);os.chmod(tmp,0o644)
-    assert digest(tmp.read_bytes())==digest(data)
-    os.replace(tmp,path)
-def metadata(stage): return json.loads((stage/'release.json').read_text('utf-8'))
+    # O_EXCL makes temporary-file creation atomic: a concurrent publisher
+    # cannot insert a symlink/file between a preflight check and write_bytes.
+    flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0)
+    try:
+        fd=os.open(tmp,flags,0o644)
+    except FileExistsError as exc:
+        raise AssertionError(f'temporary path exists: {tmp}') from exc
+    identity=(os.fstat(fd).st_dev,os.fstat(fd).st_ino)
+    try:
+        with os.fdopen(fd,'wb') as output:
+            os.fchmod(output.fileno(),0o644)
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        assert not tmp.is_symlink(),f'temporary path linked: {tmp}'
+        assert digest(tmp.read_bytes())==digest(data)
+        os.replace(tmp,path)
+    except BaseException:
+        # A failed write must not strand a partial payload on a full disk.
+        # Never delete an unrelated writer's pre-existing/replaced temp file.
+        try:
+            if not tmp.is_symlink():
+                current=tmp.stat()
+                if (current.st_dev,current.st_ino)==identity:
+                    tmp.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+def safe_release_file(root, relative):
+    """Read a regular release file only within an unlinked directory tree."""
+    root=Path(root)
+    rel=Path(relative)
+    assert root.is_dir() and not root.is_symlink(),'linked release directory refused'
+    assert not rel.is_absolute() and rel.parts and '..' not in rel.parts
+    for n in range(1,len(rel.parts)+1):
+        assert not root.joinpath(*rel.parts[:n]).is_symlink(),'linked release file or parent refused: '+str(relative)
+    candidate=root/rel
+    assert candidate.is_file(),'release file missing: '+str(relative)
+    assert candidate.resolve().is_relative_to(root.resolve()),'release file escapes root'
+    return candidate
+
+def metadata(stage):
+    return json.loads(safe_release_file(stage,'release.json').read_text('utf-8'))
 def store(stage,value):
-    p=stage/'release.json.tmp';p.write_text(json.dumps(value,sort_keys=True),encoding='utf-8');os.replace(p,stage/'release.json')
+    # Release metadata is security-critical: refuse a planted temporary link
+    # rather than following it with Path.write_text on the cPanel host.
+    assert stage.is_dir() and not stage.is_symlink()
+    p=stage/'release.json.tmp'
+    target=stage/'release.json'
+    assert not target.is_symlink(),'linked release state refused'
+    payload=json.dumps(value,sort_keys=True).encode('utf-8')
+    flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0)
+    try:
+        fd=os.open(p,flags,0o600)
+    except FileExistsError as exc:
+        raise RuntimeError('release state temporary file already exists') from exc
+    identity=(os.fstat(fd).st_dev,os.fstat(fd).st_ino)
+    try:
+        with os.fdopen(fd,'wb') as output:
+            output.write(payload)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(p,target)
+    except BaseException:
+        try:
+            if not p.is_symlink():
+                current=p.stat()
+                if (current.st_dev,current.st_ino)==identity:
+                    p.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+def validate_release_manifest(m):
+    """Fail closed on a corrupted or path-traversing on-host release journal."""
+    assert isinstance(m,dict) and m.get('phase') in ('prepared','published')
+    old,new,protected=m.get('old'),m.get('new'),m.get('protected')
+    assert isinstance(old,dict) and isinstance(new,dict) and isinstance(protected,dict)
+    allowed=set(ASSETS)
+    assert set(new)==allowed and set(old).issubset(allowed)
+    # These seven pre-existing assets are the minimum recoverable baseline.
+    # A forged journal must never reclassify them as new-only deletable files.
+    required={'index.html','game.js','game.css','engine3d.js',
+              'three.module.js','three.core.min.js','THREE-LICENSE.txt'}
+    assert required.issubset(old),'original release baseline missing'
+    assert set(protected).issubset({'.htaccess','agriculture/index.html',
+                                    'research/index.html','store/index.html'})
+    assert len(protected)>=2
+    hashes=list(old.values())+list(new.values())+list(protected.values())+[m.get('route')]
+    assert all(isinstance(h,str) and re.fullmatch(r'[0-9a-f]{64}',h) for h in hashes)
+    return True
+
 def live_card_check():
     home=ROOT/'index.html';assert home.is_file() and not home.is_symlink()
     text=home.read_text('utf-8');m=re.search(r'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',text,re.S)
@@ -40,15 +129,52 @@ def live_card_check():
     assert cards[3].get('slug')=='website-design'
     return home
 
+def write_backup(stage,name,data):
+    """Write an immutable original-asset backup, never following existing links."""
+    assert name in ASSETS
+    assert stage.is_dir() and not stage.is_symlink()
+    backup=stage/f'old-{name}'
+    parent=backup.parent
+    while parent!=stage:
+        assert parent.is_relative_to(stage) and not parent.is_symlink(),'linked backup parent refused'
+        parent=parent.parent
+    backup.parent.mkdir(parents=True,exist_ok=True)
+    assert not backup.parent.is_symlink(),'linked backup parent refused'
+    flags=os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0)
+    try:
+        fd=os.open(backup,flags,0o600)
+    except FileExistsError as exc:
+        raise RuntimeError('rollback backup already exists: '+name) from exc
+    identity=(os.fstat(fd).st_dev,os.fstat(fd).st_ino)
+    try:
+        with os.fdopen(fd,'wb') as output:
+            output.write(data)
+            output.flush()
+            os.fsync(output.fileno())
+        assert digest(backup.read_bytes())==digest(data),'backup checksum mismatch'
+    except BaseException:
+        try:
+            if not backup.is_symlink():
+                current=backup.stat()
+                if (current.st_dev,current.st_ino)==identity:
+                    backup.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
 def prepare(stage):
     assert ROOT.is_dir() and not ROOT.is_symlink() and GAME.is_dir() and not GAME.is_symlink()
     home=live_card_check()
-    inputs={name:(stage/f'incoming/{name}') for name in ASSETS+['.htaccess']}
+    inputs={name:safe_release_file(stage/'incoming',name) for name in ASSETS+['.htaccess']}
     assert all(p.is_file() and not p.is_symlink() for p in inputs.values())
     assert inputs['.htaccess'].read_text('utf-8')=='PassengerEnabled off\nDirectoryIndex index.html\n'
     new={name:inputs[name].read_bytes() for name in ASSETS}
     assert len(new['index.html'])>1000 and MARK.encode() in new['index.html']
     assert b'RamadanWarDebug' in new['game.js'] and b'createEngine' in new['game.js'] and b'./game.js' in new['index.html'] and b'./game.css' in new['index.html']
+    assert b'./input-guard.mjs' in new['game.js']
+    assert b'./save-validation.mjs' in new['game.js']
+    assert b'./campaign-backup.mjs' in new['game.js'] and b'validateCampaignSave' in new['campaign-backup.mjs']
+    assert all(('./'+name).encode() in new['game.js'] for name in ['upgrade-policy.mjs','moj1-commerce-policy.mjs','missile-targets.mjs','enemy-action-policy.mjs','save-validation.mjs'])
     assert b'./engine3d.js' in new['game.js'] and b'./three.module.js' in new['engine3d.js'] and b'./three.core.min.js' in new['three.module.js'] and len(new['three.module.js'])>300000 and len(new['three.core.min.js'])>300000
     assert b'The MIT License' in new['THREE-LICENSE.txt']
     assert b'CC BY 4.0' in new['ASSET-CREDITS.md'] and b'BAMEN' in new['ASSET-CREDITS.md'] and b'Naudaff3D' in new['ASSET-CREDITS.md']
@@ -59,8 +185,8 @@ def prepare(stage):
     assert len(new['three-addons/libs/meshopt_decoder.module.js'])>20000
     assert b'weapon-overlay.webp' in new['index.html'] and b'soldier-enemy.webp' in new['engine3d.js'] and b'missionBackdrop' in new['index.html'] and b'scene-sniper-desert-v2.webp' in new['game.js'] and b'alpha:true' in new['engine3d.js']
     assert b'GLTFLoader' in new['engine3d.js'] and b'soldier-rigged-ccby.glb' in new['engine3d.js'] and b'm24-sniper-ccby.glb' in new['engine3d.js'] and b'MeshoptDecoder' in new['engine3d.js']
-    assert (GAME/'.htaccess').is_file() and (GAME/'.htaccess').read_bytes()==inputs['.htaccess'].read_bytes()
-    old={name:(GAME/name).read_bytes() for name in ASSETS if (GAME/name).is_file() and not (GAME/name).is_symlink()}
+    assert safe_release_file(GAME,'.htaccess').read_bytes()==inputs['.htaccess'].read_bytes()
+    old={name:safe_release_file(GAME,name).read_bytes() for name in ASSETS if (GAME/name).is_file()}
     assert all(name in old for name in ['index.html','game.js','game.css','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt'])
     for name in set(new)-set(old):
         assert not (GAME/name).exists() and not (GAME/name).is_symlink(),f'new asset already exists: {name}'
@@ -72,25 +198,41 @@ def prepare(stage):
         if p.is_file() and not p.is_symlink():protected[rel]=digest(p.read_bytes())
     assert len(protected)>=2,'insufficient protected-page baseline'
     for name,data in old.items():
-        backup=stage/f'old-{name}'
-        assert backup.is_relative_to(stage) and not backup.is_symlink()
-        backup.parent.mkdir(parents=True,exist_ok=True)
-        backup.write_bytes(data)
-        assert digest(backup.read_bytes())==digest(data)
+        write_backup(stage,name,data)
     (stage/'old-home-hash.txt').write_text(digest(home.read_bytes()),encoding='ascii')
     store(stage,{'phase':'prepared','old':{k:digest(v) for k,v in old.items()},'new':{k:digest(v) for k,v in new.items()},'route':digest(inputs['.htaccess'].read_bytes()),'protected':protected})
     print('RAMADAN_WEB_PREPARE=PASS current-card-two-confirmed; old-client-backed-up')
 
+def ensure_publish_capacity(stage, payload_bytes, reserve_bytes=128*1024*1024,
+                            statvfs=os.statvfs):
+    """Recheck free space immediately before any live file replacement.
+
+    The earlier SSH preflight is not enough if another process fills the disk
+    during transfer or backup. Leave headroom for atomic writes and rollback.
+    """
+    assert stage.is_dir() and not stage.is_symlink()
+    assert GAME.is_dir() and not GAME.is_symlink()
+    assert isinstance(payload_bytes,int) and payload_bytes>0
+    game_fs=statvfs(GAME)
+    if game_fs.f_bavail*game_fs.f_frsize < reserve_bytes+2*payload_bytes:
+        raise RuntimeError('live game storage fell below safe publish reserve')
+    if stage.stat().st_dev != GAME.stat().st_dev:
+        stage_fs=statvfs(stage)
+        if stage_fs.f_bavail*stage_fs.f_frsize < reserve_bytes:
+            raise RuntimeError('staging storage fell below safe rollback reserve')
+
+
 def publish(stage,run):
-    m=metadata(stage);assert m['phase']=='prepared';live_card_check()
-    for name,h in m['old'].items():assert digest((GAME/name).read_bytes())==h,'game file changed concurrently: '+name
+    m=metadata(stage);validate_release_manifest(m);assert m['phase']=='prepared';live_card_check()
+    for name,h in m['old'].items():assert digest(safe_release_file(GAME,name).read_bytes())==h,'game file changed concurrently: '+name
     for name in set(m['new'])-set(m['old']):assert not (GAME/name).exists() and not (GAME/name).is_symlink(),'new asset appeared concurrently: '+name
-    assert digest((GAME/'.htaccess').read_bytes())==m['route'],'game route config changed concurrently'
+    assert digest(safe_release_file(GAME,'.htaccess').read_bytes())==m['route'],'game route config changed concurrently'
     for name in m['new']:
-        data=(stage/f'incoming/{name}').read_bytes();assert digest(data)==m['new'][name]
+        data=safe_release_file(stage/'incoming',name).read_bytes();assert digest(data)==m['new'][name]
+    ensure_publish_capacity(stage,sum(safe_release_file(stage/'incoming',name).stat().st_size for name in ASSETS))
     try:
         for name in [asset for asset in ASSETS if asset!='index.html']+['index.html']:
-            atomic(GAME/name,(stage/f'incoming/{name}').read_bytes(),run)
+            atomic(GAME/name,safe_release_file(stage/'incoming',name).read_bytes(),run)
             assert digest((GAME/name).read_bytes())==m['new'][name]
         m['phase']='published';store(stage,m)
         print('RAMADAN_WEB_CLIENT_UPDATED=PASS; route and card position preserved')
@@ -98,25 +240,83 @@ def publish(stage,run):
         rollback_files(stage,m,run)
         raise
 
+def verify_protected_pages(protected):
+    """Refuse linked protected routes, including links in intermediate folders."""
+    assert ROOT.is_dir() and not ROOT.is_symlink()
+    allowed={'.htaccess','agriculture/index.html','research/index.html','store/index.html'}
+    for rel,h in protected.items():
+        assert rel in allowed,'unexpected protected route'
+        parts=Path(rel).parts
+        assert not any((ROOT.joinpath(*parts[:n])).is_symlink()
+                       for n in range(1,len(parts)+1)),'linked protected route: '+rel
+        path=ROOT/rel
+        assert path.is_file() and not path.is_symlink(),'protected route missing: '+rel
+        assert digest(path.read_bytes())==h,'protected file changed: '+rel
+
 def verify(stage):
-    m=metadata(stage);assert m['phase']=='published';live_card_check()
-    for name,h in m['new'].items():assert digest((GAME/name).read_bytes())==h,'new game file hash mismatch: '+name
-    assert digest((GAME/'.htaccess').read_bytes())==m['route']
-    for rel,h in m['protected'].items():assert digest((ROOT/rel).read_bytes())==h,'protected file changed: '+rel
+    m=metadata(stage);validate_release_manifest(m);assert m['phase']=='published';live_card_check()
+    for name,h in m['new'].items():assert digest(safe_release_file(GAME,name).read_bytes())==h,'new game file hash mismatch: '+name
+    assert digest(safe_release_file(GAME,'.htaccess').read_bytes())==m['route']
+    verify_protected_pages(m['protected'])
     print('RAMADAN_WEB_CLIENT_AND_PROTECTED_PAGES=PASS')
 
 def rollback_files(stage,m,run):
+    """Restore only known release assets; fail if any file cannot be restored.
+
+    An already-restored old asset or an absent new-only asset is safe for
+    idempotent retries. Unexpected concurrent writes must remain untouched,
+    but MUST NOT be reported as a successful rollback.
+    """
+    problems=[]
     for name,h in m['new'].items():
+        if name not in ASSETS:
+            problems.append('unsafe release asset: '+str(name))
+            continue
         p=GAME/name
-        if name in m['old'] and p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
-            atomic(p,(stage/f'old-{name}').read_bytes(),run);print('RESTORED_OLD_GAME_FILE='+name)
-        elif name not in m['old'] and p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
-            p.unlink();print('REMOVED_NEW_GAME_ASSET='+name)
-        else:print('ROLLBACK_SKIPPED_UNEXPECTED_GAME_FILE='+name)
+        parts=Path(name).parts
+        if (GAME.is_symlink() or any((GAME.joinpath(*parts[:n])).is_symlink()
+                                     for n in range(1,len(parts)+1))):
+            problems.append('linked release asset parent: '+name)
+            continue
+        if name in m['old']:
+            if p.is_file() and not p.is_symlink():
+                current=digest(p.read_bytes())
+                if current==m['old'][name]:
+                    continue  # Idempotent: already restored or never published.
+                if current==h:
+                    backup=stage/f'old-{name}'
+                    backup_parts=Path('old-'+name).parts
+                    linked=any((stage.joinpath(*backup_parts[:n])).is_symlink()
+                               for n in range(1,len(backup_parts)+1))
+                    if (not backup.is_file() or linked or
+                            not backup.resolve().is_relative_to(stage.resolve())):
+                        problems.append('rollback backup missing or linked: '+name)
+                        continue
+                    data=backup.read_bytes()
+                    if digest(data)!=m['old'][name]:
+                        problems.append('rollback backup SHA-256 mismatch: '+name)
+                        continue
+                    atomic(p,data,run)
+                    if digest(p.read_bytes())!=m['old'][name]:
+                        problems.append('rollback restored SHA-256 mismatch: '+name)
+                    else:
+                        print('RESTORED_OLD_GAME_FILE='+name)
+                    continue
+            problems.append('rollback conflict, original asset not restored: '+name)
+        else:
+            if not p.exists() and not p.is_symlink():
+                continue  # Idempotent: new-only asset already absent.
+            if p.is_file() and not p.is_symlink() and digest(p.read_bytes())==h:
+                p.unlink()
+                print('REMOVED_NEW_GAME_ASSET='+name)
+            else:
+                problems.append('rollback conflict, new asset not removed: '+name)
+    if problems:
+        raise RuntimeError('rollback incomplete: '+'; '.join(problems))
 
 def rollback(stage,run):
     if not (stage/'release.json').is_file():print('ROLLBACK_SKIPPED_NO_RELEASE_STATE');return
-    m=metadata(stage);rollback_files(stage,m,run)
+    m=metadata(stage);validate_release_manifest(m);rollback_files(stage,m,run)
     print('OLD_GAME_CLIENT_RESTORED; HOMEPAGE_CARD_UNCHANGED')
 
 def main():
