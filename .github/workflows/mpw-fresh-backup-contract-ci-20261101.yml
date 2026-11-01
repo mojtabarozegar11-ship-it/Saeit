@@ -10,6 +10,8 @@ on:
       - 'tests/test_mojplaywin_backup_link_guard_20261101.py'
       - 'tests/test_mojplaywin_backup_pair_identity_20261101.py'
       - 'tests/test_mpw_fresh_backup_approval_contract_20261101.py'
+      - 'scripts/mpw_vps_backup_runtime_gate_readonly_20261101.py'
+      - 'tests/test_mpw_vps_backup_runtime_gate_readonly_20261101.py'
 permissions: {contents: read}
 concurrency:
   group: mpw-fresh-backup-contract-ci-${{ github.ref }}
@@ -29,6 +31,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_mpw_fresh_backup_approval_contract_20261101.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_mojplaywin_backup_link_guard_20261101.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_mojplaywin_backup_pair_identity_20261101.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_mpw_vps_backup_runtime_gate_readonly_20261101.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_mojplaywin_backup_gpg_v2.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_mojplaywin_recovery_isolated_once.py -v
           python3 -B -m py_compile scripts/mojplaywin_backup_stream_cpanel.py scripts/mojplaywin_backup_encrypt_vps_gpg.py scripts/mojplaywin_recovery_stream_vps.py
