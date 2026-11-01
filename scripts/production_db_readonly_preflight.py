@@ -20,6 +20,20 @@ class PreflightFailure(RuntimeError):
     pass
 
 
+def _wal_state(path: Path):
+    """Reject a live or unsafe WAL that immutable SQLite would silently ignore."""
+    wal = Path(str(path) + "-wal")
+    try:
+        metadata = wal.lstat()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise PreflightFailure("SQLITE_WAL_INACCESSIBLE") from exc
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size:
+        raise PreflightFailure("SQLITE_WAL_ACTIVE_OR_UNSAFE")
+    return (metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns)
+
+
 def inspect_sqlite_file(name: str | Path, base_dir: str | Path) -> int:
     """Return table count only for an existing, regular, readable Django DB."""
     path = Path(name)
@@ -33,6 +47,11 @@ def inspect_sqlite_file(name: str | Path, base_dir: str | Path) -> int:
         raise PreflightFailure("SQLITE_MISSING_OR_INACCESSIBLE") from exc
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_size < 4096:
         raise PreflightFailure("SQLITE_EMPTY_OR_NOT_REGULAR")
+
+    # An immutable SQLite URI does not read an active WAL. Never attest a
+    # potentially stale main-file schema while uncheckpointed changes exist.
+    signature = (metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns)
+    wal_before = _wal_state(path)
 
     try:
         with path.open("rb") as handle:
@@ -52,6 +71,14 @@ def inspect_sqlite_file(name: str | Path, base_dir: str | Path) -> int:
             }
     except (sqlite3.Error, OSError) as exc:
         raise PreflightFailure("SQLITE_READONLY_CHECK_FAILED") from exc
+
+    try:
+        current = path.stat()
+    except OSError as exc:
+        raise PreflightFailure("SQLITE_CHANGED_DURING_PREFLIGHT") from exc
+    current_signature = (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns)
+    if current_signature != signature or _wal_state(path) != wal_before:
+        raise PreflightFailure("SQLITE_CHANGED_DURING_PREFLIGHT")
 
     if not REQUIRED_TABLES.issubset(tables):
         raise PreflightFailure("SQLITE_DJANGO_SCHEMA_MISSING")
