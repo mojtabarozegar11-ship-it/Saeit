@@ -333,7 +333,7 @@ jobs:
           test -x "$configured_python"
           echo "PASSENGER_DB_PROBE_INTERPRETER_SOURCE=CPANEL_HTACCESS"
           cd "$app"
-          PYTHONDONTWRITEBYTECODE=1 "$configured_python" -B - <<'PY'
+          probe_output="$(PYTHONDONTWRITEBYTECODE=1 "$configured_python" -B - <<'PY'
           import os
           import pathlib
           import sqlite3
@@ -344,6 +344,7 @@ jobs:
           if pathlib.Path.cwd().resolve()!=app:
               raise SystemExit("PASSENGER_DB_PROBE_APP_ROOT_MISMATCH")
           sys.path.insert(0,str(app))
+          print("PASSENGER_DB_PROBE_INTERPRETER_RUNNING=true",flush=True)
           try:
               import passenger_wsgi
               from django.conf import settings
@@ -420,6 +421,141 @@ jobs:
           # remain independent even if an active worker file match is observed.
           print("PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no")
           PY
+          )"
+          # A zero exit status alone is not evidence that the interpreter
+          # returned an attestation; Passenger imports may exit before printing.
+          if ! printf '%s\n' "$probe_output" | grep -Eq '^PASSENGER_APP_DB_ATTESTED=(true|false) versus Django root DB without writes or row access
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 75s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import pathlib
+          import sqlite3
+          import stat
+          from urllib.parse import quote
+
+          candidates = (
+              ("PHP_LEDGER", pathlib.Path("/home/zomorod2/.private/zomorod-business/management.sqlite3")),
+              ("DJANGO_DEFAULT", pathlib.Path("/home/zomorod2/Saeit/db.sqlite3")),
+          )
+          for label, path in candidates:
+              try:
+                  meta = path.stat() if not path.is_symlink() else None
+              except OSError:
+                  meta = None
+              regular = bool(meta and stat.S_ISREG(meta.st_mode))
+              nonzero = bool(regular and meta.st_size >= 4096)
+              print(label + "_REGULAR=" + str(regular).lower())
+              print(label + "_NONEMPTY_SQLITE_SIZE=" + str(nonzero).lower())
+              if not nonzero:
+                  print(label + "_BASE_SCHEMA=unavailable")
+                  continue
+              try:
+                  with path.open("rb") as handle:
+                      if handle.read(16) != b"SQLite format 3\x00":
+                          print(label + "_BASE_SCHEMA=invalid_header")
+                          continue
+                  uri = "file:" + quote(str(path.resolve(strict=True)), safe="/") + "?mode=ro&immutable=1"
+                  with sqlite3.connect(uri, uri=True, timeout=3) as connection:
+                      connection.execute("PRAGMA query_only=ON")
+                      tables = {row[0] for row in connection.execute(
+                          "SELECT name FROM sqlite_master WHERE type='table'"
+                      )}
+                  print(label + "_BASE_SCHEMA_TABLES=" + str(len(tables)))
+                  print(label + "_HAS_DJANGO_SCHEMA=" + str(
+                      {"django_migrations", "auth_user"}.issubset(tables)
+                  ).lower())
+              except (OSError, sqlite3.Error):
+                  print(label + "_BASE_SCHEMA=read_only_unavailable")
+          print("DB_CLASSIFICATION_READONLY=true")
+          print("ACCOUNTING_SOURCE_OF_TRUTH_NOT_ATTESTED=true")
+          PY
+          REMOTE
+      - name: Attest the staged read-only PHP ledger bridge against the live schema
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 80s ssh -F "$d/config" "$COMMAND_HOST" bash -se -- "$SOURCE_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          stage="/home/zomorod2/.private/zomorod-messaging-release-stages/$sha"
+          if test ! -f "$stage/code/enterprise_portal/php_ledger_bridge.py" || ! grep -Fqx "release=$sha" "$stage/manifest.txt"; then
+            echo "PHP_LEDGER_BRIDGE_SCHEMA=not_run_stage_missing"
+            exit 0
+          fi
+          py="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
+          if test ! -x "$py"; then py="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"; fi
+          test -x "$py"
+          STAGE="$stage/code" PYTHONDONTWRITEBYTECODE=1 "$py" -B - <<'PY'
+          import os
+          import sys
+          sys.path.insert(0, os.environ["STAGE"])
+          from enterprise_portal.php_ledger_bridge import read_php_finance_snapshot
+          result = read_php_finance_snapshot(
+              "/home/zomorod2/.private/zomorod-business/management.sqlite3"
+          )
+          assert result["authority"] == "PHP V7 (read-only)"
+          assert result["document_count"] >= 0 and result["invoice_count"] >= 0
+          assert result["imbalance_count"] >= 0
+          assert all(row["currency"] in {"IRR", "USD", "EUR", "AED"} for row in result["turnovers"])
+          print("PHP_LEDGER_BRIDGE_SCHEMA=verified")
+          print("PHP_LEDGER_BRIDGE_AGGREGATE_ONLY=true")
+          print("FINANCIAL_VALUES_OR_PRIVATE_ROWS_LOGGED=false")
+          PY
+          REMOTE
+      - name: Reject any anonymous live finance report exposure
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No cookies, authorization headers, redirects, or response body.
+          # A redirect to login or a 404 on the still-unpublished route is safe;
+          # an unsolicited 200 must block the private-office release.
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --proto '=https' --tlsv1.2 --max-time 25 --max-redirs 0 \
+            --retry 2 --retry-delay 2 \
+            'https://zomorodmelal.ir/company/office/finance/authoritative/')"
+          case "$status" in
+            301|302|303|307|308|401|403|404|503)
+              echo "LIVE_ANONYMOUS_FINANCE_EXPOSURE=no"
+              echo "LIVE_FINANCE_HTTP_CLASS=guarded_or_unpublished"
+              ;;
+            200)
+              echo "::error title=Private finance access check::Anonymous HTTP 200 requires manual verification before release"
+              echo "LIVE_ANONYMOUS_FINANCE_EXPOSURE=possible"
+              exit 1
+              ;;
+            *)
+              echo "::error title=Private finance access check::Unexpected HTTP status; unable to attest anonymous safety"
+              echo "LIVE_ANONYMOUS_FINANCE_EXPOSURE=unattested"
+              exit 1
+              ;;
+          esac
+      - name: Erase transient private relay files
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
+; then
+              echo "PASSENGER_DB_PROBE_OUTPUT_INCOMPLETE=true"
+              exit 1
+          fi
+          if ! printf '%s\n' "$probe_output" | grep -Fqx 'PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no'; then
+              echo "PASSENGER_DB_PROBE_RELEASE_GATE_MISSING=true"
+              exit 1
+          fi
+          printf '%s\n' "$probe_output"
           REMOTE
       - name: Classify PHP ledger versus Django root DB without writes or row access
         shell: bash
