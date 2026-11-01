@@ -1,0 +1,28 @@
+name: Zomorod business accounting atomicity regression
+on:
+  push:
+    branches: [fix/zm-atomic-invoice-stock-20261101]
+    paths:
+      - content/zomorod-business/app.php
+      - tests/test_zm_business_atomicity.py
+      - .github/workflows/zm-business-atomicity-ci-20261101.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - content/zomorod-business/app.php
+      - tests/test_zm_business_atomicity.py
+      - .github/workflows/zm-business-atomicity-ci-20261101.yml
+permissions:
+  contents: read
+jobs:
+  finance-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: PHP syntax check (no web execution)
+        run: php -l content/zomorod-business/app.php
+      - name: Simulate concurrent stock withdrawals and invoice settlement with SQLite
+        run: python3 -m unittest discover -s tests -p test_zm_business_atomicity.py -v
