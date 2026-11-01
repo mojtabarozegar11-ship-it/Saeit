@@ -1,12 +1,14 @@
-name: Zomorod Master Command offline Django verification
+name: Zomorod Business OS offline Django verification
 
 on:
   push:
     branches:
       - feature/zm-master-agent-hourly-command-20261101
+      - feature/zm-intent-router-marketing-agent-20261101
   pull_request:
     branches:
       - feature/zm-business-os-unified-dashboard-20261101
+      - feature/zm-master-agent-hourly-command-20261101
 
 permissions:
   contents: read
