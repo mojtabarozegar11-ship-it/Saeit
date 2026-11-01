@@ -86,7 +86,7 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
 
     def test_unlisted_primary_symlink_blocks(self):
         (self.app / "unexpected").symlink_to(self.targets["assets"])
-        with self.assertRaisesRegex(RuntimeError, "UNSCOPED_PRIMARY_SYMLINK"):
+        with self.assertRaisesRegex(RuntimeError, "NESTED_PUBLIC_ASSET_SYMLINK"):
             self.check()
 
     def test_nested_target_symlink_blocks(self):
