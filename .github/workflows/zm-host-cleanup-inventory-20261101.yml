@@ -87,7 +87,7 @@ jobs:
               ("staging", HOME/"Saeit-staging/core/templates"),
               ("published", HOME/"public_html"),
           ]
-          def entries(root, max_depth=6, cap=12000):
+          def entries(root, max_depth=12, cap=80000):
               if not root.is_dir() or root.is_symlink():
                   return [],"missing"
               result=[]
@@ -127,6 +127,40 @@ jobs:
           for label,root,p,size,mtime in old:
               print("OLD_BACKUP_CANDIDATE="+json.dumps({"root":label,"file":safe_name(p,root),
                    "mib":round(size/1048576,2),"age_days":round((now-mtime)/86400,1)},ensure_ascii=True))
+          # Per-lineage inventory is restricted to Zomorod-named backup families.
+          # File ages are informational; mtime alone is not grounds for deletion.
+          buckets={}
+          other={"files":0,"bytes":0}
+          for label,root,p,size,mtime in allbackups:
+              if label!="private":
+                  continue
+              first=p.relative_to(root).parts[0]
+              if first.startswith(("zomorod","zm-","ZM-")):
+                  b=buckets.setdefault(first,{"files":0,"bytes":0,"oldest_mtime":mtime,
+                                                "latest_mtime":mtime})
+                  b["files"]+=1
+                  b["bytes"]+=size
+                  b["oldest_mtime"]=min(b["oldest_mtime"],mtime)
+                  b["latest_mtime"]=max(b["latest_mtime"],mtime)
+              else:
+                  other["files"]+=1
+                  other["bytes"]+=size
+          for name,b in sorted(buckets.items(),key=lambda kv:kv[1]["bytes"],reverse=True)[:60]:
+              print("ZM_BACKUP_FAMILY="+json.dumps({
+                  "family":name,"files":b["files"],"mib":round(b["bytes"]/1048576,2),
+                  "oldest_file_age_days":round((now-b["oldest_mtime"])/86400,1),
+                  "newest_file_age_days":round((now-b["latest_mtime"])/86400,1)},ensure_ascii=True))
+          print("PRIVATE_NON_ZM_PROTECTED="+json.dumps({
+              "files":other["files"],"mib":round(other["bytes"]/1048576,1)},ensure_ascii=True))
+          # Independently confirm prior recoverable public-preview cleanup.
+          quarantine=HOME/".backups/zomorod-quarantined-old-previews-20261101"
+          if quarantine.is_dir() and not quarantine.is_symlink():
+              names=sorted(p.name for p in quarantine.iterdir() if p.is_dir() and not p.is_symlink())
+              live=HOME/"public_html"
+              all_absent=all(not (live/name).exists() for name in names)
+              print("QUARANTINE_POSTCHECK="+json.dumps({"folders":len(names),
+                  "absent_from_live":all_absent,"has_manifest":(quarantine/"manifest.json").is_file()},
+                  ensure_ascii=True))
           # Hash only same-size non-database archive candidates; never expose contents.
           archives=(".zip",".tar",".tgz",".tar.gz",".gz",".7z",".rar")
           bysize={}
