@@ -41,7 +41,7 @@ class UnifiedBusinessCommandTests(TestCase):
         UnitMembership.objects.create(user=self.analyst, unit=self.farm, role="analyst")
         permissions = Permission.objects.filter(
             content_type__app_label__in=("enterprise_portal", "company_marketing", "ecosystem_hub"),
-            codename__in=("view_organization", "view_worktask", "view_campaign"),
+            codename__in=("view_businessunit", "view_organization", "view_worktask", "view_campaign"),
         )
         self.analyst.user_permissions.add(*permissions)
 
