@@ -72,8 +72,12 @@ MARKER_NAMES = {
 def alias_purpose(source_relative):
     """Return a label from a controlled vocabulary, never the link's name."""
     name = PurePosixPath(source_relative).name.casefold()
-    if name in ("media", "uploads", "assets", "images", "static"):
-        return "site_asset_alias"
+    if name in ("media", "uploads"):
+        return "media_upload_alias"
+    if name in ("static",):
+        return "static_asset_alias"
+    if name in ("assets", "images"):
+        return "general_asset_alias"
     if name in ("venv", ".venv", "virtualenv", "site-packages"):
         return "python_runtime_alias"
     if name in ("src", "core", "templates", "app", "modules", "plugins"):
@@ -81,6 +85,30 @@ def alias_purpose(source_relative):
     if name in ("backup", "backups", "dump", "dumps"):
         return "backup_alias"
     return "unclassified_alias"
+
+
+def target_site_affinity(resolved, home=HOME):
+    """Classify account-relative destination *identity hints*, not site ownership.
+
+    Only fixed labels and nesting depth leave the host, never directory names.
+    """
+    try:
+        rel = resolved.relative_to(home.resolve(strict=True))
+    except ValueError:
+        return {"hint": "outside_account", "depth": 0}
+    parts = tuple(p.casefold() for p in rel.parts)
+    if not parts:
+        return {"hint": "entire_account_disallowed", "depth": 0}
+    if parts[0] in ("saeit", "saeit-staging", "mojplaywin.com"):
+        role = "known_site_named_root"
+    elif any(p in ("mojplaywin", "mpw", "mojplaywin-assets", "mpw-static",
+                       "mpw-media") for p in parts[:2]):
+        role = "site_brand_labeled"
+    elif parts[0] in ("staticfiles", "static", "media", "assets", "uploads"):
+        role = "generic_asset_root_unverified"
+    else:
+        role = "unverified_account_root"
+    return {"hint": role, "depth": min(len(parts), 4)}
 
 
 def direct_child_metadata(directory, *, max_entries=10_000):
@@ -183,6 +211,7 @@ def inspect():
                             "source_primary_root": name,
                             "alias_purpose": alias_purpose(str(path.relative_to(HOME))),
                             "destination_role": role,
+                            "target_site_affinity": target_site_affinity(resolved),
                             "target_inspection": allowed_private_target_metadata(resolved),
                         })
                 except (OSError, RuntimeError, ValueError):
