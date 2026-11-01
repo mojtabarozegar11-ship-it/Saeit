@@ -1,6 +1,7 @@
 name: Register independent top-level Zomorod office preflight (no cutover)
 on:
   pull_request:
+    types: [opened]
     branches: [main]
     paths:
       - ".github/workflows/zomorod-office-independent-preflight.yml"
@@ -11,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   preview-registration:
-    if: github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'integration/zomorod-office-messaging-current-main-20261031'
+    if: github.event.action == 'opened' && github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'integration/zomorod-office-messaging-current-main-20261031'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
