@@ -206,9 +206,13 @@ try {
                 if($now+$qty<0)bail('موجودی انبار منفی می‌شود.');
                 $db->prepare('INSERT INTO inventory_movements(inventory_id,movement_date,qty,note,created_by) VALUES(?,?,?,?,?)')->execute([$id,$date,$qty,$note,actor()]);
                 audit($db,'move','inventory-stock',(int)$db->lastInsertId());
-                $db->commit();
+                // Raw BEGIN IMMEDIATE must be paired with raw COMMIT/ROLLBACK;
+                // PDO::commit() may reject a transaction started through exec().
+                $db->exec('COMMIT');
             }catch(Throwable $e){
-                if($db->inTransaction())$db->rollBack();
+                try{$db->exec('ROLLBACK');}catch(Throwable $rollback){
+                    error_log('ZM stock rollback failed: '.get_class($rollback));
+                }
                 throw $e;
             }
         } elseif($action==='employee'){
