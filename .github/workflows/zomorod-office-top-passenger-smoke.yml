@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   preview-only-fix:
-    if: github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'integration/zomorod-office-messaging-current-main-20261031'
+    if: github.event.action == 'opened' && github.event.pull_request.number == 1724 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'integration/zomorod-office-messaging-current-main-20261031'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
