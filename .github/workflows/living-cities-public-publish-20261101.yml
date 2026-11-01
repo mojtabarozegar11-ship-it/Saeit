@@ -1,0 +1,104 @@
+name: Living Cities publish guarded isolated game
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/living-cities-public-publish-20261101.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency: {group: living-cities-public-guarded, cancel-in-progress: false}
+jobs:
+  publish-and-smoke:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Confirm scoped installer
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/living_cities_isolated_install.py
+          grep -Fq LC-OWNER-PINNED- scripts/living_cities_isolated_install.py
+      - name: Connect via fingerprint-pinned VPS and cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Verify private install and off-host recovery before production publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 45s ssh -T -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          root="$HOME/.private/living-cities-app"
+          release="$root/releases/b3fe1b772368f3f0874481ab88ad82862bd24de2"
+          test ! -e "$HOME/public_html/living-cities" && test ! -L "$HOME/public_html/living-cities"
+          test -f "$release/LC_VALIDATED.json"
+          test -f "$root/state/game.sqlite3"
+          test -f "$root/state/pre-publication.sqlite3"
+          python3 - "$release/LC_VALIDATED.json" <<'PY'
+          import json,sys
+          j=json.load(open(sys.argv[1]))
+          assert j["source"]=="b3fe1b772368f3f0874481ab88ad82862bd24de2"
+          assert j["archive"]=="aab0387619fecaf2ed5c181abab5ef775142ff1512c39c2a015de135775c744c"
+          print("PINNED_PRIVATE_GAME=PASS")
+          PY
+          REMOTE
+          timeout 40s ssh -T -F "$d/config" vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import sqlite3
+          p=Path.home()/".private/living-cities-transport/pre-publication-b3fe1b7.sqlite3"
+          assert p.is_file()
+          with sqlite3.connect("file:"+str(p)+"?mode=ro",uri=True) as db:
+              assert db.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+          print("OFF_HOST_GAME_RECOVERY=PASS")
+          PY
+      - name: Publish only isolated /living-cities/ route
+        id: publish
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 90s ssh -T -F "$d/config" host 'python3 - publish' < scripts/living_cities_isolated_install.py
+      - name: External public play and regression smoke tests
+        id: smoke
+        run: |
+          set -euo pipefail
+          origin=https://zomorodmelal.ir
+          for path in /living-cities/play/ /living-cities/static/living_cities/app.mjs /living-cities/static/living_cities/tycoon-panel.mjs /living-cities/health/ / /games/; do
+            tmp="$(mktemp)"
+            status=000
+            for attempt in 1 2 3 4; do
+              status="$(curl -sSL --connect-timeout 6 --max-time 22 -H 'Cache-Control: no-cache' -o "$tmp" -w '%{http_code}' "$origin$path" || true)"
+              test "$status" != 200 || break
+              sleep 3
+            done
+            echo "LIVING_CITIES_SMOKE=$path HTTP=$status"
+            test "$status" = 200 || { rm -f "$tmp"; exit 1; }
+            if test "$path" = /living-cities/play/; then
+              grep -Fq 'LIVING CITIES' "$tmp"
+              grep -Fq '/living-cities/static/living_cities/app.mjs' "$tmp"
+            fi
+            if test "$path" = /living-cities/static/living_cities/app.mjs; then
+              grep -Fq 'tycoon-panel.mjs' "$tmp"
+            fi
+            if test "$path" = /living-cities/health/; then
+              python3 -c 'import json,sys;v=json.load(open(sys.argv[1]));assert v["game"]=="living-cities" and v["ready"] is True and v["payment_enabled"] is False' "$tmp"
+            fi
+            rm -f "$tmp"
+          done
+          echo LIVING_CITIES_PUBLIC_LIVE=PASS
+      - name: Roll back only newly managed route on publication smoke failure
+        if: failure() && steps.publish.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          if test -f "$d/config"; then
+            timeout 75s ssh -T -F "$d/config" host 'python3 - rollback' < scripts/living_cities_isolated_install.py
+          fi
+      - name: Erase runner SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
