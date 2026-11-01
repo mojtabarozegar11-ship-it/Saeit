@@ -138,10 +138,13 @@ def _identity(request, *, create=False):
 
 
 def _install_cookie(response, token):
+    # All purchase responses are personalized by a signed guest cookie or login.
+    # Preserve pre-existing Vary values even when no new cookie is issued.
+    from django.utils.cache import patch_vary_headers
+    patch_vary_headers(response, ("Cookie",))
     if token:
         response.set_cookie(COOKIE, token, max_age=COOKIE_AGE, path=COOKIE_PATH,
                             secure=True, httponly=True, samesite="Lax")
-        response["Vary"] = "Cookie"
     response["Cache-Control"] = "private, no-store, max-age=0"
     response["Referrer-Policy"] = "same-origin"
     response["X-Content-Type-Options"] = "nosniff"
@@ -154,6 +157,73 @@ def _dispatch(request, view, args, kwargs, *, create=False):
     request.user = user
     response = view(request, *args, **kwargs)
     return _install_cookie(response, token)
+
+
+
+def _public_price_ok(value):
+    """Only real public products at or above the owner-approved USD $4 floor."""
+    from decimal import Decimal, InvalidOperation
+    if isinstance(value, bool):
+        return False
+    try:
+        amount = Decimal(str(value))
+    except (TypeError, ValueError, InvalidOperation):
+        return False
+    return amount.is_finite() and amount >= Decimal("4.00")
+
+
+def _public_shop_page(request, pages_namespace):
+    """Guest-only public catalog; diagnostics never become payable public SKUs."""
+    if not _host_ok(request):
+        raise Http404
+    from html import escape
+    from types import SimpleNamespace
+    from django.conf import settings
+    from django.db import connection
+    from core.models import Product
+    from mpw_commerce.buyer_orders import _eligible
+    from mpw_commerce.downloads import _private_file
+    from services.mpw_trx_commercial_context import rights_cleared_for_sale
+    from services.mpw_trx_commercial_web import _configured_receiver
+    from services.mpw_trx_walletless_core import PaymentHold
+    from services.mpw_walletless_commercial_intent import _commercial_db
+
+    try:
+        _commercial_db(settings, connection)
+        _configured_receiver()
+    except PaymentHold as exc:
+        raise Http404("TRX catalog temporarily unavailable") from exc
+
+    cards = []
+    ids = getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ())
+    for product in Product.objects.filter(pk__in=ids, active=True).order_by("pk"):
+        if (not _public_price_ok(product.price) or not _eligible(product)
+                or not rights_cleared_for_sale(product)):
+            continue
+        try:
+            file = _private_file(SimpleNamespace(product=product))
+            if file.is_symlink() or not file.is_file() or file.stat().st_size <= 0:
+                continue
+        except (OSError, ValueError):
+            continue
+        cards.append(
+            f'<article><h2>{escape(product.title)}</h2>'
+            f'<p>${escape(str(product.price))} USD · Pay the quoted amount in TRX</p>'
+            f'<a class="button" href="/store/product/{product.pk}/checkout/">'
+            'Buy with TRX</a></article>'
+        )
+    intro = (
+        "<p>No account is required. Create your invoice, then pay the exact "
+        "quoted TRX amount using Trust Wallet on the TRON network. "
+        "Keep this browser to retrieve your purchase. If you already paid "
+        "and cannot see your receipt, do not pay again; contact "
+        '<a href="mailto:support@mojplaywin.com">purchase support</a>.</p>'
+    )
+    return pages_namespace["_page"](
+        "Buy digital products with TRX",
+        intro + "".join(cards) if cards else
+        "<p>No products are currently cleared for TRX checkout.</p>"
+    )
 
 
 def _checkout_page(request, product_id, pages_namespace):
@@ -180,8 +250,20 @@ def _checkout_page(request, product_id, pages_namespace):
         raise Http404
     product = Product.objects.select_related("knowledge_article").filter(
         pk=product_id, active=True).first()
-    if product is None or not _eligible(product) or not rights_cleared_for_sale(product):
+    if (product is None or not _public_price_ok(product.price)
+            or not _eligible(product) or not rights_cleared_for_sale(product)):
         raise Http404
+    # Direct checkout URLs must meet the same private-deliverable gate as
+    # catalog cards; never invite payment for a missing or empty ZIP.
+    from types import SimpleNamespace
+    from mpw_commerce.downloads import _private_file
+    try:
+        deliverable = _private_file(SimpleNamespace(product=product))
+        if (deliverable.is_symlink() or not deliverable.is_file()
+                or deliverable.stat().st_size <= 0):
+            raise Http404("Product delivery is unavailable")
+    except (OSError, ValueError) as exc:
+        raise Http404("Product delivery is unavailable") from exc
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
         "mpw_trx_easy_enabled": True, "mpw_guest_checkout": True,
@@ -197,7 +279,6 @@ def _checkout_page(request, product_id, pages_namespace):
 def patch_public(namespace):
     from django.views.decorators.cache import never_cache
     from django.views.decorators.http import require_GET
-    import inspect
 
     old_checkout = namespace.get("product_checkout")
     old_purchases = namespace.get("purchases")
@@ -210,9 +291,43 @@ def patch_public(namespace):
     @never_cache
     @require_GET
     def purchases(request):
-        return _dispatch(request, inspect.unwrap(old_purchases), (), {})
+        # A missing/expired guest owner cookie is not a missing URL.
+        # Never reveal orders without a signed cookie or authenticated user.
+        if not _host_ok(request):
+            raise Http404
+        current = getattr(request, "user", None)
+        authenticated = bool(current is not None and getattr(current, "is_authenticated", False))
+        if not authenticated and _read_user(request) is None:
+            from django.http import HttpResponse
+            response = HttpResponse(
+                "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+                "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                "<title>TRX purchase recovery | MojPlayWin</title></head><body>"
+                "<main><h1>TRX purchase recovery</h1>"
+                "<p>No active purchase session was found in this browser. "
+                "For security, purchases cannot be displayed without the original "
+                "browser session.</p>"
+                "<p>If you have already paid, do not send another payment. "
+                "Contact purchase support with your invoice reference and "
+                "transaction hash; never send a wallet recovery phrase.</p>"
+                "<p><a href=\"/store/\">Return to store</a> "
+                "<a href=\"mailto:support@mojplaywin.com\">Purchase support</a></p></main></body></html>",
+                content_type="text/html; charset=utf-8",
+                status=200,
+            )
+            response["Content-Security-Policy"] = (
+                "default-src 'none'; base-uri 'none'; form-action 'none'; "
+                "frame-ancestors 'none'")
+            return _install_cookie(response, None)
+        # Keep the original authentication, permission and cache decorators.
+        # _dispatch installs the verified guest principal before they run.
+        return _dispatch(request, old_purchases, (), {})
 
     namespace["product_checkout"] = never_cache(require_GET(product_checkout))
+    if callable(namespace.get("public_shop")) and callable(namespace.get("_page")):
+        def public_shop(request):
+            return _public_shop_page(request, namespace)
+        namespace["public_shop"] = never_cache(require_GET(public_shop))
     namespace["purchases"] = purchases
 
 
