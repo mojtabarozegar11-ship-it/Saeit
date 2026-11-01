@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 from scripts.mojplaywin_backup_stream_cpanel import (assert_no_unbacked_symlinks, assert_scoped_public_asset_links, scoped_files_tar_command)
+from scripts.mojplaywin_restore_files_isolated_runner import recover
 
 
 class BackupLinkGuardTests(unittest.TestCase):
@@ -112,6 +113,24 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
             self.assertFalse(any(m.issym() or m.islnk() for m in members.values()))
             self.assertFalse(any("unlinked-independent-project" in name for name in members))
             self.assertFalse(any(name.startswith("external-assets") for name in members))
+
+    def test_synthetic_self_contained_tar_isolates_and_recovers(self):
+        if not shutil.which("tar"):
+            self.skipTest("GNU tar unavailable")
+        self.check()
+        archive = subprocess.run(
+            scoped_files_tar_command(self.account, (self.app, self.site)),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
+        ).stdout
+        sandbox = self.account / "fresh-private-restore"
+        sandbox.mkdir(mode=0o700)
+        result = recover(io.BytesIO(archive), sandbox)
+        self.assertTrue(result["restore_complete"])
+        self.assertEqual(result["symlinks_restored"], 0)
+        self.assertEqual(result["root_count_restored"], 2)
+        self.assertTrue((sandbox / "mojplaywin.com" / "static" / "example.css").is_file())
+        self.assertTrue((sandbox / "mojplaywin.com" / self.nested_site.name / "assets" / "example.css").is_file())
+        self.assertTrue((sandbox / "mojplaywin.com" / self.nested_site.name / "uploads" / "example.css").is_file())
 
     def test_missing_alias_blocks(self):
         (self.nested_site / "uploads").unlink()
