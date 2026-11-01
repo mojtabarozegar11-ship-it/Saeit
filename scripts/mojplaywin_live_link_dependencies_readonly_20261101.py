@@ -195,6 +195,13 @@ def bounded_asset_tree_metadata(directory, *, max_entries=150_000):
                     original = p.with_suffix("")
                     if not original.is_symlink() and original.is_file() and original.suffix.casefold() in web:
                         shapes["precompressed_web_sidecar_shape"] += 1
+                    elif (not original.is_symlink() and original.is_file() and
+                          original.suffix.casefold() in media):
+                        shapes["precompressed_media_sidecar_shape"] += 1
+                    elif (not original.is_symlink() and original.is_file() and
+                          original.suffix.casefold() in (".json", ".xml", ".txt", ".md",
+                                                        ".csv", ".webmanifest", ".wasm")):
+                        shapes["precompressed_data_sidecar_shape"] += 1
                     else:
                         shapes["other_gzip_or_brotli_shape"] += 1
                 elif suffix in (".zip", ".tar", ".7z"):
