@@ -4,7 +4,7 @@ from django.conf import settings
 from django_otp.forms import OTPAuthenticationForm
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
-from .models import WorkTask, OfficeLetter, BusinessUnit
+from .models import WorkTask, OfficeLetter, BusinessUnit, Meeting
 from .security import login_is_blocked, register_failed_login, clear_login_failures
 
 
@@ -115,3 +115,27 @@ class LetterForm(forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["assigned_to"].queryset = colleagues(user)
+
+
+class MeetingForm(forms.ModelForm):
+    """Human-created meeting; no auto-invitation or external provider traffic."""
+
+    class Meta:
+        model = Meeting
+        fields = ("title", "agenda", "starts_at", "ends_at", "location")
+        widgets = {
+            "agenda": forms.Textarea(attrs={"rows": 4}),
+            "starts_at": forms.DateTimeInput(
+                format="%Y-%m-%dT%H:%M", attrs={"type": "datetime-local"},
+            ),
+            "ends_at": forms.DateTimeInput(
+                format="%Y-%m-%dT%H:%M", attrs={"type": "datetime-local"},
+            ),
+        }
+
+    def clean(self):
+        values = super().clean()
+        start, end = values.get("starts_at"), values.get("ends_at")
+        if start and end and end <= start:
+            self.add_error("ends_at", "پایان جلسه باید بعد از شروع آن باشد.")
+        return values
