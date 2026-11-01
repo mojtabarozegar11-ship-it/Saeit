@@ -253,6 +253,17 @@ def _checkout_page(request, product_id, pages_namespace):
     if (product is None or not _public_price_ok(product.price)
             or not _eligible(product) or not rights_cleared_for_sale(product)):
         raise Http404
+    # Direct checkout URLs must meet the same private-deliverable gate as
+    # catalog cards; never invite payment for a missing or empty ZIP.
+    from types import SimpleNamespace
+    from mpw_commerce.downloads import _private_file
+    try:
+        deliverable = _private_file(SimpleNamespace(product=product))
+        if (deliverable.is_symlink() or not deliverable.is_file()
+                or deliverable.stat().st_size <= 0):
+            raise Http404("Product delivery is unavailable")
+    except (OSError, ValueError) as exc:
+        raise Http404("Product delivery is unavailable") from exc
     response = _nocache(render(request, "mpw_commerce/product_checkout.html", {
         "product": product, "price_usd": format(product.price, ".2f"),
         "mpw_trx_easy_enabled": True, "mpw_guest_checkout": True,
