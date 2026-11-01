@@ -97,6 +97,38 @@ class ProjectRegisterTests(TestCase):
         self.assertEqual(before, (ManagementProject.objects.count(),
                                   BudgetPlan.objects.count(), AuditEvent.objects.count()))
 
+    def test_new_project_requires_write_role_and_is_audited_idea_only(self):
+        add_perm = Permission.objects.get(
+            content_type__app_label="enterprise_portal",
+            codename="add_managementproject",
+        )
+        self.viewer.user_permissions.add(add_perm)
+        self.client.force_login(self.viewer)
+        url = reverse("enterprise_portal:new_project")
+        payload = {
+            "unit": self.farm.pk, "code": "P-002",
+            "title": "New project", "objective": "Feasibility first",
+        }
+        # A read-only unit analyst cannot create or approve.
+        self.assertEqual(self.client.post(url, payload, secure=True).status_code, 403)
+        self.assertFalse(ManagementProject.objects.filter(code="P-002").exists())
+        UnitMembership.objects.filter(user=self.viewer, unit=self.farm).update(role="manager")
+        # Cross-unit IDs are not accepted even for an authorized manager.
+        self.assertEqual(self.client.post(
+            url, {**payload, "unit": self.factory.pk}, secure=True
+        ).status_code, 200)
+        self.assertFalse(ManagementProject.objects.filter(code="P-002").exists())
+        response = self.client.post(url, payload, secure=True)
+        self.assertEqual(response.status_code, 302)
+        project = ManagementProject.objects.get(code="P-002")
+        self.assertEqual(project.status, "idea")
+        self.assertEqual(project.owner, self.viewer)
+        self.assertEqual(project.unit, self.farm)
+        self.assertEqual(BudgetPlan.objects.filter(project=project).count(), 0)
+        self.assertTrue(AuditEvent.objects.filter(
+            action="office_project_created", target=f"ManagementProject:{project.pk}"
+        ).exists())
+
     def test_post_cannot_mutate_project_register(self):
         self.client.force_login(self.viewer)
         url = reverse("enterprise_portal:project_register")
