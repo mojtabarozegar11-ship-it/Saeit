@@ -251,9 +251,10 @@ def assert_scoped_public_asset_links(roots=(APP, DOCROOT), home=HOME,
                     if (name in (".env", "id_rsa", "wp-config.php", "secrets.yml") or
                             suffix in (".pem", ".key", ".p12", ".pfx",
                                        ".sql", ".sqlite", ".sqlite3", ".db",
-                                       ".bak", ".gpg", ".age", ".zip",
-                                       ".tar", ".gz", ".7z")):
-                        raise RuntimeError("ASSET_TREE_UNAPPROVED_FILE_SHAPE")
+                                       ".bak", ".gpg", ".age")):
+                        raise RuntimeError("ASSET_TREE_SENSITIVE_FILE_SHAPE")
+                    if suffix in (".zip", ".tar", ".gz", ".7z"):
+                        raise RuntimeError("ASSET_TREE_ARCHIVE_FILE_SHAPE")
                     regular_bytes += info.st_size
                 elif not stat.S_ISDIR(info.st_mode):
                     raise RuntimeError("ASSET_TREE_SPECIAL_FILE")
@@ -312,7 +313,8 @@ if __name__ == "__main__":
             "REQUIRED_PUBLIC_ASSET_ALIAS_MISSING", "ASSET_TREE_UNREADABLE",
             "ASSET_TREE_ENTRY_LIMIT", "ASSET_TREE_UNAPPROVED_MEMBER",
             "ASSET_TREE_UNAPPROVED_FILE_SHAPE", "ASSET_TREE_SPECIAL_FILE",
-            "ASSET_TREE_BYTE_LIMIT",
+            "ASSET_TREE_BYTE_LIMIT", "ASSET_TREE_SENSITIVE_FILE_SHAPE",
+            "ASSET_TREE_ARCHIVE_FILE_SHAPE",
         }
         if len(sys.argv) == 2 and sys.argv[1] == "preflight-scoped-files":
             code = str(exc) if type(exc) is RuntimeError and str(exc) in safe_codes else "unknown"
