@@ -6,6 +6,7 @@ on:
     paths:
       - ops/picm-vps/worker.py
       - tests/test_picm_worker_cpu.py
+      - tests/test_picm_private_worker_release.py
       - .github/workflows/picm-direct-cpu-fallback-ci.yml
   pull_request:
     paths:
@@ -31,8 +32,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check -r requirements.txt
-          python -m py_compile ops/picm-vps/worker.py tests/test_picm_worker_cpu.py
-          python -m pytest -q --noconftest tests/test_picm_worker_cpu.py
+          python -m py_compile ops/picm-vps/worker.py scripts/picm_private_worker_release.py tests/test_picm_worker_cpu.py tests/test_picm_private_worker_release.py
+          python -m pytest -q --noconftest tests/test_picm_worker_cpu.py tests/test_picm_private_worker_release.py
       - name: Assert no VPS, site, paid provider or download operations
         run: |
           python - <<'PY'
