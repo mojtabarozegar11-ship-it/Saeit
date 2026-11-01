@@ -58,12 +58,15 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
         self.app.mkdir()
         self.site.mkdir()
         (self.app / "main.py").write_text("synthetic", encoding="utf8")
+        self.nested_site = self.site / "one-synthetic-nested-directory"
+        self.nested_site.mkdir()
         self.targets = {}
         for label in ("static", "assets", "uploads"):
             t = self.account / "external-assets" / label
             t.mkdir(parents=True)
             (t / "example.css").write_text("synthetic", encoding="utf8")
-            (self.site / label).symlink_to(t, target_is_directory=True)
+            source_root = self.site if label == "static" else self.nested_site
+            (source_root / label).symlink_to(t, target_is_directory=True)
             self.targets[label] = t
 
     def check(self, **overrides):
@@ -80,13 +83,29 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
         self.assertTrue((self.app / "main.py").exists())
 
     def test_missing_alias_blocks(self):
-        (self.site / "uploads").unlink()
+        (self.nested_site / "uploads").unlink()
         with self.assertRaisesRegex(RuntimeError, "REQUIRED_PUBLIC_ASSET_ALIAS_MISSING"):
             self.check()
 
     def test_unlisted_primary_symlink_blocks(self):
         (self.app / "unexpected").symlink_to(self.targets["assets"])
-        with self.assertRaisesRegex(RuntimeError, "NESTED_PUBLIC_ASSET_SYMLINK"):
+        with self.assertRaisesRegex(RuntimeError, "UNKNOWN_PUBLIC_ALIAS"):
+            self.check()
+
+    def test_nested_asset_aliases_must_share_one_direct_child_parent(self):
+        other = self.site / "another-synthetic-subsite"
+        other.mkdir()
+        (self.nested_site / "uploads").unlink()
+        (other / "uploads").symlink_to(self.targets["uploads"], target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "NESTED_ASSET_PARENT_MISMATCH"):
+            self.check()
+
+    def test_deeper_nested_asset_alias_fails(self):
+        deeper = self.nested_site / "deeper"
+        deeper.mkdir()
+        (self.nested_site / "assets").unlink()
+        (deeper / "assets").symlink_to(self.targets["assets"], target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, "UNEXPECTED_ASSET_ALIAS_DEPTH"):
             self.check()
 
     def test_nested_target_symlink_blocks(self):
@@ -110,7 +129,7 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
 
     def test_other_account_target_blocks(self):
         with tempfile.TemporaryDirectory() as external:
-            link = self.site / "assets"
+            link = self.nested_site / "assets"
             link.unlink()
             link.symlink_to(Path(external), target_is_directory=True)
             with self.assertRaisesRegex(RuntimeError, "ASSET_LINK_TARGET_OUT_OF_SCOPE"):
