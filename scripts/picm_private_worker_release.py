@@ -64,26 +64,39 @@ def release(run_id, expected_sha):
         raise RuntimeError("PICM_INVALID_DEPLOY_ARGUMENT")
     if ROOT.is_symlink() or not ROOT.is_dir() or os.getuid() == 0:
         raise RuntimeError("PICM_VPS_ROOT_UNSAFE")
-    for path in (WORKER, TOKEN, PIDFILE, LOG):
+    for path in (WORKER, TOKEN, LOG):
         guard_regular(path)
-    if not (ROOT / "worker.lock").is_file():
+    if PIDFILE.exists() or PIDFILE.is_symlink():
+        guard_regular(PIDFILE)
+    if not (ROOT / "worker.lock").is_file() or (ROOT / "worker.lock").is_symlink():
         raise RuntimeError("PICM_WORKER_LOCK_MISSING")
-    old_pid = int(PIDFILE.read_text(encoding="ascii").strip())
-    if not process_ours(old_pid):
-        raise RuntimeError("PICM_ACTIVE_WORKER_MISSING")
-    log_lines = LOG.read_text(encoding="utf-8", errors="replace").splitlines()[-60:]
-    relevant = [v for v in log_lines if any(w in v for w in (
-        "PICM_QUEUE_EMPTY", "PICM_JOB_CLAIMED", "PICM_JOB_DELIVERED_",
-        "PICM_JOB_REPORTED_FAILED_"))]
-    if not relevant or "PICM_JOB_CLAIMED" in relevant[-1]:
-        raise RuntimeError("PICM_RENDER_ACTIVE_OR_UNKNOWN")
-    if any(Path("/proc/" + str(old_pid) + "/task/" + str(old_pid) + "/children").read_text().strip().split()):
-        raise RuntimeError("PICM_WORKER_CHILD_PROCESS_ACTIVE")
-
+    old_pid = int(PIDFILE.read_text(encoding="ascii").strip()) if PIDFILE.is_file() else None
+    old_running = old_pid is not None and process_ours(old_pid)
+    # An absent/stale PID is expected after the owner's factory-wide shutdown.
+    # Never signal an unrelated process if Linux reused the previous PID.
+    if old_running:
+        log_lines = LOG.read_text(encoding="utf-8", errors="replace").splitlines()[-60:]
+        relevant = [v for v in log_lines if any(w in v for w in (
+            "PICM_QUEUE_EMPTY", "PICM_JOB_CLAIMED", "PICM_JOB_DELIVERED_",
+            "PICM_JOB_REPORTED_FAILED_"))]
+        if not relevant or "PICM_JOB_CLAIMED" in relevant[-1]:
+            raise RuntimeError("PICM_RENDER_ACTIVE_OR_UNKNOWN")
+        childfile = Path("/proc") / str(old_pid) / "task" / str(old_pid) / "children"
+        if childfile.read_text().strip():
+            raise RuntimeError("PICM_WORKER_CHILD_PROCESS_ACTIVE")
+    # Reject any unpinned candidate before importing or replacing a worker.
+    import importlib.util
+    from importlib.machinery import SourceFileLoader
     candidate = ROOT / ("worker.py.candidate." + run_id)
     guard_regular(candidate)
     if hashlib.sha256(candidate.read_bytes()).hexdigest() != expected_sha:
         raise RuntimeError("PICM_CANDIDATE_HASH_MISMATCH")
+    loader = SourceFileLoader("picm_candidate", str(candidate))
+    spec = importlib.util.spec_from_loader("picm_candidate", loader)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    if not module.picm_resource_ok() or not module.direct_cpu_ready():
+        raise RuntimeError("PICM_PRIVATE_RESOURCE_OR_MODEL_NOT_READY")
     backup_dir = ROOT / ".release-backups"
     if backup_dir.is_symlink():
         raise RuntimeError("PICM_BACKUP_DIR_UNSAFE")
@@ -100,12 +113,14 @@ def release(run_id, expected_sha):
         candidate.chmod(0o600)
         os.replace(candidate, WORKER)
         changed = True
-        stop_worker(old_pid)
+        if old_running:
+            stop_worker(old_pid)
         new_pid = start_worker()
         assert hashlib.sha256(WORKER.read_bytes()).hexdigest() == expected_sha
         print("PICM_PRIVATE_WORKER_RELEASE_SUCCESS")
         print("PICM_RELEASE_BACKUP_REFERENCE=" + run_id)
         print("PICM_NEW_WORKER_PID=" + str(new_pid))
+        print("PICM_STARTED_FROM_STOPPED_STATE=" + str(not old_running).lower())
         return
     except Exception:
         if changed:
@@ -116,7 +131,7 @@ def release(run_id, expected_sha):
             shutil.copy2(backup, recovery)
             os.replace(recovery, WORKER)
             assert hashlib.sha256(WORKER.read_bytes()).hexdigest() == previous_hash
-            if not process_ours(old_pid):
+            if old_running and not process_ours(old_pid):
                 try:
                     start_worker()
                     print("PICM_PREVIOUS_WORKER_RESTORED", flush=True)

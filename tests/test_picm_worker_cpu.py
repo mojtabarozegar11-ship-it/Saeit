@@ -55,7 +55,7 @@ def test_missing_cpu_install_retains_original_local_comfyui_route():
         return {"cpu-history-test": {"outputs": {"2": {"images": [{"filename": "test.png"}]}}}}
     with patch.object(worker, "direct_cpu_ready", return_value=False), \
          patch.object(worker, "start_comfy_if_needed") as init, \
-         patch.object(worker, "factory_ok", return_value=True), \
+         patch.object(worker, "picm_resource_ok", return_value=True), \
          patch.object(worker, "ram_ok", return_value=True), \
          patch.object(worker, "comfy_api", side_effect=api), \
          patch.object(worker, "urlopen", return_value=io.BytesIO(PNG)):
@@ -77,7 +77,7 @@ def test_direct_cpu_executes_command_as_argument_vector_and_validates_png():
             Path(args[-1]).write_bytes(PNG)
             return FakeChild()
         with patch.object(worker, "CPU_STATE", Path(base) / "renders"), \
-             patch.object(worker, "factory_ok", return_value=True), \
+             patch.object(worker, "picm_resource_ok", return_value=True), \
              patch.object(worker, "ram_ok", return_value=True), \
              patch.object(worker.subprocess, "Popen", side_effect=fake_spawn):
             assert worker.render_direct_cpu("Gentle morning scene", 1) == PNG
@@ -89,8 +89,15 @@ def test_direct_cpu_executes_command_as_argument_vector_and_validates_png():
         assert kwargs["stdin"] == worker.subprocess.DEVNULL
 
 
-def test_direct_cpu_never_starts_if_factory_safety_fails():
-    with patch.object(worker, "factory_ok", return_value=False), \
+def test_direct_cpu_never_starts_if_picm_resources_are_low():
+    with patch.object(worker, "picm_resource_ok", return_value=False), \
          patch.object(worker.subprocess, "Popen", side_effect=AssertionError("must not spawn")):
         with pytest.raises(RuntimeError, match="PICM_CPU_START_GUARD"):
             worker.render_direct_cpu("A quiet garden", 1)
+
+
+def test_picm_independent_from_stopped_factory():
+    source = WORKER.read_text(encoding="utf-8")
+    assert "factory-runtime" not in source
+    assert "factory_ok()" not in source
+    assert "def picm_resource_ok():" in source
