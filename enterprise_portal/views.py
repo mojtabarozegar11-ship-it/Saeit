@@ -20,7 +20,7 @@ from .forms import CompanyAuthenticationForm, TaskForm, LetterForm, has_office_a
 from .models import (
     AuditEvent, BudgetPlan, BusinessUnit, CommercialDocument, CompanyAsset,
     InventoryItem, JournalEntry, JournalLine, ManagementProject, Meeting,
-    OfficeLetter, Partner, StockMovement, WorkTask,
+    OfficeLetter, OfficeAttachment, Partner, StockMovement, WorkTask,
 )
 from .task_workflow import TRANSITIONS, available_actions
 from .services import stock_balance
@@ -316,7 +316,7 @@ def task_detail(request, pk):
 @require_GET
 def letters(request):
     required_permission(request, "view_officeletter")
-    qs = _visible_letters(request.user).select_related("assigned_to").order_by("-sent_on", "-pk")
+    qs = _visible_letters(request.user).select_related("assigned_to").prefetch_related("attachments").order_by("-sent_on", "-pk")
     return page(request, "letters", {
         "section": "letters", "letters": qs[:100],
         "can_add": request.user.has_perm("enterprise_portal.add_officeletter"),
@@ -350,17 +350,54 @@ def new_task(request):
 @require_http_methods(["GET", "POST"])
 def new_letter(request):
     required_permission(request, "add_officeletter")
-    form = LetterForm(request.POST or None, user=request.user)
+    form = LetterForm(request.POST or None, request.FILES or None, user=request.user)
     if request.method == "POST" and form.is_valid():
+        attachment = form.cleaned_data.get("attachment")
+        if attachment:
+            required_permission(request, "add_officeattachment")
         item = form.save(commit=False)
         item.created_by = request.user
-        with transaction.atomic():
-            item.save()
-            AuditEvent.objects.create(actor=request.user, action="office_letter_created",
-                                      target=f"OfficeLetter:{item.pk}",
-                                      detail={"number": item.number, "classification": item.classification})
+        from .private_uploads import remove_only_new_attachment, store_attachment
+        saved_key = None
+        try:
+            with transaction.atomic():
+                item.save()
+                AuditEvent.objects.create(
+                    actor=request.user, action="office_letter_created",
+                    target=f"OfficeLetter:{item.pk}",
+                    detail={"number": item.number, "classification": item.classification},
+                )
+                if attachment:
+                    stored = store_attachment(item, request.user, attachment)
+                    saved_key = stored.storage_key
+                    AuditEvent.objects.create(
+                        actor=request.user, action="office_attachment_uploaded",
+                        target=f"OfficeLetter:{item.pk}",
+                        detail={"attachment_id": stored.pk, "size_bytes": stored.size_bytes,
+                                "sha256": stored.sha256, "human_action": True},
+                    )
+        except Exception:
+            if saved_key:
+                remove_only_new_attachment(saved_key)
+            raise
         return no_cache(redirect("enterprise_portal:letters"))
     return page(request, "form", {
         "section": "office", "form": form, "heading": "ثبت نامه در دبیرخانه",
         "submit_label": "ثبت نامه", "back_url": reverse("enterprise_portal:letters"),
     })
+
+
+@never_cache
+@office_access
+@require_GET
+def download_office_attachment(request, pk):
+    required_permission(request, "view_officeletter")
+    required_permission(request, "download_officeattachment")
+    record = get_object_or_404(
+        OfficeAttachment.objects.select_related("letter").filter(
+            letter__in=_visible_letters(request.user),
+        ),
+        pk=pk,
+    )
+    from .private_uploads import download_attachment
+    return download_attachment(record)
