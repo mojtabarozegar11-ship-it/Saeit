@@ -1,0 +1,60 @@
+{% extends "ecosystem_hub/base.html" %}
+{% block title %}چت فرماندهی مسترایجنت زمرد ملل{% endblock %}
+{% block hub_title %}مسترایجنت | میز فرمان عملیاتی{% endblock %}
+{% block hub_subtitle %}ثبت فرمان متنی مدیر، ارجاع به دستیار تخصصی و تحویل گزارش مستند در واحد انتخاب‌شده{% endblock %}
+{% block hub_content %}
+<div class="hub-notice" role="note">
+این گفت‌وگوی خصوصی به داده‌های ثبت‌شده شرکت متصل است. متن فرمان به‌صورت قابل پیگیری ذخیره می‌شود،
+اما در این نسخه تنها تحلیل داخلیِ دستیار انتخاب‌شده اجرا می‌شود؛ هیچ دستور پرداخت،
+ارسال پیام، انتشار تبلیغ، جابه‌جایی انبار یا کنترل تجهیزات کارخانه از این صفحه اجرا نمی‌شود.
+خروجی همیشه پیش‌نویسِ نیازمند بازبینی است.
+</div>
+<section class="hub-section">
+  <div class="hub-section-title"><h2>فرمان جدید برای {{ selected_unit.name }}</h2></div>
+  {% if specialists %}
+  <form class="hub-command-form" method="post" action="{% url 'enterprise_portal:ecosystem_hub:master_command' %}" autocomplete="off">
+    {% csrf_token %}
+    <input type="hidden" name="unit" value="{{ selected_unit.code }}">
+    <input type="hidden" name="request_key" value="{{ request_key }}">
+    <label for="master-command-text">دستور یا پرسش مدیریتی</label>
+    <textarea id="master-command-text" name="instruction" maxlength="2000" minlength="1"
+      required rows="5" placeholder="مثلاً: ریسک‌های باز و ضرورت‌های اصلاحی این واحد را بررسی و گزارش کن."></textarea>
+    <label for="master-command-agent">دستیار مسئول بررسی</label>
+    <select id="master-command-agent" name="assistant_code" required>
+      <option value="">انتخاب دستیار تخصصی</option>
+      {% for item in specialists %}
+      <option value="{{ item.code }}">{{ item.title }} — {{ item.description }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">ثبت فرمان و تولید گزارش پیش‌نویس</button>
+    <p class="hub-command-hint">هر فرمان یک شناسه یکتا و سابقه حسابرسی دارد. تکرار ارسال همان فرم، گزارش را دوباره تولید نمی‌کند.</p>
+  </form>
+  {% else %}
+  <p class="hub-empty">برای این حساب، دستیار تحلیل‌گر دارای موتور و مجوز مشاهده داده‌های منبع موجود نیست.</p>
+  {% endif %}
+</section>
+<section class="hub-section">
+  <div class="hub-section-title"><h2>تاریخچه فرمان‌های واحد</h2></div>
+  <div class="table-frame"><table>
+    <thead><tr><th>دستور</th><th>دستیار</th><th>صادرکننده</th><th>وضعیت</th><th>ثبت</th><th>خروجی</th></tr></thead>
+    <tbody>
+    {% for item in commands %}
+    <tr>
+      <td class="hub-command-instruction">{{ item.instruction }}</td>
+      <td>{{ item.assistant_code }}</td>
+      <td>{{ item.issued_by.username }}</td>
+      <td>{{ item.get_status_display }}</td>
+      <td>{{ item.created_at|date:"Y/m/d H:i" }}</td>
+      <td>
+        {% if item.report and item.assistant_code in allowed_codes %}
+        <a href="{% url 'enterprise_portal:ecosystem_hub:report' item.report.pk %}">مشاهده گزارش</a>
+        {% else %}—{% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6">هنوز فرمانی برای این واحد ثبت نشده است.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}
