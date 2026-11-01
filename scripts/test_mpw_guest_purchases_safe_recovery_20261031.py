@@ -113,5 +113,15 @@ class ReleasePurchasesSmokeContractTests(unittest.TestCase):
         self.assertIn("GUEST_RECOVERY_NOSTORE_MISSING", workflow)
 
 
+class ReleaseInterlockTests(unittest.TestCase):
+    def test_release_is_manual_and_fail_closed_until_independent_proof(self):
+        from pathlib import Path
+        workflow = (Path(__file__).resolve().parents[1] / ".github" / "workflows" /
+                    "mpw-guest-checkout-live-release.yml").read_text("utf8")
+        self.assertIn("  workflow_dispatch:", workflow)
+        self.assertNotIn("  push:", workflow)
+        self.assertIn("if: ${{ false }}", workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
