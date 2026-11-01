@@ -20,18 +20,23 @@ class PreflightFailure(RuntimeError):
     pass
 
 
-def _wal_state(path: Path):
-    """Reject a live or unsafe WAL that immutable SQLite would silently ignore."""
-    wal = Path(str(path) + "-wal")
-    try:
-        metadata = wal.lstat()
-    except FileNotFoundError:
-        return None
-    except OSError as exc:
-        raise PreflightFailure("SQLITE_WAL_INACCESSIBLE") from exc
-    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size:
-        raise PreflightFailure("SQLITE_WAL_ACTIVE_OR_UNSAFE")
-    return (metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns)
+def _sidecar_state(path: Path):
+    """Reject SQLite sidecars that immutable=1 cannot safely reconcile.
+
+    Even a zero-byte WAL or a hot rollback journal is ambiguous while another
+    process may be writing. Refuse them without opening or changing the files.
+    """
+    for suffix, reason in (("-wal", "SQLITE_WAL_ACTIVE_OR_UNSAFE"),
+                           ("-shm", "SQLITE_SHM_PRESENT_OR_UNSAFE"),
+                           ("-journal", "SQLITE_JOURNAL_PRESENT_OR_UNSAFE")):
+        sidecar = Path(str(path) + suffix)
+        try:
+            sidecar.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise PreflightFailure("SQLITE_SIDECAR_INACCESSIBLE") from exc
+        raise PreflightFailure(reason)
 
 
 def inspect_sqlite_file(name: str | Path, base_dir: str | Path) -> int:
@@ -51,7 +56,7 @@ def inspect_sqlite_file(name: str | Path, base_dir: str | Path) -> int:
     # An immutable SQLite URI does not read an active WAL. Never attest a
     # potentially stale main-file schema while uncheckpointed changes exist.
     signature = (metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns)
-    wal_before = _wal_state(path)
+    _sidecar_state(path)
 
     try:
         with path.open("rb") as handle:
@@ -77,7 +82,8 @@ def inspect_sqlite_file(name: str | Path, base_dir: str | Path) -> int:
     except OSError as exc:
         raise PreflightFailure("SQLITE_CHANGED_DURING_PREFLIGHT") from exc
     current_signature = (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns)
-    if current_signature != signature or _wal_state(path) != wal_before:
+    _sidecar_state(path)
+    if current_signature != signature:
         raise PreflightFailure("SQLITE_CHANGED_DURING_PREFLIGHT")
 
     if not REQUIRED_TABLES.issubset(tables):
