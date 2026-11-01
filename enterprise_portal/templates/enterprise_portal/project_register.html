@@ -23,6 +23,7 @@
 </section>
 <section class="panel">
   <h2>بودجه‌های مرتبط با همین پروژه و واحد</h2>
+  {% if can_view_budget %}
   <div class="table-frame"><table>
     <thead><tr><th>عنوان</th><th>سال مالی</th><th>وضعیت</th><th>مبلغ</th><th>ارز</th></tr></thead>
     <tbody>
@@ -31,6 +32,9 @@
       {% empty %}<tr><td colspan="5">بودجه‌ای برای این پروژه ثبت نشده است.</td></tr>{% endfor %}
     </tbody>
   </table></div>
+  {% else %}
+  <p>نمایش بودجه نیازمند مجوز مستقل مشاهده اطلاعات مالی است.</p>
+  {% endif %}
   <p>NPV، IRR، هزینه واقعی، سود نقدی و نرخ بازگشت سرمایه: بدون داده‌های مستند جریان نقدی و هزینه، محاسبه یا ادعا نمی‌شوند.</p>
 </section>
 {% else %}
@@ -39,7 +43,7 @@
   <h2>پروژه‌های ثبت‌شده</h2>
   <p>حداکثر {{ record_limit }} پرونده اول به ترتیب واحد و شناسه؛ وضعیت و بودجه‌ها از پایگاه داده فعلی خوانده می‌شوند.</p>
   <div class="table-frame"><table>
-    <thead><tr><th>شناسه</th><th>پروژه</th><th>واحد</th><th>مسئول</th><th>وضعیت</th><th>بودجه مصوب به تفکیک ارز</th></tr></thead>
+    <thead><tr><th>شناسه</th><th>پروژه</th><th>واحد</th><th>مسئول</th><th>وضعیت</th><th>{% if can_view_budget %}بودجه مصوب به تفکیک ارز{% else %}دسترسی بودجه{% endif %}</th></tr></thead>
     <tbody>
       {% for project in projects %}
       <tr>
@@ -48,7 +52,7 @@
         <td>{{ project.unit.name }}</td>
         <td>{{ project.owner.get_username }}</td>
         <td>{{ project.get_status_display }}</td>
-        <td>{% for budget in project.approved_budgets %}{{ budget.total }} {{ budget.currency }}{% if not forloop.last %}؛ {% endif %}{% empty %}بودجه مصوب ثبت نشده{% endfor %}</td>
+        <td>{% if can_view_budget %}{% for budget in project.approved_budgets %}{{ budget.total }} {{ budget.currency }}{% if not forloop.last %}؛ {% endif %}{% empty %}بودجه مصوب ثبت نشده{% endfor %}{% else %}نیازمند مجوز مالی{% endif %}</td>
       </tr>
       {% empty %}<tr><td colspan="6">هیچ پروژه مجازی برای نمایش ثبت نشده است.</td></tr>{% endfor %}
     </tbody>

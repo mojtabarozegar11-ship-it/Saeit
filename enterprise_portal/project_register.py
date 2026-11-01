@@ -68,33 +68,43 @@ def new_project(request):
 def project_register(request, pk=None):
     required_permission(request, "view_managementproject")
     units = user_units(request.user)
+    # Viewing a project never grants access to its financial records.  Both
+    # the list aggregate and detail queryset must enforce budget permission.
+    can_view_budget = (
+        request.user.is_superuser
+        or request.user.has_perm("enterprise_portal.view_budgetplan")
+    )
     visible = ManagementProject.objects.select_related("unit", "owner").filter(
         unit__in=units
     )
     if pk is not None:
         project = get_object_or_404(visible, pk=pk)
-        budgets = BudgetPlan.objects.filter(
-            project=project, unit=project.unit
-        ).order_by("currency", "fiscal_year", "pk")
+        budgets = BudgetPlan.objects.none()
+        if can_view_budget:
+            budgets = BudgetPlan.objects.filter(
+                project=project, unit=project.unit
+            ).order_by("currency", "fiscal_year", "pk")
         return page(request, "project_register", {
             "section": "projects", "item": project, "budgets": budgets,
+            "can_view_budget": can_view_budget,
         })
 
     projects = list(visible.order_by("unit__code", "code", "pk")[:150])
-    by_id = {project.pk: project for project in projects}
-    if by_id:
+    for project in projects:
+        project.approved_budgets = []
+    if can_view_budget and projects:
+        by_id = {project.pk: project for project in projects}
         totals = BudgetPlan.objects.filter(
             project_id__in=by_id,
             unit_id=F("project__unit_id"),
             status="approved",
         ).values("project_id", "currency").annotate(total=Sum("amount"))
-        for project in projects:
-            project.approved_budgets = []
         for row in totals:
             by_id[row["project_id"]].approved_budgets.append({
                 "currency": row["currency"], "total": row["total"],
             })
     return page(request, "project_register", {
         "section": "projects", "projects": projects, "record_limit": 150,
+        "can_view_budget": can_view_budget,
         "can_add": request.user.is_superuser or request.user.has_perm("enterprise_portal.add_managementproject"),
     })
