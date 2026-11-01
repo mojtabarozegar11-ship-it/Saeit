@@ -23,6 +23,7 @@ from .catalog import CATALOG
 from .intent_router import route_instruction
 from .models import MasterCommand, UnitMembership
 from .report_policy import permitted_assistant_codes
+from .task_watch import watch_for_unit
 from .views import page, permission, require_hub, select_unit
 
 
@@ -44,11 +45,13 @@ def _authorized_specialists(user):
 def _render_room(request, unit, units, specialists, eligible, *,
                  error="", instruction="", request_key=None, response_status=200):
     visible = MasterCommand.objects.filter(unit=unit).select_related(
-        "issued_by", "report",
+        "issued_by", "report", "task",
     ).order_by("-created_at", "-pk")[:40]
+    can_view_tasks = request.user.is_superuser or request.user.has_perm("enterprise_portal.view_worktask")
+    task_watch = watch_for_unit(unit, actor=request.user) if can_view_tasks else None
     result = page(request, "master_command", {
         "selected_unit": unit, "units": units,
-        "commands": visible,
+        "commands": visible, "task_watch": task_watch,
         "specialists": specialists,
         "allowed_codes": eligible,
         "request_key": request_key or uuid4(),
