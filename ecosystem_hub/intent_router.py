@@ -76,8 +76,9 @@ def route_instruction(instruction, permitted_codes):
     if not scores:
         return {"status": "unmatched", "code": None, "candidates": [],
                 "version": ROUTER_VERSION}
-    highest = max(scores.values())
-    leaders = sorted(code for code, score in scores.items() if score == highest)
+    # A command touching multiple departments needs the manager to choose
+    # the first owner explicitly; never silently drop the other subjects.
+    leaders = sorted(scores)
     if len(leaders) != 1:
         return {"status": "ambiguous", "code": None, "candidates": leaders,
                 "version": ROUTER_VERSION}
