@@ -466,18 +466,79 @@ jobs:
           print("TRACE_ROOT_HTACCESS_READONLY=true")
           PY
           REMOTE
+      - name: Inspect active root Django URL declarations without importing or changing production
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          test "$COMMAND_HOST" = saeit-cpanel
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          timeout 90s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          from pathlib import Path
+          import ast
+          root=Path("/home/zomorod2/Saeit")
+          urls=root/"config"/"urls.py"
+          settings=root/"config"/"settings.py"
+          print("ROOT_SOURCE_DIR_EXISTS="+str(root.is_dir() and not root.is_symlink()).lower())
+          print("ROOT_URLCONF_SOURCE_EXISTS="+str(urls.is_file() and not urls.is_symlink()).lower())
+          print("ROOT_SETTINGS_SOURCE_EXISTS="+str(settings.is_file() and not settings.is_symlink()).lower())
+          if urls.is_file() and not urls.is_symlink():
+              source=urls.read_text(encoding="utf-8",errors="replace")
+              tree=ast.parse(source)
+              literals={node.value for node in ast.walk(tree)
+                        if isinstance(node,ast.Constant) and isinstance(node.value,str)}
+              for name,value in (
+                  ("PRIVATE_MESSAGE_ROUTE","company/office/messages/"),
+                  ("PRIVATE_MARKETING_ROUTE","company/office/marketing/"),
+                  ("PRIVATE_OFFICE_ROUTE","company/office/"),
+                  ("PRIVATE_LOGIN_LEGACY_ROUTE","company/office/login/"),
+                  ("INDEPENDENT_PREVIEW_ROUTE","office-preflight-9ab790b15a42/"),
+                  ("HEALTH_ROOT_ROUTE","api/"),
+              ):
+                  print("ROOT_URLCONF_"+name+"_DECLARED="+str(value in literals).lower())
+              office_imports=any(
+                  isinstance(node,ast.ImportFrom) and node.module in
+                  ("company_messaging", "company_marketing", "enterprise_portal")
+                  for node in ast.walk(tree)
+              )
+              print("ROOT_URLCONF_OFFICE_MODULE_DIRECT_IMPORT="+str(office_imports).lower())
+          for name in ("company_messaging","company_marketing","enterprise_portal"):
+              path=root/name/"__init__.py"
+              print("ROOT_SOURCE_PACKAGE_"+name.upper()+"_EXISTS="+str(
+                  path.is_file() and not path.is_symlink()).lower())
+          if settings.is_file() and not settings.is_symlink():
+              source=settings.read_text(encoding="utf-8",errors="replace")
+              tree=ast.parse(source)
+              constants={}
+              for node in tree.body:
+                  if isinstance(node,ast.Assign):
+                      for target in node.targets:
+                          if isinstance(target,ast.Name) and target.id in (
+                              "COMPANY_OFFICE_REQUIRE_MFA","ROOT_URLCONF"):
+                              try:constants[target.id]=ast.literal_eval(node.value)
+                              except (TypeError,ValueError):pass
+              print("ROOT_SOURCE_MFA_FAIL_CLOSED="+str(constants.get("COMPANY_OFFICE_REQUIRE_MFA") is True).lower())
+              print("ROOT_SOURCE_URLCONF_CONFIG="+str(constants.get("ROOT_URLCONF")=="config.urls").lower())
+          print("ROOT_SOURCE_INSPECTION_READONLY=true")
+          PY
+          REMOTE
       - name: Fingerprint external 404 response classes without printing page content
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zm-route-fingerprint"
           mkdir -m 700 -p "$d"
-          for key in health office_login office_root missing_canary original_office; do
+          for key in health office_login office_root missing_canary original_office root_api_unknown; do
             case "$key" in
               health) url="https://zomorodmelal.ir/api/health/" ;;
               office_login) url="https://zomorodmelal.ir/office-preflight-9ab790b15a42/secure-login/" ;;
               office_root) url="https://zomorodmelal.ir/office-preflight-9ab790b15a42/" ;;
               original_office) url="https://zomorodmelal.ir/company/office/messages/" ;;
+              root_api_unknown) url="https://zomorodmelal.ir/api/office-404-route-probe-11a0c83f/" ;;
               missing_canary) url="https://zomorodmelal.ir/missing-route-canary-11a0c83f/" ;;
             esac
             code="$(curl --silent --show-error --max-redirs 0 --max-time 25 --dump-header "$d/$key.headers" --output "$d/$key.body" --write-out '%{http_code}' "$url" || true)"
@@ -524,6 +585,27 @@ jobs:
               echo "ROUTE_FINGERPRINT_LOGIN_SAME_AS_MISSING_CANARY=false"
             fi
           fi
+          python3 -B - "$d" <<'PY'
+          from pathlib import Path
+          from hashlib import sha256
+          import sys
+          folder=Path(sys.argv[1])
+          canonical="\n<!doctype html>\n<html lang=\"en\">\n<head>\n  <title>Not Found</title>\n</head>\n<body>\n  <h1>Not Found</h1><p>The requested resource was not found on this server.</p>\n</body>\n</html>\n".encode("utf-8")
+          assert len(canonical)==179
+          expected=sha256(canonical).hexdigest()
+          for name in ("office_login","office_root","original_office",
+                       "missing_canary","root_api_unknown"):
+              file=folder/(name+".body")
+              if file.is_file():
+                  digest=sha256(file.read_bytes()).hexdigest()
+                  print("ROUTE_DIAG_"+name.upper()+"_EXACT_DJANGO_DEFAULT_404="+str(digest==expected).lower())
+          left=folder/"office_login.body"
+          right=folder/"root_api_unknown.body"
+          if left.is_file() and right.is_file():
+              print("ROUTE_DIAG_LOGIN_MATCHES_ROOT_DJANGO_API_CANARY="+str(
+                  left.read_bytes()==right.read_bytes()).lower())
+          print("ROUTE_DIAG_STOCK_DJANGO_REFERENCE_SHA256="+expected)
+          PY
           rm -rf -- "$d"
           echo "ROUTE_DIAGNOSTIC_READONLY=true"
       - name: Remove runner transient relay credentials
