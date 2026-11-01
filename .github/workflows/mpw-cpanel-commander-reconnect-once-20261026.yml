@@ -1,72 +1,49 @@
 name: Restore already paired cPanel Remote Desktop Commander once
-# Owner-requested continuation of private 72/225/879 visual QA.
-# Does not access/change product files, web apps, prices, rights, or payments.
+# One-time owner-authorized reconnection through the already pinned direct cPanel SSH route.
+# Isolated branch: does not touch web, payment, database, cron, or VPS.
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/mpw-cpanel-commander-reconnect-once-20261026.yml
   workflow_dispatch:
-permissions: {contents: read}
+permissions:
+  contents: read
 concurrency:
-  group: mpw-cpanel-commander-reconnect-once
+  group: mpw-cpanel-commander-direct-reconnect-20261101
   cancel-in-progress: false
 jobs:
   reconnect:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/ops/cpanel-commander-direct-reconnect-20261101'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Establish pinned no-agent-forwarding GitHub to VPS to cPanel relay
+      - name: Reconnect paired cPanel device via pinned direct SSH (no VPS)
         shell: bash
         env:
-          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           umask 077
-          test -n "$VPS_KEY" && test -n "$HOST_KEY"
-          d="$RUNNER_TEMP/mpw-live-three-private-qa"
+          test -n "$HOST_KEY" || { echo 'CPANEL_KEY_NOT_CONFIGURED'; exit 1; }
+          d="$RUNNER_TEMP/mpw-cpanel-commander-direct-$GITHUB_RUN_ID"
           install -d -m 700 "$d"
-          for variable in VPS_KEY HOST_KEY; do
-            file="$d/$variable.key"
-            printf '%s' "${!variable}" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$file"
-            chmod 600 "$file"
-            ssh-keygen -y -P '' -f "$file" >/dev/null
-          done
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          ssh -i "$d/VPS_KEY.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
-          cat > "$d/config" <<EOF
-          Host saeit-vps
-            HostName 178.239.147.150
-            User githubops
-            IdentityFile $d/VPS_KEY.key
-            UserKnownHostsFile $d/vps.known
-          Host saeit-cpanel
-            HostName zohal.pws-dns.net
-            User zomorod2
-            Port 1396
-            IdentityFile $d/HOST_KEY.key
-            UserKnownHostsFile $d/host.known
-            ProxyJump saeit-vps
-          Host *
-            StrictHostKeyChecking yes
-            IdentitiesOnly yes
-            BatchMode yes
-            ConnectTimeout 15
-            ForwardAgent no
-            RequestTTY no
-          EOF
-          chmod 600 "$d/config"
-      - name: Reconnect existing paired device only (no site or cron changes)
-        shell: bash
-        run: |
+          trap 'rm -f -- "$d/site.key" "$d/site.known"; rmdir -- "$d" 2>/dev/null || true' EXIT
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/site.key"
+          chmod 600 "$d/site.key"
+          ssh-keygen -y -P '' -f "$d/site.key" >/dev/null
+          ssh-keyscan -T 12 -p 1396 -t ed25519 178.239.147.125 > "$d/site.known" 2>/dev/null
+          test -s "$d/site.known" || { echo 'CPANEL_PORT_UNREACHABLE'; exit 1; }
+          fingerprint="$(ssh-keygen -lf "$d/site.known" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$fingerprint" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' || { echo 'CPANEL_HOST_KEY_PIN_MISMATCH'; exit 1; }
+          timeout 100s ssh -T -F /dev/null \
+            -i "$d/site.key" \
+            -o UserKnownHostsFile="$d/site.known" \
+            -o StrictHostKeyChecking=yes \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=12 \
+            -o ConnectionAttempts=1 \
+            -o ForwardAgent=no \
+            -p 1396 zomorod2@178.239.147.125 'bash -se' <<'REMOTE'
           set -euo pipefail
-          d="$RUNNER_TEMP/mpw-live-three-private-qa"
-          timeout 110s ssh -T -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
-          set -euo pipefail
+          test "$(id -un)" = zomorod2
           export PATH="/opt/alt/alt-nodejs22/root/usr/bin:$PATH"
           command -v node >/dev/null
           command -v npx >/dev/null
@@ -86,52 +63,4 @@ jobs:
             exit 1
           fi
           REMOTE
-      - name: Classify agent readiness and remote reachability without exposing private log
-        shell: bash
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/mpw-live-three-private-qa"
-          timeout 45s ssh -T -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
-          set -euo pipefail
-          export PATH="/opt/alt/alt-nodejs22/root/usr/bin:$PATH"
-          python3 - <<'PY'
-          from pathlib import Path
-          import json
-          path = Path.home() / "desktop-commander.log"
-          if not path.is_file():
-              print("MPW_REMOTE_DIAGNOSTIC=" + json.dumps({"log_exists": False}))
-          else:
-              with path.open("rb") as stream:
-                  size = path.stat().st_size
-                  stream.seek(max(0, size - 131072))
-                  log = stream.read().decode("utf-8", errors="replace").casefold()
-              terms = {
-                  "connected": "connected to remote mcp",
-                  "session_restored": "session restored",
-                  "channel_subscribed": "channel subscribed",
-                  "device_ready": "device ready",
-                  "marked_online": "device marked as online",
-                  "auth_flow_required": "device code received",
-                  "session_invalid": "persisted session invalid",
-                  "fetch_failed": "fetch failed",
-                  "startup_failed": "device startup failed",
-              }
-              print("MPW_REMOTE_DIAGNOSTIC=" + json.dumps({"log_exists": True, "log_bytes": size,
-                  "markers": {key: value in log for key, value in terms.items()}}, sort_keys=True))
-          PY
-          python3 - <<'PY'
-          import urllib.request
-          try:
-              with urllib.request.urlopen("https://mcp.desktopcommander.app", timeout=9) as response:
-                  print("MPW_REMOTE_ENDPOINT_HTTP=" + str(response.status))
-          except Exception as exc:
-              print("MPW_REMOTE_ENDPOINT_ERROR_TYPE=" + type(exc).__name__)
-          PY
-          REMOTE
-      - name: Remove only this run's transient SSH identity
-        if: always()
-        shell: bash
-        run: |
-          if test -d "$RUNNER_TEMP/mpw-live-three-private-qa"; then
-            rm -rf -- "$RUNNER_TEMP/mpw-live-three-private-qa"
-          fi
+          echo 'MPW_CPANEl_DIRECT_SSH_TASK=COMPLETED'
