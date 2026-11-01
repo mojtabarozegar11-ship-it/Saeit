@@ -28,4 +28,5 @@ urlpatterns = [
     path("tasks/<int:pk>/", views.task_detail, name="task_detail"),
     path("letters/", views.letters, name="letters"),
     path("letters/new/", views.new_letter, name="new_letter"),
+    path("letters/attachments/<int:pk>/download/", views.download_office_attachment, name="download_office_attachment"),
 ]
