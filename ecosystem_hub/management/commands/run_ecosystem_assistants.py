@@ -75,7 +75,7 @@ def process_rule(rule_id, *, now):
     # Record an auditable due-date snapshot, never change task status or send.
     if CATALOG[rule.assistant_code]["handler"] in ("tasks", "executive"):
         detail["task_watch"] = watch_for_unit(
-            rule.unit, today=timezone.localdate(now), limit=1,
+            rule.unit, actor=actor, today=timezone.localdate(now), limit=1,
         )["counts"]
     AuditEvent.objects.create(
         actor=actor,
