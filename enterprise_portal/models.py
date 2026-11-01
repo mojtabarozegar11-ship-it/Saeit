@@ -418,3 +418,71 @@ class AuditEvent(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ValidationError("سوابق حسابرسی حذف نمی‌شود.")
+
+
+class ChatGPTActionReport(models.Model):
+    """Append-only receipt for a *reported* ChatGPT action, not an AI chat transcript.
+
+    Explicit provenance and independent-review fields prevent confusing a
+    proposed activity, a GitHub commit and a completed production operation.
+    """
+    unit = models.ForeignKey(BusinessUnit, on_delete=models.PROTECT, related_name="chatgpt_reports")
+    report_code = models.CharField(max_length=64, unique=True)
+    cycle_code = models.CharField(max_length=16, default="05")
+    run_reference = models.CharField(max_length=128)
+    occurred_at = models.DateTimeField()
+    title = models.CharField(max_length=240)
+    body = models.TextField(max_length=8000)
+    outcome = models.CharField(max_length=16, choices=(
+        ("completed", "اقدام انجام‌شده در محدوده شواهد"),
+        ("partial", "بخشی انجام‌شده"),
+        ("blocked", "متوقف یا ناموفق"),
+        ("proposed", "فقط پیشنهاد؛ اجرا نشده"),
+    ))
+    evidence_url = models.URLField(max_length=500)
+    evidence_reviewed = models.BooleanField(default=False, help_text="صرفاً بررسی دستی سند؛ نه تضمین نتیجه تجاری")
+    evidence_reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="reviewed_chatgpt_reports", null=True, blank=True,
+    )
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="recorded_chatgpt_reports",
+    )
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "گزارش متنی اقدام چت‌جی‌پی‌تی"
+        verbose_name_plural = "گزارش‌های متنی اقدامات چت‌جی‌پی‌تی"
+        ordering = ("-occurred_at", "-pk")
+        indexes = [
+            models.Index(fields=("cycle_code", "occurred_at"), name="zm_chatgpt_cycle_time_idx"),
+        ]
+
+    def clean(self):
+        from urllib.parse import urlsplit
+        errors = {}
+        if not (self.report_code or "").strip():
+            errors["report_code"] = "شناسه یکتای گزارش ضروری است."
+        if not (self.run_reference or "").strip():
+            errors["run_reference"] = "شناسه اجرای واقعی ضروری است."
+        if not (self.title or "").strip() or not (self.body or "").strip():
+            errors["body"] = "متن نتیجه و عنوان گزارش نباید خالی باشند."
+        parsed = urlsplit(self.evidence_url or "")
+        if (parsed.scheme != "https" or parsed.netloc != "github.com" or
+                not parsed.path.startswith("/mojtabarozegar11-ship-it/Saeit/") or
+                parsed.query or parsed.username or parsed.password):
+            errors["evidence_url"] = "مدرک باید پیوند HTTPS بدون پارامتر به مخزن رسمی Saeit باشد."
+        if self.evidence_reviewed != bool(self.evidence_reviewed_by_id):
+            errors["evidence_reviewed"] = "بررسی مدرک و هویت بازبین باید با هم ثبت شوند."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError("گزارش ثبت‌شده غیرقابل‌ویرایش است؛ برای تصحیح رسید جدید ثبت کنید.")
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("گزارش ثبت‌شده حذف نمی‌شود.")

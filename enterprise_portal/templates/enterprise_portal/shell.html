@@ -22,6 +22,7 @@
     <a href="{% url 'enterprise_portal:dashboard' %}">◈ &nbsp; میزکار اصلی</a>
     {% if perms.ecosystem_hub.view_organization %}<a href="{% url 'enterprise_portal:ecosystem_hub:dashboard' %}">✥ &nbsp; مرکز مدیریت اکوسیستم</a>{% endif %}
     {% if perms.ecosystem_hub.view_organization %}<a href="{% url 'enterprise_portal:ecosystem_hub:assistants' %}">✦ &nbsp; دستیارهای مدیریت و تولید</a>{% endif %}
+    {% if request.user.is_superuser %}<a href="{% url 'enterprise_portal:chatgpt_reports' %}">≡ &nbsp; گزارش‌های متنی اقدامات ChatGPT</a>{% endif %}
     {% if perms.enterprise_portal.view_journalentry %}<a href="{% url 'enterprise_portal:finance' %}">▤ &nbsp; حسابداری و مالی</a>{% endif %}
     {% if perms.enterprise_portal.view_inventoryitem %}<a href="{% url 'enterprise_portal:inventory' %}">▣ &nbsp; انبار و تولید</a>{% endif %}
     {% if perms.enterprise_portal.view_meeting or perms.enterprise_portal.view_worktask %}<a href="{% url 'enterprise_portal:calendar' %}">◷ &nbsp; تقویم هوشمند و جلسات</a>{% endif %}

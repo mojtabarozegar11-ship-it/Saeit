@@ -5,7 +5,7 @@ from django.db.models import Q
 from .models import (
     AuditEvent, BudgetPlan, BusinessUnit, CommercialDocument, CompanyAsset,
     InventoryItem, JournalEntry, JournalLine, LedgerAccount, ManagementProject,
-    Meeting, OfficeLetter, Partner, StockMovement, WorkTask,
+    Meeting, OfficeLetter, Partner, StockMovement, WorkTask, ChatGPTActionReport,
 )
 from .services import confirm_stock_movement, post_journal
 from ecosystem_hub.access import can_view_unit, require_unit, user_units
@@ -394,3 +394,52 @@ class AuditEventAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(ChatGPTActionReport)
+class ChatGPTActionReportAdmin(admin.ModelAdmin):
+    """CEO-only immutable report intake; never auto-assert a completed activity."""
+    list_display = ("report_code", "cycle_code", "unit", "outcome", "evidence_reviewed", "occurred_at")
+    list_filter = ("cycle_code", "outcome", "evidence_reviewed")
+    search_fields = ("report_code", "run_reference", "title")
+    readonly_fields = ("recorded_by", "recorded_at", "evidence_reviewed_by")
+    list_per_page = 40
+
+    def get_form(self, request, obj=None, **kwargs):
+        base_form = super().get_form(request, obj, **kwargs)
+
+        class ReviewerBoundForm(base_form):
+            def clean(inner):
+                values = super().clean()
+                # Set the reviewing identity before ModelForm._post_clean calls
+                # the model's full_clean; a claimed review cannot be anonymous.
+                inner.instance.evidence_reviewed_by = (
+                    request.user if values.get("evidence_reviewed") else None
+                )
+                return values
+
+        return ReviewerBoundForm
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs if request.user.is_superuser else qs.none()
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_active and request.user.is_superuser
+
+    def has_add_permission(self, request):
+        return request.user.is_active and request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        if change or not request.user.is_superuser:
+            raise PermissionDenied("ویرایش گزارش ثبت‌شده مجاز نیست.")
+        obj.recorded_by = request.user
+        obj.evidence_reviewed_by = request.user if obj.evidence_reviewed else None
+        obj.full_clean()
+        super().save_model(request, obj, form, change)
