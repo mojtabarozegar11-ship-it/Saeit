@@ -167,6 +167,8 @@ def verify_stream(target: Path, gpg_home: Path, key: bytes):
         if proc.poll() is None:
             proc.kill()
             proc.wait()
+        if proc.stdout is not None:
+            proc.stdout.close()
 
 
 def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None = None,
