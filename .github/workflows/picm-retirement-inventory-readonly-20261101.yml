@@ -1,7 +1,7 @@
 name: Owner PICM retirement and legacy backup scope inventory - read only
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
     branches: [diagnostic/mpw-pinned-direct-preflight-20261101]
     paths:
       - ".github/workflows/picm-retirement-inventory-readonly-20261101.yml"
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inventory:
-    if: github.event.action == 'opened' && github.actor == 'mojtabarozegar11-ship-it' && github.head_ref == 'ops/picm-private-retirement-inventory-20261101' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'diagnostic/mpw-pinned-direct-preflight-20261101'
+    if: (github.event.action == 'opened' || github.event.action == 'synchronize') && github.actor == 'mojtabarozegar11-ship-it' && github.head_ref == 'ops/picm-private-retirement-inventory-20261101' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'diagnostic/mpw-pinned-direct-preflight-20261101'
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
@@ -292,6 +292,56 @@ jobs:
           )"
           call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
           timeout 190s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64' cpanel"
+      - name: Confirm no active PICM process or foreign-owned mounted children
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          probe64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import os, stat
+          home=Path.home()
+          targets=(home/"comfyui-isolated",home/".local/share/saeit-picm")
+          active=0
+          for item in Path("/proc").iterdir():
+              if not item.name.isdecimal() or int(item.name)==os.getpid():
+                  continue
+              try:
+                  p=(item/"cmdline")
+                  if p.stat().st_uid != os.getuid():
+                      continue
+                  cmd=p.read_bytes().replace(b"\0",b" ")
+                  if any(sig in cmd for sig in (b"comfyui-isolated",b"saeit-picm/worker.py",b"sd-cli")):
+                      active+=1
+              except (OSError,PermissionError):
+                  continue
+          print("PICM_REFERENCING_PROCESSES="+str(active))
+          for idx,root in enumerate(targets):
+              label="PICM_COMFY" if idx==0 else "PICM_WORKER"
+              if root.is_symlink() or not root.is_dir() or root.resolve()!=root or root.stat().st_uid!=os.getuid():
+                  print(label+"_ROOT_GUARD=FAIL")
+                  continue
+              primary_device=root.stat().st_dev
+              scanned=symlinks=wrong_owner=other_devices=0
+              for where,dirs,files in os.walk(root,followlinks=False):
+                  for name in dirs+files:
+                      scanned+=1
+                      if scanned>100000:
+                          raise RuntimeError("PICM_TREE_TOO_LARGE")
+                      item=Path(where)/name
+                      info=item.lstat()
+                      symlinks+=stat.S_ISLNK(info.st_mode)
+                      wrong_owner+=(info.st_uid!=os.getuid())
+                      other_devices+=(info.st_dev!=primary_device)
+              print(label+"_ROOT_GUARD=PASS")
+              print(label+"_TREE_ENTRIES="+str(scanned))
+              print(label+"_SYMLINK_COUNT="+str(symlinks))
+              print(label+"_OTHER_OWNER_COUNT="+str(wrong_owner))
+              print(label+"_OTHER_DEVICE_COUNT="+str(other_devices))
+          PY
+          )"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          timeout 180s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$probe64'"
       - name: Confirm zero remote modifications or backup deletions
         shell: bash
         run: |
