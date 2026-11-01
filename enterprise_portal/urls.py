@@ -16,6 +16,7 @@ urlpatterns = [
     path("finance/trial-balance.csv", reports.trial_balance_csv, name="trial_balance_csv"),
     path("inventory/", views.inventory, name="inventory"),
     path("projects/", projects.project_register, name="project_register"),
+    path("projects/new/", projects.new_project, name="new_project"),
     path("projects/<int:pk>/", projects.project_register, name="project_detail"),
     path("tasks/", views.tasks, name="tasks"),
     path("tasks/new/", views.new_task, name="new_task"),
