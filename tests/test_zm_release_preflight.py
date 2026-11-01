@@ -58,6 +58,7 @@ class PrivateOfficeReleaseWorkflowRegression(unittest.TestCase):
         self.assertIn('os.environ["COMPANY_MESSAGING_SEND_ENABLED"]="false"', diag)
         self.assertIn('".github/workflows/zomorod-office-500-readonly-diagnostic.yml"', stage)
         self.assertIn("DB_CLASSIFICATION_READONLY=true", diag)
+        self.assertIn("PHP_LEDGER_BRIDGE_SCHEMA=verified", diag)
         self.assertIn("ACCOUNTING_SOURCE_OF_TRUTH_NOT_ATTESTED=true", diag)
 
 

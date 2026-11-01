@@ -438,6 +438,44 @@ jobs:
           print("ACCOUNTING_SOURCE_OF_TRUTH_NOT_ATTESTED=true")
           PY
           REMOTE
+      - name: Attest the staged read-only PHP ledger bridge against the live schema
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 80s ssh -F "$d/config" "$COMMAND_HOST" bash -se -- "$SOURCE_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          stage="/home/zomorod2/.private/zomorod-messaging-release-stages/$sha"
+          if test ! -f "$stage/code/enterprise_portal/php_ledger_bridge.py" || ! grep -Fqx "release=$sha" "$stage/manifest.txt"; then
+            echo "PHP_LEDGER_BRIDGE_SCHEMA=not_run_stage_missing"
+            exit 0
+          fi
+          py="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
+          if test ! -x "$py"; then py="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"; fi
+          test -x "$py"
+          STAGE="$stage/code" PYTHONDONTWRITEBYTECODE=1 "$py" -B - <<'PY'
+          import os
+          import sys
+          sys.path.insert(0, os.environ["STAGE"])
+          from enterprise_portal.php_ledger_bridge import read_php_finance_snapshot
+          result = read_php_finance_snapshot(
+              "/home/zomorod2/.private/zomorod-business/management.sqlite3"
+          )
+          assert result["authority"] == "PHP V7 (read-only)"
+          assert result["document_count"] >= 0 and result["invoice_count"] >= 0
+          assert result["imbalance_count"] >= 0
+          assert all(row["currency"] in {"IRR", "USD", "EUR", "AED"} for row in result["turnovers"])
+          print("PHP_LEDGER_BRIDGE_SCHEMA=verified")
+          print("PHP_LEDGER_BRIDGE_AGGREGATE_ONLY=true")
+          print("FINANCIAL_VALUES_OR_PRIVATE_ROWS_LOGGED=false")
+          PY
+          REMOTE
       - name: Erase transient private relay files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
