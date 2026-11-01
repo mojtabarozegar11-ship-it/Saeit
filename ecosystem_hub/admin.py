@@ -13,7 +13,7 @@ from .models import (
     MaterialRequirement, ProductionOrder, ProcurementNeed, QualityInspection,
     MaintenanceTicket, StaffAssignment, Timesheet, ManagementRisk,
     PerformanceIndicator, ReviewApproval, ReferenceEvidence, AssistantRun,
-    ProposedAutomation, MaterialPriceReference, ProductionCostScenario,
+    ProposedAutomation, AgentFollowUp, MaterialPriceReference, ProductionCostScenario,
 )
 
 
@@ -325,3 +325,29 @@ class ProposedAutomationAdmin(ScopedAdmin):
             require_unit(actor, obj.unit, write=True)
         obj.requires_human_review = True
         super().save_model(request, obj, form, change)
+
+
+@admin.register(AgentFollowUp)
+class AgentFollowUpAdmin(admin.ModelAdmin):
+    """Inspect immutable internal follow-up evidence without mutation."""
+
+    list_display = ("created_at", "rule", "source_ref", "task", "report")
+    list_select_related = ("rule", "task", "report")
+    readonly_fields = ("created_at", "updated_at", "rule", "source_ref", "task", "report")
+    search_fields = ("source_ref",)
+    list_per_page = 40
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(rule__unit__in=user_units(request.user), rule__owner=request.user)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
