@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.core.exceptions import PermissionDenied
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -92,6 +93,10 @@ class UnifiedBusinessCommandTests(TestCase):
         self.assertNotIn("پیام‌های منتظر ارسال", shown)
         self.assertNotContains(response, "کارخانه محرمانه")
         self.assertIn("no-store", response.get("Cache-Control", ""))
+
+    def test_snapshot_helper_rejects_unrelated_unit(self):
+        with self.assertRaises(PermissionDenied):
+            snapshot_for_unit(self.analyst, self.factory)
 
     def test_other_unit_cannot_be_selected_by_query_parameter(self):
         self.client.force_login(self.analyst)
