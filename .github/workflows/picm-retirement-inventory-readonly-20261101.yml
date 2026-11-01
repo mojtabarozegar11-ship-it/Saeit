@@ -342,6 +342,32 @@ jobs:
           )"
           call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
           timeout 180s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$probe64'"
+      - name: Classify PICM-only cPanel release backup entry types read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          COMMAND_HOST="${{ steps.link.outputs.command_host }}"
+          probe64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import os, stat
+          home=Path.home()
+          if os.geteuid()==0 or home!=Path("/home/zomorod2"):
+              raise SystemExit("WRONG_IDENTITY")
+          root=home/".mojplaywin-backups"
+          if not root.is_dir() or root.is_symlink():
+              raise SystemExit("UNSAFE_ROOT")
+          files=sorted((x for x in root.iterdir() if x.name.startswith(("picm-","picm_"))),key=lambda x:x.name)
+          print("PICM_BACKUP_CANDIDATES="+str(len(files)))
+          for x in files:
+              st=x.lstat()
+              kind=("regular" if stat.S_ISREG(st.st_mode) else "directory" if stat.S_ISDIR(st.st_mode) else "symlink" if stat.S_ISLNK(st.st_mode) else "other")
+              print("PICM_BACKUP_MEMBER="+x.name+"|"+kind+"|owned="+str(st.st_uid==os.geteuid()).lower()+"|size="+str(st.st_size))
+          
+          PY
+          )"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          timeout 120s ssh -T -F "$d/config" $COMMAND_HOST "python3 -c '$call' '$probe64'"
       - name: Confirm zero remote modifications or backup deletions
         shell: bash
         run: |
