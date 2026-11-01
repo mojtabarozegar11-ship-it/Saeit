@@ -217,7 +217,7 @@ def _public_shop_page(request, pages_namespace):
         "quoted TRX amount using Trust Wallet on the TRON network. "
         "Keep this browser to retrieve your purchase. If you already paid "
         "and cannot see your receipt, do not pay again; contact "
-        '<a href="/support/">purchase support</a>.</p>'
+        '<a href="mailto:support@mojplaywin.com">purchase support</a>.</p>'
     )
     return pages_namespace["_page"](
         "Buy digital products with TRX",
@@ -311,7 +311,7 @@ def patch_public(namespace):
                 "Contact purchase support with your invoice reference and "
                 "transaction hash; never send a wallet recovery phrase.</p>"
                 "<p><a href=\"/store/\">Return to store</a> "
-                "<a href=\"/support/\">Purchase support</a></p></main></body></html>",
+                "<a href=\"mailto:support@mojplaywin.com\">Purchase support</a></p></main></body></html>",
                 content_type="text/html; charset=utf-8",
                 status=200,
             )
