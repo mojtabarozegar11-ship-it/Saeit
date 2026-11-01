@@ -483,9 +483,9 @@ jobs:
           # No cookies, authorization headers, redirects, or response body.
           # A redirect to login or a 404 on the still-unpublished route is safe;
           # an unsolicited 200 must block the private-office release.
-          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \\
-            --proto '=https' --tlsv1.2 --max-time 25 --max-redirs 0 \\
-            --retry 2 --retry-delay 2 \\
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --proto '=https' --tlsv1.2 --max-time 25 --max-redirs 0 \
+            --retry 2 --retry-delay 2 \
             'https://zomorodmelal.ir/company/office/finance/authoritative/')"
           case "$status" in
             301|302|303|307|308|401|403|404|503)
