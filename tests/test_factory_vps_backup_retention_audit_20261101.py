@@ -35,6 +35,7 @@ class FactoryBackupAuditTests(unittest.TestCase):
         self.assertTrue(report["read_only"])
         self.assertEqual(report["files_changed_or_deleted"], 0)
         self.assertEqual(report["sqlite_count"], 1)
+        self.assertGreaterEqual(report["records"][0]["check_elapsed_seconds"], 0)
         self.assertTrue(report["records"][0]["quick_check_ok"])
         self.assertFalse(report["records"][0]["approved_for_deletion"])
         self.assertTrue(report["deletion_gate"].startswith("BLOCKED_"))
@@ -109,6 +110,19 @@ class FactoryBackupAuditTests(unittest.TestCase):
             set(report["keep_newest_two_verified_master_paths"]),
             {b.name, c.name},
         )
+
+    def test_timed_out_quick_check_distinguished_from_corruption(self):
+        path = self.make_database("master-before-20261027T141414Z.sqlite3")
+        with sqlite3.connect(path) as conn:
+            conn.executemany(
+                "INSERT INTO example(note) VALUES (?)",
+                (("synthetic",) for _ in range(4000)),
+            )
+        before = (path.read_bytes(), path.stat().st_mtime_ns)
+        healthy, result = audit_module.check_database(path, seconds=-1)
+        self.assertFalse(healthy)
+        self.assertEqual(result, "quick_check_timed_out")
+        self.assertEqual(before, (path.read_bytes(), path.stat().st_mtime_ns))
 
     def test_wal_or_journal_sidecar_blocks_snapshot_verification(self):
         path = self.make_database("master-before-20261027T121212Z.sqlite3")
