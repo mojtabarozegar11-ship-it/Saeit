@@ -203,9 +203,14 @@ def assert_scoped_public_asset_links(roots=(APP, DOCROOT), home=HOME,
                     if not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
                         raise RuntimeError("BACKUP_PRIMARY_SPECIAL_FILE")
                     continue
-                if (path.parent != public_root or entry not in expected or
-                        info.st_uid != os.geteuid() or entry in seen):
-                    raise RuntimeError("UNSCOPED_PRIMARY_SYMLINK")
+                if path.parent != public_root:
+                    raise RuntimeError("NESTED_PUBLIC_ASSET_SYMLINK")
+                if entry not in expected:
+                    raise RuntimeError("UNKNOWN_PUBLIC_ALIAS")
+                if info.st_uid != os.geteuid():
+                    raise RuntimeError("PUBLIC_ALIAS_OWNER_MISMATCH")
+                if entry in seen:
+                    raise RuntimeError("DUPLICATE_PUBLIC_ALIAS")
                 try:
                     target = path.resolve(strict=True)
                 except (OSError, RuntimeError):
@@ -295,6 +300,8 @@ if __name__ == "__main__":
             "BACKUP_PRIMARY_ROOT_COUNT", "UNSAFE_PRIMARY_BACKUP_ROOT",
             "BACKUP_LINK_SCAN_INCOMPLETE", "BACKUP_LINK_SCAN_LIMIT",
             "BACKUP_PRIMARY_SPECIAL_FILE", "UNSCOPED_PRIMARY_SYMLINK",
+            "NESTED_PUBLIC_ASSET_SYMLINK", "UNKNOWN_PUBLIC_ALIAS",
+            "PUBLIC_ALIAS_OWNER_MISMATCH", "DUPLICATE_PUBLIC_ALIAS",
             "ASSET_LINK_UNRESOLVABLE", "ASSET_LINK_TARGET_OUT_OF_SCOPE",
             "REQUIRED_PUBLIC_ASSET_ALIAS_MISSING", "ASSET_TREE_UNREADABLE",
             "ASSET_TREE_ENTRY_LIMIT", "ASSET_TREE_UNAPPROVED_MEMBER",
