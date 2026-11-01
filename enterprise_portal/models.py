@@ -271,6 +271,23 @@ class OfficeLetter(Stamp):
         verbose_name_plural = "دبیرخانه و مکاتبات"
 
 
+class OfficeAttachment(models.Model):
+    """Private immutable attachment record; actual bytes are never in MEDIA_URL."""
+    letter = models.ForeignKey(OfficeLetter, on_delete=models.PROTECT, related_name="attachments")
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    storage_key = models.CharField(max_length=96, unique=True, editable=False)
+    original_name = models.CharField(max_length=180)
+    content_type = models.CharField(max_length=64)
+    size_bytes = models.PositiveIntegerField()
+    sha256 = models.CharField(max_length=64, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "پیوست محرمانه نامه"
+        verbose_name_plural = "پیوست‌های دبیرخانه"
+        permissions = (("download_officeattachment", "دریافت فایل خصوصی دبیرخانه"),)
+
+
 class WorkTask(Stamp):
     title = models.CharField(max_length=240)
     description = models.TextField(blank=True)
