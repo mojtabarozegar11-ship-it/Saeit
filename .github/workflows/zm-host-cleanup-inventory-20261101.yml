@@ -277,25 +277,35 @@ jobs:
                   whole=hashlib.sha256()
                   n=0
                   volume=0
+                  unsafe=0
                   for directory,dirs,files in os.walk(candidate,followlinks=False):
                       d=Path(directory)
-                      assert all(not (d/name).is_symlink() for name in dirs)
+                      unsafe+=sum((d/name).is_symlink() for name in dirs)
+                      dirs[:]=[name for name in dirs if not (d/name).is_symlink()]
                       for name in sorted(files):
                           p=d/name
-                          assert p.is_file() and not p.is_symlink()
+                          if not p.is_file() or p.is_symlink():
+                              unsafe+=1
+                              continue
                           relative=str(p.relative_to(candidate))
                           inner=hashlib.sha256()
-                          with p.open("rb") as fp:
-                              for chunk in iter(lambda:fp.read(1048576),b""):
-                                  inner.update(chunk)
+                          try:
+                              with p.open("rb") as fp:
+                                  for chunk in iter(lambda:fp.read(1048576),b""):
+                                      inner.update(chunk)
+                          except OSError:
+                              unsafe+=1
+                              continue
                           whole.update(relative.encode("utf-8")+b"\x00"+inner.digest()+b"\x00")
                           n+=1
                           volume+=p.stat().st_size
                   digest=whole.hexdigest()
-                  fingerprints.setdefault(digest,[]).append(candidate.name)
+                  if not unsafe:
+                      fingerprints.setdefault(digest,[]).append(candidate.name)
                   print("WHOLE_SNAPSHOT_FINGERPRINT="+json.dumps({
                       "name":candidate.name,"files":n,"mib":round(volume/1048576,2),
-                      "sha256":digest},ensure_ascii=True))
+                      "sha256":digest,"nonregular_or_symlinks":unsafe,
+                      "safe_for_exact_tree_comparison":unsafe==0},ensure_ascii=True))
           for digest,names in fingerprints.items():
               if len(names)>1:
                   print("WHOLE_SNAPSHOT_EXACT_DUPLICATES="+json.dumps({
