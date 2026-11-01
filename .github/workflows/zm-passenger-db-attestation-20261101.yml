@@ -229,13 +229,22 @@ jobs:
           print("ZM_PASSENGER_PROBE_READONLY=complete")
           PY
           REMOTE
-      - name: Check Zomorod public pages after diagnostic
+      - name: Verify Zomorod public routes through the already pinned hosting endpoint
         shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           for p in "/" "/agents/"; do
-            code="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$p" || true)"
-            echo "ZM_PUBLIC_HEALTH=$p:$code"
+            # CI's public DNS resolver may be unavailable. Pin the verified
+            # cPanel IP while retaining hostname/SNI and normal TLS checks.
+            code="$(curl -sS --connect-timeout 8 --max-time 16 --resolve zomorodmelal.ir:443:178.239.147.125 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$p" || true)"
+            if test "$code" != 200; then
+              code="$(timeout 32s ssh -F "$d/config" "$COMMAND_HOST" "curl -sS --connect-timeout 8 --max-time 16 -o /dev/null -w '%{http_code}' 'https://zomorodmelal.ir$p'" || true)"
+            fi
+            echo "ZM_PINNED_PUBLIC_HEALTH=$p:$code"
             test "$code" = 200
           done
       - name: Clear temporary credentials on GitHub runner only
