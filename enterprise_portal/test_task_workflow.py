@@ -1,4 +1,5 @@
 """Private Zomorod task lifecycle: assignment, evidence, review, and audit."""
+from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import Client, TestCase, override_settings
@@ -129,6 +130,22 @@ class HumanTaskWorkflowTests(TestCase):
         final = AuditEvent.objects.filter(target=f"WorkTask:{own.pk}").order_by("-pk").first()
         self.assertEqual(final.detail["transition"], "approve")
         self.assertFalse(final.detail["superuser_self_review_override"])
+
+    def test_superuser_self_review_is_explicitly_flagged(self):
+        own = WorkTask.objects.create(
+            unit=self.farm, title="بازبینی مستقیم مالک",
+            assigned_to=self.owner, created_by=self.owner,
+        )
+        path = f"/company/office/tasks/{own.pk}/"
+        self.post(self.owner, "start", "todo", path=path)
+        self.post(self.owner, "submit", "doing", path=path)
+        self.assertEqual(self.post(self.owner, "approve", "review", path=path).status_code, 302)
+        final = AuditEvent.objects.filter(target=f"WorkTask:{own.pk}").order_by("-pk").first()
+        self.assertTrue(final.detail["superuser_self_review_override"])
+
+    def test_admin_status_field_is_readonly_to_prevent_audit_bypass(self):
+        panel = admin.site._registry[WorkTask]
+        self.assertIn("status", panel.get_readonly_fields(None, self.task))
 
     def test_staff_cannot_read_other_units_or_colleague_private_task(self):
         self.client.force_login(self.outsider)
