@@ -25,8 +25,8 @@ jobs:
           echo GAME_PRIVATE_INSTALLER_SYNTAX=PASS
       - name: Establish pinned cPanel relay
         env:
-          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          HOST_KEY: \${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           bash games/farm-wars-v3/scripts/ssh_relay.sh
