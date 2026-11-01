@@ -79,6 +79,8 @@ class SmartCalendarWatchTests(TestCase):
             self.task(f"کار پیگیری {i:02d}", due=self.today)
         snapshot = watch_for_unit(self.farm, today=self.today, limit=1000)
         self.assertEqual(len(snapshot["tasks"]), 12)
+        self.assertIn("فوری بدون موعد", [task.title for task in snapshot["tasks"]])
+        self.assertIn("فوری آینده دور", [task.title for task in snapshot["tasks"]])
         self.assertEqual(snapshot["counts"]["open"], 22)
         urgent_only = watch_for_unit(self.farm, today=self.today, limit=30)
         self.assertEqual(urgent_only["counts"]["urgent"], 2)
