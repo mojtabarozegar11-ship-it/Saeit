@@ -48,7 +48,7 @@ def _render_room(request, unit, units, specialists, eligible, *,
         "issued_by", "report", "task",
     ).order_by("-created_at", "-pk")[:40]
     can_view_tasks = request.user.is_superuser or request.user.has_perm("enterprise_portal.view_worktask")
-    task_watch = watch_for_unit(unit) if can_view_tasks else None
+    task_watch = watch_for_unit(unit, actor=request.user) if can_view_tasks else None
     result = page(request, "master_command", {
         "selected_unit": unit, "units": units,
         "commands": visible, "task_watch": task_watch,
