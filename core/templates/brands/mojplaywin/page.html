@@ -1,4 +1,12 @@
 {% extends 'brands/mojplaywin/base.html' %}{% block title %}{{ page.title }} — MojPlayWin{% endblock %}{% block meta_description %}{{ page.body|striptags|truncatechars:155 }}{% endblock %}{% block content %}<section class="mpw-page-hero"><span class="eyebrow">{{ page.kicker }}</span><h1>{{ page.headline }}</h1><p>{{ page.body }}</p><div class="mpw-lux-rule" aria-hidden="true"></div></section><div class="mpw-section-label">MOJPLAYWIN / CURATED</div><section class="mpw-page-grid">{% for title,meta,text in page.cards %}<article class="mpw-page-card"><small>{{ meta }}</small><h2>{{ title }}</h2><p>{{ text }}</p>{% if page_key == 'games' and forloop.first %}<a href="/games/first-realm/">View project →</a>{% endif %}</article>{% endfor %}</section>{% if page_key == 'games' %}
+<section class="mpw-page-cta" id="mpw-global-living-cities-feature-20261101" aria-labelledby="mpw-global-lc-title">
+<span class="eyebrow">NOW PLAYABLE · WORLDWIDE · 20 LANGUAGES</span>
+<h2 id="mpw-global-lc-title">Living Cities — Build a world worth keeping</h2>
+<p>An original free-to-play, 3D city-builder and business tycoon. Open 20 businesses, manage 12 characters, discover up to 60 cities and progress through 200 missions across 20 world regions. English by default, with 19 more languages selectable inside the game.</p>
+<p><a class="primary" href="/living-cities/play/">▶ PLAY LIVING CITIES — FREE</a> <a href="/living-cities/">Explore game features and languages →</a></p>
+<p><small>Local browser save · no purchases or unverified MOJ1 payments.</small></p>
+</section>
+
 <section class="mpw-page-cta" id="original-playable-games" aria-labelledby="original-playable-games-heading">
 <span class="eyebrow">ORIGINAL WEB GAMES · FREE PLAYABLE PREVIEWS</span>
 <h2 id="original-playable-games-heading">Play five original MojPlayWin browser games</h2>
