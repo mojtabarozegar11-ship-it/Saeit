@@ -53,7 +53,9 @@ urlpatterns = [
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),
-    path("company/office/login/", RedirectView.as_view(url="/admin/login/?next=/staff/command-center/", permanent=False), name="company_office_login"),
+    # Keep the pre-cutover login on the existing isolated business application.
+    # The Django private office remains blocked until DB, MFA and restore gates pass.
+    path("company/office/login/", RedirectView.as_view(url="/business/", permanent=False), name="company_office_login"),
     # Temporary root-only fallback while the private Django office is release-blocked.
     # Replace this route at the validated private-office cutover.
     path("company/office/", RedirectView.as_view(url="/business/", permanent=False), name="company_office_fallback"),
