@@ -115,7 +115,12 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
 
     def test_sensitive_alias_member_blocks(self):
         (self.targets["assets"] / "database.sql").write_text("secret synthetic", encoding="utf8")
-        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_UNAPPROVED_FILE_SHAPE"):
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_SENSITIVE_FILE_SHAPE"):
+            self.check()
+
+    def test_archive_like_asset_is_flagged_without_name_disclosure(self):
+        (self.targets["assets"] / "ordinary-download.zip").write_bytes(b"synthetic")
+        with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_ARCHIVE_FILE_SHAPE"):
             self.check()
 
     def test_hidden_asset_entry_blocks(self):
