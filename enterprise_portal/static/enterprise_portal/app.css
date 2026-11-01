@@ -11,3 +11,30 @@
 @media(max-width:1020px){.sidebar{width:215px}.workspace{padding-inline:3vw}.hero-symbol{min-width:120px;height:120px;font-size:43px}.login-layout{gap:25px}}
 @media(max-width:750px){.site-shell{display:block}.sidebar{position:static;width:100%;min-height:0;max-height:none;border-left:0;border-bottom:1px solid var(--border);padding:17px}.brand{padding-bottom:10px}.sidebar-label{margin:10px 0}.main-nav{display:flex;gap:8px;overflow-x:auto;white-space:nowrap}.main-nav a{font-size:12px;flex-shrink:0}.sidebar-foot{padding:10px 0 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}.sidebar-foot form{margin:0}.workspace{padding:0 17px 30px}.topbar{min-height:58px}.hero{margin-top:20px;padding:24px;min-height:0}.hero-symbol{display:none}.module-grid{grid-template-columns:1fr}.module{min-height:210px}.login-layout{grid-template-columns:1fr;padding:30px 0}.login-feature{padding:10px}.login-feature .login-mark{height:70px;width:70px;font-size:30px}.login-panel{padding:24px}.feature-grid{margin:20px 0}.site-foot{margin-top:35px}.form-card{padding:18px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important;animation:none!important}}
+
+
+/* Isolated office calendar; never affects public Zomorod pages. */
+.calendar-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface,#132719);border:1px solid var(--border);border-radius:16px;padding:16px;margin:16px 0}
+.calendar-month-form{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0}
+.calendar-month-form label{font-size:14px}
+.calendar-month-form input{min-height:39px;max-width:170px}
+.calendar-month-form button{margin:0}
+.calendar-legend{display:flex;flex-wrap:wrap;gap:15px;margin:15px 0;font-size:13px}
+.calendar-legend span{display:inline-flex;align-items:center;gap:6px}
+.calendar-scroll{max-width:100%;overflow-x:auto;box-shadow:0 12px 34px #0003;border-radius:17px}
+.calendar-grid{border-collapse:collapse;table-layout:fixed;width:100%;min-width:840px;background:#142519}
+.calendar-grid caption{text-align:right;padding:15px;background:#1d3925;font-weight:700}
+.calendar-grid th{padding:12px;background:#21432e;color:#edcf86;text-align:center;border:1px solid #4b654d}
+.calendar-grid td{height:132px;min-width:120px;vertical-align:top;padding:9px;border:1px solid #3e5643}
+.calendar-grid td.calendar-muted{opacity:.5;background:#102016}
+.calendar-grid td.calendar-today{box-shadow:inset 0 0 0 2px #e7c779;background:#1e3c27}
+.calendar-day-number{display:block;text-align:left;font-size:15px;color:#e4c981;font-weight:700;padding:3px 0 8px}
+.calendar-events{padding:0;margin:0;list-style:none;display:grid;gap:6px}
+.calendar-event{display:flex;align-items:start;gap:5px;flex-wrap:wrap;text-decoration:none;border:1px solid #5a6c56;border-radius:10px;background:#203928;padding:7px;font-size:12px;color:#fff}
+.calendar-event:hover,.calendar-event:focus-visible{background:#31513a;outline:2px solid #e6ca81}
+.calendar-event>span{overflow-wrap:anywhere;flex-basis:100%}
+.calendar-event small{color:#d2d2b2}
+.calendar-badge{display:inline-block;border-radius:7px;padding:3px 6px;color:#183025;background:#d6c17b;font-size:11px}
+.calendar-badge.task{background:#a6d8cb}
+.calendar-badge.overdue,.calendar-event.is-overdue{border-color:#e4a5a5;background:#683c3c;color:#fff}
+.calendar-more{font-size:11px;color:#e5cf9a;padding:3px}
