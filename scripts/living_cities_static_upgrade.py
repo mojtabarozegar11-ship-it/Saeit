@@ -57,6 +57,8 @@ def extracted_bytes():
                     (entry.isdir() or entry.isfile()),"invalid_archive_entry")
             if entry.isfile() and str(name).startswith("apps/living_cities/static/living_cities/"):
                 rel=name.relative_to("apps/living_cities/static/living_cities")
+                if rel.name=="index.html":
+                    continue  # Standalone source sample; production serves only vetted Django-template HTML.
                 require(len(rel.parts)==1 and rel.suffix in ALLOWED_EXTENSIONS, "unapproved_static_file")
                 require(entry.size<400000,"oversized_game_asset")
                 files[rel.name]=tar.extractfile(entry).read()
