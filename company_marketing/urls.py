@@ -4,6 +4,7 @@ from . import views
 app_name = "company_marketing"
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("crm/", views.crm, name="crm"),
     path("campaigns/new/", views.new_campaign, name="new_campaign"),
     path("campaigns/<int:pk>/state/", views.set_campaign_state, name="set_campaign_state"),
     path("channels/new/", views.new_channel, name="new_channel"),
