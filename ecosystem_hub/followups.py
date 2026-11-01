@@ -19,7 +19,7 @@ MAX_UNRESOLVED_TASKS_PER_RULE = 40
 SOURCE_MODELS = frozenset({
     "CommercialDocument", "InventoryItem", "ProductionOrder",
     "MaterialRequirement", "ManagementRisk", "MaintenanceTicket",
-    "QualityInspection", "Campaign", "Publication", "JournalEntry",
+    "QualityInspection", "Campaign", "Publication", "JournalEntry", "Lead",
 })
 
 

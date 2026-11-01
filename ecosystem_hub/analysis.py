@@ -4,6 +4,7 @@ All findings are evidence-linked drafts for human review, not real-world actions
 No payments, stock transactions, publishing or external API calls.
 """
 from collections import defaultdict
+from datetime import timedelta
 from decimal import Decimal, ROUND_UP
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -62,6 +63,9 @@ HANDLER_VIEW_PERMISSIONS = {
     "marketing": ("company_marketing.view_campaign",
                   "company_marketing.view_lead",
                   "company_marketing.view_publication"),
+    "sales": ("company_marketing.view_lead",
+              "enterprise_portal.view_commercialdocument"),
+    "crm": ("company_marketing.view_lead",),
 }
 
 
@@ -318,6 +322,79 @@ def scan(unit, code, *, actor=None):
             else:
                 findings.append(issue(k.label, f"هدف {k.target}؛ عملکرد ثبت‌شده {k.actual} {k.measurement_unit}.",
                     source=f"PerformanceIndicator:{k.pk}"))
+    elif mode in ("sales", "crm"):
+        # CRM records are evidence-linked internal claims, never proof of
+        # bank settlement or customer payment. No contact names or addresses
+        # are exposed, and this engine cannot send a customer message.
+        leads = Lead.objects.filter(unit=unit)
+        total_leads = leads.count()
+        stages = {
+            row["stage"]: row["count"]
+            for row in leads.values("stage").annotate(count=Count("pk"))
+        }
+        counts = ", ".join(
+            f"{label}: {stages.get(stage, 0)}"
+            for stage, label in Lead.STAGES
+        )
+        findings.append(issue(
+            "قیف مشتری و فروش در CRM",
+            f"{total_leads} سرنخ در این واحد ثبت شده؛ {counts}. "
+            "تغییر وضعیت به «فروش واقعی» به‌تنهایی اثبات دریافت پول نیست.",
+            source="Lead",
+        ))
+        evidenced = leads.filter(
+            stage="won", verified_sale_irr__gt=0,
+        ).exclude(sale_evidence_reference="")
+        evidenced_count = evidenced.count()
+        reported = evidenced.aggregate(total=Sum("verified_sale_irr"))["total"]
+        findings.append(issue(
+            "ارزش فروش دارای مرجع شواهد در CRM",
+            f"{evidenced_count} سرنخ برنده با مرجع شواهد و مجموع ثبت‌شده "
+            f"{reported or Decimal('0')} ریال؛ این جمع صرفاً داده CRM است "
+            "و با وصول بانکی، فاکتور و دفتر حسابداری تطبیق مستقل نشده است.",
+            source="Lead",
+        ))
+        seven_days_ago = timezone.now() - timedelta(days=7)
+        old_new = leads.filter(stage="new", created_at__lt=seven_days_ago)
+        old_new_count = old_new.count()
+        for lead in old_new.order_by("created_at", "pk")[:15]:
+            findings.append(issue(
+                f"پیگیری داخلی سرنخ جدید #{lead.pk}",
+                "بیش از هفت روز از ثبت این سرنخ گذشته و مرحله آن هنوز "
+                "«جدید» است؛ مسئول فروش باید وضعیت را بررسی کند. "
+                "این هشدار نشانه عدم تماس نیست و هیچ پیام خودکاری ارسال نمی‌شود.",
+                severity="warning", source=f"Lead:{lead.pk}",
+            ))
+        if old_new_count > 15:
+            findings.append(issue(
+                "دامنه محدود پیگیری CRM",
+                f"{old_new_count} سرنخ قدیمی در مرحله جدید وجود دارد؛ "
+                "این گزارش حداکثر ۱۵ مورد را جداگانه نشان می‌دهد.",
+            ))
+        if mode == "sales":
+            sales_docs = CommercialDocument.objects.filter(
+                unit=unit, kind="sales",
+            )
+            outstanding = sales_docs.exclude(status__in=("settled", "cancelled"))
+            quotations = CommercialDocument.objects.filter(
+                unit=unit, kind="quotation",
+            )
+            findings.append(issue(
+                "اسناد تجاری قیف فروش",
+                f"{quotations.count()} پیش‌فاکتور و {sales_docs.count()} فاکتور "
+                f"فروش داخلی، از جمله {sales_docs.filter(status='settled').count()} "
+                f"فاکتور با وضعیت «تسویه‌شده» ثبت شده؛ "
+                f"{outstanding.filter(due_on__lt=today).count()} فاکتور باز "
+                "از موعد گذشته است. هیچ‌کدام به‌تنهایی اثبات دریافت وجه "
+                "بانکی یا تبدیل یک سرنخ معین به سفارش نیست.",
+                severity="info", source="CommercialDocument",
+            ))
+        if not total_leads:
+            findings.append(issue(
+                "نیاز به مستندسازی مسیر جذب مشتری",
+                "در CRM این واحد سرنخی ثبت نشده؛ وجود یا نبود مشتری "
+                "خارج از سامانه از این گزارش قابل نتیجه‌گیری نیست.",
+            ))
     elif mode == "marketing":
         campaigns = Campaign.objects.filter(unit=unit)
         active = campaigns.filter(status="active")
