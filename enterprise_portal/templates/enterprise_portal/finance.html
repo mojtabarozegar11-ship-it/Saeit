@@ -1,7 +1,7 @@
 {% extends 'enterprise_portal/shell.html' %}
 {% block title %}گزارش دفتر کل{% endblock %}{% block crumb %}حسابداری{% endblock %}
 {% block content %}
-<div class="page-head"><div class="eyebrow">FINANCIAL CONTROL · INTERNAL DJANGO LEDGER</div><h1>دفتر داخلی جنگو ـ غیرمرجع</h1><p>این اطلاعات متعلق به دفتر داخلی جنگو هستند و <strong>دفتر مالی مرجع PHP زمرد ملل نیستند</strong>. ثبت سند مالی جدید در این دفتر تا تطبیق و تأیید رسمی نباید انجام شود.</p><p><a href="{% url 'enterprise_portal:authoritative_finance' %}">مشاهدهٔ گزارش فقط‌خواندنی دفتر مالی اصلی ←</a></p></div>
+<div class="page-head"><div class="eyebrow">FINANCIAL CONTROL · INTERNAL DJANGO LEDGER</div><h1>دفتر داخلی جنگو ـ غیرمرجع</h1><p>این اطلاعات متعلق به دفتر داخلی جنگو هستند و <strong>دفتر مالی مرجع PHP زمرد ملل نیستند</strong>. ثبت سند مالی جدید در این دفتر تا تطبیق و تأیید رسمی نباید انجام شود.</p>{% if user.is_superuser %}<p><a href="{% url 'enterprise_portal:authoritative_finance' %}">مشاهدهٔ گزارش فقط‌خواندنی دفتر مالی اصلی ←</a></p>{% endif %}</div>
 <div class="stats-grid">
 <div class="stat"><span>اسناد قطعی</span><strong>{{ posted_count }}</strong><small>ثبت‌شده پس از کنترل تراز</small></div>
 <div class="stat"><span>اسناد پیش‌نویس</span><strong>{{ draft_count }}</strong><small>هنوز در محاسبات قطعی نیستند</small></div>

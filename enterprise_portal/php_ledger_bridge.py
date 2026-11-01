@@ -57,6 +57,9 @@ def read_php_finance_snapshot(name: str | Path) -> dict:
         with sqlite3.connect(uri, uri=True, timeout=3) as db:
             db.execute("PRAGMA query_only=ON")
             db.execute("PRAGMA busy_timeout=3000")
+            # One read transaction gives all monetary aggregates the same
+            # SQLite snapshot even while the PHP application posts entries.
+            db.execute("BEGIN")
             for table, required in REQUIRED_COLUMNS.items():
                 columns = {row[1] for row in db.execute("PRAGMA table_info(" + table + ")")}
                 if not required.issubset(columns):
