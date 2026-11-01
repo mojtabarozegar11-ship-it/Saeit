@@ -1,0 +1,53 @@
+name: MojPlayWin games listing template safe discovery
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-living-cities-games-listing-readonly-20261101.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  paths:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish pinned cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Compare potential live games template paths without reading credentials
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 60s ssh -T -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib,os
+          home=Path("/home/zomorod2")
+          candidates=[
+            "mojplaywin.com/games/index.html",
+            "mojplaywin.com/studio/index.html",
+            "mojplaywin.com/core/templates/brands/mojplaywin/page.html",
+            "mojplaywin.com/templates/brands/mojplaywin/page.html",
+            "Saeit/core/templates/brands/mojplaywin/page.html",
+            "Saeit-staging/core/templates/brands/mojplaywin/page.html",
+            "mojplaywin.com/apps/core/templates/brands/mojplaywin/page.html",
+          ]
+          for name in candidates:
+              p=home/name
+              if not p.is_file() or p.is_symlink():
+                  print("MPW_GAMES_TEMPLATE="+name+" regular=no")
+                  continue
+              raw=p.read_bytes()
+              print("MPW_GAMES_TEMPLATE="+name+" regular=yes bytes="+str(len(raw))+
+                    " sha256="+hashlib.sha256(raw).hexdigest()+
+                    " first_realm="+str(b"first-realm" in raw)+
+                    " original_five="+str(b"Play five original" in raw)+
+                    " global_link="+str(b"/living-cities/play/" in raw))
+          print("MPW_GAMES_TEMPLATE_READ_ONLY=PASS")
+          PY
+      - name: Remove runner SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
