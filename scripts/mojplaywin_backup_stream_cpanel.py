@@ -266,12 +266,21 @@ def assert_scoped_public_asset_links(roots=(APP, DOCROOT), home=HOME,
                                    ".avif", ".pdf", ".mp3", ".mp4", ".webm",
                                    ".wav", ".ogg", ".json", ".xml", ".txt",
                                    ".md", ".csv", ".webmanifest", ".wasm"}
-                        if (source.is_symlink() or not source.is_file() or
-                                source.suffix.casefold() not in allowed or
-                                source.stat().st_uid != os.geteuid()):
-                            # Precisely two small orphaned compressed assets
-                            # were observed on the read-only live inventory.
-                            # Permit no expansion in either count or file size.
+                        # A compressed sidecar can never turn a sensitive
+                        # source type, symlink, directory or other-owned file
+                        # into an approved public asset merely by being tiny.
+                        if (source.suffix.casefold() not in allowed or
+                                source.is_symlink() or
+                                (source.exists() and not source.is_file())):
+                            raise RuntimeError("ASSET_COMPRESSED_SIDECAR_UNVERIFIED")
+                        if source.is_file():
+                            if source.stat().st_uid != os.geteuid():
+                                raise RuntimeError("ASSET_COMPRESSED_SIDECAR_UNVERIFIED")
+                        else:
+                            # The live metadata scan found two orphaned public
+                            # asset sidecars. Bound missing-base exceptions to
+                            # ordinary web/media/data suffixes, at most two
+                            # files and no more than 256 KiB each.
                             unpaired_compressed_count += 1
                             if (unpaired_compressed_count > 2 or
                                     info.st_size > 256 * 1024):
