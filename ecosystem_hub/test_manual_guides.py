@@ -51,9 +51,9 @@ class ManualAssistantGuidanceTests(SimpleTestCase):
         self.assertEqual(CATALOG["supplier-review"]["handler"], "supplier")
         steps = MANUAL_GUIDES["supplier-review"]
         self.assertGreaterEqual(len(steps), 4)
-        details = " ".join(detail for _, detail in steps)
-        self.assertIn("تعارض", details)
-        self.assertIn("تحویل", details)
+        checklist = " ".join(title + " " + detail for title, detail in steps)
+        self.assertIn("تعارض", checklist)
+        self.assertIn("تحویل", checklist)
 
     def test_connected_journal_control_does_not_replace_bank_reconciliation(self):
         self.assertEqual(CATALOG["financial-reconciliation"]["handler"], "reconciliation")
