@@ -4,6 +4,8 @@ on:
     paths:
       - scripts/mpw_checkout_csp_zero_script_guard_20261029.py
       - tests/test_mpw_checkout_csp_zero_script_20261029.py
+      - scripts/s01_trx_commerce_source_overlay_20261031.py
+      - tests/test_s01_trx_commerce_source_overlay_20261031.py
       - .github/workflows/mpw-checkout-csp-readonly-preflight-20261029.yml
 permissions: {contents: read}
 concurrency:
@@ -21,6 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_checkout_csp_zero_script_20261029.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_trx_commerce_source_overlay_20261031.py -v
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -100,13 +103,232 @@ jobs:
           result['local_preflight']=('PASS' if all(result.get(x,False) for x in required) else 'BLOCKED')
           print('S01_CSP_READONLY_PREFLIGHT='+json.dumps(result,sort_keys=True))
           PY
+      - name: Inspect live checkout source signatures via existing pinned read-only relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No imports from live Django app; no DB connections, writes or restarts.
+          timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' <<'PY'
+          import hashlib, json, os, stat
+          from pathlib import Path
+          app = Path('/home/zomorod2/Saeit-staging')
+          root = Path('/home/zomorod2/mojplaywin.com')
+          filenames = {
+              'checkout_view': app/'mpw_commerce/product_checkout_page.py',
+              'trx_web': app/'services/mpw_trx_commercial_web.py',
+              'rate_feed': app/'scripts/mojplaywin_direct_wallet_rates.py',
+              'buyer_wallets': app/'mpw_commerce/buyer_wallets.py',
+              'commerce_urls': app/'mpw_commerce/urls.py',
+              'django_settings': app/'config/settings.py',
+              'live_wsgi': root/'passenger_wsgi.py',
+          }
+          # Public CI: report only SHA/size of application source, never file bytes,
+          # credentials, .env contents, DB host/user/name, process environment or keys.
+          out = {'scope':'S01_CHECKOUT_ACTUAL_SOURCE_READONLY',
+                 'site_writes':False,'factory_writes':False,
+                 'db_queries':False,'passenger_restart':False,
+                 'effective_passenger_db_proven':False,
+                 'complete_offhost_restore_proven':False,'files':{}}
+          for label,p in filenames.items():
+              entry = {'present':False}
+              try:
+                  s=p.lstat()
+                  entry['regular']=stat.S_ISREG(s.st_mode)
+                  entry['symlink']=stat.S_ISLNK(s.st_mode)
+                  if entry['regular'] and not entry['symlink'] and s.st_size<=524288:
+                      entry.update(present=True,bytes=s.st_size,
+                                   sha256=hashlib.sha256(p.read_bytes()).hexdigest())
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  entry['read_error']=True
+              out['files'][label]=entry
+          # Static, no-execution structural audit: a changed SHA is NOT a safe
+          # substitute for proving the exact old CSP guard/branch exists.
+          import ast
+          csp_path=filenames['checkout_view']
+          if out['files']['checkout_view'].get('present'):
+              source=csp_path.read_text('utf8','replace')
+              legacy_guard="""if len(scripts) != 1 or len(styles) not in (1, 2) or b'<meta charset="utf-8">' not in body:"""
+              legacy_policy="""\"script-src 'self' \" + source_hash(scripts[0]) + \"; \""""
+              try:
+                  tree=ast.parse(source)
+                  matches=[n for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name=='_apply_two_book_strict_csp']
+                  structural={'python_parse':True,'handler_count':len(matches),
+                              'old_guard_count':source.count(legacy_guard),
+                              'old_policy_count':source.count(legacy_policy),
+                              'unsafe_eval_in_handler':False,
+                              'unsafe_inline_in_handler':False}
+                  if len(matches)==1:
+                      code=ast.get_source_segment(source,matches[0]) or ''
+                      structural['unsafe_eval_in_handler']=("'unsafe-eval'" in code)
+                      structural['unsafe_inline_in_handler']=("'unsafe-inline'" in code)
+                      structural['calls_source_hash']=any(
+                          isinstance(n,ast.Call) and isinstance(n.func,ast.Name)
+                          and n.func.id=='source_hash' for n in ast.walk(matches[0]))
+                      structural['has_script_src_policy']=('script-src' in code)
+                      structural['has_style_src_policy']=('style-src' in code)
+                      structural['uses_response_header']=('Content-Security-Policy' in code)
+                  structural['legacy_patch_exact_match']=(len(matches)==1 and
+                      structural['old_guard_count']==1 and
+                      structural['old_policy_count']==1 and
+                      not structural['unsafe_eval_in_handler'] and
+                      not structural['unsafe_inline_in_handler'])
+              except (SyntaxError,ValueError):
+                  structural={'python_parse':False,'legacy_patch_exact_match':False}
+              out['checkout_csp_structure']=structural
+          trx_path=filenames['trx_web']
+          if out['files']['trx_web'].get('present'):
+              src=trx_path.read_text('utf8','replace')
+              # Classify the exact stale-rate call site without publishing
+              # private commerce source or executing payment code.
+              try:
+                  tree=ast.parse(src)
+                  class RateCalls(ast.NodeVisitor):
+                      def __init__(self): self.fn='module'; self.found=[]
+                      def visit_FunctionDef(self,node):
+                          prev=self.fn;self.fn=node.name
+                          self.generic_visit(node);self.fn=prev
+                      def visit_Call(self,node):
+                          func=node.func
+                          if isinstance(func,ast.Name) and func.id=='fetch_server_rate':
+                              args=node.args
+                              self.found.append({'function':self.fn,
+                                  'line':node.lineno,
+                                  'trx_literal':len(args)==1 and isinstance(args[0],ast.Constant) and args[0].value=='TRX'})
+                          self.generic_visit(node)
+                  visitor=RateCalls();visitor.visit(tree)
+                  out['trx_rate_call_sites']=visitor.found[:10]
+              except SyntaxError:
+                  out['trx_rate_call_sites']='SOURCE_SYNTAX_ERROR'
+              out['trx_rate_source_static']={
+                  'uses_server_rate':"fetch_server_rate(" in src,
+                  'uses_trx':"'TRX'" in src or '"TRX"' in src,
+                  'has_rate_feed_unavailable':"RateFeedUnavailable" in src}
+          # Static, non-secret API shape: preserve the original rate provider
+          # contract when designing a scoped staging patch. Never emit source.
+          if out['files']['trx_web'].get('present'):
+              try:
+                  tree=ast.parse(trx_path.read_text('utf8','replace'))
+                  funcs=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='_rate_provider']
+                  if len(funcs)==1:
+                      fn=funcs[0]
+                      assignments=[]
+                      for n in ast.walk(fn):
+                          if isinstance(n,(ast.Assign,ast.AnnAssign)):
+                              value=n.value
+                              if isinstance(value,ast.Call) and isinstance(value.func,ast.Name) and value.func.id=='fetch_server_rate':
+                                  targets=n.targets if isinstance(n,ast.Assign) else [n.target]
+                                  assignments.extend(t.id for t in targets if isinstance(t,ast.Name))
+                      quote_name=assignments[0] if len(assignments)==1 else None
+                      attributes=sorted({n.attr for n in ast.walk(fn)
+                          if isinstance(n,ast.Attribute) and isinstance(n.value,ast.Name)
+                          and n.value.id==quote_name}) if quote_name else []
+                      returns=[]
+                      for n in ast.walk(fn):
+                          if isinstance(n,ast.Return):
+                              v=n.value
+                              returns.append({'kind':type(v).__name__,
+                                  'name':v.id if isinstance(v,ast.Name) else None,
+                                  'attribute':v.attr if isinstance(v,ast.Attribute) else None,
+                                  'call_name':v.func.id if isinstance(v,ast.Call) and isinstance(v.func,ast.Name) else None})
+                      out['trx_rate_provider_contract']={
+                          'function_count':1,
+                          'positional_args':len(fn.args.posonlyargs)+len(fn.args.args),
+                          'keyword_args':len(fn.args.kwonlyargs),
+                          'quote_assignment_count':len(assignments),
+                          'quote_attribute_names':attributes,
+                          'return_shapes':returns[:6],
+                          'has_try':any(isinstance(n,ast.Try) for n in ast.walk(fn)),
+                          'has_except':any(isinstance(n,ast.ExceptHandler) for n in ast.walk(fn)),
+                          'has_raise':any(isinstance(n,ast.Raise) for n in ast.walk(fn)),
+                          'body_statement_count':len(fn.body),
+                          'body_node_types':[type(n).__name__ for n in fn.body],
+                          'function_imports':[{'module':n.module,
+                              'names':[alias.name for alias in n.names]}
+                              for n in fn.body if isinstance(n,ast.ImportFrom)],
+                          'return_tuple_elements':[
+                              [({'kind':type(x).__name__,
+                                 'attribute':x.attr if isinstance(x,ast.Attribute) else None,
+                                 'call_name':x.func.id if isinstance(x,ast.Call) and isinstance(x.func,ast.Name) else None})
+                               for x in n.value.elts]
+                              for n in ast.walk(fn) if isinstance(n,ast.Return)
+                              and isinstance(n.value,ast.Tuple)][:2],
+                          'assignment_target_types':[type(t).__name__
+                              for n in fn.body if isinstance(n,ast.Assign)
+                              for t in n.targets]}
+                  else:
+                      out['trx_rate_provider_contract']={'function_count':len(funcs)}
+              except (SyntaxError,ValueError):
+                  out['trx_rate_provider_contract']={'source_parse_error':True}
+          # Verify the only external application dependency of the proposed
+          # one-file TRX patch by AST, without importing commerce or Django.
+          error_module=app/'scripts/mojplaywin_direct_wallet_rates.py'
+          out['existing_rate_error_contract']='UNKNOWN'
+          try:
+              if error_module.is_file() and not error_module.is_symlink():
+                  rate_tree=ast.parse(error_module.read_text('utf8'))
+                  direct=any(isinstance(n,ast.ClassDef) and n.name=='RateFeedUnavailable'
+                             for n in rate_tree.body)
+                  imported=any(isinstance(n,ast.ImportFrom) and
+                               any(a.name=='RateFeedUnavailable' and
+                                   (a.asname is None or a.asname=='RateFeedUnavailable')
+                                   for a in n.names) for n in rate_tree.body)
+                  out['existing_rate_error_contract']='PRESENT' if (direct or imported) else 'MISSING'
+          except (OSError,SyntaxError,UnicodeError):
+              out['existing_rate_error_contract']='UNREADABLE'
+          out['safe_to_release']=False  # DB authority + external restore not proven.
+          print('S01_CHECKOUT_SOURCE_FINGERPRINTS='+json.dumps(out,sort_keys=True))
+          PY
+      - name: Preview exact-source TRX rate repair in memory without cPanel writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_s01_trx_commerce_source_overlay_20261031.py -v
+          timeout 40s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B - preview' \
+            < scripts/s01_trx_commerce_source_overlay_20261031.py
+      - name: Check TRX-only external quote freshness from cPanel without commerce writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 30s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' <<'PY'
+          import json,time,urllib.request
+          url='https://api.coingecko.com/api/v3/simple/price?ids=tron&vs_currencies=usd&include_last_updated_at=true'
+          result={'scope':'S01_TRX_RATE_ORIGIN_READONLY','network_only':True,
+                  'db_access':False,'invoice_created':False,'payment_created':False,
+                  'fresh_quote':False}
+          try:
+              req=urllib.request.Request(url,headers={'Accept':'application/json',
+                  'User-Agent':'MojPlayWin-RateGate/1.0'})
+              with urllib.request.urlopen(req,timeout=8) as response:
+                  result['http_status']=response.status
+                  result['exact_origin']=response.geturl()==url
+                  data=json.loads(response.read(4097))
+              item=data.get('tron',{}) if isinstance(data,dict) else {}
+              observed=item.get('last_updated_at')
+              price=item.get('usd')
+              age=int(time.time())-observed if type(observed)==int else None
+              result['timestamp_present']=type(observed)==int
+              result['age_within_300s']=age is not None and -45<=age<=300
+              result['positive_price']=type(price) in (int,float) and price>0
+              result['fresh_quote']=(result['http_status']==200 and
+                  result['exact_origin'] and result['age_within_300s'] and
+                  result['positive_price'])
+          except Exception as exc:
+              result['error_type']=type(exc).__name__
+          # Do not print market price, API payload, site secrets or wallet details.
+          print('S01_TRX_QUOTE_NETWORK_PROBE='+json.dumps(result,sort_keys=True))
+          PY
       - name: Capture non-transactional public HTTP and sitemap status
         shell: bash
         run: |
           python3 - <<'PY'
           import json, urllib.error, urllib.request
           targets={
-              'mpw':['/','/store/','/store/product/72/','/store/product/225/','/store/product/879/','/sitemap.xml','/robots.txt'],
+              'mpw':['/','/store/','/store/product/72/','/store/product/72/checkout/','/store/product/225/','/store/product/225/checkout/','/store/product/879/','/store/product/879/checkout/','/sitemap.xml','/robots.txt'],
               'zm':['/','/academy/','/company-gallery/','/newsletter/','/research/','/sitemap.xml','/robots.txt']
           }
           domains={'mpw':'mojplaywin.com','zm':'zomorodmelal.ir'}
