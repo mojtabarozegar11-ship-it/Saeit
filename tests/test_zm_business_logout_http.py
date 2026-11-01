@@ -145,7 +145,7 @@ class LogoutHTTPTests(unittest.TestCase):
         self.assertIsNotNone(self.cookie)
         status, _, self.dashboard = self.request("GET", "/app.php?page=dashboard", cookie=self.cookie)
         self.assertEqual(status, 200)
-        self.assertIn("مدیریت زمرد ملل", self.dashboard)
+        self.assertIn('name="action" value="logout"', self.dashboard)
 
     def test_logout_control_is_post_form_with_csrf(self) -> None:
         self.assertIn('<form method="post" action="/business/"', self.dashboard)
@@ -159,7 +159,7 @@ class LogoutHTTPTests(unittest.TestCase):
         self.assertFalse(any(k.lower() == "location" for k, _ in headers))
         status, _, html = self.request("GET", "/app.php?page=dashboard", cookie=self.cookie)
         self.assertEqual(status, 200)
-        self.assertIn("مدیریت زمرد ملل", html)
+        self.assertIn('name="action" value="logout"', html)
 
     def test_invalid_logout_csrf_is_rejected_without_logging_out(self) -> None:
         for csrf in ("", "f" * 64):
@@ -171,7 +171,7 @@ class LogoutHTTPTests(unittest.TestCase):
                 self.assertEqual(status, 403)
         status, _, html = self.request("GET", "/app.php?page=dashboard", cookie=self.cookie)
         self.assertEqual(status, 200)
-        self.assertIn("مدیریت زمرد ملل", html)
+        self.assertIn('name="action" value="logout"', html)
 
     def test_valid_logout_destroys_session_and_expires_cookie(self) -> None:
         status, headers, _ = self.request(
