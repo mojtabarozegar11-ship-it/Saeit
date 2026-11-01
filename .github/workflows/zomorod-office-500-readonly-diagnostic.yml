@@ -230,16 +230,31 @@ jobs:
           set -euo pipefail
           sha="$1"
           [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
-          stage="/home/zomorod2/.private/zomorod-messaging-release-stages/$sha/code"
-          # Staging and this read-only diagnostic can run concurrently.
-          # Report missing exact-head stage without claiming production readiness.
-          if test ! -f "$stage/config/settings.py" || test ! -s "$stage/isolation.sqlite3"; then
-            echo "EXACT_HEAD_PRIVATE_STAGE=missing"
+          parent="/home/zomorod2/.private/zomorod-messaging-release-stages/$sha"
+          stage="$parent/code"
+          receipt="$parent/ready.receipt"
+          # The private stage and diagnostic are independent workflows and may
+          # start concurrently. Wait only for this exact source SHA's *finished*
+          # schema/login receipt; never infer readiness from partial files.
+          ready=0
+          for attempt in {1..12}; do
+            if test -f "$receipt" && test ! -L "$receipt" && \
+               grep -Fqx "release=$sha" "$receipt" && \
+               grep -Fqx 'schema=passed' "$receipt" && \
+               grep -Fqx 'private_login=200' "$receipt"; then
+              ready=1
+              break
+            fi
+            sleep 5
+          done
+          if test "$ready" != 1; then
+            echo "EXACT_HEAD_PRIVATE_STAGE=not_ready"
             echo "PRODUCTION_SIMULATOR=not_run"
             exit 0
           fi
-          if ! grep -Fqx "release=$sha" "$stage/../manifest.txt"; then
-            echo "EXACT_HEAD_PRIVATE_STAGE=manifest_mismatch"
+          if test ! -f "$stage/config/settings.py" || test ! -s "$stage/isolation.sqlite3" || \
+             ! grep -Fqx "release=$sha" "$parent/manifest.txt"; then
+            echo "EXACT_HEAD_PRIVATE_STAGE=receipt_or_manifest_mismatch"
             echo "PRODUCTION_SIMULATOR=not_run"
             exit 0
           fi
