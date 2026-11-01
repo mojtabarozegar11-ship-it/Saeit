@@ -1,15 +1,21 @@
 """Read-only, unit-scoped arithmetic for the Zomorod financial reconciliation assistant."""
+from datetime import timedelta
 from decimal import Decimal
+from io import StringIO
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import PermissionDenied
+from django.core.management import call_command
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
-from enterprise_portal.models import BusinessUnit, JournalEntry, JournalLine, LedgerAccount
+from enterprise_portal.models import (
+    BusinessUnit, JournalEntry, JournalLine, LedgerAccount, WorkTask,
+)
 from .analysis import generate_report
 from .catalog import CATALOG
-from .models import AssistantRun, UnitMembership
+from .models import AgentFollowUp, AssistantRun, ProposedAutomation, UnitMembership
 
 
 STORAGES = {
@@ -105,3 +111,46 @@ class FinancialReconciliationAgentTests(TestCase):
         self.assertEqual(AssistantRun.objects.count(), 1)
         with self.assertRaises(PermissionDenied):
             generate_report(self.analyst, self.factory, "financial-reconciliation")
+
+    @override_settings(ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED=True)
+    def test_hourly_reconciliation_creates_bounded_private_followups_only_once(self):
+        rule = ProposedAutomation.objects.create(
+            unit=self.farm, owner=self.owner,
+            assistant_code="financial-reconciliation",
+            cadence="hourly", active=True, requires_human_review=True,
+            auto_create_tasks=True,
+        )
+        before = (JournalEntry.objects.count(), JournalLine.objects.count())
+        out = StringIO()
+        call_command(
+            "run_ecosystem_assistants", "--commit", "--strict",
+            "--json-receipt", "--unit=farm", stdout=out,
+        )
+        self.assertIn("followups=2", out.getvalue())
+        self.assertEqual(AgentFollowUp.objects.count(), 2)
+        self.assertEqual(WorkTask.objects.count(), 2)
+        sources = set(AgentFollowUp.objects.values_list("source_ref", flat=True))
+        self.assertEqual(sources, {
+            f"JournalEntry:{self.farm_entry.pk}",
+            f"JournalEntry:{self.empty_entry.pk}",
+        })
+        for task in WorkTask.objects.all():
+            self.assertEqual(task.unit, self.farm)
+            self.assertEqual(task.status, "todo")
+            self.assertEqual(task.priority, "high")
+            self.assertEqual(task.created_by, self.owner)
+            self.assertNotIn("FACTORY-SECRET", task.description)
+        self.assertEqual(
+            (JournalEntry.objects.count(), JournalLine.objects.count()), before,
+        )
+
+        # A later eligible hourly draft must not reopen duplicate tasks.
+        rule.last_checked_at = timezone.now() - timedelta(hours=2)
+        rule.save(update_fields=("last_checked_at",))
+        call_command(
+            "run_ecosystem_assistants", "--commit", "--strict",
+            "--json-receipt", "--unit=farm", stdout=StringIO(),
+        )
+        self.assertEqual(AssistantRun.objects.count(), 2)
+        self.assertEqual(AgentFollowUp.objects.count(), 2)
+        self.assertEqual(WorkTask.objects.count(), 2)
