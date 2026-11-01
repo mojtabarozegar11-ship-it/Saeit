@@ -292,10 +292,48 @@ jobs:
           test "$(id -un)" = zomorod2
           app=/home/zomorod2/Saeit
           test -d "$app" && test ! -L "$app" && test -s "$app/passenger_wsgi.py"
-          py=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
-          test -x "$py"
+          # Resolve the interpreter from the live cPanel Passenger configuration.
+          # Guessing a virtualenv version cannot attest the executing application.
+          configured_python="$(python3 -B - <<'CPANEL_CONFIG'
+          import os
+          import shlex
+          from pathlib import Path
+
+          app = Path("/home/zomorod2/Saeit")
+          config = Path("/home/zomorod2/public_html/.htaccess")
+          if not config.is_file() or config.is_symlink():
+              raise SystemExit("PASSENGER_CONFIG_UNAVAILABLE")
+          pythons = []
+          roots = []
+          for raw in config.read_text(encoding="utf-8").splitlines():
+              stripped = raw.strip()
+              if not stripped or stripped.startswith("#"):
+                  continue
+              key = stripped.split(None, 1)[0].lower()
+              if key not in ("passengerpython", "passengerapproot"):
+                  continue
+              try:
+                  fields = shlex.split(stripped, comments=True)
+              except ValueError:
+                  raise SystemExit("PASSENGER_CONFIG_DIRECTIVE_INVALID")
+              if len(fields) != 2:
+                  raise SystemExit("PASSENGER_CONFIG_DIRECTIVE_INVALID")
+              if key == "passengerpython":
+                  pythons.append(fields[1])
+              else:
+                  roots.append(fields[1])
+          if len(pythons) != 1 or roots != [str(app)]:
+              raise SystemExit("PASSENGER_CONFIG_UNATTESTED")
+          interpreter = Path(pythons[0])
+          if not interpreter.is_absolute() or not interpreter.is_file() or not os.access(interpreter, os.X_OK):
+              raise SystemExit("PASSENGER_INTERPRETER_UNAVAILABLE")
+          print(str(interpreter))
+          CPANEL_CONFIG
+          )"
+          test -x "$configured_python"
+          echo "PASSENGER_DB_PROBE_INTERPRETER_SOURCE=CPANEL_HTACCESS"
           cd "$app"
-          PYTHONDONTWRITEBYTECODE=1 "$py" -B - <<'PY'
+          PYTHONDONTWRITEBYTECODE=1 "$configured_python" -B - <<'PY'
           import os
           import pathlib
           import sqlite3
