@@ -33,3 +33,11 @@ State: **HOLD (private-stage only)**. This document is not a live-deployment app
 - The feature is an **internal auction opportunities/approvals register**. It never places bids, pays deposits, or sends outside messages.
 - Main business ERP management scope remains Issue #1725, auction feature PR #1726.
 - Evidence: [host preflight](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41226089107), [private stage](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41226225337), [web runtime](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41226775331), [scoped PHP 8.3](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41226889499).
+
+## Batch hardening (2026-11-01; branch-only, not staged on host)
+
+- Approval and manual participation now require the physical evidence file to exist outside the web root, have an allowed storage key/MIME/size, and match its recorded SHA-256. A database row by itself is insufficient.
+- Isolated regression now covers tampered notice, tampered/missing receipt, active-session revocation, role downgrade, and cross-session CSRF. No real auction, finance, external communication, or production database writes are involved.
+- Earlier cPanel staging is SHA-pinned to commit `8a93511adbcddb6b228b93d9c5d46064b8ea1a09`. **It does not contain this hardening.** Re-stage only after separately verifying all remaining release gates and obtaining controlled staging authorization. Never silently reuse the old staged hash as proof of the new version.
+- **Still HOLD:** encrypted off-host snapshot of office DB + required code, restoration on a separate host or independent environment with digest/integrity receipt; authenticated real PHP 8.2-to-8.3 session/role acceptance; effective web upload size limits; documented route-disable rollback.
+- This change must not trigger any live host stage, merge, deploy, bid, receipt submission, or payment.

@@ -117,6 +117,12 @@ def main():
             else:raise AssertionError("PHP server failed to start")
             must(anonymous==403,"anonymous access allowed")
             must(call(base,cookie="viewer")[0]==200,"viewer should have read-only access")
+            with sqlite3.connect(master) as control:
+                control.execute("UPDATE users SET active=0 WHERE id=4")
+            must(call(base,cookie="viewer")[0]==403,"revoked viewer session remained authorized")
+            with sqlite3.connect(master) as control:
+                control.execute("UPDATE users SET active=1 WHERE id=4")
+            must(call(base,cookie="viewer")[0]==200,"reactivated viewer cannot read")
             must(not (private/"auctions_v1.sqlite3").exists(),"read-only GET created a DB")
             manager_token=csrf(base,"manager")
             admin_token=csrf(base,"admin")
@@ -128,7 +134,17 @@ def main():
                 "currency":"IRR","estimate":"100000","deposit":"3000","limit":"90000",
                 "project_id":"1","notes":"فقط سناریوی آفلاین"
             }
+            with sqlite3.connect(master) as control:
+                control.execute("UPDATE users SET role='viewer' WHERE id=3")
+            must(post(base,"manager",manager_token,"create",payload)==403,
+                 "downgraded manager session retained write privileges")
+            with sqlite3.connect(master) as control:
+                control.execute("UPDATE users SET role='manager' WHERE id=3")
+            must(not (private/"auctions_v1.sqlite3").exists(),
+                 "role downgrade rejection created auction DB")
             master_hash=hashlib.sha256(master.read_bytes()).hexdigest()
+            must(post(base,"admin",manager_token,"create",payload)==403,
+                 "another session's CSRF token was accepted")
             must(post(base,"manager","invalid","create",payload)==403,"CSRF guard bypassed")
             must(not (private/"auctions_v1.sqlite3").exists(),"invalid CSRF created DB")
             must(post(base,"viewer","invalid","create",payload)==403,"viewer created auction")
@@ -201,6 +217,10 @@ def main():
                  "same finance reviewer/executive approved")
             must(post(base,"accountant",accountant_token,"review",dict(scope,kind="financial",decision="approved"))==200,
                  "independent accountant review failed")
+            stored.write_bytes(b"tampered-after-archive"+pdf)
+            must(post(base,"admin",admin_token,"executive",scope)==409,
+                 "executive approved a tampered notice document")
+            stored.write_bytes(pdf)
             must(post(base,"admin",admin_token,"executive",scope)==200,"independent executive approval failed")
             must(post(base,"manager",manager_token,"review",dict(scope,kind="technical",decision="rejected"))==409,
                  "review was changed after executive approval")
@@ -211,6 +231,20 @@ def main():
             must(upload_document(base,"accountant",accountant_token,auction_id,"receipt",
                                  "participation-receipt.pdf",pdf)==200,
                  "receipt archive failed before manual participation record")
+            with sqlite3.connect(local) as db:
+                receipt_key=db.execute(
+                    "SELECT storage_key FROM auction_documents WHERE auction_id=? AND category='receipt' ORDER BY id DESC LIMIT 1",
+                    (int(auction_id),)).fetchone()[0]
+            receipt_file=docdir/receipt_key
+            receipt_file.write_bytes(b"tampered-receipt"+pdf)
+            must(post(base,"admin",admin_token,"submission",scope)==409,
+                 "submission accepted a tampered receipt")
+            receipt_file.write_bytes(pdf)
+            missing_file=receipt_file.with_name(receipt_file.name+".missing")
+            receipt_file.rename(missing_file)
+            must(post(base,"admin",admin_token,"submission",scope)==409,
+                 "submission accepted a missing receipt")
+            missing_file.rename(receipt_file)
             must(post(base,"admin",admin_token,"submission",scope)==200,"submission receipt not recorded")
             must(post(base,"manager",manager_token,"outcome",dict(scope,decision="won"))==200,
                  "manual auction outcome not recorded")
