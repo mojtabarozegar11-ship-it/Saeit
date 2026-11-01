@@ -405,6 +405,21 @@ class ChatGPTActionReportAdmin(admin.ModelAdmin):
     readonly_fields = ("recorded_by", "recorded_at", "evidence_reviewed_by")
     list_per_page = 40
 
+    def get_form(self, request, obj=None, **kwargs):
+        base_form = super().get_form(request, obj, **kwargs)
+
+        class ReviewerBoundForm(base_form):
+            def clean(inner):
+                values = super().clean()
+                # Set the reviewing identity before ModelForm._post_clean calls
+                # the model's full_clean; a claimed review cannot be anonymous.
+                inner.instance.evidence_reviewed_by = (
+                    request.user if values.get("evidence_reviewed") else None
+                )
+                return values
+
+        return ReviewerBoundForm
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
         return qs if request.user.is_superuser else qs.none()
