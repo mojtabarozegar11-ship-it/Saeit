@@ -2,6 +2,7 @@
 import unittest
 import os
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.conf import settings
 # Do not override an existing Django project configuration during CI collection.
@@ -29,9 +30,11 @@ def request(*, secure=True, host="mojplaywin.com", cookie=None, authenticated=Fa
 
 class GuestRecoveryLandingTests(unittest.TestCase):
     def setUp(self):
+        self.seen_user = None
         def checkout(_request, _product_id):
             return HttpResponse("checkout")
         def purchases(_request):
+            self.seen_user = getattr(_request, "user", None)
             return HttpResponse("PRIVATE_INVOICE_SENTINEL")
         self.namespace = {"product_checkout": checkout, "purchases": purchases}
         patch_public(self.namespace)
@@ -56,6 +59,18 @@ class GuestRecoveryLandingTests(unittest.TestCase):
         result = self.view(request(authenticated=True))
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.content, b"PRIVATE_INVOICE_SENTINEL")
+
+    def test_valid_guest_owner_lookup_preserves_private_invoice_access(self):
+        # Simulate a verified guest principal without touching the database.
+        owner = SimpleNamespace(pk=777, is_authenticated=True)
+        with patch("services.mpw_trx_guest_commerce._read_user", return_value=owner) as lookup:
+            result = self.view(request(cookie="synthetic-valid-guest-owner"))
+        self.assertGreaterEqual(lookup.call_count, 2)
+        self.assertIs(self.seen_user, owner)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.content, b"PRIVATE_INVOICE_SENTINEL")
+        self.assertEqual(result["X-Robots-Tag"], "noindex, nofollow")
+        self.assertIn("no-store", result["Cache-Control"])
 
     def test_plain_http_is_not_accepted(self):
         with self.assertRaises(Http404):
