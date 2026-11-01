@@ -159,11 +159,11 @@ jobs:
           command -v docker >/dev/null
           free=$(df -PB1 "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')
           test "$free" -ge 9000000000 || { echo "NO-GO: isolated runner free disk below 9GB"; exit 1; }
-          docker pull mariadb:11.4 >/dev/null
+          docker pull mariadb:11.8.9 >/dev/null
           docker run -d --rm --name "$label" --network none \
             --memory 2g --cpus 2 --pids-limit 200 \
             --security-opt no-new-privileges \
-            -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1 mariadb:11.4 >/dev/null
+            -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1 mariadb:11.8.9 >/dev/null
           ready=0
           for i in $(seq 1 90); do
             if docker exec "$label" mariadb-admin --no-defaults -uroot ping --silent >/dev/null 2>&1; then
