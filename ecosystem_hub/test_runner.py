@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -136,6 +137,54 @@ class AssistantRunnerIsolationTests(TestCase):
         self.assertEqual(receipt["outcome"], "ok")
         self.assertFalse(receipt["external_actions_executed"])
         self.assertNotIn("owner@example.org", receipts[0])
+        self.assertFalse(AssistantRun.objects.exists())
+        self.assertFalse(AuditEvent.objects.exists())
+        rule.refresh_from_db()
+        self.assertIsNone(rule.last_checked_at)
+
+    def test_strict_preview_rejects_unauthorized_unit_without_due_claim(self):
+        invalid = self.rule(owner=self.alice, unit=self.factory, cadence="hourly")
+        out, errors = StringIO(), StringIO()
+        with self.assertRaisesMessage(CommandError, "ECOSYSTEM_CYCLE_INCOMPLETE errors=1"):
+            call_command(
+                "run_ecosystem_assistants", "--strict", "--json-receipt",
+                stdout=out, stderr=errors,
+            )
+        receipt = json.loads(next(
+            line.split("=", 1)[1] for line in out.getvalue().splitlines()
+            if line.startswith("ECOSYSTEM_CYCLE_RECEIPT_JSON=")
+        ))
+        self.assertEqual(receipt["mode"], "preview")
+        self.assertEqual(receipt["due_or_created"], 0)
+        self.assertEqual(receipt["errors"], 1)
+        self.assertEqual(receipt["outcome"], "partial_failure")
+        self.assertNotIn("PREVIEW id=", out.getvalue())
+        self.assertIn("DENIED", errors.getvalue())
+        invalid.refresh_from_db()
+        self.assertIsNone(invalid.last_checked_at)
+        self.assertFalse(AssistantRun.objects.exists())
+        self.assertFalse(AuditEvent.objects.exists())
+
+    def test_preview_denies_auto_followup_for_readonly_analyst(self):
+        self.alice.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="ecosystem_hub",
+            codename__in=("add_assistantrun", "view_managementrisk"),
+        ))
+        self.alice.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="enterprise_portal",
+            codename__in=("add_worktask", "view_worktask"),
+        ))
+        rule = self.rule(owner=self.alice, unit=self.farm, cadence="hourly")
+        rule.auto_create_tasks = True
+        rule.save(update_fields=("auto_create_tasks",))
+        out, errors = StringIO(), StringIO()
+        with self.assertRaisesMessage(CommandError, "ECOSYSTEM_CYCLE_INCOMPLETE errors=1"):
+            call_command(
+                "run_ecosystem_assistants", "--strict", "--json-receipt",
+                stdout=out, stderr=errors,
+            )
+        self.assertIn("DENIED", errors.getvalue())
+        self.assertNotIn("PREVIEW id=", out.getvalue())
         self.assertFalse(AssistantRun.objects.exists())
         self.assertFalse(AuditEvent.objects.exists())
         rule.refresh_from_db()
