@@ -17,6 +17,49 @@ release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
 
 
+class GuardedReleasePathSafetyTests(unittest.TestCase):
+    def _verify_without_live_access(self, app, private):
+        class FakeUser:
+            pw_name = "zomorod2"
+
+        with patch.object(release, "APP", app), patch.object(release, "PRIVATE", private), \
+             patch.object(release.sys, "argv", ["release", "a" * 40]), \
+             patch.object(release.pwd, "getpwuid", return_value=FakeUser()):
+            return release.verify()
+
+    def test_missing_application_directory_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(RuntimeError, "MAIN_APPLICATION_DIRECTORY_UNSAFE"):
+                self._verify_without_live_access(root / "missing-app", root / "private")
+
+    def test_symlinked_stage_ancestor_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "app"
+            app.mkdir()
+            private = root / "private"
+            private.mkdir()
+            external = root / "external-stage"
+            external.mkdir()
+            (private / "zomorod-messaging-release-stages").symlink_to(
+                external, target_is_directory=True
+            )
+            with self.assertRaisesRegex(RuntimeError, "STAGE_DIRECTORY_UNSAFE"):
+                self._verify_without_live_access(app, private)
+
+    def test_missing_staged_manifest_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "app"
+            app.mkdir()
+            private = root / "private"
+            stage = private / "zomorod-messaging-release-stages" / ("a" * 40)
+            (stage / "code").mkdir(parents=True)
+            with self.assertRaisesRegex(RuntimeError, "STAGE_MANIFEST_OR_ARCHIVE_MISSING"):
+                self._verify_without_live_access(app, private)
+
+
 class GuardedReleaseRollbackTests(unittest.TestCase):
     def test_passenger_restart_creates_marker_and_updates_mtime(self):
         with tempfile.TemporaryDirectory() as directory:
