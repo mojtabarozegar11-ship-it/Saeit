@@ -12,6 +12,9 @@ on:
       - .github/workflows/picm-text-image-scoped-deploy.yml
       - scripts/picm_text_image_release.py
       - tests/test_picm_text_image_release.py
+      - tests/test_picm_private_capacity_release.py
+      - scripts/picm_private_capacity_release.py
+      - .github/workflows/picm-private-capacity-scoped-release.yml
   pull_request:
     paths:
       - templates/picm/index.html
@@ -36,7 +39,7 @@ jobs:
       - name: Compile real implementation and test browser JavaScript
         run: |
           set -Eeuo pipefail
-          python -m py_compile scripts/picm_text_image_browser_proof.py scripts/picm_text_image_release.py tests/test_picm_text_image_ui.py tests/test_picm_text_image_release.py
+          python -m py_compile scripts/picm_private_capacity_release.py scripts/picm_text_image_browser_proof.py scripts/picm_text_image_release.py tests/test_picm_text_image_ui.py tests/test_picm_text_image_release.py tests/test_picm_private_capacity_release.py
           node --check templates/picm/text_image.js
           python - <<'PY'
           from pathlib import Path
