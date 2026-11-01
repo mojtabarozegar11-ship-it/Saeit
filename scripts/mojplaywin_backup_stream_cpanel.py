@@ -270,10 +270,22 @@ def stream_files():
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) != 2 or sys.argv[1] not in ("mysql", "files"):
+        if len(sys.argv) != 2 or sys.argv[1] not in ("mysql", "files", "preflight-scoped-files"):
             raise RuntimeError("unsupported source mode")
         if sys.argv[1] == "mysql":
             stream_mysql()
+        elif sys.argv[1] == "preflight-scoped-files":
+            summary = assert_scoped_public_asset_links()
+            print("MPW_SCOPED_ASSET_PREFLIGHT=" + json.dumps({
+                "classification": "READ_ONLY_SELF_CONTAINED_BACKUP_PREP",
+                "approved_public_aliases": sorted(summary),
+                "public_alias_count": len(summary),
+                "target_entry_counts": {key: val[2] for key, val in summary.items()},
+                "no_contents_read": True,
+                "source_modified": False,
+                "archive_started": False,
+                "release_permitted": False,
+            }, sort_keys=True))
         else:
             stream_files()
     except Exception:
