@@ -319,6 +319,15 @@ jobs:
           print("STAGING_SCHEMA_TABLE_COUNT="+str(n))
           print("PRODUCTION_SCHEMA_UNMODIFIED=true")
           PY
+          # Publish readiness only after isolated migrations, schema,
+          # manifest and private login have all passed. This private marker is
+          # neither a release permit nor a production DB attestation.
+          receipt="${root%/code}/ready.receipt"
+          pending="$receipt.pending.$$"
+          printf 'release=%s\nschema=passed\nprivate_login=200\n' "$sha" > "$pending"
+          chmod 600 "$pending"
+          mv -- "$pending" "$receipt"
+          echo "PRIVATE_STAGE_READY_RECEIPT=verified"
           echo "PRIVATE_STAGING_DJANGO_MIGRATION=passed"
           REMOTE
       - name: Remove runner transient keys and package
