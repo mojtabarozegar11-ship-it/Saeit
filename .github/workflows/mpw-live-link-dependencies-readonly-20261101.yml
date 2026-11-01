@@ -6,6 +6,9 @@ on:
       - 'tests/test_mojplaywin_live_link_dependencies_readonly_20261101.py'
       - 'scripts/mojplaywin_backup_stream_cpanel.py'
       - 'tests/test_mojplaywin_backup_link_guard_20261101.py'
+      - 'scripts/mojplaywin_backup_encrypt_vps_gpg.py'
+      - 'scripts/mojplaywin_recovery_stream_vps.py'
+      - 'tests/test_mojplaywin_backup_pair_identity_20261101.py'
       - '.github/workflows/mpw-live-link-dependencies-readonly-20261101.yml'
 permissions: {contents: read}
 concurrency:
@@ -24,7 +27,8 @@ jobs:
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mojplaywin_live_link_dependencies_readonly_20261101.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mojplaywin_backup_link_guard_20261101.py -v
-          python3 -B -m py_compile scripts/mojplaywin_live_link_dependencies_readonly_20261101.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mojplaywin_backup_pair_identity_20261101.py -v
+          python3 -B -m py_compile scripts/mojplaywin_live_link_dependencies_readonly_20261101.py scripts/mojplaywin_backup_encrypt_vps_gpg.py scripts/mojplaywin_recovery_stream_vps.py
       - name: Establish pinned VPS relay to cPanel
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}

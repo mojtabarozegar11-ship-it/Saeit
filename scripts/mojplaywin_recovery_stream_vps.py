@@ -24,6 +24,7 @@ VERSION = "gpgv2"
 # One owner-approved run; newer archives get independent timestamp/nonce stems.
 NEW_RUN_DAY = "20261021"
 STEM_RE = re.compile(r"^mojplaywin_(?:20261017|[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16})$")
+EXPLICIT_STEM_RE = re.compile(r"^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}$")
 NEW_MANIFEST_RE = re.compile(r"^(mojplaywin_20261021T[0-9]{6}Z_[0-9a-f]{16})_(mysql|files)_gpgv2[.]manifest[.]json$")
 MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
 MAX_PLAINTEXT_BYTES = 12 * 1024**3
@@ -93,6 +94,40 @@ def discover(home=None):
     return stems
 
 
+def discover_explicit_pair(stem, home=None):
+    """Select exactly the two manifests from the one explicitly named new set.
+
+    No silent fallback to the historical 2026-10-21 discovery is permitted.
+    This checks metadata, not yet authenticated stream restore.
+    """
+    if not isinstance(stem, str) or not EXPLICIT_STEM_RE.fullmatch(stem):
+        raise RuntimeError("invalid explicit backup-set identity")
+    chosen = {}
+    for kind in ("mysql", "files"):
+        _, meta, _, _ = load(kind, home=home, stem=stem)
+        if (meta.get("backup_set_stem") != stem or
+                meta.get("explicit_backup_set_id") is not True or
+                meta.get("archive_name") != f"{stem}_{kind}_{VERSION}.gpg" or
+                meta.get("release_permitted") is not False):
+            raise RuntimeError("backup set provenance mismatch")
+        chosen[kind] = stem
+    return chosen
+
+
+def explicit_pair_readiness(stem, home=None):
+    try:
+        discover_explicit_pair(stem, home=home)
+        selectable = True
+    except Exception:
+        selectable = False
+    return {"classification": "EXPLICIT_BACKUP_PAIR_MANIFEST_READINESS",
+            "both_manifests_selectable": selectable,
+            "gpg_stream_reverified": False,
+            "isolated_restore_performed": False,
+            "passenger_effective_database_proven": False,
+            "release_permitted": False}
+
+
 def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
     path, meta, ghome, key = load(kind, home=home, stem=stem)
     passphrase = hashlib.sha256(key + b":MJWP:GPG-AES256:20261017:v2").hexdigest().encode()+b"\n"
@@ -154,22 +189,31 @@ def readiness(home=None):
 
 
 if __name__=="__main__":
-    if len(sys.argv)!=2:
+    if len(sys.argv) not in (2, 3):
         raise SystemExit(2)
-    mode=sys.argv[1]
-    if mode=="check":
-        report=readiness()
-        print(json.dumps(report,sort_keys=True))
+    mode = sys.argv[1]
+    if mode == "check" and len(sys.argv) == 2:
+        report = readiness()  # Historical, date-pinned API only.
+        print(json.dumps(report, sort_keys=True))
         raise SystemExit(0 if report["both_primary_archives_complete"] else 1)
+    if mode == "check-pair" and len(sys.argv) == 3:
+        report = explicit_pair_readiness(sys.argv[2])
+        print(json.dumps(report, sort_keys=True))
+        raise SystemExit(0 if report["both_manifests_selectable"] else 1)
     try:
-        if mode not in ("mysql","files"):
+        if mode in ("mysql-pair", "files-pair") and len(sys.argv) == 3:
+            kind = mode.removesuffix("-pair")
+            stems = discover_explicit_pair(sys.argv[2])
+        elif mode in ("mysql", "files") and len(sys.argv) == 2:
+            kind = mode
+            stems = discover()  # Historical, date-pinned API only.
+        else:
             raise RuntimeError("unsupported operation")
-        stems=discover()
-        size=decrypt_to_stdout(mode,stem=stems[mode])
-        print(json.dumps({"classification":"PRIVATE_STREAM_VERIFIED",
-                          "source_kind":mode,"source_verified":True,
-                          "plaintext_bytes":size,"release_permitted":False},
-                         sort_keys=True),file=sys.stderr)
+        size = decrypt_to_stdout(kind, stem=stems[kind])
+        print(json.dumps({"classification": "PRIVATE_STREAM_VERIFIED",
+                          "source_kind": kind, "source_verified": True,
+                          "plaintext_bytes": size, "release_permitted": False},
+                         sort_keys=True), file=sys.stderr)
     except Exception:
-        print("PRIVATE_RESTORE_STREAM_INTEGRITY_FAILURE",file=sys.stderr)
+        print("PRIVATE_RESTORE_STREAM_INTEGRITY_FAILURE", file=sys.stderr)
         raise SystemExit(1)

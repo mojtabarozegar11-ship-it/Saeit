@@ -13,6 +13,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -31,6 +32,17 @@ MIN_START_FREE = 10 * 1024**3
 BLOCK = 128 * 1024
 STEM = "mojplaywin_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + token_hex(8)
 VERSION = "gpgv2"
+EXPLICIT_STEM_RE = re.compile(r"^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}$")
+
+
+def backup_set_stem():
+    """Use one caller-owned pair identity for both streams of a new backup."""
+    value = os.environ.get("MPW_BACKUP_SET_STEM")
+    if value is None:
+        return STEM  # Existing one-off callers preserve their legacy behavior.
+    if not EXPLICIT_STEM_RE.fullmatch(value):
+        raise RuntimeError("invalid explicit backup-set identity")
+    return value
 
 
 def make_private(p: Path):
@@ -161,6 +173,8 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
           minimum_free: int = MIN_START_FREE):
     if kind not in ("mysql", "files"):
         raise RuntimeError("unsupported kind")
+    stem = backup_set_stem()
+    explicit_set = os.environ.get("MPW_BACKUP_SET_STEM") is not None
     root = Path.home() if root is None else root
     keyroot = Path.home() if keyroot is None else keyroot
     backups = root / ".private-mojplaywin-offhost-backups"
@@ -172,9 +186,9 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
     if shutil.which("gpg") is None or disk_free(backups) < minimum_free:
         raise RuntimeError("GPG unavailable or destination capacity insufficient")
     key = recovery_key(secrets / "recovery-key.bin")
-    partial = backups / (STEM + "_" + kind + "_" + VERSION + ".gpg.partial")
-    complete = backups / (STEM + "_" + kind + "_" + VERSION + ".gpg")
-    manifest = backups / (STEM + "_" + kind + "_" + VERSION + ".manifest.json")
+    partial = backups / (stem + "_" + kind + "_" + VERSION + ".gpg.partial")
+    complete = backups / (stem + "_" + kind + "_" + VERSION + ".gpg")
+    manifest = backups / (stem + "_" + kind + "_" + VERSION + ".manifest.json")
     if any(x.exists() or x.is_symlink() for x in (partial,complete,manifest)):
         raise RuntimeError("one-time output already exists; refusing overwrite")
     total, digest = encrypt_stream_to_file(stream, partial, gnupg, key)
@@ -185,6 +199,7 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
     summary = {
         "kind": kind, "format": "OpenPGP-AES256-GPGv2",
         "archive_name": complete.name,
+        "backup_set_stem": stem, "explicit_backup_set_id": explicit_set,
         "encrypted_bytes": complete.stat().st_size,
         "plaintext_bytes": total, "plaintext_sha256": digest,
         "source_completion_footer_verified": True,
