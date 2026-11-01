@@ -24,10 +24,13 @@
     {% if perms.ecosystem_hub.view_organization %}<a href="{% url 'enterprise_portal:ecosystem_hub:assistants' %}">✦ &nbsp; دستیارهای مدیریت و تولید</a>{% endif %}
     {% if perms.enterprise_portal.view_journalentry %}<a href="{% url 'enterprise_portal:finance' %}">▤ &nbsp; حسابداری و مالی</a>{% endif %}
     {% if perms.enterprise_portal.view_inventoryitem %}<a href="{% url 'enterprise_portal:inventory' %}">▣ &nbsp; انبار و تولید</a>{% endif %}
+    {% if perms.enterprise_portal.view_meeting or perms.enterprise_portal.view_worktask %}<a href="{% url 'enterprise_portal:calendar' %}">◷ &nbsp; تقویم هوشمند و جلسات</a>{% endif %}
     {% if perms.enterprise_portal.view_worktask %}<a href="{% url 'enterprise_portal:tasks' %}">✓ &nbsp; کارها و پیگیری</a>{% endif %}
     {% if perms.enterprise_portal.view_officeletter %}<a href="{% url 'enterprise_portal:letters' %}">✉ &nbsp; دبیرخانه</a>{% endif %}
     {% if perms.company_messaging.view_message %}<a href="{% url 'company_messaging:inbox' %}">✉ &nbsp; مرکز ارسال و دریافت پیام</a>{% endif %}
     {% if perms.company_marketing.view_campaign %}<a href="{% url 'company_marketing:dashboard' %}">◈ &nbsp; بازاریابی و انتشار تبلیغات</a>{% endif %}
+    {% if perms.company_marketing.view_lead %}<a href="{% url 'company_marketing:crm' %}">◇ &nbsp; مدیریت مشتریان و فروش CRM</a>{% endif %}
+    {% if perms.ecosystem_hub.view_organization %}<a href="{% url 'enterprise_portal:ecosystem_hub:master_command' %}">✦ &nbsp; مسترایجنت و فرماندهی</a>{% endif %}
     {% if perms.enterprise_portal.view_commercialdocument %}<a href="{% url 'admin:enterprise_portal_commercialdocument_changelist' %}">◉ &nbsp; قرارداد و بازرگانی</a>{% endif %}
     {% if perms.enterprise_portal.view_managementproject %}<a href="{% url 'admin:enterprise_portal_managementproject_changelist' %}">◇ &nbsp; برنامه‌های مدیریت</a>{% endif %}
   </nav>
