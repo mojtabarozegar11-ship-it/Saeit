@@ -56,7 +56,7 @@ class ScheduledFollowUpTests(TestCase):
             requires_human_review=True, auto_create_tasks=auto,
         )
 
-    def run(self, *args):
+    def invoke_scheduler(self, *args):
         output = StringIO()
         errors = StringIO()
         call_command("run_ecosystem_assistants", *args, stdout=output, stderr=errors)
@@ -65,7 +65,7 @@ class ScheduledFollowUpTests(TestCase):
     def test_preview_is_read_only_even_when_task_creation_is_opted_in(self):
         rule = self.rule()
         self.campaign(1)
-        out, err = self.run()
+        out, err = self.invoke_scheduler()
         self.assertIn("PREVIEW", out)
         self.assertIn("auto_tasks=1", out)
         self.assertEqual(err, "")
@@ -79,7 +79,7 @@ class ScheduledFollowUpTests(TestCase):
     def test_default_rule_never_creates_followups(self):
         self.rule(auto=False)
         self.campaign(1)
-        out, errors = self.run("--commit")
+        out, errors = self.invoke_scheduler("--commit")
         self.assertIn("DRAFT_CREATED", out)
         self.assertEqual(errors, "")
         self.assertEqual(AssistantRun.objects.count(), 1)
@@ -90,7 +90,7 @@ class ScheduledFollowUpTests(TestCase):
     def test_authorized_warning_creates_one_traceable_task_and_no_external_action(self):
         rule = self.rule()
         campaign = self.campaign(1)
-        out, errors = self.run("--commit")
+        out, errors = self.invoke_scheduler("--commit")
         self.assertIn("followups=1", out)
         self.assertEqual(errors, "")
         linked = AgentFollowUp.objects.select_related("task", "report").get()
@@ -116,10 +116,10 @@ class ScheduledFollowUpTests(TestCase):
     def test_repeated_hourly_warning_does_not_duplicate_unfinished_task(self):
         rule = self.rule()
         self.campaign(1)
-        self.run("--commit")
+        self.invoke_scheduler("--commit")
         rule.last_checked_at = timezone.now() - timedelta(hours=2)
         rule.save(update_fields=("last_checked_at",))
-        self.run("--commit")
+        self.invoke_scheduler("--commit")
         self.assertEqual(AssistantRun.objects.count(), 2)
         self.assertEqual(AgentFollowUp.objects.count(), 1)
         self.assertEqual(WorkTask.objects.count(), 1)
@@ -133,7 +133,7 @@ class ScheduledFollowUpTests(TestCase):
         for i in range(12):
             self.campaign(i)
         self.campaign("secret", unit=self.factory)
-        out, errors = self.run("--commit", "--unit=farm")
+        out, errors = self.invoke_scheduler("--commit", "--unit=farm")
         self.assertEqual(errors, "")
         self.assertIn(f"followups={MAX_NEW_TASKS_PER_CYCLE}", out)
         self.assertEqual(WorkTask.objects.count(), MAX_NEW_TASKS_PER_CYCLE)
@@ -160,7 +160,7 @@ class ScheduledFollowUpTests(TestCase):
         manager.user_permissions.add(*list(perms))
         rule = self.rule(owner=manager)
         self.campaign(1, owner=manager)
-        out, errors = self.run("--commit")
+        out, errors = self.invoke_scheduler("--commit")
         self.assertIn("errors=1", out)
         self.assertIn("DENIED", errors)
         rule.refresh_from_db()
@@ -186,7 +186,7 @@ class ScheduledFollowUpTests(TestCase):
     def test_links_are_immutable_and_admin_is_read_only(self):
         self.rule()
         self.campaign(1)
-        self.run("--commit")
+        self.invoke_scheduler("--commit")
         link = AgentFollowUp.objects.get()
         with self.assertRaises(ValidationError):
             link.save()
