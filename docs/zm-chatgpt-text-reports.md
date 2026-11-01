@@ -1,25 +1,55 @@
-# Private ChatGPT work reports — Zomorod Melal
+# Private ChatGPT action-text reports and scheduled-source import
 
-The private route is `/company/office/chatgpt-reports/` (CEO/superuser only, HTTPS and office MFA gate).
-A distinct immutable `ChatGPTActionReport` holds report number, cycle, source run reference,
-execution time, plain-text details, declared outcome, evidence URL and human review state.
-Rendered text is HTML-escaped; unrelated assistant drafts and journal entries are never
-misrepresented as ChatGPT actions.
+Route: `/company/office/chatgpt-reports/` — CEO-only HTTPS/MFA, read-only, paginated.
+Immutable reports store text, cycle/number, claimed action time, run reference, source
+GitHub comment, declared outcome and optional separate human review. This is **not**
+a replica of private ChatGPT conversations, nor a bank/payment or deployment audit.
 
-**Intake:** Only an authenticated superuser can add a record through the private Django
-admin. Use one numbered receipt per actual cycle delta; cite a concrete Saeit commit, PR,
-issue, or GitHub Actions run. A record is not proof of real sales or production deployment.
-Human evidence review is explicit. Duplicated report codes are rejected; records are
-append-only. Corrections require a distinct, cross-referenced report, not an overwrite.
+## Existing cycle source
 
-**Current integration boundary:** The ChatGPT hourly automation is separate from the
-Django server. This patch does NOT claim to import full ChatGPT conversations, monitor
-the background automation, or automatically ingest text from GitHub. Until an authenticated,
-authorized reporting bridge is provisioned, the page honestly shows only records
-actually entered in the private database. Do not store customer, bank or auth secrets
-in public GitHub issues or Action logs.
+The owner's management task already posts numbered summaries in Saeit issue #1725:
+`https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725`.
+The importer only accepts the exact owner username and a first-line header such as:
 
-**Release gate:** These changes are prepared on a feature branch. The current PHP
-financial ledger remains authoritative. No production migration/merge/deploy is allowed
-until independent off-host restore, effective Passenger DB identity, live MFA/roles
-and rollback are confirmed.
+```text
+## گزارش ۰۵-۰۰۰۴ | 2026-11-01 19:08 UTC | ZM-CTRL-20261101-PR1782-CI41340155618
+```
+
+It does not accept unnumbered or unrelated comments. No private account, customer,
+supplier or payment details may be posted to the public issue. Imported text remains
+**unreviewed** and outcome `partial`, regardless of any stronger claims in comments;
+a GitHub comment is not independent evidence that a sale or deployment occurred.
+Report codes are unique and immutable; collisions from another source cause errors.
+
+## Controlled importer
+
+Preview (read-only, no database writes or model creation):
+
+```sh
+python manage.py sync_chatgpt_action_reports
+```
+
+After releasing and attesting the *effective* production DB, an authorized
+scheduler may run the import exactly once per hourly cycle using the following
+requirements **on the trusted server**:
+
+```sh
+ZM_CHATGPT_REPORT_SYNC_ENABLED=1 ZM_CHATGPT_REPORT_DB_ATTESTED=1 \
+python manage.py sync_chatgpt_action_reports --commit \
+  --unit-code='<active validated unit code>' \
+  --recorder-id='<existing authorized superuser ID>'
+```
+
+Do **not** put tokens, passwords, customer details or other private data in CLI
+arguments or GitHub Actions logs. A read-only `ZM_GITHUB_REPORTS_READ_TOKEN`
+is optional for Github API throttling; keep it solely in a server secret store.
+The command accesses only the fixed GitHub issue API, times out, caps response
+size and pages, ignores off-format or other-author posts, redacts stdout to
+counts, stops on conflicting report codes, and never contacts financial providers.
+
+**Important:** Both environment switches are operator attestations and NOT
+substitutes for actual Passenger effective DB confirmation, independently
+restored backup, MFA/RBAC and rollback approval. This PR deliberately does
+not install cron or enable `--commit` on the production host. It can be
+integrated only through the guarded parent release PR #1774. The existing
+ChatGPT hourly schedule remains unchanged.
