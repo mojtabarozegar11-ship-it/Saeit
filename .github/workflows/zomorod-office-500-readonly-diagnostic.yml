@@ -547,6 +547,34 @@ jobs:
                       break
           print("CPANEL_PYTHON_ELF_HEADER=" + str(header == bytes((0x7f,)) + b"ELF").lower())
           print("CPANEL_PYTHON_LSAPI_SIGNATURE=" + str(lsapi_signature).lower())
+          # Search only two established virtualenv CLI locations. Do not invoke
+          # the running LSAPI worker or import Django/production configuration.
+          import subprocess
+          for version, suffix in (("3.10", "310"), ("3.11", "311")):
+              candidate = Path("/home/zomorod2/virtualenv/Saeit") / version / "bin/python"
+              available = False
+              if candidate.is_file() and os.access(candidate, os.X_OK):
+                  with candidate.open("rb") as stream:
+                      signature_seen = False
+                      for _ in range(32):
+                          chunk = stream.read(1024 * 1024)
+                          if not chunk:
+                              break
+                          if b"lsapi" in chunk.lower() or b"lswsgi" in chunk.lower():
+                              signature_seen = True
+                              break
+                  if not signature_seen:
+                      try:
+                          result = subprocess.run(
+                              [str(candidate), "-S", "-B", "-c",
+                               "import sys;print('%s.%s'%(sys.version_info.major,sys.version_info.minor))"],
+                              capture_output=True, timeout=7, text=True,
+                              env={"PYTHONDONTWRITEBYTECODE": "1", "PATH": "/usr/bin:/bin"},
+                          )
+                          available = result.returncode == 0 and result.stdout.strip() == version
+                      except (OSError, subprocess.TimeoutExpired):
+                          pass
+              print("CPANEL_PYTHON_CLI_" + suffix + "_AVAILABLE=" + str(available).lower())
           app_resolved = app.resolve()
           cwd_workers = 0
           exe_matches = 0
