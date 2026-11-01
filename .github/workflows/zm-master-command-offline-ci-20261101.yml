@@ -40,12 +40,13 @@ jobs:
         run: python manage.py check
       - name: Migration consistency against model definitions
         run: python manage.py makemigrations --check --dry-run
-      - name: Private command and unit-isolation regression suite
+      - name: Integrated ERP, factory management, marketing and messaging regression
         run: |
           python manage.py test \
-            ecosystem_hub.test_unified_command \
-            ecosystem_hub.test_master_command \
-            ecosystem_hub.test_runner
+            ecosystem_hub \
+            enterprise_portal \
+            company_marketing \
+            company_messaging
       - name: Release boundary
         run: |
           echo "CI_ONLY=1"
