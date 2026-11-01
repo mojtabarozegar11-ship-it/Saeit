@@ -96,5 +96,22 @@ class StorefrontRecoveryCopyTests(unittest.TestCase):
         self.assertIn("Never share your wallet recovery phrase", storefront)
 
 
+class ReleasePurchasesSmokeContractTests(unittest.TestCase):
+    def test_release_checks_exact_anonymous_purchases_route(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        controller = (root / "scripts" / "mpw_guest_checkout_live_release.py").read_text("utf8")
+        workflow = (root / ".github" / "workflows" /
+                    "mpw-guest-checkout-live-release.yml").read_text("utf8")
+        route = "/commerce/trx-easy/purchases/"
+        self.assertIn("recovery_route = '" + route + "'", controller)
+        self.assertIn("ANONYMOUS_PURCHASES_HTTP", controller)
+        self.assertIn("PURCHASES_NOINDEX_MISSING", controller)
+        self.assertIn("PURCHASES_NOSTORE_MISSING", controller)
+        self.assertIn("'" + route + "'", workflow)
+        self.assertIn("GUEST_RECOVERY_NOINDEX_MISSING", workflow)
+        self.assertIn("GUEST_RECOVERY_NOSTORE_MISSING", workflow)
+
+
 if __name__ == "__main__":
     unittest.main()
