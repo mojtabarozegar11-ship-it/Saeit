@@ -1,0 +1,144 @@
+name: Private Media Library - owner-only guarded deployment
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mpw-picm-media-owner-only
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: deploy private media owner gate 2026-11-01'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fail-closed source and route preflight
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import ast, hashlib
+          from pathlib import Path
+          p=Path('scripts/deploy_private_media.py')
+          source=p.read_text(encoding='utf-8')
+          tree=ast.parse(source)
+          view=next(ast.literal_eval(node.value) for node in tree.body
+              if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='VIEW_SOURCE' for target in node.targets))
+          ast.parse(view)
+          data=Path('assets/private-media-library.html').read_bytes()
+          assert 10000<len(data)<100000
+          for token in (b'<title>Private Media Library</title>',b'crypto.subtle',b'noindex',b'connect-src \'none\''):
+              assert token in data
+          assert 'owner_allowed(request.user)' in view
+          assert 'not getattr(request.user, "is_authenticated", False)' in view
+          assert 'private, no-store' in view
+          assert 'DOCROOT / ' in source and 'Saeit-staging' in source
+          print('PRIVATE_MEDIA_PREFLIGHT_OK',hashlib.sha256(data).hexdigest())
+          PY
+      - name: Establish pinned VPS and cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          WORK="$RUNNER_TEMP/private-media-relay"
+          install -d -m 700 "$WORK"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P '' -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$WORK/config" <<EOF
+          Host private-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          timeout 30s ssh -F "$WORK/config" private-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$WORK/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat >> "$WORK/config" <<EOF
+          Host private-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump private-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+      - name: Stage isolated source outside web root and baseline unchanged assets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/private-media-relay"
+          STAGE="/home/zomorod2/.private-media-stage-$GITHUB_RUN_ID"
+          timeout 30s ssh -F "$WORK/config" private-cpanel "test \"\$(id -un)\" = zomorod2 && install -d -m 700 '$STAGE'"
+          tar -cf "$RUNNER_TEMP/private-media-package.tar" -C scripts deploy_private_media.py -C ../assets private-media-library.html
+          scp -q -F "$WORK/config" "$RUNNER_TEMP/private-media-package.tar" "private-cpanel:$STAGE/package.tar"
+          timeout 35s ssh -F "$WORK/config" private-cpanel "tar -xf '$STAGE/package.tar' -C '$STAGE' && sha256sum /home/zomorod2/mojplaywin.com/passenger_wsgi.py /home/zomorod2/Saeit-staging/core/picm_views.py /home/zomorod2/Saeit-staging/core/picm_auth.py > '$STAGE/immutable.sha256'"
+      - name: Install owner-only route with backup and rollback data
+        id: install
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/private-media-relay"
+          STAGE="/home/zomorod2/.private-media-stage-$GITHUB_RUN_ID"
+          EXPECTED="$(sha256sum assets/private-media-library.html | awk '{print $1}')"
+          timeout 70s ssh -F "$WORK/config" private-cpanel "python3 '$STAGE/deploy_private_media.py' deploy '$GITHUB_RUN_ID' '$EXPECTED'"
+      - name: Confirm protected HTTPS endpoint, original routes and private contents
+        id: smoke
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/private-media-relay"
+          STAGE="/home/zomorod2/.private-media-stage-$GITHUB_RUN_ID"
+          timeout 35s ssh -F "$WORK/config" private-cpanel "sha256sum -c '$STAGE/immutable.sha256'"
+          timeout 35s ssh -F "$WORK/config" private-cpanel "test -s /home/zomorod2/.private-media-library/index.html && test \"\$(stat -c %a /home/zomorod2/.private-media-library/index.html)\" = 600 && test \"\$(stat -c %a /home/zomorod2/.private-media-library)\" = 700"
+          for attempt in 1 2 3 4 5; do
+            CODE="$(curl -sS --max-time 12 -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/media/ || true)"
+            LOCATION="$(curl -sS --max-time 12 -D - -o /dev/null https://mojplaywin.com/picm/media/ | tr -d '\r' | grep -i '^location:' | head -1 || true)"
+            if [[ "$CODE" == 302 && "$LOCATION" == *'/picm/login/'* ]]; then
+              echo 'PRIVATE_MEDIA_UNAUTHENTICATED_DENIED_HTTP_302'
+              echo 'PRIVATE_MEDIA_LOGIN_REQUIRED=true'
+              exit 0
+            fi
+            sleep 3
+          done
+          echo 'PRIVATE_MEDIA_AUTH_GATE_SMOKE_FAILED'
+          exit 1
+      - name: Roll back only this route on installation or smoke failure
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/private-media-relay"
+          STAGE="/home/zomorod2/.private-media-stage-$GITHUB_RUN_ID"
+          timeout 50s ssh -F "$WORK/config" private-cpanel "python3 '$STAGE/deploy_private_media.py' rollback '$GITHUB_RUN_ID'"
+      - name: Report guarded completion
+        if: success()
+        run: echo 'PRIVATE_MEDIA_GUARDED_DEPLOY_SUCCESS=true'
