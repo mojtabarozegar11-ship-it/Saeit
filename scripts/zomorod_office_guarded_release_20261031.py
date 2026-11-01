@@ -206,6 +206,40 @@ def require_production_dependencies(py: Path) -> None:
         fail("PRODUCTION_DEPENDENCY_PREFLIGHT_FAILED")
 
 
+
+def require_configured_sqlite_target(py: Path) -> None:
+    """Reject a configured Django DB that differs from the only staged SQLite target.
+
+    This checks a fresh production-interpreter settings load without touching DB
+    contents. It is NOT proof of the effective DB used by existing Passenger
+    worker processes; independent live attestation remains a release blocker.
+    """
+    expression = (
+        "import os,sys; "
+        "sys.path.insert(0,os.getcwd()); "
+        "os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); "
+        "from django.conf import settings; "
+        "from pathlib import Path; "
+        "db=settings.DATABASES['default']; "
+        "expected=Path(os.getcwd())/'db.sqlite3'; "
+        "sys.exit(0 if db.get('ENGINE')=='django.db.backends.sqlite3' "
+        "and Path(str(db.get('NAME'))).resolve()==expected.resolve() else 41)"
+    )
+    try:
+        completed = subprocess.run(
+            [str(py), "-I", "-B", "-c", expression],
+            cwd=APP,
+            check=False,
+            timeout=25,
+            capture_output=True,
+            env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        fail("PRODUCTION_CONFIGURED_DB_TARGET_UNATTESTED")
+    if completed.returncode != 0:
+        fail("PRODUCTION_CONFIGURED_DB_TARGET_UNATTESTED")
+
+
 def verify():
     if len(sys.argv) != 2 or len(sys.argv[1]) != 40 or any(x not in ALLOWED_HEAD for x in sys.argv[1]):
         fail("HEAD_SHA_INVALID")
@@ -271,6 +305,7 @@ def verify():
     # replacing even a single live file. Staging-only dependencies do not count.
     py = production_python()
     require_production_dependencies(py)
+    require_configured_sqlite_target(py)
     return sha, stage, code, py
 
 
