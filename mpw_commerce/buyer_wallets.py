@@ -182,7 +182,7 @@ def fetch_server_rate(asset,*,now=None):
         fetch_fresh_rates,RateFeedUnavailable,
     )
     try:
-        snap=fetch_fresh_rates()
+        snap=fetch_fresh_rates(required_assets=(asset,))
         item=snap[asset]
         observed=datetime.fromtimestamp(item.observed_at_epoch,utc_timezone.utc)
         return TrustedRate(
