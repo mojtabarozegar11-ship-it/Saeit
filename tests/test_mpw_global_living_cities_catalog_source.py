@@ -25,7 +25,7 @@ class MojPlayWinGlobalGamesCatalogTests(unittest.TestCase):
         self.assertIn("Cipher Garden",html)
         self.assertIn("Skyline Keeper",html)
         self.assertIn("Nebula Salvage",html)
-        self.assertIn("First Realm",html)
+        self.assertIn("/games/first-realm/",html)
         self.assertIn("{% if page_key == 'about' %}",html)
         self.assertIn("{% if page_key == 'studio' %}",html)
 
