@@ -488,9 +488,26 @@ class MasterCommand(Timeline):
     def clean(self):
         if not self.instruction or not self.instruction.strip():
             raise ValidationError({"instruction": "متن فرمان نمی‌تواند خالی باشد."})
+        if (self.status == "draft_ready") != bool(self.report_id):
+            raise ValidationError({"status": "وضعیت فرمان و وجود گزارش باید سازگار باشند."})
         if self.report_id and (
             self.report.unit_id != self.unit_id or
             self.report.assistant_code != self.assistant_code or
             self.report.requested_by_id != self.issued_by_id
         ):
             raise ValidationError({"report": "گزارش باید با واحد، دستیار و صادرکننده فرمان یکسان باشد."})
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            before = type(self).objects.get(pk=self.pk)
+            if (
+                self.unit_id != before.unit_id or
+                self.issued_by_id != before.issued_by_id or
+                self.request_key != before.request_key or
+                self.assistant_code != before.assistant_code or
+                self.instruction != before.instruction or
+                (before.report_id and self.report_id != before.report_id)
+            ):
+                raise ValidationError("هویت، متن و نتیجه فرمان ثبت‌شده قابل بازنویسی نیست.")
+        self.full_clean()
+        return super().save(*args, **kwargs)
