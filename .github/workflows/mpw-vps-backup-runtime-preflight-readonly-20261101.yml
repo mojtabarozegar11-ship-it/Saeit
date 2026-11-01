@@ -44,7 +44,7 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-vps-backup-readonly"
           script64="$(base64 -w0 scripts/mpw_vps_backup_runtime_gate_readonly_20261101.py)"
-          call='import base64,sys;exec(base64.b64decode(sys.argv[1]))'
+          call='import base64,sys;payload=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(payload))'
           timeout 65s ssh -T -i "$d/vps.key" \
             -o UserKnownHostsFile="$d/vps.known" -o StrictHostKeyChecking=yes \
             -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 \
