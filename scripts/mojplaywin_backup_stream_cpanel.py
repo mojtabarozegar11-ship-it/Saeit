@@ -165,6 +165,60 @@ def assert_no_unbacked_symlinks(roots=(APP, DOCROOT), max_entries=200_000):
     return {"checked_entries": entries, "symlinks_inside_roots": links}
 
 
+def sidecar_equals_plain_local_only(compressed, plain, max_plain=2 * 1024**2):
+    """Bounded local byte equivalence. No names or content leave cPanel.
+
+    A nonstandard compressed sidecar is never trusted just by extension or
+    small size; decompressed bytes must equal the already-scoped ordinary file.
+    """
+    import gzip
+    import zlib
+
+    try:
+        plain_size = plain.stat().st_size
+        if (plain_size < 0 or plain_size > max_plain or
+                compressed.stat().st_size > 256 * 1024):
+            return False
+        codec = compressed.suffix.casefold()
+        if codec == ".gz":
+            with gzip.open(compressed, "rb") as decoder, plain.open("rb") as source:
+                counted = 0
+                while True:
+                    chunk = decoder.read(65536)
+                    if not chunk:
+                        break
+                    counted += len(chunk)
+                    if counted > max_plain or source.read(len(chunk)) != chunk:
+                        return False
+                return counted == plain_size and not source.read(1)
+        if codec != ".br":
+            return False
+        brotli_bin = shutil.which("brotli")
+        if not brotli_bin:
+            return False
+        with compressed.open("rb") as encoded, plain.open("rb") as source:
+            proc = subprocess.Popen([brotli_bin, "-d", "-c"], stdin=encoded,
+                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            try:
+                counted = 0
+                assert proc.stdout is not None
+                while True:
+                    chunk = proc.stdout.read(65536)
+                    if not chunk:
+                        break
+                    counted += len(chunk)
+                    if counted > max_plain or source.read(len(chunk)) != chunk:
+                        return False
+                return (counted == plain_size and not source.read(1) and
+                        proc.wait(timeout=10) == 0)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.wait()
+    except (OSError, EOFError, ValueError, zlib.error, subprocess.TimeoutExpired):
+        return False
+
+
 def assert_scoped_public_asset_links(roots=(APP, DOCROOT), home=HOME,
                                      max_entries=200_000, max_asset_entries=100_000,
                                      max_asset_bytes=512 * 1024**2):
@@ -266,21 +320,30 @@ def assert_scoped_public_asset_links(roots=(APP, DOCROOT), home=HOME,
                                    ".avif", ".pdf", ".mp3", ".mp4", ".webm",
                                    ".wav", ".ogg", ".json", ".xml", ".txt",
                                    ".md", ".csv", ".webmanifest", ".wasm"}
-                        # A compressed sidecar can never turn a sensitive
-                        # source type, symlink, directory or other-owned file
-                        # into an approved public asset merely by being tiny.
-                        if (source.suffix.casefold() not in allowed or
-                                source.is_symlink() or
-                                (source.exists() and not source.is_file())):
+                        # Never accept sensitive, archive, source-code,
+                        # symlinked, directory or other-owned base files.
+                        forbidden_base_types = {
+                            ".pem", ".key", ".p12", ".pfx", ".sql", ".sqlite",
+                            ".sqlite3", ".db", ".bak", ".gpg", ".age", ".zip",
+                            ".tar", ".7z", ".py", ".php", ".sh", ".rb",
+                            ".go", ".java", ".jsx", ".tsx", ".ts", ".vue",
+                            ".yml", ".yaml", ".toml",
+                        }
+                        if (source.is_symlink() or
+                                (source.exists() and not source.is_file()) or
+                                source.suffix.casefold() in forbidden_base_types):
                             raise RuntimeError("ASSET_COMPRESSED_SIDECAR_UNVERIFIED")
                         if source.is_file():
                             if source.stat().st_uid != os.geteuid():
                                 raise RuntimeError("ASSET_COMPRESSED_SIDECAR_UNVERIFIED")
+                            if (source.suffix.casefold() not in allowed and
+                                    not sidecar_equals_plain_local_only(item, source)):
+                                raise RuntimeError("ASSET_COMPRESSED_SIDECAR_UNVERIFIED")
                         else:
-                            # The live metadata scan found two orphaned public
-                            # asset sidecars. Bound missing-base exceptions to
-                            # ordinary web/media/data suffixes, at most two
-                            # files and no more than 256 KiB each.
+                            if source.suffix.casefold() not in allowed:
+                                raise RuntimeError("ASSET_COMPRESSED_SIDECAR_UNVERIFIED")
+                            # Only conventional missing-base sidecars remain
+                            # subject to the two-file, 256-KiB exception.
                             unpaired_compressed_count += 1
                             if (unpaired_compressed_count > 2 or
                                     info.st_size > 256 * 1024):
@@ -333,7 +396,8 @@ if __name__ == "__main__":
                 "approved_public_aliases": sorted(summary),
                 "public_alias_count": len(summary),
                 "target_entry_counts": {key: val[2] for key, val in summary.items()},
-                "no_contents_read": True,
+                "only_bounded_sidecar_equality_bytes_read_locally": True,
+                "no_content_or_private_names_logged": True,
                 "source_modified": False,
                 "archive_started": False,
                 "release_permitted": False,
