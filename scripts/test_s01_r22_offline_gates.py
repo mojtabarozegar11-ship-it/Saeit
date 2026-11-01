@@ -1,13 +1,19 @@
 """No network, no production host, no database. Synthetic isolated fixtures only."""
 import hashlib
 import io
+import json
 import os
+import sys
+from contextlib import redirect_stdout
+from datetime import datetime, timezone
+from unittest.mock import patch
 from pathlib import Path
 import tarfile
 import tempfile
 import unittest
 from scripts.s01_r22_offline_gates import (checkout, game_source_gate, office_stage,
-                                            public_route_contract, regular_bytes)
+                                            public_route_contract, regular_bytes,
+                                            release_readiness_contract, main)
 
 class R22Tests(unittest.TestCase):
     def files(self, root, old=b"x=1\n", new=b"x=1\n"):
@@ -100,12 +106,14 @@ class R22Tests(unittest.TestCase):
                 office_stage(d,pin)
 
     def test_public_route_blocked_baseline(self):
-        d={"source":"READ_ONLY_HTTP_OBSERVATION","observed_at":"2026-10-31T04:00Z",
-           "routes":{p:{"status":s} for p,s in [("/",200),("/api/health/",200),
+        d={"source":"READ_ONLY_HTTP_OBSERVATION","origin":"https://zomorodmelal.ir",
+           "observed_at":"2026-10-31T04:00Z",
+           "routes":{p:{"status":s,"redirected":False} for p,s in [("/",200),("/api/health/",200),
                 ("/company/office/messages/",404),("/company/office/marketing/",404)]}}
-        self.assertEqual(public_route_contract(d)["status"],"BLOCKED_BASELINE_RECORDED")
+        now=datetime(2026,10,31,4,5,tzinfo=timezone.utc)
+        self.assertEqual(public_route_contract(d,now=now)["status"],"BLOCKED_BASELINE_RECORDED")
         d["routes"]["/company/office/messages/"]["status"]=200
-        self.assertEqual(public_route_contract(d)["status"],"NEEDS_REVIEW")
+        self.assertEqual(public_route_contract(d,now=now)["status"],"NEEDS_REVIEW")
 
     def test_public_route_fake_source_rejected(self):
         with self.assertRaisesRegex(ValueError,"INVALID_OBSERVATION_FORMAT"):
@@ -126,5 +134,98 @@ class R22Tests(unittest.TestCase):
             game.write_text("function nextMission(){} function resumeInMemoryCampaign(){} canEnterGameplay(")
             policy.write_text("ownerApproved: true, checkoutEnabled: false, verifiedBackend: false")
             self.assertEqual(game_source_gate(str(game),str(policy))["status"],"SOURCE_GUARD_MISSING")
+
+
+    def test_stage_unarchived_html_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            pin, code = self.stage(d)
+            extra = code / "company_messaging/templates/unarchived.html"
+            extra.parent.mkdir(parents=True, exist_ok=True)
+            extra.write_text("<script>unexpected()</script>")
+            with self.assertRaisesRegex(ValueError, "UNARCHIVED_ASSET"):
+                office_stage(d, pin)
+
+    def test_stage_unarchived_javascript_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            pin, code = self.stage(d)
+            extra = code / "company_messaging/static/unarchived.js"
+            extra.parent.mkdir(parents=True, exist_ok=True)
+            extra.write_text("console.log('unexpected')")
+            with self.assertRaisesRegex(ValueError, "UNARCHIVED_ASSET"):
+                office_stage(d, pin)
+
+    def test_stage_parent_symlink_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            real = root / "real"
+            real.mkdir()
+            pin, _ = self.stage(real)
+            (root / "alias").symlink_to(real, target_is_directory=True)
+            with self.assertRaises(OSError):
+                office_stage(str(root / "alias"), pin)
+
+    def test_public_route_stale_and_wrong_origin_rejected(self):
+        evidence = {"source":"READ_ONLY_HTTP_OBSERVATION",
+                    "origin":"https://zomorodmelal.ir",
+                    "observed_at":"2026-10-31T04:00:00Z",
+                    "routes":{}}
+        now = datetime(2026, 10, 31, 5, 0, tzinfo=timezone.utc)
+        with self.assertRaisesRegex(ValueError, "OBSERVATION_STALE"):
+            public_route_contract(evidence, now=now)
+        evidence["origin"] = "https://unexpected.example"
+        with self.assertRaisesRegex(ValueError, "INVALID_OBSERVATION_ORIGIN"):
+            public_route_contract(evidence, now=now)
+
+    def test_public_route_redirect_evidence_required(self):
+        evidence = {"source":"READ_ONLY_HTTP_OBSERVATION",
+                    "origin":"https://zomorodmelal.ir",
+                    "observed_at":"2026-10-31T04:00:00Z",
+                    "routes":{p:{"status":s} for p,s in
+                        [("/",200),("/api/health/",200),
+                         ("/company/office/messages/",404),("/company/office/marketing/",404)]}}
+        now = datetime(2026, 10, 31, 4, 1, tzinfo=timezone.utc)
+        self.assertEqual(public_route_contract(evidence, now=now)["status"], "NEEDS_REVIEW")
+
+    def test_format_only_drift_cli_cannot_pass_gate(self):
+        with tempfile.TemporaryDirectory() as d:
+            approved, observed, pin = self.files(d, new=b"x = 1  # harmless comment\n")
+            out = io.StringIO()
+            with patch.object(sys, "argv", ["offline", "checkout",
+                              "--approved", str(approved), "--current", str(observed),
+                              "--sha256", pin]), redirect_stdout(out):
+                self.assertEqual(main(), 2)
+            self.assertIn("FORMAT_ONLY_DRIFT", out.getvalue())
+
+    def test_public_blocked_baseline_cli_cannot_pass_gate(self):
+        with tempfile.TemporaryDirectory() as d:
+            observation = {"source":"READ_ONLY_HTTP_OBSERVATION",
+                           "origin":"https://zomorodmelal.ir",
+                           "observed_at":datetime.now(timezone.utc).isoformat(),
+                           "routes":{p:{"status":s,"redirected":False} for p,s in
+                             [("/",200),("/api/health/",200),
+                              ("/company/office/messages/",404),("/company/office/marketing/",404)]}}
+            path = Path(d) / "observation.json"
+            path.write_text(json.dumps(observation))
+            out = io.StringIO()
+            with patch.object(sys, "argv", ["offline", "public-routes", "--evidence", str(path)]), redirect_stdout(out):
+                self.assertEqual(main(), 2)
+            self.assertIn("BLOCKED_BASELINE_RECORDED", out.getvalue())
+
+    def test_missing_release_evidence_remains_blocked(self):
+        result = release_readiness_contract({"source_sha_reconciled":True})
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("passenger_db_authority_verified", result["missing"])
+        self.assertIn("durable_offhost_full_restore_verified", result["missing"])
+        self.assertIn("rollback_rehearsal_verified", result["missing"])
+        self.assertIn("buyer_flow_accepted", result["missing"])
+        self.assertFalse(result["release_permitted"])
+
+    def test_self_declared_complete_release_evidence_never_authorizes(self):
+        from scripts.s01_r22_offline_gates import REQUIRED_RELEASE_EVIDENCE
+        result = release_readiness_contract({name:True for name in REQUIRED_RELEASE_EVIDENCE})
+        self.assertEqual(result["status"], "INDEPENDENT_ATTESTATION_REQUIRED")
+        self.assertEqual(result["missing"], [])
+        self.assertFalse(result["safe_to_deploy"])
+        self.assertFalse(result["release_permitted"])
 
 if __name__ == "__main__": unittest.main()
