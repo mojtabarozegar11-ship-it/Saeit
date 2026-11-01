@@ -46,7 +46,7 @@ function sync(){
   prompt.maxLength=580;
   if(label)label.textContent="توصیف تصویر برای موتور هوش مصنوعی";
   prompt.placeholder="مثلاً: یک مزرعه سرسبز در طلوع آفتاب، نور طبیعی، نمای نزدیک از خوشه‌های گندم";
-  notice.textContent="ساخت واقعی تصویر با موتور CPU خصوصی VPS. خروجی آزمایشی ۲۵۶×۲۵۶ پیکسل است؛ کیفیت تجاری، 8K یا ساخت فیلم واقعی نیست. حداکثر دو درخواست در ۲۴ ساعت. ممکن است چند دقیقه منتظر بمانید.";
+  notice.textContent="ساخت واقعی تصویر با موتور CPU خصوصی VPS. خروجی آزمایشی ۲۵۶×۲۵۶ پیکسل است؛ کیفیت تجاری، 8K یا ساخت فیلم واقعی نیست. بدون سهمیهٔ روزانه؛ تعداد کارهای هم‌زمان به ظرفیت VPS بستگی دارد. ممکن است چند دقیقه منتظر بمانید.";
   button.textContent=active?"در حال پیگیری سفارش…":"ساخت عکس با هوش مصنوعی (آزمایشی)";
 }
 document.querySelectorAll("[data-mode]").forEach(el=>el.addEventListener("click",()=>{
@@ -139,9 +139,8 @@ form.addEventListener("submit",async event=>{
     const result=await response.json().catch(()=>({}));
     if(!response.ok){
       const reasons={
-        daily_limit_reached:"سقف دو تصویر در ۲۴ ساعت تکمیل شده است.",
         queue_full:"صف تولید موقتاً پر است.",
-        studio_capacity_reached:"ظرفیت ذخیره سفارش‌های آزمایشی تکمیل شده است.",
+        private_storage_full:"فضای آزاد ذخیره‌سازی خصوصی کافی نیست.",
         forbidden:"فقط مالک PICM مجاز است.",
         authentication_required:"لطفاً دوباره وارد PICM شوید."
       };
