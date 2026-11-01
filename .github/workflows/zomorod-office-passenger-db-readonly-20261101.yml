@@ -1,7 +1,7 @@
 name: Attest staged Zomorod office DB config and Passenger mapping read-only
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
     branches: [main]
     paths:
       - ".github/workflows/zomorod-office-passenger-db-readonly-20261101.yml"
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   attest:
-    if: github.event.action == 'opened' && github.head_ref == 'ops/zomorod-office-passenger-db-readonly-20261101' && github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.event.action == 'opened' || github.event.action == 'synchronize') && github.head_ref == 'ops/zomorod-office-passenger-db-readonly-20261101' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 16
     steps:
@@ -263,6 +263,79 @@ jobs:
           print("COMPANY_PHP_PASSENGER_DISABLED=verified")
           print("ROOT_HTACCESS_READONLY=verified")
           print("LIVE_ROUTING_CUTOVER_PERFORMED=false")
+          print("PRODUCTION_DEPLOY_ALLOWED=no")
+          PY
+          REMOTE
+      - name: Audit Selector registration and private env placement without displaying secrets
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-office-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 120s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import hashlib,json,os,pathlib,shutil,stat,subprocess
+          home=pathlib.Path("/home/zomorod2")
+          source=home/".private/zomorod-company-office/office.env"
+          assert source.is_file() and not source.is_symlink()
+          source_stat=source.stat()
+          assert stat.S_IMODE(source_stat.st_mode)==0o600
+          def placement(rel):
+              p=home/rel
+              if p.is_symlink(): return "symlink_rejected"
+              if not p.is_file(): return "absent"
+              try:
+                  q=p.stat()
+                  if not stat.S_ISREG(q.st_mode): return "not_regular"
+                  if stat.S_IMODE(q.st_mode)!=0o600: return "mode_not_0600"
+                  src_digest=hashlib.sha256(source.read_bytes()).digest()
+                  target_digest=hashlib.sha256(p.read_bytes()).digest()
+                  return "matching_private_env" if src_digest==target_digest else "different_content"
+              except PermissionError:
+                  return "not_readable"
+          print("OFFICE_ENV_PLACEMENT_STAGED_CODE="+placement(".private/zomorod-messaging-release-stages/d7342c0fef977aa67b570bebf86b297c93220f23/code/.env"))
+          print("OFFICE_ENV_PLACEMENT_PREFLIGHT_APP="+placement("zomorod_office_preflight_2a8a0f4b9e17/.env"))
+          print("OFFICE_ENV_PLACEMENT_PRIVATE_APP_ROOT="+placement(".private/zomorod-company-office/.env"))
+          print("OFFICE_PRIVATE_ENV_SOURCE_MODE=0600")
+          def safe_file(rel):
+              p=home/rel
+              return "present_regular" if p.is_file() and not p.is_symlink() else "absent_or_untrusted"
+          print("PREVIEW_APP_STARTUP_FILE="+safe_file("zomorod_office_preflight_2a8a0f4b9e17/office_passenger_wsgi.py"))
+          print("PREVIEW_ROUTING_FILE="+safe_file("public_html/office-preflight-2a8a0f4b9e17/.htaccess"))
+          selector=shutil.which("cloudlinux-selector")
+          wrapper=pathlib.Path("/bin/cagefs_enter.proxied")
+          command=([selector] if selector else ([str(wrapper),"/usr/sbin/cloudlinux-selector"] if wrapper.is_file() else []))
+          if not command:
+              print("CLOUDLINUX_SELECTOR_READONLY=unavailable")
+          else:
+              try:
+                  process=subprocess.run(command+["get","--json","--interpreter","python","--user","zomorod2"],capture_output=True,timeout=30,check=False)
+                  data=json.loads(process.stdout) if process.returncode==0 else {}
+                  matches=[]
+                  def walk(obj):
+                      if isinstance(obj,dict):
+                          if "app_uri" in obj:
+                              matches.append(obj)
+                          for v in obj.values(): walk(v)
+                      elif isinstance(obj,list):
+                          for v in obj: walk(v)
+                  walk(data)
+                  uris=[str(x.get("app_uri","")).strip("/") for x in matches]
+                  if matches:
+                      print("CLOUDLINUX_SELECTOR_READONLY=parsed")
+                      print("SELECTOR_OFFICE_URI_REGISTERED="+str("company/office" in uris).lower())
+                      print("SELECTOR_PREFLIGHT_URI_REGISTERED="+str(any(u.startswith("office-preflight-") for u in uris)).lower())
+                      print("SELECTOR_ROOT_URI_REGISTERED="+str("" in uris).lower())
+                  else:
+                      print("CLOUDLINUX_SELECTOR_READONLY=no_parseable_app_metadata")
+              except (ValueError,subprocess.TimeoutExpired,OSError):
+                  print("CLOUDLINUX_SELECTOR_READONLY=unavailable_or_unparseable")
+          print("WORKER_EFFECTIVE_DB_IDENTITY=not_attested_by_selector_metadata")
+          print("PRODUCTION_ROUTING_CHANGED=false")
           print("PRODUCTION_DEPLOY_ALLOWED=no")
           PY
           REMOTE
