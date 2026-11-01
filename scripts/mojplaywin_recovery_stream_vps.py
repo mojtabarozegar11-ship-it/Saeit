@@ -24,6 +24,7 @@ VERSION = "gpgv2"
 # One owner-approved run; newer archives get independent timestamp/nonce stems.
 NEW_RUN_DAY = "20261021"
 STEM_RE = re.compile(r"^mojplaywin_(?:20261017|[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16})$")
+PAIR_STEM_RE = re.compile(r"^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}$")
 NEW_MANIFEST_RE = re.compile(r"^(mojplaywin_20261021T[0-9]{6}Z_[0-9a-f]{16})_(mysql|files)_gpgv2[.]manifest[.]json$")
 MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
 MAX_PLAINTEXT_BYTES = 12 * 1024**3
@@ -143,6 +144,8 @@ def readiness(home=None, stem=None):
         if stem is None:
             discover(home)
         else:
+            if not isinstance(stem, str) or not PAIR_STEM_RE.fullmatch(stem):
+                raise RuntimeError("invalid fresh pair identity")
             for kind in ("mysql", "files"):
                 load(kind, home=home, stem=stem)
         return {"classification":"ONE_PASS_RECOVERY_SOURCE_READINESS",
@@ -171,8 +174,8 @@ if __name__=="__main__":
         if mode not in ("mysql","files"):
             raise RuntimeError("unsupported operation")
         if requested_stem is not None:
-            if not STEM_RE.fullmatch(requested_stem):
-                raise RuntimeError("invalid pair identity")
+            if not PAIR_STEM_RE.fullmatch(requested_stem):
+                raise RuntimeError("invalid fresh pair identity")
             stems={kind: requested_stem for kind in ("mysql", "files")}
         else:
             stems=discover()
