@@ -5,6 +5,8 @@ on:
     branches: [integration/zm-unified-business-command-center-20261101]
     paths:
       - content/zomorod-business/app.php
+      - content/zomorod-business/auctions.php
+      - scripts/test_zomorod_auctions.py
       - tests/test_zm_business_atomicity.py
       - tests/test_zm_business_sqlite_tx.php
       - tests/test_zm_business_logout_http.py
@@ -13,6 +15,8 @@ on:
   pull_request:
     paths:
       - content/zomorod-business/app.php
+      - content/zomorod-business/auctions.php
+      - scripts/test_zomorod_auctions.py
       - tests/test_zm_business_atomicity.py
       - tests/test_zm_business_sqlite_tx.php
       - tests/test_zm_business_logout_http.py
@@ -35,6 +39,10 @@ jobs:
           sudo apt-get install -y -qq php-cli php-sqlite3
       - name: Verify PHP syntax
         run: php -l content/zomorod-business/app.php
+      - name: Verify auction PHP syntax
+        run: php -l content/zomorod-business/auctions.php
+      - name: Private auction role, document upload and dual-review lifecycle
+        run: python3 scripts/test_zomorod_auctions.py
       - name: Native PDO immediate transaction regression
         run: php tests/test_zm_business_sqlite_tx.php
       - name: Invoice and stock concurrent writer regression
