@@ -85,6 +85,9 @@ class Command(BaseCommand):
 
         counters = {"seen": 0, "eligible": 0, "created": 0, "duplicate": 0, "skipped": 0}
         seen_codes = {}
+        eligible_receipts = []
+        # Complete the bounded network fetch and validate source-number uniqueness
+        # BEFORE any DB write. A late page failure must not partially import.
         for item in fetch_issue_comments(pages=pages):
             counters["seen"] += 1
             receipt = extract_receipt(item)
@@ -93,35 +96,37 @@ class Command(BaseCommand):
                 continue
             counters["eligible"] += 1
             code, evidence = receipt["report_code"], receipt["evidence_url"]
-            # Detect a conflict even in dry-run. An existing number can never
-            # silently acquire a new source reference, including within one run.
             if code in seen_codes:
                 if seen_codes[code] != evidence:
                     raise CommandError("REPORT_NUMBER_SOURCE_CONFLICT")
                 counters["duplicate"] += 1
                 continue
             seen_codes[code] = evidence
-            if not commit:
-                continue
+            if commit:
+                eligible_receipts.append(receipt)
 
+        if commit:
+            # One transaction for the entire batch: a conflicting existing row,
+            # validation failure or concurrent insert rolls back ALL new rows.
+            # Network I/O occurs outside the transaction to avoid long DB locks.
             try:
                 with transaction.atomic():
-                    existing = ChatGPTActionReport.objects.filter(report_code=code).first()
-                    if existing:
-                        if existing.evidence_url != evidence:
-                            raise CommandError("REPORT_NUMBER_SOURCE_CONFLICT")
-                        counters["duplicate"] += 1
-                        continue
-                    # Imported status remains deliberately unreviewed regardless
-                    # of claimed completion inside the source comment.
-                    record = ChatGPTActionReport(
-                        unit=unit, recorded_by=recorder, evidence_reviewed=False,
-                        evidence_reviewed_by=None, outcome="partial", **receipt,
-                    )
-                    record.save()
-                    counters["created"] += 1
+                    for receipt in eligible_receipts:
+                        code, evidence = receipt["report_code"], receipt["evidence_url"]
+                        existing = ChatGPTActionReport.objects.filter(report_code=code).first()
+                        if existing:
+                            if existing.evidence_url != evidence:
+                                raise CommandError("REPORT_NUMBER_SOURCE_CONFLICT")
+                            counters["duplicate"] += 1
+                            continue
+                        # A source comment is not independently verified delivery.
+                        record = ChatGPTActionReport(
+                            unit=unit, recorded_by=recorder, evidence_reviewed=False,
+                            evidence_reviewed_by=None, outcome="partial", **receipt,
+                        )
+                        record.save()
+                        counters["created"] += 1
             except IntegrityError as exc:
-                # Concurrent inserts should be reported, not treated as success.
                 raise CommandError("REPORT_IMPORT_CONCURRENT_CONFLICT") from exc
 
         # Never log raw reports, names, addresses or any private credentials.
