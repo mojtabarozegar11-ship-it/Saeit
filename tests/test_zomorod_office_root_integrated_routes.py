@@ -10,19 +10,25 @@ from django.urls import Resolver404, resolve, reverse
 
 
 class OfficeRootIntegrationRoutingTests(SimpleTestCase):
-    def test_root_office_login_legacy_redirects_to_private_mfa_login(self):
+    def test_legacy_staff_login_remains_unchanged(self):
+        # The existing command-center staff login must not be repurposed
+        # during a private-office release.
         url = reverse("company_office_login")
         self.assertEqual(url, "/company/office/login/")
-        matching = resolve(url)
-        self.assertEqual(matching.url_name, "company_office_login")
-        result = matching.func(RequestFactory().get(url, secure=True))
-        self.assertEqual(result.status_code, 302)
+        match = resolve(url)
+        self.assertEqual(match.url_name, "company_office_login")
+        response = match.func(RequestFactory().get(url, secure=True))
+        self.assertEqual(response.status_code, 302)
         self.assertEqual(
-            result["Location"], reverse("enterprise_portal:login"),
+            response["Location"], "/admin/login/?next=/staff/command-center/",
         )
-        self.assertEqual(result["Location"], "/company/office/secure-login/")
-        self.assertNotIn("/admin/login/", result["Location"])
-        self.assertNotIn("/staff/command-center/", result["Location"])
+
+    def test_private_office_login_is_a_distinct_mfa_route(self):
+        new_login = reverse("enterprise_portal:login")
+        self.assertEqual(new_login, "/company/office/secure-login/")
+        match = resolve(new_login)
+        self.assertEqual(match.view_name, "enterprise_portal:login")
+        self.assertNotEqual(new_login, reverse("company_office_login"))
 
     def test_root_messages_marketing_and_office_login_resolve_privately(self):
         paths = (
