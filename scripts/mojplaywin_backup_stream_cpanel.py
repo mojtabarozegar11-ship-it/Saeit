@@ -185,6 +185,7 @@ def assert_scoped_public_asset_links(roots=(APP, DOCROOT), home=HOME,
     account = Path(home).resolve(strict=True)
     expected = frozenset(("static", "assets", "uploads"))
     seen = {}
+    source_parents = {}
     count = 0
 
     def walk_error(_error):
@@ -203,10 +204,11 @@ def assert_scoped_public_asset_links(roots=(APP, DOCROOT), home=HOME,
                     if not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
                         raise RuntimeError("BACKUP_PRIMARY_SPECIAL_FILE")
                     continue
-                if path.parent != public_root:
-                    raise RuntimeError("NESTED_PUBLIC_ASSET_SYMLINK")
                 if entry not in expected:
                     raise RuntimeError("UNKNOWN_PUBLIC_ALIAS")
+                if (entry == "static" and path.parent != public_root or
+                        entry in ("assets", "uploads") and path.parent.parent != public_root):
+                    raise RuntimeError("UNEXPECTED_ASSET_ALIAS_DEPTH")
                 if info.st_uid != os.geteuid():
                     raise RuntimeError("PUBLIC_ALIAS_OWNER_MISMATCH")
                 if entry in seen:
@@ -219,8 +221,11 @@ def assert_scoped_public_asset_links(roots=(APP, DOCROOT), home=HOME,
                         not target.is_dir() or target.stat().st_uid != os.geteuid()):
                     raise RuntimeError("ASSET_LINK_TARGET_OUT_OF_SCOPE")
                 seen[entry] = target
+                source_parents[entry] = path.parent
     if frozenset(seen) != expected:
         raise RuntimeError("REQUIRED_PUBLIC_ASSET_ALIAS_MISSING")
+    if source_parents["assets"] != source_parents["uploads"]:
+        raise RuntimeError("NESTED_ASSET_PARENT_MISMATCH")
 
     result = {}
     for label in sorted(expected):
@@ -302,6 +307,7 @@ if __name__ == "__main__":
             "BACKUP_PRIMARY_SPECIAL_FILE", "UNSCOPED_PRIMARY_SYMLINK",
             "NESTED_PUBLIC_ASSET_SYMLINK", "UNKNOWN_PUBLIC_ALIAS",
             "PUBLIC_ALIAS_OWNER_MISMATCH", "DUPLICATE_PUBLIC_ALIAS",
+            "UNEXPECTED_ASSET_ALIAS_DEPTH", "NESTED_ASSET_PARENT_MISMATCH",
             "ASSET_LINK_UNRESOLVABLE", "ASSET_LINK_TARGET_OUT_OF_SCOPE",
             "REQUIRED_PUBLIC_ASSET_ALIAS_MISSING", "ASSET_TREE_UNREADABLE",
             "ASSET_TREE_ENTRY_LIMIT", "ASSET_TREE_UNAPPROVED_MEMBER",
