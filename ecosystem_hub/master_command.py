@@ -1,16 +1,15 @@
 """Authorized private Zomorod master-command intake.
 
-Natural-language instruction is preserved exactly, but task routing is explicit:
-the manager selects a supported read-only specialist. No LLM inference,
+Natural-language instruction is preserved exactly. A conservative local topic
+router may select one eligible specialist or require explicit selection. No LLM,
 external delivery, finance posting, factory control or hidden job execution.
 """
 from uuid import UUID, uuid4
 
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect
-from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
@@ -19,6 +18,7 @@ from enterprise_portal.models import AuditEvent
 from enterprise_portal.views import office_access, no_cache
 from .analysis import generate_report
 from .catalog import CATALOG
+from .intent_router import route_instruction
 from .models import MasterCommand, UnitMembership
 from .report_policy import permitted_assistant_codes
 from .views import page, permission, require_hub, select_unit
@@ -37,6 +37,25 @@ def _authorized_specialists(user):
         for code, definition in CATALOG.items()
         if code in allowed and definition["handler"]
     ]
+
+
+def _render_room(request, unit, units, specialists, eligible, *,
+                 error="", instruction="", request_key=None, response_status=200):
+    visible = MasterCommand.objects.filter(unit=unit).select_related(
+        "issued_by", "report",
+    ).order_by("-created_at", "-pk")[:40]
+    result = page(request, "master_command", {
+        "selected_unit": unit, "units": units,
+        "commands": visible,
+        "specialists": specialists,
+        "allowed_codes": eligible,
+        "request_key": request_key or uuid4(),
+        "routing_error": error,
+        "prefill_instruction": instruction,
+        "section": "master_command",
+    })
+    result.status_code = response_status
+    return result
 
 
 @never_cache
@@ -65,12 +84,31 @@ def room(request):
         code = (request.POST.get("assistant_code") or "").strip()
         if not instruction or len(instruction) > 2000:
             return no_cache(HttpResponse("متن فرمان باید بین ۱ تا ۲۰۰۰ نویسه باشد.", status=400))
-        if code not in eligible:
-            raise PermissionDenied("دستیار انتخاب‌شده فعال نیست یا اجازه بررسی منبع وجود ندارد.")
         try:
             key = UUID(request.POST.get("request_key", ""))
         except (ValueError, TypeError, AttributeError):
             return no_cache(HttpResponse("شناسه فرمان معتبر نیست.", status=400))
+
+        routing_mode = "explicit_specialist"
+        if code in ("", "auto"):
+            routing = route_instruction(instruction, eligible)
+            if routing["status"] == "unauthorized":
+                raise PermissionDenied("مجوز مشاهده داده‌های تخصصی موضوع این فرمان موجود نیست.")
+            if routing["status"] != "matched":
+                message = (
+                    "فرمان شامل چند موضوع تخصصی است؛ دستیار مسئول را انتخاب کنید."
+                    if routing["status"] == "ambiguous"
+                    else "موضوع فرمان با دقت کافی شناسایی نشد؛ دستیار مسئول را انتخاب کنید."
+                )
+                return _render_room(
+                    request, unit, units, specialists, eligible,
+                    error=message, instruction=instruction,
+                    request_key=key, response_status=422,
+                )
+            code = routing["code"]
+            routing_mode = routing["version"]
+        if code not in eligible:
+            raise PermissionDenied("دستیار انتخاب‌شده فعال نیست یا اجازه بررسی منبع وجود ندارد.")
 
         with transaction.atomic():
             command, created = MasterCommand.objects.get_or_create(
@@ -105,20 +143,11 @@ def room(request):
                 detail={
                     "unit_id": unit.pk, "assistant_code": code,
                     "report_id": report.pk,
+                    "routing_mode": routing_mode,
                     "no_external_side_effects": True,
                     "requires_human_review": True,
                 },
             )
         return no_cache(redirect("enterprise_portal:ecosystem_hub:report", pk=report.pk))
 
-    visible = MasterCommand.objects.filter(unit=unit).select_related(
-        "issued_by", "report",
-    ).order_by("-created_at", "-pk")[:40]
-    return page(request, "master_command", {
-        "selected_unit": unit, "units": units,
-        "commands": visible,
-        "specialists": specialists,
-        "allowed_codes": eligible,
-        "request_key": uuid4(),
-        "section": "master_command",
-    })
+    return _render_room(request, unit, units, specialists, eligible)
