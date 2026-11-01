@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import resource
+import shutil
 import signal
 import struct
 import subprocess
@@ -27,7 +28,6 @@ TOKEN = ROOT / "worker-token"
 SITE = "https://mojplaywin.com"
 LOCAL = "http://127.0.0.1:18188"
 CONTROL = ROOT / "control.sh"
-FACTORY = HOME / "factory-runtime/operations/vps-only-loop.pid"
 HEX = re.compile(r"^[0-9a-f]{32}$")
 STEPS = {1, 2, 3}
 CPU_ROOT = HOME / "comfyui-isolated"
@@ -68,15 +68,6 @@ def comfy_api(endpoint, data=None, timeout=20):
         return json.load(response)
 
 
-def factory_ok():
-    try:
-        pid = int(FACTORY.read_text().strip())
-        os.kill(pid, 0)
-        return True
-    except (OSError, ValueError):
-        return False
-
-
 def ram_ok():
     try:
         with open("/proc/meminfo", encoding="ascii") as mem:
@@ -98,6 +89,19 @@ def free_kib():
     except (OSError, ValueError):
         pass
     return 0
+
+
+def picm_disk_ok():
+    """Reserve at least 1 GiB of VPS disk for other services."""
+    try:
+        return shutil.disk_usage(HOME).free >= 1_073_741_824
+    except OSError:
+        return False
+
+
+def picm_resource_ok():
+    """PICM uses its own resource guard, independently of factory lifecycle."""
+    return ram_ok() and picm_disk_ok()
 
 
 def direct_cpu_ready():
@@ -127,10 +131,10 @@ def cpu_child_limits():
 def render_direct_cpu(prompt, steps):
     """Render one real 256px PNG without starting PyTorch/ComfyUI.
 
-    Locks against ComfyUI's own SSE2 render node, guards factory liveness,
+    Locks against ComfyUI's own SSE2 render node, guards PICM resources,
     bounds wall time and memory, and refuses placeholder images.
     """
-    if not factory_ok() or not ram_ok():
+    if not picm_resource_ok():
         raise RuntimeError("PICM_CPU_START_GUARD")
     if CPU_STATE.is_symlink():
         raise RuntimeError("PICM_CPU_UNSAFE_STATE")
@@ -161,7 +165,7 @@ def render_direct_cpu(prompt, steps):
                 limit = time.monotonic() + CPU_MAX_SECONDS
                 try:
                     while child.poll() is None and time.monotonic() < limit:
-                        if not factory_ok() or free_kib() < CPU_MIN_KIB:
+                        if not picm_disk_ok() or free_kib() < CPU_MIN_KIB:
                             raise RuntimeError("PICM_CPU_RUNTIME_GUARD")
                         time.sleep(0.5)
                     if child.poll() is None:
@@ -185,8 +189,8 @@ def render_direct_cpu(prompt, steps):
 
 
 def start_comfy_if_needed():
-    if not factory_ok() or not ram_ok():
-        raise RuntimeError("FACTORY_OR_MEMORY_GUARD_BLOCKED")
+    if not picm_resource_ok():
+        raise RuntimeError("PICM_RESOURCE_GUARD_BLOCKED")
     try:
         comfy_api("/system_stats", timeout=3)
         return
@@ -222,8 +226,8 @@ def render(job):
     prompt_id = result["prompt_id"]
     deadline = time.monotonic() + 430
     while time.monotonic() < deadline:
-        if not factory_ok() or not ram_ok():
-            raise RuntimeError("FACTORY_OR_MEMORY_GUARD_DURING_RENDER")
+        if not picm_disk_ok() or free_kib() < CPU_MIN_KIB:
+            raise RuntimeError("PICM_RESOURCE_GUARD_DURING_RENDER")
         history = comfy_api("/history/" + str(prompt_id), timeout=12)
         if str(prompt_id) in history:
             record = history[str(prompt_id)]
