@@ -95,7 +95,7 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           probe64="$(base64 -w0 scripts/mpw_vps_backup_runtime_gate_readonly_20261101.py)"
-          call='import base64,sys;exec(base64.b64decode(sys.argv[1]))'
+          call='import base64,sys;payload=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(payload))'
           timeout 45s ssh -T -F "$d/config" saeit-vps "PYTHONDONTWRITEBYTECODE=1 python3 -B -c '$call' '$probe64' --require-ready"
           stem="mojplaywin_$(date -u +%Y%m%dT%H%M%SZ)_$(openssl rand -hex 8)"
           [[ "$stem" =~ ^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}$ ]]
