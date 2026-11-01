@@ -56,6 +56,33 @@ def target_kind(resolved):
         return "regular_file"
     return "other"
 
+
+def source_scope(source_relative):
+    """Fixed source-zone label; never return names from the private tree."""
+    parts = PurePosixPath(source_relative).parts
+    if not parts or parts[0] not in ROOTS:
+        return "outside_primary_roots"
+    if parts[0] == "Saeit-staging":
+        return "application_tree"
+    return "public_web_tree"
+
+
+def directory_population(directory, max_entries=32):
+    """Read at most 32 entry names internally; emit only bounded category."""
+    if max_entries < 1 or max_entries > 32:
+        raise ValueError("INVALID_POPULATION_BOUND")
+    try:
+        with os.scandir(directory) as members:
+            count = 0
+            for _member in members:
+                count += 1
+                if count >= max_entries:
+                    return "at_least_32_entries"
+        return "empty" if count == 0 else "one_to_31_entries"
+    except OSError:
+        return "unreadable"
+
+
 def inspect():
     result = {
         "classification": "MPW_LIVE_SYMLINK_DEPENDENCIES_READ_ONLY",
@@ -77,6 +104,7 @@ def inspect():
         if not p.is_dir() or p.is_symlink() or p.resolve() != p:
             raise RuntimeError("PRIMARY_ROOT_DRIFT")
     categories, resolution, target_types = Counter(), Counter(), Counter()
+    source_scopes, external_directory_population = Counter(), Counter()
     links = entries = 0
     def fail_walk(_error):
         raise RuntimeError("SCAN_UNREADABLE")
@@ -102,7 +130,18 @@ def inspect():
                         state = "dangling"
                     categories[role] += 1
                     resolution[role + "_" + state] += 1
-                    target_types[role + "_" + target_kind(resolved)] += 1
+                    kind = target_kind(resolved)
+                    target_types[role + "_" + kind] += 1
+                    if role != "backed_primary_roots":
+                        source_scopes[source_scope(str(path.relative_to(HOME)))] += 1
+                        if state == "present_same_owner" and kind == "directory":
+                            try:
+                                resolved.relative_to(HOME)
+                            except ValueError:
+                                population = "outside_account_not_scanned"
+                            else:
+                                population = directory_population(resolved)
+                            external_directory_population[role + "_" + population] += 1
                 except (OSError, RuntimeError, ValueError):
                     categories["unreadable"] += 1
     result.update({
@@ -111,6 +150,8 @@ def inspect():
         "dependency_classes": dict(sorted(categories.items())),
         "dependency_resolution": dict(sorted(resolution.items())),
         "dependency_target_types": dict(sorted(target_types.items())),
+        "external_link_source_scopes": dict(sorted(source_scopes.items())),
+        "external_directory_population": dict(sorted(external_directory_population.items())),
     })
     return result
 
