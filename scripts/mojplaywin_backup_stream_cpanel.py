@@ -162,6 +162,98 @@ def assert_no_unbacked_symlinks(roots=(APP, DOCROOT), max_entries=200_000):
                     raise RuntimeError("BACKUP_LINK_OUTSIDE_APPROVED_ROOTS")
     return {"checked_entries": entries, "symlinks_inside_roots": links}
 
+
+def assert_scoped_public_asset_links(roots=(APP, DOCROOT), home=HOME,
+                                     max_entries=200_000, max_asset_entries=100_000,
+                                     max_asset_bytes=512 * 1024**2):
+    """Dry-run-only guard for a future site-scoped, self-contained file snapshot.
+
+    ONLY docroot's direct public static/assets/uploads aliases are eligible.
+    Their linked content must be same-account-owned, bounded, ordinary files
+    and directories; neither parent projects nor unlinked siblings are read.
+    No contents, private target paths or credentials are logged.
+    This function itself does not create or transfer an archive.
+    """
+    import stat
+
+    if len(roots) != 2:
+        raise RuntimeError("BACKUP_PRIMARY_ROOT_COUNT")
+    app_root, public_root = tuple(Path(p) for p in roots)
+    for root in (app_root, public_root):
+        if root.is_symlink() or not root.is_dir() or root.resolve() != root:
+            raise RuntimeError("UNSAFE_PRIMARY_BACKUP_ROOT")
+    account = Path(home).resolve(strict=True)
+    expected = frozenset(("static", "assets", "uploads"))
+    seen = {}
+    count = 0
+
+    def walk_error(_error):
+        raise RuntimeError("BACKUP_LINK_SCAN_INCOMPLETE")
+
+    for root in (app_root, public_root):
+        for dirname, dirs, files in os.walk(
+                root, followlinks=False, onerror=walk_error):
+            count += len(dirs) + len(files)
+            if count > max_entries:
+                raise RuntimeError("BACKUP_LINK_SCAN_LIMIT")
+            for entry in dirs + files:
+                path = Path(dirname) / entry
+                info = path.lstat()
+                if not stat.S_ISLNK(info.st_mode):
+                    if not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
+                        raise RuntimeError("BACKUP_PRIMARY_SPECIAL_FILE")
+                    continue
+                if (path.parent != public_root or entry not in expected or
+                        info.st_uid != os.geteuid() or entry in seen):
+                    raise RuntimeError("UNSCOPED_PRIMARY_SYMLINK")
+                try:
+                    target = path.resolve(strict=True)
+                except (OSError, RuntimeError):
+                    raise RuntimeError("ASSET_LINK_UNRESOLVABLE") from None
+                if (target == account or account not in target.parents or
+                        not target.is_dir() or target.stat().st_uid != os.geteuid()):
+                    raise RuntimeError("ASSET_LINK_TARGET_OUT_OF_SCOPE")
+                seen[entry] = target
+    if frozenset(seen) != expected:
+        raise RuntimeError("REQUIRED_PUBLIC_ASSET_ALIAS_MISSING")
+
+    result = {}
+    for label in sorted(expected):
+        target = seen[label]
+        entries = regular_bytes = 0
+        def target_error(_error):
+            raise RuntimeError("ASSET_TREE_UNREADABLE")
+        for dirname, dirs, files in os.walk(
+                target, followlinks=False, onerror=target_error):
+            entries += len(dirs) + len(files)
+            if entries > max_asset_entries:
+                raise RuntimeError("ASSET_TREE_ENTRY_LIMIT")
+            for entry in dirs + files:
+                item = Path(dirname) / entry
+                info = item.lstat()
+                if (entry.startswith(".") or
+                        info.st_uid != os.geteuid() or
+                        stat.S_ISLNK(info.st_mode)):
+                    raise RuntimeError("ASSET_TREE_UNAPPROVED_MEMBER")
+                if stat.S_ISREG(info.st_mode):
+                    name = entry.casefold()
+                    suffix = item.suffix.casefold()
+                    if (name in (".env", "id_rsa", "wp-config.php", "secrets.yml") or
+                            suffix in (".pem", ".key", ".p12", ".pfx",
+                                       ".sql", ".sqlite", ".sqlite3", ".db",
+                                       ".bak", ".gpg", ".age", ".zip",
+                                       ".tar", ".gz", ".7z")):
+                        raise RuntimeError("ASSET_TREE_UNAPPROVED_FILE_SHAPE")
+                    regular_bytes += info.st_size
+                elif not stat.S_ISDIR(info.st_mode):
+                    raise RuntimeError("ASSET_TREE_SPECIAL_FILE")
+                if regular_bytes > max_asset_bytes:
+                    raise RuntimeError("ASSET_TREE_BYTE_LIMIT")
+        info = target.stat()
+        result[label] = (info.st_dev, info.st_ino, entries, regular_bytes)
+    return result
+
+
 def stream_files():
     for p in (APP, DOCROOT):
         if p.is_symlink() or not p.is_dir():
