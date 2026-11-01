@@ -1,0 +1,34 @@
+{
+  "owner": "G-01",
+  "product": "Ramadan War Web",
+  "version": "R58 (same fixed version)",
+  "finding": "The previous launcher listened on port 0 (random); browser localStorage is origin-scoped, so a new port on each restart silently loses access to previous saves.",
+  "fix": "Stable default 127.0.0.1:8765; explicit --port for persistent alternate; occupied/invalid ports fail closed; LAN IP+port must remain stable; old random-port saves require JSON export/import.",
+  "qa": {
+    "stable_port_http_200": true,
+    "index_sha_matches": true,
+    "occupied_port_fails_closed": true,
+    "invalid_port_fails_closed": true,
+    "restart_same_origin_url": true,
+    "game_js_bytes_match": true,
+    "runtime_integrity": "47/47 PASS",
+    "zip_crc": "66/66 PASS",
+    "manifest_sha": "65/65 PASS",
+    "go_cross_builds": [
+      "linux/amd64",
+      "linux/arm64",
+      "darwin/amd64",
+      "darwin/arm64",
+      "windows/amd64"
+    ]
+  },
+  "private_zip_sha256": "e1853bed6089d5e2b6a326277f3f0fb413419c2989a3fc7ac956a1af70743fae",
+  "private_zip_bytes": 16182152,
+  "private_library_upload": "FAILED: container_session_unavailable; existing private Library ZIP remains prior SHA 0cddb322d1643af81fdc27af7b14ffbe890e7074ff27d72b64fcbbf60dac5df8",
+  "real_origin_localStorage": "NOT_VERIFIED: Chromium browser navigation blocked by administrator",
+  "physical_android": "NOT_TESTED",
+  "public_release": "BLOCKED: rights + S-01 offhost backup/restore/rollback",
+  "factory": "HOLD; no VPS writes",
+  "payment": "MOJ1 disabled",
+  "next": "Persist exact fixed ZIP to private Library, independently rematerialize SHA, then physical Android/real-origin browser save/reopen and S-01 release gate."
+}
