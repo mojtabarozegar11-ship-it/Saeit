@@ -7,12 +7,13 @@ from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q, Sum
 from django.db import transaction
-from django.http import HttpResponseForbidden, FileResponse
+from django.http import HttpResponse, HttpResponseForbidden, FileResponse
 from pathlib import Path
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_GET, require_http_methods
 
 from .forms import CompanyAuthenticationForm, TaskForm, LetterForm, has_office_access
@@ -21,6 +22,7 @@ from .models import (
     InventoryItem, JournalEntry, JournalLine, ManagementProject, Meeting,
     OfficeLetter, Partner, StockMovement, WorkTask,
 )
+from .task_workflow import TRANSITIONS, available_actions
 from .services import stock_balance
 from ecosystem_hub.access import user_units, require_unit
 
@@ -202,19 +204,78 @@ def inventory(request):
     })
 
 
+def _visible_tasks(user):
+    """The same row-level and unit-level privacy for task list and task detail."""
+    qs = WorkTask.objects.select_related("assigned_to", "created_by", "unit")
+    if not user.is_superuser:
+        qs = qs.filter(unit__in=user_units(user))
+        if not user.has_perm("enterprise_portal.change_worktask"):
+            qs = qs.filter(Q(assigned_to=user) | Q(created_by=user))
+    return qs
+
+
 @never_cache
 @office_access
 @require_GET
 def tasks(request):
     required_permission(request, "view_worktask")
-    qs = WorkTask.objects.select_related("assigned_to", "unit").order_by("due_on", "-created_at")
-    if not request.user.is_superuser:
-        qs = qs.filter(unit__in=user_units(request.user))
-        if not request.user.has_perm("enterprise_portal.change_worktask"):
-            qs = qs.filter(Q(assigned_to=request.user) | Q(created_by=request.user))
     return page(request, "tasks", {
-        "section": "tasks", "tasks": qs[:100],
-        "can_add": request.user.has_perm("enterprise_portal.add_worktask"),
+        "section": "tasks",
+        "tasks": _visible_tasks(request.user).order_by("due_on", "-created_at")[:100],
+        "can_add": request.user.is_superuser or request.user.has_perm("enterprise_portal.add_worktask"),
+    })
+
+
+@never_cache
+@office_access
+@csrf_protect
+@require_http_methods(["GET", "POST"])
+def task_detail(request, pk):
+    """Human-reviewed task lifecycle; transition and immutable audit are atomic."""
+    required_permission(request, "view_worktask")
+    qs = _visible_tasks(request.user)
+    if request.method == "POST":
+        code = (request.POST.get("transition") or "").strip()
+        expected_status = (request.POST.get("expected_status") or "").strip()
+        note = (request.POST.get("note") or "").strip()
+        if code not in TRANSITIONS:
+            return no_cache(HttpResponse("نوع اقدام معتبر نیست.", status=400))
+        if not 5 <= len(note) <= 1200:
+            return no_cache(HttpResponse("شرح اقدام باید ۵ تا ۱۲۰۰ نویسه باشد.", status=400))
+        with transaction.atomic():
+            task = get_object_or_404(qs.select_for_update(), pk=pk)
+            if expected_status != task.status:
+                return no_cache(HttpResponse("وضعیت وظیفه تغییر کرده؛ صفحه را تازه کنید.", status=409))
+            if code not in {action["code"] for action in available_actions(request.user, task)}:
+                raise PermissionDenied("مجوز انجام این مرحله از گردش کار موجود نیست.")
+            old_status = task.status
+            task.status = TRANSITIONS[code][1]
+            task.full_clean()
+            task.save(update_fields=("status", "updated_at"))
+            AuditEvent.objects.create(
+                actor=request.user,
+                action="office_task_transition",
+                target=f"WorkTask:{task.pk}",
+                detail={
+                    "unit_id": task.unit_id,
+                    "transition": code,
+                    "from": old_status,
+                    "to": task.status,
+                    "note": note,
+                    "human_action": True,
+                    "no_external_side_effects": True,
+                },
+            )
+        return no_cache(redirect("enterprise_portal:task_detail", pk=pk))
+
+    task = get_object_or_404(qs, pk=pk)
+    events = AuditEvent.objects.filter(
+        target=f"WorkTask:{task.pk}", action="office_task_transition",
+    ).select_related("actor").order_by("-occurred_at", "-pk")[:50]
+    return page(request, "task_detail", {
+        "section": "tasks", "item": task,
+        "actions": available_actions(request.user, task),
+        "events": events,
     })
 
 
