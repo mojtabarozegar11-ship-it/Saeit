@@ -21,6 +21,12 @@ assert source.read_bytes()==(private/'app.php').read_bytes()
 php=shutil.which('php') or '/opt/cpanel/ea-php82/root/usr/bin/php'
 assert pathlib.Path(php).is_file()
 assert subprocess.run([php,'-r','exit(extension_loaded("pdo_sqlite")?0:1);']).returncode==0
+# The accounting DB must now be initialized explicitly; HTTP GET may never
+# auto-create it. Initialize only this throwaway synthetic directory.
+init=subprocess.run([php,str(private/'app.php'),'--initialize-private-db'],
+                    cwd=str(base/'synthetic'),capture_output=True,text=True,timeout=25)
+assert init.returncode==0,('Isolated PHP private setup failed',init.stderr[-400:])
+assert (private/'management.sqlite3').is_file() and (private/'setup.token').is_file()
 sid='zmtest'+sha[:12]
 code="session_id(getenv('SID'));$_SERVER['REQUEST_METHOD']=getenv('REQ_METHOD');$_GET=json_decode(getenv('QUERY_JSON'),true);$_POST=json_decode(getenv('POST_JSON'),true);register_shutdown_function(function(){file_put_contents(getenv('SID_RESULT'),session_id());});require getenv('INDEX');"
 def request(method='GET',page=None,post=None):
