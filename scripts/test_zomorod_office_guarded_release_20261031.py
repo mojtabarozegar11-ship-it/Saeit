@@ -267,6 +267,38 @@ class GuardedReleaseDependencyPreflightTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "PRODUCTION_DEPENDENCY_PREFLIGHT_FAILED"):
                 release.require_production_dependencies(Path("/nonexistent/virtualenv/bin/python"))
 
+    def test_configured_db_target_is_inspected_with_isolated_production_python(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = Path(directory)
+            with patch.object(release, "APP", app), patch.object(
+                release.subprocess, "run",
+                return_value=release.subprocess.CompletedProcess([], 0)
+            ) as runner:
+                release.require_configured_sqlite_target(Path("/opt/venv/bin/python"))
+            args, kwargs = runner.call_args
+            self.assertEqual(args[0][:4], ["/opt/venv/bin/python", "-I", "-B", "-c"])
+            self.assertIn("django.db.backends.sqlite3", args[0][4])
+            self.assertIn("db.sqlite3", args[0][4])
+            self.assertIn("sys.exit", args[0][4])
+            self.assertEqual(kwargs["cwd"], app)
+            self.assertTrue(kwargs["capture_output"])
+
+    def test_configured_db_mismatch_blocks_release(self):
+        with patch.object(
+            release.subprocess, "run",
+            return_value=release.subprocess.CompletedProcess([], 41)
+        ):
+            with self.assertRaisesRegex(RuntimeError, "PRODUCTION_CONFIGURED_DB_TARGET_UNATTESTED"):
+                release.require_configured_sqlite_target(Path("/opt/venv/bin/python"))
+
+    def test_configured_db_inspection_timeout_blocks_release(self):
+        with patch.object(
+            release.subprocess, "run",
+            side_effect=release.subprocess.TimeoutExpired("python", 25)
+        ):
+            with self.assertRaisesRegex(RuntimeError, "PRODUCTION_CONFIGURED_DB_TARGET_UNATTESTED"):
+                release.require_configured_sqlite_target(Path("/opt/venv/bin/python"))
+
 
 if __name__ == "__main__":
     unittest.main()
