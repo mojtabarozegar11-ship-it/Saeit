@@ -5,6 +5,7 @@ from django_otp.forms import OTPAuthenticationForm
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from .models import WorkTask, OfficeLetter, BusinessUnit, Meeting
+from .private_uploads import _validated_file
 from .security import login_is_blocked, register_failed_login, clear_login_failures
 
 
@@ -103,6 +104,8 @@ class TaskForm(forms.ModelForm):
 
 
 class LetterForm(forms.ModelForm):
+    attachment = forms.FileField(required=False, label="پیوست خصوصی (PDF، PNG، JPEG تا ۸ مگابایت)")
+
     class Meta:
         model = OfficeLetter
         fields = ("number", "subject", "direction", "body", "classification",
@@ -115,6 +118,13 @@ class LetterForm(forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["assigned_to"].queryset = colleagues(user)
+
+
+    def clean_attachment(self):
+        value = self.cleaned_data.get("attachment")
+        if value:
+            _validated_file(value)
+        return value
 
 
 class MeetingForm(forms.ModelForm):
