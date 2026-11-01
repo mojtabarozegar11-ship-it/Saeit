@@ -277,6 +277,7 @@ def inspect():
                     if role != "backed_primary_roots":
                         external_dependencies.append({
                             "source_primary_root": name,
+                            "source_depth_within_root": min(len(path.relative_to(HOME / name).parts), 5),
                             "alias_purpose": alias_purpose(str(path.relative_to(HOME))),
                             "destination_role": role,
                             "target_site_affinity": target_site_affinity(resolved),
