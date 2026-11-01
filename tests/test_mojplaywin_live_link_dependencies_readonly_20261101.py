@@ -165,12 +165,31 @@ class PrivateShallowTargetMetadataTests(unittest.TestCase):
             (root / "package.wasm.br").write_bytes(b"synthetic")
             result = bounded_asset_tree_metadata(root)
             shapes = result["entry_shapes"]
-            self.assertEqual(shapes["compressed_base_disallowed_extension_shape"], 1)
+            self.assertEqual(shapes["compressed_archive_base_shape"], 1)
             self.assertEqual(shapes["compressed_base_missing_shape"], 1)
             self.assertEqual(shapes["precompressed_data_sidecar_shape"], 1)
             self.assertNotIn("orphan", json.dumps(result))
             self.assertNotIn("bundle", json.dumps(result))
             self.assertNotIn(td, json.dumps(result))
+
+    def test_disallowed_compressed_base_risk_labels_never_emit_extensions_or_names(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            for name in ("private-records.db", "saved.tar", "app.py",
+                         "blob.bin", "unfamiliar.foobar", "readme"):
+                (root / name).write_bytes(b"synthetic")
+                (root / (name + ".gz")).write_bytes(b"synthetic")
+            shapes = bounded_asset_tree_metadata(root)["entry_shapes"]
+            self.assertEqual(shapes["compressed_sensitive_base_shape"], 1)
+            self.assertEqual(shapes["compressed_archive_base_shape"], 1)
+            self.assertEqual(shapes["compressed_source_base_shape"], 1)
+            self.assertEqual(shapes["compressed_binary_data_base_shape"], 1)
+            self.assertEqual(shapes["compressed_other_unapproved_base_shape"], 1)
+            self.assertEqual(shapes["compressed_no_extension_base_shape"], 1)
+            serialized = json.dumps(shapes)
+            for forbidden in ("private-records", "saved.tar", "blob.bin",
+                              "unfamiliar", td):
+                self.assertNotIn(forbidden, serialized)
 
     def test_bounded_tree_scan_fails_on_entry_limit(self):
         with tempfile.TemporaryDirectory() as td:
