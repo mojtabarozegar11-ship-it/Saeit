@@ -1,10 +1,14 @@
 """Fail-closed primary backup link guards, using only private synthetic files."""
 import tempfile
+import io
+import subprocess
+import tarfile
+import shutil
 import json
 import unittest
 from pathlib import Path
 
-from scripts.mojplaywin_backup_stream_cpanel import (assert_no_unbacked_symlinks, assert_scoped_public_asset_links)
+from scripts.mojplaywin_backup_stream_cpanel import (assert_no_unbacked_symlinks, assert_scoped_public_asset_links, scoped_files_tar_command)
 
 
 class BackupLinkGuardTests(unittest.TestCase):
@@ -81,6 +85,33 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
         self.assertTrue(all(v[3] == len("synthetic") for v in report.values()))
         self.assertNotIn(str(self.account), json.dumps(report))
         self.assertTrue((self.app / "main.py").exists())
+
+    def test_synthetic_tar_materializes_aliases_inside_only_primary_roots(self):
+        if not shutil.which("tar"):
+            self.skipTest("GNU tar unavailable")
+        private = self.account / "unlinked-independent-project"
+        private.mkdir()
+        (private / "unlinked-private-data.bin").write_bytes(b"synthetic")
+        self.check()
+        proc = subprocess.run(
+            scoped_files_tar_command(self.account, (self.app, self.site)),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
+        )
+        with tarfile.open(fileobj=io.BytesIO(proc.stdout), mode="r:") as archive:
+            members = {m.name: m for m in archive.getmembers()}
+            source = self.nested_site.name
+            expected = (
+                "Saeit-staging/main.py",
+                "mojplaywin.com/static/example.css",
+                "mojplaywin.com/" + source + "/assets/example.css",
+                "mojplaywin.com/" + source + "/uploads/example.css",
+            )
+            for name in expected:
+                self.assertIn(name, members)
+                self.assertTrue(members[name].isfile())
+            self.assertFalse(any(m.issym() or m.islnk() for m in members.values()))
+            self.assertFalse(any("unlinked-independent-project" in name for name in members))
+            self.assertFalse(any(name.startswith("external-assets") for name in members))
 
     def test_missing_alias_blocks(self):
         (self.nested_site / "uploads").unlink()
