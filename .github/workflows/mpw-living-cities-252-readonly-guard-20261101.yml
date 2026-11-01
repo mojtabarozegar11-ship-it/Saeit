@@ -1,0 +1,50 @@
+name: MojPlayWin Living Cities exact read-only release preflight
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-living-cities-252-readonly-guard-20261101.yml]
+permissions: {contents: read}
+jobs:
+  guard:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Connect via pinned relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Independently check original game owner and private staging prerequisites only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 50s ssh -T -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          import os,hashlib
+          h=Path.home()
+          game=h/"mojplaywin.com/living-cities"
+          marker=game/"LC-OWNER.txt"
+          expected="MPW-LIVING-CITIES-GLOBAL-20-LANG-27111d39d96f44638554233b8fcc129bea33752a"
+          checks={
+            "correct_user":os.geteuid()==h.stat().st_uid,
+            "home_dot_private_not_symlink":not (h/".private").is_symlink(),
+            "site_not_symlink":not (h/"mojplaywin.com").is_symlink(),
+            "public_game_is_real_folder":game.is_dir() and not game.is_symlink(),
+            "public_game_owner_file_exists":marker.is_file() and not marker.is_symlink(),
+            "old_release_owner_exact":marker.is_file() and marker.read_text().strip()==expected,
+            "new_private_root_not_symlink":not (h/".private/mpw-living-cities-global").is_symlink(),
+            "new_release_not_symlink":not (h/".private/mpw-living-cities-global/releases/813629da154b8cb541641eaddf3b143007db4d4e").is_symlink(),
+            "game_252_source_file_exists":(h/".private/mpw-living-cities-global/releases/813629da154b8cb541641eaddf3b143007db4d4e/source.tgz").is_file(),
+          }
+          for key,value in checks.items():print("MPW_252_PREFLIGHT_"+key+"="+("PASS" if value else "FAIL"))
+          print("MPW_252_RELEASE_GUARD_DIAGNOSTICS_ONLY=PASS")
+          PY
+      - name: Wipe SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
