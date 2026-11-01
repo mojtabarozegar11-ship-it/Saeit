@@ -82,8 +82,7 @@ jobs:
           set -euo pipefail
           script64="$(base64 -w0 scripts/mojplaywin_backup_stream_cpanel.py)"
           call='import base64,sys;decoded=base64.b64decode(sys.argv[1]);sys.argv=sys.argv[1:];exec(decoded)'
-          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \\
-            "PYTHONDONTWRITEBYTECODE=1 python3 -B -c '$call' '$script64' preflight-scoped-files"
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "PYTHONDONTWRITEBYTECODE=1 python3 -B -c '$call' '$script64' preflight-scoped-files"
       - name: Delete runner-only SSH material
         if: always()
         run: |
