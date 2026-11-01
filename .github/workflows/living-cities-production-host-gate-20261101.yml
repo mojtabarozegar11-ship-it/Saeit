@@ -24,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           for route in / /living-cities/play/ /games/; do
-            status="$(curl -sSL --max-time 24 --retry 1 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            status="$(curl -sSL --connect-timeout 4 --max-time 9 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
             echo "ZM_HTTP route=$route code=$status"
           done
       - name: Connect only using pinned VPS to cPanel identities
