@@ -11,6 +11,7 @@ on:
       - feature/zm-agent-warning-followup-20261101
       - c01/private-project-register-20261101
       - integration/zm-business-os-onepass-20261101
+      - integration/zm-unified-business-command-center-20261101
   pull_request:
     branches:
       - main
