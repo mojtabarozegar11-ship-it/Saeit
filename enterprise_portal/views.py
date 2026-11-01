@@ -117,11 +117,15 @@ MODULES = [
     {"key": "stock", "title": "انبار و تولید", "text": "کالاها، ورود و خروج قطعی، موجودی و نقطه سفارش", "icon": "▣", "permission": "view_inventoryitem", "url": "enterprise_portal:inventory"},
     {"key": "office", "title": "دبیرخانه و مکاتبات", "text": "نامه‌های وارده، صادره، داخلی و محرمانه", "icon": "✉", "permission": "view_officeletter", "url": "enterprise_portal:letters"},
     {"key": "tasks", "title": "اتوماسیون وظایف", "text": "ارجاع کار، اولویت، پیگیری، سررسید و مسئولیت", "icon": "✓", "permission": "view_worktask", "url": "enterprise_portal:tasks"},
-    {"key": "meetings", "title": "جلسات و صورت‌جلسات", "text": "تقویم، دستور جلسه، افراد حاضر و مصوبات", "icon": "◷", "permission": "view_meeting", "admin": "admin:enterprise_portal_meeting_changelist"},
+    {"key": "meetings", "title": "تقویم هوشمند و جلسات", "text": "تقویم ماهانه، سررسید وظایف، جلسات، پیشگیری از تداخل و خروجی تقویم", "icon": "◷", "permission": "view_meeting", "url": "enterprise_portal:calendar"},
     {"key": "projects", "title": "برنامه‌ها و پروژه‌ها", "text": "مدیریت طرح‌های صنعتی، تجاری و پژوهشی شرکت", "icon": "◇", "permission": "view_managementproject", "url": "enterprise_portal:project_register"},
     {"key": "budgets", "title": "بودجه و برنامه مالی", "text": "اعتبار مصوب و پیشنهادی در واحدها و ارزهای جداگانه", "icon": "▤", "permission": "view_budgetplan", "admin": "admin:enterprise_portal_budgetplan_changelist"},
     {"key": "assets", "title": "اموال و دارایی ثابت", "text": "ثبت تجهیزات، محل، تاریخ خرید و مسئول نگهداری", "icon": "⬡", "permission": "view_companyasset", "admin": "admin:enterprise_portal_companyasset_changelist"},
     {"key": "audit", "title": "گزارش حسابرسی داخلی", "text": "سوابق قطعی‌سازی اسناد و گردش انبار", "icon": "≡", "permission": "view_auditevent", "admin": "admin:enterprise_portal_auditevent_changelist"},
+    {"key": "message_center", "title": "سامانه پیام و مکاتبات داخلی", "text": "صندوق پیام، مخاطبان و تاریخچه ارسال با رضایت و مجوز", "icon": "✉", "permission_app": "company_messaging", "permission": "view_message", "url": "company_messaging:inbox"},
+    {"key": "marketing", "title": "تبلیغات و بازاریابی", "text": "کمپین، برنامه انتشار، سنجش عملکرد و هزینه", "icon": "◎", "permission_app": "company_marketing", "permission": "view_campaign", "url": "company_marketing:dashboard"},
+    {"key": "crm", "title": "مدیریت ارتباط مشتریان", "text": "سرنخ، مراحل فروش و درآمد مستند به تفکیک واحد", "icon": "◇", "permission_app": "company_marketing", "permission": "view_lead", "url": "company_marketing:crm"},
+    {"key": "master_agent", "title": "مسترایجنت و فرماندهی", "text": "تحلیل، صف کارها و چرخه‌های کنترل‌شده با تأیید و ردپا", "icon": "✦", "permission_app": "ecosystem_hub", "permission": "view_organization", "url": "enterprise_portal:ecosystem_hub:master_command"},
 ]
 
 
@@ -131,7 +135,7 @@ MODULES = [
 def dashboard(request):
     user = request.user
     modules = [item for item in MODULES
-               if user.is_superuser or user.has_perm("enterprise_portal." + item["permission"])]
+               if user.is_superuser or user.has_perm(item.get("permission_app", "enterprise_portal") + "." + item["permission"])]
     summary = []
     if user.is_superuser or user.has_perm("enterprise_portal.view_businessunit"):
         summary.append(("واحدهای شرکت", user_units(user).filter(active=True).count()))
