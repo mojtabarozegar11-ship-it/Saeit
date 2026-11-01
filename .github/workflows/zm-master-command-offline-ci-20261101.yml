@@ -8,6 +8,7 @@ on:
       - feature/zm-command-to-calendar-tasks-20261101
       - feature/zm-hourly-smart-task-watch-20261101
       - feature/zm-task-review-approval-workflow-20261101
+      - feature/zm-agent-warning-followup-20261101
   pull_request:
     branches:
       - feature/zm-business-os-unified-dashboard-20261101
@@ -15,6 +16,7 @@ on:
       - feature/zm-intent-router-marketing-agent-20261101
       - feature/zm-command-to-calendar-tasks-20261101
       - feature/zm-hourly-smart-task-watch-20261101
+      - feature/zm-task-review-approval-workflow-20261101
 
 permissions:
   contents: read
