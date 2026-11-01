@@ -247,6 +247,53 @@ jobs:
             echo "ZM_PINNED_PUBLIC_HEALTH=$p:$code"
             test "$code" = 200
           done
+      - name: Map PHP business mount and Django office fallback without executing any page
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 80s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          PYTHONDONTWRITEBYTECODE=1 python3 -B - <<'PY'
+          from pathlib import Path
+          import re
+          home=Path("/home/zomorod2")
+          assert Path.home()==home
+          public=home/"public_html"
+          app=home/"Saeit"
+          assert public.is_dir() and not public.is_symlink()
+          def exists_regular(path):
+              return path.is_file() and not path.is_symlink()
+          def safe_read(path):
+              if not exists_regular(path):return ""
+              with path.open("rb") as source:
+                  raw=source.read(250000)
+              return raw.decode("utf-8",errors="replace")
+          paths={
+              "PUBLIC_BUSINESS_INDEX": public/"business/index.php",
+              "PUBLIC_BUSINESS_HTACCESS": public/"business/.htaccess",
+              "PRIVATE_BUSINESS_APP": home/".private/zomorod-business/app.php",
+              "DJANGO_ROOT_WSGI": app/"passenger_wsgi.py",
+          }
+          for label,path in paths.items():
+              print("ZM_ROUTE_"+label+"_REGULAR="+str(exists_regular(path)).lower())
+          root=safe_read(public/".htaccess")
+          business=safe_read(public/"business/.htaccess")
+          urls=safe_read(app/"config/urls.py")
+          print("ZM_ROUTE_ROOT_HTACCESS_EXISTS="+str(bool(root)).lower())
+          print("ZM_ROUTE_ROOT_PASSENGER_BASE_URI_SLASH="+str(bool(re.search(r"(?im)^\s*PassengerBaseURI\s+/\s*$",root))).lower())
+          print("ZM_ROUTE_BUSINESS_PASSENGER_DISABLED="+str(bool(re.search(r"(?im)^\s*PassengerEnabled\s+off\s*$",business))).lower())
+          print("ZM_ROUTE_DJANGO_OFFICE_FALLBACK_TO_BUSINESS="+str('RedirectView.as_view(url="/business/"' in urls).lower())
+          print("ZM_ROUTE_DJANGO_OFFICE_INCLUDES_ERP="+str('include("enterprise_portal.urls")' in urls).lower())
+          print("ZM_ROUTE_PHP_HANDLER_EXECUTED=false")
+          print("ZM_ROUTE_DB_OR_SESSIONS_MODIFIED=false")
+          print("ZM_ROUTE_LIVE_APP_HANDOFF_ATTESTED=false")
+          PY
+          REMOTE
       - name: Clear temporary credentials on GitHub runner only
         if: always()
         shell: bash
