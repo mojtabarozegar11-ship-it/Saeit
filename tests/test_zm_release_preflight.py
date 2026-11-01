@@ -158,6 +158,41 @@ class ReadOnlySQLitePreflightTests(unittest.TestCase):
         self.assertEqual(database.read_bytes(), before)
         self.assertEqual(target.read_bytes(), b"private-other-data")
 
+    def test_empty_wal_is_blocked_without_mutation(self):
+        import sqlite3
+        from scripts.production_db_readonly_preflight import PreflightFailure, inspect_sqlite_file
+        database = self.base / "empty-wal.sqlite3"
+        with sqlite3.connect(database) as connection:
+            connection.execute("CREATE TABLE django_migrations (id integer)")
+            connection.execute("CREATE TABLE auth_user (id integer)")
+        before = database.read_bytes()
+        wal = Path(str(database) + "-wal")
+        wal.touch()
+        with self.assertRaisesRegex(PreflightFailure, "SQLITE_WAL_ACTIVE_OR_UNSAFE"):
+            inspect_sqlite_file(database, self.base)
+        self.assertEqual(database.read_bytes(), before)
+        self.assertEqual(wal.stat().st_size, 0)
+
+    def test_shm_and_rollback_journal_are_blocked_without_mutation(self):
+        import sqlite3
+        from scripts.production_db_readonly_preflight import PreflightFailure, inspect_sqlite_file
+        for suffix, reason in (
+            ("-shm", "SQLITE_SHM_PRESENT_OR_UNSAFE"),
+            ("-journal", "SQLITE_JOURNAL_PRESENT_OR_UNSAFE"),
+        ):
+            with self.subTest(sidecar=suffix):
+                database = self.base / ("sidecar" + suffix + ".sqlite3")
+                with sqlite3.connect(database) as connection:
+                    connection.execute("CREATE TABLE django_migrations (id integer)")
+                    connection.execute("CREATE TABLE auth_user (id integer)")
+                before = database.read_bytes()
+                sidecar = Path(str(database) + suffix)
+                sidecar.write_bytes(b"unreplayed-transaction")
+                with self.assertRaisesRegex(PreflightFailure, reason):
+                    inspect_sqlite_file(database, self.base)
+                self.assertEqual(database.read_bytes(), before)
+                self.assertEqual(sidecar.read_bytes(), b"unreplayed-transaction")
+
     def test_symlink_is_rejected(self):
         import os
         import sqlite3
