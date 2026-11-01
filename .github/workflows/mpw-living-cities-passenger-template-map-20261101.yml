@@ -1,0 +1,60 @@
+name: MojPlayWin live Passenger template mapping read only
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-living-cities-passenger-template-map-20261101.yml]
+permissions: {contents: read}
+jobs:
+  mapping:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Hash current repository template as comparison target
+        run: |
+          sha256sum core/templates/brands/mojplaywin/page.html
+      - name: Pinned cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Map only PassengerAppRoot, application templates and known files
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 55s ssh -T -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          import re,hashlib
+          h=Path("/home/zomorod2")
+          base=h/"mojplaywin.com"
+          files=[base/".htaccess",base/"passenger_wsgi.py"]
+          roots=[]
+          if files[0].is_file():
+              for line in files[0].read_text(errors="replace").splitlines():
+                  m=re.match(r"^\s*(PassengerAppRoot|PassengerBaseURI|PassengerPython)\s+([^#\s]+)",line)
+                  if m:
+                      key,value=m.groups()
+                      print("MPW_PASSENGER_"+key+"="+value[:160])
+                      if key=="PassengerAppRoot":
+                          roots.append(Path(value.replace('"',"").replace("'","")))
+          roots.extend([base,h/"Saeit-staging",h/"Saeit",h/"Saeit-live",h/"apps"])
+          for root in roots:
+              print("MPW_APPROOT="+str(root)+" exists="+str(root.is_dir())+
+                    " link="+str(root.is_symlink()))
+              for rel in ("core/templates/brands/mojplaywin/page.html",
+                          "templates/brands/mojplaywin/page.html",
+                          "core/templates/brands/mojplaywin/base.html"):
+                  p=root/rel
+                  if p.is_file() and not p.is_symlink():
+                      b=p.read_bytes()
+                      print("MPW_APP_TEMPLATE="+str(p)+" bytes="+str(len(b))+
+                            " sha256="+hashlib.sha256(b).hexdigest()+
+                            " five_games="+str(b"Play five original" in b)+
+                            " featured_global="+str(b"/living-cities/play/" in b))
+          print("MPW_PASSENGER_TEMPLATE_MAP_READONLY=PASS")
+          PY
+      - name: Scrub SSH
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
