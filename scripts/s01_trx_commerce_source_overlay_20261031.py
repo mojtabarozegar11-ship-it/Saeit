@@ -27,7 +27,7 @@ NEW_FUNCTION = '''def _rate_provider():
     import time
     from decimal import Decimal, InvalidOperation
     from urllib.request import Request, urlopen
-    from scripts.mojplaywin_direct_wallet_rates import RateFeedUnavailable
+    from mpw_commerce.buyer_wallets import WalletLinkRejected
 
     url = ("https://api.coingecko.com/api/v3/simple/price"
            "?ids=tron&vs_currencies=usd&include_last_updated_at=true")
@@ -70,7 +70,7 @@ NEW_FUNCTION = '''def _rate_provider():
         return price, observed_at
     except Exception as exc:
         # No fallback price, invoice or entitlement on any market-data failure.
-        raise RateFeedUnavailable("Trusted TRX quote unavailable") from exc
+        raise WalletLinkRejected("Trusted server rate unavailable") from exc
 '''
 
 
@@ -122,8 +122,8 @@ def _validate_contract(tree: ast.Module, fn: ast.FunctionDef) -> None:
         if not isinstance(expr, ast.Attribute) or expr.attr != attr \
                 or not isinstance(expr.value, ast.Name) or expr.value.id != name:
             raise SourceContractChanged("Return field or order changed")
-    # New provider imports the original RateFeedUnavailable class explicitly.
-    # No fallback to an unrelated exception or unverified payable quote.
+    # Preserve the original WalletLinkRejected failure contract observed in
+    # pinned cPanel traceback; callers must not receive a new error class.
 
 
 def build(original: bytes, *, expected_sha256: str = EXPECTED_SOURCE_SHA256) -> bytes:
@@ -184,12 +184,15 @@ def actual_source_in_memory_smoke(candidate: bytes) -> None:
                                     "last_updated_at": timestamp}}).encode("utf8")
     fake_scripts = ModuleType("scripts")
     fake_scripts.__path__ = []
-    fake_market = ModuleType("scripts.mojplaywin_direct_wallet_rates")
-    fake_market.RateFeedUnavailable = OriginalRateError
+    fake_mpw = ModuleType("mpw_commerce")
+    fake_mpw.__path__ = []
+    fake_wallets = ModuleType("mpw_commerce.buyer_wallets")
+    fake_wallets.WalletLinkRejected = OriginalRateError
     scope = {}
     with patch.dict(sys.modules, {
         "scripts": fake_scripts,
-        "scripts.mojplaywin_direct_wallet_rates": fake_market,
+        "mpw_commerce": fake_mpw,
+        "mpw_commerce.buyer_wallets": fake_wallets,
     }):
         exec(compile(ast.Module(body=[fn], type_ignores=[]),
                      "<exact-live-source-memory>", "exec"), scope)
