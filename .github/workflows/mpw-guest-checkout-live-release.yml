@@ -1,12 +1,8 @@
 name: MojPlayWin production guest TRX checkout release
+# Explicit release trigger only. The job remains hard-blocked pending independent
+# off-host full restore, effective Passenger DB attestation and rollback rehearsal.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "services/mpw_trx_guest_commerce.py"
-      - "scripts/mpw_guest_checkout_live_release.py"
-      - "scripts/test_mpw_guest_first_order_identity.py"
-      - ".github/workflows/mpw-guest-checkout-live-release.yml"
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -14,7 +10,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    # Fail closed even for manual dispatch until a separately reviewed gate-unlock PR.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
