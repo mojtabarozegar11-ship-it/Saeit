@@ -116,7 +116,7 @@ jobs:
           python3 - <<'PY'
           import json,urllib.request
           origin='https://mojplaywin.com'
-          for route in ('/store/','/store/product/72/checkout/','/store/product/225/checkout/','/store/product/879/checkout/','/commerce/trx-easy/purchases/'):
+          for route in ('/store/','/store/product/72/checkout/','/store/product/225/checkout/','/store/product/879/checkout/','/commerce/trx-easy/purchases/','/commerce/trx-easy/'):
               req=urllib.request.Request(origin+route,headers={'Cache-Control':'no-cache','Cookie':''})
               with urllib.request.urlopen(req,timeout=25) as r:
                   if r.status!=200: raise RuntimeError('GUEST_ROUTE_NOT_200:'+route)
@@ -128,6 +128,14 @@ jobs:
                           raise RuntimeError('GUEST_RECOVERY_NOINDEX_MISSING')
                       if 'no-store' not in r.headers.get('Cache-Control',''):
                           raise RuntimeError('GUEST_RECOVERY_NOSTORE_MISSING')
+                  if route == '/commerce/trx-easy/':
+                      body=r.read(220000)
+                      if not all(('/store/product/'+i+'/checkout/').encode() in body for i in ('72','225','879')):
+                          raise RuntimeError('PUBLIC_TRX_CATALOG_MISSING_REAL_SKU')
+                      if b'/commerce/book/779/' in body or b'/store/product/779/checkout/' in body or b'$0.03' in body:
+                          raise RuntimeError('PUBLIC_TRX_MICRO_TRIAL_EXPOSED')
+                      if b'No account is required' not in body:
+                          raise RuntimeError('PUBLIC_TRX_GUEST_COPY_MISSING')
               print('MPW_GUEST_PUBLIC_ROUTE='+json.dumps({'route':route,'http':200,'anonymous':True,'payment_created':False}))
           before=json.load(open('/tmp/mpw-guest-baseline.json'))
           for route,status in before.items():
