@@ -205,6 +205,32 @@ class ScopedPublicAssetsPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "ASSET_TREE_UNAPPROVED_MEMBER|ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
             self.check()
 
+    def test_nonstandard_base_sidecar_requires_exact_local_gzip_bytes(self):
+        import gzip
+        source = self.targets["assets"] / "copyright.notice"
+        source.write_bytes(b"synthetic existing public asset")
+        (self.targets["assets"] / "copyright.notice.gz").write_bytes(
+            gzip.compress(source.read_bytes()))
+        self.assertEqual(set(self.check()), {"static", "assets", "uploads"})
+
+    def test_mismatching_nonstandard_compressed_content_is_blocked(self):
+        import gzip
+        source = self.targets["assets"] / "copyright.notice"
+        source.write_bytes(b"known public asset")
+        (self.targets["assets"] / "copyright.notice.gz").write_bytes(
+            gzip.compress(b"DIFFERENT SECRET BYTES"))
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
+    def test_nonstandard_compression_expansion_is_bounded(self):
+        import gzip
+        source = self.targets["assets"] / "bulk.notice"
+        source.write_bytes(b"A" * (2 * 1024 * 1024 + 1))
+        (self.targets["assets"] / "bulk.notice.gz").write_bytes(
+            gzip.compress(source.read_bytes()))
+        with self.assertRaisesRegex(RuntimeError, "ASSET_COMPRESSED_SIDECAR_UNVERIFIED"):
+            self.check()
+
     def test_third_orphan_compressed_asset_is_blocked(self):
         for label in ("one", "two", "three"):
             (self.targets["assets"] / ("unmatched-" + label + ".json.gz")).write_bytes(b"synthetic")
