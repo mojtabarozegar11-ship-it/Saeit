@@ -21,12 +21,23 @@ def material_shortages(order):
         raise ValidationError("برنامه‌ریزی تأمین برای واحد غیرفعال مجاز نیست.")
     if not recipe.product.active:
         raise ValidationError("محصول نهایی غیرفعال است؛ فرمول تولید باید بازبینی شود.")
+    # Legacy/bulk edits can bypass ProductionOrder.clean. Do not plan
+    # purchases for a different unit's work center or an inactive center.
+    if order.work_center_id:
+        if order.work_center.unit_id != order.unit_id:
+            raise ValidationError("مرکز تولید سفارش متعلق به واحد دیگری است.")
+        if not order.work_center.active:
+            raise ValidationError("مرکز تولید سفارش غیرفعال است.")
+    if order.planned_start and order.due_date and order.due_date < order.planned_start:
+        raise ValidationError("سررسید تولید پیش از تاریخ شروع است؛ برنامه تأمین معتبر نیست.")
     if order.quantity <= 0 or recipe.yield_quantity <= 0:
         raise ValidationError("مقدار تولید و بازده فرمول باید مثبت باشند.")
     items = []
     for row in recipe.materials.select_related("item").order_by("item__sku"):
         if row.item.unit_id != order.unit_id:
             raise ValidationError("ماده اولیه متعلق به واحد تولید نیست.")
+        if row.item_id == recipe.product_id:
+            raise ValidationError("محصول نهایی نمی‌تواند ماده اولیه مستقیم خودش باشد.")
         if not row.item.active:
             raise ValidationError("ماده اولیه غیرفعال است؛ درخواست تأمین جدید مجاز نیست.")
         # Legacy imports and QuerySet.update bypass model validators.
