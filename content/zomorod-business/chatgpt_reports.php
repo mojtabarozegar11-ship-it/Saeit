@@ -5,6 +5,82 @@ declare(strict_types=1);
  * No direct entrypoint: this script is only called from app.php *after* the
  * currently active role is re-read from the existing company user database.
  */
+
+/**
+ * Structured operational receipts are untrusted claims, not independent proof.
+ * Read-only command panel; never consult the financial database or make calls.
+ */
+function zmBusinessActionReceipt(string $body,string $reportCode):array {
+    $none=['state'=>'missing','actions'=>[]];
+    if(!str_contains($body,'ZM_ACTIONS_V1_START'))return $none;
+    $matches=[];
+    $found=preg_match_all('/(?:^|\n)ZM_ACTIONS_V1_START\r?\n([^\x00]{1,7800}?)\r?\nZM_ACTIONS_V1_END(?=\r?\n|$)/u',$body,$matches);
+    if($found!==1)return ['state'=>'invalid','actions'=>[]];
+    try {$data=json_decode($matches[1][0],true,16,JSON_THROW_ON_ERROR);}
+    catch(Throwable $e){return ['state'=>'invalid','actions'=>[]];}
+    if(!is_array($data)||($data['version']??null)!==1||
+       ($data['report_code']??null)!==$reportCode||
+       !isset($data['actions'])||!is_array($data['actions'])||
+       !array_is_list($data['actions'])||count($data['actions'])>20){
+        return ['state'=>'invalid','actions'=>[]];
+    }
+    $ids=[];$actions=[];
+    foreach($data['actions'] as $item){
+        if(!is_array($item))return ['state'=>'invalid','actions'=>[]];
+        $id=$item['id']??null;$title=$item['title_fa']??null;
+        $status=$item['status']??null;$url=$item['evidence_url']??null;
+        $impact=$item['impact_fa']??'';
+        if(!is_string($id)||!preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/D',$id)||isset($ids[$id])||
+           !is_string($title)||strlen($title)<8||strlen($title)>350||
+           !is_string($impact)||strlen($impact)>500||
+           !in_array($status,['completed','partial','blocked','not_started'],true)||
+           !is_string($url)||strlen($url)>350||
+           ($url!==''&&!preg_match('~^https://github\.com/mojtabarozegar11-ship-it/Saeit/(?:commit/[a-f0-9]{40}|actions/runs/[1-9][0-9]*|pull/[1-9][0-9]*|issues/[1-9][0-9]*(?:#issuecomment-[1-9][0-9]*)?)$~D',$url))||
+           ($status==='completed'&&$url==='')){
+            return ['state'=>'invalid','actions'=>[]];
+        }
+        $ids[$id]=true;
+        $actions[]=['id'=>$id,'title'=>$title,'status'=>$status,'url'=>$url,'impact'=>$impact];
+    }
+    return ['state'=>'valid','actions'=>$actions];
+}
+
+function zmBusinessCommandCenter(SQLite3 $db):void {
+    $latest=$db->query('SELECT report_code,occurred_at,body,evidence_url FROM reports WHERE substr(report_code,1,2)="05" ORDER BY seq DESC LIMIT 1');
+    if($latest===false)throw new RuntimeException('command center latest query failed');
+    $report=$latest->fetchArray(SQLITE3_ASSOC);
+    $contract=is_array($report)?zmBusinessActionReceipt((string)$report['body'],(string)$report['report_code']):['state'=>'missing','actions'=>[]];
+    $labels=['completed'=>'انجام واقعی (ادعای گزارش؛ نیازمند راستی‌آزمایی)','partial'=>'بخشی انجام‌شده','blocked'=>'مسدود','not_started'=>'انجام‌نشده'];
+    $claimed=count(array_filter($contract['actions'],static fn($a)=>$a['status']==='completed'));
+    echo '<section aria-labelledby="zm-command-title"><h2 id="zm-command-title">اتاق فرمان چرخهٔ ساعتی ۰۵</h2>';
+    echo '<p class="muted">فرمانده اجرایی این طرح وظیفهٔ زمان‌بندی‌شدهٔ ChatGPT است؛ این صفحه فقط وضعیت و شواهد آن را نمایش می‌دهد. مشاهدهٔ گزارش یا پیوند مدرک، اجرای واقعی و نتیجهٔ تجاری را اثبات نمی‌کند.</p>';
+    echo '<div class="grid"><div class="card"><h3>هدف هر اجرای چرخهٔ ۰۵</h3><div class="metric">۲۰ اقدام</div><p class="muted">مستقل، ضروری و غیرتکراری</p></div>';
+    echo '<div class="card"><h3>ردیف‌های «انجام‌شده» در رسید ساختاریافتهٔ اخیر</h3><div class="metric">'.$claimed.' / ۲۰</div><p class="muted">صرفاً خوداظهاری منبع؛ نه تأیید مستقل</p></div>';
+    echo '<div class="card"><h3>عملیات مستقلاً تأییدشده از این قالب</h3><div class="metric">۰</div><p class="muted">راستی‌آزمای بیرونی به این نسخه متصل نیست؛ صفر به معنی نبود عملیات واقعی نیست.</p></div></div>';
+    if(is_array($report))echo '<p class="muted">مبنای نمایش: '.esc((string)$report['report_code']).' · '.esc((string)$report['occurred_at']).' · <a href="'.esc((string)$report['evidence_url']).'" target="_blank" rel="noopener noreferrer">منبع شماره‌دار</a></p>';
+    if($contract['state']==='missing')echo '<div class="notice">در گزارش اخیر هنوز دفتر اقدامات با قالب استاندارد ثبت نشده است؛ تعداد اقدامات واقعی نامعلوم است. گزارش‌های قبلی به‌صورت خودکار به ۲۰ اقدام تبدیل نمی‌شوند.</div>';
+    if($contract['state']==='invalid')echo '<div class="notice danger">رسید ساختاریافته ناسازگار یا ناقص است؛ از شمارش و نمایش ادعاهای آن خودداری شد.</div>';
+    if($contract['state']==='valid'){
+        echo '<div class="scroll"><table><caption>ردیف‌های گزارش‌شده؛ تأیید مستقل این ردیف‌ها انجام نشده است</caption><tr><th>شناسه یکتا</th><th>اقدام</th><th>وضعیت اظهاری</th><th>اثر ادعایی</th><th>مدرک اولیه</th></tr>';
+        foreach($contract['actions'] as $a){
+            $link=$a['url']!==''?'<a target="_blank" rel="noopener noreferrer" href="'.esc($a['url']).'">بررسی شاهد</a>':'در دسترس نیست';
+            echo '<tr><td>'.esc($a['id']).'</td><td>'.esc($a['title']).'</td><td>'.esc($labels[$a['status']]).'</td><td>'.esc($a['impact']).'</td><td>'.$link.'</td></tr>';
+        }
+        echo '</table></div>';
+        if(count($contract['actions'])<20)echo '<p class="notice">کسری ردیف‌های عملیاتی ثبت‌شده نسبت به هدف: '.(20-count($contract['actions'])).'؛ این کسری را با اقدام انجام‌شده اشتباه نگیرید.</p>';
+    }
+    echo '<h3>معماری پنج حوزهٔ فرماندهی</h3><div class="scroll"><table><tr><th>حوزه</th><th>داده و مسئولیت</th><th>مرز کنترل</th></tr>';
+    $areas=[
+        ['رهبری و ۴ چرخهٔ دیگر','تجمیع گزارش‌های ۰۱، ۰۲، ۰۳، ۰۴ و اولویت‌های چرخهٔ ۰۵','چرخهٔ ۰۳ هنوز اتصال امن خودکار ندارد'],
+        ['فروش، مشتری و رشد','سرنخ، سفارش، محصول قابل تحویل، رضایت و نرخ تبدیل','تراکنش بانکی و فروش واقعی بدون سند ثبت نمی‌شود'],
+        ['مالی و حسابداری','دفتر کل، صورت‌حساب، بودجه و گزارش نقدینگی','نوشتن مالی فقط از مجرای کنترل‌شده و تأییدشده'],
+        ['سایت و فناوری','نسخه، آزمون، وضعیت انتشار، ریسک و بازیابی','انتشار حساس با تأیید بازیابی و MFA'],
+        ['عملیات و نیروی انسانی','کارخانه، تأمین، لجستیک، طرح‌ها و ظرفیت','پروژه و استخدام بدون تأیید واقعی محقق تلقی نمی‌شوند']
+    ];
+    foreach($areas as $a)echo '<tr><td>'.esc($a[0]).'</td><td>'.esc($a[1]).'</td><td>'.esc($a[2]).'</td></tr>';
+    echo '</table></div><p class="muted">وضعیت چرخه‌ها و تاریخچهٔ مستند در ادامهٔ همین صفحه حفظ شده است. دریافت گزارش ساعتی از طریق همگام‌ساز انجام می‌شود؛ وجود پنل، به‌خودی‌خود اختیار بانکی یا فرمان اجرایی به سرور نمی‌دهد.</p></section>';
+}
+
 function zmBusinessChatgptReports(string $private):void {
     if(role()!=='admin')bail('دسترسی فقط برای مدیرکل مجاز است.',403);
     if(zmBusinessChatgptReportsArchive($private))return;
@@ -260,6 +336,7 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
             echo '<tr><td>'.esc($key.' · '.$name).'</td><td>'.(int)$c['count'].'</td><td>'.esc($c['latest']).'</td><td>'.($key==='05'?'۲۰ اقدام / تحقق احرازنشده':'—').'</td><td>'.($key==='05'?'متصل به دفتر مدیریت ۰۵':($publicDb!==null&&in_array($key,['01','02','04'],true)&&$c['count']>0?'دفتر عمومی ۱۵۱۴ · متصل':'فاقد اتصال خودکار و خصوصی')).'</td></tr>';
         }
         echo '</table></div></section>';
+        zmBusinessCommandCenter($db);
         if($total===0)echo '<p>برای این چرخه هنوز گزارش شماره‌دار از منبع معتبر دریافت نشده است.</p>';
         $limit=25;
         $offset=($page-1)*$limit;
