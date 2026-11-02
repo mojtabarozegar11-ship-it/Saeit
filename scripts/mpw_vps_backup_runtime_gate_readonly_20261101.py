@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import stat
 from pathlib import Path
 
 MIN_START_FREE = 10 * 1024**3
+PARTIAL_NAME = re.compile(r"^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}_(?:mysql|files)_gpgv2\.gpg\.partial$")
 
 
 def private_directory(path: Path, uid: int) -> bool:
@@ -33,6 +35,28 @@ def recovery_key_metadata_valid(path: Path, uid: int) -> bool:
     except OSError:
         return False
 
+
+
+def failed_partial_inventory(root: Path, uid: int) -> tuple[int, int, bool]:
+    """Names and lstat only; never read archives or return private filenames."""
+    if not private_directory(root, uid):
+        return 0, 0, False
+    count = total_bytes = 0
+    try:
+        for index, path in enumerate(root.iterdir()):
+            if index >= 20_000:
+                return count, total_bytes, True
+            if not path.name.endswith(".gpg.partial"):
+                continue
+            info = path.lstat()
+            if (not PARTIAL_NAME.fullmatch(path.name) or
+                    not stat.S_ISREG(info.st_mode) or info.st_uid != uid):
+                return count, total_bytes, True
+            count += 1
+            total_bytes += info.st_size
+    except OSError:
+        return count, total_bytes, True
+    return count, total_bytes, False
 
 def inspect(home: Path | None = None, *, free_bytes: int | None = None,
             uid: int | None = None, gpg_available: bool | None = None):
@@ -56,15 +80,20 @@ def inspect(home: Path | None = None, *, free_bytes: int | None = None,
     storage = private_directory(root, uid)
     secret_parent = private_directory(secret_root, uid)
     key_ok = secret_parent and recovery_key_metadata_valid(key, uid)
+    partial_count, partial_bytes, partial_unsafe = failed_partial_inventory(root, uid)
     capacity = free_measured and measured >= MIN_START_FREE
     return {
         "classification": "READ_ONLY_NEW_BACKUP_VPS_CAPACITY_AND_KEY",
         "vps_has_gpg_binary": bool(gpg_available),
         "free_capacity_meets_10gib_admission": bool(capacity),
         "private_backup_folder_exists_and_owner_only": storage,
+        "failed_private_partial_count": partial_count,
+        "failed_private_partial_bytes": partial_bytes,
+        "failed_private_partial_metadata_unsafe": partial_unsafe,
         "existing_recovery_key_metadata_owner_only_32_bytes": bool(key_ok),
         "owner_armed_backup_runtime_prerequisites_ready": bool(
-            capacity and gpg_available and key_ok and (storage or not root.exists())),
+            capacity and gpg_available and key_ok and (storage or not root.exists())
+            and partial_count == 0 and not partial_unsafe),
         "recovery_key_bytes_read": False,
         "key_exported_off_vps": False,
         "archive_bytes_read": False,

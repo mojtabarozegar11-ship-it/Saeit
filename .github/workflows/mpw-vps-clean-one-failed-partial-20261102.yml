@@ -1,0 +1,91 @@
+name: MojPlayWin one-incident failed GPG partial cleanup (owner-armed)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mpw-vps-clean-one-failed-partial-20261102.yml'
+      - 'scripts/mpw_vps_cleanup_failed_partial_20261102.py'
+      - 'tests/test_mpw_vps_cleanup_failed_partial_20261102.py'
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type DELETE_ONLY_FAILED_GPG_PARTIAL_41389864098 (deletes exactly one invalid VPS .partial; no completed backup or production write)'
+        type: string
+        required: true
+permissions: {contents: read}
+concurrency:
+  group: mpw-one-failed-partial-cleanup-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  synthetic_contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test no-other-file deletion and strict owner-private metadata
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mpw_vps_cleanup_failed_partial_20261102.py' -v
+          python3 -m py_compile scripts/mpw_vps_cleanup_failed_partial_20261102.py
+  delete_exact_failed_partial:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.confirmation == 'DELETE_ONLY_FAILED_GPG_PARTIAL_41389864098'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify exact one-incident cleanup logic on synthetic data
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mpw_vps_cleanup_failed_partial_20261102.py' -v
+          python3 -m py_compile scripts/mpw_vps_cleanup_failed_partial_20261102.py
+      - name: Establish owner VPS SSH with fixed verified host key
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/mpw-one-failed-partial"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+      - name: Read-only revalidate the exact failed-run partial on VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-one-failed-partial"
+          timeout 60s ssh -T -i "$d/key" -o UserKnownHostsFile="$d/known" \
+            -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o ForwardAgent=no -o ConnectTimeout=10 githubops@178.239.147.150 \
+            'PYTHONDONTWRITEBYTECODE=1 python3 -B - --audit' \
+            < scripts/mpw_vps_cleanup_failed_partial_20261102.py
+      - name: Delete only the still-matching invalid .partial on private VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-one-failed-partial"
+          timeout 60s ssh -T -i "$d/key" -o UserKnownHostsFile="$d/known" \
+            -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o ForwardAgent=no -o ConnectTimeout=10 githubops@178.239.147.150 \
+            'MPW_APPROVED_INCIDENT_RUN=41389864098 PYTHONDONTWRITEBYTECODE=1 python3 -B - --execute DELETE_ONLY_FAILED_GPG_PARTIAL_41389864098' \
+            < scripts/mpw_vps_cleanup_failed_partial_20261102.py
+      - name: Remove ephemeral runner-only SSH key material
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-one-failed-partial"
+          if [ -d "$d" ]; then
+            rm -f -- "$d/key" "$d/known"
+            rmdir "$d"
+          fi
