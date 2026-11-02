@@ -145,11 +145,22 @@ def account_tycoon(source):
     return source
 
 
-def changes_from_browser(html, app, tycoon):
+def account_global_shell(source):
+    require("browserSnapshots(localStorage)" in source and
+            "weeklyExpedition(world,tycoon,localStorage)" in source,
+            "local_world_tour_source_changed")
+    return once(source,
+                "' · '+safe(GT(\"worldSafety\",lang))+'</p>';",
+                "' · '+safe(GT(\"worldSafety\",lang))+' · WORLD TOUR PROGRESS IS LOCAL-ONLY, NOT ACCOUNT-SYNCED</p>';",
+                "tour_missions_not_server_authoritative")
+
+
+def changes_from_browser(html, app, tycoon, global_shell):
     return {
         Path("play/index.html"): account_html(html),
         STATIC / "app.mjs": account_app(app),
         STATIC / "tycoon-panel.mjs": account_tycoon(tycoon),
+        STATIC / "global-shell.mjs": account_global_shell(global_shell),
         STATIC / "account-csrf.mjs": CSRF_HELPER,
     }
 
@@ -176,6 +187,7 @@ def validate_public():
         (PUBLIC / "play/index.html").read_text(encoding="utf-8"),
         (PUBLIC / STATIC / "app.mjs").read_text(encoding="utf-8"),
         (PUBLIC / STATIC / "tycoon-panel.mjs").read_text(encoding="utf-8"),
+        (PUBLIC / STATIC / "global-shell.mjs").read_text(encoding="utf-8"),
     )
 
 
