@@ -1,0 +1,55 @@
+name: ZM office attachment security offline regression
+on:
+  push:
+    branches:
+      - fix/zm-office-private-attachment-ancestor-symlink-20261101
+    paths:
+      - enterprise_portal/private_uploads.py
+      - enterprise_portal/test_office_attachments.py
+      - .github/workflows/zm-office-attachment-security-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zm-office-attachment-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  attachment-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "ci-only-office-attachment"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,testserver"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify immutable candidate SHA
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Django system and migration consistency
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+      - name: Private office attachment regression
+        run: python manage.py test enterprise_portal.test_office_attachments --verbosity 2
+      - name: Confirm no production side effects
+        run: |
+          echo "CI_ONLY=1"
+          echo "NO_HOST_CONTACT=1"
+          echo "NO_MERGE_DEPLOY_DB_CHANGE=1"
