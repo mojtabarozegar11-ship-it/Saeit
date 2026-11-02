@@ -1,0 +1,176 @@
+name: ZM guarded bank-specific ledger route
+on:
+  push:
+    branches: [feature/zm-bank-ledger-20261102]
+    paths:
+      - 'content/zomorod-business/banking.php'
+      - 'tests/test_zm_banking_http.py'
+      - '.github/workflows/zm-banking-live-20261102.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zm-live-php-private-reports-only
+  cancel-in-progress: false
+jobs:
+  guarded-bank-ledger:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite,sqlite3
+      - name: Lint and synthetic-only bank accounting acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          php -l content/zomorod-business/banking.php
+          python3 -m unittest discover -s tests -p 'test_zm_banking_http.py' -v
+          echo 'BANK_CARD_AND_ACCOUNT_NUMBERS_IN_RELEASE=no'
+          echo 'REAL_BANK_CREDENTIALS_USED=no'
+      - name: Configure pinned GitHub-to-VPS-to-cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-banking"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump zm-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" zm-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Host preflight without private finance data export
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-banking"
+          ssh -F "$d/config" zm-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          root="$HOME/.private/zomorod-business"
+          web="$HOME/public_html/business"
+          stage="$root/.banking-install-$sha"
+          test -d "$root" && test ! -L "$root"
+          test -d "$web" && test ! -L "$web"
+          test -f "$root/management.sqlite3" && test ! -L "$root/management.sqlite3"
+          test "$(stat -c %a "$root/management.sqlite3")" = 600
+          test -f "$root/app.php" && test ! -L "$root/app.php"
+          test "$(stat -c %a "$root/app.php")" = 600
+          test -f "$web/index.php" && test ! -L "$web/index.php"
+          test ! -e "$web/banking.php" && test ! -L "$web/banking.php"
+          test ! -e "$web/.banking-install-$sha.php" && test ! -L "$web/.banking-install-$sha.php"
+          test ! -e "$stage" && test ! -L "$stage"
+          phpbin=/opt/cpanel/ea-php82/root/usr/bin/php
+          test -x "$phpbin"
+          "$phpbin" -m | grep -Fxq pdo_sqlite
+          "$phpbin" -l "$root/app.php" >/dev/null
+          install -d -m 700 "$stage"
+          sha256sum "$root/app.php" | awk '{print $1}' > "$stage/app.before.sha256"
+          echo 'ORIGINAL_APP=unchanged'
+          echo 'FINANCIAL_DB=untouched_by_preflight'
+          REMOTE
+      - name: Transfer only the reviewed banking route
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-banking"
+          scp -F "$d/config" content/zomorod-business/banking.php "zm-cpanel:/home/zomorod2/.private/zomorod-business/.banking-install-$GITHUB_SHA/banking.php"
+      - name: Guarded publish with anonymous 403 smoke and rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-banking"
+          digest="$(sha256sum content/zomorod-business/banking.php | awk '{print $1}')"
+          ssh -F "$d/config" zm-cpanel bash -se -- "$GITHUB_SHA" "$digest" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; digest="$2"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ && "$digest" =~ ^[a-f0-9]{64}$ ]]
+          root="$HOME/.private/zomorod-business"
+          web="$HOME/public_html/business"
+          stage="$root/.banking-install-$sha"
+          dest="$web/banking.php"
+          ready="$web/.banking-install-$sha.php"
+          phpbin=/opt/cpanel/ea-php82/root/usr/bin/php
+          test -f "$stage/banking.php" && test ! -L "$stage/banking.php"
+          test "$(sha256sum "$stage/banking.php" | awk '{print $1}')" = "$digest"
+          test "$(sha256sum "$root/app.php" | awk '{print $1}')" = "$(cat "$stage/app.before.sha256")"
+          test ! -e "$dest" && test ! -L "$dest"
+          test ! -e "$ready" && test ! -L "$ready"
+          "$phpbin" -l "$stage/banking.php" >/dev/null
+          install -m 0644 "$stage/banking.php" "$ready"
+          test "$(sha256sum "$ready" | awk '{print $1}')" = "$digest"
+          installed=0
+          rollback() {
+            set +e
+            if test "$installed" = 1 && test -f "$dest" && test ! -L "$dest" && test "$(sha256sum "$dest" | awk '{print $1}')" = "$digest"; then
+              mv "$dest" "$stage/failed-publication.php" && echo 'NEW_BANKING_ROUTE_ROLLBACK=restored_absent'
+            fi
+            if test -f "$ready" && test ! -L "$ready"; then mv "$ready" "$stage/unpublished.php"; fi
+          }
+          trap 'rc=$?; trap - EXIT; rollback; exit "$rc"' EXIT
+          mv -n "$ready" "$dest"
+          installed=1
+          test -f "$dest" && test ! -L "$dest"
+          test "$(sha256sum "$dest" | awk '{print $1}')" = "$digest"
+          test "$(stat -c %a "$dest")" = 644
+          code="$(curl --silent --show-error --location --max-time 30 --output "$stage/anonymous.html" --write-out '%{http_code}' 'https://zomorodmelal.ir/business/banking.php')"
+          test "$code" = 403
+          grep -Fq 'ابتدا وارد میز مدیریت شوید' "$stage/anonymous.html"
+          ! grep -Fq 'سابقه ثبت‌های بانکی' "$stage/anonymous.html"
+          test "$(sha256sum "$root/app.php" | awk '{print $1}')" = "$(cat "$stage/app.before.sha256")"
+          test "$(stat -c %a "$root/management.sqlite3")" = 600
+          installed=0
+          trap - EXIT
+          echo 'LIVE_BANKING_PAGE=installed'
+          echo 'ANONYMOUS=denied_403'
+          echo 'EXISTING_LEDGER_DATA_MODIFIED_BY_RELEASE=no'
+          echo 'OWNER_AUTHENTICATED_ACCEPTANCE=pending'
+          echo 'ACTUAL_BANK_SETTLEMENT=not_connected'
+          REMOTE
+      - name: Remove temporary credentials from CI runner
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/zm-banking"
