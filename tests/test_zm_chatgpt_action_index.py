@@ -197,7 +197,7 @@ class ActionIndexSafety(unittest.TestCase):
             db.execute("UPDATE reports SET body=? WHERE report_code='05-0001'",
                        (receipt("05-0001", "ZM05-0001-A02"),))
         self.archive.chmod(0o600)
-        with self.assertRaisesRegex(ValueError, "IMMUTABLE_ACTION_HISTORY_CHANGED"):
+        with self.assertRaisesRegex(ValueError, "IMMUTABLE_REPORT_HISTORY_CHANGED"):
             rebuild(self.archive, self.index)
         self.assertEqual(self.index.read_bytes(), before)
 
