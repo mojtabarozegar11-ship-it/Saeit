@@ -19,7 +19,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git cat-file -e c668d5c12109f62c4b371823b1711860f63e4e30^{blob}
-          test "$(git hash-object scripts/zm_chatgpt_action_index.py)" = "c7c86781c2fbd90cdbebb578008dcce8af04f362"
+          test "$(git hash-object scripts/zm_chatgpt_action_index.py)" = "8a82d209660a6b013e7e75ef25c77a5205bdd2f5"
           git cat-file blob c668d5c12109f62c4b371823b1711860f63e4e30 | sha256sum | awk '{print $1}' > "$RUNNER_TEMP/viewer-live.sha"
       - name: Configure pinned GitHub to VPS to cPanel relay
         shell: bash
