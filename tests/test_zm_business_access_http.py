@@ -213,7 +213,7 @@ class ZmAccessHTTPTests(unittest.TestCase):
                 CREATE TABLE products(id INTEGER PRIMARY KEY,sku TEXT,
                                       title TEXT,price_irr INTEGER,enabled INTEGER);
                 CREATE TABLE free_digital_products(
-                    sku TEXT,title TEXT,download_path TEXT,
+                    id INTEGER PRIMARY KEY,sku TEXT,title TEXT,download_path TEXT,
                     artifact_sha256 TEXT,license_text TEXT,enabled INTEGER);
                 CREATE TABLE payment_state(id INTEGER PRIMARY KEY,state TEXT);
                 INSERT INTO payment_state VALUES(1,'not_configured');
