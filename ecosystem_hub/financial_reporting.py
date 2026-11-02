@@ -90,6 +90,21 @@ def calculate_management_income(*, allowed_units, start, end, currency="", unit=
     ).exists():
         raise ValueError("گزارش به علت آرتیکل قطعی نامعتبر متوقف شد.")
 
+    # A posted document must balance across all ledger classes, not only
+    # income/expense. Legacy imports can bypass post_journal() checks.
+    if records.values("entry_id").annotate(
+        total_debit=Sum("debit"), total_credit=Sum("credit"),
+    ).exclude(total_debit=F("total_credit")).exists():
+        raise ValueError("گزارش به علت سند قطعی نامتوازن متوقف شد.")
+    # Choice validators are bypassed by bulk imports. Never silently drop
+    # unknown account classes or report unsupported currency as real income.
+    if records.exclude(
+        account__category__in=("asset", "liability", "equity", "income", "expense"),
+    ).exists():
+        raise ValueError("گزارش به علت طبقه حساب نامعتبر متوقف شد.")
+    if records.exclude(entry__currency__in=[code for code, _ in CURRENCIES]).exists():
+        raise ValueError("گزارش به علت ارز سند قطعی نامعتبر متوقف شد.")
+
     grouped = records.filter(
         account__category__in=("income", "expense"),
     ).values(
