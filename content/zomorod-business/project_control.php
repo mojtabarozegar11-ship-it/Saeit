@@ -100,15 +100,19 @@ function zmPmRender(PDO $db):void {
     }
     echo '<section><h2>داشبورد مدیریت پروژه‌های شرکت</h2><p class="muted">وضعیت هر پروژه ثبت اداری است؛ به‌تنهایی مجوز هزینه، استخدام، آغاز عملیات واقعی یا اثبات اتمام کار نیست.</p><div class="grid">';
     foreach($counts as $key=>$n)echo '<div class="card"><div class="metric">'.$n.'</div>'.esc($labels[$key]).'</div>';
+    if(function_exists('zmPiSchema')){
+        zmPiSchema($db);
+        echo '<p><a href="?page=project_links">پرونده یکپارچه و اسناد وابسته</a> · <a href="?page=project_calendar">تقویم و سررسیدهای پروژه‌ها</a></p>';
+    }
     echo '</div><p>کل پرونده‌ها: <strong>'.array_sum($counts).'</strong> · رویدادهای تغییر وضعیت: <strong>'.(int)one($db,'SELECT COUNT(*) FROM zm_project_events').'</strong> · گزارش‌های پیشرفت و موانع: <strong>'.(int)one($db,'SELECT COUNT(*) FROM zm_project_updates').'</strong></p></section>';
     $offsetText=(string)($_GET['offset']??'0');
     $offset=preg_match('/^(?:0|[1-9][0-9]{0,5})$/D',$offsetText)?min(100000,(int)$offsetText):0;
     $page=q($db,'SELECT p.id,p.title,p.owner,p.state,p.budget,
        (SELECT progress_pct FROM zm_project_updates WHERE project_id=p.id AND category="progress" ORDER BY id DESC LIMIT 1) AS recorded_progress
        FROM projects p ORDER BY p.id DESC LIMIT 40 OFFSET '.$offset);
-    echo '<section><h2>پرونده‌های ثبت‌شده</h2><div class="scroll"><table><tr><th>شناسه</th><th>عنوان</th><th>مسئول</th><th>وضعیت</th><th>بودجه پیشنهادی (IRR)</th><th>آخرین درصد اظهاری</th>'.($canManage?'<th>تغییر وضعیت با دلیل</th>':'').'</tr>';
+    echo '<section><h2>پرونده‌های ثبت‌شده</h2><div class="scroll"><table><tr><th>شناسه</th><th>عنوان</th><th>مسئول</th><th>وضعیت</th><th>بودجه پیشنهادی (IRR)</th><th>آخرین درصد اظهاری</th><th>پرونده جامع</th>'.($canManage?'<th>تغییر وضعیت با دلیل</th>':'').'</tr>';
     foreach($page as $p){
-        echo '<tr><td>'.(int)$p['id'].'</td><td>'.esc($p['title']).'</td><td>'.esc($p['owner']).'</td><td>'.esc($labels[$p['state']]??$p['state']).'</td><td>'.money((int)$p['budget']).'</td><td>'.($p['recorded_progress']===null?'ثبت نشده':(int)$p['recorded_progress'].'٪').'</td>';
+        echo '<tr><td>'.(int)$p['id'].'</td><td>'.esc($p['title']).'</td><td>'.esc($p['owner']).'</td><td>'.esc($labels[$p['state']]??$p['state']).'</td><td>'.money((int)$p['budget']).'</td><td>'.($p['recorded_progress']===null?'ثبت نشده':(int)$p['recorded_progress'].'٪').'</td><td><a href="?page=project_links&amp;project_id='.(int)$p['id'].'">ارتباطات و اقدامات</a></td>';
         if($canManage){
             echo '<td>';
             $choices=zmPmAllowed((string)$p['state']);
