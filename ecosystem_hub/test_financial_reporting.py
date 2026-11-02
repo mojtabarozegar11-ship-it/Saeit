@@ -179,3 +179,37 @@ class ManagementIncomeTests(TestCase):
         self.assertEqual(totals[0]["income"], D("110"))
         self.assertEqual(totals[0]["result"], D("110"))
         self.assertEqual(len(details), 1)
+
+    def test_cross_unit_posted_account_is_rejected_without_leaking_account_title(self):
+        entry = self.journal(self.farm, "IRR", amount="130")
+        foreign = self.accounts["factory"]["income"]
+        foreign.name = "عنوان محرمانه کارخانه"
+        foreign.save()
+        # Simulate a legacy/bulk import bypassing JournalLine.clean().
+        JournalLine.objects.filter(
+            entry=entry, account=self.accounts["farm"]["income"],
+        ).update(account=foreign)
+        self.client.force_login(self.accountant)
+        for url in (self.url(), self.url("income.csv")):
+            with self.subTest(url=url):
+                response = self.client.get(url + "?start=2026-10-01&end=2026-10-31", secure=True)
+                self.assertEqual(response.status_code, 400)
+                self.assertNotIn("عنوان محرمانه کارخانه", response.content.decode("utf-8"))
+                self.assertIn("no-store", response["Cache-Control"])
+        self.assertEqual(JournalEntry.objects.count(), 1)
+
+    def test_malformed_posted_debit_credit_is_rejected_not_reported_as_income(self):
+        entry = self.journal(self.farm, "IRR", amount="80")
+        line = JournalLine.objects.get(entry=entry, account=self.accounts["farm"]["income"])
+        self.client.force_login(self.owner)
+        for debit, credit in (("10", "80"), ("0", "0"), ("-1", "80")):
+            with self.subTest(debit=debit, credit=credit):
+                JournalLine.objects.filter(pk=line.pk).update(debit=D(debit), credit=D(credit))
+                for url in (self.url(), self.url("income.csv")):
+                    response = self.client.get(url + "?start=2026-10-01&end=2026-10-31", secure=True)
+                    self.assertEqual(response.status_code, 400)
+                    self.assertIn("no-store", response["Cache-Control"])
+        JournalLine.objects.filter(pk=line.pk).update(debit=D("0"), credit=D("80"))
+        response = self.client.get(self.url() + "?start=2026-10-01&end=2026-10-31", secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["totals"][0]["income"], D("80"))

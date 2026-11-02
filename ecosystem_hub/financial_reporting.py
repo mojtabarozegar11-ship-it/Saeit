@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.core.exceptions import PermissionDenied
-from django.db.models import Sum
+from django.db.models import F, Q, Sum
 from django.http import HttpResponse, HttpResponseBadRequest, Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -69,14 +69,30 @@ def calculate_management_income(*, allowed_units, start, end, currency="", unit=
         entry__unit__in=allowed_units,
         entry__booked_on__gte=start,
         entry__booked_on__lte=end,
-        account__category__in=("income", "expense"),
     )
     if unit is not None:
         records = records.filter(entry__unit=unit)
     if currency:
         records = records.filter(entry__currency=currency)
 
-    grouped = records.values(
+    # Old imports and queryset.update() bypass JournalLine.clean(). Never
+    # expose another unit's account metadata or silently omit corrupt posted
+    # rows from an income statement. Check *all* lines, not just P&L lines.
+    if records.exclude(account__unit_id=F("entry__unit_id")).exists():
+        raise ValueError("گزارش به علت مغایرت واحد حساب و سند قطعی متوقف شد.")
+    # A posted debit/credit line must have exactly one positive side. Bulk
+    # imports can bypass model validation; a malformed line must not enter
+    # financial management totals or be quietly ignored.
+    if records.filter(
+        Q(debit__lt=0) | Q(credit__lt=0)
+        | (Q(debit__gt=0) & Q(credit__gt=0))
+        | (Q(debit=0) & Q(credit=0))
+    ).exists():
+        raise ValueError("گزارش به علت آرتیکل قطعی نامعتبر متوقف شد.")
+
+    grouped = records.filter(
+        account__category__in=("income", "expense"),
+    ).values(
         "entry__unit__code", "entry__unit__name", "entry__currency",
         "account__code", "account__name", "account__category",
     ).annotate(debit=Sum("debit"), credit=Sum("credit")).order_by(
@@ -110,13 +126,13 @@ def _report(request):
     _require_financial_access(request)
     try:
         selected = _parameters(request)
+        details, totals = calculate_management_income(
+            allowed_units=selected["allowed_units"],
+            start=selected["start"], end=selected["end"],
+            currency=selected["currency"], unit=selected["unit"],
+        )
     except ValueError as error:
         return None, no_cache(HttpResponseBadRequest(str(error)))
-    details, totals = calculate_management_income(
-        allowed_units=selected["allowed_units"],
-        start=selected["start"], end=selected["end"],
-        currency=selected["currency"], unit=selected["unit"],
-    )
     return {**selected, "details": details, "totals": totals}, None
 
 
