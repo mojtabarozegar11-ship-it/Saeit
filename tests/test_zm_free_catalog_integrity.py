@@ -374,5 +374,68 @@ echo 'CROSS_CATALOG_SKU=PASS';
         self.assertIn("CROSS_CATALOG_SKU=PASS", run.stdout)
 
 
+
+    def test_sqlite_prevents_cross_catalog_sku_collisions_from_other_writers(self):
+        # Enforce the rule in SQLite itself, including imports and SKU updates.
+        php = r"""<?php
+require $argv[1];
+$db=zmStoreDb($argv[2]);
+$db->exec("INSERT INTO free_digital_products
+ (sku,title,description,download_path,artifact_sha256,license_text)
+ VALUES('free_only','Free','Verified','/store/free-products/free/index.html',
+ 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','Free use')");
+$db->exec("INSERT INTO products(sku,title,description,price_irr)
+ VALUES('paid_only','Paid','Private',1000)");
+$bad=[
+ "INSERT INTO products(sku,title,description,price_irr) VALUES('free_only','Bad','Bad',1000)",
+ "INSERT INTO free_digital_products(sku,title,description,download_path,artifact_sha256,license_text) VALUES('paid_only','Bad','Bad','/store/free-products/bad/index.html','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','Free')",
+ "UPDATE products SET sku='free_only' WHERE sku='paid_only'",
+ "UPDATE free_digital_products SET sku='paid_only' WHERE sku='free_only'",
+];
+foreach($bad as $sql){
+ try{$db->exec($sql);exit(71);}catch(PDOException $e){
+  if(strpos($e->getMessage(),'cross_catalog_sku_collision')===false)exit(72);
+ }
+}
+if((int)$db->query('SELECT COUNT(*) FROM products')->fetchColumn()!==1)exit(73);
+if((int)$db->query('SELECT COUNT(*) FROM free_digital_products')->fetchColumn()!==1)exit(74);
+echo 'CROSS_CATALOG_SQLITE_GUARDS=PASS';
+"""
+        script = self.home / "sku_triggers.php"
+        script.write_text(php, encoding="utf8")
+        run = subprocess.run(
+            ["php", str(script), str(self.private / "site_store.php"), str(self.private)],
+            capture_output=True, text=True, timeout=15)
+        self.assertEqual(run.returncode, 0, run.stderr + run.stdout)
+        self.assertIn("CROSS_CATALOG_SQLITE_GUARDS=PASS", run.stdout)
+
+    def test_product_toggle_rejects_noncanonical_ids_without_touching_row(self):
+        php = r"""<?php
+$id='1junk';
+function req($name){global $id;return $id;}
+function bail($message){throw new RuntimeException($message);}
+require $argv[1];
+$db=zmStoreDb($argv[2]);
+$db->exec("INSERT INTO products(id,sku,title,description,price_irr,enabled)
+ VALUES(1,'paid_draft','Paid','Private',1000,1)");
+foreach(['1junk','1.0','01','9223372036854775808','-1'] as $candidate){
+ $id=$candidate;
+ try{zmStoreHandle($db,'product_toggle');exit(81);}catch(RuntimeException $e){}
+ if((int)$db->query('SELECT enabled FROM products WHERE id=1')->fetchColumn()!==1)exit(82);
+}
+$id='1';
+zmStoreHandle($db,'product_toggle');
+if((int)$db->query('SELECT enabled FROM products WHERE id=1')->fetchColumn()!==0)exit(83);
+echo 'STRICT_PRODUCT_ID=PASS';
+"""
+        script = self.home / "strict_product_id.php"
+        script.write_text(php, encoding="utf8")
+        run = subprocess.run(
+            ["php", str(script), str(self.private / "site_store.php"), str(self.private)],
+            capture_output=True, text=True, timeout=15)
+        self.assertEqual(run.returncode, 0, run.stderr + run.stdout)
+        self.assertIn("STRICT_PRODUCT_ID=PASS", run.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
