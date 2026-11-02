@@ -1,0 +1,67 @@
+name: MojPlayWin account game live asset contract read-only
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mpw-living-cities-account-live-asset-contract-readonly-20261102.yml'
+      - 'scripts/mpw_living_cities_account_asset_candidate.py'
+      - 'core/tests/test_living_cities_account_asset_candidate.py'
+permissions: {contents: read}
+concurrency:
+  group: mpw-account-asset-readonly-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  live_source_contract:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'feat/mpw-living-cities-account-api-integration-20261102'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test exact 20-language account-asset transformation, no publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest core.tests.test_living_cities_account_asset_candidate -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile scripts/mpw_living_cities_account_asset_candidate.py
+      - name: Pin and authenticate direct cPanel owner SSH
+        shell: bash
+        env:
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-account-assets-readonly"
+          install -d -m 700 "$d"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 12 -p 1396 -t ed25519 178.239.147.125 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+      - name: Verify exact live game sources in place without changing any files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-account-assets-readonly"
+          timeout 85s ssh -T -F /dev/null -i "$d/key" \
+            -o UserKnownHostsFile="$d/known" -o StrictHostKeyChecking=yes \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 \
+            -o ConnectionAttempts=2 -o ForwardAgent=no -p 1396 \
+            zomorod2@178.239.147.125 \
+            'PYTHONDONTWRITEBYTECODE=1 python3 -B - check' \
+            < scripts/mpw_living_cities_account_asset_candidate.py
+          echo 'MPW_GAME_ACCOUNT_ASSET_LIVE_READONLY_VERIFIED=YES'
+          echo 'MPW_GAME_PUBLISH_PERFORMED=NO'
+      - name: Remove ephemeral runner SSH credentials
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-account-assets-readonly"
+          if [ -d "$d" ]; then
+            rm -f -- "$d/key" "$d/known"
+            rmdir "$d"
+          fi
