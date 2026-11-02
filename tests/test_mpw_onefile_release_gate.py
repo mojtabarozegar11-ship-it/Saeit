@@ -79,9 +79,9 @@ class PassengerRestartRootTests(unittest.TestCase):
         (self.app / "tmp").mkdir()
         (self.public / "tmp").mkdir(parents=True)
         (self.public / "passenger_wsgi.py").write_text(
-            "APP='/home/zomorod2/Saeit-staging'\\n", encoding="utf8")
+            "APP='/home/zomorod2/Saeit-staging'" + chr(10), encoding="utf8")
         (self.public / ".htaccess").write_text(
-            "PassengerAppRoot " + str(self.public) + "\\n", encoding="utf8")
+            "PassengerAppRoot " + str(self.public) + chr(10), encoding="utf8")
         self.pages = self.app / "services/mpw_trx_public_pages.py"
         self.web = self.app / "services/mpw_trx_commercial_web.py"
         self.pages.write_text("# safe", encoding="utf8")
@@ -101,7 +101,7 @@ class PassengerRestartRootTests(unittest.TestCase):
 
     def test_guard_rejects_app_root_drift(self):
         (self.public / ".htaccess").write_text(
-            "PassengerAppRoot " + str(self.app) + "\\n", encoding="utf8")
+            "PassengerAppRoot " + str(self.app) + chr(10), encoding="utf8")
         with self.assertRaisesRegex(RuntimeError, "PASSENGER_REGISTERED_ROOT_MISMATCH"):
             self.guard()
 
