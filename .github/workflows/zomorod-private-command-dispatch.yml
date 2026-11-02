@@ -460,6 +460,70 @@ jobs:
                     (",".join(relevant) if relevant else "NO_RECOGNIZED_PATH"))
           except (OSError, ValueError, subprocess.TimeoutExpired):
               print("MPW_PASSENGER_UAPI_ROOT_SIGNALS=UNAVAILABLE")
+          # Read-only domain-to-document-root proof. No hostname inventory or raw paths in logs.
+          try:
+              output = subprocess.run(
+                  [command, "--output=json", "DomainInfo", "domains_data", "format=hash"],
+                  capture_output=True, timeout=15, check=False,
+              )
+              if output.returncode or len(output.stdout) > 1000000:
+                  raise ValueError("DOMAININFO_UNAVAILABLE")
+              record = json.loads(output.stdout)
+              result = record.get("result", {}) if isinstance(record, dict) else {}
+              if not isinstance(result, dict) or result.get("status") not in (1, True, "1"):
+                  raise ValueError("DOMAININFO_INVALID")
+              data = result.get("data")
+              pending = [(data, False)]
+              matched = False
+              document_roots = set()
+              inspected = 0
+              while pending and inspected < 600:
+                  value, related = pending.pop()
+                  inspected += 1
+                  if isinstance(value, list):
+                      pending.extend((entry, related) for entry in value[:100])
+                  elif isinstance(value, dict):
+                      marker = any(
+                          str(value.get(field, "")).lower().rstrip(".") == "mojplaywin.com"
+                          for field in ("domain", "domain_name", "domainname", "name")
+                      )
+                      marker = marker or any(
+                          str(key).lower().rstrip(".") == "mojplaywin.com"
+                          for key in value
+                      )
+                      related = related or marker
+                      if marker:
+                          matched = True
+                      if related:
+                          for field in ("documentroot", "document_root", "docroot",
+                                        "document_root_directory"):
+                              path_value = value.get(field)
+                              if isinstance(path_value, str):
+                                  document_roots.add(root_category(path_value))
+                      for key, child in list(value.items())[:100]:
+                          pending.append((child, related or str(key).lower() == "mojplaywin.com"))
+              print("MPW_DOMAININFO_DOMAINS_DATA=OK")
+              print("MPW_DOMAININFO_MATCHES_MOJPLAYWIN=" + ("YES" if matched else "NO"))
+              print("MPW_DOMAININFO_DOCROOT_CATEGORY=" +
+                    (",".join(sorted(document_roots)) if document_roots else "NOT_EXPOSED"))
+          except (OSError, ValueError, subprocess.TimeoutExpired):
+              print("MPW_DOMAININFO_DOMAINS_DATA=UNAVAILABLE")
+
+          # Inspect effective app grouping directives without printing other domains.
+          ht = small_regular(public / ".htaccess", 100000)
+          if ht is not None:
+              t = ht.decode("utf8", "replace")
+              groups = re.findall(r"(?im)^\s*PassengerAppGroupName\s+([^\s#]+)", t)
+              starts = re.findall(r"(?im)^\s*PassengerStartupFile\s+([^\s#]+)", t)
+              print("MPW_PUBLIC_PASSENGER_GROUP=" +
+                    (root_category(groups[-1]) if groups else "NOT_DECLARED"))
+              print("MPW_PUBLIC_PASSENGER_STARTUP_FILE=" +
+                    ("PASSENGER_WSGI" if starts and starts[-1].endswith("passenger_wsgi.py")
+                     else "OTHER" if starts else "NOT_DECLARED"))
+          else:
+              print("MPW_PUBLIC_PASSENGER_GROUP=UNVERIFIED")
+              print("MPW_PUBLIC_PASSENGER_STARTUP_FILE=UNVERIFIED")
+
           # Read-only worker metadata: never print PIDs, commands, paths or environment.
           # Compare process age with the now-confirmed PUBLIC restart marker.
           try:
