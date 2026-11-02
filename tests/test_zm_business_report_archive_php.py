@@ -8,6 +8,8 @@ import subprocess
 import tempfile
 import unittest
 
+from scripts.zm_chatgpt_action_index import rebuild
+
 ROOT = Path(__file__).resolve().parents[1]
 VIEWER = ROOT / "content/zomorod-business/chatgpt_reports.php"
 SOURCE = "github:mojtabarozegar11-ship-it/Saeit:issue:1725"
@@ -128,6 +130,48 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr[-500:])
         self.assertIn("05-0027", result.stdout)
         self.assertIn("زمرد ملل اقدام مستند", result.stdout)
+        self.assertNotIn("اعتبارسنجی آرشیو ناموفق", result.stdout)
+
+    def test_private_index_shows_unique_claims_without_false_verification(self):
+        payload = {"version": 1, "report_code": "05-0027", "actions": [
+            {"id": "ZM05-0027-A01", "title_fa": "بهبود امنیت مسیر خرید کالا",
+             "status": "completed",
+             "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/" + "a" * 40,
+             "impact_fa": "کاهش ریسک گزارش شده"}
+        ]}
+        body = ("گزارش فارسی معتبر با سند غیرمحرمانه.\nZM_ACTIONS_V1_START\n"
+                + json.dumps(payload, ensure_ascii=False) + "\nZM_ACTIONS_V1_END")
+        with sqlite3.connect(self.archive) as db:
+            db.execute("UPDATE reports SET body=? WHERE report_code='05-0027'", (body,))
+        self.archive.chmod(0o600)
+        index = self.folder / "chatgpt_actions_index.sqlite3"
+        self.assertEqual(rebuild(self.archive, index), (1, 0, 27))
+        result = self.view()
+        self.assertEqual(result.returncode, 0, result.stderr[-500:])
+        self.assertIn("اقدامات با شناسه یکتای ثبت‌شده", result.stdout)
+        self.assertIn("نمایهٔ جلوگیری از تکرار: 1 شناسهٔ یکتا", result.stdout)
+        self.assertIn("1 ردیف کامل اظهاریِ غیرتکراری", result.stdout)
+        self.assertIn("عملیات مستقلاً تأییدشده از این قالب", result.stdout)
+
+    def test_replayed_action_id_is_not_counted_in_current_receipt(self):
+        evidence = "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/" + "a" * 40
+        for number in (26, 27):
+            code = f"05-{number:04d}"
+            payload = {"version": 1, "report_code": code, "actions": [
+                {"id": "ZM05-REPEATED-A01", "title_fa": "اقدام تکراری برای بررسی",
+                 "status": "completed", "evidence_url": evidence, "impact_fa": "تکرار ممنوع"}
+            ]}
+            body = ("گزارش آزمایشی برای شناسایی اقدام تکراری.\nZM_ACTIONS_V1_START\n"
+                    + json.dumps(payload, ensure_ascii=False) + "\nZM_ACTIONS_V1_END")
+            with sqlite3.connect(self.archive) as db:
+                db.execute("UPDATE reports SET body=? WHERE report_code=?", (body, code))
+        self.archive.chmod(0o600)
+        self.assertEqual(rebuild(self.archive, self.folder / "chatgpt_actions_index.sqlite3"),
+                         (1, 1, 27))
+        result = self.view()
+        self.assertEqual(result.returncode, 0, result.stderr[-500:])
+        self.assertIn("رسید جدید به علت ناسازگاری یا تکرار شناسه", result.stdout)
+        self.assertIn("0 ردیف کامل اظهاریِ غیرتکراری", result.stdout)
         self.assertNotIn("اعتبارسنجی آرشیو ناموفق", result.stdout)
 
     def test_admin_paginated_persian_escape_and_five_cycles(self):
