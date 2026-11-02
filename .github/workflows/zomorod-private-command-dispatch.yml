@@ -573,6 +573,50 @@ jobs:
                         ("YES" if "mojplaywin.com" in text_data else "NO"))
                   print("MPW_CLOUDLINUX_RECOGNIZES_STAGING_ROOT=" +
                         ("YES" if "saeit-staging" in text_data else "NO"))
+                  # Match the registered application, not just a directory token.
+                  registrations = []
+                  pending = [info]
+                  visited = 0
+                  while pending and visited < 500:
+                      node = pending.pop()
+                      visited += 1
+                      if isinstance(node, dict):
+                          apps = node.get("applications")
+                          if isinstance(apps, dict):
+                              for app_root, record in list(apps.items())[:100]:
+                                  if (isinstance(app_root, str)
+                                          and isinstance(record, dict)):
+                                      root = app_root.strip("/").lower()
+                                      if root.endswith("saeit-staging") or root.endswith("mojplaywin.com"):
+                                          domain = record.get("domain")
+                                          domain_status = (
+                                              "MOJPLAYWIN" if domain in ("mojplaywin.com", "www.mojplaywin.com")
+                                              else "OTHER_DOMAIN" if isinstance(domain, str) and domain
+                                              else "MISSING")
+                                          startup = record.get("startup_file")
+                                          startup_status = (
+                                              "PASSENGER_WSGI" if startup == "passenger_wsgi.py"
+                                              else "OTHER" if isinstance(startup, str) and startup
+                                              else "MISSING")
+                                          registration = (
+                                              "STAGING" if root.endswith("saeit-staging") else "PUBLIC",
+                                              domain_status, startup_status,
+                                              record.get("app_status") == "started")
+                                          registrations.append(registration)
+                          pending.extend(list(node.values())[:100])
+                      elif isinstance(node, list):
+                          pending.extend(node[:100])
+                  for root in ("STAGING", "PUBLIC"):
+                      selected = [item for item in registrations if item[0] == root]
+                      print("MPW_CLOUDLINUX_" + root + "_APP_REGISTRATIONS=" +
+                            str(len(selected)))
+                      print("MPW_CLOUDLINUX_" + root + "_DOMAIN_BINDING=" +
+                            ("MOJPLAYWIN" if any(x[1] == "MOJPLAYWIN" for x in selected)
+                             else "OTHER_DOMAIN" if selected else "UNREGISTERED"))
+                      print("MPW_CLOUDLINUX_" + root + "_STARTUP_FILE=" +
+                            ("PASSENGER_WSGI" if any(x[2] == "PASSENGER_WSGI" for x in selected)
+                             else "OTHER_OR_MISSING"))
+
               except (OSError, ValueError, subprocess.TimeoutExpired):
                   print("MPW_CLOUDLINUX_SELECTOR_GET=UNAVAILABLE")
           print("MPW_PRODUCTION_FILE_WRITES=NONE")
