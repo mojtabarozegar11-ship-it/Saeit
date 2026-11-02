@@ -43,6 +43,8 @@ def material_shortages(order):
             "available": available, "shortage": missing,
             "measure": row.item.measure,
         })
+    if not items:
+        raise ValidationError("فرمول تولید فاقد مواد اولیه است؛ نتیجه صفر به معنای آمادگی تأمین نیست.")
     return items
 
 
