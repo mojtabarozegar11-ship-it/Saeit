@@ -32,6 +32,17 @@ class LivingCitiesAccountAssetTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "global|tycoon"):
             candidate.account_tycoon('fetch("/living-cities/api/living-cities/tycoon/")')
 
+    def test_account_tour_explicitly_labels_local_only_missions(self):
+        source = (
+            "browserSnapshots(localStorage)\n"
+            "weeklyExpedition(world,tycoon,localStorage)\n"
+            "' · '+safe(GT(\"worldSafety\",lang))+'</p>';")
+        output = candidate.account_global_shell(source)
+        self.assertIn("WORLD TOUR PROGRESS IS LOCAL-ONLY, NOT ACCOUNT-SYNCED",
+                      output)
+        with self.assertRaisesRegex(RuntimeError, "local_world_tour_source_changed"):
+            candidate.account_global_shell("' · '+safe(GT(\"worldSafety\",lang))+'</p>';")
+
     def test_csrf_requires_same_origin_and_login_rotation(self):
         self.assertIn('credentials: "same-origin"', candidate.CSRF_HELPER)
         self.assertIn('cache: "no-store"', candidate.CSRF_HELPER)
