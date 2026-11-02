@@ -3,10 +3,11 @@
 Nothing sends a purchase order, settles an invoice or confirms inventory.
 """
 from decimal import Decimal, ROUND_UP
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from enterprise_portal.models import AuditEvent
 from enterprise_portal.services import stock_balance
+from .access import require_unit
 from .models import MaterialRequirement, ProcurementNeed, ProductionOrder
 
 
@@ -43,12 +44,25 @@ def material_shortages(order):
 def prepare_purchase_drafts(order_id, actor):
     """Operates only on a user-confirmed draft action, never as a bot side-effect.
 
-    Authorization is enforced in the HTTP handler, and repeated calls are
-    idempotent by unit+MRP<order id>-<material id> unique reference.
+    Enforce the same permissions inside the service, not only in HTTP views.
+    This also protects management commands and future internal callers.
+    Repeated calls are idempotent by unit+MRP<order id>-<material id>.
     """
+    if not (actor and actor.is_authenticated and actor.is_active and actor.is_staff):
+        raise PermissionDenied("ثبت پیش‌نویس تأمین به کاربر فعال و مجاز نیاز دارد.")
+    required_permissions = (
+        "ecosystem_hub.add_procurementneed",
+        "ecosystem_hub.view_productionorder",
+        "ecosystem_hub.view_billofmaterials",
+        "enterprise_portal.view_inventoryitem",
+        "enterprise_portal.view_stockmovement",
+    )
+    if not (actor.is_superuser or all(actor.has_perm(p) for p in required_permissions)):
+        raise PermissionDenied("مجوز کامل برنامه‌ریزی مواد و ثبت پیش‌نویس تأمین لازم است.")
     order = ProductionOrder.objects.select_for_update().select_related(
         "unit", "formula",
     ).get(pk=order_id)
+    require_unit(actor, order.unit, write=True)
     if order.state not in ("draft", "review", "approved"):
         raise ValidationError("برای سفارش مختومه یا لغوشده درخواست تأمین ساخته نمی‌شود.")
     # A repeated POST is idempotent only while the original shortage is still
