@@ -330,6 +330,66 @@ jobs:
                       print("CPANEL_LOCAL_QUOTA_HEADROOM_GIB_FLOOR=" + str(max(0, limit - used) // 1073741824))
                   else:
                       print("CPANEL_LOCAL_QUOTA_DATA=UNVERIFIED")
+          # Targeted, bounded source-only MojPlayWin readiness evidence.
+          # No imports of the live Django app, DB queries, plaintext secrets or writes.
+          from pathlib import Path
+          import hashlib
+
+          app = Path("/home/zomorod2/Saeit-staging")
+          public = Path("/home/zomorod2/mojplaywin.com")
+          marker = "# MPW_GUEST_CHECKOUT_LIVE_V1"
+
+          def small_regular(path, ceiling=300000):
+              try:
+                  if path.is_symlink() or not path.is_file():
+                      return None
+                  size = path.stat().st_size
+                  if size <= 0 or size > ceiling:
+                      return None
+                  return path.read_bytes()
+              except OSError:
+                  return None
+
+          if app.is_symlink() or public.is_symlink() or not app.is_dir() or not public.is_dir():
+              print("MPW_PRODUCTION_ROOTS=UNVERIFIED")
+          else:
+              print("MPW_PRODUCTION_ROOTS=REGULAR_DIRECTORIES")
+              wsgi = small_regular(public / "passenger_wsgi.py", 100000)
+              wsgi_match = (wsgi is not None
+                            and b"APP='/home/zomorod2/Saeit-staging'" in wsgi)
+              print("MPW_PASSENGER_WSGI_APP_LINK=" +
+                    ("EXPECTED_STATIC_PATH" if wsgi_match else "UNVERIFIED"))
+              guest = small_regular(app / "services/mpw_trx_guest_commerce.py")
+              pages = small_regular(app / "services/mpw_trx_public_pages.py")
+              commerce = small_regular(app / "services/mpw_trx_commercial_web.py")
+              old_sha = "7693254e4ed72141b6de7fc283c5a3214159ea49d838318337e47e86953f5f2f"
+              if guest is None:
+                  guest_status = "MISSING_OR_UNREADABLE"
+              elif hashlib.sha256(guest).hexdigest() == old_sha:
+                  guest_status = "EXPECTED_PRE_RECOVERY_BASE"
+              elif (b"No active purchase session was found" in guest
+                    and b"def patch_public(namespace):" in guest
+                    and b"def patch_commercial(namespace):" in guest):
+                  guest_status = "RECOVERY_SOURCE_ON_DISK_UNVERIFIED_RUNTIME"
+              else:
+                  guest_status = "UNRECOGNIZED_SOURCE"
+              print("MPW_GUEST_ADAPTER_SOURCE=" + guest_status)
+              def hook_status(payload, method):
+                  if payload is None:
+                      return "MISSING_OR_UNREADABLE"
+                  text = payload.decode("utf-8", "replace")
+                  hook = ("from services.mpw_trx_guest_commerce import patch_" + method)
+                  if text.count(marker) == 1 and hook in text:
+                      return "INSTALLED_ON_DISK"
+                  if marker not in text and hook not in text:
+                      return "NOT_INSTALLED"
+                  return "UNRECOGNIZED_OR_PARTIAL"
+              print("MPW_PUBLIC_PAGES_GUEST_HOOK=" + hook_status(pages, "public"))
+              print("MPW_COMMERCIAL_WEB_GUEST_HOOK=" + hook_status(commerce, "commercial"))
+              print("MPW_EFFECTIVE_PASSENGER_DB_IDENTITY=NOT_VERIFIED_BY_STATIC_SOURCE")
+              print("MPW_RUNNING_WORKER_RESTART_STATE=NOT_VERIFIED_BY_STATIC_SOURCE")
+          print("MPW_PRODUCTION_FILE_WRITES=NONE")
+          print("MPW_ORDERS_CREATED=0;PAYMENTS_CREATED=0")
           print("CPANEL_SITE_MUTATIONS=NONE")
           print("CPANEL_FACTORY_OPERATIONS=NONE")
           CPANEL_READONLY_PY
