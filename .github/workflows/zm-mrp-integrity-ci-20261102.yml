@@ -1,0 +1,46 @@
+name: ZM MRP draft integrity exact-head CI
+on:
+  push:
+    branches:
+      - fix/zm-mrp-stale-drafts-and-invalid-bom-20261102
+  pull_request:
+    branches:
+      - integration/zm-unified-business-command-center-20261101
+permissions:
+  contents: read
+jobs:
+  mrp-integrity:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DEBUG: 'true'
+      SECRET_KEY: 'ci-only-not-production'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1,testserver'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify immutable source head
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Compile and check Django
+        run: |
+          python -m py_compile ecosystem_hub/procurement.py ecosystem_hub/test_procurement_integrity.py
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+      - name: Verify MRP integrity and existing procurement behavior
+        run: python manage.py test ecosystem_hub.test_procurement_integrity ecosystem_hub.tests.HubSuite
+      - name: Explicit nonproduction boundary
+        run: |
+          echo 'NO_HOST_CONTACT=1'
+          echo 'NO_PRODUCTION_MIGRATION=1'
+          echo 'NO_PURCHASE_PAYMENT_OR_DEPLOY=1'
