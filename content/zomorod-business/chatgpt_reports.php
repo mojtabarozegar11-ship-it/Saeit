@@ -161,6 +161,17 @@ function zmBusinessCommandCenter(SQLite3 $db,string $private):void {
     $labels=['completed'=>'انجام واقعی (ادعای گزارش؛ نیازمند راستی‌آزمایی)','partial'=>'بخشی انجام‌شده','blocked'=>'مسدود','not_started'=>'انجام‌نشده'];
     $claimed=count(array_filter($contract['actions'],static fn($a)=>$a['status']==='completed'));
     $actionIndex=zmBusinessActionIndexStatus($private,is_array($report)?(string)$report['report_code']:'');
+    // The Python index rejects duplicate JSON keys and replayed action IDs.
+    // PHP json_decode alone accepts the last duplicate key; never display
+    // a completed claim that the stricter private index has quarantined.
+    $indexPresent=in_array($actionIndex['state'],['ready','stale'],true);
+    if($actionIndex['state']==='invalid' ||
+       ($indexPresent && ($actionIndex['latest_rejection']!=='' ||
+          $actionIndex['latest_total']!==count($contract['actions']) ||
+          $actionIndex['latest_completed']!==$claimed))){
+        $contract=['state'=>'invalid','actions'=>[]];
+        $claimed=0;
+    }
     $referenceAudit=zmBusinessEvidenceAttestation($private);
     echo '<section aria-labelledby="zm-command-title"><h2 id="zm-command-title">اتاق فرمان چرخهٔ ساعتی ۰۵</h2>';
     echo '<p class="muted">فرمانده اجرایی این طرح وظیفهٔ زمان‌بندی‌شدهٔ ChatGPT است؛ این صفحه فقط وضعیت و شواهد آن را نمایش می‌دهد. مشاهدهٔ گزارش یا پیوند مدرک، اجرای واقعی و نتیجهٔ تجاری را اثبات نمی‌کند.</p>';
