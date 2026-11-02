@@ -64,6 +64,9 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
         self.assertEqual(first.returncode, 0, first.stderr[-500:])
         self.assertIn("تعداد گزارش‌های بایگانی‌شده: 27", first.stdout)
         self.assertIn("پایش پنج چرخهٔ ساعتی", first.stdout)
+        self.assertIn("آخرین دریافت منبع", first.stdout)
+        self.assertIn("فاقد اتصال خودکار و خصوصی", first.stdout)
+        self.assertIn("متصل به دفتر مدیریت ۰۵", first.stdout)
         self.assertIn("۲۰ اقدام / تحقق احرازنشده", first.stdout)
         self.assertIn("05-0027", first.stdout)
         self.assertNotIn("<script>attack()</script>", first.stdout)
@@ -74,6 +77,17 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
         self.assertEqual(second.returncode, 0, second.stderr[-500:])
         self.assertIn("<h3>05-0001</h3>", second.stdout)
         self.assertIn("صفحه جدیدتر", second.stdout)
+
+    def test_stale_receipt_feed_warns_and_future_clock_blocks(self):
+        with sqlite3.connect(self.archive) as db:
+            db.execute("UPDATE metadata SET value='2020-01-01T00:00:00+00:00' WHERE name='last_checked_at'")
+        output = self.view()
+        self.assertEqual(output.returncode, 0)
+        self.assertIn("هشدار: از آخرین دریافت موفق گزارش بیش از دو ساعت گذشته است", output.stdout)
+        with sqlite3.connect(self.archive) as db:
+            db.execute("UPDATE metadata SET value='2099-01-01T00:00:00+00:00' WHERE name='last_checked_at'")
+        invalid = self.view()
+        self.assertIn("اعتبارسنجی آرشیو ناموفق بود", invalid.stdout)
 
     def test_role_and_corrupt_permissions_are_closed(self):
         self.assertNotEqual(self.view(role="viewer").returncode, 0)
