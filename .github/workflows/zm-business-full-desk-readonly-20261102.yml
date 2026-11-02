@@ -114,6 +114,7 @@ jobs:
               echo "PRIVATE_MODULE_$key=missing"
             else
               echo "PRIVATE_MODULE_$key=UNSAFE"
+              stat -c "MODULE_DIAGNOSTIC_$key=type:%F,mode:%a" "$path" || echo "MODULE_DIAGNOSTIC_$key=stat_failed"
               exit 1
             fi
           done
