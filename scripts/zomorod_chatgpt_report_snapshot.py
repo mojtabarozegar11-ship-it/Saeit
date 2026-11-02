@@ -90,8 +90,25 @@ def install(snapshot, payload, target):
             raise ValueError("EXISTING_SNAPSHOT_INVALID")
         prior = old["items"]
         updated = snapshot["items"]
-        if len(prior) > len(updated) or prior != updated[:len(prior)]:
+        if len(prior) > len(updated):
             raise ValueError("NON_APPEND_ONLY_SNAPSHOT_CHANGE")
+        if prior != updated[:len(prior)]:
+            # Only historical recovery permitted: the precise real 05-0010
+            # comment was previously excluded by an over-strict title parser.
+            # A later 05-0011 may already be in the live snapshot, so a strict
+            # prefix check alone would reject recovery. No older row may change.
+            recovered = [
+                row for row in updated
+                if row.get("report_code") == "05-0010"
+                and row.get("comment_id") == 6566708686
+                and row.get("evidence_url") ==
+                "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-6566708686"
+            ]
+            remaining = [row for row in updated if row not in recovered]
+            if (len(recovered) != 1
+                    or any(row.get("report_code") == "05-0010" for row in prior)
+                    or prior != remaining[:len(prior)]):
+                raise ValueError("NON_APPEND_ONLY_SNAPSHOT_CHANGE")
         if prior == updated:
             return "UNCHANGED"
     fd, temp_name = tempfile.mkstemp(prefix=".zm-text-", suffix=".tmp", dir=parent)
