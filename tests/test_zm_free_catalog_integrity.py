@@ -89,6 +89,9 @@ class FreeCatalogIntegrity(unittest.TestCase):
         code = """<?php
 require $argv[1];
 $db=zmStorePublicDb($argv[2]);
+// Even if query_only is disabled by a future refactor, the SQLite
+// connection itself must never have permission to mutate the catalogue.
+$db->exec("PRAGMA query_only=OFF");
 try {$db->exec("CREATE TABLE unauthorized_public_write(x INTEGER)"); exit(19);}
 catch(PDOException $e) {echo "PUBLIC_READ_ONLY=PASS";}
 """
