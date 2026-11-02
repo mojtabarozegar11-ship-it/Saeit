@@ -59,6 +59,62 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
         return subprocess.run([PHP, "-d", "display_errors=0", "-r", WRAPPER],
                               env=env, capture_output=True, text=True, timeout=12)
 
+    def test_command_center_is_readonly_and_never_invents_actions(self):
+        result = self.view()
+        self.assertEqual(result.returncode, 0, result.stderr[-500:])
+        self.assertIn("اتاق فرمان چرخهٔ ساعتی ۰۵", result.stdout)
+        self.assertIn("۲۰ اقدام", result.stdout)
+        self.assertIn("تعداد اقدامات واقعی نامعلوم است", result.stdout)
+        self.assertIn("عملیات مستقلاً تأییدشده از این قالب", result.stdout)
+
+    def test_structured_action_receipt_claims_are_not_marked_verified(self):
+        payload = {
+            "version": 1, "report_code": "05-0027",
+            "actions": [
+                {"id": "ZM05-20261102-A01", "title_fa": "اصلاح آزمون مستقل مسیر <خطر>",
+                 "status": "completed",
+                 "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41410088193",
+                 "impact_fa": "تأیید خروجی منبع، نه استقرار"},
+                {"id": "ZM05-20261102-A02", "title_fa": "تأیید اتصال درگاه بانک شهر",
+                 "status": "blocked", "evidence_url": "", "impact_fa": "مدرک بانکی موجود نیست"}
+            ]
+        }
+        receipt = "\nZM_ACTIONS_V1_START\n" + json.dumps(payload, ensure_ascii=False) + "\nZM_ACTIONS_V1_END"
+        with sqlite3.connect(self.archive) as db:
+            db.execute("UPDATE reports SET body=? WHERE report_code='05-0027'",
+                       ("گزارش کار، داده آزمایشی معتبر برای کنترل امنیت. " + receipt,))
+        result = self.view()
+        self.assertEqual(result.returncode, 0, result.stderr[-500:])
+        self.assertIn("1 / ۲۰", result.stdout)
+        self.assertIn("ZM05-20261102-A01", result.stdout)
+        self.assertIn("&lt;خطر&gt;", result.stdout)
+        self.assertNotIn("<خطر>", result.stdout)
+        self.assertIn("نیازمند راستی‌آزمایی", result.stdout)
+        self.assertIn("تأیید مستقل این ردیف‌ها انجام نشده است", result.stdout)
+        self.assertIn("کسری ردیف‌های عملیاتی ثبت‌شده نسبت به هدف: 18", result.stdout)
+        self.assertNotIn("اعتبارسنجی آرشیو ناموفق", result.stdout)
+
+    def test_bad_action_receipts_fail_closed_without_miscounting(self):
+        cases = [
+            {"version": 1, "report_code": "05-9999", "actions": []},
+            {"version": 1, "report_code": "05-0027", "actions": [
+                {"id": "ZM05-20261102-A01", "title_fa": "اقدام کامل آزمون",
+                 "status": "completed", "evidence_url": "javascript:alert(1)"}]},
+            {"version": 1, "report_code": "05-0027", "actions": [
+                {"id": "ZM05-20261102-A01", "title_fa": "اقدام کامل آزمون",
+                 "status": "completed", "evidence_url": ""}]},
+        ]
+        for payload in cases:
+            with self.subTest(payload=payload):
+                receipt = "\nZM_ACTIONS_V1_START\n" + json.dumps(payload, ensure_ascii=False) + "\nZM_ACTIONS_V1_END"
+                with sqlite3.connect(self.archive) as db:
+                    db.execute("UPDATE reports SET body=? WHERE report_code='05-0027'",
+                               ("گزارش آزمایشی نامعتبر برای کنترل عدم اعتماد. " + receipt,))
+                result = self.view()
+                self.assertEqual(result.returncode, 0, result.stderr[-500:])
+                self.assertIn("رسید ساختاریافته ناسازگار یا ناقص است", result.stdout)
+                self.assertNotIn("javascript:alert(1)", result.stdout)
+
     def test_admin_paginated_persian_escape_and_five_cycles(self):
         first = self.view()
         self.assertEqual(first.returncode, 0, first.stderr[-500:])
