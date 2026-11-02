@@ -125,6 +125,32 @@ jobs:
           print("LIVE_PHP_TARGETED_PATCH_READY=" + ("yes" if compatible else "no"))
           PYTHON_SOURCE
           echo "PHP_FINANCE_DATABASE_TOUCHED=no"
+          module="$HOME/.private/zomorod-business/chatgpt_reports.php"
+          if test -f "$module" && test ! -L "$module" && grep -Fq 'zmBusinessChatgptReports($private)' "$app"; then
+            phpbin="$(command -v php || echo /opt/cpanel/ea-php82/root/usr/bin/php)"
+            "$phpbin" -l "$app" >/dev/null
+            "$phpbin" -l "$module" >/dev/null
+            echo "LIVE_CHATGPT_REPORT_PAGE_SOURCE=present_and_syntax_valid"
+          else
+            echo "LIVE_CHATGPT_REPORT_PAGE_SOURCE=not_installed"
+          fi
+          python3 - "$snapshot" <<'PYTHON_SNAPSHOT'
+          import json, stat, sys
+          from pathlib import Path
+          p=Path(sys.argv[1])
+          if not p.is_file() or p.is_symlink() or (p.stat().st_mode & 0o077):
+              print("LIVE_REPORT_SNAPSHOT_VALID=no")
+          else:
+              try:
+                  raw=p.read_bytes()
+                  d=json.loads(raw)
+                  if not isinstance(d,dict) or d.get("version") != 1 or d.get("source") != "github:mojtabarozegar11-ship-it/Saeit:issue:1725" or not isinstance(d.get("items"),list) or d.get("count") != len(d["items"]):
+                      raise ValueError("invalid private snapshot")
+                  print("LIVE_REPORT_SNAPSHOT_VALID=yes")
+                  print("LIVE_REPORT_SNAPSHOT_COUNT="+str(d["count"]))
+              except (OSError,ValueError):
+                  print("LIVE_REPORT_SNAPSHOT_VALID=no")
+          PYTHON_SNAPSHOT
           echo "DEPLOY_MERGE_MIGRATION_EXECUTED=no"
           REMOTE
       - name: Cleanup ephemeral relay keys
