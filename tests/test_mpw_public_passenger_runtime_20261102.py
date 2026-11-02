@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from scripts.mpw_public_passenger_runtime_readonly_20261102 import (
-    _as_target_root, _uapi_summary, inspect,
+    _as_target_root, _uapi_summary, _passenger_status_summary, inspect,
 )
 
 
@@ -29,6 +29,20 @@ class PassengerDiagnosticTests(unittest.TestCase):
         self.assertNotIn("synthetic", json.dumps(summary))
         self.assertNotIn("other-site", json.dumps(summary))
 
+    def test_passenger_status_only_classifies_allowlisted_app_roots(self):
+        raw = ("--- Application groups ---\n"
+               "/home/zomorod2/mojplaywin.com#default:\n"
+               "  App root: /home/zomorod2/mojplaywin.com\n"
+               "  * PID: 12345 Sessions: 0\n"
+               "other-app:\n"
+               "  App root: /private/other-app-with-secret\n")
+        result = _passenger_status_summary(raw)
+        self.assertTrue(result["available"])
+        self.assertTrue(result["readable"])
+        self.assertTrue(result["public_root"])
+        self.assertFalse(result["staging_root"])
+        self.assertNotIn("other-app", json.dumps(result))
+
     def test_synthetic_public_app_contract_and_no_mutation(self):
         with tempfile.TemporaryDirectory() as td:
             public = Path(td) / "public"
@@ -46,10 +60,12 @@ class PassengerDiagnosticTests(unittest.TestCase):
             report = inspect(public=public, app=app, uapi_payload={
                 "result": {"status": 1, "data": [
                     {"app_path": "/home/zomorod2/mojplaywin.com"}]}},
-                workers={"candidate_count": 2, "cwd_public": 1, "cwd_staging": 1})
+                workers={"candidate_count": 2, "cwd_public": 1, "cwd_staging": 1},
+                status_payload="App root: /home/zomorod2/Saeit-staging")
             self.assertTrue(report["htaccess_public_root"])
             self.assertTrue(report["public_wsgi_references_staging"])
             self.assertTrue(report["uapi_registers_public_root"])
+            self.assertTrue(report["passenger_status_staging_root"])
             self.assertEqual(report["owned_candidate_worker_count_capped"], 2)
             self.assertFalse(report["guest_module_restored_to_known_prior"])
             self.assertFalse(report["files_modified"])
