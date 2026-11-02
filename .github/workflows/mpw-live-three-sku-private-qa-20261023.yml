@@ -1,37 +1,11 @@
 name: Private QA copies of three existing MojPlayWin store products
 # Owner-directed 2026-10-26: preserve all three live listings, copy existing
 # immutable bytes to the private VPS factory, and require proof before any replacement.
+# Owner C03 policy hold: no scheduled or automatic multi-SKU operations.
+# Source-only safeguard; production workflow remains unchanged until authorized release.
 on:
-  pull_request:
-    paths:
-      - scripts/mpw_live_three_sku_qa_copy_20261023.py
-      - scripts/mpw_three_sku_factory_quality1000_20261026.py
-      - scripts/mpw_three_sku_qa_progress_20261026.py
-      - tests/test_mpw_three_sku_qa_progress_20261026.py
-      - tests/test_mpw_three_sku_factory_quality1000_20261026.py
-      - tests/test_mpw_live_three_sku_qa_copy_20261023.py
-      - .github/requirements/mpw-pdf-parser.txt
-      - .github/requirements/mpw-pdf-renderer.txt
-      - scripts/mpw_three_sku_private_content_audit_20261026.py
-      - tests/test_mpw_three_sku_private_content_audit_20261026.py
-      - .github/workflows/mpw-live-three-sku-private-qa-20261023.yml
-  push:
-    branches: [main]
-    paths:
-      - scripts/mpw_three_sku_private_content_audit_20261026.py
-      - tests/test_mpw_three_sku_private_content_audit_20261026.py
-      - scripts/mpw_live_three_sku_qa_copy_20261023.py
-      - scripts/mpw_three_sku_factory_quality1000_20261026.py
-      - scripts/mpw_three_sku_qa_progress_20261026.py
-      - tests/test_mpw_three_sku_qa_progress_20261026.py
-      - tests/test_mpw_three_sku_factory_quality1000_20261026.py
-      - tests/test_mpw_live_three_sku_qa_copy_20261023.py
-      - .github/requirements/mpw-pdf-parser.txt
-      - .github/requirements/mpw-pdf-renderer.txt
-      - .github/workflows/mpw-live-three-sku-private-qa-20261023.yml
   workflow_dispatch:
-  schedule:
-    - cron: '17 * * * *'
+
 permissions: {contents: read}
 concurrency:
   group: mpw-existing-three-private-factory-quality-copy
@@ -39,6 +13,7 @@ concurrency:
 
 jobs:
   tests:
+    if: ${{ false }} # HOLD: owner prohibits tests and multi-product QA execution
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -68,7 +43,7 @@ jobs:
 
   private-copy:
     needs: tests
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: ${{ false }} # HOLD: never copy three SKUs to VPS
     runs-on: ubuntu-24.04
     timeout-minutes: 14
     steps:
