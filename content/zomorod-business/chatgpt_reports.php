@@ -121,7 +121,7 @@ function zmBusinessChatgptReports(string $private):void {
             $at=$row['occurred_at']??null;
             if(!is_string($code)||!preg_match('/^[0-9]{2}-[0-9]{4,8}$/D',$code)||
                isset($seen[$code])||!is_int($id)||$id<1||
-               !is_string($body)||strlen($body)<20||strlen($body)>8000||
+               !is_string($body)||strlen($body)<20||strlen($body)>32000||
                !is_string($at)||strlen($at)>40||
                !is_string($url)||$url!=='https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-'.$id){
                 throw new RuntimeException('invalid report receipt');
@@ -352,7 +352,7 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
         while($result!==null && ($r=$result->fetchArray(SQLITE3_ASSOC))){
             $code=$r['report_code'];$id=(int)$r['comment_id'];$body=$r['body'];
             if(!is_string($code)||!preg_match('/^[0-9]{2}-[0-9]{4,8}$/D',$code)||$id<1||
-               !is_string($body)||strlen($body)<20||strlen($body)>8000||
+               !is_string($body)||strlen($body)<20||strlen($body)>32000||
                $r['evidence_url']!=='https://github.com/mojtabarozegar11-ship-it/Saeit/issues/'.($cycle==='05'?'1725':'1514').'#issuecomment-'.$id){
                 throw new RuntimeException('invalid archived report');
             }
