@@ -106,9 +106,21 @@ function zmPmRender(PDO $db):void {
     $page=q($db,'SELECT p.id,p.title,p.owner,p.state,p.budget,
        (SELECT progress_pct FROM zm_project_updates WHERE project_id=p.id AND category="progress" ORDER BY id DESC LIMIT 1) AS recorded_progress
        FROM projects p ORDER BY p.id DESC LIMIT 40 OFFSET '.$offset);
-    echo '<section><h2>پرونده‌های ثبت‌شده</h2><div class="scroll"><table><tr><th>شناسه</th><th>عنوان</th><th>مسئول</th><th>وضعیت</th><th>بودجه پیشنهادی (IRR)</th><th>آخرین درصد اظهاری</th></tr>';
+    echo '<section><h2>پرونده‌های ثبت‌شده</h2><div class="scroll"><table><tr><th>شناسه</th><th>عنوان</th><th>مسئول</th><th>وضعیت</th><th>بودجه پیشنهادی (IRR)</th><th>آخرین درصد اظهاری</th>'.($canManage?'<th>تغییر وضعیت با دلیل</th>':'').'</tr>';
     foreach($page as $p){
-        echo '<tr><td>'.(int)$p['id'].'</td><td>'.esc($p['title']).'</td><td>'.esc($p['owner']).'</td><td>'.esc($labels[$p['state']]??$p['state']).'</td><td>'.money((int)$p['budget']).'</td><td>'.($p['recorded_progress']===null?'ثبت نشده':(int)$p['recorded_progress'].'٪').'</td></tr>';
+        echo '<tr><td>'.(int)$p['id'].'</td><td>'.esc($p['title']).'</td><td>'.esc($p['owner']).'</td><td>'.esc($labels[$p['state']]??$p['state']).'</td><td>'.money((int)$p['budget']).'</td><td>'.($p['recorded_progress']===null?'ثبت نشده':(int)$p['recorded_progress'].'٪').'</td>';
+        if($canManage){
+            echo '<td>';
+            $choices=zmPmAllowed((string)$p['state']);
+            if($choices){
+                formBegin('project_transition');
+                echo '<input type="hidden" name="project_id" value="'.(int)$p['id'].'"><input type="hidden" name="expected_state" value="'.esc($p['state']).'"><select name="next_state" aria-label="وضعیت جدید پروژه">';
+                foreach($choices as $next)echo '<option value="'.esc($next).'">'.esc($labels[$next]).'</option>';
+                echo '</select><input name="reason" maxlength="800" required placeholder="دلیل مستند تغییر وضعیت"><button>ثبت تصمیم</button></form>';
+            } else echo '<span class="muted">مختومه؛ تغییر وضعیت مجاز نیست</span>';
+            echo '</td>';
+        }
+        echo '</tr>';
     }
     echo '</table></div><p>';
     if($offset>0)echo '<a href="?page=projects&offset='.max(0,$offset-40).'">صفحه پیشین</a> · ';
@@ -118,14 +130,6 @@ function zmPmRender(PDO $db):void {
         $all=q($db,'SELECT id,title,state FROM projects ORDER BY id DESC LIMIT 250');
         $options='';
         foreach($all as $p)$options.='<option value="'.(int)$p['id'].'">#'.(int)$p['id'].' · '.esc($p['title']).' ('.esc($labels[$p['state']]??$p['state']).')</option>';
-        echo '<section><h2>تغییر کنترل‌شده وضعیت</h2><p class="muted">تنها پس از دریافت شواهد واقعی و ثبت دلیل؛ هیچ هزینه یا عملیات خودکاری از این فرم صادر نمی‌شود. وضعیت فعلی نیز باید انتخاب شود تا از تغییر همزمان جلوگیری شود.</p>';
-        formBegin('project_transition');
-        echo '<label>پروژه</label><select name="project_id" required>'.$options.'</select>';
-        echo '<div class="form"><div><label>وضعیت مورد انتظار</label><select name="expected_state">';
-        foreach($labels as $k=>$name)echo '<option value="'.esc($k).'">'.esc($name).'</option>';
-        echo '</select></div><div><label>وضعیت جدید</label><select name="next_state">';
-        foreach($labels as $k=>$name)echo '<option value="'.esc($k).'">'.esc($name).'</option>';
-        echo '</select></div></div><label>دلیل، مدرک یا تصمیم مدیریتی</label><textarea name="reason" maxlength="800" required></textarea><button>ثبت تغییر وضعیت با ردپا</button></form></section>';
         echo '<section><h2>ثبت پیشرفت، مانع یا تصمیم</h2><p class="muted">درصد پیشرفت خوداظهاری است و تأیید مستقل یا اجرای واقعی محسوب نمی‌شود. امکان افزودن گزارش وجود دارد اما گزارش قبلی بازنویسی نمی‌شود.</p>';
         formBegin('project_update');echo '<label>پروژه</label><select name="project_id" required>'.$options.'</select>';
         echo '<label>نوع گزارش</label><select name="category"><option value="progress">پیشرفت</option><option value="blocker">مانع</option><option value="decision">تصمیم</option></select>';
