@@ -21,6 +21,11 @@ import tempfile
 import time
 
 SCHEMA = "saeit.factory.strict-serial-fullcycle.v1"
+CHATGPT_REVIEW_SCHEMA = "saeit.factory.chatgpt-independent-review.v1"
+REVIEW_CRITERIA = (
+    "scientific_accuracy", "technical_execution", "security_and_privacy",
+    "rights_and_licenses", "deliverable_integrity", "commercial_readiness",
+)
 ORDER = re.compile(r"WO-[0-9]{8}\Z")
 RESERVE = 2 * 1024**3
 STAGES = (
@@ -192,6 +197,55 @@ def certified_finished(root, order, governance=None):
         return False
 
 
+def independently_reviewed(root, ops, order, governance=None):
+    """Separate, signed, artifact-bound ChatGPT expert verdict is mandatory.
+
+    Factory workers cannot create this approval. An unsigned JSON review or
+    self-reported `passed` flag never advances the serial production cursor.
+    A real reviewer key must be enrolled out of band; its presence does not
+    itself prove professional qualifications, which require separate vetting.
+    """
+    if governance is None or not ORDER.fullmatch(order):
+        return False
+    source = root / "product-lifecycle/approved-finished-goods" / order
+    audit = ops.parent / "independent-product-reviews" / order
+    if any(p.is_symlink() for p in (source, audit, audit.parent)):
+        return False
+    receipt = audit / "review.json"
+    report = audit / "report.json"
+    artifact = source / "product.zip"
+    try:
+        if any(p.is_symlink() or not p.is_file() for p in (receipt, report, artifact)):
+            return False
+        review = checked_json(receipt, 50_000)
+        report_doc = checked_json(report, 300_000)
+        passport = governance.spec_path(root, order)
+        passport_doc = checked_json(passport, 100_000)
+        if (review.get("schema") != CHATGPT_REVIEW_SCHEMA
+                or review.get("order") != order
+                or review.get("decision") != "approved"
+                or review.get("reviewer_id") != "chatgpt-independent"
+                or review.get("reviewer_role") != "qualified_specialist"
+                or not isinstance(review.get("producer_id"), str)
+                or not review["producer_id"]
+                or review.get("producer_id") != passport_doc.get("producer_id")
+                or review.get("producer_id") == review.get("reviewer_id")
+                or review.get("artifact_sha256") != governance.sha(artifact)
+                or review.get("passport_sha256") != governance.sha(passport)
+                or review.get("report_sha256") != governance.sha(report)
+                or review.get("criteria") != {key: "pass" for key in REVIEW_CRITERIA}
+                or report_doc.get("order") != order
+                or report_doc.get("decision") != "approved"
+                or not isinstance(report_doc.get("tests_performed"), list)
+                or not report_doc["tests_performed"]
+                or report_doc.get("blocking_findings") != []):
+            return False
+        governance.verify_reviewer_signature(root, review)
+        return True
+    except (OSError, ValueError, TypeError, RuntimeError, KeyError, AttributeError):
+        return False
+
+
 def worker_args(root, ops, order, stage):
     name, file, args, _ = stage
     script = ops / file
@@ -247,15 +301,20 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
     order, index, ticks = selected_order(state, orders)
     governance = load_governance(ops)
     if order is None:
-        if not all(certified_finished(root, item, governance) for item in orders):
+        if not all(certified_finished(root, item, governance)
+                   and independently_reviewed(root, ops, item, governance)
+                   for item in orders):
             raise RuntimeError("STRICT_SERIAL_QUEUE_COMPLETION_UNVERIFIED")
         return {"schema":SCHEMA, "all_complete":True, "stages_executed":0,
                 "sites_modified":False, "publications":0}
     verified_intake(area, order)
     # Dry-run doesn't create a lock or mutate any private inventory.
     if dry_run:
+        finished = certified_finished(root, order, governance)
         return {"schema":SCHEMA, "active_order":order, "tick_number":ticks,
-                "certified":certified_finished(root, order, governance),
+                "certified":finished,
+                "independent_chatgpt_review_approved":(
+                    independently_reviewed(root, ops, order, governance) if finished else False),
                 "storage_hold":disk_usage(root).free < RESERVE,
                 "stages_executed":0, "sites_modified":False}
     lock = ops / ".strict-serial-fullcycle.lock"
@@ -270,7 +329,9 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
         # Re-read after locking: even a second scheduler cannot roll forward.
         order, index, ticks = selected_order(state, orders)
         if order is None:
-            if not all(certified_finished(root, item, governance) for item in orders):
+            if not all(certified_finished(root, item, governance)
+                       and independently_reviewed(root, ops, item, governance)
+                       for item in orders):
                 raise RuntimeError("STRICT_SERIAL_QUEUE_COMPLETION_UNVERIFIED")
             return {"schema":SCHEMA, "all_complete":True, "stages_executed":0,
                     "publications":0}
@@ -305,7 +366,10 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                 except (OSError, RuntimeError, ValueError) as exc:
                     results[label] = "BLOCKED_" + type(exc).__name__ + ":" + str(exc)[:80]
             certified = certified_finished(root, order, governance)
-        next_index = index + 1 if certified else index
+        review_approved = independently_reviewed(root, ops, order, governance) if certified else False
+        if certified and not review_approved:
+            results["independent_chatgpt_review"] = "AWAITING_SIGNED_EXTERNAL_REVIEW"
+        next_index = index + 1 if certified and review_approved else index
         # A certified product exits the active slot, without silently
         # distributing it to sites whose buyer-delivery gate is not proven.
         all_complete = next_index == len(orders)
@@ -314,6 +378,7 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                        "index":next_index, "ticks":0 if certified else ticks + 1,
                        "all_complete":all_complete,
                        "last_order":order, "last_order_certified":certified,
+                       "last_order_independently_reviewed":review_approved,
                        "last_cycle_utc":datetime.now(timezone.utc).isoformat(),
                        "stage_results":results, "storage_hold":hold,
                        "independent_approval_required":True,
@@ -321,6 +386,7 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
         return {"schema":SCHEMA, "processed_order":order,
                 "active_order_after_cycle":next_order,
                 "certified_to_private_finished_goods":certified,
+                "independent_chatgpt_review_approved":review_approved,
                 "stages_executed":sum(v=="EXECUTED" for v in results.values()),
                 "stage_results":results, "storage_hold":hold, "tick_number":ticks+1,
                 "publications":0, "automatic_quality_approvals":0}
