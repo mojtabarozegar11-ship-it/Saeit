@@ -8,6 +8,7 @@ from django.test import TestCase
 from enterprise_portal.models import (
     AuditEvent, BusinessUnit, InventoryItem, JournalEntry, StockMovement,
 )
+from enterprise_portal.services import confirm_stock_movement
 from .models import (
     BillOfMaterials, MaterialRequirement, ProcurementNeed, ProductionOrder,
 )
@@ -75,10 +76,11 @@ class ProcurementIntegrityTests(TestCase):
 
     def test_confirmed_stock_removes_shortage_but_cannot_silently_keep_old_draft(self):
         prepare_purchase_drafts(self.order.pk, self.owner)
-        StockMovement.objects.create(
+        movement = StockMovement.objects.create(
             item=self.material, direction="in", reference="CONFIRMED-STOCK",
-            quantity=Decimal("25"), status="confirmed", created_by=self.owner,
+            quantity=Decimal("25"), created_by=self.owner,
         )
+        confirm_stock_movement(movement.pk, self.owner)
         self.assertEqual(material_shortages(self.order)[0]["shortage"], Decimal("0"))
         with self.assertRaises(ValidationError):
             prepare_purchase_drafts(self.order.pk, self.owner)
