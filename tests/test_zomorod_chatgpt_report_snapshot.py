@@ -23,6 +23,14 @@ class SnapshotSafetyTests(unittest.TestCase):
         self.assertIn(b"issuecomment-123", p)
         self.assertNotIn(b"issuecomment-199", p)
 
+    def test_explicit_run_id_prefix_is_imported_without_rewriting_source(self):
+        original = HEADER.replace(" | ZM-CTRL-", " | run_id ZM-CTRL-", 1) + "\\nثبت امن نسخه گزارش فارسی.\\n"
+        result, payload = build_snapshot([row(900, original)])
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(result["items"][0]["report_code"], "05-0001")
+        self.assertEqual(result["items"][0]["body"], original)
+        self.assertIn("run_id ZM-CTRL", payload.decode("utf-8"))
+
     def test_conflicting_same_number_and_overflow_fail(self):
         with self.assertRaisesRegex(ValueError, "CONFLICTING_REPORT"):
             build_snapshot([row(123), row(124)])
