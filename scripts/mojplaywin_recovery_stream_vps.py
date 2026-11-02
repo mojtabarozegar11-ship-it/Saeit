@@ -215,6 +215,17 @@ def readiness(home=None):
                 "release_permitted":False}
 
 
+def pair_mode_to_kind(mode):
+    """Compatible with the older Python 3 interpreters on the private VPS.
+
+    str.removesuffix is unavailable until Python 3.9. An AttributeError at
+    this point previously appeared as a generic private restore failure.
+    """
+    if mode not in ("mysql-pair", "files-pair"):
+        raise ValueError("invalid private stream mode")
+    return mode[:-len("-pair")]
+
+
 if __name__=="__main__":
     if len(sys.argv) not in (2, 3):
         raise SystemExit(2)
@@ -237,7 +248,7 @@ if __name__=="__main__":
         raise SystemExit(0)
     try:
         if mode in ("mysql-pair", "files-pair") and len(sys.argv) == 3:
-            kind = mode.removesuffix("-pair")
+            kind = pair_mode_to_kind(mode)
             stems = discover_explicit_pair(sys.argv[2])
         elif mode in ("mysql", "files") and len(sys.argv) == 2:
             kind = mode
@@ -254,6 +265,15 @@ if __name__=="__main__":
         # the already verified GPG archive; never log private SQL bytes.
         print("PRIVATE_RESTORE_DOWNSTREAM_CLOSED_NO_RELEASE", file=sys.stderr)
         raise SystemExit(1)
-    except Exception:
-        print("PRIVATE_RESTORE_STREAM_INTEGRITY_FAILURE", file=sys.stderr)
+    except Exception as error:
+        # Exception messages can contain private filesystem paths or SQL;
+        # disclose only a fixed type category, never the exception text.
+        category = type(error).__name__
+        if category not in (
+                "AttributeError", "FileNotFoundError", "PermissionError",
+                "BrokenPipeError", "OSError", "RuntimeError", "ValueError",
+                "TimeoutExpired", "TypeError", "KeyError"):
+            category = "OTHER"
+        print("PRIVATE_RESTORE_STREAM_INTEGRITY_FAILURE category=" + category,
+              file=sys.stderr)
         raise SystemExit(1)
