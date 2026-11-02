@@ -19,6 +19,20 @@ function zmStoreDb(string $private):PDO {
    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
  return $db;
 }
+/** Public storefront must not create or migrate the private catalog on GET. */
+function zmStorePublicDb(string $private):PDO {
+ $file=$private.'/site_store.sqlite3';
+ if(!is_dir($private)||is_link($private)||!is_file($file)||is_link($file)){
+  throw new RuntimeException('Private catalog is not ready');
+ }
+ $db=new PDO('sqlite:'.$file,null,null,[
+  PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,
+  PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,
+  PDO::ATTR_TIMEOUT=>5,
+ ]);
+ $db->exec('PRAGMA query_only=ON');
+ return $db;
+}
 function zmStoreHandle(PDO $db,string $action):void{
  if($action==='product_create'){
   $sku=req('sku');$title=req('title');$body=req('description');$amount=req('price_irr');
