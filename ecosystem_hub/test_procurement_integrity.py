@@ -174,3 +174,14 @@ class ProcurementIntegrityTests(TestCase):
         self.assertFalse(AuditEvent.objects.filter(
             action="ecosystem_procurement_draft",
         ).exists())
+
+    def test_empty_bom_cannot_be_mistaken_for_zero_shortage(self):
+        self.line.delete()
+        with self.assertRaises(ValidationError):
+            material_shortages(self.order)
+        with self.assertRaises(ValidationError):
+            prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertFalse(ProcurementNeed.objects.exists())
+        self.assertFalse(AuditEvent.objects.filter(
+            action="ecosystem_procurement_draft",
+        ).exists())
