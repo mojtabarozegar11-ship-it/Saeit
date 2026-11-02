@@ -107,41 +107,45 @@ def encrypt_stream_to_file(stream, target: Path, gpg_home: Path, key: bytes,
                            *, max_source_bytes=MAX_SOURCE_BYTES):
     fd = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        proc = gpg_process(key, gpg_home, [
-            "--symmetric", "--cipher-algo", "AES256", "--compress-algo", "zlib",
-            "--s2k-digest-algo", "SHA256", "--s2k-mode", "3",
-            "--s2k-count", "65011712", "--output", "-",
-        ], input_pipe=True, stdout=fd)
-    finally:
-        os.close(fd)
-    total = 0
-    digest = hashlib.sha256()
-    tail = b""
-    try:
-        assert proc.stdin is not None
-        while True:
-            chunk = stream.read(BLOCK)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > max_source_bytes:
-                raise RuntimeError("source exceeds safety maximum")
-            digest.update(chunk)
-            tail = (tail + chunk)[-len(MARKER):]
-            proc.stdin.write(chunk)
-            if target.stat().st_size > MAX_ENCRYPTED_BYTES or disk_free(target.parent) < 3 * 1024**3:
-                raise RuntimeError("VPS storage safety cap")
-        proc.stdin.close()
-        if proc.wait(timeout=120):
-            raise RuntimeError("GPG encryption process failed")
-        if total < 1024 + len(MARKER) or tail != MARKER:
-            raise RuntimeError("source completion footer absent")
-        return total, digest.hexdigest()
-    finally:
-        if proc.poll() is None:
-            proc.kill()
-            proc.wait()
-
+        try:
+            proc = gpg_process(key, gpg_home, [
+                "--symmetric", "--cipher-algo", "AES256", "--compress-algo", "zlib",
+                "--s2k-digest-algo", "SHA256", "--s2k-mode", "3",
+                "--s2k-count", "65011712", "--output", "-",
+            ], input_pipe=True, stdout=fd)
+        finally:
+            os.close(fd)
+        total = 0
+        digest = hashlib.sha256()
+        tail = b""
+        try:
+            assert proc.stdin is not None
+            while True:
+                chunk = stream.read(BLOCK)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_source_bytes:
+                    raise RuntimeError("source exceeds safety maximum")
+                digest.update(chunk)
+                tail = (tail + chunk)[-len(MARKER):]
+                proc.stdin.write(chunk)
+                if target.stat().st_size > MAX_ENCRYPTED_BYTES or disk_free(target.parent) < 3 * 1024**3:
+                    raise RuntimeError("VPS storage safety cap")
+            proc.stdin.close()
+            if proc.wait(timeout=120):
+                raise RuntimeError("GPG encryption process failed")
+            if total < 1024 + len(MARKER) or tail != MARKER:
+                raise RuntimeError("source completion footer absent")
+            return total, digest.hexdigest()
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+    except BaseException:
+        # Target was opened O_EXCL in this call: only this incomplete ciphertext is removed.
+        target.unlink(missing_ok=True)
+        raise
 
 def verify_stream(target: Path, gpg_home: Path, key: bytes,
                   *, max_source_bytes=MAX_SOURCE_BYTES):
@@ -199,11 +203,16 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
     source_cap = MAX_MYSQL_SOURCE_BYTES if kind == "mysql" else MAX_SOURCE_BYTES
     total, digest = encrypt_stream_to_file(
         stream, partial, gnupg, key, max_source_bytes=source_cap)
-    verified_total, verified_digest = verify_stream(
-        partial, gnupg, key, max_source_bytes=source_cap)
-    if total != verified_total or digest != verified_digest:
-        raise RuntimeError("OpenPGP round-trip integrity or size mismatch")
-    os.rename(partial, complete)
+    try:
+        verified_total, verified_digest = verify_stream(
+            partial, gnupg, key, max_source_bytes=source_cap)
+        if total != verified_total or digest != verified_digest:
+            raise RuntimeError("OpenPGP round-trip integrity or size mismatch")
+        os.rename(partial, complete)
+    except BaseException:
+        # The completed archive, if any, is never deleted or overwritten here.
+        partial.unlink(missing_ok=True)
+        raise
     summary = {
         "kind": kind, "format": "OpenPGP-AES256-GPGv2",
         "archive_name": complete.name,
