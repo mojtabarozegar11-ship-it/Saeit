@@ -28,7 +28,9 @@ function zmStorePublicDb(string $private):PDO {
  if(!is_dir($parent)||is_link($parent)||!is_dir($private)||is_link($private)||!is_file($file)||is_link($file)){
   throw new RuntimeException('Private catalog is not ready');
  }
- $db=new PDO('sqlite:'.$file,null,null,[
+ // Open at the SQLite connection layer in read-only mode, not merely
+ // through a mutable PRAGMA that could be switched off later.
+ $db=new PDO('sqlite:file:'.$file.'?mode=ro',null,null,[
   PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,
   PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,
   PDO::ATTR_TIMEOUT=>5,
