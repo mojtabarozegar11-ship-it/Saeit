@@ -1,0 +1,104 @@
+name: Moj messaging - authorize replacement Termux phone public key
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths:
+      - '.github/workflows/moj-messaging-new-phone-key-authorize-20261028.yml'
+permissions:
+  contents: read
+concurrency:
+  group: moj-messaging-phone-ssh-gate-20261028
+  cancel-in-progress: false
+jobs:
+  authorize:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Register only the verified replacement public key with the existing forced private wizard
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo 'MMSG_VPS_KEY_UNAVAILABLE'; exit 1; }
+          d="$(mktemp -d "$RUNNER_TEMP/mmsg-phone-replacement.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          gate_digest="$(sha256sum ops/messaging-bridge/phone-onboard-gate.sh | awk '{print $1}')"
+          timeout 60s ssh -i "$d/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'bash -s' "$gate_digest" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          test "$HOME" = /home/githubops
+          test -x "$HOME/private-messaging-bridge/runtime/current/app/user-onboard.sh"
+          gate="$HOME/private-messaging-bridge/security/phone-onboard-gate.sh"
+          test -f "$gate" && test -x "$gate" && test ! -L "$gate"
+          test "$(sha256sum "$gate" | awk '{print $1}')" = "$1" || { echo 'MMSG_FORCED_GATE_DIGEST_MISMATCH'; exit 2; }
+          bash -n "$gate"
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, fcntl, os, secrets, stat
+          ssh=Path.home()/'.ssh'
+          auth=ssh/'authorized_keys'
+          assert ssh.is_dir() and not ssh.is_symlink()
+          assert stat.S_IMODE(ssh.stat().st_mode)==0o700
+          assert auth.is_file() and not auth.is_symlink()
+          assert stat.S_IMODE(auth.stat().st_mode)==0o600
+          blob='AAAAC3NzaC1lZDI1NTE5AAAAIKrC0Ak+4wqQrorub6w4C7I6FMg3x1iSxV9opmZbseZE'
+          keybytes=base64.b64decode(blob,validate=True)
+          assert len(keybytes)==51 and keybytes[:4]==b'\x00\x00\x00\x0b'
+          assert keybytes[4:15]==b'ssh-ed25519' and keybytes[15:19]==b'\x00\x00\x00 '
+          key='ssh-ed25519 '+blob+' moj-messaging-phone-20261028'
+          gate='/home/githubops/private-messaging-bridge/security/phone-onboard-gate.sh'
+          authorized='restrict,pty,command="'+gate+'" '+key
+          lock=ssh/'.mmsg-phone-key-update.lock'
+          with open(lock,'a') as handle:
+              os.chmod(lock,0o600)
+              fcntl.flock(handle.fileno(),fcntl.LOCK_EX)
+              original=auth.read_bytes()
+              rows=original.splitlines(keepends=True)
+              found=[line for line in rows if ('ssh-ed25519 '+blob).encode() in line]
+              if found:
+                  assert len(found)==1
+                  assert found[0].rstrip(b'\r\n')==authorized.encode(), 'Unknown options for this public key; refusing overwrite'
+                  print('MMSG_REPLACEMENT_PHONE_KEY=ALREADY_AUTHORIZED')
+              else:
+                  if original and not original.endswith(b'\n'):
+                      original+=b'\n'
+                  replacement=original+authorized.encode()+b'\n'
+                  backup=ssh/('authorized_keys.pre-phone-'+secrets.token_hex(8)+'.bak')
+                  fd=os.open(str(backup),os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+                  with os.fdopen(fd,'wb') as f:
+                      f.write(auth.read_bytes())
+                      f.flush()
+                      os.fsync(f.fileno())
+                  pending=ssh/('.authorized_keys.phone-'+secrets.token_hex(8))
+                  fd=os.open(str(pending),os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+                  with os.fdopen(fd,'wb') as f:
+                      f.write(replacement)
+                      f.flush()
+                      os.fsync(f.fileno())
+                  os.replace(str(pending),str(auth))
+                  assert auth.read_bytes()==replacement
+                  assert stat.S_IMODE(auth.stat().st_mode)==0o600
+                  print('MMSG_REPLACEMENT_PHONE_KEY=AUTHORIZED')
+              final=auth.read_text().splitlines()
+              assert sum(('ssh-ed25519 '+blob) in line for line in final)==1
+              assert authorized in final
+              assert any('comfyui-phone-ui-20261015' in line and 'permitopen="127.0.0.1:18188"' in line for line in final)
+              print('MMSG_FORCED_ONBOARDING_ONLY=PASS')
+              print('MMSG_OLD_COMFYUI_PHONE_KEY_RETAINED=PASS')
+              print('MMSG_NO_UNRESTRICTED_NEW_SSH_KEY=PASS')
+              print('MMSG_ACCOUNT_SESSIONS_UNCHANGED=PASS')
+          PY
+          REMOTE

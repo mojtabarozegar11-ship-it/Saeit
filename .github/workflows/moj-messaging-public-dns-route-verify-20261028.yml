@@ -1,0 +1,59 @@
+name: Moj messaging - GitHub resolver to VPS WhatsApp route verification
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths: ['.github/workflows/moj-messaging-public-dns-route-verify-20261028.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Resolve real public DNS on runner, test from VPS with TLS SNI
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/wa-external-dns.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          # Resolve at GitHub runner, explicitly reject non-global answers.
+          python3 - "$d/wa-ips.txt" <<'PY'
+          import socket,ipaddress,sys
+          infos=socket.getaddrinfo('web.whatsapp.com',443,socket.AF_INET,socket.SOCK_STREAM)
+          ips=list(dict.fromkeys(item[4][0] for item in infos if ipaddress.ip_address(item[4][0]).is_global))
+          if not ips: raise SystemExit('MMSG_GITHUB_RUNNER_WA_PUBLIC_DNS=NOT_FOUND')
+          with open(sys.argv[1],'w') as fp:
+              for ip in ips[:5]:fp.write(ip+'\n')
+          print('MMSG_GITHUB_RUNNER_WA_PUBLIC_DNS=PASS')
+          print('MMSG_GITHUB_RUNNER_WA_PUBLIC_COUNT='+str(len(ips)))
+          PY
+          timeout 60s ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'python3 -' < <(cat <<'PY'
+          import socket,ssl,ipaddress,sys
+          ips=sys.argv[1:]
+          for ip in ips:
+              if not ipaddress.ip_address(ip).is_global:raise SystemExit('Unsafe address rejected')
+          tcp=0
+          tls=0
+          for ip in ips:
+              try:
+                  with socket.create_connection((ip,443),timeout=4) as raw:
+                      tcp+=1
+                      with ssl.create_default_context().wrap_socket(raw,server_hostname='web.whatsapp.com') as s:
+                          tls+=1
+              except OSError:pass
+          print('MMSG_VPS_TO_PUBLIC_WA_TCP='+('PASS' if tcp else 'BLOCKED'))
+          print('MMSG_VPS_TO_PUBLIC_WA_TLS='+('PASS' if tls else 'BLOCKED'))
+          print('MMSG_VPS_SYSTEM_CONFIG_UNCHANGED=PASS')
+          PY
+          ) $(cat "$d/wa-ips.txt")

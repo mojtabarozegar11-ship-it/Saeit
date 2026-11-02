@@ -1,0 +1,63 @@
+name: Moj messaging - WhatsApp pairing process conflict audit
+on:
+  push:
+    branches: [feature/private-messaging-bridge-20261028]
+    paths: ['.github/workflows/moj-messaging-pairing-process-conflict-audit-20261028.yml']
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/private-messaging-bridge-20261028'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Inspect only auth boolean and process counts; no chats or secrets
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/mmsg-whatsapp-conflict.XXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          chmod 600 "$d/known"
+          timeout 45s ssh -i "$d/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=10 githubops@178.239.147.150 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,os
+          base=Path('/home/githubops/private-messaging-bridge')
+          f=base/'state/whatsapp/primary/creds.json'
+          if not f.is_file() or f.is_symlink():
+              print('MMSG_WA_PRIMARY_CREDS_FILE=ABSENT')
+          else:
+              try:
+                  # Evaluate only Boolean metadata; never print JSON or credentials.
+                  creds=json.loads(f.read_text())
+                  b=creds.get('registered',None)
+                  if isinstance(b,bool):
+                      print('MMSG_WA_PRIMARY_REGISTERED='+('YES' if b else 'NO'))
+                  else:
+                      print('MMSG_WA_PRIMARY_REGISTERED=UNKNOWN')
+              except Exception: print('MMSG_WA_PRIMARY_REGISTERED=UNKNOWN')
+          counters={'login':0,'daemon':0}
+          for p in Path('/proc').iterdir():
+              if not p.name.isdigit():continue
+              try:
+                  argv=(p/'cmdline').read_bytes().split(b'\0')
+                  if not any(arg.endswith(b'/whatsapp.mjs') for arg in argv):continue
+                  if b'--account' not in argv: continue
+                  idx=argv.index(b'--account')
+                  if idx+1>=len(argv) or argv[idx+1]!=b'primary':continue
+                  if b'login' in argv:counters['login']+=1
+                  if b'daemon' in argv:counters['daemon']+=1
+              except (OSError,ValueError):continue
+          print('MMSG_WA_PRIMARY_LOGIN_PROCESSES='+str(counters['login']))
+          print('MMSG_WA_PRIMARY_DAEMON_PROCESSES='+str(counters['daemon']))
+          print('MMSG_WA_MULTI_INSTANCE_RISK='+('YES' if counters['login'] and counters['daemon'] else 'NO'))
+          print('MMSG_WA_PRIVATE_DATA_DISCLOSED=NO')
+          PY

@@ -1,0 +1,12 @@
+node_modules/
+.venv/
+.env
+*.session
+*.session-journal
+*.session-shm
+*.session-wal
+state/
+whatsapp-auth/
+*.db
+*.sqlite3
+*.log
