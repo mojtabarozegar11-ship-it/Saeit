@@ -78,11 +78,18 @@ def prepare_purchase_drafts(order_id, actor):
         )
     }
     # Preflight before any insertion; atomicity covers all materials.
+    # An unchanged shortage is not enough: due date and source order code
+    # must still match the draft that a human is being asked to review.
+    expected_reason = (
+        f"پیشنهاد کسری مواد سفارش تولید {order.code}؛ خرید واقعی انجام نشده است."
+    )
     for reference, need in existing.items():
         row = expected.get(reference)
         if (row is None or need.item_id != row["item"].pk
                 or need.status != "draft" or row["shortage"] <= 0
-                or need.quantity != row["shortage"]):
+                or need.quantity != row["shortage"]
+                or need.required_by != order.due_date
+                or need.request_reason != expected_reason):
             raise ValidationError(
                 "درخواست تأمین قبلی با کسری فعلی تطابق ندارد؛ بازبینی انسانی لازم است."
             )
@@ -97,7 +104,7 @@ def prepare_purchase_drafts(order_id, actor):
             defaults={
                 "item": item,
                 "quantity": row["shortage"],
-                "request_reason": f"پیشنهاد کسری مواد سفارش تولید {order.code}؛ خرید واقعی انجام نشده است.",
+                "request_reason": expected_reason,
                 "required_by": order.due_date,
                 "status": "draft",
                 "requested_by": actor,
