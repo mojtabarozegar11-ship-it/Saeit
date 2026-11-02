@@ -35,7 +35,7 @@ code="session_id(getenv('SID'));$_SERVER['REQUEST_METHOD']=getenv('REQ_METHOD');
 def request(method='GET',page=None,post=None):
     global sid
     env=os.environ.copy()
-    env.update({'SID':sid,'SID_RESULT':str(base/'sid.result'),'INDEX':str(web/'index.php'),'REQ_METHOD':method,'QUERY_JSON':json.dumps({'page':page} if page else {}),'POST_JSON':json.dumps(post or {})})
+    env.update({'SID':sid,'SID_RESULT':str(base/'sid.result'),'INDEX':str(web/'index.php'),'REQ_METHOD':method,'QUERY_JSON':json.dumps(page if isinstance(page,dict) else ({'page':page} if page else {})),'POST_JSON':json.dumps(post or {})})
     result=subprocess.run([php,'-d','session.save_path='+str(sessions),'-r',code],env=env,capture_output=True,text=True,timeout=25)
     assert result.returncode==0,('PHP test failed',result.stderr[-400:])
     sid=(base/'sid.result').read_text().strip()
@@ -157,6 +157,37 @@ assert 'اعتبارسنجی پرونده گزارش ناموفق بود' in req
 fa_file.unlink()
 assert 'ترجمه فارسی این گزارش هنوز' in request('GET','chatgpt_reports')
 assert 'گزارش‌های متنی ChatGPT' in request('GET','dashboard')
+# Independent immutable report archive: paging after 25 rows, Persian labels,
+# XSS escaping and unchanged accounting tables. This is a disposable DB only.
+archive_file=private/'chatgpt_reports_archive.sqlite3'
+with sqlite3.connect(str(archive_file)) as archive:
+    archive.execute('CREATE TABLE reports (seq INTEGER PRIMARY KEY, report_code TEXT NOT NULL UNIQUE, comment_id INTEGER NOT NULL UNIQUE, occurred_at TEXT NOT NULL, body TEXT NOT NULL, evidence_url TEXT NOT NULL)')
+    archive.execute('CREATE TABLE metadata (name TEXT PRIMARY KEY, value TEXT NOT NULL)')
+    archive.execute('PRAGMA user_version=1')
+    archive.execute("INSERT INTO metadata VALUES ('source','github:mojtabarozegar11-ship-it/Saeit:issue:1725')")
+    archive.execute("INSERT INTO metadata VALUES ('last_checked_at','2026-11-02T00:00:00+00:00')")
+    for n in range(1,27):
+        cid=987653+n
+        code=f'05-{n:04d}'
+        archive.execute('INSERT INTO reports(report_code,comment_id,occurred_at,body,evidence_url) VALUES (?,?,?,?,?)',
+                        (code,cid,'2026-11-02T01:00:00+00:00',
+                         'آزمایش فارسی صفحه‌بندی با <script>attack()</script> و رسید مستقل.',
+                         'https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-'+str(cid)))
+archive_file.chmod(0o600)
+first_page=request('GET','chatgpt_reports')
+assert 'تعداد گزارش‌های بایگانی‌شده: 26' in first_page
+assert '05-0026' in first_page and '05-0001' not in first_page
+assert '&lt;script&gt;attack()&lt;/script&gt;' in first_page
+assert '<script>attack()</script>' not in first_page
+assert 'صفحه قدیمی‌تر' in first_page
+second_page=request('GET',{'page':'chatgpt_reports','p':'2'})
+assert '05-0001' in second_page and 'صفحه جدیدتر' in second_page
+assert 'پایش پنج چرخهٔ ساعتی' in second_page
+archive_file.chmod(0o644)
+assert 'اعتبارسنجی آرشیو ناموفق بود' in request('GET','chatgpt_reports')
+archive_file.chmod(0o600)
+print('PRIVATE_IMMUTABLE_REPORT_ARCHIVE_PAGINATION_SYNTHETIC=PASS')
+archive_file.unlink()
 with sqlite3.connect(str(private/'management.sqlite3')) as rw:
     rw.execute("UPDATE users SET role='viewer' WHERE username='TestOnlyAdmin'")
 assert 'درخواست انجام نشد' in request('GET','chatgpt_reports')
