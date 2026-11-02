@@ -619,6 +619,88 @@ jobs:
 
               except (OSError, ValueError, subprocess.TimeoutExpired):
                   print("MPW_CLOUDLINUX_SELECTOR_GET=UNAVAILABLE")
+          # Categorize effective account-owned Python/Passenger process cwd.
+          # Do not log process IDs, arguments, environment values or arbitrary paths.
+          try:
+              snapshot = subprocess.run(
+                  ["ps", "-u", "zomorod2", "-o", "pid=,etimes=,comm=,args="],
+                  capture_output=True, timeout=10, check=False, text=True,
+              )
+              if snapshot.returncode or len(snapshot.stdout) > 250000:
+                  raise ValueError("PS_UNAVAILABLE")
+              process_cwd = {"PUBLIC": 0, "STAGING": 0, "OTHER": 0, "UNREADABLE": 0}
+              app_tag = {"PUBLIC": 0, "STAGING": 0, "BOTH": 0, "NEITHER": 0}
+              candidates = 0
+              for line in snapshot.stdout.splitlines()[:500]:
+                  fields = re.match(r"^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$", line)
+                  if not fields:
+                      continue
+                  pid, age, name, args = fields.groups()
+                  name, args = name.lower(), args.lower()
+                  if not ("passenger" in name or "passenger" in args
+                          or "wsgi" in args or "python" in name):
+                      continue
+                  candidates += 1
+                  has_public = "mojplaywin.com" in args
+                  has_staging = "saeit-staging" in args
+                  app_tag["BOTH" if has_public and has_staging else
+                          "PUBLIC" if has_public else "STAGING" if has_staging
+                          else "NEITHER"] += 1
+                  try:
+                      proc_root = os.readlink("/proc/" + pid + "/cwd")
+                      if proc_root == str(public) or proc_root.startswith(str(public) + "/"):
+                          process_cwd["PUBLIC"] += 1
+                      elif proc_root == str(app) or proc_root.startswith(str(app) + "/"):
+                          process_cwd["STAGING"] += 1
+                      else:
+                          process_cwd["OTHER"] += 1
+                  except OSError:
+                      process_cwd["UNREADABLE"] += 1
+              print("MPW_PROCESS_CWD_CANDIDATES=" + str(candidates))
+              for key, count in process_cwd.items():
+                  print("MPW_PROCESS_CWD_" + key + "=" + str(count))
+              for key, count in app_tag.items():
+                  print("MPW_PROCESS_COMMAND_TAG_" + key + "=" + str(count))
+          except (OSError, ValueError, subprocess.TimeoutExpired):
+              print("MPW_PROCESS_CWD_AUDIT=UNAVAILABLE")
+
+          # Check whether PassengerApps UAPI knows the manually configured public app.
+          try:
+              resp = subprocess.run(
+                  [command, "--output=json", "PassengerApps", "list_applications"],
+                  capture_output=True, timeout=15, check=False,
+              )
+              if resp.returncode or len(resp.stdout) > 1000000:
+                  raise ValueError("UAPI_UNAVAILABLE")
+              doc = json.loads(resp.stdout)
+              info = doc.get("result", {}) if isinstance(doc, dict) else {}
+              if not isinstance(info, dict) or info.get("status") not in (1, True, "1"):
+                  raise ValueError("UAPI_INVALID")
+              encoded = json.dumps(info.get("data"), sort_keys=True).lower()
+              print("MPW_PASSENGER_UAPI_MENTIONS_PUBLIC=" +
+                    ("YES" if "mojplaywin.com" in encoded else "NO"))
+              print("MPW_PASSENGER_UAPI_MENTIONS_STAGING=" +
+                    ("YES" if "saeit-staging" in encoded else "NO"))
+          except (OSError, ValueError, subprocess.TimeoutExpired):
+              print("MPW_PASSENGER_UAPI_BINDING=UNAVAILABLE")
+
+          public_htaccess = small_regular(public / ".htaccess", 100000)
+          if public_htaccess is not None:
+              config = public_htaccess.decode("utf8", "replace")
+              python_paths = re.findall(
+                  r"(?im)^\s*PassengerPython\s+([^\r\n#]+)", config)
+              if python_paths:
+                  selected = python_paths[-1].lower()
+                  interpreter = ("STAGING_VENV" if "saeit-staging" in selected else
+                                 "PUBLIC_VENV" if "mojplaywin.com" in selected else "OTHER")
+              else:
+                  interpreter = "NOT_DECLARED"
+              base_uris = re.findall(
+                  r"(?im)^\s*PassengerBaseURI\s+([^\r\n#]+)", config)
+              base = "ROOT" if base_uris and base_uris[-1].strip() == "/" else (
+                  "OTHER" if base_uris else "NOT_DECLARED")
+              print("MPW_PUBLIC_PASSENGER_PYTHON=" + interpreter)
+              print("MPW_PUBLIC_PASSENGER_BASE_URI=" + base)
           print("MPW_PRODUCTION_FILE_WRITES=NONE")
           print("MPW_ORDERS_CREATED=0;PAYMENTS_CREATED=0")
           print("CPANEL_SITE_MUTATIONS=NONE")
