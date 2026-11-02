@@ -107,11 +107,11 @@ class ActionIndexSafety(unittest.TestCase):
         for bad in ('[]', '{"unexpected":"completed"}'):
             with self.subTest(status=bad):
                 body = receipt("05-0020", "ZM05-0020-A01")
-                body = body.replace('"status": "completed"', '"status": ' + bad)
+                body = body.replace('"status":"completed"', '"status":' + bad)
                 self.assertEqual(parse_block(body, "05-0020"),
                                  ("invalid_contract", []))
         self.add(20, receipt("05-0020", "ZM05-0020-A01").replace(
-            '"status": "completed"', '"status": []'))
+            '"status":"completed"', '"status": []'))
         self.assertEqual(rebuild(self.archive, self.index), (0, 1, 1))
         with sqlite3.connect(self.index) as db:
             self.assertEqual(db.execute("SELECT reason FROM rejected").fetchone(),
@@ -119,12 +119,12 @@ class ActionIndexSafety(unittest.TestCase):
 
     def test_duplicate_json_keys_are_not_silently_accepted(self):
         body = receipt("05-0020", "ZM05-0020-A01")
-        body = body.replace('"version": 1', '"version": 1, "version": 1')
+        body = body.replace('"version":1', '"version":1,"version":1')
         self.assertEqual(parse_block(body, "05-0020"),
                          ("invalid_contract", []))
         nested = receipt("05-0020", "ZM05-0020-A01").replace(
-            '"status": "completed"',
-            '"status": "blocked", "status": "completed"')
+            '"status":"completed"',
+            '"status":"blocked","status":"completed"')
         self.assertEqual(parse_block(nested, "05-0020"),
                          ("invalid_contract", []))
 
