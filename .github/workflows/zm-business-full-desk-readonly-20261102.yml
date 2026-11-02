@@ -102,7 +102,7 @@ jobs:
           php83="/opt/cpanel/ea-php83/root/usr/bin/php"
           if test -x "$php83" && test "$("$php83" -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')" = "8.3"; then
             echo 'PHP83_CLI_AVAILABLE=yes'
-            if "$php83" -r 'exit(extension_loaded("pdo_sqlite")&&class_exists("SQLite3")?0:1)'; then
+            if "$php83" -r 'exit(extension_loaded("pdo_sqlite")&&class_exists("SQLite3")&&in_array("sqlite",PDO::getAvailableDrivers(),true)?0:1);'; then
               echo 'PHP83_SQLITE_RUNTIME_READY=yes'
               "$php83" -l "$app" >/dev/null
               modules_ready=yes
