@@ -1,10 +1,13 @@
 name: Synthetic QA for Zomorod business accounting
 on:
   push:
-    branches: [main]
+    branches: [main, feature/zm-business-php-chatgpt-reports-20261102]
     paths:
       - ".github/workflows/zomorod-business-synthetic-qa.yml"
       - "content/zomorod-business/app.php"
+      - "content/zomorod-business/chatgpt_reports.php"
+      - "scripts/zomorod_chatgpt_report_snapshot.py"
+      - "tests/test_zomorod_chatgpt_report_snapshot.py"
       - "content/zomorod-business/approvals.php"
       - "scripts/zomorod_business_synthetic_qa.py"
       - "scripts/zomorod_project_approval_snapshot.py"
@@ -35,10 +38,12 @@ jobs:
           php -m | grep -qi pdo_sqlite
           php -l content/zomorod-business/app.php
           php -l content/zomorod-business/approvals.php
+          php -l content/zomorod-business/chatgpt_reports.php
           php -l content/zomorod-business/index.php
           python3 -m py_compile scripts/zomorod_business_synthetic_qa.py
           python3 -m py_compile scripts/zomorod_project_approval_snapshot.py tests/test_zomorod_approval_snapshot.py
           python3 -m unittest discover -s tests -p 'test_zomorod_approval_snapshot.py'
+          python3 -m unittest discover -s tests -p 'test_zomorod_chatgpt_report_snapshot.py'
           mkdir -p "$HOME/.private/zomorod-business" "$HOME/public_html/business"
           cp content/zomorod-business/app.php "$HOME/.private/zomorod-business/app.php"
           cp content/zomorod-business/index.php "$HOME/public_html/business/index.php"
