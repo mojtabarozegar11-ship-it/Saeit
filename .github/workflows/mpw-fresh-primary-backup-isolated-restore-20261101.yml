@@ -11,6 +11,11 @@ on:
         required: false
         default: ""
         type: string
+      restore_only_set_id:
+        description: "Optional: verify and restore existing complete SQL+files pair; no production backup stream"
+        required: false
+        default: ""
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -157,6 +162,7 @@ jobs:
           fi
           printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
       - name: Preflight approved three public aliases and transactional CLI database (no dump)
+        if: ${{ inputs.restore_only_set_id == '' }}
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         shell: bash
@@ -173,18 +179,28 @@ jobs:
         shell: bash
         env:
           MPW_RESUME_SQL_SET_ID: ${{ inputs.resume_sql_set_id }}
+          MPW_RESTORE_ONLY_SET_ID: ${{ inputs.restore_only_set_id }}
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           probe64="$(base64 -w0 scripts/mpw_vps_backup_runtime_gate_readonly_20261101.py)"
           call='import base64,sys;payload=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(payload))'
-          timeout 45s ssh -T -F "$d/config" saeit-vps "PYTHONDONTWRITEBYTECODE=1 python3 -B -c '$call' '$probe64' --require-ready"
-          if [ -n "$MPW_RESUME_SQL_SET_ID" ]; then
-            stem="$MPW_RESUME_SQL_SET_ID"
-            mode="resume-existing-sql"
+          if [ -n "$MPW_RESUME_SQL_SET_ID" ] && [ -n "$MPW_RESTORE_ONLY_SET_ID" ]; then
+            echo "NO-GO: choose either SQL-files resume or isolated restore, not both"
+            exit 1
+          fi
+          if [ -n "$MPW_RESTORE_ONLY_SET_ID" ]; then
+            stem="$MPW_RESTORE_ONLY_SET_ID"
+            mode="restore-existing-pair-only"
           else
-            stem="mojplaywin_$(date -u +%Y%m%dT%H%M%SZ)_$(openssl rand -hex 8)"
-            mode="new-pair"
+            timeout 45s ssh -T -F "$d/config" saeit-vps "PYTHONDONTWRITEBYTECODE=1 python3 -B -c '$call' '$probe64' --require-ready"
+            if [ -n "$MPW_RESUME_SQL_SET_ID" ]; then
+              stem="$MPW_RESUME_SQL_SET_ID"
+              mode="resume-existing-sql"
+            else
+              stem="mojplaywin_$(date -u +%Y%m%dT%H%M%SZ)_$(openssl rand -hex 8)"
+              mode="new-pair"
+            fi
           fi
           [[ "$stem" =~ ^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}$ ]]
           echo "MPW_BACKUP_SET_STEM=$stem" >> "$GITHUB_ENV"
@@ -201,7 +217,7 @@ jobs:
           timeout 1450s ssh -T -F "$d/config" saeit-vps "python3 -B -c '$call' '$script64' verify-resume-sql '$MPW_BACKUP_SET_STEM'"
           echo "SQL_GPGV2_RESUME=fully_reverified; ORIGINAL_SQL_ARCHIVE_UNMODIFIED=YES"
       - name: Back up fresh MySQL transactionally using gzip-1 and private VPS GPG AES256
-        if: ${{ inputs.resume_sql_set_id == '' }}
+        if: ${{ inputs.resume_sql_set_id == '' && inputs.restore_only_set_id == '' }}
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         shell: bash
@@ -221,6 +237,7 @@ jobs:
             timeout 6000s ssh -T -F "$d/config" saeit-vps "MPW_BACKUP_SET_STEM=$MPW_BACKUP_SET_STEM bash -o pipefail -c \"gzip -dc | python3 -c '$call' '$dst64' mysql\""
           echo "MYSQL_GPGV2_TRANSFER=verified_complete_new_name"
       - name: Back up fresh scoped file roots with public aliases materialized (no source write)
+        if: ${{ inputs.restore_only_set_id == '' }}
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         shell: bash
@@ -255,10 +272,14 @@ jobs:
           call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
           label="mjwp-drill-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           restore_dir=""
+          import_errors=""
           cleanup() {
             docker rm -f "$label" >/dev/null 2>&1 || true
             if [ -n "$restore_dir" ] && [[ "$restore_dir" == "$RUNNER_TEMP"/mojplaywin-restore-* ]]; then
               rm -rf -- "$restore_dir"
+            fi
+            if [ -n "$import_errors" ] && [[ "$import_errors" == "$RUNNER_TEMP"/mpw-sql-import-* ]]; then
+              rm -f -- "$import_errors"
             fi
           }
           trap cleanup EXIT
@@ -272,17 +293,45 @@ jobs:
             -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1 mariadb:11.8.9 >/dev/null
           ready=0
           for i in $(seq 1 90); do
-            if docker exec "$label" mariadb-admin --no-defaults -uroot ping --silent >/dev/null 2>&1; then
-              ready=1
-              break
+            # A ping can succeed during the image's temporary init server.
+            # Two real SQL queries separated in time reject that startup race.
+            if docker exec "$label" mariadb --no-defaults -uroot --batch --skip-column-names -e "SELECT 1" >/dev/null 2>&1; then
+              sleep 3
+              if docker exec "$label" mariadb --no-defaults -uroot --batch --skip-column-names -e "SELECT 1" >/dev/null 2>&1; then
+                ready=1
+                break
+              fi
             fi
             sleep 2
           done
-          test "$ready" = 1 || { echo "NO-GO: isolated MariaDB container did not start"; exit 1; }
+          test "$ready" = 1 || { echo "NO-GO: isolated MariaDB SQL readiness unstable"; exit 1; }
           echo "MariaDB sandbox ready: no published port, container network disabled"
+          import_errors=$(mktemp "$RUNNER_TEMP/mpw-sql-import-XXXXXXXX")
+          chmod 600 "$import_errors"
+          # Do not send MariaDB's potentially private SQL-error text to CI logs.
+          # Record only fixed error categories and each pipeline exit code.
+          set +e
           timeout 5500s ssh -T -F "$d/config" saeit-vps \
             "python3 -B -c '$call' '$stream64' mysql-pair '$MPW_BACKUP_SET_STEM'" |
-            timeout 5500s docker exec -i "$label" mariadb --no-defaults -uroot --binary-mode
+            timeout 5500s docker exec -i "$label" mariadb --no-defaults -uroot --binary-mode 2>"$import_errors"
+          pipe_status=("${PIPESTATUS[@]}")
+          set -e
+          if [ "${pipe_status[0]}" -ne 0 ] || [ "${pipe_status[1]}" -ne 0 ]; then
+            category="ISOLATED_IMPORT_UNCLASSIFIED"
+            if grep -Eqi 'Access denied|ERROR 1045|ERROR 1698' "$import_errors"; then
+              category="ISOLATED_DB_AUTH"
+            elif grep -Eqi 'No space left|Disk full|ERROR 1114' "$import_errors"; then
+              category="ISOLATED_DB_CAPACITY"
+            elif grep -Eqi 'Can.t connect|Lost connection|ERROR 2002|ERROR 2013' "$import_errors"; then
+              category="ISOLATED_DB_CONNECTION"
+            elif grep -Eq 'ERROR [0-9]+' "$import_errors"; then
+              category="ISOLATED_SQL_COMPATIBILITY"
+            fi
+            echo "ISOLATED_SQL_IMPORT_FAILED source_exit=${pipe_status[0]} consumer_exit=${pipe_status[1]} category=$category" >&2
+            exit 1
+          fi
+          rm -f -- "$import_errors"
+          import_errors=""
           table_count=$(docker exec "$label" mariadb --no-defaults -uroot --batch --skip-column-names \
             -e "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA NOT IN ('mysql','performance_schema','information_schema','sys') AND TABLE_TYPE='BASE TABLE'")
           schema_count=$(docker exec "$label" mariadb --no-defaults -uroot --batch --skip-column-names \
