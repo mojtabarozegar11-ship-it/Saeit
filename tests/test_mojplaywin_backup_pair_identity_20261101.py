@@ -6,13 +6,15 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+from types import SimpleNamespace
+from scripts import mojplaywin_backup_stream_cpanel as source_stream
 
 from scripts.mojplaywin_backup_encrypt_vps_gpg import (
     MARKER, backup_set_stem, store,
 )
 from scripts.mojplaywin_recovery_stream_vps import (
-    discover_explicit_pair, explicit_pair_readiness,
+    discover_explicit_pair, explicit_pair_readiness, load, verify_resumable_sql,
 )
 
 PAIR = "mojplaywin_20261101T120000Z_0123456789abcdef"
@@ -65,6 +67,55 @@ class ExplicitPairIdentityTests(unittest.TestCase):
             files_manifest.write_text(json.dumps(metadata))
             with self.assertRaises(RuntimeError):
                 discover_explicit_pair(PAIR, home=base)
+
+    @unittest.skipUnless(shutil.which("gpg"), "Synthetic GPG verification requires gpg")
+    def test_resume_only_verified_sql_and_per_kind_size_limits(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            synthetic = b"fake synthetic SQL; no real database rows\\n" * 80 + MARKER
+            with patch.dict(os.environ, {"MPW_BACKUP_SET_STEM": PAIR}):
+                store(io.BytesIO(synthetic), "mysql", root=base, keyroot=base,
+                      minimum_free=0)
+                store(io.BytesIO(synthetic), "files", root=base, keyroot=base,
+                      minimum_free=0)
+            verified = verify_resumable_sql(PAIR, home=base)
+            self.assertTrue(verified["source_verified"])
+            self.assertEqual(verified["plaintext_bytes"], len(synthetic))
+            self.assertFalse(verified["release_permitted"])
+            with self.assertRaises(RuntimeError):
+                verify_resumable_sql(WRONG, home=base)
+            root = base / ".private-mojplaywin-offhost-backups"
+            sql_manifest = root / (PAIR + "_mysql_gpgv2.manifest.json")
+            metadata = json.loads(sql_manifest.read_text())
+            metadata["plaintext_bytes"] = 17_901_542_305
+            sql_manifest.write_text(json.dumps(metadata))
+            self.assertEqual(load("mysql", home=base, stem=PAIR)[1]
+                             ["plaintext_bytes"], 17_901_542_305)
+            with self.assertRaises(RuntimeError):
+                verify_resumable_sql(PAIR, home=base)  # SHA/size must match decrypted data.
+            files_manifest = root / (PAIR + "_files_gpgv2.manifest.json")
+            metadata = json.loads(files_manifest.read_text())
+            metadata["plaintext_bytes"] = 17_901_542_305
+            files_manifest.write_text(json.dumps(metadata))
+            with self.assertRaisesRegex(RuntimeError, "manifest incomplete"):
+                load("files", home=base, stem=PAIR)
+
+    def test_scoped_tar_nonzero_is_fatal_with_private_safe_reason(self):
+        for code, expected in ((1, "SCOPED_TAR_EXIT_WARNING"),
+                               (2, "SCOPED_TAR_EXIT_FATAL")):
+            with self.subTest(exit_code=code):
+                fake = Mock()
+                fake.stdout = io.BytesIO(b"synthetic archive data")
+                fake.wait.return_value = code
+                fake.poll.return_value = code
+                sink = SimpleNamespace(buffer=io.BytesIO())
+                with patch.object(source_stream.subprocess, "Popen",
+                                  return_value=fake), patch.object(
+                                      source_stream.sys, "stdout", sink):
+                    with self.assertRaisesRegex(RuntimeError, expected):
+                        source_stream.copy_exact_process_stdout(
+                            ["nice", "-n", "15", "tar", "--dereference"])
+
 
     def test_invalid_identity_errors_never_echo_value_to_summary(self):
         with tempfile.TemporaryDirectory() as td:

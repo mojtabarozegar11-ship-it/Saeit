@@ -27,7 +27,8 @@ STEM_RE = re.compile(r"^mojplaywin_(?:20261017|[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16})$
 EXPLICIT_STEM_RE = re.compile(r"^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}$")
 NEW_MANIFEST_RE = re.compile(r"^(mojplaywin_20261021T[0-9]{6}Z_[0-9a-f]{16})_(mysql|files)_gpgv2[.]manifest[.]json$")
 MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
-MAX_PLAINTEXT_BYTES = 12 * 1024**3
+MAX_PLAINTEXT_BYTES = 12 * 1024**3  # Scoped files only.
+MAX_MYSQL_PLAINTEXT_BYTES = 48 * 1024**3  # Matches the producer SQL hard cap.
 
 
 def safe_regular(path, *, private=False):
@@ -67,7 +68,8 @@ def load(kind, home=None, stem=None):
             not isinstance(meta.get("plaintext_sha256"), str) or
             len(meta["plaintext_sha256"]) != 64 or
             not isinstance(meta.get("plaintext_bytes"), int) or
-            not (1024 <= meta["plaintext_bytes"] <= MAX_PLAINTEXT_BYTES)):
+            not (1024 <= meta["plaintext_bytes"] <= (
+                 MAX_MYSQL_PLAINTEXT_BYTES if kind == "mysql" else MAX_PLAINTEXT_BYTES))):
         raise RuntimeError("backup manifest incomplete or invalid")
     key = keyfile.read_bytes()
     if len(key) != 32:
@@ -153,7 +155,7 @@ def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
         assert proc.stdout is not None
         for block in iter(lambda:proc.stdout.read(131072),b""):
             size+=len(block)
-            if size>MAX_PLAINTEXT_BYTES:
+            if size>(MAX_MYSQL_PLAINTEXT_BYTES if kind == "mysql" else MAX_PLAINTEXT_BYTES):
                 raise RuntimeError("stream too large")
             digest.update(block)
             tail=(tail+block)[-len(MARKER):]
@@ -170,6 +172,31 @@ def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
             proc.kill()
             proc.wait()
     return size
+
+
+class _VerifyOnlySink:
+    """Discard decrypted bytes in-process; never print or persist SQL rows."""
+    def write(self, payload):
+        return len(payload)
+
+    def flush(self):
+        pass
+
+
+def verify_resumable_sql(stem, home=None):
+    """Reverify the existing immutable SQL archive before a files-only resume."""
+    if not isinstance(stem, str) or not EXPLICIT_STEM_RE.fullmatch(stem):
+        raise RuntimeError("invalid explicit backup-set identity")
+    _, meta, _, _ = load("mysql", home=home, stem=stem)
+    if (meta.get("backup_set_stem") != stem or
+            meta.get("explicit_backup_set_id") is not True or
+            meta.get("archive_name") != f"{stem}_mysql_{VERSION}.gpg" or
+            meta.get("release_permitted") is not False):
+        raise RuntimeError("backup set provenance mismatch")
+    size = decrypt_to_stdout("mysql", home=home, stem=stem, out=_VerifyOnlySink())
+    return {"classification": "EXISTING_SQL_BACKUP_REVERIFIED_FOR_FILES_RESUME",
+            "source_verified": True, "plaintext_bytes": size,
+            "isolated_restore_performed": False, "release_permitted": False}
 
 
 def readiness(home=None):
@@ -200,6 +227,14 @@ if __name__=="__main__":
         report = explicit_pair_readiness(sys.argv[2])
         print(json.dumps(report, sort_keys=True))
         raise SystemExit(0 if report["both_manifests_selectable"] else 1)
+    if mode == "verify-resume-sql" and len(sys.argv) == 3:
+        try:
+            report = verify_resumable_sql(sys.argv[2])
+        except Exception:
+            print("SQL_RESUME_SOURCE_REJECTED_NO_RELEASE", file=sys.stderr)
+            raise SystemExit(1)
+        print(json.dumps(report, sort_keys=True))
+        raise SystemExit(0)
     try:
         if mode in ("mysql-pair", "files-pair") and len(sys.argv) == 3:
             kind = mode.removesuffix("-pair")
