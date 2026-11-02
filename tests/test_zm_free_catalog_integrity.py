@@ -168,9 +168,52 @@ catch(PDOException $e) {echo "PUBLIC_READ_ONLY=PASS";}
         self.private.parent.rename(redirected)
         self.private.parent.symlink_to(redirected, target_is_directory=True)
         html = self.render()
-        self.assertIn("Store temporarily unavailable", html)
+        self.assertIn("Store module is not available", html)
         self.assertNotIn('href="' + URL + '"', html)
 
+    def test_symlinked_private_php_module_is_never_executed(self):
+        marker = self.home / "malicious_module_ran"
+        outside = self.home / "outside_site_store.php"
+        outside.write_text("<?php file_put_contents(" + repr(str(marker)) + ", 'bad');",
+                           encoding="utf8")
+        module = self.private / "site_store.php"
+        module.unlink()
+        module.symlink_to(outside)
+        html = self.render()
+        self.assertIn("Store module is not available", html)
+        self.assertFalse(marker.exists())
+
+    def test_private_free_status_follows_real_release_integrity(self):
+        with sqlite3.connect(self.dbpath) as db:
+            db.execute("""CREATE TABLE payment_state
+                (id INTEGER PRIMARY KEY, provider TEXT, state TEXT, note TEXT)""")
+            db.execute("""INSERT INTO payment_state VALUES
+                (1,'Bank Shahr','not_configured','No live payment')""")
+        script = self.home / "private_status.php"
+        script.write_text(r"""<?php
+function role(){return 'viewer';}
+function esc($x){return htmlspecialchars((string)$x,ENT_QUOTES,'UTF-8');}
+function tokenInput(){return '';}
+require $argv[1];
+$db=zmStorePublicDb($argv[2]);
+zmStoreRender($db);
+""", encoding="utf8")
+
+        def status():
+            run = subprocess.run(
+                ["php", str(script), str(self.private / "site_store.php"),
+                 str(self.private)],
+                capture_output=True, text=True, timeout=15)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            return run.stdout
+
+        self.assertIn("فایل معتبر؛ قابل نمایش عمومی", status())
+        self.file.write_bytes(b"changed after original release")
+        self.assertIn("غیرفعال یا فایل/مجوز نامعتبر", status())
+        self.assertNotIn("فایل معتبر؛ قابل نمایش عمومی", status())
+        self.file.write_bytes(b"verified original free release")
+        self.update("license_text", "  ")
+        self.assertIn("غیرفعال یا فایل/مجوز نامعتبر", status())
 
     def test_admin_cannot_enable_unverified_paid_draft_but_can_withdraw(self):
         # The legacy toggle may withdraw a published row, not create a paid offer.
