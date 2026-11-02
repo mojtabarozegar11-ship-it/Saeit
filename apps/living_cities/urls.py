@@ -19,6 +19,7 @@ urlpatterns = [
     path("manufacturing/labels/", scoped(api.issue_product_labels)),
     path("manufacturing/delivery/", scoped(api.confirm_product_delivery)),
     path("physical-codes/claim/", scoped(api.claim_code)),
+    path("auth/csrf/", scoped(auth_api.csrf_view)),
     path("auth/login/", scoped(auth_api.login_view)),
     path("auth/logout/", scoped(auth_api.logout_view)),
     path("auth/me/", scoped(auth_api.me_view)),
