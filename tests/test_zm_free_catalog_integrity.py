@@ -72,6 +72,7 @@ class FreeCatalogIntegrity(unittest.TestCase):
         html = self.render()
         self.assertNotIn('href="' + URL + '"', html)
         self.assertNotIn("Verified free seed calculator", html)
+        self.assertIn("کاتالوگ در حال تکمیل", html)
 
     def test_missing_artifact_is_not_advertised(self):
         self.file.unlink()
