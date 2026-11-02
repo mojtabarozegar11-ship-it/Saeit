@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Disposable end-to-end PHP/HTTP tests for isolated IRR bank subledgers.
+"""Disposable PHP/HTTP regression tests for pending-only IRR bank claims.
 
 Never uses live bank credentials, account/card numbers or production data.
 """
@@ -35,6 +35,7 @@ class BankLedgerHTTPTests(unittest.TestCase):
             shutil.copy2(SOURCE / filename, cls.web / filename)
         private = cls.root / ".private/zomorod-business"
         private.mkdir(parents=True)
+        shutil.copy2(SOURCE / "bank_claims.php", private / "bank_claims.php")
         cls.database = private / "management.sqlite3"
         init = subprocess.run(["php", str(cls.web / "app.php"), "--initialize-private-db"],
                               capture_output=True, text=True, timeout=20)
@@ -71,6 +72,18 @@ class BankLedgerHTTPTests(unittest.TestCase):
         assert status == 303
         cls.admin_cookie = cls.cookie(headers)
         with sqlite3.connect(cls.database) as db:
+            db.executescript("""CREATE TABLE IF NOT EXISTS bank_receipt_claims (
+                id INTEGER PRIMARY KEY,
+                invoice_id INTEGER NOT NULL REFERENCES invoices(id),
+                bank_account_id INTEGER NOT NULL REFERENCES ledger_accounts(id),
+                amount INTEGER NOT NULL CHECK(amount>0),
+                claimed_on TEXT NOT NULL,
+                external_ref TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending' CHECK(status='pending'),
+                created_by INTEGER NOT NULL REFERENCES users(id),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(bank_account_id,external_ref)
+            );""")
             cls.actor_id = db.execute("SELECT id FROM users WHERE username='bank_admin_test'").fetchone()[0]
             db.execute("INSERT INTO users(username,password_hash,role,active) VALUES('bank_viewer_test','disabled','viewer',1)")
             db.execute("INSERT INTO parties(name,kind) VALUES('Synthetic customer','customer')")
@@ -143,7 +156,7 @@ class BankLedgerHTTPTests(unittest.TestCase):
 
     def payment_form(self, token: str, reference: str, *, bank: str = "1011",
                      amount: str = "1200.00", invoice: int | None = None) -> dict[str,str]:
-        return {"csrf":token,"action":"payment","invoice_id":str(invoice or self.invoice),
+        return {"csrf":token,"action":"claim","invoice_id":str(invoice or self.invoice),
                 "bank_code":bank,"amount":amount,"date":"2026-11-02","evidence":reference}
 
     def test_01_anonymous_is_denied(self) -> None:
@@ -168,45 +181,44 @@ class BankLedgerHTTPTests(unittest.TestCase):
                              [('1011','asset'),('1012','asset')])
             self.assertEqual(db.execute("SELECT COUNT(*) FROM sqlite_master WHERE name='bank_payment_evidence'").fetchone()[0],1)
 
-    def test_03_invoice_receipt_uses_selected_bank_and_is_balanced(self) -> None:
+    def test_03_claim_does_not_settle_invoice_or_post_ledger(self) -> None:
         token=self._setup_banks()
+        before=(self.count("invoice_payments"),self.count("journal_entries"),
+                self.count("journal_lines"))
         status,headers,_=self.http("POST",cookie=self.admin_cookie,
                                    form=self.payment_form(token,"synthetic-ref-unique-001",bank="1012"))
         self.assertEqual(status,303)
         with sqlite3.connect(self.database) as db:
-            result=db.execute("SELECT p.id,p.entry_id,b.bank_account_id FROM invoice_payments p JOIN bank_payment_evidence b ON b.payment_id=p.id WHERE b.evidence='synthetic-ref-unique-001'").fetchone()
-            self.assertIsNotNone(result)
-            payment_id,entry_id,account_id=result
-            self.assertEqual(db.execute("SELECT code FROM ledger_accounts WHERE id=?",(account_id,)).fetchone()[0],'1012')
-            lines=db.execute("SELECT a.code,l.debit,l.credit FROM journal_lines l JOIN ledger_accounts a ON a.id=l.account_id WHERE l.entry_id=? ORDER BY l.id",(entry_id,)).fetchall()
-            self.assertEqual(lines,[('1012',120000,0),('1100',0,120000)])
-            self.assertEqual(db.execute("SELECT SUM(debit)-SUM(credit) FROM journal_lines WHERE entry_id=?",(entry_id,)).fetchone()[0],0)
-            self.assertEqual(db.execute("SELECT user_id,verb,subject,entity_id FROM audit_events ORDER BY id DESC LIMIT 1").fetchone(),
-                             (self.actor_id,'create','bank-invoice-payment',payment_id))
+            result=db.execute("SELECT c.invoice_id,c.amount,c.status,a.code FROM bank_receipt_claims c JOIN ledger_accounts a ON c.bank_account_id=a.id WHERE c.external_ref='synthetic-ref-unique-001'").fetchone()
+            self.assertEqual(result,(self.invoice,120000,'pending','1012'))
+            self.assertEqual(db.execute("SELECT verb,subject FROM audit_events ORDER BY id DESC LIMIT 1").fetchone(),('submit','unverified-bank-claim'))
+        self.assertEqual((self.count("invoice_payments"),self.count("journal_entries"),
+                          self.count("journal_lines")),before)
 
-    def test_04_duplicate_reference_does_not_post_twice(self) -> None:
+    def test_04_duplicate_reference_cannot_create_duplicate_claim(self) -> None:
         token=self._setup_banks()
         first=self.payment_form(token,"synthetic-idempotency-unique-002",bank="1011",amount="100.00")
         status,_,_=self.http("POST",cookie=self.admin_cookie,form=first)
         self.assertEqual(status,303)
-        before=self.count("invoice_payments")
-        status,_,body=self.http("POST",cookie=self.admin_cookie,
-                                form=first)
+        before=self.count("bank_receipt_claims")
+        status,_,body=self.http("POST",cookie=self.admin_cookie,form=first)
         self.assertEqual(status,409)
         self.assertIn("قبلاً",body)
-        self.assertEqual(self.count("invoice_payments"),before)
+        self.assertEqual(self.count("bank_receipt_claims"),before)
+        self.assertEqual(self.count("invoice_payments"),0)
 
-    def test_05_invalid_bank_currency_and_overpayment_are_rejected(self) -> None:
+    def test_05_bad_bank_currency_and_overclaim_rejected(self) -> None:
         token=self._setup_banks()
-        before=self.count("invoice_payments")
-        for form in (
-            self.payment_form(token,"synthetic-bad-bank",bank="1010"),
-            self.payment_form(token,"synthetic-bad-usd",invoice=self.usd_invoice),
-            self.payment_form(token,"synthetic-overpay",amount="9000000.00"),
+        before=self.count("bank_receipt_claims")
+        for form,code in (
+            (self.payment_form(token,"synthetic-bad-bank",bank="1010"),422),
+            (self.payment_form(token,"synthetic-bad-usd",invoice=self.usd_invoice),422),
+            (self.payment_form(token,"synthetic-overpay",amount="9000000.00"),409),
         ):
             status,_,_=self.http("POST",cookie=self.admin_cookie,form=form)
-            self.assertEqual(status,422)
-        self.assertEqual(self.count("invoice_payments"),before)
+            self.assertEqual(status,code)
+        self.assertEqual(self.count("bank_receipt_claims"),before)
+        self.assertEqual(self.count("invoice_payments"),0)
 
     def test_06_bank_ids_never_appear_in_source_or_http(self) -> None:
         source=(SOURCE/"banking.php").read_text()
