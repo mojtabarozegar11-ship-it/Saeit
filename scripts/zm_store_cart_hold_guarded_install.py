@@ -135,6 +135,7 @@ def rollback(home, run_id, *, production=True):
     with lock.open("a+b") as handle:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
         manifest = private / ".zm-cart-hold-releases" / (run_id + ".json")
+        directory(manifest.parent)
         regular(manifest)
         data = json.loads(manifest.read_text(encoding="utf8"))
         target = store / "cart"
@@ -160,11 +161,18 @@ if __name__ == "__main__":
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--sha256", required=True)
-    parser.add_argument("--apply", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--apply", action="store_true")
+    mode.add_argument("--rollback", action="store_true")
     parser.add_argument("--approval", default="")
     args = parser.parse_args()
     home = Path("/home/zomorod2")
-    if args.apply:
+    if args.rollback:
+        if args.approval != "ROLLBACK_DISABLED_CART_ONLY":
+            raise SystemExit("OWNER_ROLLBACK_APPROVAL_REQUIRED")
+        rollback(home, args.run_id)
+        print("ZM_CART_HOLD_OWNED_ROLLBACK=PASS")
+    elif args.apply:
         if args.approval != "INSTALL_DISABLED_CART_ONLY":
             raise SystemExit("OWNER_RELEASE_APPROVAL_REQUIRED")
         print(json.dumps(install(home, args.source, args.run_id, args.sha256), ensure_ascii=False))
