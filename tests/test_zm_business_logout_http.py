@@ -394,5 +394,42 @@ class LogoutHTTPTests(unittest.TestCase):
 
 
 
+    def test_every_core_desk_page_is_reachable_and_optional_sources_fail_closed(self) -> None:
+        """Navigation acceptance for the entire logged-in accounting and admin desk."""
+        expected = {
+            "dashboard": "پایش اجزای میز مدیریت",
+            "accounts": "کدینگ حساب‌ها",
+            "journal": "دفتر روزنامه",
+            "trial": "تراز آزمایشی",
+            "parties": "مشتریان و تأمین‌کنندگان",
+            "invoices": "فاکتورهای فروش و خرید",
+            "payments": "دریافت‌ها و پرداخت‌های ثبت‌شده",
+            "inventory": "کالاها و موجودی تعدادی",
+            "employees": "پرسنل",
+            "documents": "نامه‌ها و مکاتبات اداری",
+            "projects": "پروژه‌های شرکت",
+            "approval_register": "دفتر مصوبات",
+            "audit": "ردپای عملیات ثبت‌شده",
+            "security": "تغییر گذرواژه حساب",
+            "users": "دسترسی کاربران",
+        }
+        for page, marker in expected.items():
+            with self.subTest(page=page):
+                status, _, html = self.request(
+                    "GET", "/app.php?page=" + page, cookie=self.cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertIn(marker, html)
+                self.assertNotIn("درخواست انجام نشد", html)
+        for page in ("store_manager", "agent_center", "chatgpt_reports"):
+            with self.subTest(optional_page=page):
+                status, _, html = self.request(
+                    "GET", "/app.php?page=" + page, cookie=self.cookie
+                )
+                # In the isolated fixture no optional private module exists.
+                self.assertEqual(status, 503)
+                self.assertIn("درخواست انجام نشد", html)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
