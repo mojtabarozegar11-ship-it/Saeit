@@ -33,6 +33,31 @@ class VpsRuntimePrerequisiteTests(unittest.TestCase):
         self.assertNotIn("recovery-key.bin", str(report))
         self.assertNotIn(str(self.base), str(report))
 
+    def test_failed_owned_partial_is_counted_and_blocks_repeat(self):
+        backup = self.base / ".private-mojplaywin-offhost-backups"
+        backup.mkdir(mode=0o700)
+        partial = backup / "mojplaywin_20261102T050000Z_0123456789abcdef_mysql_gpgv2.gpg.partial"
+        partial.write_bytes(b"synthetic incomplete ciphertext")
+        partial.chmod(0o600)
+        report = self.probe()
+        self.assertEqual(report["failed_private_partial_count"], 1)
+        self.assertEqual(report["failed_private_partial_bytes"], partial.stat().st_size)
+        self.assertFalse(report["failed_private_partial_metadata_unsafe"])
+        self.assertFalse(report["owner_armed_backup_runtime_prerequisites_ready"])
+        self.assertNotIn(partial.name, str(report))
+        partial.unlink()
+        self.assertTrue(self.probe()["owner_armed_backup_runtime_prerequisites_ready"])
+
+    def test_symlink_named_like_partial_blocks_repeat(self):
+        backup = self.base / ".private-mojplaywin-offhost-backups"
+        backup.mkdir(mode=0o700)
+        other = self.base / "synthetic"
+        other.write_bytes(b"fixture")
+        (backup / "mojplaywin_20261102T050000Z_0123456789abcdef_files_gpgv2.gpg.partial").symlink_to(other)
+        report = self.probe()
+        self.assertTrue(report["failed_private_partial_metadata_unsafe"])
+        self.assertFalse(report["owner_armed_backup_runtime_prerequisites_ready"])
+
     def test_wrong_key_size_or_permissions_fail_closed(self):
         self.key.write_bytes(b"S" * 31)
         self.assertFalse(self.probe()["owner_armed_backup_runtime_prerequisites_ready"])
