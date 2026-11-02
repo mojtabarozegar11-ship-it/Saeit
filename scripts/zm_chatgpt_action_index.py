@@ -89,7 +89,15 @@ def parse_block(body: str, report_code: str):
         aid, title = item.get("id"), item.get("title_fa")
         state, evidence = item.get("status"), item.get("evidence_url")
         impact = item.get("impact_fa", "")
-        if (not isinstance(aid, str) or ACTION_ID.fullmatch(aid) is None or aid in seen
+        # Historical receipts remain immutable. For reports 05-0018 onward,
+        # the action ID must belong to this exact numbered report, not a date.
+        # Do not reclassify old, already indexed receipts during this upgrade.
+        numbered_id = (int(report_code.split("-")[1]) < 18 or (
+            isinstance(aid, str) and re.fullmatch(
+                re.escape("ZM" + report_code) + r"-A(?:0[1-9]|1[0-9]|20)", aid
+            ) is not None
+        ))
+        if (not isinstance(aid, str) or ACTION_ID.fullmatch(aid) is None or not numbered_id or aid in seen
                 or not isinstance(title, str) or not 8 <= len(title.encode("utf-8")) <= 350
                 or not isinstance(impact, str) or len(impact.encode("utf-8")) > 500
                 or state not in STATUSES or not isinstance(evidence, str)
