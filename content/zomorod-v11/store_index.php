@@ -8,7 +8,7 @@ header('X-Content-Type-Options: nosniff');
 header('Cache-Control: private, no-store, max-age=0');
 if(!is_file($lib)){http_response_code(503);echo 'Store module is not available';exit;}
 require_once $lib;
-try{$db=zmStorePublicDb($private);$free=$db->query('SELECT title,description,sku,download_path,artifact_sha256,license_text FROM free_digital_products WHERE enabled=1 AND price_irr=0 ORDER BY id DESC LIMIT 100')->fetchAll();}
+try{$db=zmStorePublicDb($private);$db->query('SELECT 1 FROM products LIMIT 1');$free=$db->query('SELECT title,description,sku,download_path,artifact_sha256,license_text FROM free_digital_products WHERE enabled=1 AND price_irr=0 ORDER BY id DESC LIMIT 100')->fetchAll();}
 catch(Throwable $e){http_response_code(503);echo 'Store temporarily unavailable';exit;}
 function storeEsc(string $x):string{return htmlspecialchars($x,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
 /** Only advertise an enabled free artifact while its exact on-disk release matches the ledger. */
