@@ -146,6 +146,17 @@ def publish(run,src_path):
  print('MPW_GUEST_RELEASE=APPLIED;MODE='+('UPGRADE' if upgrading else 'INSTALL')+
        ';FILES='+('1' if upgrading else '3')+';ORDERS_CREATED=0;PAYMENTS_CREATED=0')
 
+def publish_onefile(run,src_path):
+ guard()
+ live=TARGETS['guest']
+ expected='7693254e4ed72141b6de7fc283c5a3214159ea49d838318337e47e86953f5f2f'
+ if live.is_symlink() or not live.is_file() or digest(live.read_bytes())!=expected:
+  fail('ONE_FILE_EXACT_OLD_SHA_REQUIRED')
+ old,new,needed=plan(source_from(src_path))
+ if not needed or any(new[k]!=old[k] for k in ('pages','web')):
+  fail('ONE_FILE_ONLY_PLAN_REQUIRED')
+ publish(run,src_path)
+
 def preview(src_path):
  guard();src=source_from(src_path);old,new,needed=plan(src)
  print('MPW_GUEST_RELEASE_PREFLIGHT='+json.dumps({'needs_install':needed,
@@ -220,6 +231,7 @@ def rollback(run):
 if __name__=='__main__':
  if len(sys.argv)==3 and sys.argv[1]=='preview': preview(sys.argv[2])
  elif len(sys.argv)==4 and sys.argv[1]=='publish': publish(sys.argv[2],sys.argv[3])
+ elif len(sys.argv)==4 and sys.argv[1]=='publish-onefile': publish_onefile(sys.argv[2],sys.argv[3])
  elif len(sys.argv)==2 and sys.argv[1]=='verify': verify()
  elif len(sys.argv)==3 and sys.argv[1]=='rollback': rollback(sys.argv[2])
- else: raise SystemExit('preview GUEST_MODULE | publish RUN_ID GUEST_MODULE | verify | rollback RUN_ID')
+ else: raise SystemExit('preview GUEST_MODULE | publish-onefile RUN_ID GUEST_MODULE | verify | rollback RUN_ID')
