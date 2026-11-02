@@ -56,6 +56,30 @@ jobs:
           ps -eo comm= | sort | uniq -c | grep -Ei 'python|cron|supervisor|celery|factory|worker' || true
           echo "C03_USER_CRON_FACTORY_ENTRY_COUNT"
           (crontab -l 2>/dev/null || true) | grep -Eic 'factory|autonomous-product|ten-generation' || true
+          echo "C03_CRON_ACTIVE_AND_QUEUE_CANDIDATES"
+          python3 - <<'PY'
+          import hashlib,re,subprocess
+          from pathlib import Path
+          p=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8)
+          matches=[s.strip() for s in p.stdout.splitlines() if re.search(r"factory|autonomous-product|ten-generation",s,re.I)]
+          active=[s for s in matches if s and not s.startswith("#")]
+          print("C03_CRON_MATCHED_ALL="+str(len(matches)))
+          print("C03_CRON_ACTIVE_FACTORY="+str(len(active)))
+          print("C03_CRON_COMMENTED_FACTORY="+str(len(matches)-len(active)))
+          for s in active[:30]:
+              digest=hashlib.sha256(s.encode()).hexdigest()[:16]
+              names=re.findall(r"(?:factory|autonomous)[A-Za-z0-9_.-]*[.](?:py|sh|service)",s,re.I)
+              print("C03_CRON_ENTRY="+digest+":"+(",".join(names[:3]) or "UNCLASSIFIED")+":LIMIT2="+str(bool(re.search(r"--limit[ ]+2(?:[ ]|$)",s))))
+          base=Path.home()/"factory-runtime"
+          for folder in (base/"operations",base/"private"/"autonomous-product-cycle"):
+              try:
+                  for x in sorted(folder.iterdir()):
+                      if x.is_symlink(): continue
+                      if re.search(r"queue|state|status|receipt|hold|stop|lock|checkpoint",x.name,re.I):
+                          print("C03_STATE_CANDIDATE="+x.name+":"+("directory" if x.is_dir() else "file"))
+              except OSError as e:
+                  print("C03_STATE_LIST_ERROR="+type(e).__name__)
+          PY
           echo "C03_SYSTEM_TIMER_FACTORY_ENTRY_COUNT"
           (systemctl list-timers --all --no-pager --no-legend 2>/dev/null || true) | grep -Eic 'factory|autonomous|generation' || true
           echo "C03_LOCK_OBSERVATIONS"
