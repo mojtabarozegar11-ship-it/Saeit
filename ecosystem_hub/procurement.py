@@ -13,12 +13,14 @@ from .models import MaterialRequirement, ProcurementNeed, ProductionOrder
 
 def material_shortages(order):
     recipe = order.formula
+    if order.unit_id != recipe.unit_id:
+        raise ValidationError("فرمول سفارش متعلق به واحد دیگری است.")
+    if recipe.product.unit_id != order.unit_id:
+        raise ValidationError("محصول نهایی فرمول متعلق به واحد دیگری است.")
     if not order.unit.active:
         raise ValidationError("برنامه‌ریزی تأمین برای واحد غیرفعال مجاز نیست.")
     if not recipe.product.active:
         raise ValidationError("محصول نهایی غیرفعال است؛ فرمول تولید باید بازبینی شود.")
-    if order.unit_id != recipe.unit_id:
-        raise ValidationError("فرمول سفارش متعلق به واحد دیگری است.")
     if order.quantity <= 0 or recipe.yield_quantity <= 0:
         raise ValidationError("مقدار تولید و بازده فرمول باید مثبت باشند.")
     items = []
