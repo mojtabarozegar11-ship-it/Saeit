@@ -24,7 +24,7 @@ class SnapshotSafetyTests(unittest.TestCase):
         self.assertNotIn(b"issuecomment-199", p)
 
     def test_explicit_run_id_prefix_is_imported_without_rewriting_source(self):
-        original = HEADER.replace(" | ZM-CTRL-", " | run_id ZM-CTRL-", 1) + "\\nثبت امن نسخه گزارش فارسی.\\n"
+        original = HEADER.replace(" | ZM-CTRL-", " | run_id ZM-CTRL-", 1) + "\nثبت امن نسخه گزارش فارسی.\n"
         result, payload = build_snapshot([row(900, original)])
         self.assertEqual(result["count"], 1)
         self.assertEqual(result["items"][0]["report_code"], "05-0001")
