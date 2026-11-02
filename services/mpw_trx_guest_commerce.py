@@ -138,10 +138,12 @@ def _identity(request, *, create=False):
 
 
 def _install_cookie(response, token):
+    # Personalized purchase pages must vary on Cookie, including existing sessions.
+    from django.utils.cache import patch_vary_headers
+    patch_vary_headers(response, ("Cookie",))
     if token:
         response.set_cookie(COOKIE, token, max_age=COOKIE_AGE, path=COOKIE_PATH,
                             secure=True, httponly=True, samesite="Lax")
-        response["Vary"] = "Cookie"
     response["Cache-Control"] = "private, no-store, max-age=0"
     response["Referrer-Policy"] = "same-origin"
     response["X-Content-Type-Options"] = "nosniff"
@@ -197,7 +199,6 @@ def _checkout_page(request, product_id, pages_namespace):
 def patch_public(namespace):
     from django.views.decorators.cache import never_cache
     from django.views.decorators.http import require_GET
-    import inspect
 
     old_checkout = namespace.get("product_checkout")
     old_purchases = namespace.get("purchases")
@@ -210,7 +211,35 @@ def patch_public(namespace):
     @never_cache
     @require_GET
     def purchases(request):
-        return _dispatch(request, inspect.unwrap(old_purchases), (), {})
+        # Missing or expired owner cookie is a recoverable browser state, not a missing URL.
+        if not _host_ok(request):
+            raise Http404
+        current = getattr(request, "user", None)
+        authenticated = bool(current is not None and getattr(current, "is_authenticated", False))
+        if not authenticated and _read_user(request) is None:
+            from django.http import HttpResponse
+            response = HttpResponse(
+                '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+                '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                '<title>Purchase recovery | MojPlayWin</title></head><body>'
+                '<main><h1>TRX purchase recovery</h1>'
+                '<p>No active purchase session was found in this browser. '
+                'Your orders are private and require the original browser session.</p>'
+                '<p>If you already paid, do not pay again. Contact purchase support '
+                'with your invoice reference and transaction hash. '
+                'Never share a wallet recovery phrase or private key.</p>'
+                '<p><a href="/store/">Return to store</a> | '
+                '<a href="mailto:support@mojplaywin.com">Purchase support</a></p>'
+                '</main></body></html>',
+                content_type="text/html; charset=utf-8",
+                status=200,
+            )
+            response["Content-Security-Policy"] = (
+                "default-src 'none'; base-uri 'none'; form-action 'none'; "
+                "frame-ancestors 'none'")
+            return _install_cookie(response, None)
+        # Preserve the original view decorators and permission checks.
+        return _dispatch(request, old_purchases, (), {})
 
     namespace["product_checkout"] = never_cache(require_GET(product_checkout))
     namespace["purchases"] = purchases
