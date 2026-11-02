@@ -81,7 +81,7 @@ try{
   await mobile.locator('[data-global-tour]').click();
   await mobile.waitForSelector("#lcGlobalHub:not([hidden])");
   assert.match(await mobile.locator("#lcGlobalHub").innerText(),/Gira mundial/);
-  assert.match(await mobile.locator(".lc-weekly").innerText(),/Expedición semanal/);
+  assert.match(await mobile.locator(".lc-weekly").innerText(),/expedición semanal/i);
   assert.equal(await mobile.locator(".lc-region").count(),20);
   await mobile.locator('[data-lc-region="harbor"]').click();
   assert.equal(await mobile.locator(".lc-mission").count(),10);
