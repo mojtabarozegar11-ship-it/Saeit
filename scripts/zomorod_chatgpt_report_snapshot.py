@@ -15,7 +15,31 @@ import tempfile
 from datetime import datetime, timezone
 
 from enterprise_portal.github_chatgpt_reports import extract_receipt
-from enterprise_portal.management.commands.sync_chatgpt_action_reports import fetch_issue_comments
+from enterprise_portal.github_chatgpt_reports import PUBLIC_ISSUE_API
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+
+
+def fetch_issue_comments(*, pages):
+    headers = {"User-Agent": "ZM-Private-ReportSnapshot/1.0", "Accept": "application/vnd.github+json"}
+    token = os.environ.get("ZM_GITHUB_REPORTS_READ_TOKEN", "")
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    for page in range(1, pages + 1):
+        try:
+            with urlopen(Request(PUBLIC_ISSUE_API + f"?per_page=100&page={page}", headers=headers), timeout=10) as response:
+                data = response.read(2_000_001)
+        except (HTTPError, URLError, TimeoutError, OSError) as e:
+            raise ValueError("GITHUB_REPORT_SOURCE_UNAVAILABLE") from e
+        if len(data) > 2_000_000:
+            raise ValueError("SOURCE_PAGE_TOO_LARGE")
+        items = json.loads(data)
+        if not isinstance(items, list) or len(items) > 100:
+            raise ValueError("SOURCE_PAGE_INVALID")
+        yield from items
+        if len(items) < 100:
+            return
+    raise ValueError("SOURCE_PAGINATION_UNFINISHED")
 
 SOURCE = "github:mojtabarozegar11-ship-it/Saeit:issue:1725"
 FILENAME = "chatgpt_reports_snapshot.json"
