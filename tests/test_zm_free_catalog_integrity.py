@@ -253,5 +253,39 @@ echo 'PRIVATE_PAID_STATUS=PASS';
         self.assertIn("PRIVATE_PAID_STATUS=PASS", run.stdout)
 
 
+    def test_paid_draft_rejects_free_product_sku_collision(self):
+        php = r"""<?php
+$sku='shared_catalog_sku';
+function req($name){
+  global $sku;
+  $v=['sku'=>$sku,'title'=>'Paid draft','description'=>'Private draft','price_irr'=>'1500'];
+  return $v[$name]??'';
+}
+function mbSafeLen($s){return strlen($s);}
+function bail($message){throw new RuntimeException($message);}
+require $argv[1];
+$db=zmStoreDb($argv[2]);
+$db->exec("INSERT INTO free_digital_products
+ (sku,title,description,download_path,artifact_sha256,license_text,price_irr,enabled)
+ VALUES('shared_catalog_sku','Free','Existing','/store/free-products/free/index.html',
+ 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','Free use',0,0)");
+try {zmStoreHandle($db,'product_create');exit(61);}
+catch(RuntimeException $e){}
+if((int)$db->query('SELECT COUNT(*) FROM products')->fetchColumn()!==0)exit(62);
+$sku='unique_paid_draft';
+zmStoreHandle($db,'product_create');
+$row=$db->query("SELECT sku,enabled FROM products LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+if(!$row||$row['sku']!=='unique_paid_draft'||(int)$row['enabled']!==0)exit(63);
+echo 'CROSS_CATALOG_SKU=PASS';
+"""
+        script = self.home / "sku_collision.php"
+        script.write_text(php, encoding="utf8")
+        run = subprocess.run(
+            ["php", str(script), str(self.private / "site_store.php"), str(self.private)],
+            capture_output=True, text=True, timeout=15)
+        self.assertEqual(run.returncode, 0, run.stderr + run.stdout)
+        self.assertIn("CROSS_CATALOG_SKU=PASS", run.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()
