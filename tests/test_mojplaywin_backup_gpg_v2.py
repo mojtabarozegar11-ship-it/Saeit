@@ -80,11 +80,15 @@ class RawBackupLimitTests(unittest.TestCase):
     def test_mysql_only_ceiling_raised_without_relaxing_disk_or_file_limits(self):
         from scripts import mojplaywin_backup_stream_cpanel as source
         from scripts import mojplaywin_backup_encrypt_vps_gpg as destination
+        from scripts import mojplaywin_recovery_stream_vps as recovery
         gib = 1024**3
         self.assertEqual(source.MAX_STREAM, 12 * gib)
         self.assertEqual(source.MAX_MYSQL_STREAM, 48 * gib)
         self.assertEqual(destination.MAX_SOURCE_BYTES, 12 * gib)
         self.assertEqual(destination.MAX_MYSQL_SOURCE_BYTES, 48 * gib)
+        self.assertEqual(recovery.MAX_PLAINTEXT_BYTES, 48 * gib)
+        self.assertEqual(source.MAX_MYSQL_STREAM, destination.MAX_MYSQL_SOURCE_BYTES)
+        self.assertEqual(source.MAX_MYSQL_STREAM, recovery.MAX_PLAINTEXT_BYTES)
         self.assertEqual(destination.MAX_ENCRYPTED_BYTES, 12 * gib)
         self.assertEqual(destination.MIN_START_FREE, 10 * gib)
 
