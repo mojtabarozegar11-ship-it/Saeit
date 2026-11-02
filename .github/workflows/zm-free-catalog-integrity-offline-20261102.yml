@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'content/zomorod-v11/store_index.php'
+      - 'content/zomorod-v11/site_store.php'
       - 'tests/test_zm_free_catalog_integrity.py'
       - 'tests/test_zomorod_free_seed_product.py'
       - '.github/workflows/zm-free-catalog-integrity-offline-20261102.yml'
