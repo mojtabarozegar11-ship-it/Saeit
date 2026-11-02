@@ -55,7 +55,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for item in '/living-cities/play/ 200' '/api/living-cities/rewards/moj1-policy/ 200'; do
+          for item in '/living-cities/play/ 200' '/api/living-cities/rewards/moj1-policy/ 200' '/api/living-cities/tycoon/ 401'; do
             read -r route expected_code <<< "$item"
             code="$(curl -sS -L --connect-timeout 6 --max-time 18 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route" || true)"
             echo "MPW_READINESS_HTTP route=$route status=$code expected=$expected_code"
