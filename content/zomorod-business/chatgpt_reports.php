@@ -45,18 +45,75 @@ function zmBusinessActionReceipt(string $body,string $reportCode):array {
     return ['state'=>'valid','actions'=>$actions];
 }
 
-function zmBusinessCommandCenter(SQLite3 $db):void {
+
+/**
+ * Optional derived, non-financial action index. The report source remains
+ * authoritative; the index only rejects replay and malformed machine receipts.
+ * Never upgrade an imported claim to an independently verified business act.
+ */
+function zmBusinessActionIndexStatus(string $private,string $code):array {
+    $missing=['state'=>'missing','unique_total'=>0,'latest_total'=>0,'latest_completed'=>0,'rejections'=>0,'latest_rejection'=>''];
+    $path=$private.'/chatgpt_actions_index.sqlite3';
+    if(!file_exists($path)&&!is_link($path))return $missing;
+    try{
+        if(is_link($private)||is_link($path)||!is_file($path)||!is_readable($path))throw new RuntimeException('unsafe action index path');
+        $stat=lstat($path);
+        if($stat===false||!is_int($stat['size'])||$stat['size']<4096||$stat['size']>500000000||(((int)$stat['mode'])&0077)!==0)throw new RuntimeException('unsafe action index permissions');
+        $index=new SQLite3($path,SQLITE3_OPEN_READONLY);
+        $index->busyTimeout(1500);
+        try{
+            if((int)$index->querySingle('PRAGMA user_version')!==1||
+               $index->querySingle("SELECT value FROM metadata WHERE name='source'")!=='github:mojtabarozegar11-ship-it/Saeit:issue:1725'||
+               $index->querySingle("SELECT value FROM metadata WHERE name='verification'")!=='not_checked')throw new RuntimeException('index identity mismatch');
+            $built=$index->querySingle("SELECT value FROM metadata WHERE name='built_at'");
+            $checked=is_string($built)?strtotime($built):false;
+            if($checked===false||$checked>time()+300)throw new RuntimeException('index timestamp mismatch');
+            $total=(int)$index->querySingle('SELECT COUNT(*) FROM actions');
+            $rejected=(int)$index->querySingle('SELECT COUNT(*) FROM rejected');
+            if($total<0||$total>2000000||$rejected<0||$rejected>100000)throw new RuntimeException('index count invalid');
+            $p=$index->prepare('SELECT COUNT(*) AS n,COALESCE(SUM(CASE WHEN action_status="completed" THEN 1 ELSE 0 END),0) AS completed FROM actions WHERE report_code=:code');
+            if($p===false)throw new RuntimeException('index query failed');
+            $p->bindValue(':code',$code,SQLITE3_TEXT);
+            $result=$p->execute();
+            if($result===false)throw new RuntimeException('index query execution failed');
+            $r=$result->fetchArray(SQLITE3_ASSOC);
+            $check=$index->prepare('SELECT reason FROM rejected WHERE report_code=:code');
+            if($check===false)throw new RuntimeException('index rejection query failed');
+            $check->bindValue(':code',$code,SQLITE3_TEXT);
+            $flag=$check->execute();
+            $reason=$flag===false?false:$flag->fetchArray(SQLITE3_ASSOC);
+            return ['state'=>time()-$checked>10800?'stale':'ready',
+                    'unique_total'=>$total,'latest_total'=>(int)$r['n'],
+                    'latest_completed'=>(int)$r['completed'],
+                    'rejections'=>$rejected,'latest_rejection'=>is_array($reason)?(string)$reason['reason']:''];
+        } finally {$index->close();}
+    }catch(Throwable $e){
+        error_log('ZM ACTION INDEX REJECTED ['.get_class($e).']');
+        return ['state'=>'invalid','unique_total'=>0,'latest_total'=>0,'latest_completed'=>0,'rejections'=>0,'latest_rejection'=>''];
+    }
+}
+
+function zmBusinessCommandCenter(SQLite3 $db,string $private):void {
     $latest=$db->query('SELECT report_code,occurred_at,body,evidence_url FROM reports WHERE substr(report_code,1,2)="05" ORDER BY seq DESC LIMIT 1');
     if($latest===false)throw new RuntimeException('command center latest query failed');
     $report=$latest->fetchArray(SQLITE3_ASSOC);
     $contract=is_array($report)?zmBusinessActionReceipt((string)$report['body'],(string)$report['report_code']):['state'=>'missing','actions'=>[]];
     $labels=['completed'=>'انجام واقعی (ادعای گزارش؛ نیازمند راستی‌آزمایی)','partial'=>'بخشی انجام‌شده','blocked'=>'مسدود','not_started'=>'انجام‌نشده'];
     $claimed=count(array_filter($contract['actions'],static fn($a)=>$a['status']==='completed'));
+    $actionIndex=zmBusinessActionIndexStatus($private,is_array($report)?(string)$report['report_code']:'');
     echo '<section aria-labelledby="zm-command-title"><h2 id="zm-command-title">اتاق فرمان چرخهٔ ساعتی ۰۵</h2>';
     echo '<p class="muted">فرمانده اجرایی این طرح وظیفهٔ زمان‌بندی‌شدهٔ ChatGPT است؛ این صفحه فقط وضعیت و شواهد آن را نمایش می‌دهد. مشاهدهٔ گزارش یا پیوند مدرک، اجرای واقعی و نتیجهٔ تجاری را اثبات نمی‌کند.</p>';
     echo '<div class="grid"><div class="card"><h3>هدف هر اجرای چرخهٔ ۰۵</h3><div class="metric">۲۰ اقدام</div><p class="muted">مستقل، ضروری و غیرتکراری</p></div>';
     echo '<div class="card"><h3>ردیف‌های «انجام‌شده» در رسید ساختاریافتهٔ اخیر</h3><div class="metric">'.$claimed.' / ۲۰</div><p class="muted">صرفاً خوداظهاری منبع؛ نه تأیید مستقل</p></div>';
-    echo '<div class="card"><h3>عملیات مستقلاً تأییدشده از این قالب</h3><div class="metric">۰</div><p class="muted">راستی‌آزمای بیرونی به این نسخه متصل نیست؛ صفر به معنی نبود عملیات واقعی نیست.</p></div></div>';
+    echo '<div class="card"><h3>عملیات مستقلاً تأییدشده از این قالب</h3><div class="metric">۰</div><p class="muted">راستی‌آزمای بیرونی به این نسخه متصل نیست؛ صفر به معنی نبود عملیات واقعی نیست.</p></div>';
+    echo '<div class="card"><h3>اقدامات با شناسه یکتای ثبت‌شده</h3><div class="metric">'.(int)$actionIndex['unique_total'].'</div><p class="muted">منبع خوداظهاری؛ کنترل تکرار، نه اثبات مستقل</p></div></div>';
+    if($actionIndex['state']==='missing')echo '<div class="notice">نمایهٔ مستقل کنترل تکرار هنوز نصب نشده است؛ گزارش‌های متنی قبلی مبنای شمارش قطعی اقدام نیستند.</div>';
+    if($actionIndex['state']==='invalid')echo '<div class="notice danger">نمایهٔ اقدامات نامعتبر است؛ اطلاعات آن شمرده نشد.</div>';
+    if($actionIndex['state']==='stale')echo '<div class="notice danger">نمایهٔ اقدامات بیش از سه ساعت به‌روزرسانی نشده؛ دادهٔ آن قدیمی است.</div>';
+    if($actionIndex['state']==='ready'){
+        echo '<p class="muted">نمایهٔ جلوگیری از تکرار: '.(int)$actionIndex['unique_total'].' شناسهٔ یکتا از کل تاریخچه · '.(int)$actionIndex['rejections'].' گزارش دارای رسید نامعتبر یا تکراری · '.(int)$actionIndex['latest_completed'].' ردیف کامل اظهاریِ غیرتکراری در گزارش آخر (بدون تأیید مستقل).</p>';
+        if($actionIndex['latest_rejection']!=='')echo '<div class="notice danger">رسید جدید به علت ناسازگاری یا تکرار شناسه در تاریخچه رد شد؛ هیچ ردیف آن در نمایه یکتا محاسبه نشده است.</div>';
+    }
     if(is_array($report))echo '<p class="muted">مبنای نمایش: '.esc((string)$report['report_code']).' · '.esc((string)$report['occurred_at']).' · <a href="'.esc((string)$report['evidence_url']).'" target="_blank" rel="noopener noreferrer">منبع شماره‌دار</a></p>';
     if($contract['state']==='missing')echo '<div class="notice">در گزارش اخیر هنوز دفتر اقدامات با قالب استاندارد ثبت نشده است؛ تعداد اقدامات واقعی نامعلوم است. گزارش‌های قبلی به‌صورت خودکار به ۲۰ اقدام تبدیل نمی‌شوند.</div>';
     if($contract['state']==='invalid')echo '<div class="notice danger">رسید ساختاریافته ناسازگار یا ناقص است؛ از شمارش و نمایش ادعاهای آن خودداری شد.</div>';
@@ -336,7 +393,7 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
             echo '<tr><td>'.esc($key.' · '.$name).'</td><td>'.(int)$c['count'].'</td><td>'.esc($c['latest']).'</td><td>'.($key==='05'?'۲۰ اقدام / تحقق احرازنشده':'—').'</td><td>'.($key==='05'?'متصل به دفتر مدیریت ۰۵':($publicDb!==null&&in_array($key,['01','02','04'],true)&&$c['count']>0?'دفتر عمومی ۱۵۱۴ · متصل':'فاقد اتصال خودکار و خصوصی')).'</td></tr>';
         }
         echo '</table></div></section>';
-        zmBusinessCommandCenter($db);
+        zmBusinessCommandCenter($db,$private);
         if($total===0)echo '<p>برای این چرخه هنوز گزارش شماره‌دار از منبع معتبر دریافت نشده است.</p>';
         $limit=25;
         $offset=($page-1)*$limit;
