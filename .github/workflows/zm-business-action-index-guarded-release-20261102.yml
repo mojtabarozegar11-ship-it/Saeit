@@ -145,7 +145,8 @@ jobs:
           test ! -e "$index" && test ! -L "$index"
           test ! -e "$worker" && test ! -L "$worker"
           test ! -e "$root/.chatgpt-actions-index.lock"
-          cmp <(crontab -l) "$backup/crontab.before"
+          crontab -l > "$stage/crontab.current"
+          cmp "$stage/crontab.current" "$backup/crontab.before"
           changed=0
           installed=0
           cron_added=0
@@ -202,7 +203,8 @@ jobs:
           schedule="55 * * * * /usr/bin/python3 $worker/index.py --source $archive --output $index >/dev/null 2>&1 # ZM_CHATGPT_ACTION_INDEX"
           cp "$backup/crontab.before" "$stage/crontab.proposed"
           printf '\n%s\n' "$schedule" >> "$stage/crontab.proposed"
-          cmp <(crontab -l) "$backup/crontab.before"
+          crontab -l > "$stage/crontab.current"
+          cmp "$stage/crontab.current" "$backup/crontab.before"
           crontab "$stage/crontab.proposed"
           cron_added=1
           crontab -l > "$backup/crontab.after"
