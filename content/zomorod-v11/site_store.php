@@ -74,9 +74,9 @@ function zmFactoryDraftsPanel(PDO $db):void {
 function zmStoreRender(PDO $db):void {
  $payment=$db->query('SELECT * FROM payment_state WHERE id=1')->fetch();
  echo '<section><h2>فروشگاه زمرد ملل — پنل مدیریت</h2><p>وضعیت پرداخت: <strong>بانک شهر — '.esc($payment['state']).'</strong>. برای شروع پرداخت بانکی، قرارداد، مشخصات پایانه و مستندات رسمی تأیید پرداخت سروربه‌سرور لازم است. هیچ پرداختی در وضعیت فعلی تأیید نمی‌شود.</p><p><a href="/store/">نمایش فروشگاه عمومی</a></p></section>';
- echo '<section><h2>کاتالوگ محصولات واقعی</h2><div class="scroll"><table><tr><th>شناسه</th><th>محصول</th><th>قیمت (ریال)</th><th>نمایش عمومی</th><th>عملیات</th></tr>';
+ echo '<section><h2>کاتالوگ محصولات واقعی</h2><div class="scroll"><table><tr><th>شناسه</th><th>محصول</th><th>قیمت (ریال)</th><th>وضعیت ثبت خصوصی</th><th>عملیات</th></tr>';
  foreach($db->query('SELECT * FROM products ORDER BY id DESC LIMIT 150')->fetchAll() as $p){
-   echo '<tr><td>'.esc($p['sku']).'</td><td>'.esc($p['title']).'</td><td>'.number_format((int)$p['price_irr']).'</td><td>'.($p['enabled']?'فعال':'پیش‌نویس').'</td><td>';
+   echo '<tr><td>'.esc($p['sku']).'</td><td>'.esc($p['title']).'</td><td>'.number_format((int)$p['price_irr']).'</td><td>'.($p['enabled']?'ردیف قدیمی؛ عرضه عمومی مسدود':'پیش‌نویس؛ عرضه عمومی مسدود').'</td><td>';
    if(role()==='admin' && $p['enabled'])echo '<form method="post">'.tokenInput().'<input type="hidden" name="product_id" value="'.(int)$p['id'].'"><button name="action" value="product_toggle">پنهان‌کردن</button></form>';
    elseif(role()==='admin')echo '<span>انتشار پولی تا احراز حقوق، تحویل و پذیرندگی مسدود است.</span>';
    echo '</td></tr>';
