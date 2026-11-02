@@ -155,7 +155,7 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
         self.assertIn("1 ردیف کامل اظهاریِ غیرتکراری", result.stdout)
         self.assertIn("عملیات مستقلاً تأییدشده از این قالب", result.stdout)
 
-    def test_replayed_action_id_is_not_counted_in_current_receipt(self):
+    def test_foreign_action_id_is_rejected_in_all_recent_receipts(self):
         evidence = "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/" + "a" * 40
         for number in (26, 27):
             code = f"05-{number:04d}"
@@ -169,7 +169,7 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
                 db.execute("UPDATE reports SET body=? WHERE report_code=?", (body, code))
         self.archive.chmod(0o600)
         self.assertEqual(rebuild(self.archive, self.folder / "chatgpt_actions_index.sqlite3"),
-                         (1, 1, 27))
+                         (0, 2, 27))
         result = self.view()
         self.assertEqual(result.returncode, 0, result.stderr[-500:])
         self.assertIn("رسید جدید به علت ناسازگاری یا تکرار شناسه", result.stdout)
