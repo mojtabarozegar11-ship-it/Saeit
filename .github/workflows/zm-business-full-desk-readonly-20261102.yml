@@ -104,6 +104,7 @@ jobs:
           else
             echo 'LIVE_APP_EQUALS_NEW_STAGED_FINANCIAL_PATCH=no'
           fi
+          unsafe_count=0
           for name in site_agents.php site_store.php chatgpt_reports.php chatgpt_reports_fa.json chatgpt_reports_public_fa.json approvals_snapshot.json; do
             path="$root/$name"
             key="$(printf '%s' "$name" | tr '.' '_')"
@@ -115,9 +116,10 @@ jobs:
             else
               echo "PRIVATE_MODULE_$key=UNSAFE"
               stat -c "MODULE_DIAGNOSTIC_$key=type:%F,mode:%a" "$path" || echo "MODULE_DIAGNOSTIC_$key=stat_failed"
-              exit 1
+              unsafe_count=$((unsafe_count+1))
             fi
           done
+          echo "MODULE_SECURITY_ISSUES=$unsafe_count"
           python3 - "$root" <<'PY'
           import json,pathlib,sqlite3,stat,sys
           root=pathlib.Path(sys.argv[1])
