@@ -21,7 +21,8 @@ HOME = Path("/home/zomorod2")
 APP = HOME / "Saeit-staging"
 DOCROOT = HOME / "mojplaywin.com"
 MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
-MAX_STREAM = 12 * 1024**3
+MAX_MYSQL_STREAM = 64 * 1024**3  # Large transactional SQL dumps; still bounded.
+MAX_FILE_STREAM = 12 * 1024**3  # Preserve the smaller filesystem archive limit.
 
 
 def load_connection():
@@ -70,7 +71,7 @@ def base_cmd(p, db, user):
     return cmd
 
 
-def copy_exact_process_stdout(command, *, env=None, verify_after=None):
+def copy_exact_process_stdout(command, *, env=None, verify_after=None, max_bytes=MAX_FILE_STREAM):
     proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                             env=env, bufsize=0)
     total = 0
@@ -82,7 +83,7 @@ def copy_exact_process_stdout(command, *, env=None, verify_after=None):
             if not b:
                 break
             total += len(b)
-            if total > MAX_STREAM:
+            if total > max_bytes:
                 raise RuntimeError("source stream exceeds safety cap")
             if total == len(b):
                 print("BACKUP_SOURCE_STREAM_STARTED", file=sys.stderr, flush=True)
@@ -211,7 +212,7 @@ def stream_mysql():
     if p.port is not None:
         cmd.append("--port="+str(p.port))
     cmd.extend(["--databases", db])
-    copy_exact_process_stdout(cmd, env=env)
+    copy_exact_process_stdout(cmd, env=env, max_bytes=MAX_MYSQL_STREAM)
 
 
 
