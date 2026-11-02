@@ -460,6 +460,63 @@ jobs:
                     (",".join(relevant) if relevant else "NO_RECOGNIZED_PATH"))
           except (OSError, ValueError, subprocess.TimeoutExpired):
               print("MPW_PASSENGER_UAPI_ROOT_SIGNALS=UNAVAILABLE")
+          # Read-only worker metadata: never print PIDs, commands, paths or environment.
+          # Compare process age with the now-confirmed PUBLIC restart marker.
+          try:
+              proc = subprocess.run(
+                  ["ps", "-u", "zomorod2", "-o", "etimes=,comm=,args="],
+                  capture_output=True, timeout=10, check=False, text=True,
+              )
+              if proc.returncode or len(proc.stdout) > 250000:
+                  raise ValueError("PS_UNAVAILABLE")
+              ages = []
+              app_ages = []
+              for line in proc.stdout.splitlines()[:500]:
+                  match = re.match(r"^\s*(\d+)\s+(\S+)\s+(.*)$", line)
+                  if not match:
+                      continue
+                  age = int(match.group(1))
+                  name = match.group(2).lower()
+                  args = match.group(3).lower()
+                  if ("passenger" in name or "passenger" in args
+                          or "wsgi" in args or
+                          ("python" in name and
+                           ("mojplaywin" in args or "saeit-staging" in args))):
+                      ages.append(age)
+                      if "mojplaywin" in args or "saeit-staging" in args:
+                          app_ages.append(age)
+              print("MPW_PROCESS_PASSENGER_LIKE_COUNT=" + str(len(ages)))
+              print("MPW_PROCESS_MOJPLAYWIN_LIKE_COUNT=" + str(len(app_ages)))
+              marker_age = time.time() - (public / "tmp/restart.txt").stat().st_mtime
+              if ages and marker_age >= 0:
+                  old_count = sum(age > marker_age + 10 for age in ages)
+                  print("MPW_PASSENGER_LIKE_OLDER_THAN_RESTART_COUNT=" + str(old_count))
+              else:
+                  print("MPW_PASSENGER_LIKE_OLDER_THAN_RESTART_COUNT=UNKNOWN")
+          except (OSError, ValueError, subprocess.TimeoutExpired):
+              print("MPW_PASSENGER_PROCESS_METADATA=UNAVAILABLE")
+
+          # Honor PassengerRestartDir if a public app-specific override exists.
+          htaccess = small_regular(public / ".htaccess", 100000)
+          if htaccess is not None:
+              config_text = htaccess.decode("utf8", "replace")
+              dirs = re.findall(r"(?im)^\s*PassengerRestartDir\s+([^\r\n#]+)",
+                                config_text)
+              if not dirs:
+                  restart_dir = "DEFAULT_TMP"
+              else:
+                  configured = dirs[-1].strip().strip(chr(39)).strip(chr(34)).rstrip("/")
+                  if configured == "tmp":
+                      restart_dir = "DEFAULT_TMP"
+                  elif configured in (str(public / "tmp"), "mojplaywin.com/tmp"):
+                      restart_dir = "PUBLIC_TMP"
+                  elif configured in (str(app / "tmp"), "Saeit-staging/tmp"):
+                      restart_dir = "STAGING_TMP"
+                  else:
+                      restart_dir = "OTHER"
+              print("MPW_PUBLIC_PASSENGER_RESTART_DIR=" + restart_dir)
+          else:
+              print("MPW_PUBLIC_PASSENGER_RESTART_DIR=UNVERIFIED")
           print("MPW_PRODUCTION_FILE_WRITES=NONE")
           print("MPW_ORDERS_CREATED=0;PAYMENTS_CREATED=0")
           print("CPANEL_SITE_MUTATIONS=NONE")
