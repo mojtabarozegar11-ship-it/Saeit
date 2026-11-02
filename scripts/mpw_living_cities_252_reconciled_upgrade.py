@@ -120,7 +120,7 @@ def landing_html(old):
     html=html.replace("200 evolving world missions",
         "200 evolving world missions and 52 rotating weekly expeditions")
     html=html.replace("<b>200</b>World missions",
-        "<b>252</b>200 world missions + 52 weekly expeditions")
+        "<b>252</b>Total quests (200 world + 52 weekly)")
     return html.encode("utf-8")
 
 def prepare():
