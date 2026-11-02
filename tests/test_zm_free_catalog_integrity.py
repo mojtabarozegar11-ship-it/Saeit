@@ -112,6 +112,47 @@ catch(PDOException $e) {echo "PUBLIC_READ_ONLY=PASS";}
         self.assertIn("خرید آنلاین و برداشت وجه غیرفعال است", html)
         self.assertNotIn("<form", html.lower())
 
+    def test_public_catalogue_rejects_post_before_loading_private_module(self):
+        # A write-like verb must never be accepted as a storefront view.
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        server = subprocess.Popen(
+            ["php", "-S", f"127.0.0.1:{port}", "-t", str(self.home / "public_html")],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            for _ in range(40):
+                try:
+                    req = urllib.request.Request(
+                        f"http://127.0.0.1:{port}/store/index.php",
+                        data=b"action=product_create", method="POST")
+                    urllib.request.urlopen(req, timeout=2)
+                except urllib.error.HTTPError as exc:
+                    self.assertEqual(exc.code, 405)
+                    self.assertEqual(exc.headers.get("Allow"), "GET, HEAD")
+                    self.assertNotIn("Verified free seed calculator",
+                                     exc.read().decode("utf-8"))
+                    break
+                except urllib.error.URLError:
+                    time.sleep(0.1)
+            else:
+                self.fail("Public store did not reject POST with HTTP 405")
+        finally:
+            server.terminate()
+            server.wait(timeout=5)
+
+    def test_conflicting_paid_sku_cannot_appear_as_free_release(self):
+        # A legacy/admin data collision must fail closed in the public view.
+        with sqlite3.connect(self.dbpath) as db:
+            db.execute(
+                "INSERT INTO products(sku,title,description,price_irr,enabled) "
+                "VALUES(?,?,?,?,0)",
+                ("wheat_seed_rate_v1", "Paid duplicate", "Private draft", 1000))
+        html = self.render()
+        self.assertNotIn('href="' + URL + '"', html)
+        self.assertNotIn("Verified free seed calculator", html)
+        self.assertIn("کاتالوگ در حال تکمیل", html)
+
     def test_tampered_artifact_is_not_advertised(self):
         self.file.write_bytes(b"altered content after verified release")
         html = self.render()
