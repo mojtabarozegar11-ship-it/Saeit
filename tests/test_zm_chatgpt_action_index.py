@@ -136,6 +136,32 @@ class ActionIndexSafety(unittest.TestCase):
                 self.assertEqual(parse_block(injected, "05-0020"),
                                  ("invalid_contract", []))
 
+    def test_noncompleted_actions_cannot_carry_completed_evidence(self):
+        # A blocked/partial/not-started item must not display a GitHub
+        # evidence link as though the underlying work were complete.
+        for state in ("partial", "blocked", "not_started"):
+            with self.subTest(status=state):
+                invalid = receipt("05-0021", "ZM05-0021-A01", status=state)
+                self.assertEqual(parse_block(invalid, "05-0021"),
+                                 ("invalid_contract", []))
+                valid = receipt("05-0021", "ZM05-0021-A01",
+                                status=state, url="")
+                self.assertEqual(parse_block(valid, "05-0021")[0], "valid")
+        self.add(21, receipt("05-0021", "ZM05-0021-A01", status="blocked"))
+        self.assertEqual(rebuild(self.archive, self.index), (0, 1, 1))
+
+    def test_persian_action_fields_required_in_structured_receipt(self):
+        valid = receipt("05-0021", "ZM05-0021-A01")
+        for altered in (
+            valid.replace("اصلاح فنی و کاربردی زنده", "English only action"),
+            valid.replace("بهبود محدود با شاهد اولیه", "English only impact"),
+            valid.replace("بهبود محدود با شاهد اولیه", ""),
+        ):
+            with self.subTest(receipt=altered[-75:]):
+                self.assertEqual(parse_block(altered, "05-0021"),
+                                 ("invalid_contract", []))
+        self.assertEqual(parse_block(valid, "05-0021")[0], "valid")
+
     def test_mutated_source_history_fails_without_overwriting_old_index(self):
         self.add(1, receipt("05-0001", "ZM05-0001-A01"))
         rebuild(self.archive, self.index)
