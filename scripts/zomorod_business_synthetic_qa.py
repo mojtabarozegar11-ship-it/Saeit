@@ -141,6 +141,10 @@ fa_file.write_text(json.dumps({
 fa_file.chmod(0o600)
 page=request('GET','chatgpt_reports')
 assert 'گزارش‌های متنی اقدامات ChatGPT' in page
+assert 'پایش پنج چرخهٔ ساعتی' in page
+assert '۲۰ اقدام / تحقق احرازنشده' in page
+assert '01 · مقالات علمی' in page
+assert '05 · فرماندهی کسب‌وکار' in page
 assert '05-0001' in page
 assert 'گزارش فارسی آزمایشی' in page
 assert 'Synthetic private work report' not in page
