@@ -92,8 +92,14 @@ def copy_exact_process_stdout(command, *, env=None, verify_after=None, max_strea
                 progress_mib = current_mib
                 print(f"BACKUP_SOURCE_PROGRESS_MIB={progress_mib}", file=sys.stderr, flush=True)
             sys.stdout.buffer.write(b)
-        if proc.wait(timeout=30):
-            raise RuntimeError("source archive or transactional DB dump failed")
+        exit_code = proc.wait(timeout=30)
+        if exit_code:
+            if "tar" in command:
+                # GNU tar exit 1 commonly denotes changed/unreadable live files.
+                # Treat warnings as fatal: the copied tree is NOT trustworthy.
+                raise RuntimeError("SCOPED_TAR_EXIT_WARNING" if exit_code == 1
+                                   else "SCOPED_TAR_EXIT_FATAL")
+            raise RuntimeError("MYSQL_DUMP_EXIT_NONZERO")
         if verify_after is not None:
             verify_after()  # Before trusted footer; failing streams cannot be accepted.
         sys.stdout.buffer.write(MARKER)
@@ -526,11 +532,20 @@ if __name__ == "__main__":
             code = str(exc) if type(exc) is RuntimeError and str(exc) in safe_codes else "unknown"
             print("SCOPED_PUBLIC_ASSET_PREFLIGHT_FAILED_NO_RELEASE category=" + code, file=sys.stderr)
         else:
-            category = ("MYSQL_RAW_STREAM_CAP_EXCEEDED"
-                        if (len(sys.argv) == 2 and sys.argv[1] == "mysql"
-                            and type(exc) is RuntimeError
-                            and str(exc) == "source stream exceeds safety cap")
-                        else "UNCLASSIFIED")
+            category = "UNCLASSIFIED"
+            if type(exc) is RuntimeError:
+                if str(exc) == "source stream exceeds safety cap":
+                    category = ("MYSQL_RAW_STREAM_CAP_EXCEEDED"
+                                if len(sys.argv) == 2 and sys.argv[1] == "mysql"
+                                else "FILES_RAW_STREAM_CAP_EXCEEDED")
+                elif str(exc) in {
+                    "SCOPED_TAR_EXIT_WARNING", "SCOPED_TAR_EXIT_FATAL",
+                    "SCOPED_PUBLIC_ASSET_DRIFT_DURING_BACKUP",
+                    "MYSQL_DUMP_EXIT_NONZERO",
+                }:
+                    category = str(exc)
+            elif isinstance(exc, BrokenPipeError):
+                category = "SOURCE_PIPE_CLOSED"
             print("SOURCE_BACKUP_STREAM_FAILED_NO_RELEASE category=" + category,
                   file=sys.stderr)
         raise SystemExit(1)
