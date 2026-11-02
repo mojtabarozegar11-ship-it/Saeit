@@ -398,7 +398,8 @@ foreach($bad as $sql){
  }
 }
 if((int)$db->query('SELECT COUNT(*) FROM products')->fetchColumn()!==1)exit(73);
-if((int)$db->query('SELECT COUNT(*) FROM free_digital_products')->fetchColumn()!==1)exit(74);
+if((int)$db->query("SELECT COUNT(*) FROM free_digital_products WHERE sku='free_only'")->fetchColumn()!==1)exit(74);
+if((int)$db->query("SELECT COUNT(*) FROM free_digital_products WHERE sku='paid_only'")->fetchColumn()!==0)exit(75);
 echo 'CROSS_CATALOG_SQLITE_GUARDS=PASS';
 """
         script = self.home / "sku_triggers.php"
