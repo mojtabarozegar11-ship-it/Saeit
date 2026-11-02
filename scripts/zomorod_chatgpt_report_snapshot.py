@@ -71,7 +71,7 @@ def _normalized_rows(comments):
             continue
         seen[row["report_code"]] = row
         rows.append(row)
-    return sorted(rows, key=lambda x: x["comment_id"])
+    return rows
 
 
 def _snapshot_from_rows(rows):
