@@ -12,6 +12,7 @@ from enterprise_portal.models import (
 from enterprise_portal.services import confirm_stock_movement
 from .models import (
     BillOfMaterials, MaterialRequirement, ProcurementNeed, ProductionOrder,
+    WorkCenter,
 )
 from .procurement import material_shortages, prepare_purchase_drafts
 
@@ -203,3 +204,68 @@ class ProcurementIntegrityTests(TestCase):
         self.assertFalse(AuditEvent.objects.filter(
             action="ecosystem_procurement_draft",
         ).exists())
+
+    def test_legacy_cross_unit_work_center_cannot_create_procurement(self):
+        other_unit = BusinessUnit.objects.create(code="mrp-center-other", name="Other Center Unit")
+        foreign_center = WorkCenter.objects.create(
+            unit=other_unit, code="FOREIGN-CENTER", name="Foreign Center",
+        )
+        ProductionOrder.objects.filter(pk=self.order.pk).update(work_center=foreign_center)
+        self.order.refresh_from_db()
+        with self.assertRaises(ValidationError):
+            material_shortages(self.order)
+        with self.assertRaises(ValidationError):
+            prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertFalse(ProcurementNeed.objects.exists())
+        self.assertFalse(AuditEvent.objects.filter(action="ecosystem_procurement_draft").exists())
+        self.assertFalse(JournalEntry.objects.exists())
+
+    def test_inactive_work_center_cannot_create_procurement(self):
+        center = WorkCenter.objects.create(
+            unit=self.unit, code="INACTIVE-CENTER", name="Inactive Center", active=False,
+        )
+        self.order.work_center = center
+        self.order.save(update_fields=("work_center",))
+        with self.assertRaises(ValidationError):
+            material_shortages(self.order)
+        with self.assertRaises(ValidationError):
+            prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertFalse(ProcurementNeed.objects.exists())
+        self.assertFalse(AuditEvent.objects.filter(action="ecosystem_procurement_draft").exists())
+
+    def test_legacy_due_date_before_start_cannot_create_procurement(self):
+        ProductionOrder.objects.filter(pk=self.order.pk).update(
+            planned_start=date(2026, 11, 20), due_date=date(2026, 11, 15),
+        )
+        self.order.refresh_from_db()
+        with self.assertRaises(ValidationError):
+            material_shortages(self.order)
+        with self.assertRaises(ValidationError):
+            prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertFalse(ProcurementNeed.objects.exists())
+        self.assertFalse(AuditEvent.objects.filter(action="ecosystem_procurement_draft").exists())
+
+    def test_legacy_finished_product_as_direct_material_is_rejected(self):
+        MaterialRequirement.objects.filter(pk=self.line.pk).update(item=self.product)
+        self.order.refresh_from_db()
+        with self.assertRaises(ValidationError):
+            material_shortages(self.order)
+        with self.assertRaises(ValidationError):
+            prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertFalse(ProcurementNeed.objects.exists())
+        self.assertFalse(AuditEvent.objects.filter(action="ecosystem_procurement_draft").exists())
+
+    def test_active_same_unit_work_center_keeps_draft_planning_available(self):
+        center = WorkCenter.objects.create(
+            unit=self.unit, code="ACTIVE-CENTER", name="Active Center",
+        )
+        self.order.work_center = center
+        self.order.planned_start = date(2026, 11, 10)
+        self.order.due_date = date(2026, 11, 15)
+        self.order.save(update_fields=("work_center", "planned_start", "due_date"))
+        shortages = material_shortages(self.order)
+        self.assertEqual(shortages[0]["shortage"], Decimal("20"))
+        created = prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertEqual(len(created), 1)
+        self.assertEqual(ProcurementNeed.objects.get(pk=created[0]).status, "draft")
+        self.assertFalse(JournalEntry.objects.exists())
