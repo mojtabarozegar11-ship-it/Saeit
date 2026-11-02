@@ -140,3 +140,37 @@ class ProcurementIntegrityTests(TestCase):
             action="ecosystem_procurement_draft",
         ).count(), 1)
         self.assertFalse(JournalEntry.objects.exists())
+
+    def test_inactive_unit_cannot_generate_purchase_draft(self):
+        BusinessUnit.objects.filter(pk=self.unit.pk).update(active=False)
+        self.unit.refresh_from_db()
+        with self.assertRaises(ValidationError):
+            material_shortages(self.order)
+        with self.assertRaises(ValidationError):
+            prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertFalse(ProcurementNeed.objects.exists())
+        self.assertFalse(AuditEvent.objects.filter(
+            action="ecosystem_procurement_draft",
+        ).exists())
+
+    def test_inactive_material_cannot_generate_purchase_draft(self):
+        InventoryItem.objects.filter(pk=self.material.pk).update(active=False)
+        with self.assertRaises(ValidationError):
+            material_shortages(self.order)
+        with self.assertRaises(ValidationError):
+            prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertFalse(ProcurementNeed.objects.exists())
+        self.assertFalse(AuditEvent.objects.filter(
+            action="ecosystem_procurement_draft",
+        ).exists())
+
+    def test_inactive_finished_product_cannot_generate_purchase_draft(self):
+        InventoryItem.objects.filter(pk=self.product.pk).update(active=False)
+        with self.assertRaises(ValidationError):
+            material_shortages(self.order)
+        with self.assertRaises(ValidationError):
+            prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertFalse(ProcurementNeed.objects.exists())
+        self.assertFalse(AuditEvent.objects.filter(
+            action="ecosystem_procurement_draft",
+        ).exists())
