@@ -22,6 +22,7 @@ import time
 
 SCHEMA = "saeit.factory.strict-serial-fullcycle.v1"
 CHATGPT_REVIEW_SCHEMA = "saeit.factory.chatgpt-independent-review.v1"
+STORE_HANDOFF_SCHEMA = "saeit.factory.private-store-handoff.v1"
 REVIEW_CRITERIA = (
     "scientific_accuracy", "technical_execution", "security_and_privacy",
     "rights_and_licenses", "deliverable_integrity", "commercial_readiness",
@@ -225,7 +226,7 @@ def independently_reviewed(root, ops, order, governance=None):
                 or review.get("order") != order
                 or review.get("decision") != "approved"
                 or review.get("reviewer_id") != "chatgpt-independent"
-                or review.get("reviewer_role") != "qualified_specialist"
+                or review.get("reviewer_role") != "ai_independent_technical_reviewer"
                 or not isinstance(review.get("producer_id"), str)
                 or not review["producer_id"]
                 or review.get("producer_id") != passport_doc.get("producer_id")
@@ -241,6 +242,45 @@ def independently_reviewed(root, ops, order, governance=None):
                 or report_doc.get("blocking_findings") != []):
             return False
         governance.verify_reviewer_signature(root, review)
+        return True
+    except (OSError, ValueError, TypeError, RuntimeError, KeyError, AttributeError):
+        return False
+
+
+def store_handoff_verified(root, ops, order, governance=None):
+    """Keep the same order active until the reviewed version reaches private store.
+
+    The receipt is a private transfer acknowledgment, never a paid order,
+    public listing, owner authorization, or proof of a bank settlement.
+    """
+    if governance is None or not ORDER.fullmatch(order):
+        return False
+    audit = ops.parent / "independent-product-reviews" / order
+    product = root / "product-lifecycle/approved-finished-goods" / order / "product.zip"
+    files = (audit / "review.json", audit / "store-handoff.json",
+             audit / "store-receipt.json", product)
+    try:
+        if audit.is_symlink() or audit.parent.is_symlink() or any(
+                p.is_symlink() or not p.is_file() for p in files):
+            return False
+        handoff = checked_json(files[1], 50_000)
+        store_receipt = checked_json(files[2], 50_000)
+        if (handoff.get("schema") != STORE_HANDOFF_SCHEMA
+                or handoff.get("order") != order
+                or handoff.get("state") != "received_private_in_store"
+                or handoff.get("store_domain") != "zomorodmelal.ir"
+                or handoff.get("reviewer_id") != "store-handoff-operator"
+                or handoff.get("reviewer_role") != "human_approver"
+                or handoff.get("artifact_sha256") != governance.sha(product)
+                or handoff.get("independent_review_sha256") != governance.sha(files[0])
+                or handoff.get("store_receipt_sha256") != governance.sha(files[2])
+                or handoff.get("public_enabled") is not False
+                or handoff.get("payment_recorded") is not False
+                or store_receipt.get("order") != order
+                or store_receipt.get("source_artifact_sha256") != governance.sha(product)
+                or store_receipt.get("state") != "received_private_in_store"):
+            return False
+        governance.verify_reviewer_signature(root, handoff)
         return True
     except (OSError, ValueError, TypeError, RuntimeError, KeyError, AttributeError):
         return False
@@ -303,6 +343,7 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
     if order is None:
         if not all(certified_finished(root, item, governance)
                    and independently_reviewed(root, ops, item, governance)
+                   and store_handoff_verified(root, ops, item, governance)
                    for item in orders):
             raise RuntimeError("STRICT_SERIAL_QUEUE_COMPLETION_UNVERIFIED")
         return {"schema":SCHEMA, "all_complete":True, "stages_executed":0,
@@ -311,10 +352,12 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
     # Dry-run doesn't create a lock or mutate any private inventory.
     if dry_run:
         finished = certified_finished(root, order, governance)
+        reviewed = independently_reviewed(root, ops, order, governance) if finished else False
         return {"schema":SCHEMA, "active_order":order, "tick_number":ticks,
                 "certified":finished,
-                "independent_chatgpt_review_approved":(
-                    independently_reviewed(root, ops, order, governance) if finished else False),
+                "independent_chatgpt_review_approved":reviewed,
+                "private_store_handoff_verified":(
+                    store_handoff_verified(root, ops, order, governance) if reviewed else False),
                 "storage_hold":disk_usage(root).free < RESERVE,
                 "stages_executed":0, "sites_modified":False}
     lock = ops / ".strict-serial-fullcycle.lock"
@@ -331,6 +374,7 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
         if order is None:
             if not all(certified_finished(root, item, governance)
                        and independently_reviewed(root, ops, item, governance)
+                       and store_handoff_verified(root, ops, item, governance)
                        for item in orders):
                 raise RuntimeError("STRICT_SERIAL_QUEUE_COMPLETION_UNVERIFIED")
             return {"schema":SCHEMA, "all_complete":True, "stages_executed":0,
@@ -367,9 +411,12 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                     results[label] = "BLOCKED_" + type(exc).__name__ + ":" + str(exc)[:80]
             certified = certified_finished(root, order, governance)
         review_approved = independently_reviewed(root, ops, order, governance) if certified else False
+        handoff_approved = store_handoff_verified(root, ops, order, governance) if review_approved else False
         if certified and not review_approved:
             results["independent_chatgpt_review"] = "AWAITING_SIGNED_EXTERNAL_REVIEW"
-        next_index = index + 1 if certified and review_approved else index
+        if review_approved and not handoff_approved:
+            results["private_store_handoff"] = "AWAITING_SIGNED_PRIVATE_STORE_RECEIPT"
+        next_index = index + 1 if certified and review_approved and handoff_approved else index
         # A certified product exits the active slot, without silently
         # distributing it to sites whose buyer-delivery gate is not proven.
         all_complete = next_index == len(orders)
@@ -379,6 +426,7 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                        "all_complete":all_complete,
                        "last_order":order, "last_order_certified":certified,
                        "last_order_independently_reviewed":review_approved,
+                       "last_order_private_store_handoff":handoff_approved,
                        "last_cycle_utc":datetime.now(timezone.utc).isoformat(),
                        "stage_results":results, "storage_hold":hold,
                        "independent_approval_required":True,
@@ -387,6 +435,7 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                 "active_order_after_cycle":next_order,
                 "certified_to_private_finished_goods":certified,
                 "independent_chatgpt_review_approved":review_approved,
+                "private_store_handoff_verified":handoff_approved,
                 "stages_executed":sum(v=="EXECUTED" for v in results.values()),
                 "stage_results":results, "storage_hold":hold, "tick_number":ticks+1,
                 "publications":0, "automatic_quality_approvals":0}
