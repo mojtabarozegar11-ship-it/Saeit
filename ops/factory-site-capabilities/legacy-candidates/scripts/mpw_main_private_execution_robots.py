@@ -120,9 +120,15 @@ def editorial_robot(public=EDITORIAL,probe=public_probe):
     require(public.is_dir() and not public.is_symlink(),"EDITORIAL_DIR_UNSAFE")
     paths=[public/"index.html",public/"agents/index.html"]
     discovered=list(public.rglob("index.html"))
-    require(2<=len(discovered)<=15 and not any(p.is_symlink() for p in discovered),
-            "EDITORIAL_DOCUMENT_COUNT_UNSAFE")
-    require(all(p.is_file() and p.stat().st_size<45000 for p in discovered),
+    # Site growth must not disable its own observer. Bound the scan by an
+    # explicit resource budget while retaining per-file and symlink guards.
+    require(2<=len(discovered)<=2048,
+            "EDITORIAL_DOCUMENT_COUNT_UNSAFE:"+str(len(discovered)))
+    require(not any(p.is_symlink() for p in discovered),
+            "EDITORIAL_SYMLINK_UNSAFE")
+    # A bounded 64 KiB per-page ceiling accommodates the verified 49,534-byte
+    # editorial About page without weakening the file/symlink safety checks.
+    require(all(p.is_file() and p.stat().st_size<65536 for p in discovered),
             "EDITORIAL_DOCUMENT_NOT_FILE")
     urls=[]
     malformed=[]
@@ -130,15 +136,33 @@ def editorial_robot(public=EDITORIAL,probe=public_probe):
         contents=doc.read_text("utf8")
         parser=InternalLinkParser();parser.feed(contents)
         for link in parser.links:
-            if link.startswith("/mpw-editorial/"):
-                # Passenger serves physical /index.html files, not folder URLs.
-                if not link.endswith("/index.html"):
+            if not link.startswith("/mpw-editorial/"):
+                continue
+            parsed=urlsplit(link)
+            name=parsed.path.removeprefix("/mpw-editorial/")
+            # Verify canonical HTML files, working directory URLs, and the
+            # single existing commercial inquiry handler. Never accept
+            # traversal, unrecognised PHP endpoints or arbitrary query input.
+            if (parsed.scheme or parsed.netloc or parsed.fragment or
+                not name or "\\" in name or
+                any(part in (".","..") for part in name.split("/"))):
+                malformed.append(link);continue
+            if parsed.path.endswith("/"):
+                if parsed.query:
                     malformed.append(link);continue
-                name=link.removeprefix("/mpw-editorial/")
-                target=public/name
-                if target.is_symlink() or not target.is_file():
-                    malformed.append(link)
-                urls.append(link)
+                name += "index.html"
+            elif parsed.path.endswith("/index.html"):
+                if parsed.query:
+                    malformed.append(link);continue
+            elif parsed.path=="/mpw-editorial/revenue/inquiry.php":
+                if not re.fullmatch(r"service=[a-z0-9]+(?:-[a-z0-9]+)*",parsed.query):
+                    malformed.append(link);continue
+            else:
+                malformed.append(link);continue
+            target=public/name
+            if target.is_symlink() or not target.is_file():
+                malformed.append(link)
+            urls.append(link)
     code,page=probe("/mpw-editorial/index.html","GET")
     reachable=code==200 and b"MojPlayWin" in page
     return {"name":"editorial_integrity","status":"ok" if reachable and not malformed else "warning",
