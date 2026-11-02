@@ -1,0 +1,177 @@
+name: ZM one-time read-only effective PHP database identity proof
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths: [".github/workflows/zm-business-web-identity-probe-20261102.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zm-business-one-time-web-identity-probe
+  cancel-in-progress: false
+jobs:
+  web-identity-probe:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite,sqlite3
+      - name: Validate one-time diagnostic scope
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test -f content/zomorod-business/app.php
+          php -l content/zomorod-business/app.php
+          echo 'DIAGNOSTIC_SCOPE=temporary_readonly_web_php_without_financial_db_writes'
+
+      - name: Configure pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-business-web-identity-probe"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+
+      - name: Prove effective PHP web process can read original ledger with no writes
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zm-business-web-identity-probe"
+          nonce="$(openssl rand -hex 16)"
+          token="$(openssl rand -hex 32)"
+          proof="$(printf '%s' "$token" | sha256sum | awk '{print $1}')"
+          [[ "$nonce" =~ ^[a-f0-9]{32}$ ]]
+          [[ "$token" =~ ^[a-f0-9]{64}$ ]]
+          cleanup() {
+            ssh -F "$d/config" saeit-cpanel bash -se -- "$nonce" <<'CLEAN'
+          set -euo pipefail
+          nonce="$1"
+          [[ "$nonce" =~ ^[a-f0-9]{32}$ ]]
+          file="$HOME/public_html/business/zm-identity-$nonce.php"
+          if test -e "$file" || test -L "$file"; then
+            test -f "$file" && test ! -L "$file"
+            test "$(stat -c %u "$file")" = "$(id -u)"
+            grep -Fq 'ZM_DIAGNOSTIC_ONETIME_READONLY' "$file"
+            rm -f -- "$file"
+          fi
+          test ! -e "$file" && test ! -L "$file"
+          echo 'TEMPORARY_WEB_PROBE=removed'
+          CLEAN
+          }
+          trap 'rc=$?; trap - EXIT; cleanup || exit 1; exit "$rc"' EXIT
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$nonce" "$proof" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          nonce="$1"; proof="$2"
+          [[ "$nonce" =~ ^[a-f0-9]{32}$ ]]
+          [[ "$proof" =~ ^[a-f0-9]{64}$ ]]
+          public="$HOME/public_html/business"
+          test -d "$public" && test ! -L "$public"
+          test "$(stat -c %u "$public")" = "$(id -u)"
+          test -f "$public/index.php" && test ! -L "$public/index.php"
+          file="$public/zm-identity-$nonce.php"
+          test ! -e "$file" && test ! -L "$file"
+          printf "<?php\ndeclare(strict_types=1);\nconst ZM_PROBE_SHA256 = '%s';\n" "$proof" > "$file"
+          cat >> "$file" <<'PHP'
+          // ZM_DIAGNOSTIC_ONETIME_READONLY. Remove immediately after one signed request.
+          ini_set('display_errors','0');
+          header('Content-Type: text/plain; charset=utf-8');
+          header('Cache-Control: no-store, private, max-age=0');
+          header('X-Robots-Tag: noindex, nofollow');
+          header('X-Content-Type-Options: nosniff');
+          if(($_SERVER['REQUEST_METHOD']??'')!=='POST'){http_response_code(404);exit;}
+          $supplied=(string)($_SERVER['HTTP_X_ZM_PROBE']??'');
+          if(!preg_match('/^[a-f0-9]{64}$/D',$supplied)||
+              !hash_equals(ZM_PROBE_SHA256,hash('sha256',$supplied))){http_response_code(404);exit;}
+          register_shutdown_function(static function():void{@unlink(__FILE__);});
+          $path='/home/zomorod2/.private/zomorod-business/management.sqlite3';
+          if(!is_file($path)||is_link($path)||!is_readable($path)||filesize($path)<4096){
+              http_response_code(503);echo "WEB_DB_READONLY_QUERY=unavailable\n";exit;
+          }
+          try{
+              if(!class_exists('SQLite3'))throw new RuntimeException('SQLite3 not available');
+              $db=new SQLite3($path,SQLITE3_OPEN_READONLY);
+              $db->busyTimeout(3000);
+              $found=$db->querySingle("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='users')");
+              $db->close();
+              if((int)$found!==1)throw new RuntimeException('Required table missing');
+              echo "WEB_DB_READONLY_QUERY=ok\n";
+              echo 'WEB_PHP_VERSION='.PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION."\n";
+              if(function_exists('posix_geteuid')){
+                  $same=(posix_geteuid()===fileowner($path));
+                  echo 'WEB_EUID_MATCHES_DB_OWNER='.($same?'yes':'no')."\n";
+              }else{
+                  echo "WEB_EUID_MATCHES_DB_OWNER=unavailable\n";
+              }
+              echo 'WEB_DB_AND_DIRECTORY_WRITABLE='.(is_writable($path)&&is_writable(dirname($path))?'yes':'no')."\n";
+          }catch(Throwable $e){
+              http_response_code(503);echo "WEB_DB_READONLY_QUERY=unavailable\n";
+          }
+          PHP
+          chmod 600 "$file"
+          phpbin="$(command -v php || echo /opt/cpanel/ea-php82/root/usr/bin/php)"
+          "$phpbin" -l "$file" >/dev/null
+          echo 'TEMPORARY_WEB_PROBE=prepared'
+          REMOTE
+          code="$(curl -sSL --connect-timeout 8 --max-time 20 -o "$d/web-proof.txt" -w '%{http_code}' -X POST -H "X-ZM-Probe: $token" "https://zomorodmelal.ir/business/zm-identity-$nonce.php")"
+          test "$code" = 200
+          grep -Fxq 'WEB_DB_READONLY_QUERY=ok' "$d/web-proof.txt"
+          for key in WEB_PHP_VERSION WEB_EUID_MATCHES_DB_OWNER WEB_DB_AND_DIRECTORY_WRITABLE; do
+            value="$(sed -n "s/^$key=//p" "$d/web-proof.txt")"
+            [[ "$value" =~ ^[A-Za-z0-9_.-]{1,30}$ ]]
+            echo "$key=$value"
+          done
+          echo 'EFFECTIVE_WEB_SQLITE_READONLY_ACCESS=proven'
+          echo 'FINANCIAL_LEDGER_MUTATIONS=none'
+      - name: Remove transient relay credentials
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/zm-business-web-identity-probe"
