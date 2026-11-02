@@ -121,19 +121,10 @@ jobs:
             echo 'PHP83_CLI_AVAILABLE=no'
           fi
           if command -v uapi >/dev/null 2>&1; then
-            if uapi --output=json LangPHP php_get_vhost_versions 2>/dev/null | python3 -c '
-import json,sys
-try:
-    raw=json.load(sys.stdin)
-    entries=raw.get("result",{}).get("data",[])
-    domain=[entry for entry in entries if isinstance(entry,dict) and "zomorodmelal.ir" in str(entry.get("vhost",""))]
-    version=next((str(e.get("version",e.get("phpversion",""))) for e in domain if e.get("version") or e.get("phpversion")),"")
-    print("DOMAIN_CPANEl_PHP_VERSION="+(version if version and len(version)<40 else "unavailable"))
-except Exception:
-    print("DOMAIN_CPANEl_PHP_VERSION=unavailable")
-'; then :; else echo 'DOMAIN_CPANEl_PHP_VERSION=unavailable'; fi
+            version="$(uapi --output=json LangPHP php_get_vhost_versions 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin).get("result",{}).get("data",[]); x=[str(y.get("version") or y.get("phpversion") or "") for y in d if isinstance(y,dict) and "zomorodmelal.ir" in str(y.get("vhost",""))]; print(x[0] if x else "unavailable")' 2>/dev/null)" || version="unavailable"
+            if [[ "$version" =~ ^[A-Za-z0-9_.-]{1,30}$ ]]; then echo "DOMAIN_CPANEL_PHP_VERSION=$version"; else echo 'DOMAIN_CPANEL_PHP_VERSION=unavailable'; fi
           else
-            echo 'DOMAIN_CPANEl_PHP_VERSION=unavailable'
+            echo 'DOMAIN_CPANEL_PHP_VERSION=unavailable'
           fi
           if test "$(sha256sum "$app" | awk '{print $1}')" = "$staged"; then
             echo 'LIVE_APP_EQUALS_NEW_STAGED_FINANCIAL_PATCH=yes'
