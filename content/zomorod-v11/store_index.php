@@ -1,5 +1,15 @@
 <?php
 declare(strict_types=1);
+// Public catalogue is read-only; reject unsafe verbs before loading private code.
+$method=$_SERVER['REQUEST_METHOD']??'GET';
+if(!in_array($method,['GET','HEAD'],true)){
+ http_response_code(405);
+ header('Allow: GET, HEAD');
+ header('Content-Type: text/plain; charset=utf-8');
+ header('Cache-Control: no-store');
+ echo 'Method not allowed';
+ exit;
+}
 $home=dirname(__DIR__,2);
 $private=$home.'/.private/zomorod-business';
 $lib=$private.'/site_store.php';
@@ -13,7 +23,7 @@ header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
 header('Cache-Control: private, no-store, max-age=0');
 if(!is_file($lib)||is_link($lib)||is_link($private)||is_link(dirname($private))){http_response_code(503);echo 'Store module is not available';exit;}
 require_once $lib;
-try{$db=zmStorePublicDb($private);$db->query('SELECT 1 FROM products LIMIT 1');$free=$db->query('SELECT title,description,sku,download_path,artifact_sha256,license_text FROM free_digital_products WHERE enabled=1 AND price_irr=0 ORDER BY id DESC LIMIT 100')->fetchAll();}
+try{$db=zmStorePublicDb($private);$db->query('SELECT 1 FROM products LIMIT 1');$free=$db->query('SELECT title,description,sku,download_path,artifact_sha256,license_text FROM free_digital_products AS f WHERE f.enabled=1 AND f.price_irr=0 AND NOT EXISTS (SELECT 1 FROM products AS p WHERE p.sku=f.sku) ORDER BY f.id DESC LIMIT 100')->fetchAll();}
 catch(Throwable $e){http_response_code(503);echo 'Store temporarily unavailable';exit;}
 function storeEsc(string $x):string{return htmlspecialchars($x,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');}
 $free=array_values(array_filter($free,static function(array $p)use($home):bool{
