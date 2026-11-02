@@ -5,9 +5,11 @@ on:
     paths:
       - ".github/workflows/zm-business-archive-ci-20261102.yml"
       - "scripts/zomorod_chatgpt_report_snapshot.py"
+      - "scripts/zm_chatgpt_action_index.py"
       - "content/zomorod-business/chatgpt_reports.php"
       - "tests/test_zomorod_chatgpt_report_snapshot.py"
       - "tests/test_zm_business_report_archive_php.py"
+      - "tests/test_zm_chatgpt_action_index.py"
 permissions:
   contents: read
 jobs:
@@ -27,8 +29,9 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           php -l content/zomorod-business/chatgpt_reports.php
-          python3 -m py_compile scripts/zomorod_chatgpt_report_snapshot.py
+          python3 -m py_compile scripts/zomorod_chatgpt_report_snapshot.py scripts/zm_chatgpt_action_index.py
           python3 -m unittest discover -v -s tests -p 'test_zomorod_chatgpt_report_snapshot.py'
           python3 -m unittest discover -v -s tests -p 'test_zm_business_report_archive_php.py'
+          python3 -m unittest discover -v -s tests -p 'test_zm_chatgpt_action_index.py'
           echo "IMMUTABLE_PRIVATE_REPORT_ARCHIVE_CI=PASS"
           echo "PRODUCTION_DATABASE_TOUCHED=no"
