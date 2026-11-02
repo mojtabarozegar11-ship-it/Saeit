@@ -1,0 +1,121 @@
+name: ZM read-only evidence of scheduled private ChatGPT action index
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths: [".github/workflows/zm-business-action-index-cron-readonly-20261102.yml"]
+permissions:
+  contents: read
+jobs:
+  cron-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pin reviewed Persian viewer and nonfinancial indexer
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git hash-object content/zomorod-business/chatgpt_reports.php)" = "c668d5c12109f62c4b371823b1711860f63e4e30"
+          test "$(git hash-object scripts/zm_chatgpt_action_index.py)" = "6ee7887f48140e4339c263acebecac68f3d2fcd8"
+          sha256sum content/zomorod-business/chatgpt_reports.php | awk '{print $1}' > "$RUNNER_TEMP/viewer-live.sha"
+      - name: Configure pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-php-viewer-freshness"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Attest real minute-55 cron execution without financial reads or writes
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-viewer-freshness"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$(cat "$RUNNER_TEMP/viewer-live.sha")" <<'REMOTE'
+          set -euo pipefail
+          viewer_sha="$1"
+          root="$HOME/.private/zomorod-business"
+          index="$root/chatgpt_actions_index.sqlite3"
+          archive="$root/chatgpt_reports_archive.sqlite3"
+          worker="$root/.chatgpt-action-indexer/index.py"
+          viewer="$root/chatgpt_reports.php"
+          test -f "$index" && test ! -L "$index"
+          test -f "$archive" && test ! -L "$archive"
+          test -f "$worker" && test ! -L "$worker"
+          test "$(stat -c %a "$index")" = 600
+          test "$(stat -c %a "$archive")" = 600
+          test "$(stat -c %a "$worker")" = 600
+          test "$(sha256sum "$viewer" | awk '{print $1}')" = "$viewer_sha"
+          crontab -l | grep -Fqx '50 * * * * /bin/bash /home/zomorod2/.private/zomorod-business/.chatgpt-report-sync/run-hourly.sh >/dev/null 2>&1 # ZM_CHATGPT_REPORT_REFRESH'
+          crontab -l | grep -Fqx '55 * * * * /usr/bin/python3 /home/zomorod2/.private/zomorod-business/.chatgpt-action-indexer/index.py --source /home/zomorod2/.private/zomorod-business/chatgpt_reports_archive.sqlite3 --output /home/zomorod2/.private/zomorod-business/chatgpt_actions_index.sqlite3 >/dev/null 2>&1 # ZM_CHATGPT_ACTION_INDEX'
+          PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 - "$index" <<'PY'
+          from datetime import datetime, timezone
+          import sqlite3, sys
+          from pathlib import Path
+          path=Path(sys.argv[1])
+          with sqlite3.connect(path.as_uri()+"?mode=ro",uri=True) as db:
+              assert db.execute("PRAGMA user_version").fetchone() == (1,)
+              assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+              meta=dict(db.execute("SELECT name,value FROM metadata"))
+              assert meta["source"]=="github:mojtabarozegar11-ship-it/Saeit:issue:1725"
+              assert meta["verification"]=="not_checked"
+              since=datetime.fromisoformat("2026-11-02T08:55:00+00:00")
+              built=datetime.fromisoformat(meta["built_at"])
+              now=datetime.now(timezone.utc)
+              assert built <= now and (now-built).total_seconds() < 10800
+              reports=int(meta["report_count"])
+              actions=db.execute("SELECT COUNT(*) FROM actions").fetchone()[0]
+              rejected=db.execute("SELECT COUNT(*) FROM rejected").fetchone()[0]
+              assert reports >= 0 and 0 <= actions <= reports*20 and 0 <= rejected <= reports
+          print("ACTION_INDEX_SCHEDULED_EXECUTION="+("verified" if built>=since else "not_yet_observed"))
+          print("INDEPENDENT_BUSINESS_VERIFICATION=not_claimed")
+          PY
+          echo 'CRON_50_AND_55=installed'
+          echo 'LIVE_VIEWER_SHA=matched'
+          echo 'FINANCIAL_DB_TOUCHED=no'
+          REMOTE
+      - name: Cleanup ephemeral relay key material
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/zm-php-viewer-freshness"
+          rm -f "$RUNNER_TEMP/viewer-live.sha"
