@@ -1,0 +1,182 @@
+name: ZM live PHP business ChatGPT report-only guarded release
+on:
+  push:
+    branches:
+      - feature/zm-business-php-chatgpt-reports-20261102
+    paths:
+      - ".github/workflows/zm-business-php-chatgpt-report-guarded-release-20261102.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zm-business-php-report-only-release
+  cancel-in-progress: false
+jobs:
+  report-only-release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3
+      - name: Verify immutable head and synthetic PHP/patch regressions first
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/chatgpt_reports.php
+          python3 -m unittest discover -s tests -p 'test_zomorod_chatgpt_report_snapshot.py'
+          python3 -m unittest discover -s tests -p 'test_zm_business_live_report_patch.py'
+          echo 'SOURCE_REGRESSION=passed'
+      - name: Prepare numbered-source snapshot in an isolated 0700 runner directory
+        env:
+          ZM_GITHUB_REPORTS_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          pack="$RUNNER_TEMP/zm-private-chatgpt-report-package"
+          install -d -m 700 "$pack"
+          cp scripts/zm_business_live_report_patch.py "$pack/report_patch.py"
+          cp content/zomorod-business/chatgpt_reports.php "$pack/chatgpt_reports.php"
+          ZM_BUSINESS_REPORT_SNAPSHOT_INSTALL=1 PYTHONPATH=. python3 scripts/zomorod_chatgpt_report_snapshot.py --pages 2 --install --output "$pack/chatgpt_reports_snapshot.json" > "$pack/receipt.log"
+          grep -Fq 'FINANCIAL_DB_TOUCHED=no' "$pack/receipt.log"
+          grep -Fq 'ZM_CHATGPT_SNAPSHOT=UPDATED' "$pack/receipt.log" || grep -Fq 'ZM_CHATGPT_SNAPSHOT=INSTALLED_EMPTY' "$pack/receipt.log"
+          test -s "$pack/chatgpt_reports_snapshot.json"
+          test "$(stat -c %a "$pack/chatgpt_reports_snapshot.json")" = 600
+          echo "GITHUB_SOURCE_SNAPSHOT_PREPARED=yes"
+      - name: Configure pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-php-report-release"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Create new isolated private staging and immutable original-code backup
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-report-release"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          private="$HOME/.private/zomorod-business"
+          app="$private/app.php"
+          stage="$private/.report-release-$sha"
+          backup="$HOME/.backups/zm-php-report-release/$sha"
+          test -d "$private" && test ! -L "$private"
+          test -f "$app" && test ! -L "$app"
+          test -f "$private/management.sqlite3" && test ! -L "$private/management.sqlite3"
+          test ! -e "$private/chatgpt_reports.php"
+          test ! -e "$private/chatgpt_reports_snapshot.json"
+          test ! -e "$stage" && test ! -e "$backup"
+          install -d -m 700 "$stage" "$backup"
+          cp -p "$app" "$backup/app.php"
+          sha256sum "$app" > "$backup/active-before.sha256"
+          echo "CURRENT_LIVE_PHP_BACKUP=preserved"
+          echo "FINANCIAL_SQLITE=untouched"
+          REMOTE
+      - name: Deliver only public-numbered report snapshot, renderer and patcher to staging
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-report-release"
+          pack="$RUNNER_TEMP/zm-private-chatgpt-report-package"
+          tar -cf - -C "$pack" report_patch.py chatgpt_reports.php chatgpt_reports_snapshot.json |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.private/zomorod-business/.report-release-$GITHUB_SHA"
+      - name: Re-attest and atomically apply additive report page with rollback
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-report-release"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          private="$HOME/.private/zomorod-business"
+          app="$private/app.php"
+          stage="$private/.report-release-$sha"
+          backup="$HOME/.backups/zm-php-report-release/$sha"
+          test -d "$stage" && test -f "$backup/app.php"
+          test -f "$stage/chatgpt_reports.php"
+          test -f "$stage/chatgpt_reports_snapshot.json"
+          test -f "$stage/report_patch.py"
+          test "$(sha256sum "$app" | awk '{print $1}')" = "$(sha256sum "$backup/app.php" | awk '{print $1}')"
+          test ! -e "$private/chatgpt_reports.php"
+          test ! -e "$private/chatgpt_reports_snapshot.json"
+          python3 "$stage/report_patch.py" "$app"
+          ZM_REPORT_PATCH_STAGE=1 python3 "$stage/report_patch.py" "$app" --output "$stage/app.new.php"
+          phpbin="$(command -v php || echo /opt/cpanel/ea-php82/root/usr/bin/php)"
+          "$phpbin" -l "$stage/app.new.php"
+          "$phpbin" -l "$stage/chatgpt_reports.php"
+          test "$(stat -c %a "$stage/chatgpt_reports_snapshot.json")" = 600
+          rollback() {
+            set +e
+            cp -p "$backup/app.php" "$stage/app.rollback.php" && mv -f "$stage/app.rollback.php" "$app"
+            rm -f "$private/chatgpt_reports.php" "$private/chatgpt_reports_snapshot.json"
+            echo "REPORT_PAGE_DEPLOY_ROLLBACK=restored_saved_php"
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          install -m 600 "$stage/chatgpt_reports.php" "$private/chatgpt_reports.php"
+          install -m 600 "$stage/chatgpt_reports_snapshot.json" "$private/chatgpt_reports_snapshot.json"
+          chmod 600 "$stage/app.new.php"
+          mv -f "$stage/app.new.php" "$app"
+          "$phpbin" -l "$app"
+          code="$(curl -sS -L --max-time 25 -o "$stage/anonymous.html" -w '%{http_code}' 'https://zomorodmelal.ir/business/?page=chatgpt_reports' || true)"
+          test "$code" = 200
+          grep -Fq 'ورود مدیر و حسابدار' "$stage/anonymous.html"
+          ! grep -Fq 'متن کامل گزارش' "$stage/anonymous.html"
+          echo "LIVE_PHP_REPORT_ANONYMOUS_AUTH_GATE=verified"
+          active=0
+          trap - EXIT
+          echo "LIVE_PHP_CHATGPT_REPORT_PAGE=installed"
+          echo "REPORT_SOURCE_PRIVATE_SNAPSHOT=installed"
+          echo "ACCOUNTING_DATABASE_CHANGED=no"
+          echo "ORIGINAL_PHP_BACKUP=preserved"
+          REMOTE
+      - name: Cleanup ephemeral SSH credentials and report package
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zm-php-report-release" "$RUNNER_TEMP/zm-private-chatgpt-report-package"
