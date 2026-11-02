@@ -108,6 +108,22 @@ jobs:
           else
             echo "LIVE_PHP_REPORT_MODULE=not_installed"
           fi
+          python3 - "$app" <<'PYTHON_SOURCE'
+          import sys
+          from pathlib import Path
+          text = Path(sys.argv[1]).read_text(encoding="utf-8")
+          anchors = {
+              "NAV": "'approval_register'=>'دفتر مصوبات','agent_center'",
+              "ROLE": "if($key==='users'&&role()!=='admin')continue;",
+              "ROUTE": "    } elseif($page==='approval_register'){",
+          }
+          compatible = True
+          for label, pattern in anchors.items():
+              count = text.count(pattern)
+              print("LIVE_PHP_PATCH_ANCHOR_" + label + "=" + ("one" if count == 1 else "missing_or_ambiguous"))
+              compatible = compatible and count == 1
+          print("LIVE_PHP_TARGETED_PATCH_READY=" + ("yes" if compatible else "no"))
+          PYTHON_SOURCE
           echo "PHP_FINANCE_DATABASE_TOUCHED=no"
           echo "DEPLOY_MERGE_MIGRATION_EXECUTED=no"
           REMOTE
