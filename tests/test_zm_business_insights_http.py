@@ -149,6 +149,7 @@ class InsightsHTTPTests(unittest.TestCase):
         self.assertNotIn("250.00", body)
         self.assertNotIn("<script>", body)
         self.assertNotIn("پایش سلامت دفتر حسابداری", body)
+        self.assertNotIn("دسترسی سریع به عملیات شرکت", body)
         self.assertTrue(any(k.lower() == "cache-control" and "no-store" in v.lower()
                             for k, v in headers))
 
@@ -167,6 +168,11 @@ class InsightsHTTPTests(unittest.TestCase):
         # Synthetic fixture journals intentionally have no debit/credit lines.
         self.assertRegex(body, r"توازن بدهکار و بستانکار هر سند و ارز.*?نیاز به رسیدگی")
         self.assertIn("نتیجهٔ آن‌ها به GitHub ارسال نمی‌شود", body)
+        self.assertIn('href="/business/?page=journal"', body)
+        self.assertIn('href="/business/?page=invoices"', body)
+        self.assertIn('href="/business/?page=payments"', body)
+        self.assertIn('href="/business/access.php"', body)
+        self.assertIn('href="/business/?page=chatgpt_reports"', body)
 
     def test_overpayment_warning_is_private_and_readonly(self) -> None:
         with sqlite3.connect(self.database) as db:
@@ -188,6 +194,9 @@ class InsightsHTTPTests(unittest.TestCase):
         status, _, body = self.http("GET", cookie=self.auth_cookie)
         self.assertEqual(status, 200)
         self.assertIn("qa_2026_owner · viewer", body)
+        self.assertIn('href="/business/?page=trial"', body)
+        self.assertNotIn('href="/business/access.php"', body)
+        self.assertNotIn('href="/business/?page=chatgpt_reports"', body)
         with sqlite3.connect(self.database) as db:
             db.execute("UPDATE users SET active=0 WHERE id=?", (self.user_id,))
         status, _, body = self.http("GET", cookie=self.auth_cookie)

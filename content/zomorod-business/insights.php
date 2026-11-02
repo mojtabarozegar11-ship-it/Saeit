@@ -130,6 +130,20 @@ try {
 </style></head><body>
 <header><div><strong>زمرد ملل · گزارش مالی</strong><div class="muted">نمای تصمیم‌گیری مدیریت و حسابداری</div></div><div><span><?=ziEsc($user['username'])?> · <?=ziEsc($user['role'])?></span> &nbsp; <a class="pill" href="/business/">بازگشت به میز مدیریت</a></div></header>
 <main>
+<nav class="panel" aria-label="دسترسی سریع به عملیات شرکت" style="display:flex;flex-wrap:wrap;gap:9px;align-items:center">
+<a class="pill" href="/business/?page=dashboard">داشبورد</a>
+<a class="pill" href="/business/?page=journal">اسناد حسابداری</a>
+<a class="pill" href="/business/?page=trial">تراز و سود و زیان</a>
+<a class="pill" href="/business/?page=invoices">فاکتورهای خرید و فروش</a>
+<a class="pill" href="/business/?page=payments">دریافت و پرداخت</a>
+<a class="pill" href="/business/?page=inventory">انبار</a>
+<a class="pill" href="/business/?page=projects">پروژه‌ها</a>
+<a class="pill" href="/business/?page=documents">مکاتبات</a>
+<?php if ($user['role']==='admin'): ?>
+<a class="pill" href="/business/access.php">مدیریت دسترسی کاربران</a>
+<a class="pill" href="/business/?page=chatgpt_reports">گزارش‌های فارسی ChatGPT</a>
+<?php endif; ?>
+</nav>
 <h1>وضعیت مطالبات و تعهدات شرکت</h1>
 <p class="muted">تاریخ محاسبه: <?=ziEsc($today)?> (به وقت ایران) · اطلاعات موجود در دفتر حسابداری داخلی</p>
 <div class="warn">این ارقام از فاکتورها و پرداخت‌های ثبت‌شده توسط کاربران محاسبه می‌شوند؛ <strong>تأییدیه بانک، درگاه پرداخت یا تسویه واقعی محسوب نمی‌شوند.</strong> ارزهای مختلف عمداً با هم جمع نشده‌اند.</div>

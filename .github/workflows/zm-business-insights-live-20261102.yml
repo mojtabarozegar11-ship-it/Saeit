@@ -102,7 +102,7 @@ jobs:
           test "$(stat -c %a "$root/management.sqlite3")" = 600
           test "$(stat -c %a "$root/app.php")" = 600
           test -f "$web/index.php" && test ! -L "$web/index.php"
-          old=da2868cf0e9c305eca86818a883268cba358a51181b90861d7df5f093c44f9f8
+          old=6906dee8c0071853720cf984e8621566d58a7cd9313ed15f5c32e1eee585f726
           test -f "$web/insights.php" && test ! -L "$web/insights.php"
           test "$(sha256sum "$web/insights.php" | awk '{print $1}')" = "$old"
           test "$(stat -c %a "$web/insights.php")" = 644
@@ -145,7 +145,7 @@ jobs:
           test -f "$stage/insights.php" && test ! -L "$stage/insights.php"
           test "$(sha256sum "$stage/insights.php" | awk '{print $1}')" = "$digest"
           test "$(sha256sum "$root/app.php" | awk '{print $1}')" = "$(cat "$stage/original-app.sha256")"
-          old=da2868cf0e9c305eca86818a883268cba358a51181b90861d7df5f093c44f9f8
+          old=6906dee8c0071853720cf984e8621566d58a7cd9313ed15f5c32e1eee585f726
           test -f "$dest" && test ! -L "$dest"
           test "$(sha256sum "$dest" | awk '{print $1}')" = "$old"
           test "$(sha256sum "$stage/insights.before.php" | awk '{print $1}')" = "$old"
