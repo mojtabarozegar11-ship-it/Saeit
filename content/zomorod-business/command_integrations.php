@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * Read-only bridges from the private workflow/store databases to the owner task queue.
+ * Read-only bridges from private workflow/store/customer databases to the owner task queue.
  * The only writes are idempotent tasks and task_events in command-center.sqlite3.
  * Never creates invoices, confirms settlements, changes products or grants approvals.
  */
@@ -79,6 +79,25 @@ function zmCcScanBridges(PDO $control, int $uid, ?string $private=null): array {
                     'تعداد پیش‌نویس‌های واردشده: '.$drafts.'؛ مجوز عرضه، محتوای قابل تحویل و قیمت باید پیش از انتشار بررسی شوند.',
                     'high');
             }
+        }
+    }
+    $inbox = zmCcBridgeReadOnly($private.'/master_customer_inbox.sqlite3');
+    if ($inbox !== null) {
+        // Keep personal names, emails and message bodies out of the command-center task store.
+        $messages = $inbox->query("SELECT id,kind,processing_status FROM customer_questions
+            WHERE tenant='zomorod' ORDER BY created_utc DESC,id DESC LIMIT 30")->fetchAll();
+        foreach ($messages as $message) {
+            ++$inspected;
+            $ticket = (string)$message['id'];
+            if (!preg_match('/^[a-f0-9]{24}$/D', $ticket)) continue;
+            $isOrderClaim = (string)$message['kind']==='order_question';
+            $isPending = (string)$message['processing_status']!=='handled';
+            $queue('customer:'.$ticket, 'sales', 'بررسی درخواست واقعی مشتری #'.substr($ticket,0,10),
+                'پیام مشتری در صندوق خصوصی ثبت شده است. وضعیت پردازش: '.(string)$message['processing_status'].
+                '؛ مشاهده: /business/customer_inbox.php. '.
+                ($isOrderClaim ? 'مرجع سفارش صرفاً ادعای مشتری است و پرداخت یا فروش را اثبات نمی‌کند.' :
+                    'ثبت پرسش به‌معنای سفارش یا پرداخت نیست.'),
+                $isPending ? 'high' : 'normal');
         }
     }
     return ['created'=>$created, 'inspected'=>$inspected, 'sources'=>$sources];
