@@ -75,6 +75,24 @@ class ActionIndexSafety(unittest.TestCase):
             self.assertEqual(db.execute("SELECT report_code,reason FROM rejected").fetchall(),
                              [("05-0002", "replayed_action_id")])
 
+    def test_new_numbered_receipts_reject_foreign_or_date_based_action_ids(self):
+        # Do not retroactively invalidate legacy reports 05-0001..05-0017.
+        legacy = receipt("05-0017", "ZM05-20261102-A01")
+        self.assertEqual(parse_block(legacy, "05-0017")[0], "valid")
+        valid = receipt("05-0018", "ZM05-0018-A20")
+        self.assertEqual(parse_block(valid, "05-0018")[0], "valid")
+        for wrong in ("ZM05-20261102-A01", "ZM05-0017-A01",
+                      "ZM05-0018-A00", "ZM05-0018-A21"):
+            with self.subTest(action_id=wrong):
+                self.assertEqual(
+                    parse_block(receipt("05-0018", wrong), "05-0018"),
+                    ("invalid_contract", []),
+                )
+        self.add(18, receipt("05-0018", "ZM05-20261102-A01"))
+        self.assertEqual(rebuild(self.archive, self.index), (0, 1, 1))
+        with sqlite3.connect(self.index) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM actions").fetchone(), (0,))
+
     def test_bad_url_and_duplicate_inside_same_report_fail_closed(self):
         invalid = receipt("05-0001", "ZM05-0001-A01", url="javascript:alert(1)")
         self.assertEqual(parse_block(invalid, "05-0001"), ("invalid_contract", []))
