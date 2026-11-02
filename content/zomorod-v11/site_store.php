@@ -22,7 +22,10 @@ function zmStoreDb(string $private):PDO {
 /** Public storefront must not create or migrate the private catalog on GET. */
 function zmStorePublicDb(string $private):PDO {
  $file=$private.'/site_store.sqlite3';
- if(!is_dir($private)||is_link($private)||!is_file($file)||is_link($file)){
+ // The private directory itself may be real while its parent is a symlink.
+ // Refuse redirected catalogue roots on anonymous public requests.
+ $parent=dirname($private);
+ if(!is_dir($parent)||is_link($parent)||!is_dir($private)||is_link($private)||!is_file($file)||is_link($file)){
   throw new RuntimeException('Private catalog is not ready');
  }
  $db=new PDO('sqlite:'.$file,null,null,[
