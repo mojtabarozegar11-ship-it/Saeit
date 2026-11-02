@@ -203,6 +203,16 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
             if(!is_array($faPayload)||($faPayload['source']??'')!=='github:mojtabarozegar11-ship-it/Saeit:issue:1725'||($faPayload['version']??null)!==1||($faPayload['kind']??'')!=='persian_management_rendering'||!is_array($faPayload['items']??null)||count($faPayload['items'])>100)throw new RuntimeException('invalid Persian translations');
             $faRows=$faPayload['items'];
         }
+        $publicFaRows=[];
+        $publicFaPath=$private.'/chatgpt_reports_public_fa.json';
+        if(is_file($publicFaPath)||is_link($publicFaPath)){
+            if(is_link($publicFaPath)||!is_readable($publicFaPath))throw new RuntimeException('unsafe public translations');
+            $publicFaStat=lstat($publicFaPath);
+            if($publicFaStat===false||!is_int($publicFaStat['size'])||$publicFaStat['size']<64||$publicFaStat['size']>200000||(((int)$publicFaStat['mode'])&0077)!==0)throw new RuntimeException('invalid public translation permissions');
+            $publicFaPayload=json_decode((string)file_get_contents($publicFaPath),true,32,JSON_THROW_ON_ERROR);
+            if(!is_array($publicFaPayload)||($publicFaPayload['source']??'')!=='github:mojtabarozegar11-ship-it/Saeit:issue:1514'||($publicFaPayload['version']??null)!==1||($publicFaPayload['kind']??'')!=='persian_public_cycle_summaries'||!is_array($publicFaPayload['items']??null)||count($publicFaPayload['items'])>100)throw new RuntimeException('invalid public translation metadata');
+            $publicFaRows=$publicFaPayload['items'];
+        }
         echo '<p class="notice">تعداد گزارش‌های بایگانی‌شده: '.$total.' · صفحه '.$page.' از '.$pageCount.' · راستی‌آزمایی مستقل محتوا انجام نشده است.</p>';
         echo '<p class="muted">آخرین دریافت منبع: '.esc(gmdate('Y-m-d H:i',(int)$checkedTime)).' UTC · تأخیر: '.(int)floor($age/60).' دقیقه</p>';
         if($age>7200)echo '<div class="notice danger">هشدار: از آخرین دریافت موفق گزارش بیش از دو ساعت گذشته است؛ وضعیت اجراکنندهٔ ساعتی باید بررسی شود.</div>';
@@ -270,8 +280,10 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
                 throw new RuntimeException('invalid archived report');
             }
             $visible=$body;
-            if(isset($faRows[$code])){
-                $fa=$faRows[$code];
+            $translations=$cycle==='05'?$faRows:$publicFaRows;
+            $hasPersianSummary=$cycle!=='05'&&isset($translations[$code]);
+            if(isset($translations[$code])){
+                $fa=$translations[$code];
                 if(!is_array($fa)||($fa['comment_id']??null)!==$id||!is_string($fa['text_fa']??null)||strlen($fa['text_fa'])<20||strlen($fa['text_fa'])>8000)throw new RuntimeException('invalid translation association');
                 $visible=$fa['text_fa'];
             }else{
@@ -279,7 +291,7 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
                 preg_match_all('/[A-Za-z]/',$body,$latinChars);
                 if(count($latinChars[0])>count($faChars[0]))$visible='ترجمه فارسی این گزارش هنوز تأیید نشده است. متن اولیه در پیوند مدرک قابل مشاهده است.';
             }
-            echo '<article class="card"><h3>'.esc($code).'</h3><p class="muted">زمان ثبت: '.esc($r['occurred_at']).'</p><details open><summary>متن فارسی گزارش</summary><p lang="fa" dir="rtl" style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9">'.esc($visible).'</p></details><p><a href="'.esc($r['evidence_url']).'" target="_blank" rel="noopener noreferrer">مشاهده مدرک اولیه در GitHub</a></p></article>';
+            echo '<article class="card"><h3>'.esc($code).'</h3><p class="muted">زمان ثبت: '.esc($r['occurred_at']).'</p><details open><summary>'.($hasPersianSummary?'خلاصهٔ فارسی مستند از گزارش':'متن فارسی گزارش').'</summary><p lang="fa" dir="rtl" style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9">'.esc($visible).'</p></details><p><a href="'.esc($r['evidence_url']).'" target="_blank" rel="noopener noreferrer">مشاهده مدرک اولیه در GitHub</a></p></article>';
         }
         if($pageCount>1){
             echo '<nav aria-label="صفحه‌بندی گزارش‌ها"><p>';
