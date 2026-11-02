@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 import tempfile
 import unittest
 
-from scripts.zomorod_chatgpt_report_snapshot import build_snapshot, install, archive_sync, archive_since
+from scripts.zomorod_chatgpt_report_snapshot import (build_snapshot, install, archive_sync, archive_since,
+    extract_public_cycle_receipt, PUBLIC_CYCLES_SOURCE, PUBLIC_CYCLES_ARCHIVE_NAME)
 
 HEADER = "## گزارش ۰۵-۰۰۰۱ | 2026-11-01 16:04 UTC | ZM-CTRL-20261101-PR1779-CI41324363802"
 
@@ -105,6 +106,48 @@ class SnapshotSafetyTests(unittest.TestCase):
             ])
             with self.assertRaisesRegex(ValueError, "NON_APPEND_ONLY"):
                 install(forged, forged_payload, target)
+
+    def test_public_issue_1514_01_02_04_real_format_only_and_no_forgery(self):
+        heading = "G-01 | گزارش ۰۴-۰۰۱۴ | ۲ نوامبر ۲۰۲۶، ۰۸:۲۳ تهران | شناسه G01-20261102T081757p0330"
+        item = {"id": 12341, "body": heading + "\n۶ اصلاح واقعی آزمایشی بدون ادعای فروش.", "created_at": "2026-11-02T04:53:00Z", "user": {"login": "mojtabarozegar11-ship-it"}}
+        receipt = extract_public_cycle_receipt(item)
+        self.assertEqual(receipt["report_code"], "04-0014")
+        self.assertIn("issues/1514#issuecomment-12341", receipt["evidence_url"])
+        self.assertIsNone(extract_public_cycle_receipt(dict(item, user={"login": "forgery"})))
+        self.assertIsNone(extract_public_cycle_receipt(dict(item, body=item["body"].replace("۰۴", "۰۳"))))
+        self.assertIsNone(extract_public_cycle_receipt(dict(item, created_at="invalid")))
+        self.assertIsNone(extract_public_cycle_receipt(dict(item, body="گزارش ۰۴-۰۰۱۴ و گزارش ۰۲-۰۰۱۴\n" + item["body"])))
+
+    def test_public_cycle_archive_is_separate_from_financial_and_05_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "private"
+            root.mkdir(mode=0o700)
+            target = root / PUBLIC_CYCLES_ARCHIVE_NAME
+            def item(number, cycle, cid):
+                return {
+                    "id": cid,
+                    "body": f"**گزارش {cycle}-{number:04d} | ۲ نوامبر ۲۰۲۶، ساعت ۰۸:۰۰ تهران | شناسه واحد**\n"
+                            "گزارش فارسی فقط برای آزمایش است؛ بدون رویداد واقعی.",
+                    "created_at": "2026-11-02T04:30:00Z",
+                    "user": {"login": "mojtabarozegar11-ship-it"},
+                }
+            cycle_items = [item(2, "۰۱", 10001), item(13, "۰۲", 10002), item(14, "۰۴", 10003)]
+            kwargs = {"source": PUBLIC_CYCLES_SOURCE, "archive_name": PUBLIC_CYCLES_ARCHIVE_NAME,
+                      "extractor": extract_public_cycle_receipt}
+            total, added, _ = archive_sync(cycle_items, target, **kwargs)
+            self.assertEqual((total, added), (3, 3))
+            self.assertEqual(target.stat().st_mode & 0o077, 0)
+            self.assertIsNotNone(archive_since(target, source=PUBLIC_CYCLES_SOURCE, archive_name=PUBLIC_CYCLES_ARCHIVE_NAME))
+            with sqlite3.connect("file:" + str(target) + "?mode=ro", uri=True) as db:
+                self.assertEqual([r[0] for r in db.execute("SELECT report_code FROM reports ORDER BY seq")],
+                                 ["01-0002", "02-0013", "04-0014"])
+            total, added, _ = archive_sync(cycle_items[-1:], target, **kwargs)
+            self.assertEqual((total, added), (3, 0))
+            forged = dict(cycle_items[-1], body=cycle_items[-1]["body"] + "altered")
+            with self.assertRaisesRegex(ValueError, "IMMUTABLE_REPORT_ARCHIVE_CONFLICT"):
+                archive_sync([forged], target, **kwargs)
+            with self.assertRaisesRegex(ValueError, "INVALID_REPORT_ARCHIVE_METADATA"):
+                archive_since(target, source="wrong", archive_name=PUBLIC_CYCLES_ARCHIVE_NAME)
 
     def test_nonfinancial_private_archive_grows_past_100_without_truncating_history(self):
         with tempfile.TemporaryDirectory() as tmp:
