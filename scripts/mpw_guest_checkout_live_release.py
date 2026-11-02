@@ -55,8 +55,8 @@ def plan(src):
   if live.is_symlink() or not live.is_file(): fail('GUEST_MODULE_MISSING')
   installed=source_from(live)
   if installed==src: return old,old,False
-  # Restrict the first upgrade to the exact version installed in successful run 41109493749.
-  if digest(installed)!='0db371611ef61b052e368505297af0808cb0108e56c5d99a9f11f66338da19ba':
+  # Restrict this upgrade to the exact live version installed by successful run 41120996466.
+  if digest(installed)!='7693254e4ed72141b6de7fc283c5a3214159ea49d838318337e47e86953f5f2f':
    fail('UNRECOGNIZED_GUEST_UPGRADE_BASE')
   return old,old,True
  # A module without both verified caller hooks is never safe to overwrite.
@@ -173,6 +173,24 @@ def verify():
   body=response.content.decode('utf8','replace')
   if 'Create invoice and pay with TRX' not in body: fail('TRX_CTA_MISSING:'+str(pid))
   print('MPW_GUEST_CHECKOUT_ROUTE='+json.dumps({'product':pid,'http':response.status_code,'handler':getattr(target,'__name__','?'),'order_created':False}))
+ recovery_route = '/commerce/trx-easy/purchases/'
+ try:
+  handler = resolve(recovery_route).func
+ except Exception:
+  fail('PURCHASES_ROUTE_UNRESOLVED')
+ recovery = Client(enforce_csrf_checks=True).get(
+  recovery_route, secure=True, HTTP_HOST='mojplaywin.com')
+ if recovery.status_code != 200:
+  fail('ANONYMOUS_PURCHASES_HTTP:'+str(recovery.status_code))
+ if b'No active purchase session' not in recovery.content:
+  fail('PURCHASES_SAFE_RECOVERY_BODY_MISSING')
+ if recovery.headers.get('X-Robots-Tag') != 'noindex, nofollow':
+  fail('PURCHASES_NOINDEX_MISSING')
+ if 'no-store' not in recovery.headers.get('Cache-Control',''):
+  fail('PURCHASES_NOSTORE_MISSING')
+ print('MPW_GUEST_PURCHASES_ROUTE='+json.dumps({
+  'http': recovery.status_code, 'handler': getattr(handler,'__name__','?'),
+  'anonymous': True, 'order_created': False, 'payment_created': False}))
  print('MPW_GUEST_RELEASE=VERIFIED;READ_ONLY=TRUE')
 
 def rollback(run):
