@@ -319,5 +319,80 @@ class LogoutHTTPTests(unittest.TestCase):
                          [(credit, debit) for debit, credit in original_lines])
 
 
+    def test_all_module_validation_and_atomic_audit(self) -> None:
+        """One isolated HTTP regression batch across accounting and administrative modules."""
+        self.assertIn("پایش اجزای میز مدیریت", self.dashboard)
+        self.assertIn("ثبت پرسنل به معنی استخدام قطعی", self.dashboard)
+        self.assertIn(":focus-visible", self.dashboard)
+        csrf = self.csrf(self.dashboard)
+        def post(page: str, action: str, **values: str) -> int:
+            status, _, _ = self.request(
+                "POST", "/app.php?page="+page, cookie=self.cookie,
+                form={"csrf": csrf, "action": action, **values}
+            )
+            return status
+        db_path=self.private / "management.sqlite3"
+        # Invalid native PHP array input must not become the literal value "Array".
+        self.assertEqual(post("parties","party",**{"name[]":"Injected", "kind":"customer"}),422)
+        self.assertEqual(post("parties","party",name="QA-Customer-Strict",kind="customer"),303)
+        self.assertEqual(post("parties","party",name="QA-Supplier-Strict",kind="supplier"),303)
+        with sqlite3.connect(db_path) as conn:
+            customer=conn.execute("SELECT id FROM parties WHERE name='QA-Customer-Strict'").fetchone()[0]
+            supplier=conn.execute("SELECT id FROM parties WHERE name='QA-Supplier-Strict'").fetchone()[0]
+        invoice=dict(invoice_no="QA-STRICT-INV",amount="8.50",currency="USD",
+                     date="2026-11-02",due_date="2026-11-02",description="Synthetic bound invoice")
+        self.assertEqual(post("invoices","invoice",kind="sale",party=str(supplier),**invoice),422)
+        self.assertEqual(post("invoices","invoice",kind="purchase",purchase_class="service",
+                              party=str(customer),**invoice),422)
+        self.assertEqual(post("invoices","invoice",kind="sale",party=str(customer),
+                              **{**invoice,"due_date":"2026-11-01"}),422)
+        self.assertEqual(post("invoices","invoice",kind="sale",party="1.5",**invoice),422)
+        with sqlite3.connect(db_path) as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM invoices WHERE invoice_no='QA-STRICT-INV'").fetchone()[0],0)
+        self.assertEqual(post("invoices","invoice",kind="sale",party=str(customer),**invoice),303)
+        self.assertEqual(post("inventory","inventory",sku="QA-STRICT-ITEM",name="Strict inventory",
+                              reorder_level="-1"),422)
+        self.assertEqual(post("inventory","inventory",sku="QA-STRICT-ITEM",name="Strict inventory",
+                              reorder_level="3.5"),422)
+        self.assertEqual(post("inventory","inventory",sku="QA-STRICT-ITEM",name="Strict inventory",
+                              reorder_level="3"),303)
+        with sqlite3.connect(db_path) as conn:
+            item=conn.execute("SELECT id FROM inventory WHERE sku='QA-STRICT-ITEM'").fetchone()[0]
+        self.assertEqual(post("inventory","stock",inventory_id=str(item),qty="2.5",date="2026-11-02"),422)
+        self.assertEqual(post("inventory","stock",inventory_id=str(item),qty="-1",date="2026-11-02"),422)
+        self.assertEqual(post("inventory","stock",inventory_id=str(item),qty="5",date="2026-11-02"),303)
+        with sqlite3.connect(db_path) as conn:
+            self.assertEqual(conn.execute(
+                "SELECT SUM(qty) FROM inventory_movements WHERE inventory_id=?", (item,)
+            ).fetchone()[0],5)
+            # If writing the audit ledger fails, the corresponding new party must rollback.
+            conn.execute("""
+                CREATE TRIGGER qa_reject_party_audit BEFORE INSERT ON audit_events
+                WHEN NEW.subject='party' BEGIN SELECT RAISE(ABORT,'synthetic audit unavailable'); END
+            """)
+        self.assertEqual(post("parties","party",name="QA-ATOMIC-ROLLBACK",kind="both"),500)
+        with sqlite3.connect(db_path) as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM parties WHERE name='QA-ATOMIC-ROLLBACK'").fetchone()[0],0)
+            conn.execute("DROP TRIGGER qa_reject_party_audit")
+        self.assertEqual(post("parties","party",name="QA-ATOMIC-ROLLBACK",kind="both"),303)
+        self.assertEqual(post("documents","document",title="QA-document",body="A"*25001),422)
+        self.assertEqual(post("projects","project",title="QA-project",owner="Operator",
+                              state="active",budget="-1"),422)
+        with sqlite3.connect(db_path) as conn:
+            self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0],"ok")
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM parties WHERE name='QA-ATOMIC-ROLLBACK'").fetchone()[0],1)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM audit_events WHERE subject='party' AND entity_id="
+                "(SELECT id FROM parties WHERE name='QA-ATOMIC-ROLLBACK')").fetchone()[0],1)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM documents WHERE title='QA-document'").fetchone()[0],0)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM projects WHERE title='QA-project'").fetchone()[0],0)
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
