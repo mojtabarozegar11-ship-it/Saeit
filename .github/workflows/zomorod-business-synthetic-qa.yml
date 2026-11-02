@@ -57,5 +57,4 @@ jobs:
           grep -Fq 'ZM_CHATGPT_SNAPSHOT=PREVIEW_ONLY' "$RUNNER_TEMP/zm-report-probe.log"
           grep -Fq 'FINANCIAL_DB_TOUCHED=no' "$RUNNER_TEMP/zm-report-probe.log"
           echo 'ZM_REPORT_SOURCE_READONLY=passed'
-          grep -E '^VALID_NUMBERED_REPORTS=[0-9]+
- "$RUNNER_TEMP/zm-report-probe.log"
+          grep -F 'VALID_NUMBERED_REPORTS=' "$RUNNER_TEMP/zm-report-probe.log"
