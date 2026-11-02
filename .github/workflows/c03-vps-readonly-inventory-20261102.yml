@@ -117,6 +117,33 @@ jobs:
               for p in sorted(holds.iterdir())[:25]:
                   if not p.is_symlink(): print("C03_HOLD_ENTRY="+p.name)
           PY
+          echo "C03_STATE_SAFE_FIELDS"
+          python3 - <<'PY'
+          import hashlib,json
+          from datetime import datetime,timezone
+          from pathlib import Path
+          base=Path.home()/"factory-runtime"
+          p=base/"private"/"autonomous-product-cycle"/"production-state.json"
+          if p.is_file() and not p.is_symlink():
+              d=json.loads(p.read_text(encoding="utf8"))
+              print("C03_STATE_MODIFIED_UTC="+datetime.fromtimestamp(p.stat().st_mtime,timezone.utc).isoformat())
+              for k in ("active_product_slot_capacity","active_product_slot_recipes","active_production_line_id","cycle_status","mode","cycle_finished_at_utc","cycle_started_at_utc","private_rework_queue","publishable_product_count","commercial_quality_review_completed","quality_failures_this_cycle","product_candidates_processed","built_product_count"):
+                  if k not in d: continue
+                  v=d[k]
+                  if isinstance(v,(list,dict)):
+                      print("C03_STATE_SAFE_FIELD="+k+":length="+str(len(v))+":digest="+hashlib.sha256(json.dumps(v,sort_keys=True,default=str).encode()).hexdigest()[:16])
+                  elif isinstance(v,(int,float,bool)) or (isinstance(v,str) and k in ("cycle_status","mode","cycle_finished_at_utc","cycle_started_at_utc")):
+                      print("C03_STATE_SAFE_FIELD="+k+":value="+str(v)[:120])
+                  else:
+                      print("C03_STATE_SAFE_FIELD="+k+":type="+type(v).__name__+":digest="+hashlib.sha256(str(v).encode()).hexdigest()[:16])
+          holds=base/"operations"/"holds"
+          if holds.is_dir() and not holds.is_symlink():
+              for h in sorted(holds.iterdir()):
+                  if h.is_symlink(): continue
+                  print("C03_HOLD_MODIFIED_UTC="+datetime.fromtimestamp(h.stat().st_mtime,timezone.utc).isoformat())
+                  if h.is_dir():
+                      print("C03_HOLD_CHILD_COUNT="+str(sum(1 for _ in h.iterdir())))
+          PY
           echo "C03_SYSTEM_TIMER_FACTORY_ENTRY_COUNT"
           (systemctl list-timers --all --no-pager --no-legend 2>/dev/null || true) | grep -Eic 'factory|autonomous|generation' || true
           echo "C03_LOCK_OBSERVATIONS"
