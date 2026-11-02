@@ -1,0 +1,34 @@
+name: ZM accounting ledger audit isolated synthetic acceptance
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths:
+      - 'content/zomorod-business/ledger_audit_cli.php'
+      - 'tests/test_zm_business_ledger_audit_cli.py'
+      - '.github/workflows/zm-business-ledger-audit-synthetic-20261102.yml'
+permissions:
+  contents: read
+jobs:
+  synthetic-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite,sqlite3
+      - name: Test solely with throwaway fabricated data
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/ledger_audit_cli.php
+          python3 -m unittest discover -s tests -p 'test_zm_business_ledger_audit_cli.py' -v
+          echo 'TEST_SOURCE=synthetic_disposable_only'
+          echo 'PRODUCTION_ACCOUNTING_DATABASE_ACCESSED=no'
+          echo 'FINANCIAL_METADATA_EXPORTED=no'
+          echo 'LIVE_AUDIT=requires_separate_informed_owner_authorization'
