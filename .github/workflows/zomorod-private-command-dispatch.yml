@@ -388,6 +388,78 @@ jobs:
               print("MPW_COMMERCIAL_WEB_GUEST_HOOK=" + hook_status(commerce, "commercial"))
               print("MPW_EFFECTIVE_PASSENGER_DB_IDENTITY=NOT_VERIFIED_BY_STATIC_SOURCE")
               print("MPW_RUNNING_WORKER_RESTART_STATE=NOT_VERIFIED_BY_STATIC_SOURCE")
+          # Bounded, redacted diagnostics for Passenger's registered application root.
+          # These do not read application secrets or execute the live Django app.
+          import re
+          import time
+          def root_category(value):
+              if not isinstance(value, str):
+                  return "UNSET"
+              value = value.strip().strip(chr(39)).strip(chr(34)).rstrip("/")
+              if value in ("/home/zomorod2/Saeit-staging", "Saeit-staging"):
+                  return "STAGING"
+              if value in ("/home/zomorod2/mojplaywin.com", "mojplaywin.com"):
+                  return "PUBLIC"
+              if "Saeit-staging" in value:
+                  return "REFERS_TO_STAGING"
+              if "mojplaywin.com" in value:
+                  return "REFERS_TO_PUBLIC"
+              return "OTHER"
+
+          for label, root in (("PUBLIC", public), ("STAGING", app)):
+              htaccess = small_regular(root / ".htaccess", 100000)
+              if htaccess is None:
+                  print("MPW_" + label + "_HTACCESS=ABSENT_OR_UNREADABLE")
+              else:
+                  text = htaccess.decode("utf8", "replace")
+                  roots = re.findall(r"(?im)^\s*PassengerAppRoot\s+([^\s#]+)", text)
+                  enabled = re.findall(r"(?im)^\s*PassengerEnabled\s+(on|off)\b", text)
+                  print("MPW_" + label + "_HTACCESS=READABLE")
+                  print("MPW_" + label + "_PASSENGER_APP_ROOT=" +
+                        (root_category(roots[-1]) if roots else "NOT_DECLARED"))
+                  print("MPW_" + label + "_PASSENGER_ENABLED=" +
+                        (enabled[-1].upper() if enabled else "NOT_DECLARED"))
+              restart_path = root / "tmp" / "restart.txt"
+              if restart_path.is_symlink() or not restart_path.is_file():
+                  state = "MISSING"
+              else:
+                  age = time.time() - restart_path.stat().st_mtime
+                  state = "RECENT_15M" if -120 <= age <= 900 else "OLDER"
+              print("MPW_" + label + "_PASSENGER_RESTART_MARKER=" + state)
+
+          try:
+              response = subprocess.run(
+                  [command, "--output=json", "PassengerApps", "list_applications"],
+                  capture_output=True, timeout=15, check=False,
+              )
+              if response.returncode or len(response.stdout) > 1000000:
+                  raise ValueError("UAPI_UNAVAILABLE")
+              record = json.loads(response.stdout)
+              result = record.get("result", {}) if isinstance(record, dict) else {}
+              if not isinstance(result, dict) or result.get("status") not in (1, True, "1"):
+                  raise ValueError("UAPI_INVALID")
+              data = result.get("data")
+              print("MPW_PASSENGER_UAPI_DATA_TYPE=" + type(data).__name__.upper())
+              pending = [data]
+              checks = 0
+              seen = set()
+              while pending and checks < 500:
+                  item = pending.pop()
+                  checks += 1
+                  if isinstance(item, list):
+                      pending.extend(item[:100])
+                  elif isinstance(item, dict):
+                      for field in ("app_root", "application_root", "app_path",
+                                    "path", "document_root", "startup_file"):
+                          if field in item:
+                              seen.add(field.upper() + "_" + root_category(item[field]))
+                      pending.extend(list(item.values())[:100])
+              relevant = sorted(x for x in seen if
+                                "STAGING" in x or "PUBLIC" in x)
+              print("MPW_PASSENGER_UAPI_ROOT_SIGNALS=" +
+                    (",".join(relevant) if relevant else "NO_RECOGNIZED_PATH"))
+          except (OSError, ValueError, subprocess.TimeoutExpired):
+              print("MPW_PASSENGER_UAPI_ROOT_SIGNALS=UNAVAILABLE")
           print("MPW_PRODUCTION_FILE_WRITES=NONE")
           print("MPW_ORDERS_CREATED=0;PAYMENTS_CREATED=0")
           print("CPANEL_SITE_MUTATIONS=NONE")
