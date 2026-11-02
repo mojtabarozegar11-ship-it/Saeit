@@ -17,6 +17,26 @@ function zmStoreDb(string $private):PDO {
    price_irr INTEGER NOT NULL DEFAULT 0 CHECK(price_irr=0),
    enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN(0,1)),
    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+ // Enforce one identity across both catalogues at the SQLite boundary,
+ // including other importers and UPDATE paths, not just the admin form.
+ // Existing legacy collisions are deliberately left unchanged and hidden
+ // by the public fail-closed catalogue filter.
+ $db->exec("CREATE TRIGGER IF NOT EXISTS zm_paid_sku_insert_guard
+  BEFORE INSERT ON products
+  WHEN EXISTS(SELECT 1 FROM free_digital_products WHERE sku=NEW.sku)
+  BEGIN SELECT RAISE(ABORT,'cross_catalog_sku_collision'); END");
+ $db->exec("CREATE TRIGGER IF NOT EXISTS zm_paid_sku_update_guard
+  BEFORE UPDATE OF sku ON products
+  WHEN EXISTS(SELECT 1 FROM free_digital_products WHERE sku=NEW.sku)
+  BEGIN SELECT RAISE(ABORT,'cross_catalog_sku_collision'); END");
+ $db->exec("CREATE TRIGGER IF NOT EXISTS zm_free_sku_insert_guard
+  BEFORE INSERT ON free_digital_products
+  WHEN EXISTS(SELECT 1 FROM products WHERE sku=NEW.sku)
+  BEGIN SELECT RAISE(ABORT,'cross_catalog_sku_collision'); END");
+ $db->exec("CREATE TRIGGER IF NOT EXISTS zm_free_sku_update_guard
+  BEFORE UPDATE OF sku ON free_digital_products
+  WHEN EXISTS(SELECT 1 FROM products WHERE sku=NEW.sku)
+  BEGIN SELECT RAISE(ABORT,'cross_catalog_sku_collision'); END");
  return $db;
 }
 /** Public storefront must not create or migrate the private catalog on GET. */
@@ -67,8 +87,11 @@ function zmStoreHandle(PDO $db,string $action):void{
   if($collision->fetchColumn()!==false)bail('شناسه محصول در کاتالوگ رایگان موجود است؛ شناسه یکتا انتخاب کنید.');
   $db->prepare('INSERT INTO products(sku,title,description,price_irr) VALUES(?,?,?,?)')->execute([$sku,$title,$body,(int)$amount]);
  }elseif($action==='product_toggle'){
-  $id=(int)req('product_id');
-  if($id<=0) bail('شناسه محصول نامعتبر است.');
+  $rawId=req('product_id');
+  // Do not let PHP coerce "1junk", "1.0" or overflowed integers into another row ID.
+  if(!preg_match('/\\A[1-9][0-9]{0,17}\\z/D',$rawId))bail('شناسه محصول نامعتبر است.');
+  $id=(int)$rawId;
+  if($id<=0||(string)$id!==$rawId)bail('شناسه محصول نامعتبر است.');
   // Paid products have no verified release-rights, fulfillment or merchant gate yet.
   // Allow safe withdrawal of legacy enabled rows, never publication from this form.
   $stmt=$db->prepare('UPDATE products SET enabled=0 WHERE id=? AND enabled=1');$stmt->execute([$id]);
