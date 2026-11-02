@@ -92,6 +92,8 @@ urlpatterns = [
     path("staff/", staff_dashboard, name="staff_management"),
     path("farnaz/", include("farnaz.urls")),
     path("admin/", admin.site.urls),
+    # Scope the game API to MojPlayWin; existing public browser assets are untouched.
+    path("api/living-cities/", include("apps.living_cities.urls")),
     path("api/", include("core.urls")),
 ]
 
