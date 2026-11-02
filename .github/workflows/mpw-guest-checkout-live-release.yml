@@ -1,6 +1,7 @@
 name: MojPlayWin production guest TRX checkout release
 on:
-  workflow_dispatch:
+  issue_comment:
+    types: [created]
 permissions:
   contents: read
 concurrency:
@@ -8,8 +9,17 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
-    # Release disabled until separately verified Passenger DB, recovery, and rollback.
-    if: ${{ false }}
+    # Owner-only, exact issue-comment trigger. No PR/push/manual auto-release.
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'issue_comment' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.number == 1600 &&
+      !github.event.issue.pull_request &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'MPW-PURCHASES-404-ONEFILE-RELEASE-20261102'
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
@@ -184,7 +194,7 @@ jobs:
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           remote="/home/zomorod2/.mpw-guest-release-$GITHUB_RUN_ID"
           timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-guest-ssh/config" "$COMMAND_HOST" \
-            "python3 '$remote/release.py' publish '$GITHUB_RUN_ID' '$remote/guest.py'"
+            "python3 '$remote/release.py' publish-onefile '$GITHUB_RUN_ID' '$remote/guest.py'"
       - name: Verify anonymous checkout pages without creating an order or payment
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
