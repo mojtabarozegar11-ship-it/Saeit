@@ -99,6 +99,42 @@ jobs:
           "$phpbin" -l "$app" >/dev/null
           "$phpbin" -r 'echo "EFFECTIVE_PHP_CLI=".PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION."\n";'
           "$phpbin" -r 'exit(extension_loaded("pdo_sqlite")&&class_exists("SQLite3")?0:1);'
+          php83="/opt/cpanel/ea-php83/root/usr/bin/php"
+          if test -x "$php83" && test "$("$php83" -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')" = "8.3"; then
+            echo 'PHP83_CLI_AVAILABLE=yes'
+            if "$php83" -r 'exit(extension_loaded("pdo_sqlite")&&class_exists("SQLite3")?0:1)'; then
+              echo 'PHP83_SQLITE_RUNTIME_READY=yes'
+              "$php83" -l "$app" >/dev/null
+              modules_ready=yes
+              for module in site_agents.php site_store.php chatgpt_reports.php; do
+                if test -f "$root/$module" && test ! -L "$root/$module"; then
+                  if ! "$php83" -l "$root/$module" >/dev/null; then modules_ready=no; fi
+                else
+                  modules_ready=no
+                fi
+              done
+              echo "PHP83_PRIVATE_MODULE_SYNTAX=$modules_ready"
+            else
+              echo 'PHP83_SQLITE_RUNTIME_READY=no'
+            fi
+          else
+            echo 'PHP83_CLI_AVAILABLE=no'
+          fi
+          if command -v uapi >/dev/null 2>&1; then
+            if uapi --output=json LangPHP php_get_vhost_versions 2>/dev/null | python3 -c '
+import json,sys
+try:
+    raw=json.load(sys.stdin)
+    entries=raw.get("result",{}).get("data",[])
+    domain=[entry for entry in entries if isinstance(entry,dict) and "zomorodmelal.ir" in str(entry.get("vhost",""))]
+    version=next((str(e.get("version",e.get("phpversion",""))) for e in domain if e.get("version") or e.get("phpversion")),"")
+    print("DOMAIN_CPANEl_PHP_VERSION="+(version if version and len(version)<40 else "unavailable"))
+except Exception:
+    print("DOMAIN_CPANEl_PHP_VERSION=unavailable")
+'; then :; else echo 'DOMAIN_CPANEl_PHP_VERSION=unavailable'; fi
+          else
+            echo 'DOMAIN_CPANEl_PHP_VERSION=unavailable'
+          fi
           if test "$(sha256sum "$app" | awk '{print $1}')" = "$staged"; then
             echo 'LIVE_APP_EQUALS_NEW_STAGED_FINANCIAL_PATCH=yes'
           else
