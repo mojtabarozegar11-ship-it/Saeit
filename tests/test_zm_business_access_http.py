@@ -31,6 +31,7 @@ class ZmAccessHTTPTests(unittest.TestCase):
             shutil.copy2(SOURCE / filename, cls.web / filename)
         cls.private = cls.root / ".private/zomorod-business"
         cls.private.mkdir(parents=True)
+        shutil.copy2(SOURCE.parent / "zomorod-v11/site_store.php", cls.private / "site_store.php")
         cls.database = cls.private / "management.sqlite3"
         result = subprocess.run(["php", str(cls.web / "app.php"), "--initialize-private-db"],
                                 capture_output=True, text=True, timeout=12)
@@ -196,6 +197,35 @@ class ZmAccessHTTPTests(unittest.TestCase):
             status, _, _ = self.http("POST",cookie=self.admin_cookie,
                                      form=self.form(self.csrf(page),user=user,role=role))
             self.assertEqual(status,422)
+
+
+    def test_store_manager_get_never_creates_or_mutates_catalogue(self) -> None:
+        # The accounting DB is separate from the store catalogue. A private
+        # dashboard GET must not call zmStoreDb(), which creates tables/WAL.
+        store_db = self.private / "site_store.sqlite3"
+        self.assertFalse(store_db.exists(), "Synthetic store must start absent")
+        status, _, _ = self.http(
+            "GET", "/app.php?page=store_manager", cookie=self.admin_cookie)
+        self.assertEqual(status, 503)
+        self.assertFalse(store_db.exists(), "GET silently created a store DB")
+        with sqlite3.connect(store_db) as db:
+            db.executescript("""
+                CREATE TABLE products(id INTEGER PRIMARY KEY,sku TEXT,
+                                      title TEXT,price_irr INTEGER,enabled INTEGER);
+                CREATE TABLE free_digital_products(
+                    sku TEXT,title TEXT,download_path TEXT,
+                    artifact_sha256 TEXT,license_text TEXT,enabled INTEGER);
+                CREATE TABLE payment_state(id INTEGER PRIMARY KEY,state TEXT);
+                INSERT INTO payment_state VALUES(1,'not_configured');
+            """)
+        original = store_db.read_bytes()
+        status, _, body = self.http(
+            "GET", "/app.php?page=store_manager", cookie=self.admin_cookie)
+        self.assertEqual(status, 200)
+        self.assertIn("کاتالوگ محصولات واقعی", body)
+        self.assertEqual(store_db.read_bytes(), original,
+                         "GET modified the existing private catalogue")
+        self.assertFalse((self.private / "site_store.sqlite3-wal").exists())
 
 
 if __name__ == "__main__":
