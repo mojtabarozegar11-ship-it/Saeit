@@ -141,6 +141,30 @@ catch(PDOException $e) {echo "PUBLIC_READ_ONLY=PASS";}
         self.update("enabled", 0)
         self.assertNotIn('href="' + URL + '"', self.render())
 
+    def test_enabled_paid_draft_is_not_advertised_as_a_public_offer(self):
+        # Existing paid rows have no release-rights, fulfillment or merchant proof.
+        with sqlite3.connect(self.dbpath) as db:
+            db.execute(
+                "INSERT INTO products(sku,title,description,price_irr,enabled) VALUES(?,?,?,?,1)",
+                ("unverified_paid", "UNVERIFIED_PAID_DRAFT_20261102",
+                 "Unreleased draft only", 150000),
+            )
+        html = self.render()
+        self.assertNotIn("UNVERIFIED_PAID_DRAFT_20261102", html)
+        self.assertNotIn("150,000", html)
+        self.assertIn("خرید آنلاین و برداشت وجه غیرفعال است", html)
+        self.assertIn('href="' + URL + '"', html)
+
+    def test_symlinked_private_catalogue_parent_is_rejected(self):
+        # A real child directory must not bypass a symlinked .private ancestor.
+        redirected = self.home / "private_actual"
+        self.private.parent.rename(redirected)
+        self.private.parent.symlink_to(redirected, target_is_directory=True)
+        html = self.render()
+        self.assertIn("Store temporarily unavailable", html)
+        self.assertNotIn('href="' + URL + '"', html)
+
+
 
 if __name__ == "__main__":
     unittest.main()
