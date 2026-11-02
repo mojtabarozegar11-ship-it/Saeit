@@ -1,0 +1,34 @@
+name: MojPlayWin live 252 quests production Chromium audit November 2
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-living-cities-live-252-chromium-20261102.yml
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  global-game:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Ensure global gameplay scenario is well formed
+        run: |
+          set -euo pipefail
+          node --check tests/mpw_living_cities_252_browser_acceptance.mjs
+          grep -Fq 'YEARLY_CONTRACTS.length' tests/mpw_living_cities_252_browser_acceptance.mjs
+          grep -Fq 'assert.equal(assets.weeks,52' tests/mpw_living_cities_252_browser_acceptance.mjs
+          echo MPW_EXISTING_252_E2E_SCENARIOS=PASS
+      - name: Prepare chromium without modifying live server
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock --ignore-scripts playwright@1.58.0
+          npx playwright install --with-deps chromium
+      - name: Audit actual production business action, saves, 20 languages and 52 rotating contracts
+        run: |
+          set -euo pipefail
+          node tests/mpw_living_cities_252_browser_acceptance.mjs
