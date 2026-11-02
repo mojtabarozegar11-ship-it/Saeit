@@ -115,6 +115,21 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
                 self.assertIn("رسید ساختاریافته ناسازگار یا ناقص است", result.stdout)
                 self.assertNotIn("javascript:alert(1)", result.stdout)
 
+    def test_persian_source_character_length_does_not_hide_valid_archive(self):
+        # The GitHub receipt extractor limits Unicode characters, whereas PHP
+        # strlen measures UTF-8 bytes; a valid Persian report may exceed 8 KB.
+        body = "گزارش واقعی ثبت خروجی با متن فارسی. " + ("زمرد ملل اقدام مستند " * 300)
+        self.assertLessEqual(len(body), 8000)
+        self.assertGreater(len(body.encode("utf-8")), 8000)
+        self.assertLess(len(body.encode("utf-8")), 32000)
+        with sqlite3.connect(self.archive) as db:
+            db.execute("UPDATE reports SET body=? WHERE report_code='05-0027'", (body,))
+        result = self.view()
+        self.assertEqual(result.returncode, 0, result.stderr[-500:])
+        self.assertIn("05-0027", result.stdout)
+        self.assertIn("زمرد ملل اقدام مستند", result.stdout)
+        self.assertNotIn("اعتبارسنجی آرشیو ناموفق", result.stdout)
+
     def test_admin_paginated_persian_escape_and_five_cycles(self):
         first = self.view()
         self.assertEqual(first.returncode, 0, first.stderr[-500:])
