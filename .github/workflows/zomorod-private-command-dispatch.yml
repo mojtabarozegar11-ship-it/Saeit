@@ -517,6 +517,35 @@ jobs:
               print("MPW_PUBLIC_PASSENGER_RESTART_DIR=" + restart_dir)
           else:
               print("MPW_PUBLIC_PASSENGER_RESTART_DIR=UNVERIFIED")
+          # Detect a supported, user-scoped explicit Passenger restart control,
+          # without invoking any restart or changing the running service.
+          config_cli = shutil.which("passenger-config")
+          if config_cli is None:
+              for candidate in (
+                  "/usr/bin/passenger-config",
+                  "/usr/local/bin/passenger-config",
+                  "/opt/cpanel/ea-ruby27/root/usr/bin/passenger-config",
+              ):
+                  if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                      config_cli = candidate
+                      break
+          if config_cli is None:
+              print("MPW_PASSENGER_EXPLICIT_RESTART_CLI=MISSING")
+          else:
+              print("MPW_PASSENGER_EXPLICIT_RESTART_CLI=PRESENT")
+              try:
+                  help_run = subprocess.run(
+                      [config_cli, "restart-app", "--help"],
+                      capture_output=True, timeout=10, check=False, text=True,
+                  )
+                  help_text = (help_run.stdout + help_run.stderr)[:100000]
+                  print("MPW_PASSENGER_EXPLICIT_RESTART_HELP=" +
+                        ("AVAILABLE" if help_run.returncode == 0 else "FAILED"))
+                  print("MPW_PASSENGER_SCOPED_RESTART_OPTION=" +
+                        ("AVAILABLE" if "ignore-app-not-running" in help_text
+                         else "NOT_VERIFIED"))
+              except (OSError, subprocess.TimeoutExpired):
+                  print("MPW_PASSENGER_EXPLICIT_RESTART_HELP=UNAVAILABLE")
           print("MPW_PRODUCTION_FILE_WRITES=NONE")
           print("MPW_ORDERS_CREATED=0;PAYMENTS_CREATED=0")
           print("CPANEL_SITE_MUTATIONS=NONE")
