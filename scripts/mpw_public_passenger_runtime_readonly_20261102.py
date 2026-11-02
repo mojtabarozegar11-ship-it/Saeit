@@ -124,7 +124,7 @@ def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None):
     guest = app / "services/mpw_trx_guest_commerce.py"
     marker = public / "tmp/restart.txt"
     conf = htaccess.read_text("utf-8", "replace") if htaccess.is_file() and not htaccess.is_symlink() else ""
-    roots = re.findall(r"(?im)^\\s*PassengerAppRoot\\s+([^\\r\\n#]+)", conf)
+    roots = re.findall(r"(?im)^\s*PassengerAppRoot\s+([^\r\n#]+)", conf)
     wsgi_text = wsgi.read_text("utf-8", "replace") if wsgi.is_file() and not wsgi.is_symlink() else ""
     guest_prior = bool(guest.is_file() and not guest.is_symlink() and
                        hashlib.sha256(guest.read_bytes()).hexdigest() == KNOWN_GUEST_SHA)
