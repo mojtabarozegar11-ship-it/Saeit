@@ -30,12 +30,12 @@ class PassengerDiagnosticTests(unittest.TestCase):
         self.assertNotIn("other-site", json.dumps(summary))
 
     def test_passenger_status_only_classifies_allowlisted_app_roots(self):
-        raw = ("--- Application groups ---\\n"
-               "/home/zomorod2/mojplaywin.com#default:\\n"
-               "  App root: /home/zomorod2/mojplaywin.com\\n"
-               "  * PID: 12345 Sessions: 0\\n"
-               "other-app:\\n"
-               "  App root: /private/other-app-with-secret\\n")
+        raw = ("--- Application groups ---\n"
+               "/home/zomorod2/mojplaywin.com#default:\n"
+               "  App root: /home/zomorod2/mojplaywin.com\n"
+               "  * PID: 12345 Sessions: 0\n"
+               "other-app:\n"
+               "  App root: /private/other-app-with-secret\n")
         result = _passenger_status_summary(raw)
         self.assertTrue(result["available"])
         self.assertTrue(result["readable"])
