@@ -19,16 +19,39 @@ function zmStoreDb(string $private):PDO {
    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
  return $db;
 }
+/** Public storefront must not create or migrate the private catalog on GET. */
+function zmStorePublicDb(string $private):PDO {
+ $file=$private.'/site_store.sqlite3';
+ // The private directory itself may be real while its parent is a symlink.
+ // Refuse redirected catalogue roots on anonymous public requests.
+ $parent=dirname($private);
+ if(!is_dir($parent)||is_link($parent)||!is_dir($private)||is_link($private)||!is_file($file)||is_link($file)){
+  throw new RuntimeException('Private catalog is not ready');
+ }
+ $db=new PDO('sqlite:'.$file,null,null,[
+  PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,
+  PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC,
+  PDO::ATTR_TIMEOUT=>5,
+ ]);
+ $db->exec('PRAGMA query_only=ON');
+ return $db;
+}
 function zmStoreHandle(PDO $db,string $action):void{
  if($action==='product_create'){
   $sku=req('sku');$title=req('title');$body=req('description');$amount=req('price_irr');
   if(!preg_match('/^[A-Za-z0-9_-]{3,40}$/',$sku)||mbSafeLen($title)<3||mbSafeLen($title)>160||mbSafeLen($body)>2000||!preg_match('/^[1-9][0-9]{3,11}$/',$amount))bail('مشخصات محصول یا قیمت ریالی نامعتبر است.');
+  // One SKU must identify one artifact across free and paid catalogues.
+  $collision=$db->prepare('SELECT 1 FROM free_digital_products WHERE sku=? LIMIT 1');
+  $collision->execute([$sku]);
+  if($collision->fetchColumn()!==false)bail('شناسه محصول در کاتالوگ رایگان موجود است؛ شناسه یکتا انتخاب کنید.');
   $db->prepare('INSERT INTO products(sku,title,description,price_irr) VALUES(?,?,?,?)')->execute([$sku,$title,$body,(int)$amount]);
  }elseif($action==='product_toggle'){
   $id=(int)req('product_id');
   if($id<=0) bail('شناسه محصول نامعتبر است.');
-  $stmt=$db->prepare('UPDATE products SET enabled=CASE enabled WHEN 1 THEN 0 ELSE 1 END WHERE id=?');$stmt->execute([$id]);
-  if($stmt->rowCount()!==1)bail('محصول وجود ندارد.');
+  // Paid products have no verified release-rights, fulfillment or merchant gate yet.
+  // Allow safe withdrawal of legacy enabled rows, never publication from this form.
+  $stmt=$db->prepare('UPDATE products SET enabled=0 WHERE id=? AND enabled=1');$stmt->execute([$id]);
+  if($stmt->rowCount()!==1)bail('محصول پولی پیش‌نویس است و تا احراز حقوق، تحویل و پذیرندگی قابل انتشار نیست.');
  }else bail('عملیات فروشگاه نامعتبر است.');
 }
 function zmFactoryDraftsPanel(PDO $db):void {
@@ -55,10 +78,11 @@ function zmFactoryDraftsPanel(PDO $db):void {
 function zmStoreRender(PDO $db):void {
  $payment=$db->query('SELECT * FROM payment_state WHERE id=1')->fetch();
  echo '<section><h2>فروشگاه زمرد ملل — پنل مدیریت</h2><p>وضعیت پرداخت: <strong>بانک شهر — '.esc($payment['state']).'</strong>. برای شروع پرداخت بانکی، قرارداد، مشخصات پایانه و مستندات رسمی تأیید پرداخت سروربه‌سرور لازم است. هیچ پرداختی در وضعیت فعلی تأیید نمی‌شود.</p><p><a href="/store/">نمایش فروشگاه عمومی</a></p></section>';
- echo '<section><h2>کاتالوگ محصولات واقعی</h2><div class="scroll"><table><tr><th>شناسه</th><th>محصول</th><th>قیمت (ریال)</th><th>نمایش عمومی</th><th>عملیات</th></tr>';
+ echo '<section><h2>کاتالوگ محصولات واقعی</h2><div class="scroll"><table><tr><th>شناسه</th><th>محصول</th><th>قیمت (ریال)</th><th>وضعیت ثبت خصوصی</th><th>عملیات</th></tr>';
  foreach($db->query('SELECT * FROM products ORDER BY id DESC LIMIT 150')->fetchAll() as $p){
-   echo '<tr><td>'.esc($p['sku']).'</td><td>'.esc($p['title']).'</td><td>'.number_format((int)$p['price_irr']).'</td><td>'.($p['enabled']?'فعال':'پیش‌نویس').'</td><td>';
-   if(role()==='admin')echo '<form method="post">'.tokenInput().'<input type="hidden" name="product_id" value="'.(int)$p['id'].'"><button name="action" value="product_toggle">'.($p['enabled']?'پنهان‌کردن':'نمایش عمومی').'</button></form>';
+   echo '<tr><td>'.esc($p['sku']).'</td><td>'.esc($p['title']).'</td><td>'.number_format((int)$p['price_irr']).'</td><td>'.($p['enabled']?'ردیف قدیمی؛ عرضه عمومی مسدود':'پیش‌نویس؛ عرضه عمومی مسدود').'</td><td>';
+   if(role()==='admin' && $p['enabled'])echo '<form method="post">'.tokenInput().'<input type="hidden" name="product_id" value="'.(int)$p['id'].'"><button name="action" value="product_toggle">پنهان‌کردن</button></form>';
+   elseif(role()==='admin')echo '<span>انتشار پولی تا احراز حقوق، تحویل و پذیرندگی مسدود است.</span>';
    echo '</td></tr>';
  }
  echo '</table></div></section>';
