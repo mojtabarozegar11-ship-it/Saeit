@@ -27,7 +27,7 @@ STEM_RE = re.compile(r"^mojplaywin_(?:20261017|[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16})$
 EXPLICIT_STEM_RE = re.compile(r"^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}$")
 NEW_MANIFEST_RE = re.compile(r"^(mojplaywin_20261021T[0-9]{6}Z_[0-9a-f]{16})_(mysql|files)_gpgv2[.]manifest[.]json$")
 MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
-MAX_PLAINTEXT_BYTES = 12 * 1024**3
+MAX_PLAINTEXT_BYTES = 64 * 1024**3  # Must match bounded source and GPG decrypt limits.
 
 
 def safe_regular(path, *, private=False):
