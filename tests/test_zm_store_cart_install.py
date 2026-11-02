@@ -1,5 +1,6 @@
 """Isolated release/rollback tests: never contact hosting or production DB."""
 import importlib.util
+import json
 from pathlib import Path
 import shutil
 import tempfile
@@ -58,6 +59,22 @@ class CartReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "ROLLBACK_OWNERSHIP_OR_HASH_MISMATCH"):
             module.rollback(self.home, self.run, production=False)
         self.assertEqual(target.read_text(), "changed by another actor")
+
+    def test_rollback_requires_matching_run_identity_and_disabled_payment(self):
+        module.install(self.home, SOURCE, self.run, self.sha, production=False)
+        manifest = (self.home / ".private/zomorod-business"
+                    / ".zm-cart-hold-releases" / (self.run + ".json"))
+        original = json.loads(manifest.read_text())
+        cart = self.home / "public_html/store/cart/index.php"
+        for changes in ({"run_id": "99999999999"}, {"payment_enabled": True}):
+            altered = dict(original, **changes)
+            manifest.write_text(json.dumps(altered))
+            with self.assertRaisesRegex(RuntimeError, "ROLLBACK_OWNERSHIP_OR_HASH_MISMATCH"):
+                module.rollback(self.home, self.run, production=False)
+            self.assertTrue(cart.exists(), "Unowned cart must never be removed")
+            self.assertEqual(module.digest(cart), self.sha)
+        manifest.write_text(json.dumps(original))
+        self.assertTrue(module.rollback(self.home, self.run, production=False))
 
     def test_invalid_sha_and_symlink_are_rejected(self):
         with self.assertRaisesRegex(RuntimeError, "CANDIDATE_DIGEST_MISMATCH"):
