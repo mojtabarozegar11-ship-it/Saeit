@@ -105,16 +105,22 @@ function zmFactoryDraftsPanel(PDO $db):void {
    return;
  }
  $n=(int)$db->query("SELECT COUNT(*) FROM factory_drafts")->fetchColumn();
+ $states=$db->query("SELECT state,COUNT(*) AS total FROM factory_drafts GROUP BY state ORDER BY total DESC LIMIT 20")->fetchAll();
+ $stateLabels=[];
+ foreach($states as $entry){
+  $stateLabels[]=esc(trim((string)$entry['state'])?:'نامشخص').' ('.number_format((int)$entry['total']).')';
+ }
  echo '<section><h2>ربات رابط انبار کارخانه VPS — پیش‌نویس‌های دریافت‌شده</h2>'.
- '<p>تعداد بسته‌های تأیید فنی و دریافت‌شده: '.number_format($n).
- '. این محصولات تا کنترل حقوق محتوا، مجوز عرضه، قیمت‌گذاری و تأیید مالک برای فروش عمومی فعال نیستند.</p>'.
+ '<p>تعداد ردیف‌های پیش‌نویس ثبت‌شده: '.number_format($n).
+ '. ثبت ردیف به معنی تأیید فنی، حقوقی، موجودی قابل فروش یا تحویل نیست؛ عرضه عمومی همچنان مسدود است.</p>'.
+ '<p>وضعیت‌های ثبت‌شده در منبع (حداکثر ۲۰ نوع): '.($stateLabels?implode('، ',$stateLabels):'بدون ردیف').'</p>'.
  '<div class="scroll"><table><thead><tr><th>شناسه کارخانه</th><th>عنوان</th><th>خانواده</th><th>وضعیت</th><th>دریافت</th></tr></thead><tbody>';
  $stmt=$db->query("SELECT product_id,title,family_id,state,imported_at FROM factory_drafts ORDER BY id DESC LIMIT 50");
  foreach($stmt->fetchAll() as $row){
    echo '<tr><td>'.esc((string)$row['product_id']).'</td>'.
    '<td>'.esc((string)$row['title']).'</td>'.
    '<td>'.esc((string)$row['family_id']).'</td>'.
-   '<td>پیش‌نویسِ منتظر تأیید تجاری</td>'.
+   '<td>ثبت منبع: '.esc((string)$row['state']).'؛ عرضه عمومی مسدود</td>'.
    '<td>'.esc((string)$row['imported_at']).'</td></tr>';
  }
  echo '</tbody></table></div></section>';
