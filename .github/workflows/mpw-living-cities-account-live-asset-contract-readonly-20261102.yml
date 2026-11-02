@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest core.tests.test_living_cities_account_asset_candidate -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s core/tests -p 'test_living_cities_account_asset_candidate.py' -v
           PYTHONDONTWRITEBYTECODE=1 python3 -B -m py_compile scripts/mpw_living_cities_account_asset_candidate.py
       - name: Pin and authenticate direct cPanel owner SSH
         shell: bash
