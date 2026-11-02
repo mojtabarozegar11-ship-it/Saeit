@@ -23,19 +23,19 @@ function zmStoreDb(string $private):PDO {
  // by the public fail-closed catalogue filter.
  $db->exec("CREATE TRIGGER IF NOT EXISTS zm_paid_sku_insert_guard
   BEFORE INSERT ON products
-  WHEN EXISTS(SELECT 1 FROM free_digital_products WHERE sku=NEW.sku)
+  WHEN EXISTS(SELECT 1 FROM free_digital_products WHERE sku=NEW.sku COLLATE NOCASE)
   BEGIN SELECT RAISE(ABORT,'cross_catalog_sku_collision'); END");
  $db->exec("CREATE TRIGGER IF NOT EXISTS zm_paid_sku_update_guard
   BEFORE UPDATE OF sku ON products
-  WHEN EXISTS(SELECT 1 FROM free_digital_products WHERE sku=NEW.sku)
+  WHEN EXISTS(SELECT 1 FROM free_digital_products WHERE sku=NEW.sku COLLATE NOCASE)
   BEGIN SELECT RAISE(ABORT,'cross_catalog_sku_collision'); END");
  $db->exec("CREATE TRIGGER IF NOT EXISTS zm_free_sku_insert_guard
   BEFORE INSERT ON free_digital_products
-  WHEN EXISTS(SELECT 1 FROM products WHERE sku=NEW.sku)
+  WHEN EXISTS(SELECT 1 FROM products WHERE sku=NEW.sku COLLATE NOCASE)
   BEGIN SELECT RAISE(ABORT,'cross_catalog_sku_collision'); END");
  $db->exec("CREATE TRIGGER IF NOT EXISTS zm_free_sku_update_guard
   BEFORE UPDATE OF sku ON free_digital_products
-  WHEN EXISTS(SELECT 1 FROM products WHERE sku=NEW.sku)
+  WHEN EXISTS(SELECT 1 FROM products WHERE sku=NEW.sku COLLATE NOCASE)
   BEGIN SELECT RAISE(ABORT,'cross_catalog_sku_collision'); END");
  return $db;
 }
@@ -82,7 +82,7 @@ function zmStoreHandle(PDO $db,string $action):void{
   $sku=req('sku');$title=req('title');$body=req('description');$amount=req('price_irr');
   if(!preg_match('/^[A-Za-z0-9_-]{3,40}$/',$sku)||mbSafeLen($title)<3||mbSafeLen($title)>160||mbSafeLen($body)>2000||!preg_match('/^[1-9][0-9]{3,11}$/',$amount))bail('مشخصات محصول یا قیمت ریالی نامعتبر است.');
   // One SKU must identify one artifact across free and paid catalogues.
-  $collision=$db->prepare('SELECT 1 FROM free_digital_products WHERE sku=? LIMIT 1');
+  $collision=$db->prepare('SELECT 1 FROM free_digital_products WHERE sku=? COLLATE NOCASE LIMIT 1');
   $collision->execute([$sku]);
   if($collision->fetchColumn()!==false)bail('شناسه محصول در کاتالوگ رایگان موجود است؛ شناسه یکتا انتخاب کنید.');
   $db->prepare('INSERT INTO products(sku,title,description,price_irr) VALUES(?,?,?,?)')->execute([$sku,$title,$body,(int)$amount]);
