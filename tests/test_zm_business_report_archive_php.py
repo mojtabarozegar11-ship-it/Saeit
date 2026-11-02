@@ -73,11 +73,11 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
         payload = {
             "version": 1, "report_code": "05-0027",
             "actions": [
-                {"id": "ZM05-20261102-A01", "title_fa": "اصلاح آزمون مستقل مسیر <خطر>",
+                {"id": "ZM05-0027-A01", "title_fa": "اصلاح آزمون مستقل مسیر <خطر>",
                  "status": "completed",
                  "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41410088193",
                  "impact_fa": "تأیید خروجی منبع، نه استقرار"},
-                {"id": "ZM05-20261102-A02", "title_fa": "تأیید اتصال درگاه بانک شهر",
+                {"id": "ZM05-0027-A02", "title_fa": "تأیید اتصال درگاه بانک شهر",
                  "status": "blocked", "evidence_url": "", "impact_fa": "مدرک بانکی موجود نیست"}
             ]
         }
@@ -88,7 +88,7 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
         result = self.view()
         self.assertEqual(result.returncode, 0, result.stderr[-500:])
         self.assertIn("1 / ۲۰", result.stdout)
-        self.assertIn("ZM05-20261102-A01", result.stdout)
+        self.assertIn("ZM05-0027-A01", result.stdout)
         self.assertNotIn("ZM_ACTIONS_V1_START", result.stdout)
         self.assertIn("فهرست ساختاریافتهٔ اقدامات در جدول اتاق فرمان", result.stdout)
         self.assertIn("&lt;خطر&gt;", result.stdout)
@@ -102,10 +102,10 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
         cases = [
             {"version": 1, "report_code": "05-9999", "actions": []},
             {"version": 1, "report_code": "05-0027", "actions": [
-                {"id": "ZM05-20261102-A01", "title_fa": "اقدام کامل آزمون",
+                {"id": "ZM05-0027-A01", "title_fa": "اقدام کامل آزمون",
                  "status": "completed", "evidence_url": "javascript:alert(1)"}]},
             {"version": 1, "report_code": "05-0027", "actions": [
-                {"id": "ZM05-20261102-A01", "title_fa": "اقدام کامل آزمون",
+                {"id": "ZM05-0027-A01", "title_fa": "اقدام کامل آزمون",
                  "status": "completed", "evidence_url": ""}]},
         ]
         for payload in cases:
@@ -118,6 +118,38 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr[-500:])
                 self.assertIn("رسید ساختاریافته ناسازگار یا ناقص است", result.stdout)
                 self.assertNotIn("javascript:alert(1)", result.stdout)
+
+    def test_private_php_receipt_rejects_foreign_id_and_unverified_evidence(self):
+        # The viewer must not show claims that the private action index rejects.
+        base = {
+            "version": 1, "report_code": "05-0027", "actions": [{
+                "id": "ZM05-0027-A01", "title_fa": "کنترل امنیت گزارش عملیاتی",
+                "status": "completed",
+                "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/" + "a" * 40,
+                "impact_fa": "کاهش خطر نمایش گزارش نادرست"
+            }]
+        }
+        variants = []
+        import copy
+        foreign = copy.deepcopy(base)
+        foreign["actions"][0]["id"] = "ZM05-0026-A01"
+        variants.append(foreign)
+        noncomplete = copy.deepcopy(base)
+        noncomplete["actions"][0]["status"] = "blocked"
+        variants.append(noncomplete)
+        english = copy.deepcopy(base)
+        english["actions"][0]["impact_fa"] = "English only"
+        variants.append(english)
+        for payload in variants:
+            with self.subTest(payload=payload):
+                body = ("گزارش آزمون فارسی بدون ادعای عملیات واقعی.\\nZM_ACTIONS_V1_START\\n"
+                        + json.dumps(payload, ensure_ascii=False) + "\\nZM_ACTIONS_V1_END")
+                with sqlite3.connect(self.archive) as db:
+                    db.execute("UPDATE reports SET body=? WHERE report_code='05-0027'", (body,))
+                result = self.view()
+                self.assertEqual(result.returncode, 0, result.stderr[-500:])
+                self.assertIn("رسید ساختاریافته ناسازگار یا ناقص است", result.stdout)
+                self.assertNotIn("1 / ۲۰", result.stdout)
 
     def test_persian_source_character_length_does_not_hide_valid_archive(self):
         # The GitHub receipt extractor limits Unicode characters, whereas PHP
