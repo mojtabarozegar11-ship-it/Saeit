@@ -165,6 +165,31 @@ catch(PDOException $e) {echo "PUBLIC_READ_ONLY=PASS";}
         self.assertNotIn('href="' + URL + '"', html)
 
 
+    def test_admin_cannot_enable_unverified_paid_draft_but_can_withdraw(self):
+        # The legacy toggle may withdraw a published row, not create a paid offer.
+        php = r"""<?php
+function req($name) { return $name==='product_id' ? '1' : ''; }
+function bail($message) { throw new RuntimeException($message); }
+require $argv[1];
+$db=zmStoreDb($argv[2]);
+$db->exec("INSERT INTO products(id,sku,title,description,price_irr,enabled) VALUES(1,'draft','Draft','No proof',1000,0)");
+try { zmStoreHandle($db,'product_toggle'); exit(41); }
+catch(RuntimeException $e) {}
+if((int)$db->query("SELECT enabled FROM products WHERE id=1")->fetchColumn()!==0)exit(42);
+$db->exec("UPDATE products SET enabled=1 WHERE id=1");
+zmStoreHandle($db,'product_toggle');
+if((int)$db->query("SELECT enabled FROM products WHERE id=1")->fetchColumn()!==0)exit(43);
+echo "PAID_RELEASE_GATE=PASS";
+"""
+        script = self.home / "paid_gate.php"
+        script.write_text(php, encoding="utf8")
+        run = subprocess.run(
+            ["php", str(script), str(self.private / "site_store.php"), str(self.private)],
+            capture_output=True, text=True, timeout=15)
+        self.assertEqual(run.returncode, 0, run.stderr + run.stdout)
+        self.assertIn("PAID_RELEASE_GATE=PASS", run.stdout)
+
+
 
 if __name__ == "__main__":
     unittest.main()
