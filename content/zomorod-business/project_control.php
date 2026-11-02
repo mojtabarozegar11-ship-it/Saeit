@@ -105,11 +105,38 @@ function zmPmRender(PDO $db):void {
         echo '<p><a href="?page=project_links">پرونده یکپارچه و اسناد وابسته</a> · <a href="?page=project_calendar">تقویم و سررسیدهای پروژه‌ها</a></p>';
     }
     echo '</div><p>کل پرونده‌ها: <strong>'.array_sum($counts).'</strong> · رویدادهای تغییر وضعیت: <strong>'.(int)one($db,'SELECT COUNT(*) FROM zm_project_events').'</strong> · گزارش‌های پیشرفت و موانع: <strong>'.(int)one($db,'SELECT COUNT(*) FROM zm_project_updates').'</strong></p></section>';
+    // Indexed project filter: bounded input and parameterised LIKE with explicit escaping.
+    $qRaw=$_GET['q']??'';
+    $stateRaw=$_GET['state']??'all';
+    if(!is_string($qRaw)||!is_string($stateRaw))bail('ساختار جست‌وجو معتبر نیست.',422);
+    $search=trim($qRaw);$filterState=$stateRaw;
+    if((function_exists('mb_strlen')?mb_strlen($search,'UTF-8'):strlen($search))>100)
+        bail('عبارت جست‌وجو طولانی است.',422);
+    if(!in_array($filterState,['all','planned','active','paused','done'],true))bail('فیلتر وضعیت معتبر نیست.',422);
+    $where=[];$bind=[];
+    if($filterState!=='all'){$where[]='p.state=?';$bind[]=$filterState;}
+    if($search!==''){
+        $escaped=strtr($search,['!'=>'!!','%'=>'!%','_'=>'!_']);
+        $where[]="(p.title LIKE ? ESCAPE '!' OR p.owner LIKE ? ESCAPE '!')";
+        $bind[]='%'.$escaped.'%';$bind[]='%'.$escaped.'%';
+    }
+    $filter=$where?' WHERE '.implode(' AND ',$where):'';
+    $totalMatched=(int)one($db,'SELECT COUNT(*) FROM projects p'.$filter,$bind);
     $offsetText=(string)($_GET['offset']??'0');
     $offset=preg_match('/^(?:0|[1-9][0-9]{0,5})$/D',$offsetText)?min(100000,(int)$offsetText):0;
     $page=q($db,'SELECT p.id,p.title,p.owner,p.state,p.budget,
        (SELECT progress_pct FROM zm_project_updates WHERE project_id=p.id AND category="progress" ORDER BY id DESC LIMIT 1) AS recorded_progress
-       FROM projects p ORDER BY p.id DESC LIMIT 40 OFFSET '.$offset);
+       FROM projects p'.$filter.' ORDER BY p.id DESC LIMIT 40 OFFSET '.$offset,$bind);
+    echo '<section><h2>جست‌وجوی پروژه‌ها و فیلتر وضعیت</h2><form method="get">';
+    echo '<input type="hidden" name="page" value="projects"><div class="form">';
+    echo '<div><label>جست‌وجو در عنوان و مسئول</label><input name="q" value="'.esc($search).'" maxlength="100" placeholder="نام یا کد پروژه"></div>';
+    echo '<div><label>وضعیت پرونده</label><select name="state">';
+    $choices=['all'=>'همه','planned'=>'برنامه‌ریزی','active'=>'فعال','paused'=>'متوقف','done'=>'مختومه'];
+    foreach($choices as $key=>$label)echo '<option value="'.esc($key).'"'.($filterState===$key?' selected':'').'>'.esc($label).'</option>';
+    echo '</select></div></div><button>اعمال فیلتر</button></form>';
+    echo '<p>تعداد پرونده‌های مطابق: <strong>'.$totalMatched.'</strong> از <strong>'.array_sum($counts).'</strong></p>';
+    echo '<p><a href="?page=projects">نمایش همه پروژه‌ها</a> · <a href="?page=project_portfolio">گزارش جامع سبد پروژه‌ها</a></p></section>';
+    $pagerBase='?page=projects&amp;q='.rawurlencode($search).'&amp;state='.rawurlencode($filterState).'&amp;offset=';
     echo '<section><h2>پرونده‌های ثبت‌شده</h2><div class="scroll"><table><tr><th>شناسه</th><th>عنوان</th><th>مسئول</th><th>وضعیت</th><th>بودجه پیشنهادی (IRR)</th><th>آخرین درصد اظهاری</th><th>پرونده جامع</th>'.($canManage?'<th>تغییر وضعیت با دلیل</th>':'').'</tr>';
     foreach($page as $p){
         echo '<tr><td>'.(int)$p['id'].'</td><td>'.esc($p['title']).'</td><td>'.esc($p['owner']).'</td><td>'.esc($labels[$p['state']]??$p['state']).'</td><td>'.money((int)$p['budget']).'</td><td>'.($p['recorded_progress']===null?'ثبت نشده':(int)$p['recorded_progress'].'٪').'</td><td><a href="?page=project_links&amp;project_id='.(int)$p['id'].'">ارتباطات و اقدامات</a></td>';
@@ -127,8 +154,8 @@ function zmPmRender(PDO $db):void {
         echo '</tr>';
     }
     echo '</table></div><p>';
-    if($offset>0)echo '<a href="?page=projects&offset='.max(0,$offset-40).'">صفحه پیشین</a> · ';
-    if(count($page)===40)echo '<a href="?page=projects&offset='.($offset+40).'">صفحه بعدی</a>';
+    if($offset>0)echo '<a href="'.$pagerBase.max(0,$offset-40).'">صفحه پیشین</a> · ';
+    if(($offset+40)<$totalMatched)echo '<a href="'.$pagerBase.($offset+40).'">صفحه بعدی</a>';
     echo '</p></section>';
     if($canManage){
         $all=q($db,'SELECT id,title,state FROM projects ORDER BY id DESC LIMIT 250');
