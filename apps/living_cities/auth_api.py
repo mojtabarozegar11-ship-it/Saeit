@@ -4,8 +4,17 @@ import json
 from django.contrib.auth import authenticate, login, logout
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
-from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
+
+
+@require_GET
+@ensure_csrf_cookie
+def csrf_view(request):
+    """Bootstrap CSRF for the current static game without replacing its HTML."""
+    response = JsonResponse({"csrf_token": get_token(request)})
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @require_POST
