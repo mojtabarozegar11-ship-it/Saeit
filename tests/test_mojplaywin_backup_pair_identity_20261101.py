@@ -3,6 +3,8 @@ import io
 import json
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -15,7 +17,7 @@ from scripts.mojplaywin_backup_encrypt_vps_gpg import (
 )
 from scripts.mojplaywin_recovery_stream_vps import (
     discover_explicit_pair, explicit_pair_readiness, load, verify_resumable_sql,
-    decrypt_to_stdout,
+    decrypt_to_stdout, pair_mode_to_kind,
 )
 
 PAIR = "mojplaywin_20261101T120000Z_0123456789abcdef"
@@ -107,6 +109,32 @@ class ExplicitPairIdentityTests(unittest.TestCase):
             files_manifest.write_text(json.dumps(metadata))
             with self.assertRaisesRegex(RuntimeError, "manifest incomplete"):
                 load("files", home=base, stem=PAIR)
+
+    @unittest.skipUnless(shutil.which("gpg"), "Synthetic CLI stream test requires gpg")
+    def test_pair_cli_binary_stdout_and_pre39_compatible_mode_dispatch(self):
+        self.assertEqual(pair_mode_to_kind("mysql-pair"), "mysql")
+        self.assertEqual(pair_mode_to_kind("files-pair"), "files")
+        with self.assertRaises(ValueError):
+            pair_mode_to_kind("mysql")
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            synthetic = b"SELECT 1; -- synthetic fixture only\\n" * 90 + MARKER
+            with patch.dict(os.environ, {"MPW_BACKUP_SET_STEM": PAIR}):
+                store(io.BytesIO(synthetic), "mysql", root=base, keyroot=base,
+                      minimum_free=0)
+                store(io.BytesIO(synthetic), "files", root=base, keyroot=base,
+                      minimum_free=0)
+            script = Path(__file__).resolve().parents[1] / "scripts" / "mojplaywin_recovery_stream_vps.py"
+            env = dict(os.environ, HOME=td, PYTHONDONTWRITEBYTECODE="1")
+            for mode in ("mysql-pair", "files-pair"):
+                with self.subTest(mode=mode):
+                    result = subprocess.run(
+                        [sys.executable, "-B", str(script), mode, PAIR],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        env=env, check=False, timeout=60)
+                    self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
+                    self.assertEqual(result.stdout, synthetic)
+                    self.assertIn(b"PRIVATE_STREAM_VERIFIED", result.stderr)
 
     def test_scoped_tar_nonzero_is_fatal_with_private_safe_reason(self):
         for code, expected in ((1, "SCOPED_TAR_EXIT_WARNING"),
