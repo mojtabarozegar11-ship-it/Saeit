@@ -4,6 +4,8 @@ on:
     paths:
       - 'content/zomorod-v11/store_cart_index.php'
       - 'tests/test_zm_store_cart_hold.py'
+      - 'tests/test_zm_store_cart_install.py'
+      - 'scripts/zm_store_cart_hold_guarded_install.py'
       - '.github/workflows/zm-store-cart-hold-offline-ci-20261102.yml'
   push:
     branches:
@@ -11,6 +13,8 @@ on:
     paths:
       - 'content/zomorod-v11/store_cart_index.php'
       - 'tests/test_zm_store_cart_hold.py'
+      - 'tests/test_zm_store_cart_install.py'
+      - 'scripts/zm_store_cart_hold_guarded_install.py'
       - '.github/workflows/zm-store-cart-hold-offline-ci-20261102.yml'
 permissions:
   contents: read
@@ -37,5 +41,5 @@ jobs:
         run: |
           set -euo pipefail
           php -l content/zomorod-v11/store_cart_index.php
-          python3 -m unittest discover -s tests -p 'test_zm_store_cart_hold.py' -v
+          python3 -m unittest discover -s tests -p 'test_zm_store_cart_*.py' -v
           echo "ZM_CART_NO_HOST_NO_PAYMENT=PASS"
