@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/mpw-living-cities-live-252-chromium-20261102.yml
+      - tests/mpw_living_cities_252_browser_acceptance.mjs
   workflow_dispatch:
 permissions: {contents: read}
 jobs:
