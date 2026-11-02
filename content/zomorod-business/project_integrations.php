@@ -13,9 +13,10 @@ function zmPiSchema(PDO $db):void {
        reason TEXT NOT NULL,
        created_by INTEGER NOT NULL REFERENCES users(id),
        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-       UNIQUE(source,reference)
+       UNIQUE(project_id,source,reference)
     )");
     $db->exec('CREATE INDEX IF NOT EXISTS zm_project_links_by_project ON zm_project_links(project_id,id)');
+    $db->exec("CREATE UNIQUE INDEX IF NOT EXISTS zm_project_financial_source_exclusive ON zm_project_links(source,reference) WHERE source IN ('invoice','journal')");
     $db->exec("CREATE TABLE IF NOT EXISTS zm_project_milestones (
         id INTEGER PRIMARY KEY,
         project_id INTEGER NOT NULL REFERENCES projects(id),
@@ -119,24 +120,49 @@ function zmPiHandle(PDO $db,string $private,string $action):void {
     if($projectId===false)bail('شناسه پروژه نامعتبر است.');
     $db->exec('BEGIN IMMEDIATE');$locked=true;
     try {
-        $project=$db->prepare('SELECT state FROM projects WHERE id=?');$project->execute([$projectId]);
-        $state=$project->fetchColumn();if($state===false)bail('پروژه وجود ندارد.',404);
+        $project=$db->prepare('SELECT state,title FROM projects WHERE id=?');
+        $project->execute([$projectId]);$item=$project->fetch(PDO::FETCH_ASSOC);
+        if(!$item)bail('پروژه وجود ندارد.',404);
+        $state=(string)$item['state'];
+        $archived=zmPmIsArchiveOnly((string)$item['title']);
+        $approved=zmPmIsApproved((string)$item['title']);
         if($action==='project_link'){
             $source=req('source');$reference=req('reference');$reason=zmPmClean(req('reason'),700);
             $roles=zmPiSourceRole($source);zmPiRequireActor($db,$roles);
             [$type,$name]=zmPiTarget($db,$private,$source,$reference);
-            $existing=$db->prepare('SELECT project_id FROM zm_project_links WHERE source=? AND reference=?');
-            $existing->execute([$source,$reference]);$owner=$existing->fetchColumn();
-            if($owner!==false) {
-                if((int)$owner!==$projectId)bail('این رکورد قبلاً به پروژه دیگری اختصاص یافته؛ برای جلوگیری از شمارش مضاعف نمی‌توان دوباره وصل کرد.',409);
-                bail('این ارتباط قبلاً برای همین پروژه ثبت شده است.',409);
+            if($archived && !in_array($source,['document','report'],true))
+                bail('پرونده ردشده فقط برای ارجاع تاریخی به سند یا گزارش بایگانی مجاز است.',409);
+            if(!$approved && !in_array($source,['document','report','workflow'],true))
+                bail('پرونده فاقد مصوبه قطعی فقط مرجع مکاتبات، گزارش و بررسی اداری می‌پذیرد.',409);
+            $same=$db->prepare('SELECT id FROM zm_project_links WHERE project_id=? AND source=? AND reference=?');
+            $same->execute([$projectId,$source,$reference]);
+            if($same->fetchColumn()!==false)bail('این ارتباط قبلاً برای همین پروژه ثبت شده است.',409);
+            if(in_array($source,['invoice','journal'],true)){
+                $exclusive=$db->prepare('SELECT project_id FROM zm_project_links WHERE source=? AND reference=?');
+                $exclusive->execute([$source,$reference]);
+                if($exclusive->fetchColumn()!==false)
+                    bail('انتساب مالی این سند به پروژه دیگری ثبت شده؛ برای جلوگیری از دوباره‌شماری مسدود شد.',409);
             }
             $ins=$db->prepare('INSERT INTO zm_project_links(project_id,source,reference,reason,created_by) VALUES(?,?,?,?,?)');
             $ins->execute([$projectId,$source,$reference,$reason,actor()]);
             audit($db,'link','project',$projectId);
+        }elseif($action==='project_document'){
+            zmPiRequireActor($db,['admin','manager','accountant']);
+            if($archived||$state==='done')
+                bail('برای پرونده ردشده یا مختومه سند اجرایی جدید مجاز نیست.',409);
+            $title=zmPmClean(req('title'),160);
+            $category=zmPmClean(req('category'),80);
+            $body=zmPmClean(req('body'),12000);
+            $statement=$db->prepare('INSERT INTO documents(title,category,body,created_by) VALUES(?,?,?,?)');
+            $statement->execute([$title,$category,$body,actor()]);
+            $docId=(int)$db->lastInsertId();
+            $link=$db->prepare('INSERT INTO zm_project_links(project_id,source,reference,reason,created_by) VALUES(?,?,?,?,?)');
+            $link->execute([$projectId,'document',(string)$docId,'سند اصلی این پرونده؛ ثبت همزمان با ارتباط پروژه',actor()]);
+            audit($db,'create','document',$docId);
+            audit($db,'link','project',$projectId);
         }elseif($action==='project_milestone'){
             zmPiRequireActor($db,['admin','manager']);
-            if($state==='done')bail('برای پروژه مختومه نمی‌توان اقدام جدید تعریف کرد.',409);
+            if(!$approved||$state==='done')bail('برای پروژه فاقد مصوبه یا مختومه اقدام اجرایی جدید مجاز نیست.',409);
             $title=zmPmClean(req('title'),160);$due=zmPiDate(req('due_date'));
             $ins=$db->prepare('INSERT INTO zm_project_milestones(project_id,title,due_date,created_by) VALUES(?,?,?,?)');
             $ins->execute([$projectId,$title,$due,actor()]);
@@ -146,6 +172,7 @@ function zmPiHandle(PDO $db,string $private,string $action):void {
             audit($db,'milestone','project',$projectId);
         }elseif($action==='project_milestone_state'){
             zmPiRequireActor($db,['admin','manager']);
+            if(!$approved)bail('پرونده فاقد مصوبه قطعی نمی‌تواند وارد مسیر اجرای اقدام شود.',409);
             $midText=req('milestone_id');
             if(!preg_match('/^[1-9][0-9]{0,17}$/D',$midText))bail('شناسه اقدام معتبر نیست.');
             $mid=(int)$midText;
@@ -238,6 +265,11 @@ function zmPiRender(PDO $db,string $private):void {
     echo '<section><h2>پرونده یکپارچه پروژه #'.$pid.' — '.esc($project['title']).'</h2><p>مسئول: '.esc($project['owner']).' · وضعیت اداری: '.esc($labels[$project['state']]??$project['state']).' · بودجه پیشنهادی: '.money((int)$project['budget']).' ریال</p>';
     echo '<p class="muted">وجود پیوند با فاکتور یا سند مالی، تخصیص هزینه، پرداخت یا وصول را ثابت نمی‌کند. این صفحه عملیاتی فقط دفتر ارتباطات مستند است.</p>';
     echo '<p><a href="?page=projects">مدیریت پروژه‌ها</a> · <a href="?page=workflow_desk">کارتابل</a> · <a href="?page=project_calendar">تقویم پروژه‌ها</a> · <a href="?page=command_center">مرکز فرمان (مدیرکل)</a></p></section>';
+    $archiveOnly=zmPmIsArchiveOnly((string)$project['title']);
+    $approved=zmPmIsApproved((string)$project['title']);
+    if(!$approved && !$archiveOnly)
+        echo '<section><h2>پرونده فاقد مصوبه قطعی</h2><p>تا احراز مصوبه، فقط مکاتبات و بررسی اداری مجاز است؛ اجرای عملیات، گزارش پیشرفت فیزیکی یا انتساب مالی ممنوع است.</p></section>';
+    if($archiveOnly)echo '<section><h2>پرونده ردشده — فقط بایگانی</h2><p>این پرونده برای سابقه تاریخی حفظ می‌شود و ایجاد اقدام، سند اجرایی یا ارتباط مالی جدید برای آن ممنوع است.</p></section>';
     $sourceNames=zmPiSources();
     $links=q($db,'SELECT l.*,u.username FROM zm_project_links l JOIN users u ON u.id=l.created_by WHERE l.project_id=? ORDER BY l.id DESC LIMIT 150',[$pid]);
     echo '<section><h2>پیوندهای مستند به زیرسامانه‌های شرکت</h2><div class="scroll"><table><tr><th>بخش</th><th>مرجع</th><th>عنوان مرجع</th><th>دلیل اتصال</th><th>ایجادکننده</th></tr>';
@@ -250,21 +282,32 @@ function zmPiRender(PDO $db,string $private):void {
     if(!$links)echo '<tr><td colspan="5">هنوز رکوردی به این پروژه متصل نشده است؛ انتساب خودکار از روی نام‌های مشابه ممنوع است.</td></tr>';
     echo '</table></div></section>';
     if(in_array(role(),['admin','manager','accountant'],true)){
-      echo '<section><h2>اتصال یک رکورد واقعی به پروژه</h2><p class="muted">شناسه رکورد باید در زیرسامانه مربوط موجود باشد. هر مرجع فقط به یک پروژه متصل می‌شود تا هزینه یا عملکرد چندبار شمرده نشود.</p>';
+      echo '<section><h2>اتصال یک رکورد واقعی به پروژه</h2><p class="muted">رکورد باید موجود باشد. اسناد اداری و اطلاعات غیرمالی می‌توانند با توضیح به چند پروژه مرتبط شوند؛ فاکتور و سند روزنامه فقط به یک پروژه منتسب می‌شوند و هیچ مبلغی خودکار تخصیص نمی‌یابد.</p>';
       formBegin('project_link');
       echo '<input type="hidden" name="project_id" value="'.$pid.'"><label>سامانه</label><select name="source">';
-      foreach($sourceNames as $key=>$data)if(in_array(role(),zmPiSourceRole($key),true))echo '<option value="'.esc($key).'">'.esc($data[0]).'</option>';
+      foreach($sourceNames as $key=>$data)
+         if(in_array(role(),zmPiSourceRole($key),true) &&
+            ($approved || in_array($key,$archiveOnly?['document','report']:['document','report','workflow'],true)))
+             echo '<option value="'.esc($key).'">'.esc($data[0]).'</option>';
       echo '</select><label>شناسه دقیق رکورد</label><input name="reference" required maxlength="60" placeholder="شماره ID؛ برای ایجنت کد و برای گزارش 05-0033">';
       echo '<label>دلیل ارتباط و سند</label><textarea name="reason" maxlength="700" required></textarea><button>ثبت پیوند قابل ممیزی</button></form>';
       zmPiAvailableReferences($db,$private);
       echo '</section>';
+    }
+    if(in_array(role(),['admin','manager','accountant'],true) && !$archiveOnly && $project['state']!=='done'){
+       echo '<section><h2>ایجاد مکاتبه یا سند اداری مرتبط با همین پروژه</h2>';
+       echo '<p class="muted">سند و پیوند آن در یک تراکنش واحد ثبت می‌شوند. هیچ قرارداد، تعهد مالی یا پیام خارجی ارسال نمی‌شود.</p>';
+       formBegin('project_document');
+       echo '<input type="hidden" name="project_id" value="'.$pid.'"><label>عنوان مکاتبه یا سند</label><input name="title" maxlength="160" required>';
+       echo '<label>دسته سند</label><select name="category"><option value="مکاتبات">مکاتبات</option><option value="صورتجلسه">صورتجلسه</option><option value="پژوهش">پژوهش</option><option value="حقوقی و اداری">حقوقی و اداری</option></select>';
+       echo '<label>متن سند</label><textarea name="body" maxlength="12000" required></textarea><button>ثبت سند و اتصال قطعی به پرونده</button></form></section>';
     }
     $milestones=q($db,'SELECT * FROM zm_project_milestones WHERE project_id=? ORDER BY due_date,id LIMIT 200',[$pid]);
     $states=['todo'=>'برنامه‌ریزی','in_progress'=>'در جریان','blocked'=>'مسدود','done'=>'تکمیل اداری','cancelled'=>'لغوشده'];
     $transitions=['todo'=>['in_progress','blocked','cancelled'],
                   'in_progress'=>['blocked','done','cancelled'],
                   'blocked'=>['in_progress','cancelled'],'done'=>[],'cancelled'=>[]];
-    $canEdit=in_array(role(),['admin','manager'],true);
+    $canEdit=in_array(role(),['admin','manager'],true) && $approved;
     echo '<section><h2>وظایف زمان‌دار و نقاط عطف پروژه</h2><div class="scroll"><table><tr><th>سررسید</th><th>عنوان</th><th>وضعیت</th>'.($canEdit?'<th>تصمیم با دلیل</th>':'').'</tr>';
     foreach($milestones as $m){
       echo '<tr><td>'.esc($m['due_date']).'</td><td>'.esc($m['title']).'</td><td>'.esc($states[$m['state']]??$m['state']).'</td>';
