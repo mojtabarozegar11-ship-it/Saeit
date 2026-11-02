@@ -7,6 +7,7 @@ declare(strict_types=1);
  */
 function zmBusinessChatgptReports(string $private):void {
     if(role()!=='admin')bail('دسترسی فقط برای مدیرکل مجاز است.',403);
+    if(zmBusinessChatgptReportsArchive($private))return;
     $path=$private.'/chatgpt_reports_snapshot.json';
     echo '<section lang="fa" dir="rtl"><h2>گزارش‌های متنی اقدامات ChatGPT</h2>';
     echo '<p class="muted">تاریخچه شماره‌دار برگرفته از دفتر مدیریت؛ وجود گزارش به‌تنهایی اثبات فروش، پرداخت، انتشار یا اجرای عملیات نیست. دسترسی فقط‌خواندنی است.</p>';
@@ -127,4 +128,105 @@ function zmBusinessChatgptReports(string $private):void {
         echo '<div class="notice danger">اعتبارسنجی پرونده گزارش ناموفق بود؛ نمایش داده‌ها متوقف شد.</div>';
     }
     echo '</section>';
+}
+
+
+/**
+ * Paginated, non-financial, read-only archive. The legacy JSON remains an
+ * immutable compatibility snapshot of the earliest 100 validated receipts.
+ */
+function zmBusinessChatgptReportsArchive(string $private):bool {
+    $path=$private.'/chatgpt_reports_archive.sqlite3';
+    if(!file_exists($path) && !is_link($path))return false;
+    echo '<section lang="fa" dir="rtl"><h2>گزارش‌های متنی اقدامات ChatGPT</h2>';
+    echo '<p class="muted">آرشیو شماره‌دار، قابل صفحه‌بندی و فقط برای مدیرکل. متن گزارش اثبات مستقل اجرای کار، پرداخت یا درآمد نیست.</p>';
+    try {
+        if(is_link($private)||is_link($path)||!is_file($path)||!is_readable($path)||!class_exists('SQLite3'))throw new RuntimeException('unsafe report archive');
+        $stat=lstat($path);
+        if($stat===false||!is_int($stat['size'])||$stat['size']<4096||$stat['size']>500000000||(((int)$stat['mode'])&0077)!==0){
+            throw new RuntimeException('invalid report archive metadata');
+        }
+        $db=new SQLite3($path,SQLITE3_OPEN_READONLY);
+        $db->busyTimeout(1500);
+        if((int)$db->querySingle('PRAGMA user_version')!==1||
+           $db->querySingle("SELECT value FROM metadata WHERE name='source'")!=='github:mojtabarozegar11-ship-it/Saeit:issue:1725'){
+            throw new RuntimeException('invalid report archive identity');
+        }
+        $total=(int)$db->querySingle('SELECT COUNT(*) FROM reports');
+        if($total<0||$total>100000)throw new RuntimeException('invalid report archive count');
+        $pageRaw=$_GET['p']??'1';
+        if(!is_string($pageRaw)||!preg_match('/^[1-9][0-9]{0,4}$/D',$pageRaw))throw new RuntimeException('invalid page');
+        $page=(int)$pageRaw;
+        $pageCount=max(1,(int)ceil($total/25));
+        if($page>$pageCount)throw new RuntimeException('page outside archive');
+        $faRows=[];
+        $faPath=$private.'/chatgpt_reports_fa.json';
+        if(is_file($faPath)){
+            if(is_link($faPath)||!is_readable($faPath))throw new RuntimeException('unsafe Persian translations');
+            $faStat=lstat($faPath);
+            if($faStat===false||!is_int($faStat['size'])||$faStat['size']<32||$faStat['size']>100000||(((int)$faStat['mode'])&0077)!==0)throw new RuntimeException('invalid Persian translation metadata');
+            $faPayload=json_decode((string)file_get_contents($faPath),true,32,JSON_THROW_ON_ERROR);
+            if(!is_array($faPayload)||($faPayload['source']??'')!=='github:mojtabarozegar11-ship-it/Saeit:issue:1725'||($faPayload['version']??null)!==1||($faPayload['kind']??'')!=='persian_management_rendering'||!is_array($faPayload['items']??null)||count($faPayload['items'])>100)throw new RuntimeException('invalid Persian translations');
+            $faRows=$faPayload['items'];
+        }
+        echo '<p class="notice">تعداد گزارش‌های بایگانی‌شده: '.$total.' · صفحه '.$page.' از '.$pageCount.' · راستی‌آزمایی مستقل محتوا انجام نشده است.</p>';
+        $cycleNames=['01'=>'مقالات علمی','02'=>'کتاب‌ها','03'=>'کارخانه و فروشگاه‌ها','04'=>'بازی‌ها','05'=>'فرماندهی کسب‌وکار'];
+        $coverage=[];
+        foreach($cycleNames as $key=>$name)$coverage[$key]=['count'=>0,'latest'=>'—'];
+        $counts=$db->query('SELECT substr(report_code,1,2) AS cycle,COUNT(*) AS n,MAX(seq) AS last_seq FROM reports GROUP BY substr(report_code,1,2)');
+        if($counts===false)throw new RuntimeException('report count query failure');
+        while($c=$counts->fetchArray(SQLITE3_ASSOC)){
+            $key=(string)$c['cycle'];
+            if(isset($coverage[$key])){
+                $latest=$db->querySingle('SELECT report_code || " · " || occurred_at FROM reports WHERE seq='.(int)$c['last_seq']);
+                $coverage[$key]=['count'=>(int)$c['n'],'latest'=>(string)$latest];
+            }
+        }
+        echo '<section><h3>پایش پنج چرخهٔ ساعتی</h3><p class="muted">شمار گزارش‌ها از تعداد اقدامات واقعی متمایز است؛ هدف چرخه پنجم ۲۰ اقدام در هر اجراست، اما تحقق آن احراز نشده است.</p><div class="scroll"><table><tr><th>چرخه</th><th>تعداد گزارش</th><th>آخرین رسید</th><th>هدف</th></tr>';
+        foreach($cycleNames as $key=>$name){
+            $c=$coverage[$key];
+            echo '<tr><td>'.esc($key.' · '.$name).'</td><td>'.(int)$c['count'].'</td><td>'.esc($c['latest']).'</td><td>'.($key==='05'?'۲۰ اقدام / تحقق احرازنشده':'—').'</td></tr>';
+        }
+        echo '</table></div></section>';
+        if($total===0)echo '<p>هنوز گزارش معتبری دریافت نشده است.</p>';
+        $limit=25;
+        $offset=($page-1)*$limit;
+        $stmt=$db->prepare('SELECT report_code,comment_id,occurred_at,body,evidence_url FROM reports ORDER BY seq DESC LIMIT :limit OFFSET :offset');
+        if($stmt===false)throw new RuntimeException('report page preparation failure');
+        $stmt->bindValue(':limit',$limit,SQLITE3_INTEGER);
+        $stmt->bindValue(':offset',$offset,SQLITE3_INTEGER);
+        $result=$stmt->execute();
+        if($result===false)throw new RuntimeException('report page query failure');
+        while($r=$result->fetchArray(SQLITE3_ASSOC)){
+            $code=$r['report_code'];$id=(int)$r['comment_id'];$body=$r['body'];
+            if(!is_string($code)||!preg_match('/^[0-9]{2}-[0-9]{4,8}$/D',$code)||$id<1||
+               !is_string($body)||strlen($body)<20||strlen($body)>8000||
+               $r['evidence_url']!=='https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-'.$id){
+                throw new RuntimeException('invalid archived report');
+            }
+            $visible=$body;
+            if(isset($faRows[$code])){
+                $fa=$faRows[$code];
+                if(!is_array($fa)||($fa['comment_id']??null)!==$id||!is_string($fa['text_fa']??null)||strlen($fa['text_fa'])<20||strlen($fa['text_fa'])>8000)throw new RuntimeException('invalid translation association');
+                $visible=$fa['text_fa'];
+            }else{
+                preg_match_all('/[\x{0600}-\x{06FF}]/u',$body,$faChars);
+                preg_match_all('/[A-Za-z]/',$body,$latinChars);
+                if(count($latinChars[0])>count($faChars[0]))$visible='ترجمه فارسی این گزارش هنوز تأیید نشده است. متن اولیه در پیوند مدرک قابل مشاهده است.';
+            }
+            echo '<article class="card"><h3>'.esc($code).'</h3><p class="muted">زمان ثبت: '.esc($r['occurred_at']).'</p><details open><summary>متن فارسی گزارش</summary><p lang="fa" dir="rtl" style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9">'.esc($visible).'</p></details><p><a href="'.esc($r['evidence_url']).'" target="_blank" rel="noopener noreferrer">مشاهده مدرک اولیه در GitHub</a></p></article>';
+        }
+        if($pageCount>1){
+            echo '<nav aria-label="صفحه‌بندی گزارش‌ها"><p>';
+            if($page>1)echo '<a href="?page=chatgpt_reports&amp;p='.($page-1).'">صفحه جدیدتر</a> ';
+            if($page<$pageCount)echo '<a href="?page=chatgpt_reports&amp;p='.($page+1).'">صفحه قدیمی‌تر</a>';
+            echo '</p></nav>';
+        }
+        $db->close();
+    }catch(Throwable $e){
+        error_log('ZM REPORT ARCHIVE REJECTED ['.get_class($e).']');
+        echo '<div class="notice danger">اعتبارسنجی آرشیو ناموفق بود؛ گزارش نامعتبر نمایش داده نشد.</div>';
+    }
+    echo '</section>';
+    return true;
 }
