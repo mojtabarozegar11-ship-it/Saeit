@@ -403,8 +403,12 @@ try {
         zmAgentRender(zmAgentDb($private));
     } elseif($page==='store_manager'){
         authorize('view');
-        if(!function_exists('zmStoreDb'))bail('فروشگاه در دسترس نیست.',503);
-        zmStoreRender(zmStoreDb($private));
+        // A manager's GET is observational: it must never bootstrap or mutate
+        // the catalogue database (zmStoreDb initializes tables and WAL).
+        if(!function_exists('zmStorePublicDb'))bail('فروشگاه در دسترس نیست.',503);
+        try {$storeViewDb=zmStorePublicDb($private);}
+        catch(Throwable $e){bail('پایگاه داده فروشگاه برای مشاهده آماده نیست.',503);}
+        zmStoreRender($storeViewDb);
     } elseif($page==='accounts'){
         echo '<section><h2>کدینگ حساب‌ها</h2><div class="scroll"><table><tr><th>کد</th><th>نام</th><th>نوع</th></tr>';foreach(q($db,'SELECT * FROM ledger_accounts ORDER BY code') as $r)echo '<tr><td>'.esc($r['code']).'</td><td>'.esc($r['name']).'</td><td>'.esc($r['type']).'</td></tr>';echo '</table></div></section>';
         if(in_array(role(),['admin','accountant'],true)){echo '<section><h2>افزودن حساب جدید</h2>';formBegin('account');echo '<div class="form"><div><label>کد</label><input name="code" required pattern="[0-9]{3,8}"></div><div><label>عنوان حساب</label><input name="name" required></div><div><label>ماهیت</label><select name="type"><option value="asset">دارایی</option><option value="liability">بدهی</option><option value="equity">سرمایه</option><option value="income">درآمد</option><option value="expense">هزینه</option></select></div></div><button>ثبت حساب</button></form></section>';}
