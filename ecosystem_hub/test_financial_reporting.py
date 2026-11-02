@@ -213,3 +213,60 @@ class ManagementIncomeTests(TestCase):
         response = self.client.get(self.url() + "?start=2026-10-01&end=2026-10-31", secure=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["totals"][0]["income"], D("80"))
+
+    def test_unbalanced_posted_document_rejected_for_html_and_csv(self):
+        entry = self.journal(self.farm, "IRR", amount="80")
+        cash = self.accounts["farm"]["cash"]
+        JournalLine.objects.filter(entry=entry, account=cash).update(debit=D("70"))
+        self.client.force_login(self.accountant)
+        for url in (self.url(), self.url("income.csv")):
+            with self.subTest(url=url):
+                response = self.client.get(url + "?start=2026-10-01&end=2026-10-31", secure=True)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("no-store", response["Cache-Control"])
+        JournalLine.objects.filter(entry=entry, account=cash).update(debit=D("80"))
+        response = self.client.get(self.url() + "?start=2026-10-01&end=2026-10-31", secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["totals"][0]["income"], D("80"))
+
+    def test_invalid_posted_account_category_rejected_for_html_and_csv(self):
+        self.journal(self.farm, "IRR", amount="90")
+        cash = self.accounts["farm"]["cash"]
+        LedgerAccount.objects.filter(pk=cash.pk).update(category="unknown")
+        self.client.force_login(self.accountant)
+        for url in (self.url(), self.url("income.csv")):
+            with self.subTest(url=url):
+                self.assertEqual(
+                    self.client.get(url + "?start=2026-10-01&end=2026-10-31", secure=True).status_code, 400
+                )
+        LedgerAccount.objects.filter(pk=cash.pk).update(category="asset")
+        self.assertEqual(
+            self.client.get(self.url() + "?start=2026-10-01&end=2026-10-31", secure=True).status_code, 200
+        )
+
+    def test_unsupported_posted_currency_rejected_for_html_and_csv(self):
+        entry = self.journal(self.farm, "IRR", amount="75")
+        JournalEntry.objects.filter(pk=entry.pk).update(currency="XYZ")
+        self.client.force_login(self.accountant)
+        for url in (self.url(), self.url("income.csv")):
+            with self.subTest(url=url):
+                self.assertEqual(
+                    self.client.get(url + "?start=2026-10-01&end=2026-10-31", secure=True).status_code, 400
+                )
+        JournalEntry.objects.filter(pk=entry.pk).update(currency="IRR")
+        self.assertEqual(
+            self.client.get(self.url() + "?start=2026-10-01&end=2026-10-31", secure=True).status_code, 200
+        )
+
+    def test_unbalanced_other_unit_does_not_block_authorized_unit_scope(self):
+        self.journal(self.farm, "IRR", amount="25")
+        entry = self.journal(self.factory, "IRR", amount="90")
+        JournalLine.objects.filter(
+            entry=entry, account=self.accounts["factory"]["cash"],
+        ).update(debit=D("89"))
+        self.client.force_login(self.accountant)
+        response = self.client.get(
+            self.url() + "?start=2026-10-01&end=2026-10-31", secure=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["totals"][0]["income"], D("25"))
