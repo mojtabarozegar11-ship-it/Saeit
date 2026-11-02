@@ -1,4 +1,5 @@
 """Fail-closed MRP planning: no procurement or payment side effects."""
+from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -109,3 +110,33 @@ class ProcurementIntegrityTests(TestCase):
         self.assertEqual(AuditEvent.objects.filter(
             action="ecosystem_procurement_draft",
         ).count(), 1)
+
+    def test_changed_due_date_cannot_reuse_existing_purchase_draft(self):
+        created = prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertEqual(len(created), 1)
+        self.assertIsNone(ProcurementNeed.objects.get().required_by)
+        self.order.due_date = date(2026, 11, 15)
+        self.order.save(update_fields=("due_date",))
+        with self.assertRaises(ValidationError):
+            prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertIsNone(ProcurementNeed.objects.get().required_by)
+        self.assertEqual(ProcurementNeed.objects.count(), 1)
+        self.assertEqual(AuditEvent.objects.filter(
+            action="ecosystem_procurement_draft",
+        ).count(), 1)
+        self.assertFalse(JournalEntry.objects.exists())
+
+    def test_changed_order_code_cannot_keep_misleading_purchase_reason(self):
+        created = prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertEqual(len(created), 1)
+        original_reason = ProcurementNeed.objects.get().request_reason
+        self.order.code = "MRP-ORDER-RENAMED"
+        self.order.save(update_fields=("code",))
+        with self.assertRaises(ValidationError):
+            prepare_purchase_drafts(self.order.pk, self.owner)
+        self.assertEqual(ProcurementNeed.objects.get().request_reason, original_reason)
+        self.assertEqual(ProcurementNeed.objects.count(), 1)
+        self.assertEqual(AuditEvent.objects.filter(
+            action="ecosystem_procurement_draft",
+        ).count(), 1)
+        self.assertFalse(JournalEntry.objects.exists())
