@@ -245,8 +245,11 @@ def _maintain_product_slots(root, recipe_names):
         if item["recipe"] not in seen:
             active.append(item)
             seen.add(item["recipe"])
-    if len(active) > 100:
-        raise RuntimeError("PRODUCT_SLOT_MIGRATION_LIMIT_EXCEEDED")
+    # Do not silently demote another active product into a waiting slot.
+    # A previously multi-active state can still have live workers elsewhere.
+    # Stop and require an independently verified global singleton before work.
+    if len(state["active"]) != len(active) or len(active) > PRODUCT_SLOT_CAPACITY:
+        raise RuntimeError("PRODUCT_SLOT_SINGLETON_STATE_VIOLATION")
     exited = state.get("exited", {})
     waiting = state.get("waiting", [])
     if not isinstance(exited, dict) or not isinstance(waiting, list):
@@ -257,12 +260,6 @@ def _maintain_product_slots(root, recipe_names):
         if not isinstance(recipe, str) or not PRODUCT_SLUG.fullmatch(recipe):
             raise RuntimeError("PRODUCT_SLOT_WAITING_ENTRY_INVALID")
         if recipe not in seen and recipe not in queued:
-            queue.append(recipe)
-            queued.add(recipe)
-    # Migrate the former multi-slot roster into one active item plus a FIFO queue.
-    for item in active[1:]:
-        recipe = item["recipe"]
-        if recipe not in queued:
             queue.append(recipe)
             queued.add(recipe)
     retained = []
