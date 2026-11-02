@@ -6,6 +6,11 @@ on:
         description: "Type BACKUP_AND_ISOLATED_RESTORE (creates only private VPS ciphertext; production source read-only)"
         required: true
         type: string
+      resume_sql_set_id:
+        description: "Optional: existing fully verified SQL backup-set ID; resume its missing files only"
+        required: false
+        default: ""
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -166,17 +171,37 @@ jobs:
           echo "BACKUP_PREFLIGHT=PASSED; PASSENGER_DB_IDENTITY=NOT_PROVEN; RELEASE_PERMITTED=NO"
       - name: Require existing VPS recovery key and prepare unique explicit backup pair identity
         shell: bash
+        env:
+          MPW_RESUME_SQL_SET_ID: ${{ inputs.resume_sql_set_id }}
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           probe64="$(base64 -w0 scripts/mpw_vps_backup_runtime_gate_readonly_20261101.py)"
           call='import base64,sys;payload=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(payload))'
           timeout 45s ssh -T -F "$d/config" saeit-vps "PYTHONDONTWRITEBYTECODE=1 python3 -B -c '$call' '$probe64' --require-ready"
-          stem="mojplaywin_$(date -u +%Y%m%dT%H%M%SZ)_$(openssl rand -hex 8)"
+          if [ -n "$MPW_RESUME_SQL_SET_ID" ]; then
+            stem="$MPW_RESUME_SQL_SET_ID"
+            mode="resume-existing-sql"
+          else
+            stem="mojplaywin_$(date -u +%Y%m%dT%H%M%SZ)_$(openssl rand -hex 8)"
+            mode="new-pair"
+          fi
           [[ "$stem" =~ ^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}$ ]]
           echo "MPW_BACKUP_SET_STEM=$stem" >> "$GITHUB_ENV"
-          echo "OWNER_APPROVED_BACKUP_SET_ID=generated; NO_PRODUCTION_WRITES=YES"
+          echo "OWNER_APPROVED_BACKUP_SET_ID=$mode; NO_PRODUCTION_WRITES=YES"
+      - name: Reverify immutable existing SQL GPG archive before files-only resume
+        if: ${{ inputs.resume_sql_set_id != '' }}
+        shell: bash
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          script64="$(base64 -w0 scripts/mojplaywin_recovery_stream_vps.py)"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          timeout 1450s ssh -T -F "$d/config" saeit-vps "python3 -B -c '$call' '$script64' verify-resume-sql '$MPW_BACKUP_SET_STEM'"
+          echo "SQL_GPGV2_RESUME=fully_reverified; ORIGINAL_SQL_ARCHIVE_UNMODIFIED=YES"
       - name: Back up fresh MySQL transactionally using gzip-1 and private VPS GPG AES256
+        if: ${{ inputs.resume_sql_set_id == '' }}
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         shell: bash
