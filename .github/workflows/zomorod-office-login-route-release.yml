@@ -1,6 +1,7 @@
-name: Zomorod office login route release
+name: Zomorod office private login route guard (CI only, no live release)
 on:
   pull_request:
+    branches: [main]
     paths:
       - ".github/workflows/zomorod-office-login-route-release.yml"
       - "config/urls.py"
@@ -11,7 +12,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: zomorod-office-login-route-release
+  group: zomorod-office-login-route-source-check
   cancel-in-progress: false
 jobs:
   validate:
@@ -19,175 +20,27 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Validate the protected staff redirect source
+        with:
+          persist-credentials: false
+      - name: Validate current private office routes without touching the host
         run: |
           set -euo pipefail
           python3 -m py_compile config/urls.py
-          grep -Fq 'path("company/office/login/", RedirectView.as_view(url="/admin/login/?next=/staff/command-center/", permanent=False), name="company_office_login")' config/urls.py
-          grep -Fq 'from django.views.generic import RedirectView' config/urls.py
-          echo "OFFICE_LOGIN_ROUTE_SOURCE=verified"
-  release:
-    needs: validate
-    if: github.event_name == 'push' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 12
-    steps:
-      - uses: actions/checkout@v4
-      - name: Establish fingerprint-pinned VPS to cPanel relay
-        shell: bash
-        env:
-          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          umask 077
-          test -n "$VPS_KEY" && test -n "$HOST_KEY"
-          d="$RUNNER_TEMP/zomorod-office-login"
-          install -d -m 700 "$d"
-          trap 'rm -rf -- "$d"' EXIT
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
-          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
-          chmod 600 "$d/"*.key
-          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
-          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
-          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.known"
-          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          cat > "$d/config" <<EOF
-          Host saeit-vps
-            HostName 178.239.147.150
-            User githubops
-            Port 22
-            IdentityFile $d/vps.key
-            UserKnownHostsFile $d/vps.known
-          Host saeit-cpanel
-            HostName 178.239.147.125
-            User zomorod2
-            Port 1396
-            IdentityFile $d/host.key
-            UserKnownHostsFile $d/host.known
-            ProxyJump saeit-vps
-          Host *
-            StrictHostKeyChecking yes
-            IdentitiesOnly yes
-            BatchMode yes
-            ConnectTimeout 15
-            ConnectionAttempts 1
-            ForwardAgent no
-            RequestTTY no
-          EOF
-          chmod 600 "$d/config"
-          timeout 110s ssh -F "$d/config" saeit-cpanel "bash -se -- '$GITHUB_SHA'" <<'REMOTE'
-          set -euo pipefail
-          sha="$1"
-          python="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"
-          app="/home/zomorod2/Saeit"
-          test "$(id -un)" = "zomorod2"
-          test -x "$python"
-          test -d "$app" && test ! -L "$app"
-          test "$(cd "$app" && pwd -P)" = "$app"
-          test -s "$app/manage.py" && test -s "$app/passenger_wsgi.py"
-          cd "$app"
-          "$python" manage.py check --deploy
-          python3 - "$app" "$sha" <<'PY'
-          import os, pwd, shutil, stat, subprocess, sys, tempfile, time
+          python3 - <<'PY'
           from pathlib import Path
 
-          app = Path(sys.argv[1])
-          release_id = sys.argv[2]
-          if not release_id.isascii() or not release_id.isalnum() or len(release_id) != 40:
-              raise SystemExit("RELEASE_ID_REJECTED")
-          if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
-              raise SystemExit("CPANEL_IDENTITY_REJECTED")
-          urls = app / "config" / "urls.py"
-          passenger = app / "passenger_wsgi.py"
-          if urls.is_symlink() or not urls.is_file() or passenger.is_symlink() or not passenger.is_file():
-              raise SystemExit("APPLICATION_PATH_REJECTED")
-          original = urls.read_bytes()
-          text = original.decode("utf-8")
-          route = 'path("company/office/login/", RedirectView.as_view(url="/admin/login/?next=/staff/command-center/", permanent=False), name="company_office_login")'
-          if route in text:
-              print("OFFICE_LOGIN_ROUTE=already_present")
-              raise SystemExit(0)
-          if "from django.views.generic import RedirectView" not in text:
-              raise SystemExit("REDIRECT_VIEW_IMPORT_MISSING")
-          newline = b"\r\n" if b"\r\n" in original else b"\n"
-          anchor = b"urlpatterns = [" + newline
-          if original.count(anchor) != 1:
-              raise SystemExit("URLS_ANCHOR_UNSAFE")
-          backup_root = Path("/home/zomorod2/.backups/zomorod-office-login-route")
-          backup_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-          os.chmod(backup_root, 0o700)
-          backup_dir = backup_root / release_id
-          backup_dir.mkdir(mode=0o700)
-          backup = backup_dir / "config.urls.py.before"
-          with backup.open("xb") as stream:
-              stream.write(original)
-              stream.flush()
-              os.fsync(stream.fileno())
-          os.chmod(backup, 0o600)
-          inserted = b'    path("company/office/login/", RedirectView.as_view(url="/admin/login/?next=/staff/command-center/", permanent=False), name="company_office_login"),' + newline
-          updated = original.replace(anchor, anchor + inserted, 1)
-          fd, temp_name = tempfile.mkstemp(prefix=".urls-office-login-", dir=str(urls.parent))
-          try:
-              with os.fdopen(fd, "wb") as stream:
-                  stream.write(updated)
-                  stream.flush()
-                  os.fsync(stream.fileno())
-              os.chmod(temp_name, stat.S_IMODE(urls.stat().st_mode))
-              os.replace(temp_name, urls)
-              dir_fd = os.open(urls.parent, os.O_RDONLY)
-              try:
-                  os.fsync(dir_fd)
-              finally:
-                  os.close(dir_fd)
-              passenger.touch()
-              checks = [
-                  ("/company/office/login/", 302),
-                  ("/", 200),
-                  ("/admin/login/", 200),
-                  ("/api/health/", 200),
-                  ("/amozeshgah/", 200),
-              ]
-              import urllib.error, urllib.request
-              class NoRedirect(urllib.request.HTTPRedirectHandler):
-                  def redirect_request(self, req, fp, code, msg, headers, newurl):
-                      return None
-              opener = urllib.request.build_opener(NoRedirect())
-              subprocess.run(["/home/zomorod2/virtualenv/Saeit/3.11/bin/python", "manage.py", "check", "--deploy"], cwd=app, check=True, timeout=90)
-              for path, expected in checks:
-                  success = False
-                  for attempt in range(6):
-                      request = urllib.request.Request("https://zomorodmelal.ir" + path, method="GET")
-                      try:
-                          response = opener.open(request, timeout=12)
-                          status = response.status
-                          location = response.headers.get("Location", "")
-                          response.close()
-                      except urllib.error.HTTPError as error:
-                          status = error.code
-                          location = error.headers.get("Location", "")
-                          error.close()
-                      except Exception:
-                          status, location = 0, ""
-                      if status == expected and (path != "/company/office/login/" or location == "/admin/login/?next=/staff/command-center/"):
-                          print("LIVE_ROUTE=" + path + " STATUS=" + str(status))
-                          success = True
-                          break
-                      time.sleep(3)
-                  if not success:
-                      raise RuntimeError("LIVE_SMOKE_FAILED:" + path)
-              print("OFFICE_LOGIN_ROUTE=deployed_and_verified")
-          except Exception:
-              rollback_temp = urls.with_name(".urls-office-login-rollback")
-              shutil.copy2(backup, rollback_temp)
-              os.replace(rollback_temp, urls)
-              passenger.touch()
-              raise
-          finally:
-              if os.path.exists(temp_name):
-                  os.unlink(temp_name)
+          source = Path("config/urls.py").read_text(encoding="utf-8")
+          required = {
+              "private_login_alias": 'path("company/office/login/", RedirectView.as_view(url="/company/office/secure-login/", permanent=False), name="company_office_login")',
+              "private_office": 'path("company/office/", include("enterprise_portal.urls"))',
+              "private_messages": 'path("company/office/messages/", include("company_messaging.urls"))',
+              "private_marketing": 'path("company/office/marketing/", include("company_marketing.urls"))',
+          }
+          for name, route in required.items():
+              if source.count(route) != 1:
+                  raise SystemExit("OFFICE_ROUTE_INVALID:" + name)
+          if 'url="/admin/login/?next=/staff/command-center/"' in source:
+              raise SystemExit("OBSOLETE_STAFF_LOGIN_ALIAS_FORBIDDEN")
+          print("PRIVATE_OFFICE_ROUTE_SOURCE=verified")
+          print("HOST_OR_DB_MUTATION=none")
           PY
-          REMOTE
-          echo "ZOMOROD_OFFICE_LOGIN_RELEASE=verified"
