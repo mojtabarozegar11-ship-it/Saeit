@@ -67,15 +67,28 @@ def guard_private(path: Path, basename: str, *, must_exist=False):
             raise ValueError("UNSAFE_ACTION_FILE")
 
 
+def _unique_json_object(pairs):
+    """Reject ambiguous repeated JSON keys, including nested action fields."""
+    obj = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError("DUPLICATE_ACTION_JSON_KEY")
+        obj[key] = value
+    return obj
+
+
 def parse_block(body: str, report_code: str):
     """Return (status, rows), never interpret natural-language prose as actions."""
     if "ZM_ACTIONS_V1_START" not in body:
         return "missing", []
+    # An extra unbalanced marker must not be silently ignored.
+    if body.count("ZM_ACTIONS_V1_START") != 1 or body.count("ZM_ACTIONS_V1_END") != 1:
+        return "invalid_contract", []
     matches = BLOCK.findall(body)
     if len(matches) != 1:
         return "invalid_contract", []
     try:
-        data = json.loads(matches[0])
+        data = json.loads(matches[0], object_pairs_hook=_unique_json_object)
     except (ValueError, TypeError):
         return "invalid_contract", []
     if (not isinstance(data, dict) or type(data.get("version")) is not int
@@ -100,7 +113,8 @@ def parse_block(body: str, report_code: str):
         if (not isinstance(aid, str) or ACTION_ID.fullmatch(aid) is None or not numbered_id or aid in seen
                 or not isinstance(title, str) or not 8 <= len(title.encode("utf-8")) <= 350
                 or not isinstance(impact, str) or len(impact.encode("utf-8")) > 500
-                or state not in STATUSES or not isinstance(evidence, str)
+                or not isinstance(state, str) or state not in STATUSES
+                or not isinstance(evidence, str)
                 or len(evidence.encode("utf-8")) > 350
                 or (evidence and EVIDENCE.fullmatch(evidence) is None)
                 or (state == "completed" and not evidence)):
