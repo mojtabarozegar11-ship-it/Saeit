@@ -129,6 +129,60 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
         rejected=self.view(cycle="04")
         self.assertIn("اعتبارسنجی آرشیو ناموفق بود", rejected.stdout)
 
+    def test_public_persian_summaries_identity_and_fail_closed(self):
+        public = self.folder / "chatgpt_reports_public_cycles.sqlite3"
+        with sqlite3.connect(public) as db:
+            db.execute("CREATE TABLE reports (seq INTEGER PRIMARY KEY, report_code TEXT NOT NULL UNIQUE, comment_id INTEGER NOT NULL UNIQUE, occurred_at TEXT NOT NULL, body TEXT NOT NULL, evidence_url TEXT NOT NULL)")
+            db.execute("CREATE TABLE metadata (name TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            db.execute("PRAGMA user_version=1")
+            db.execute("INSERT INTO metadata VALUES ('source','github:mojtabarozegar11-ship-it/Saeit:issue:1514')")
+            db.execute("INSERT INTO metadata VALUES ('last_checked_at','2026-11-02T04:00:00+00:00')")
+            db.execute("INSERT INTO reports(report_code,comment_id,occurred_at,body,evidence_url) VALUES (?,?,?,?,?)",
+                       ("01-0002", 11112, "2026-11-02T04:00:00+00:00",
+                        "English-only text that must never appear raw in Persian report mode.",
+                        "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514#issuecomment-11112"))
+        public.chmod(0o600)
+        pack = self.folder / "chatgpt_reports_public_fa.json"
+        payload = {
+            "source": "github:mojtabarozegar11-ship-it/Saeit:issue:1514",
+            "version": 1, "kind": "persian_public_cycle_summaries",
+            "items": {"01-0002": {"comment_id": 11112,
+                                  "text_fa": "خلاصه مستند فارسی؛ صرف گزارش ادعای انتشار یا درآمد ندارد."}},
+        }
+        pack.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        pack.chmod(0o600)
+        translated = self.view(cycle="01")
+        self.assertEqual(translated.returncode, 0, translated.stderr[-200:])
+        self.assertIn("خلاصهٔ فارسی مستند از گزارش", translated.stdout)
+        self.assertIn("خلاصه مستند فارسی", translated.stdout)
+        self.assertNotIn("English-only text", translated.stdout)
+        self.assertNotIn("اعتبارسنجی آرشیو ناموفق بود", translated.stdout)
+        self.assertNotEqual(self.view(role="viewer", cycle="01").returncode, 0)
+        payload["items"]["01-0002"]["comment_id"] = 99999
+        pack.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        blocked = self.view(cycle="01")
+        self.assertIn("اعتبارسنجی آرشیو ناموفق بود", blocked.stdout)
+        payload["items"]["01-0002"]["comment_id"] = 11112
+        pack.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        pack.chmod(0o644)
+        blocked = self.view(cycle="01")
+        self.assertIn("اعتبارسنجی آرشیو ناموفق بود", blocked.stdout)
+
+    def test_public_translation_package_is_public_only_and_numbered(self):
+        source_file = ROOT / "content/zomorod-business/chatgpt_reports_public_fa.json"
+        payload = json.loads(source_file.read_text(encoding="utf-8"))
+        self.assertEqual(payload["source"], "github:mojtabarozegar11-ship-it/Saeit:issue:1514")
+        self.assertEqual(payload["kind"], "persian_public_cycle_summaries")
+        self.assertEqual(payload["version"], 1)
+        self.assertEqual(len(payload["items"]), 25)
+        for code, item in payload["items"].items():
+            self.assertRegex(code, r"^(01|02|04)-[0-9]{4}$")
+            self.assertGreater(item["comment_id"], 0)
+            self.assertGreater(len(item["text_fa"]), 50)
+            self.assertNotIn("https://docs.google.com", item["text_fa"])
+            self.assertNotIn("/Research/", item["text_fa"])
+            self.assertNotIn("/Game Releases/", item["text_fa"])
+
     def test_role_and_corrupt_permissions_are_closed(self):
         self.assertNotEqual(self.view(role="viewer").returncode, 0)
         self.archive.chmod(0o644)
