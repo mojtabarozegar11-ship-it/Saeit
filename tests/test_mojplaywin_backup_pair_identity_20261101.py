@@ -15,6 +15,7 @@ from scripts.mojplaywin_backup_encrypt_vps_gpg import (
 )
 from scripts.mojplaywin_recovery_stream_vps import (
     discover_explicit_pair, explicit_pair_readiness, load, verify_resumable_sql,
+    decrypt_to_stdout,
 )
 
 PAIR = "mojplaywin_20261101T120000Z_0123456789abcdef"
@@ -82,6 +83,13 @@ class ExplicitPairIdentityTests(unittest.TestCase):
             self.assertTrue(verified["source_verified"])
             self.assertEqual(verified["plaintext_bytes"], len(synthetic))
             self.assertFalse(verified["release_permitted"])
+            class ClosedPipe:
+                def write(self, _payload):
+                    raise BrokenPipeError("synthetic downstream close")
+                def flush(self):
+                    pass
+            with self.assertRaises(BrokenPipeError):
+                decrypt_to_stdout("mysql", home=base, stem=PAIR, out=ClosedPipe())
             with self.assertRaises(RuntimeError):
                 verify_resumable_sql(WRONG, home=base)
             root = base / ".private-mojplaywin-offhost-backups"
