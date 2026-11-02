@@ -37,6 +37,24 @@ function zmStoreDb(string $private):PDO {
   BEFORE UPDATE OF sku ON free_digital_products
   WHEN EXISTS(SELECT 1 FROM products WHERE sku=NEW.sku COLLATE NOCASE)
   BEGIN SELECT RAISE(ABORT,'cross_catalog_sku_collision'); END");
+ // Prevent case-only SKU duplicates *within* each catalogue too. Existing
+ // legacy collisions remain intact; public listing hides ambiguous releases.
+ $db->exec("CREATE TRIGGER IF NOT EXISTS zm_paid_sku_case_insert_guard
+  BEFORE INSERT ON products
+  WHEN EXISTS(SELECT 1 FROM products WHERE sku=NEW.sku COLLATE NOCASE)
+  BEGIN SELECT RAISE(ABORT,'same_catalog_sku_collision'); END");
+ $db->exec("CREATE TRIGGER IF NOT EXISTS zm_paid_sku_case_update_guard
+  BEFORE UPDATE OF sku ON products
+  WHEN EXISTS(SELECT 1 FROM products WHERE id<>OLD.id AND sku=NEW.sku COLLATE NOCASE)
+  BEGIN SELECT RAISE(ABORT,'same_catalog_sku_collision'); END");
+ $db->exec("CREATE TRIGGER IF NOT EXISTS zm_free_sku_case_insert_guard
+  BEFORE INSERT ON free_digital_products
+  WHEN EXISTS(SELECT 1 FROM free_digital_products WHERE sku=NEW.sku COLLATE NOCASE)
+  BEGIN SELECT RAISE(ABORT,'same_catalog_sku_collision'); END");
+ $db->exec("CREATE TRIGGER IF NOT EXISTS zm_free_sku_case_update_guard
+  BEFORE UPDATE OF sku ON free_digital_products
+  WHEN EXISTS(SELECT 1 FROM free_digital_products WHERE id<>OLD.id AND sku=NEW.sku COLLATE NOCASE)
+  BEGIN SELECT RAISE(ABORT,'same_catalog_sku_collision'); END");
  return $db;
 }
 /** Public storefront must not create or migrate the private catalog on GET. */
