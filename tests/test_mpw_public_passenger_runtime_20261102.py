@@ -37,9 +37,9 @@ class PassengerDiagnosticTests(unittest.TestCase):
             (app / "services").mkdir(parents=True)
             (public / "tmp").mkdir()
             (public / ".htaccess").write_text(
-                "PassengerAppRoot /home/zomorod2/mojplaywin.com\\n")
+                "PassengerAppRoot /home/zomorod2/mojplaywin.com\n")
             (public / "passenger_wsgi.py").write_text(
-                "APP='/home/zomorod2/Saeit-staging'\\n")
+                "APP='/home/zomorod2/Saeit-staging'\n")
             (app / "services/mpw_trx_guest_commerce.py").write_text(
                 "synthetic adapter content")
             (public / "tmp/restart.txt").touch()
