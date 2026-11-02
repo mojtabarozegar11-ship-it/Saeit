@@ -80,6 +80,43 @@ jobs:
               except OSError as e:
                   print("C03_STATE_LIST_ERROR="+type(e).__name__)
           PY
+          echo "C03_STATE_JSON_METADATA_ONLY"
+          python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          base=Path.home()/"factory-runtime"/"private"/"autonomous-product-cycle"
+          for name in ("production-state.json","designer-state.json","build-50-status.json"):
+              p=base/name
+              if not p.is_file() or p.is_symlink():
+                  print("C03_STATE_FILE_ABSENT="+name)
+                  continue
+              try:
+                  raw=p.read_bytes()
+                  if len(raw)>4000000: raise ValueError("oversized")
+                  d=json.loads(raw)
+                  print("C03_STATE_JSON_FILE="+name+":sha256="+hashlib.sha256(raw).hexdigest()+":bytes="+str(len(raw)))
+                  if not isinstance(d,dict):
+                      print("C03_STATE_JSON_NONOBJECT="+name)
+                      continue
+                  print("C03_STATE_JSON_KEYS="+name+":"+(",".join(sorted(d)[:35])))
+                  for k in ("active_product_count","active_count","in_progress_count","current_product","active_product","active_products","queue","queue_items","status","state","hold","stop"):
+                      if k not in d: continue
+                      v=d[k]
+                      if isinstance(v,(list,dict)): print("C03_STATE_FIELD="+name+":"+k+":type="+type(v).__name__+":length="+str(len(v)))
+                      elif isinstance(v,(int,float,bool)): print("C03_STATE_FIELD="+name+":"+k+":value="+str(v))
+                      else: print("C03_STATE_FIELD="+name+":"+k+":type="+type(v).__name__)
+              except (OSError,ValueError) as e:
+                  print("C03_STATE_READ_FAILED="+name+":"+type(e).__name__)
+          for dirname in ("global-premium-quality-receipts",):
+              p=base/dirname
+              if p.is_dir() and not p.is_symlink():
+                  print("C03_RECEIPT_DIRECTORY_ENTRY_COUNT="+dirname+":"+str(sum(1 for _ in p.iterdir())))
+          holds=Path.home()/"factory-runtime"/"operations"/"holds"
+          if holds.is_dir() and not holds.is_symlink():
+              print("C03_HOLDS_DIRECTORY_ENTRY_COUNT="+str(sum(1 for _ in holds.iterdir())))
+              for p in sorted(holds.iterdir())[:25]:
+                  if not p.is_symlink(): print("C03_HOLD_ENTRY="+p.name)
+          PY
           echo "C03_SYSTEM_TIMER_FACTORY_ENTRY_COUNT"
           (systemctl list-timers --all --no-pager --no-legend 2>/dev/null || true) | grep -Eic 'factory|autonomous|generation' || true
           echo "C03_LOCK_OBSERVATIONS"
