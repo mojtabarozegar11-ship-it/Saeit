@@ -74,6 +74,8 @@ jobs:
           ssh -F "$d/config" saeit-cpanel bash -se -- "$(cat "$RUNNER_TEMP/viewer-live.sha")" <<'REMOTE'
           set -euo pipefail
           viewer_sha="$1"
+          echo "HOST_LOCAL_TIME=$(date +%Y-%m-%dT%H:%M:%S%z)"
+          echo "HOST_UTC_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           root="$HOME/.private/zomorod-business"
           index="$root/chatgpt_actions_index.sqlite3"
           archive="$root/chatgpt_reports_archive.sqlite3"
@@ -108,6 +110,7 @@ jobs:
               rejected=db.execute("SELECT COUNT(*) FROM rejected").fetchone()[0]
               assert reports >= 0 and 0 <= actions <= reports*20 and 0 <= rejected <= reports
           print("ACTION_INDEX_SCHEDULED_EXECUTION="+("verified" if built>=since else "not_yet_observed"))
+          print("INDEX_BUILT_UTC="+built.isoformat())
           print("INDEPENDENT_BUSINESS_VERIFICATION=not_claimed")
           PY
           echo 'CRON_50_AND_55=installed'
