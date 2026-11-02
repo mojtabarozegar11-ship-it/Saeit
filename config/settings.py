@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "core",
+    "apps.living_cities",
     "farnaz.apps.FarnazConfig",
     "command_center",
 ]
@@ -91,6 +92,8 @@ STORAGES = {
     },
 }
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+LIVING_CITIES_CODE_PEPPER = env("LIVING_CITIES_CODE_PEPPER", default="")
+
 APP_VERSION = env("APP_VERSION", default="0.1.0")
 PAYMENT_WEBHOOK_SECRET = env("PAYMENT_WEBHOOK_SECRET", default="")
 
