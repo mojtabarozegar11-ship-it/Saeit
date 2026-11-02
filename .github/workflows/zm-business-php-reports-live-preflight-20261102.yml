@@ -113,9 +113,9 @@ jobs:
           from pathlib import Path
           text = Path(sys.argv[1]).read_text(encoding="utf-8")
           anchors = {
-              "NAV": "'approval_register'=>'دفتر مصوبات','agent_center'",
+              "NAV": "'audit'=>'ردپای عملیات'",
               "ROLE": "if($key==='users'&&role()!=='admin')continue;",
-              "ROUTE": "    } elseif($page==='approval_register'){",
+              "ROUTE": "    } elseif($page==='audit'){",
           }
           compatible = True
           for label, pattern in anchors.items():
