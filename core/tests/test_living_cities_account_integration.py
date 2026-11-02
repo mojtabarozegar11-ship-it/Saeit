@@ -1,11 +1,15 @@
 """MojPlayWin account game integration on the existing Django user/session database."""
 import json
+from datetime import timedelta
+from unittest.mock import patch
 
+from django.db import DatabaseError
+from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 from django.urls import Resolver404, resolve
 
-from apps.living_cities.models import PlayerTycoon, TycoonActionReceipt
+from apps.living_cities.models import LoginAttemptBucket, PlayerTycoon, TycoonActionReceipt
 
 
 @override_settings(ALLOWED_HOSTS=["mojplaywin.com", "zomorodmelal.ir", "testserver"])
@@ -134,3 +138,81 @@ class MojPlayWinLivingCitiesAccountTests(TestCase):
             browser.get("/api/living-cities/tycoon/", HTTP_HOST="mojplaywin.com").status_code,
             401,
         )
+
+    def test_invalid_password_burst_is_limited_across_clients_on_same_ip(self):
+        browser = Client(enforce_csrf_checks=True)
+        token = browser.get(
+            "/api/living-cities/auth/csrf/", HTTP_HOST="mojplaywin.com"
+        ).json()["csrf_token"]
+        endpoint = "/api/living-cities/auth/login/"
+        bad = json.dumps({"username": "mpw_existing_player", "password": "incorrect"})
+        statuses = [
+            browser.post(
+                endpoint, bad, content_type="application/json",
+                HTTP_HOST="mojplaywin.com", HTTP_X_CSRFTOKEN=token,
+            ).status_code
+            for _ in range(5)
+        ]
+        self.assertEqual(statuses, [401, 401, 401, 401, 429])
+        blocked = LoginAttemptBucket.objects.get(blocked_until__isnull=False)
+        self.assertEqual(len(blocked.key_digest), 64)
+        self.assertNotIn("mpw_existing_player", blocked.key_digest)
+        self.assertEqual(blocked.failures, 5)
+
+        good = json.dumps({
+            "username": "mpw_existing_player", "password": "existing-account-password"
+        })
+        denied = browser.post(
+            endpoint, good, content_type="application/json",
+            HTTP_HOST="mojplaywin.com", HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(denied.status_code, 429)
+        self.assertEqual(denied["Retry-After"], "900")
+        self.assertEqual(browser.get(
+            "/api/living-cities/auth/me/", HTTP_HOST="mojplaywin.com"
+        ).status_code, 401)
+
+        # Distinct remote address has its own bucket, without trusting XFF.
+        other = Client(enforce_csrf_checks=True)
+        other_token = other.get(
+            "/api/living-cities/auth/csrf/", HTTP_HOST="mojplaywin.com",
+            REMOTE_ADDR="192.0.2.7",
+        ).json()["csrf_token"]
+        allowed = other.post(
+            endpoint, good, content_type="application/json",
+            HTTP_HOST="mojplaywin.com", HTTP_X_CSRFTOKEN=other_token,
+            REMOTE_ADDR="192.0.2.7", HTTP_X_FORWARDED_FOR="127.0.0.1",
+        )
+        self.assertEqual(allowed.status_code, 200, allowed.content)
+
+        blocked.blocked_until = timezone.now() - timedelta(seconds=1)
+        blocked.first_failure_at = timezone.now() - timedelta(minutes=16)
+        blocked.save(update_fields=["blocked_until", "first_failure_at"])
+        recovered = browser.post(
+            endpoint, good, content_type="application/json",
+            HTTP_HOST="mojplaywin.com", HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(recovered.status_code, 200, recovered.content)
+
+    def test_unavailable_shared_throttle_fails_closed(self):
+        browser = Client(enforce_csrf_checks=True)
+        token = browser.get(
+            "/api/living-cities/auth/csrf/", HTTP_HOST="mojplaywin.com"
+        ).json()["csrf_token"]
+        with patch(
+            "apps.living_cities.auth_api._authenticate_with_throttle",
+            side_effect=DatabaseError("unavailable"),
+        ):
+            response = browser.post(
+                "/api/living-cities/auth/login/",
+                json.dumps({
+                    "username": "mpw_existing_player",
+                    "password": "existing-account-password",
+                }),
+                content_type="application/json", HTTP_HOST="mojplaywin.com",
+                HTTP_X_CSRFTOKEN=token,
+            )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(browser.get(
+            "/api/living-cities/auth/me/", HTTP_HOST="mojplaywin.com"
+        ).status_code, 401)
