@@ -68,5 +68,58 @@ class OneFileReleaseGateTests(unittest.TestCase):
             self.exercise(needed=False)
 
 
+
+class PassengerRestartRootTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.app = Path(self.directory.name) / "Saeit-staging"
+        self.public = Path(self.directory.name) / "mojplaywin.com"
+        (self.app / "services").mkdir(parents=True)
+        (self.app / "tmp").mkdir()
+        (self.public / "tmp").mkdir(parents=True)
+        (self.public / "passenger_wsgi.py").write_text(
+            "APP='/home/zomorod2/Saeit-staging'" + chr(10), encoding="utf8")
+        (self.public / ".htaccess").write_text(
+            "PassengerAppRoot " + str(self.public) + chr(10), encoding="utf8")
+        self.pages = self.app / "services/mpw_trx_public_pages.py"
+        self.web = self.app / "services/mpw_trx_commercial_web.py"
+        self.pages.write_text("# safe", encoding="utf8")
+        self.web.write_text("# safe", encoding="utf8")
+
+    def guard(self):
+        with (
+            mock.patch.object(release, "APP", self.app),
+            mock.patch.object(release, "PUBLIC", self.public),
+            mock.patch.object(release, "TARGETS", {"pages": self.pages, "web": self.web}),
+            mock.patch.object(release.pwd, "getpwuid", return_value=mock.Mock(pw_name="zomorod2")),
+        ):
+            release.guard()
+
+    def test_guard_accepts_matching_registered_public_root(self):
+        self.guard()
+
+    def test_guard_rejects_app_root_drift(self):
+        (self.public / ".htaccess").write_text(
+            "PassengerAppRoot " + str(self.app) + chr(10), encoding="utf8")
+        with self.assertRaisesRegex(RuntimeError, "PASSENGER_REGISTERED_ROOT_MISMATCH"):
+            self.guard()
+
+    def test_restart_touches_actual_public_passenger_root(self):
+        with mock.patch.object(release, "PUBLIC", self.public):
+            release.restart()
+        self.assertTrue((self.public / "tmp/restart.txt").is_file())
+        self.assertFalse((self.app / "tmp/restart.txt").exists())
+
+    def test_restart_rejects_symlink_marker(self):
+        target = self.app / "tmp/restart.txt"
+        target.write_text("unchanged", encoding="utf8")
+        (self.public / "tmp/restart.txt").symlink_to(target)
+        with mock.patch.object(release, "PUBLIC", self.public):
+            with self.assertRaisesRegex(RuntimeError, "UNSAFE_PASSENGER_RESTART_MARKER"):
+                release.restart()
+        self.assertEqual(target.read_text(encoding="utf8"), "unchanged")
+
+
 if __name__ == "__main__":
     unittest.main()
