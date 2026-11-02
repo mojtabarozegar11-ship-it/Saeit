@@ -142,8 +142,8 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
         variants.append(english)
         for payload in variants:
             with self.subTest(payload=payload):
-                body = ("گزارش آزمون فارسی بدون ادعای عملیات واقعی.\\nZM_ACTIONS_V1_START\\n"
-                        + json.dumps(payload, ensure_ascii=False) + "\\nZM_ACTIONS_V1_END")
+                body = ("گزارش آزمون فارسی بدون ادعای عملیات واقعی.\nZM_ACTIONS_V1_START\n"
+                        + json.dumps(payload, ensure_ascii=False) + "\nZM_ACTIONS_V1_END")
                 with sqlite3.connect(self.archive) as db:
                     db.execute("UPDATE reports SET body=? WHERE report_code='05-0027'", (body,))
                 result = self.view()
