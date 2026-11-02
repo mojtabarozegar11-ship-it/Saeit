@@ -50,6 +50,7 @@ try{
  $registeredBanks=zoCount($fin,"SELECT COUNT(*) FROM ledger_accounts WHERE code IN ('1011','1012') AND active=1");
  $genericBank=zoCount($fin,"SELECT COUNT(*) FROM journal_lines l JOIN ledger_accounts a ON l.account_id=a.id WHERE a.code='1010'");
  $evidence=zoCount($fin,'SELECT COUNT(*) FROM bank_payment_evidence');
+ $pendingClaims=zoCount($fin,"SELECT COUNT(*) FROM bank_receipt_claims WHERE status='pending'");
  $invoicing=$fin->query("SELECT i.currency,i.kind,COUNT(*) AS cnt,SUM(i.amount) AS total,
    SUM(i.amount-COALESCE((SELECT SUM(p.amount) FROM invoice_payments p WHERE p.invoice_id=i.id),0)) AS remaining
    FROM invoices i GROUP BY i.currency,i.kind ORDER BY i.currency,i.kind")->fetchAll();
@@ -64,7 +65,7 @@ try{
  $pendingQuestions=zoCount($inbox,"SELECT COUNT(*) FROM customer_questions WHERE tenant='zomorod' AND processing_status!='handled'");
  $control=zoRead($root.'/command-center.sqlite3');
  $openTasks=zoCount($control,"SELECT COUNT(*) FROM tasks WHERE state NOT IN ('done','closed','cancelled')");
- $taskRows=$control->query("SELECT title,priority,state,created_at FROM tasks WHERE state NOT IN ('done','closed','cancelled') ORDER BY id DESC LIMIT 7")->fetchAll();
+ $taskRows=$control->query("SELECT title,priority,state,created_at FROM tasks WHERE state NOT IN ('done','closed','cancelled') ORDER BY CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'normal' THEN 2 ELSE 3 END, id DESC LIMIT 7")->fetchAll();
  session_write_close();
 }catch(Throwable $e){
  error_log('ZM_OPERATIONS_VIEW_READ_FAILURE: '.get_class($e));
@@ -98,6 +99,7 @@ a:focus-visible{outline:2px solid #f9e1a8;outline-offset:4px}
 <div class="grid">
 <div class="card"><div class="metric"><?=$invoices?></div>فاکتورهای دفتر حسابداری</div>
 <div class="card"><div class="metric"><?=$receipts?></div>ثبت‌های دریافت یا پرداخت فاکتور <p class="small">نه تأیید مستقل بانک</p></div>
+<div class="card"><div class="metric"><?=$pendingClaims?></div>ادعای بانکی در انتظار بررسی<p class="small">بدون تغییر مانده حسابداری</p></div>
 <div class="card"><div class="metric"><?=$paid?></div>کالای پولی فعال در کاتالوگ</div>
 <div class="card"><div class="metric"><?=$questions?></div>درخواست‌های واقعی مشتریان زمرد ملل</div>
 <div class="card"><div class="metric"><?=$openTasks?></div>وظیفه باز مرکز فرمان</div>
@@ -112,7 +114,7 @@ a:focus-visible{outline:2px solid #f9e1a8;outline-offset:4px}
 </section>
 <section><h2>حسابداری، بانک و تسویه</h2>
 <p>اسناد روزنامه: <strong><?=$ledger?></strong> · زیرحساب‌های بانکی فعال (ملت/شهر): <strong><?=$registeredBanks?> از ۲</strong> ·
-مراجع بانکی ثبت‌شده: <strong><?=$evidence?></strong> · گردش‌های قدیمی حساب عمومی ۱۰۱۰: <strong><?=$genericBank?></strong></p>
+مراجع بانکی ثبت‌شده: <strong><?=$evidence?></strong> · اظهارهای تأییدنشده: <strong><?=$pendingClaims?></strong> · گردش‌های قدیمی حساب عمومی ۱۰۱۰: <strong><?=$genericBank?></strong></p>
 <p class="small">این ارقام برگرفته از دفاتر داخلی‌اند؛ مانده حساب بانک و وصول واقعی را اثبات نمی‌کنند. ثبت‌های قدیمی ۱۰۱۰ نباید خودکار به ملت یا شهر تخصیص داده شوند.</p>
 <div class="scroll"><table><tr><th>ارز</th><th>نوع فاکتور</th><th>تعداد</th><th>مبلغ دفتری</th><th>مانده ثبت‌نشده</th></tr>
 <?php foreach($invoicing as $r): ?>
