@@ -112,12 +112,15 @@ def parse_block(body: str, report_code: str):
         ))
         if (not isinstance(aid, str) or ACTION_ID.fullmatch(aid) is None or not numbered_id or aid in seen
                 or not isinstance(title, str) or not 8 <= len(title.encode("utf-8")) <= 350
-                or not isinstance(impact, str) or len(impact.encode("utf-8")) > 500
+                or re.search(r"[\u0600-\u06ff]", title) is None
+                or not isinstance(impact, str) or not 1 <= len(impact.encode("utf-8")) <= 500
+                or re.search(r"[\u0600-\u06ff]", impact) is None
                 or not isinstance(state, str) or state not in STATUSES
                 or not isinstance(evidence, str)
                 or len(evidence.encode("utf-8")) > 350
                 or (evidence and EVIDENCE.fullmatch(evidence) is None)
-                or (state == "completed" and not evidence)):
+                or (state == "completed" and not evidence)
+                or (state != "completed" and evidence != "")):
             return "invalid_contract", []
         seen.add(aid)
         actions.append((aid, title, state, impact, evidence))
