@@ -44,6 +44,20 @@ class GpgStreamingBackupTests(unittest.TestCase):
             f=base/".private-mojplaywin-offhost-backups"
             self.assertFalse((f/(STEM+"_files_"+VERSION+".gpg")).exists())
             self.assertFalse((f/(STEM+"_files_"+VERSION+".manifest.json")).exists())
+            self.assertFalse((f/(STEM+"_files_"+VERSION+".gpg.partial")).exists())
+
+    def test_sql_raw_ceiling_failure_removes_only_new_partial(self):
+        from unittest.mock import patch
+        from scripts import mojplaywin_backup_encrypt_vps_gpg as sink
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            with patch.object(sink, "MAX_MYSQL_SOURCE_BYTES", 64):
+                with self.assertRaisesRegex(RuntimeError, "source exceeds safety maximum"):
+                    sink.store(io.BytesIO(b"synthetic" * 200 + sink.MARKER), "mysql",
+                               root=base, keyroot=base, minimum_free=0)
+            folder=base/".private-mojplaywin-offhost-backups"
+            self.assertFalse((folder/(sink.STEM+"_mysql_"+sink.VERSION+".gpg.partial")).exists())
+            self.assertFalse((folder/(sink.STEM+"_mysql_"+sink.VERSION+".gpg")).exists())
 
     def test_tampered_file_fails_openpgp_integrity(self):
         from scripts.mojplaywin_backup_encrypt_vps_gpg import (
