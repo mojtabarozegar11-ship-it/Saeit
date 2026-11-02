@@ -27,10 +27,10 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           php -l content/zomorod-business/chatgpt_reports.php
-          test "$(git hash-object content/zomorod-business/chatgpt_reports.php)" = "0c4b505882c249033015394881cf2444139115eb"
+          test "$(git hash-object content/zomorod-business/chatgpt_reports.php)" = "ba64918bff6b9e309596a15ec5683450b730c825"
           python3 -m unittest discover -s tests -p 'test_zm_business_report_archive_php.py'
           python3 -m unittest discover -s tests -p 'test_zomorod_chatgpt_report_snapshot.py'
-          git cat-file blob 5ba8f64f039bda3477b4ccbf8d59695a0cd6472d | sha256sum | awk '{print $1}' > "$RUNNER_TEMP/old-viewer.sha"
+          git cat-file blob 0c4b505882c249033015394881cf2444139115eb | sha256sum | awk '{print $1}' > "$RUNNER_TEMP/old-viewer.sha"
           sha256sum content/zomorod-business/chatgpt_reports.php | awk '{print $1}' > "$RUNNER_TEMP/new-viewer.sha"
           echo 'VIEWER_OFFLINE_TESTS=pass'
       - name: Configure pinned GitHub to VPS to cPanel relay
