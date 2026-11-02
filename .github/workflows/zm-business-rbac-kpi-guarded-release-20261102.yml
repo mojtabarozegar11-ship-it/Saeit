@@ -180,6 +180,35 @@ jobs:
           echo 'AUTHENTICATED_ROLE_ACCEPTANCE=not_proven'
           echo 'CODE_ROLLBACK_BACKUP=preserved'
           REMOTE
+      - name: Diagnose previous stage on failure without retrieving private PHP code
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-rbac-kpi"
+          test -s "$d/config"
+          ssh -F "$d/config" zm-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          prior=e1ecf00735d5386ebe6e163268b6004e71568738
+          root="$HOME/.private/zomorod-business"
+          stage="$root/.rbac-kpi-$prior"
+          backup="$HOME/.backups/zm-business-app/$prior"
+          live="$root/app.php"
+          test -f "$live" && test ! -L "$live"
+          if test -f "$backup/app.before.php" && test ! -L "$backup/app.before.php"; then
+            old="$(sha256sum "$backup/app.before.php" | awk '{print $1}')"
+            actual="$(sha256sum "$live" | awk '{print $1}')"
+            if test "$old" = "$actual"; then echo 'PREVIOUS_FAILED_RELEASE_LIVE_APP=unchanged'; else echo 'PREVIOUS_FAILED_RELEASE_LIVE_APP=CHANGED_REVIEW_REQUIRED'; fi
+          else echo 'PREVIOUS_BACKUP=missing'; fi
+          if test -f "$stage/app.php" && test -f "$stage/app.patch"; then
+            staged="$(sha256sum "$stage/app.php" | awk '{print $1}')"
+            if test -n "${old:-}" && test "$staged" = "$old"; then echo 'PREVIOUS_STAGE_PATCH=not_applied'; else echo 'PREVIOUS_STAGE_PATCH=applied_or_partial'; fi
+            if patch --dry-run --batch --forward --fuzz=0 "$stage/app.php" "$stage/app.patch" >/dev/null 2>&1; then echo 'STAGE_FORWARD_PATCH_DRYRUN=applicable'; else echo 'STAGE_FORWARD_PATCH_DRYRUN=not_applicable'; fi
+            if patch --dry-run --batch --reverse --fuzz=0 "$stage/app.php" "$stage/app.patch" >/dev/null 2>&1; then echo 'STAGE_REVERSE_PATCH_DRYRUN=applicable'; else echo 'STAGE_REVERSE_PATCH_DRYRUN=not_applicable'; fi
+            if /opt/cpanel/ea-php82/root/usr/bin/php -l "$stage/app.php" >/dev/null 2>&1; then echo 'STAGE_PHP82_SYNTAX=valid'; else echo 'STAGE_PHP82_SYNTAX=invalid'; fi
+          else echo 'PREVIOUS_STAGE_CONTENT=missing'; fi
+          echo 'DIAGNOSIS_READ_ONLY=yes'
+          REMOTE
       - name: Remove temporary relay keys and source patch
         if: always()
         run: |
