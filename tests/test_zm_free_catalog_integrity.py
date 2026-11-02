@@ -1,5 +1,9 @@
 """Offline contract: the public ZM catalog never advertises altered free releases."""
 import hashlib
+import socket
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 import shutil
 import sqlite3
@@ -189,6 +193,64 @@ echo "PAID_RELEASE_GATE=PASS";
         self.assertEqual(run.returncode, 0, run.stderr + run.stdout)
         self.assertIn("PAID_RELEASE_GATE=PASS", run.stdout)
 
+
+
+    def test_public_store_restricts_browser_privileges(self):
+        # Real local HTTP response: CLI headers_list() is not reliable for this check.
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        server = subprocess.Popen(
+            ["php", "-S", f"127.0.0.1:{port}", "-t", str(self.home / "public_html")],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            response = None
+            for _ in range(40):
+                try:
+                    response = urllib.request.urlopen(
+                        f"http://127.0.0.1:{port}/store/index.php", timeout=2)
+                    break
+                except urllib.error.URLError:
+                    time.sleep(0.1)
+            self.assertIsNotNone(response, "Local PHP server did not start")
+            with response:
+                self.assertEqual(response.status, 200)
+                self.assertIn("default-src 'none'",
+                              response.headers.get("Content-Security-Policy", ""))
+                self.assertIn("frame-ancestors 'none'",
+                              response.headers.get("Content-Security-Policy", ""))
+                self.assertEqual(response.headers.get("X-Frame-Options"), "DENY")
+                self.assertEqual(response.headers.get("Referrer-Policy"), "no-referrer")
+                self.assertEqual(response.headers.get("Cache-Control"),
+                                 "private, no-store, max-age=0")
+        finally:
+            server.terminate()
+            server.wait(timeout=5)
+
+    def test_private_paid_rows_never_claim_public_sales_readiness(self):
+        php = r"""<?php
+function role(){return 'viewer';}
+function esc($s){return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');}
+function tokenInput(){return '';}
+require $argv[1];
+$db=zmStoreDb($argv[2]);
+$db->exec("INSERT INTO products(id,sku,title,description,price_irr,enabled)
+           VALUES(1,'legacy','Legacy paid','Private only',1000,1)");
+ob_start();
+zmStoreRender($db);
+$html=ob_get_clean();
+if(strpos($html,'ردیف قدیمی؛ عرضه عمومی مسدود')===false)exit(51);
+if(strpos($html,'<td>فعال</td>')!==false)exit(52);
+if(strpos($html,'وضعیت ثبت خصوصی')===false)exit(53);
+echo 'PRIVATE_PAID_STATUS=PASS';
+"""
+        script = self.home / "admin_status.php"
+        script.write_text(php, encoding="utf8")
+        run = subprocess.run(
+            ["php", str(script), str(self.private / "site_store.php"), str(self.private)],
+            capture_output=True, text=True, timeout=15)
+        self.assertEqual(run.returncode, 0, run.stderr + run.stdout)
+        self.assertIn("PRIVATE_PAID_STATUS=PASS", run.stdout)
 
 
 if __name__ == "__main__":
