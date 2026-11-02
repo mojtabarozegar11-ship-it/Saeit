@@ -162,6 +162,33 @@ class ActionIndexSafety(unittest.TestCase):
                                  ("invalid_contract", []))
         self.assertEqual(parse_block(valid, "05-0021")[0], "valid")
 
+    def test_legacy_report_without_action_block_is_append_only(self):
+        # Reports without structured actions were previously unprotected:
+        # rewriting their prose did not change the indexed action rows.
+        original = "گزارش مدیریتی قدیمی؛ فقط متن بدون رسید ساختاریافته"
+        self.add(1, original)
+        self.assertEqual(rebuild(self.archive, self.index), (0, 0, 1))
+        with sqlite3.connect(self.index) as db:
+            fingerprint = db.execute(
+                "SELECT value FROM metadata WHERE name='archive_prefix_sha256'"
+            ).fetchone()[0]
+            self.assertEqual(len(fingerprint), 64)
+        before = self.index.read_bytes()
+        with sqlite3.connect(self.archive) as db:
+            db.execute("UPDATE reports SET body=? WHERE report_code='05-0001'",
+                       ("گزارش مدیریتی ویرایش شده؛ بدون رسید ساختاریافته",))
+        self.archive.chmod(0o600)
+        with self.assertRaisesRegex(ValueError, "IMMUTABLE_REPORT_HISTORY_CHANGED"):
+            rebuild(self.archive, self.index)
+        self.assertEqual(self.index.read_bytes(), before)
+
+    def test_new_report_appends_without_changing_older_report_fingerprint(self):
+        self.add(1, "گزارش مدیریتی قدیمی؛ بدون اقدام ساختاریافته")
+        rebuild(self.archive, self.index)
+        self.add(2, receipt("05-0002", "ZM05-0002-A01"))
+        self.assertEqual(rebuild(self.archive, self.index), (1, 0, 2))
+        self.assertEqual(rebuild(self.archive, self.index), (1, 0, 2))
+
     def test_mutated_source_history_fails_without_overwriting_old_index(self):
         self.add(1, receipt("05-0001", "ZM05-0001-A01"))
         rebuild(self.archive, self.index)
