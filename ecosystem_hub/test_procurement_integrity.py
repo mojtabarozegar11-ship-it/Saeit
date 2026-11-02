@@ -166,6 +166,8 @@ class ProcurementIntegrityTests(TestCase):
 
     def test_inactive_finished_product_cannot_generate_purchase_draft(self):
         InventoryItem.objects.filter(pk=self.product.pk).update(active=False)
+        # A fresh request reloads the related BOM/product; discard setUp caches.
+        self.order.refresh_from_db()
         with self.assertRaises(ValidationError):
             material_shortages(self.order)
         with self.assertRaises(ValidationError):
