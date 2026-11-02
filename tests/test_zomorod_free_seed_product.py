@@ -80,7 +80,7 @@ echo "FREE_SEPARATE_FROM_PAID=PASS";
     def test_native_public_catalog_enforces_local_download_and_no_payment(self):
         body = INDEX.read_text(encoding="utf-8")
         self.assertIn("FROM free_digital_products AS f WHERE f.enabled=1",body)
-        self.assertIn("NOT EXISTS (SELECT 1 FROM products AS p WHERE p.sku=f.sku)",body)
+        self.assertIn("NOT EXISTS (SELECT 1 FROM products AS p WHERE p.sku=f.sku COLLATE NOCASE)",body)
         self.assertIn("رایگان — بدون پرداخت",body)
         self.assertIn("download rel=",body)
         self.assertIn("zmStoreVerifiedFreeArtifact",body)
