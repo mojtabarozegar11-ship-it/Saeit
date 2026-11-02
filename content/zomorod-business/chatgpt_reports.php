@@ -96,17 +96,6 @@ function zmBusinessChatgptReports(string $private):void {
                 $coverage[$key]['latest']=$row['report_code'].' · '.$row['occurred_at'];
             }
         }
-        if($publicDb!==null){
-            $publicCounts=$publicDb->query('SELECT substr(report_code,1,2) AS cycle,COUNT(*) AS n,MAX(seq) AS last_seq FROM reports GROUP BY substr(report_code,1,2)');
-            if($publicCounts===false)throw new RuntimeException('public cycle count query failed');
-            while($c=$publicCounts->fetchArray(SQLITE3_ASSOC)){
-                $key=(string)$c['cycle'];
-                if(in_array($key,['01','02','04'],true)){
-                    $latest=$publicDb->querySingle('SELECT report_code || " · " || occurred_at FROM reports WHERE seq='.(int)$c['last_seq']);
-                    $coverage[$key]=['count'=>(int)$c['n'],'latest'=>(string)$latest];
-                }
-            }
-        }
         echo '<section><h3>پایش پنج چرخهٔ ساعتی</h3>';
         echo '<p class="muted">این جدول تعداد گزارش‌های دریافت‌شده را می‌شمارد، نه تعداد اقدامات یا عملکرد تأییدشده. هدف چرخهٔ پنجم ۲۰ اقدام واقعی در هر اجراست؛ شمارش تحقق آن مستلزم بررسی مستقل مدارک است.</p>';
         echo '<div class="scroll"><table><tr><th>چرخه</th><th>گزارش ثبت‌شده</th><th>آخرین رسید معتبر</th><th>هدف اقدامات</th></tr>';
@@ -242,6 +231,17 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
             if(isset($coverage[$key])){
                 $latest=$db->querySingle('SELECT report_code || " · " || occurred_at FROM reports WHERE seq='.(int)$c['last_seq']);
                 $coverage[$key]=['count'=>(int)$c['n'],'latest'=>(string)$latest];
+            }
+        }
+        if($publicDb!==null){
+            $publicCounts=$publicDb->query('SELECT substr(report_code,1,2) AS cycle,COUNT(*) AS n,MAX(seq) AS last_seq FROM reports GROUP BY substr(report_code,1,2)');
+            if($publicCounts===false)throw new RuntimeException('public cycle count query failed');
+            while($c=$publicCounts->fetchArray(SQLITE3_ASSOC)){
+                $key=(string)$c['cycle'];
+                if(in_array($key,['01','02','04'],true)){
+                    $latest=$publicDb->querySingle('SELECT report_code || " · " || occurred_at FROM reports WHERE seq='.(int)$c['last_seq']);
+                    $coverage[$key]=['count'=>(int)$c['n'],'latest'=>(string)$latest];
+                }
             }
         }
         echo '<section><h3>پایش پنج چرخهٔ ساعتی</h3><p class="muted">شمار گزارش‌ها از تعداد اقدامات واقعی متمایز است؛ هدف چرخه پنجم ۲۰ اقدام در هر اجراست، اما تحقق آن احراز نشده است.</p><div class="scroll"><table><tr><th>چرخه</th><th>تعداد گزارش</th><th>آخرین رسید</th><th>هدف</th><th>منبع چرخه</th></tr>';
