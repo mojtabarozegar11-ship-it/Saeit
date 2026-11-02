@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from enterprise_portal.models import (
     AuditEvent, BusinessUnit, InventoryItem, JournalEntry, StockMovement,
@@ -15,6 +15,7 @@ from .models import (
 from .procurement import material_shortages, prepare_purchase_drafts
 
 
+@override_settings(COMPANY_OFFICE_REQUIRE_MFA=False, DEBUG=False, ALLOWED_HOSTS=["testserver"])
 class ProcurementIntegrityTests(TestCase):
     def setUp(self):
         self.owner = get_user_model().objects.create_superuser(
@@ -86,6 +87,18 @@ class ProcurementIntegrityTests(TestCase):
             prepare_purchase_drafts(self.order.pk, self.owner)
         self.assertEqual(ProcurementNeed.objects.get().status, "draft")
         self.assertEqual(ProcurementNeed.objects.get().quantity, Decimal("20"))
+
+
+    def test_invalid_bom_returns_controlled_http_400_not_server_error(self):
+        MaterialRequirement.objects.filter(pk=self.line.pk).update(
+            quantity=Decimal("-1"),
+        )
+        self.client.force_login(self.owner)
+        path = f"/company/office/ecosystem/production/materials/{self.order.pk}/"
+        response = self.client.get(path, secure=True)
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn("INPUT-MRP", response.content.decode("utf-8"))
+        self.assertFalse(ProcurementNeed.objects.exists())
 
     def test_removed_material_does_not_leave_old_draft_as_current(self):
         prepare_purchase_drafts(self.order.pk, self.owner)
