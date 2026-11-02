@@ -187,6 +187,35 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
         self.assertIn("1 ردیف کامل اظهاریِ غیرتکراری", result.stdout)
         self.assertIn("عملیات مستقلاً تأییدشده از این قالب", result.stdout)
 
+    def test_duplicate_json_status_rejected_by_index_never_shows_completed_claim(self):
+        # PHP json_decode keeps the last duplicate key, while the Python
+        # authoritative action index rejects the entire ambiguous receipt.
+        payload = {
+            "version": 1, "report_code": "05-0027", "actions": [{
+                "id": "ZM05-0027-A01", "title_fa": "بازبینی واقعی شواهد مدیریتی",
+                "status": "completed",
+                "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/" + "a" * 40,
+                "impact_fa": "کاهش خطر گزارش اشتباه"
+            }]
+        }
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        self.assertIn('"status":"completed"', encoded)
+        encoded = encoded.replace('"status":"completed"',
+                                  '"status":"blocked","status":"completed"')
+        body = ("گزارش فارسی ساختگی فقط برای آزمون امنیتی.\\n"
+                "ZM_ACTIONS_V1_START\\n" + encoded + "\\nZM_ACTIONS_V1_END")
+        with sqlite3.connect(self.archive) as db:
+            db.execute("UPDATE reports SET body=? WHERE report_code='05-0027'", (body,))
+        self.archive.chmod(0o600)
+        self.assertEqual(rebuild(self.archive, self.folder / "chatgpt_actions_index.sqlite3"),
+                         (0, 1, 27))
+        result = self.view()
+        self.assertEqual(result.returncode, 0, result.stderr[-500:])
+        self.assertIn("0 / ۲۰", result.stdout)
+        self.assertNotIn("1 / ۲۰", result.stdout)
+        self.assertIn("رسید ساختاریافته ناسازگار یا ناقص است", result.stdout)
+        self.assertNotIn("<td>ZM05-0027-A01</td>", result.stdout)
+
     def test_foreign_action_id_is_rejected_in_all_recent_receipts(self):
         evidence = "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/" + "a" * 40
         for number in (26, 27):
