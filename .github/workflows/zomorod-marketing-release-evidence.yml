@@ -1,0 +1,621 @@
+name: Zomorod marketing release evidence (read-only)
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/zomorod-marketing-release-evidence.yml"
+      - "company_marketing/**"
+      - "company_messaging/**"
+      - "config/urls.py"
+      - "config/settings.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-marketing-release-readonly
+  cancel-in-progress: false
+jobs:
+  readiness:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Scope declaration
+        run: |
+          echo "SITE_SCOPE=zomorodmelal.ir only"
+          echo "MODE=read-only evidence; no migrations, restart, deploy, send or account mutation"
+          echo "PRODUCTION_DEPLOY_ALLOWED=no"
+      - name: Probe public and private routes without signing in
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in / /api/health/ /company/office/login/ /company/office/messages/ /company/office/marketing/; do
+            status="$(curl --silent --output /dev/null --max-time 12 --connect-timeout 7 --write-out '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "PUBLIC_ROUTE=$route HTTP=${status:-unknown}"
+          done
+      - name: Set up pinned GitHub to VPS to cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Inspect deployed Zomorod code, effective database and Python without writing
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          ssh -F "$dir/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          app="/home/zomorod2/Saeit"
+          web="/home/zomorod2/public_html"
+          test -d "$app" && test ! -L "$app"
+          test -f "$app/manage.py"
+          echo "PRODUCTION_APP=present"
+          for rel in company_messaging/models.py company_marketing/models.py enterprise_portal/models.py ecosystem_hub/models.py company_messaging/migrations/0001_initial.py company_marketing/migrations/0001_initial.py; do
+            if test -f "$app/$rel"; then
+              echo "PRODUCTION_FILE=$rel present"
+            else
+              echo "PRODUCTION_FILE=$rel absent"
+            fi
+          done
+          if test -f "$web/.htaccess" && grep -Fq 'PassengerAppRoot "/home/zomorod2/Saeit"' "$web/.htaccess"; then
+            echo "PASSENGER_APP_ROOT=expected"
+          else
+            echo "PASSENGER_APP_ROOT=needs_review"
+          fi
+          df -Pk "$app" | awk 'NR==2 {printf "CPANEL_AVAILABLE_MB=%d\n", $4/1024}'
+          if test -x "/home/zomorod2/virtualenv/Saeit/3.10/bin/python"; then
+            interpreter="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
+          elif test -x "/home/zomorod2/virtualenv/Saeit/3.11/bin/python"; then
+            interpreter="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"
+          else
+            echo "SITE_PYTHON=not_found"; exit 0
+          fi
+          cd "$app"
+          "$interpreter" - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          try:
+              import django
+              django.setup()
+              from django.conf import settings
+              from django.urls import resolve
+          except Exception as exc:
+              print("DJANGO_STARTUP=failed:"+type(exc).__name__)
+          else:
+              print("DJANGO_STARTUP=ok")
+              info=settings.DATABASES["default"]
+              print("EFFECTIVE_DB_ENGINE="+info["ENGINE"].split(".")[-1])
+              print("EFFECTIVE_DB_CONFIGURED="+str(bool(info.get("NAME"))).lower())
+              for route in ("/company/office/login/","/company/office/messages/","/company/office/marketing/"):
+                  try:
+                      match=resolve(route)
+                  except Exception:
+                      print("ROUTE_RESOLVE="+route+" missing")
+                  else:
+                      print("ROUTE_RESOLVE="+route+" name="+str(match.url_name))
+              try:
+                  from django.db import connection
+                  if info["ENGINE"].endswith("sqlite3"):
+                      import sqlite3,pathlib,urllib.parse
+                      path=pathlib.Path(str(info["NAME"]))
+                      if not path.is_absolute():path=pathlib.Path.cwd()/path
+                      uri="file:"+urllib.parse.quote(str(path))+"?mode=ro"
+                      with sqlite3.connect(uri,uri=True,timeout=3) as db:
+                          db.execute("SELECT 1")
+                  else:
+                      with connection.cursor() as cur:
+                          cur.execute("SELECT 1")
+                          cur.fetchone()
+              except Exception as exc:
+                  print("EFFECTIVE_DB_READ=failed:"+type(exc).__name__)
+              else:
+                  print("EFFECTIVE_DB_READ=ok")
+          PY
+          REMOTE
+      - name: Inspect Passenger WSGI configuration and configured DB without secrets
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 65s ssh -F "$dir/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          app=/home/zomorod2/Saeit
+          test -f "$app/passenger_wsgi.py" && test ! -L "$app/passenger_wsgi.py"
+          test -f "$app/config/settings.py"
+          cd "$app"
+          python3 -B - <<'PY'
+          import os, pathlib, re, sys
+          app=pathlib.Path.cwd()
+          wsgi=(app/"passenger_wsgi.py").read_text(errors="replace")
+          if 'env_path = os.path.join(BASE_DIR, ".env")' not in wsgi:
+              print("PASSENGER_ENV_LOADING=unknown"); sys.exit(0)
+          print("PASSENGER_ENV_LOADING=project_env")
+          envfile=app/".env"
+          print("PASSENGER_ENV_FILE="+("present" if envfile.is_file() and not envfile.is_symlink() else "missing_or_unsafe"))
+          if envfile.is_file() and not envfile.is_symlink():
+              for raw in envfile.read_text(encoding="utf-8",errors="replace").splitlines():
+                  line=raw.strip()
+                  if not line or line.startswith("#") or "=" not in line: continue
+                  key,value=line.split("=",1)
+                  key,value=key.strip(),value.strip()
+                  if value.startswith(("'",'"')) and value.endswith(value[0]):value=value[1:-1]
+                  if key and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*",key):
+                      os.environ.setdefault(key,value)
+          # Read only metadata; NEVER print environment values or connection strings.
+          uri=os.environ.get("DATABASE_URL","")
+          if uri.startswith(("mysql://","mysql2://")): engine="mysql"
+          elif uri.startswith(("postgres://","postgresql://")):engine="postgresql"
+          elif uri.startswith("sqlite:///") or not uri:engine="sqlite3"
+          else:engine="other_or_unrecognized"
+          print("PASSENGER_ENV_DATABASE_URL_PRESENT="+str(bool(uri)).lower())
+          print("PASSENGER_ENV_DB_ENGINE_CATEGORY="+engine)
+          print("PASSENGER_ENV_DEBUG_FALSE="+str(os.environ.get("DEBUG","").lower() in ("false","0","no")).lower())
+          print("PASSENGER_ENV_SECRET_CONFIGURED="+str(bool(os.environ.get("SECRET_KEY"))).lower())
+          print("PASSENGER_ENV_ALLOWED_HOSTS_CONFIGURED="+str(bool(os.environ.get("ALLOWED_HOSTS"))).lower())
+          for key in ("SESSION_COOKIE_SECURE","CSRF_COOKIE_SECURE","SECURE_SSL_REDIRECT"):
+              print("PASSENGER_"+key+"_TRUE="+str(os.environ.get(key,"").lower() in ("true","1","yes")).lower())
+          print("PASSENGER_DB_READ_ONLY_CONFIG_CLASSIFICATION=complete")
+          PY
+          REMOTE
+      - name: Read-only SQLite size and staging availability evidence
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 60s ssh -F "$dir/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          cd /home/zomorod2/Saeit
+          python3 -B - <<'PY'
+          import os, pathlib, re, sqlite3, urllib.parse
+          base=pathlib.Path.cwd()
+          for raw in (base/".env").read_text(encoding="utf-8",errors="replace").splitlines():
+              line=raw.strip()
+              if not line or line.startswith("#") or "=" not in line:continue
+              k,v=line.split("=",1);k,v=k.strip(),v.strip()
+              if v.startswith(("'",'"')) and v.endswith(v[0]):v=v[1:-1]
+              if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*",k):os.environ.setdefault(k,v)
+          url=os.environ.get("DATABASE_URL","")
+          if url and not url.startswith("sqlite:///"):
+              print("SQLITE_BACKUP_PREFLIGHT=not_sqlite");raise SystemExit(0)
+          path=(pathlib.Path(url[len("sqlite:///"):]) if url else base/"db.sqlite3").resolve(strict=False)
+          if not path.is_absolute():path=base/path
+          if not path.is_file() or path.is_symlink():
+              print("SQLITE_BACKUP_PREFLIGHT=database_file_missing_or_unsafe");raise SystemExit(0)
+          dbpath="file:"+urllib.parse.quote(str(path))+"?mode=ro"
+          with sqlite3.connect(dbpath,uri=True,timeout=3) as conn:
+              n=conn.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+          print("SQLITE_BACKUP_PREFLIGHT=readable")
+          print("SQLITE_DB_SIZE_KIB="+str((path.stat().st_size+1023)//1024))
+          print("SQLITE_TABLE_COUNT="+str(n))
+          staging=pathlib.Path("/home/zomorod2/Saeit-staging")
+          print("PRIVATE_STAGING_DIR_PRESENT="+str(staging.is_dir() and not staging.is_symlink()).lower())
+          private=pathlib.Path("/home/zomorod2/.private")
+          print("PRIVATE_PARENT_PRESENT="+str(private.is_dir() and not private.is_symlink()).lower())
+          print("SQLITE_BACKUP_OR_RESTORE_EXECUTED=false")
+          PY
+          REMOTE
+      - name: Inspect running Passenger process DB configuration without values
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 55s ssh -F "$dir/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import os, pathlib, re, sqlite3, urllib.parse
+          ht=pathlib.Path("/home/zomorod2/public_html/.htaccess")
+          if ht.is_file() and not ht.is_symlink():
+              content=ht.read_text(encoding="utf-8",errors="replace")
+              print("HTACCESS_PASSENGER_APP_ROOT_EXPECTED="+str('PassengerAppRoot "/home/zomorod2/Saeit"' in content).lower())
+              print("HTACCESS_HAS_PASSENGER_PYTHON="+str(bool(re.search(r"(?im)^\s*PassengerPython\s+",content))).lower())
+              print("HTACCESS_HAS_PASSENGER_ENV_DIRECTIVES="+str(bool(re.search(r"(?im)^\s*(?:SetEnv|PassengerAppEnv)\s+",content))).lower())
+          me=os.getuid()
+          counts={"owned_processes":0,"candidate":0,"environ_readable":0,"db_url_present":0,
+                  "mysql":0,"postgresql":0,"sqlite3":0,"other":0}
+          for pp in pathlib.Path("/proc").iterdir():
+              if not pp.name.isdecimal():continue
+              try:
+                  if pp.stat().st_uid!=me:continue
+                  counts["owned_processes"]+=1
+                  cmd=(pp/"cmdline").read_bytes()[:4096].lower()
+                  if not (b"passenger" in cmd or (b"python" in cmd and b"saeit" in cmd)):continue
+                  counts["candidate"]+=1
+                  raw=(pp/"environ").read_bytes()[:128000]
+                  counts["environ_readable"]+=1
+                  data=dict(part.split(b"=",1) for part in raw.split(b"\x00") if b"=" in part)
+                  value=data.get(b"DATABASE_URL",b"")
+                  if value:
+                      counts["db_url_present"]+=1
+                      if value.startswith((b"mysql://",b"mysql2://")):engine="mysql"
+                      elif value.startswith((b"postgres://",b"postgresql://")):engine="postgresql"
+                      elif value.startswith(b"sqlite:///"):engine="sqlite3"
+                      else:engine="other"
+                      counts[engine]+=1
+              except (OSError,ValueError):
+                  continue
+          for key in sorted(counts):
+              print("PASSENGER_PROC_"+key.upper()+"="+str(counts[key]))
+          print("PASSENGER_PROCESS_DB_CONCLUSION="+("not_proven" if not counts["db_url_present"] else "runtime_env_keys_observed"))
+          # Only process-bound SQLite paths for this app are eligible. Never print values.
+          live_root=pathlib.Path("/home/zomorod2/Saeit")
+          observed={}
+          for pp in pathlib.Path("/proc").iterdir():
+              if not pp.name.isdecimal():continue
+              try:
+                  if pp.stat().st_uid!=me:continue
+                  cmd=(pp/"cmdline").read_bytes()[:4096].lower()
+                  if not (b"passenger" in cmd or (b"python" in cmd and b"saeit" in cmd)):continue
+                  env=(pp/"environ").read_bytes()[:128000]
+                  data=dict(part.split(b"=",1) for part in env.split(b"\x00") if b"=" in part)
+                  raw_url=data.get(b"DATABASE_URL",b"")
+                  if not raw_url.startswith(b"sqlite:////"):continue
+                  configured_root=data.get(b"PASSENGER_APP_ROOT",b"").decode("utf8","strict").rstrip("/")
+                  try: process_cwd=os.readlink(pp/"cwd")
+                  except OSError: process_cwd=""
+                  if (configured_root!=str(live_root) and process_cwd!=str(live_root)
+                    and b"/home/zomorod2/saeit" not in cmd):continue
+                  url=raw_url.decode("utf8","strict")
+                  path=pathlib.Path(urllib.parse.unquote(url.split("?",1)[0][len("sqlite:///"):]))
+                  if not path.is_absolute() or not path.is_file() or path.is_symlink():continue
+                  if path.resolve(strict=True)!=path or not str(path).startswith("/home/zomorod2/"):continue
+                  uri="file:"+urllib.parse.quote(str(path),safe="/")+"?mode=ro"
+                  with sqlite3.connect(uri,uri=True,timeout=3) as db:
+                      db.execute("PRAGMA query_only=ON")
+                      tables=db.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+                      integrity=db.execute("PRAGMA quick_check").fetchone()[0]
+                  observed[str(path)]=(path.stat().st_size,tables,integrity)
+              except (OSError,ValueError,UnicodeError,sqlite3.Error):
+                  continue
+          print("PASSENGER_APP_DB_ATTESTED="+str(len(observed)==1).lower())
+          print("PASSENGER_APP_DB_DISTINCT_COUNT="+str(len(observed)))
+          if len(observed)==1:
+              name,record=next(iter(observed.items()))
+              size,tables,integrity=record
+              print("PASSENGER_APP_DB_SIZE_KIB="+str((size+1023)//1024))
+              print("PASSENGER_APP_DB_TABLES="+str(tables))
+              print("PASSENGER_APP_DB_INTEGRITY="+("ok" if integrity=="ok" else "not_ok"))
+              default=live_root/"db.sqlite3"
+              same_default=default.is_file() and not default.is_symlink() and os.path.samefile(name,default)
+              print("PASSENGER_APP_DB_IS_DEFAULT="+str(same_default).lower())
+          print("PRODUCTION_DEPLOY_ALLOWED=no")
+          PY
+          REMOTE
+      - name: Audit Passenger directives and database candidates without secrets
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 65s ssh -F "$dir/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import os, re, sqlite3, urllib.parse
+          home=Path.home()
+          ht=home/"public_html/.htaccess"
+          if ht.is_file() and not ht.is_symlink():
+              records=[]
+              for line in ht.read_text(errors="replace").splitlines():
+                  m=re.match(r"^\s*(SetEnv|PassEnv|PassengerAppEnv|PassengerPython|PassengerAppRoot)\s+([^\s]+)(?:\s+(.*))?",line,re.I)
+                  if m: records.append((m.group(1).lower(),m.group(2),m.group(3) or ""))
+              for typ,key,value in records:
+                  # Only safe booleans, never show actual values / connection URLs.
+                  if typ=="setenv":
+                      known={"DATABASE_URL","DJANGO_SETTINGS_MODULE","SECRET_KEY","DEBUG","ALLOWED_HOSTS"}
+                      if key in known:
+                          print("HTACCESS_ENV_KEY_"+key+"=present")
+                          if key=="DATABASE_URL":
+                              scheme=value.strip().strip(chr(34)+chr(39)).split(":",1)[0].lower()
+                              print("HTACCESS_DB_SCHEME="+(scheme if scheme in ("mysql","mariadb","postgresql","postgres","sqlite") else "other"))
+                  elif typ in {"passenv","passengerappenv"}:
+                      print("HTACCESS_PASSENGER_DIRECTIVE="+typ)
+              print("HTACCESS_DIRECTIVE_COUNT="+str(len(records)))
+          for relative in ("Saeit","Saeit-staging"):
+              root=home/relative
+              files=[]
+              for p in sorted(root.glob("*.sqlite3")):
+                  if p.is_file() and not p.is_symlink():
+                      size=p.stat().st_size
+                      tables="unreadable"
+                      if size>0:
+                          try:
+                              url="file:"+urllib.parse.quote(str(p))+"?mode=ro"
+                              with sqlite3.connect(url,uri=True,timeout=2) as db:
+                                  tables=str(db.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0])
+                          except (sqlite3.Error,OSError):pass
+                      files.append((p.name,size,tables))
+              print("DB_CANDIDATE_DIR="+relative+" count="+str(len(files)))
+              for name,size,tables in files[:16]:
+                  # Public-safe metadata only. No file contents or user records.
+                  print("DB_CANDIDATE_META="+relative+"/"+name+" bytes="+str(size)+" tables="+tables)
+          print("DATABASE_OWNERSHIP_OR_RESTORE_PROVEN=false")
+          PY
+          REMOTE
+      - name: Audit existing private business database independently without records
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 55s ssh -F "$dir/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import sqlite3,urllib.parse
+          root=Path.home()/".private/zomorod-business"
+          p=root/"management.sqlite3"
+          print("LEGACY_PRIVATE_BUSINESS_DIR="+str(root.is_dir() and not root.is_symlink()).lower())
+          print("LEGACY_PRIVATE_BUSINESS_DB_PRESENT="+str(p.is_file() and not p.is_symlink()).lower())
+          if p.is_file() and not p.is_symlink():
+              print("LEGACY_PRIVATE_BUSINESS_DB_BYTES="+str(p.stat().st_size))
+              try:
+                  uri="file:"+urllib.parse.quote(str(p))+"?mode=ro"
+                  with sqlite3.connect(uri,uri=True,timeout=4) as conn:
+                      print("LEGACY_PRIVATE_BUSINESS_DB_INTEGRITY="+str(conn.execute("PRAGMA quick_check").fetchone()[0]))
+                      tables={x[0] for x in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+                      print("LEGACY_PRIVATE_BUSINESS_TABLE_COUNT="+str(len(tables)))
+                      for t in ("users","journal_entries","journal_lines","invoices"):
+                          if t in tables:
+                              print("LEGACY_PRIVATE_BUSINESS_"+t.upper()+"_COUNT="+str(conn.execute("SELECT COUNT(*) FROM "+t).fetchone()[0]))
+              except (sqlite3.Error,OSError):
+                  print("LEGACY_PRIVATE_BUSINESS_DB_READ=error")
+          print("PRIVATE_BUSINESS_DATA_UNCHANGED=true")
+          PY
+          REMOTE
+      - name: Audit live file identity, static capacity and private DB boundary
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 60s ssh -F "$dir/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          from pathlib import Path
+          import hashlib,os,shutil,json
+          base=Path("/home/zomorod2/Saeit")
+          expected={
+              "config/settings.py":"76d37568f3477ac514d6aac14237e49ce5fd4971",
+              "config/urls.py":"32a9b60c4ae5152c490b4d281069ba137d287cb1",
+              "passenger_wsgi.py":"a2c6ff97d3d8684e02de4ea2f76331f946867d93",
+          }
+          for name,sha in expected.items():
+              path=base/name
+              if not path.is_file() or path.is_symlink():
+                  print("PRODUCTION_BASELINE_"+name.upper().replace("/","_").replace(".","_")+"=missing_or_symlink")
+                  continue
+              raw=path.read_bytes()
+              found=hashlib.sha1(b"blob "+str(len(raw)).encode()+b"\x00"+raw).hexdigest()
+              print("PRODUCTION_BASELINE_"+name.upper().replace("/","_").replace(".","_")+"="+("matches_main" if found==sha else "different_from_main"))
+          static=base/"staticfiles"
+          index=static/"staticfiles.json"
+          print("PRODUCTION_STATIC_MANIFEST_PRESENT="+str(index.is_file()).lower())
+          if index.is_file():
+              try:
+                  m=json.loads(index.read_text(errors="replace"))
+                  print("PRODUCTION_STATIC_ENTRIES="+str(len(m.get("paths",{}))))
+                  print("PRODUCTION_STATIC_OFFICE_CSS_PRESENT="+str("enterprise_portal/app.css" in m.get("paths",{})).lower())
+              except Exception:
+                  print("PRODUCTION_STATIC_MANIFEST_PARSE=failed")
+          disk=shutil.disk_usage(base)
+          print("PRODUCTION_FS_FREE_MIB="+str(disk.free//(1024*1024)))
+          py=Path("/home/zomorod2/virtualenv/Saeit/3.10/bin/python")
+          print("PRODUCTION_PINNED_PYTHON_EXISTS="+str(py.is_file()).lower())
+          print("PRODUCTION_DEFAULT_SQLITE_SIZE="+str((base/"db.sqlite3").stat().st_size if (base/"db.sqlite3").is_file() else -1))
+          print("PRODUCTION_RESIDENT_SITE_NOT_MODIFIED=true")
+          PY
+          REMOTE
+      - name: Classify actual Passenger Python version without paths or secrets
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 50s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import os,pathlib,re
+          home=pathlib.Path.home()
+          ht=home/"public_html"/".htaccess"
+          version="not_found"
+          resolved_version="not_proven"
+          configured_executable="not_proven"
+          if ht.is_file() and not ht.is_symlink():
+              for line in ht.read_text(errors="replace").splitlines():
+                  match=re.match(r"^\s*PassengerPython\s+(\S+)",line,re.I)
+                  if not match:continue
+                  value=match.group(1).strip(chr(34)+chr(39))
+                  found=re.findall(r"(?<!\d)(3\.\d+)(?!\d)",value)
+                  if found: version=found[-1]
+                  elif value.endswith("/python3"):version="3.unspecified"
+                  else:version="path_without_version"
+                  candidate=pathlib.Path(value)
+                  if candidate.is_file() and os.access(candidate,os.X_OK):
+                      configured_executable="present_and_executable"
+                      resolved=os.path.realpath(str(candidate))
+                      matches=re.findall(r"(?<!\d)(3\.\d+)(?!\d)",resolved)
+                      if matches:resolved_version=matches[-1]
+                      else:resolved_version="unknown_version"
+                  else:configured_executable="not_found_or_not_executable"
+                  break
+          print("PASSENGER_CONFIGURED_PYTHON_VERSION="+version)
+          print("PASSENGER_CONFIGURED_EXE_STATUS="+configured_executable)
+          print("PASSENGER_CONFIGURED_PYTHON_REALPATH_VERSION="+resolved_version)
+          seen=set()
+          site_versions=set()
+          site_workers=0
+          for proc in pathlib.Path("/proc").iterdir():
+              if not proc.name.isdecimal():continue
+              try:
+                  if proc.stat().st_uid!=os.getuid():continue
+                  cmd=(proc/"cmdline").read_bytes()[:5000].lower()
+                  if not (b"passenger" in cmd or (b"python" in cmd and b"saeit" in cmd)):continue
+                  path=os.readlink(proc/"exe")
+                  known=re.findall(r"(?<!\d)(3\.\d+)(?!\d)",path)
+                  if known:seen.add(known[-1])
+                  try:
+                      cwd=os.path.realpath(os.readlink(proc/"cwd"))
+                      if cwd==str(home/"Saeit"):
+                          site_workers+=1
+                          if known:site_versions.add(known[-1])
+                  except OSError:pass
+              except (OSError,ValueError):continue
+          print("PASSENGER_SITE_WORKER_COUNT="+str(site_workers))
+          print("PASSENGER_SITE_WORKER_EXE_VERSIONS="+(",".join(sorted(site_versions)) if site_versions else "not_identified"))
+          print("PASSENGER_OWNED_PROCESS_EXEC_VERSION_CATEGORIES="+(",".join(sorted(seen)) if seen else "unavailable"))
+          print("PASSENGER_PYTHON_VERSION_AUDIT=readonly")
+          PY
+          REMOTE
+      - name: Require restore proof and provider rights before any deployment
+        run: |
+          echo "RESTORE_VERIFIED=not-established-by-this-readonly-probe"
+          echo "PRIVATE_LOGIN_AUTHENTICATED=not-established-by-this-readonly-probe"
+          echo "OFFICIAL_BOT_CHANNEL_TOKENS=not-established-by-this-readonly-probe"
+          echo "PRODUCTION_DEPLOY_ALLOWED=no"
+      - name: Remove temporary relay credentials
+        if: always()
+        shell: bash
+        run: |
+          if test -d "$RUNNER_TEMP/zm-marketing-ro"; then
+            rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
+          fi

@@ -26,8 +26,12 @@ else
 fi
 
 "$PYTHON" --version
+# Prevent even a Django system check from implicitly opening/creating an empty DB.
+# Load settings without connecting; inspect SQLite in immutable read-only mode.
+"$PYTHON" -m scripts.production_db_readonly_preflight
 "$PYTHON" manage.py check --deploy
-"$PYTHON" manage.py migrate --noinput
+# Schema migrations require a separately authorized, independently restorable release.
+"$PYTHON" manage.py migrate --check
 "$PYTHON" manage.py production_gate
 "$PYTHON" manage.py collectstatic --noinput
 touch passenger_wsgi.py

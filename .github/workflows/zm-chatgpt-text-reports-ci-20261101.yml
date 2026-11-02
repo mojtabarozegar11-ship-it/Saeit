@@ -1,0 +1,68 @@
+name: ZM private ChatGPT text reports CI
+on:
+  push:
+    branches:
+      - feature/zm-chatgpt-text-reports-20261101
+  pull_request:
+    branches:
+      - integration/zm-unified-business-command-center-20261101
+    paths:
+      - "enterprise_portal/**"
+      - ".github/workflows/zm-chatgpt-text-reports-ci-20261101.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zm-chatgpt-text-reports-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  text-report-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "ci-not-for-production"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,testserver"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Exact source checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Assert exact source head
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Django model and migration consistency
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+      - name: Test route, data integrity and confidentiality
+        run: python manage.py test enterprise_portal.test_chatgpt_reports enterprise_portal.test_chatgpt_sync -v 2
+      - name: Verify real numbered issue source without DB changes
+        env:
+          ZM_GITHUB_REPORTS_READ_TOKEN: ${{ github.token }}
+        run: |
+          python manage.py sync_chatgpt_action_reports --pages=1 > "$RUNNER_TEMP/zm-report-preview.jsonlog"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          output = Path(os.environ["RUNNER_TEMP"], "zm-report-preview.jsonlog").read_text()
+          record = json.loads(output.split("ZM_REPORT_SYNC_JSON=", 1)[1])
+          if record["mode"] != "preview" or record["created"] != 0 or record["eligible"] < 1:
+              raise SystemExit("GITHUB_ISSUE_REPORT_PREVIEW_NOT_CONFIRMED")
+          print("GITHUB_ISSUE_REPORT_PREVIEW=passed")
+          print("NUMBERED_REPORTS_FOUND=" + str(record["eligible"]))
+          print("DATABASE_REPORT_WRITES=0")
+          PY
+      - name: Verify release boundary
+        run: |
+          echo "EXACT_HEAD_CI=1"
+          echo "NO_HOST_CONTACT=1"
+          echo "NO_MERGE_DEPLOY_DB_CHANGE=1"

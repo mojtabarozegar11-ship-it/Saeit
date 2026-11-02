@@ -16,11 +16,20 @@ web.mkdir(parents=True)
 sessions=base/'sessions'
 sessions.mkdir(mode=0o700)
 shutil.copy2(source,private/'app.php')
+helper=pathlib.Path(__file__).resolve().parents[1]/'content/zomorod-business/chatgpt_reports.php'
+assert helper.is_file()
+shutil.copy2(helper,private/'chatgpt_reports.php')
 shutil.copy2(entry,web/'index.php')
 assert source.read_bytes()==(private/'app.php').read_bytes()
 php=shutil.which('php') or '/opt/cpanel/ea-php82/root/usr/bin/php'
 assert pathlib.Path(php).is_file()
 assert subprocess.run([php,'-r','exit(extension_loaded("pdo_sqlite")?0:1);']).returncode==0
+# The accounting DB must now be initialized explicitly; HTTP GET may never
+# auto-create it. Initialize only this throwaway synthetic directory.
+init=subprocess.run([php,str(private/'app.php'),'--initialize-private-db'],
+                    cwd=str(base/'synthetic'),capture_output=True,text=True,timeout=25)
+assert init.returncode==0,('Isolated PHP private setup failed',init.stderr[-400:])
+assert (private/'management.sqlite3').is_file() and (private/'setup.token').is_file()
 sid='zmtest'+sha[:12]
 code="session_id(getenv('SID'));$_SERVER['REQUEST_METHOD']=getenv('REQ_METHOD');$_GET=json_decode(getenv('QUERY_JSON'),true);$_POST=json_decode(getenv('POST_JSON'),true);register_shutdown_function(function(){file_put_contents(getenv('SID_RESULT'),session_id());});require getenv('INDEX');"
 def request(method='GET',page=None,post=None):
@@ -105,6 +114,38 @@ assert 'SyntheticOnlyProposalTitle' in isolated_approval_page(sid)
 assert 'SyntheticOnlyProposalTitle' not in isolated_approval_page('anonymous'+sha[:12])
 print('ISOLATED_APPROVAL_ROUTE_AUTH=PASS')
 
+
+# Read-only ChatGPT reporting screen must use the existing finance login and
+# reject access after a role downgrade without mutating a financial table.
+report_data={
+    'version':1,'source':'github:mojtabarozegar11-ship-it/Saeit:issue:1725',
+    'count':1,'items':[{
+       'report_code':'05-0001','comment_id':987654,
+       'occurred_at':'2026-11-01T16:04:00+00:00',
+       'evidence_url':'https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-987654',
+       'body':'Synthetic private work report <script>injected()</script> & safe',
+    }]
+}
+report_file=private/'chatgpt_reports_snapshot.json'
+report_file.write_text(json.dumps(report_data,ensure_ascii=False),encoding='utf-8')
+report_file.chmod(0o600)
+page=request('GET','chatgpt_reports')
+assert 'گزارش‌های متنی اقدامات ChatGPT' in page
+assert '05-0001' in page
+assert '&lt;script&gt;' in page and '<script>injected()</script>' not in page
+assert 'گزارش‌های متنی ChatGPT' in request('GET','dashboard')
+with sqlite3.connect(str(private/'management.sqlite3')) as rw:
+    rw.execute("UPDATE users SET role='viewer' WHERE username='TestOnlyAdmin'")
+assert 'درخواست انجام نشد' in request('GET','chatgpt_reports')
+assert 'گزارش‌های متنی ChatGPT' not in request('GET','dashboard')
+with sqlite3.connect(str(private/'management.sqlite3')) as rw:
+    rw.execute("UPDATE users SET role='admin' WHERE username='TestOnlyAdmin'")
+report_file.write_text('{"version":999}',encoding='utf-8')
+assert 'اعتبارسنجی پرونده گزارش ناموفق بود' in request('GET','chatgpt_reports')
+report_file.unlink()
+assert 'هنوز نصب نشده است' in request('GET','chatgpt_reports')
+assert db.execute("SELECT COUNT(*) FROM journal_entries").fetchone()[0]==3
+print('PHP_CHATGPT_REPORT_ADMIN_ONLY_ESCAPED_READONLY=PASS')
 
 print('ROLE_DOWNGRADE_REVOKES_EXISTING_SESSION=PASS')
 print('ZOMOROD_ACCOUNTING_SYNTHETIC_QA=PASS')
