@@ -44,7 +44,6 @@ class LivingCitiesAccountAssetTests(unittest.TestCase):
         self.assertEqual(len(candidate.ASSETS), 16)
         self.assertFalse(hasattr(candidate, "publish"))
         self.assertFalse(hasattr(candidate, "rollback"))
-        self.assertIn("MOJ1", candidate.CSRF_HELPER + "MOJ1")
         self.assertNotEqual(candidate.REVIEW_OWNER, candidate.PUBLIC_OWNER)
 
 
