@@ -431,5 +431,143 @@ class LogoutHTTPTests(unittest.TestCase):
                 self.assertIn("درخواست انجام نشد", html)
 
 
+
+    def test_role_permissions_and_live_session_downgrade(self) -> None:
+        """Verify every role on the isolated HTTP ledger; no production credentials."""
+        csrf = self.csrf(self.dashboard)
+        role_password = "QA-role-password-strong-2026"
+        identities = {
+            "viewer": "qa_viewer_role_2026",
+            "manager": "qa_manager_role_2026",
+            "accountant": "qa_accountant_role_2026",
+        }
+        for role_name, username in identities.items():
+            status, _, _ = self.request(
+                "POST", "/app.php?page=users", cookie=self.cookie,
+                form={
+                    "csrf": csrf, "action": "user", "username": username,
+                    "password": role_password, "role": role_name,
+                },
+            )
+            self.assertEqual(status, 303, f"create {role_name}")
+
+        def login(username: str) -> tuple[str, str]:
+            status, headers, page = self.request("GET", "/app.php")
+            self.assertEqual(status, 200)
+            anonymous_cookie = self.cookie_value(headers)
+            self.assertIsNotNone(anonymous_cookie)
+            status, headers, _ = self.request(
+                "POST", "/app.php", cookie=anonymous_cookie,
+                form={
+                    "csrf": self.csrf(page), "action": "login",
+                    "username": username, "password": role_password,
+                },
+            )
+            self.assertEqual(status, 303)
+            cookie = self.cookie_value(headers)
+            self.assertIsNotNone(cookie)
+            status, _, dashboard = self.request(
+                "GET", "/app.php?page=dashboard", cookie=cookie
+            )
+            self.assertEqual(status, 200)
+            return cookie, self.csrf(dashboard)
+
+        sessions = {role: login(username) for role, username in identities.items()}
+
+        for role_name in identities:
+            cookie, token = sessions[role_name]
+            for page in ("users", "chatgpt_reports"):
+                with self.subTest(role=role_name, denied_page=page):
+                    status, _, html = self.request(
+                        "GET", "/app.php?page=" + page, cookie=cookie
+                    )
+                    self.assertEqual(status, 403)
+                    self.assertIn("درخواست انجام نشد", html)
+                    self.assertNotIn("دسترسی کاربران</h2>", html)
+            status, _, _ = self.request(
+                "POST", "/app.php?page=users", cookie=cookie,
+                form={
+                    "csrf": token, "action": "user",
+                    "username": "qa_forbidden_user_2026",
+                    "password": role_password, "role": "admin",
+                },
+            )
+            self.assertEqual(status, 403)
+
+        for role_name, expected in (("viewer", 403), ("manager", 403),
+                                    ("accountant", 303)):
+            cookie, token = sessions[role_name]
+            status, _, _ = self.request(
+                "POST", "/app.php?page=accounts", cookie=cookie,
+                form={
+                    "csrf": token, "action": "account",
+                    "code": "889001", "name": "QA role-based ledger",
+                    "type": "expense",
+                },
+            )
+            self.assertEqual(status, expected, f"{role_name} account mutation")
+
+        manager_cookie, manager_csrf = sessions["manager"]
+        viewer_cookie, viewer_csrf = sessions["viewer"]
+        for cookie, token, expected, name in [
+            (viewer_cookie, viewer_csrf, 403, "QA Forbidden Viewer Party"),
+            (manager_cookie, manager_csrf, 303, "QA Authorized Manager Party"),
+        ]:
+            status, _, _ = self.request(
+                "POST", "/app.php?page=parties", cookie=cookie,
+                form={
+                    "csrf": token, "action": "party",
+                    "name": name, "kind": "both",
+                },
+            )
+            self.assertEqual(status, expected)
+
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM users WHERE username='qa_forbidden_user_2026'"
+            ).fetchone()[0], 0)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM parties WHERE name='QA Forbidden Viewer Party'"
+            ).fetchone()[0], 0)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM ledger_accounts WHERE code='889001'"
+            ).fetchone()[0], 1)
+            conn.execute(
+                "UPDATE users SET role='viewer' WHERE username=?",
+                (identities["manager"],),
+            )
+
+        status, _, html = self.request(
+            "GET", "/app.php?page=dashboard", cookie=manager_cookie
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("(viewer)", html)
+        status, _, _ = self.request(
+            "POST", "/app.php?page=parties", cookie=manager_cookie,
+            form={
+                "csrf": manager_csrf, "action": "party",
+                "name": "QA Downgraded Manager Party", "kind": "both",
+            },
+        )
+        self.assertEqual(status, 403, "existing session must honor role downgrade")
+
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            conn.execute(
+                "UPDATE users SET active=0 WHERE username=?",
+                (identities["manager"],),
+            )
+        status, _, html = self.request(
+            "GET", "/app.php?page=dashboard", cookie=manager_cookie
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("ورود مدیر و حسابدار", html)
+        self.assertNotIn('name="action" value="logout"', html)
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM parties WHERE name='QA Downgraded Manager Party'"
+            ).fetchone()[0], 0)
+            self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
