@@ -1,4 +1,4 @@
-name: ZM read-only accounting insights guarded live install
+name: ZM read-only accounting insights guarded live upgrade
 on:
   push:
     branches: [feature/zm-business-php-persian-reports-20261102]
@@ -82,7 +82,7 @@ jobs:
           printf '%s\n' "$scan" > "$d/host.candidate"
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
           cp "$d/host.candidate" "$d/host.known"
-      - name: Host preflight with no access to private source or financial rows
+      - name: Host preflight and exact known-version rollback backup
         shell: bash
         run: |
           set -euo pipefail
@@ -102,7 +102,10 @@ jobs:
           test "$(stat -c %a "$root/management.sqlite3")" = 600
           test "$(stat -c %a "$root/app.php")" = 600
           test -f "$web/index.php" && test ! -L "$web/index.php"
-          test ! -e "$web/insights.php" && test ! -L "$web/insights.php"
+          old=da2868cf0e9c305eca86818a883268cba358a51181b90861d7df5f093c44f9f8
+          test -f "$web/insights.php" && test ! -L "$web/insights.php"
+          test "$(sha256sum "$web/insights.php" | awk '{print $1}')" = "$old"
+          test "$(stat -c %a "$web/insights.php")" = 644
           test ! -e "$web/.insights-install-$sha.php" && test ! -L "$web/.insights-install-$sha.php"
           test ! -e "$stage" && test ! -L "$stage"
           phpbin=/opt/cpanel/ea-php82/root/usr/bin/php
@@ -110,7 +113,10 @@ jobs:
           "$phpbin" -m | grep -Fxq pdo_sqlite
           "$phpbin" -l "$root/app.php" >/dev/null
           install -d -m 700 "$stage"
+          install -m 600 "$web/insights.php" "$stage/insights.before.php"
+          test "$(sha256sum "$stage/insights.before.php" | awk '{print $1}')" = "$old"
           sha256sum "$root/app.php" | awk '{print $1}' > "$stage/original-app.sha256"
+          echo 'EXISTING_INSIGHTS=exact_known_version_backed_up'
           echo 'LIVE_APP_SOURCE=not_modified'
           echo 'FINANCIAL_DATABASE=not_modified'
           REMOTE
@@ -120,7 +126,7 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/zm-insights"
           scp -F "$d/config" content/zomorod-business/insights.php "zm-cpanel:/home/zomorod2/.private/zomorod-business/.insights-install-$GITHUB_SHA/insights.php"
-      - name: Install new route and verify anonymous data protection or roll back
+      - name: Upgrade insights route with anonymous protection smoke and rollback
         shell: bash
         run: |
           set -euo pipefail
@@ -139,7 +145,10 @@ jobs:
           test -f "$stage/insights.php" && test ! -L "$stage/insights.php"
           test "$(sha256sum "$stage/insights.php" | awk '{print $1}')" = "$digest"
           test "$(sha256sum "$root/app.php" | awk '{print $1}')" = "$(cat "$stage/original-app.sha256")"
-          test ! -e "$dest" && test ! -L "$dest"
+          old=da2868cf0e9c305eca86818a883268cba358a51181b90861d7df5f093c44f9f8
+          test -f "$dest" && test ! -L "$dest"
+          test "$(sha256sum "$dest" | awk '{print $1}')" = "$old"
+          test "$(sha256sum "$stage/insights.before.php" | awk '{print $1}')" = "$old"
           test ! -e "$ready" && test ! -L "$ready"
           "$phpbin" -l "$stage/insights.php" >/dev/null
           install -m 0644 "$stage/insights.php" "$ready"
@@ -148,12 +157,17 @@ jobs:
           rollback() {
             set +e
             if test "$published" = 1 && test -f "$dest" && test ! -L "$dest" && test "$(sha256sum "$dest" | awk '{print $1}')" = "$digest"; then
-              mv "$dest" "$stage/failed-publication.php" && echo 'NEW_ROUTE_ROLLBACK=restored_absent'
+              restore="$web/.insights-restore-$sha.php"
+              if install -m 0644 "$stage/insights.before.php" "$restore" && mv -f "$restore" "$dest"; then
+                echo 'INSIGHTS_ROLLBACK=restored_exact_previous_version'
+              else
+                echo 'INSIGHTS_ROLLBACK=manual_backup_preserved' >&2
+              fi
             fi
             if test -f "$ready" && test ! -L "$ready"; then mv "$ready" "$stage/unpublished.php"; fi
           }
           trap 'rc=$?; trap - EXIT; rollback; exit "$rc"' EXIT
-          mv -n "$ready" "$dest"
+          mv -f "$ready" "$dest"
           published=1
           test -f "$dest" && test ! -L "$dest"
           test "$(sha256sum "$dest" | awk '{print $1}')" = "$digest"
@@ -167,6 +181,8 @@ jobs:
           published=0
           trap - EXIT
           echo 'LIVE_READONLY_INSIGHTS=installed'
+          echo 'LIVE_PRIVATE_QUALITY_CONTROLS=visible_only_after_login'
+          echo 'QUALITY_RESULTS_TO_GITHUB=none'
           echo 'ANONYMOUS_ACCESS=denied_403'
           echo 'PRIVATE_APP=unchanged'
           echo 'PRIVATE_FINANCIAL_DATABASE=not_written_by_release'

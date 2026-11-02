@@ -95,6 +95,27 @@ try {
         ORDER BY i.due_date ASC,i.id DESC LIMIT 80");
     $unpaidQuery->execute();
     $unpaid = $unpaidQuery->fetchAll();
+    // All diagnostics execute under the same read-only SQLite connection.
+    // Their results are rendered ONLY for the authorized browser session,
+    // never logged or transmitted to build pipelines.
+    $imbalanced = (int)$database->query("SELECT COUNT(*) FROM (
+        SELECT j.id,l.currency FROM journal_entries j
+        LEFT JOIN journal_lines l ON l.entry_id=j.id
+        GROUP BY j.id,l.currency
+        HAVING COUNT(l.id)<2 OR COALESCE(SUM(l.debit),0)<>COALESCE(SUM(l.credit),0)
+    )")->fetchColumn();
+    $overpaid = (int)$database->query("SELECT COUNT(*) FROM (
+        SELECT i.id FROM invoices i
+        LEFT JOIN invoice_payments p ON p.invoice_id=i.id
+        GROUP BY i.id HAVING COALESCE(SUM(p.amount),0)>i.amount
+    )")->fetchColumn();
+    $qualityChecks = [
+        'بررسی سریع ساختار پایگاه‌داده' => $database->query('PRAGMA quick_check')->fetchColumn() === 'ok',
+        'سلامت ارتباط بین اسناد و جداول' => $database->query('PRAGMA foreign_key_check')->fetch() === false,
+        'توازن بدهکار و بستانکار هر سند و ارز' => $imbalanced === 0,
+        'عدم ثبت پرداخت بیش از مبلغ فاکتور' => $overpaid === 0,
+        'وجود مدیر فعال سامانه' => (int)$database->query("SELECT COUNT(*) FROM users WHERE role='admin' AND active=1")->fetchColumn() > 0,
+    ];
     $database = null;
 } catch (Throwable $exception) {
     // No private file paths, SQL, account names or amounts in an HTTP error.
@@ -122,6 +143,13 @@ try {
 <tr><td><?=ziEsc($row['currency'])?></td><td class="amount"><?=ziMoney((int)$row['receivable'])?></td><td class="amount"><?=ziMoney((int)$row['overdue_receivable'])?></td><td class="amount"><?=ziMoney((int)$row['payable'])?></td><td class="amount"><?=ziMoney((int)$row['overdue_payable'])?></td></tr>
 <?php endforeach; ?>
 </tbody></table></div><?php if (!$totals): ?><p class="empty">در دفتر فعلی فاکتوری ثبت نشده است.</p><?php endif; ?></section>
+<section class="panel" aria-labelledby="quality-title"><h2 id="quality-title">پایش سلامت دفتر حسابداری</h2>
+<p class="muted">کنترل‌ها هنگام بازکردن صفحه و فقط برای کاربر مجاز روی هاست اجرا می‌شوند؛ نتیجهٔ آن‌ها به GitHub ارسال نمی‌شود. تشخیص خطا به معنی اصلاح خودکار سند نیست و تطبیق بانکی نیز جداگانه لازم است.</p>
+<ul style="list-style:none;margin:0;padding:0">
+<?php foreach ($qualityChecks as $label => $passed): ?>
+<li style="display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;border-bottom:1px solid #405840;padding:11px 0"><span><?=ziEsc($label)?></span><strong style="color:<?=$passed?'#adf0b8':'#ffc48b'?>"><?=$passed?'تأیید اولیه':'نیاز به رسیدگی'?></strong></li>
+<?php endforeach; ?>
+</ul></section>
 <section class="panel"><h2>فاکتورهای دارای مانده؛ مرتب‌شده بر اساس سررسید</h2><p class="muted">حداکثر ۸۰ ردیف نخست نمایش داده می‌شود. برای عملیات ثبت یا اصلاح، از میز مدیریت اصلی استفاده کنید.</p><div class="table-scroll"><table><thead><tr><th>شماره فاکتور</th><th>نوع</th><th>طرف حساب</th><th>تاریخ سررسید</th><th>وضعیت</th><th>ارز</th><th>مانده</th></tr></thead><tbody>
 <?php foreach ($unpaid as $row): ?>
 <tr><td><?=ziEsc($row['invoice_no'])?></td><td><?=$row['kind']==='sale'?'فروش':'خرید'?></td><td><?=ziEsc($row['party'])?></td><td><?=ziEsc($row['due_date'])?></td><td class="<?=((string)$row['due_date']<$today)?'overdue':''?>"><?=((string)$row['due_date']<$today)?'سررسیدگذشته':'در موعد'?></td><td><?=ziEsc($row['currency'])?></td><td class="amount"><?=ziMoney((int)$row['remainder'])?></td></tr>

@@ -148,6 +148,7 @@ class InsightsHTTPTests(unittest.TestCase):
         self.assertNotIn("QA-RECEIVABLE", body)
         self.assertNotIn("250.00", body)
         self.assertNotIn("<script>", body)
+        self.assertNotIn("پایش سلامت دفتر حسابداری", body)
         self.assertTrue(any(k.lower() == "cache-control" and "no-store" in v.lower()
                             for k, v in headers))
 
@@ -162,6 +163,24 @@ class InsightsHTTPTests(unittest.TestCase):
         self.assertIn("QA &lt;script&gt;alert(1)&lt;/script&gt;", body)
         self.assertNotIn("QA <script>", body)
         self.assertIn("تأییدیه بانک", body)
+        self.assertIn("پایش سلامت دفتر حسابداری", body)
+        # Synthetic fixture journals intentionally have no debit/credit lines.
+        self.assertRegex(body, r"توازن بدهکار و بستانکار هر سند و ارز.*?نیاز به رسیدگی")
+        self.assertIn("نتیجهٔ آن‌ها به GitHub ارسال نمی‌شود", body)
+
+    def test_overpayment_warning_is_private_and_readonly(self) -> None:
+        with sqlite3.connect(self.database) as db:
+            db.execute("UPDATE invoice_payments SET amount=30000 WHERE invoice_id=(SELECT id FROM invoices WHERE invoice_no='QA-RECEIVABLE')")
+        try:
+            status, _, body = self.http("GET", cookie=self.auth_cookie)
+            self.assertEqual(status, 200)
+            self.assertRegex(body, r"عدم ثبت پرداخت بیش از مبلغ فاکتور.*?نیاز به رسیدگی")
+            status, _, anonymous = self.http("GET")
+            self.assertEqual(status, 403)
+            self.assertNotIn("عدم ثبت پرداخت بیش از مبلغ فاکتور", anonymous)
+        finally:
+            with sqlite3.connect(self.database) as db:
+                db.execute("UPDATE invoice_payments SET amount=5000 WHERE invoice_id=(SELECT id FROM invoices WHERE invoice_no='QA-RECEIVABLE')")
 
     def test_role_is_revalidated_and_inactive_account_is_denied(self) -> None:
         with sqlite3.connect(self.database) as db:
