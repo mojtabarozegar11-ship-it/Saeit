@@ -23,10 +23,12 @@ $private = $home.'/.private/zomorod-business';
 if(is_file($private.'/site_agents.php')) require_once $private.'/site_agents.php';
 if(is_file($private.'/site_store.php')) require_once $private.'/site_store.php';
 function esc(mixed $s): string {return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');}
-function req(string $k, string $default=''): string {return trim((string)($_POST[$k]??$default));}
+function req(string $k, string $default=''): string {$value=$_POST[$k]??$default;if(!is_string($value))bail('ساختار فیلد ورودی نامعتبر است.');return trim($value);}
 function bail(string $m, int $code=422): never {http_response_code($code); throw new RuntimeException($m);}
 function cents(string $s): int {if(!preg_match('/^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,2})?$/',$s))bail('مبلغ نامعتبر است.'); $parts=explode('.',$s,2); return (int)$parts[0]*100+(int)str_pad($parts[1]??'',2,'0');}
 function money(int $n): string {return number_format($n/100,2,'.',',');}
+function positiveId(string $key):int {$s=req($key);if(!preg_match('/^[1-9][0-9]{0,17}$/D',$s))bail('شناسه عددی نامعتبر است.');$id=filter_var($s,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);if($id===false)bail('شناسه خارج از محدوده مجاز است.');return $id;}
+function wholeNumber(string $key,int $min,int $max,string $default=''):int {$s=req($key,$default);if(!preg_match('/^-?(?:0|[1-9][0-9]*)$/D',$s))bail('مقدار عددی باید صحیح باشد.');$value=filter_var($s,FILTER_VALIDATE_INT);if($value===false||$value<$min||$value>$max)bail('مقدار عددی خارج از محدوده است.');return $value;}
 function today(): string {return gmdate('Y-m-d');}
 function validDate(string $s): bool {$d=DateTimeImmutable::createFromFormat('!Y-m-d',$s);return $d!==false&&$d->format('Y-m-d')===$s;}
 function inputDate(string $k): string {$s=req($k,today());if(!validDate($s))bail('تاریخ باید میلادی و به صورت YYYY-MM-DD باشد.');return $s;}
@@ -104,6 +106,11 @@ function actor(): int {return (int)($_SESSION['uid']??0);}
 function role(): string {return (string)($_SESSION['role']??'');}
 function authorize(string $access): void {$roles=['viewer'=>['view'],'manager'=>['view','manage'],'accountant'=>['view','manage','account'],'admin'=>['view','manage','account','users']];if(!in_array($access,$roles[role()]??[],true))bail('دسترسی کافی ندارید.',403);}
 function audit(PDO $db,string $verb,string $subject,int $id=0):void {$db->prepare('INSERT INTO audit_events(user_id,verb,subject,entity_id) VALUES(?,?,?,?)')->execute([actor()?:null,$verb,$subject,$id?:null]);}
+function auditedCreate(PDO $db,string $sql,array $args,string $subject):void {
+    $db->beginTransaction();
+    try {$db->prepare($sql)->execute($args);$id=(int)$db->lastInsertId();audit($db,'create',$subject,$id);$db->commit();}
+    catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
+}
 function record(PDO $db,string $number,string $date,string $note,string $cur,array $lines):int {
     if(strlen($number)>60||strlen($note)>800||!validDate($date))bail('اطلاعات سند نامعتبر است.');
     if(count($lines)<2||count($lines)>12)bail('سند باید بین دو تا دوازده ردیف داشته باشد.');
@@ -123,7 +130,7 @@ function uniqueNo(string $prefix):string {return $prefix.'-'.gmdate('YmdHis').'-
 function layoutStart(string $page,?array $user=null):void {
     $nav=['dashboard'=>'داشبورد','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','documents'=>'مکاتبات','projects'=>'پروژه‌ها','approval_register'=>'دفتر مصوبات','chatgpt_reports'=>'گزارش‌های متنی ChatGPT','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
     $navHtml='';foreach($nav as $key=>$label){if(($key==='users'||$key==='chatgpt_reports')&&role()!=='admin')continue;$navHtml.='<a class="'.($page===$key?'sel':'').'" href="?page='.esc($key).'">'.esc($label).'</a>';}
-    echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.esc(APP_TITLE).'</title><link rel="icon" type="image/webp" href="/static/site/zomorod-v7/company-logo.webp"><style>\n    :root{font-family:Tahoma,Arial,sans-serif;color:#e9e7d9;background:#0c1811}*{box-sizing:border-box}body{margin:0;background:#203b23;min-height:100vh}a{color:#d9bc72;text-decoration:none}header{padding:20px 4%;background:#1a341e;border-bottom:3px double #e5c374;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:21px;color:#edcd79;font-weight:bold}.small{font-size:12px;color:#b9c0ae}nav{display:flex;overflow:auto;gap:8px;padding:16px 4%;background:#1a341e;scrollbar-width:thin}nav a{white-space:nowrap;padding:11px 13px;background:#284c30;border:1px solid #e1c47f;border-radius:12px}nav .sel{color:#081509;background:#d8ba6e;border-color:#f3d590}main{max-width:1260px;margin:auto;padding:26px 20px 70px}h1,h2,h3{color:#edcf88}h1{font-size:clamp(23px,3vw,32px)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:15px;margin:18px 0}.card,section{background:#18291e;border:1px solid #546545;border-radius:18px;padding:20px;margin:16px 0;box-shadow:0 8px 28px #0002}.metric{font-size:28px;color:#f1d68e;font-weight:bold}table{border-collapse:collapse;width:100%;min-width:580px}th,td{padding:12px;text-align:right;border-bottom:1px solid #405243}th{color:#e4cb83}.scroll{overflow:auto}label{display:block;color:#d1dcbf;margin:9px 0 5px}input,textarea,select{font:inherit;color:#f3eedc;background:#0c1a12;border:1px solid #647153;border-radius:9px;padding:11px;width:100%;max-width:440px}textarea{min-height:88px}button{background:linear-gradient(120deg,#a98741,#f3d584);border:1px solid #f8dd9a;color:#15200e;padding:12px 19px;border-radius:12px;cursor:pointer;font-weight:bold;margin-top:13px}button:hover{filter:brightness(1.1)}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 18px}.form .full{grid-column:1/-1}.notice{border:1px solid #b99550;background:#354027;padding:15px;border-radius:12px}.danger{background:#4d1e20;border-color:#c26b6b}.muted{color:#bec8b6}.account-line{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}.sign{max-width:540px;margin:70px auto;padding:30px}footer{padding:24px 4%;border-top:1px solid #52613b;text-align:center;color:#bdc7ae;font-size:12px}.tags{display:flex;flex-wrap:wrap;gap:8px}.tags span{border:1px solid #6b7050;border-radius:15px;padding:4px 10px}@media(max-width:650px){.account-line{grid-template-columns:1fr 1fr}.account-line select{grid-column:1/-1}main{padding:14px 12px}header{padding:15px}}\n    </style></head><body><header><div><div class="brand"><img src="/static/site/zomorod-v7/company-logo.webp" alt="نشان شرکت زمرد ملل" width="48" height="48" style="width:48px;height:48px;border-radius:50%;border:2px solid #e5c377;vertical-align:middle;margin-left:12px;background:#fff">زمرد ملل · مدیریت جامع</div><div class="small">مدیریت سازمان · دفاتر مالی · ثبت عملیات با کنترل دسترسی</div></div><div><a href="https://zomorodmelal.ir/">بازگشت به سایت</a>';
+    echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.esc(APP_TITLE).'</title><link rel="icon" type="image/webp" href="/static/site/zomorod-v7/company-logo.webp"><style>\n    :root{font-family:Tahoma,Arial,sans-serif;color:#e9e7d9;background:#0c1811}*{box-sizing:border-box}body{margin:0;background:#203b23;min-height:100vh}a{color:#d9bc72;text-decoration:none}header{padding:20px 4%;background:#1a341e;border-bottom:3px double #e5c374;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:21px;color:#edcd79;font-weight:bold}.small{font-size:12px;color:#b9c0ae}nav{display:flex;overflow:auto;gap:8px;padding:16px 4%;background:#1a341e;scrollbar-width:thin}nav a{white-space:nowrap;padding:11px 13px;background:#284c30;border:1px solid #e1c47f;border-radius:12px}nav .sel{color:#081509;background:#d8ba6e;border-color:#f3d590}main{max-width:1260px;margin:auto;padding:26px 20px 70px}h1,h2,h3{color:#edcf88}h1{font-size:clamp(23px,3vw,32px)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:15px;margin:18px 0}.card,section{background:#18291e;border:1px solid #546545;border-radius:18px;padding:20px;margin:16px 0;box-shadow:0 8px 28px #0002}.metric{font-size:28px;color:#f1d68e;font-weight:bold}table{border-collapse:collapse;width:100%;min-width:580px}th,td{padding:12px;text-align:right;border-bottom:1px solid #405243}th{color:#e4cb83}.scroll{overflow:auto}label{display:block;color:#d1dcbf;margin:9px 0 5px}input,textarea,select{font:inherit;color:#f3eedc;background:#0c1a12;border:1px solid #647153;border-radius:9px;padding:11px;width:100%;max-width:440px}textarea{min-height:88px}button{background:linear-gradient(120deg,#a98741,#f3d584);border:1px solid #f8dd9a;color:#15200e;padding:12px 19px;border-radius:12px;cursor:pointer;font-weight:bold;margin-top:13px}button:hover{filter:brightness(1.1)}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 18px}.form .full{grid-column:1/-1}.notice{border:1px solid #b99550;background:#354027;padding:15px;border-radius:12px}.danger{background:#4d1e20;border-color:#c26b6b}.muted{color:#bec8b6}.account-line{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}.sign{max-width:540px;margin:70px auto;padding:30px}footer{padding:24px 4%;border-top:1px solid #52613b;text-align:center;color:#bdc7ae;font-size:12px}.tags{display:flex;flex-wrap:wrap;gap:8px}.tags span{border:1px solid #6b7050;border-radius:15px;padding:4px 10px}@media(max-width:650px){.account-line{grid-template-columns:1fr 1fr}.account-line select{grid-column:1/-1}main{padding:14px 12px}header{padding:15px}.form{grid-template-columns:1fr}input,textarea,select{max-width:none;font-size:16px}nav{padding:10px 12px}section,.card{padding:15px;border-radius:13px}}:focus-visible{outline:3px solid #f3d584;outline-offset:3px}nav a,button{min-height:44px}table caption{text-align:right;color:#d8dfc4;padding:8px}input:invalid{box-shadow:none}\n    </style></head><body><header><div><div class="brand"><img src="/static/site/zomorod-v7/company-logo.webp" alt="نشان شرکت زمرد ملل" width="48" height="48" style="width:48px;height:48px;border-radius:50%;border:2px solid #e5c377;vertical-align:middle;margin-left:12px;background:#fff">زمرد ملل · مدیریت جامع</div><div class="small">مدیریت سازمان · دفاتر مالی · ثبت عملیات با کنترل دسترسی</div></div><div><a href="https://zomorodmelal.ir/">بازگشت به سایت</a>';
     if($user)echo ' · <span class="small">'.esc($user['username']).' ('.esc($user['role']).')</span> · <form method="post" action="/business/" style="display:inline;margin:0">'.tokenInput().'<input type="hidden" name="action" value="logout"><button type="submit" style="margin:0;padding:8px 13px">خروج امن</button></form>';
     echo '</div></header>';
     if($user)echo '<nav aria-label="پیمایش مدیریت">'.$navHtml.'</nav>';
@@ -224,7 +231,7 @@ try {
             session_regenerate_id(true);
         } elseif($action==='account'){
             $code=req('code');$name=req('name');$type=req('type');if(!preg_match('/^[0-9]{3,8}$/',$code)||$name===''||mbSafeLen($name)>120||!in_array($type,['asset','liability','equity','income','expense'],true))bail('مشخصات حساب نامعتبر است.');
-            $db->prepare('INSERT INTO ledger_accounts(code,name,type) VALUES(?,?,?)')->execute([$code,$name,$type]);audit($db,'create','ledger-account',(int)$db->lastInsertId());
+            auditedCreate($db,'INSERT INTO ledger_accounts(code,name,type) VALUES(?,?,?)',[$code,$name,$type],'ledger-account');
         } elseif($action==='journal'){
             $cur=currency();$date=inputDate('date');$note=req('note');$no=req('doc_no');if($no==='')$no=uniqueNo('JV');
             $lines=[];
@@ -238,7 +245,7 @@ try {
         } elseif($action==='journal_reverse'){
             // Correct an independent manual journal without erasing its source.
             // Invoice/payment postings need their own controlled credit-note workflow.
-            $original=(int)req('entry_id');
+            $original=positiveId('entry_id');
             $reason=req('reason');
             $on=inputDate('date');
             if($original<1||mbSafeLen($reason)<8||mbSafeLen($reason)>200)bail('شناسه سند یا علت برگشت معتبر نیست.');
@@ -262,25 +269,28 @@ try {
                 $db->exec('COMMIT');
             }catch(Throwable $e){try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}throw $e;}
         } elseif($action==='party'){
-            $name=req('name');$kind=req('kind');if($name===''||!in_array($kind,['customer','supplier','both'],true))bail('اطلاعات شخص نامعتبر است.');
-            $db->prepare('INSERT INTO parties(name,kind,phone,details) VALUES(?,?,?,?)')->execute([$name,$kind,req('phone'),req('details')]);audit($db,'create','party',(int)$db->lastInsertId());
+            $name=req('name');$kind=req('kind');$phone=req('phone');$details=req('details');
+            if($name===''||mbSafeLen($name)>120||!in_array($kind,['customer','supplier','both'],true)||mbSafeLen($phone)>40||mbSafeLen($details)>1000)bail('اطلاعات شخص نامعتبر است.');
+            auditedCreate($db,'INSERT INTO parties(name,kind,phone,details) VALUES(?,?,?,?)',[$name,$kind,$phone,$details],'party');
         } elseif($action==='invoice'){
             $kind=req('kind');if(!in_array($kind,['sale','purchase'],true))bail('نوع فاکتور نامعتبر است.');
             $purchaseClass=req('purchase_class');
             if($kind==='purchase'&&!in_array($purchaseClass,['inventory','service'],true))
                 bail('در خرید باید نوع دارایی/کالای انباری یا هزینه خدمات را مشخص کنید.');
             $purchaseAccount=$purchaseClass==='service'?'5100':'1200';
-            $party=(int)req('party');if(!one($db,'SELECT id FROM parties WHERE id=?',[$party]))bail('شخص پیدا نشد.');
+            $party=positiveId('party');$partyRows=q($db,'SELECT id,kind FROM parties WHERE id=?',[$party]);
+            if(!$partyRows)bail('شخص پیدا نشد.');
+            if(($kind==='sale'&&$partyRows[0]['kind']==='supplier')||($kind==='purchase'&&$partyRows[0]['kind']==='customer'))bail('ماهیت طرف حساب با نوع فاکتور ناسازگار است.');
             $amount=cents(req('amount'));if($amount<=0)bail('مبلغ باید مثبت باشد.');
-            $cur=currency();$date=inputDate('date');$due=req('due_date',$date);if(!validDate($due))bail('سررسید نامعتبر است.');
-            $desc=req('description');if($desc==='')bail('شرح فاکتور الزامی است.');
+            $cur=currency();$date=inputDate('date');$due=req('due_date',$date);if(!validDate($due)||$due<$date)bail('تاریخ سررسید نمی‌تواند پیش از تاریخ فاکتور باشد.');
+            $desc=req('description');if($desc===''||mbSafeLen($desc)>450)bail('شرح فاکتور الزامی و حداکثر ۴۵۰ نویسه است.');
             $no=req('invoice_no');if($no==='')$no=uniqueNo('INV');if(strlen($no)>70)bail('شماره فاکتور طولانی است.');
             $db->beginTransaction();try{
                 $j=record($db,uniqueNo('IV'),$date,'فاکتور '.$no.' | '.($kind==='purchase'?('طبقه‌بندی خرید: '.$purchaseClass.' | '):'').$desc,$cur,$kind==='sale'?[['1100',$amount,0],['4000',0,$amount]]:[[$purchaseAccount,$amount,0],['2000',0,$amount]]);
                 $db->prepare('INSERT INTO invoices(invoice_no,kind,party_id,invoice_date,due_date,description,amount,currency,posted_entry,created_by) VALUES(?,?,?,?,?,?,?,?,?,?)')->execute([$no,$kind,$party,$date,$due,$desc,$amount,$cur,$j,actor()]);audit($db,'create','invoice',(int)$db->lastInsertId());$db->commit();
             }catch(Throwable $e){$db->rollBack();throw $e;}
         } elseif($action==='payment'){
-            $invoice=(int)req('invoice_id');
+            $invoice=positiveId('invoice_id');
             // Acquire the writer lock before reading the outstanding balance.
             // Validation errors must release it; concurrent payments re-check the latest balance.
             $db->exec('BEGIN IMMEDIATE');
@@ -299,10 +309,11 @@ try {
                 $db->exec('COMMIT');
             }catch(Throwable $e){try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}throw $e;}
         } elseif($action==='inventory'){
-            $sku=req('sku');$name=req('name');if($sku===''||$name==='')bail('شناسه کالا و نام لازم است.');
-            $db->prepare('INSERT INTO inventory(sku,name,unit,reorder_level) VALUES(?,?,?,?)')->execute([$sku,$name,req('unit','عدد'),max(0,(int)req('reorder_level','0'))]);audit($db,'create','inventory',(int)$db->lastInsertId());
+            $sku=req('sku');$name=req('name');$unit=req('unit','عدد');$reorder=wholeNumber('reorder_level',0,100000000,'0');
+            if($sku===''||strlen($sku)>80||preg_match('/[\\x00-\\x1F\\x7F]/',$sku)||$name===''||mbSafeLen($name)>140||$unit===''||mbSafeLen($unit)>40)bail('شناسه، عنوان یا واحد کالا نامعتبر است.');
+            auditedCreate($db,'INSERT INTO inventory(sku,name,unit,reorder_level) VALUES(?,?,?,?)',[$sku,$name,$unit,$reorder],'inventory');
         } elseif($action==='stock'){
-            $id=(int)req('inventory_id');$qty=(int)req('qty');if(!one($db,'SELECT id FROM inventory WHERE id=?',[$id])||$qty===0||abs($qty)>100000000)bail('مقدار کالا نامعتبر است.');
+            $id=positiveId('inventory_id');$qty=wholeNumber('qty',-100000000,100000000);if(!one($db,'SELECT id FROM inventory WHERE id=?',[$id])||$qty===0)bail('مقدار کالا نامعتبر است.');
             // Preserve nonnegative stock even when two requests arrive concurrently.
             $db->exec('BEGIN IMMEDIATE');
             try{
@@ -313,14 +324,15 @@ try {
                 $db->exec('COMMIT');
             }catch(Throwable $e){try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}throw $e;}
         } elseif($action==='employee'){
-            $fullname=req('fullname');$job=req('job_title');if($fullname===''||$job==='')bail('نام و سمت لازم است.');
-            $db->prepare('INSERT INTO employees(fullname,job_title,start_date,monthly_salary) VALUES(?,?,?,?)')->execute([$fullname,$job,inputDate('start_date'),cents(req('salary','0'))]);audit($db,'create','employee',(int)$db->lastInsertId());
+            $fullname=req('fullname');$job=req('job_title');if($fullname===''||$job===''||mbSafeLen($fullname)>140||mbSafeLen($job)>140)bail('نام و سمت معتبر و کوتاه لازم است.');
+            auditedCreate($db,'INSERT INTO employees(fullname,job_title,start_date,monthly_salary) VALUES(?,?,?,?)',[$fullname,$job,inputDate('start_date'),cents(req('salary','0'))],'employee');
         } elseif($action==='document'){
-            $title=req('title');$body=req('body');if($title===''||$body==='')bail('عنوان و متن سند الزامی است.');
-            $db->prepare('INSERT INTO documents(title,category,body,created_by) VALUES(?,?,?,?)')->execute([$title,req('category','اداری'),$body,actor()]);audit($db,'create','document',(int)$db->lastInsertId());
+            $title=req('title');$body=req('body');$category=req('category','اداری');
+            if($title===''||mbSafeLen($title)>200||$body===''||mbSafeLen($body)>25000||$category===''||mbSafeLen($category)>80)bail('عنوان، گروه یا متن سند نامعتبر است.');
+            auditedCreate($db,'INSERT INTO documents(title,category,body,created_by) VALUES(?,?,?,?)',[$title,$category,$body,actor()],'document');
         } elseif($action==='project'){
-            $title=req('title');$owner=req('owner');$state=req('state','planned');if($title===''||$owner===''||!in_array($state,['planned','active','paused','done'],true))bail('مشخصات پروژه ناقص است.');
-            $db->prepare('INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,?)')->execute([$title,$owner,$state,cents(req('budget','0'))]);audit($db,'create','project',(int)$db->lastInsertId());
+            $title=req('title');$owner=req('owner');$state=req('state','planned');if($title===''||$owner===''||mbSafeLen($title)>200||mbSafeLen($owner)>120||!in_array($state,['planned','active','paused','done'],true))bail('مشخصات پروژه ناقص است.');
+            auditedCreate($db,'INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,?)',[$title,$owner,$state,cents(req('budget','0'))],'project');
         } elseif(in_array($action,['agent_toggle','agent_run'],true)){
             if(role()!=='admin')bail('فقط مدیر اصلی مجاز است.',403);
             if(!function_exists('zmAgentDb'))bail('موتور ایجنت آماده نیست.',503);
@@ -333,7 +345,7 @@ try {
             audit($db,'store',$action);
         } elseif($action==='user'){
             $username=req('username');$pass=req('password');$newRole=req('role');if(!preg_match('/^[A-Za-z0-9_]{5,40}$/',$username)||strlen($pass)<14||!in_array($newRole,['admin','accountant','manager','viewer'],true))bail('کاربر، گذرواژه یا نقش نامعتبر است.');
-            $db->prepare('INSERT INTO users(username,password_hash,role) VALUES(?,?,?)')->execute([$username,password_hash($pass,PASSWORD_DEFAULT),$newRole]);audit($db,'create','user',(int)$db->lastInsertId());
+            auditedCreate($db,'INSERT INTO users(username,password_hash,role) VALUES(?,?,?)',[$username,password_hash($pass,PASSWORD_DEFAULT),$newRole],'user');
         } else bail('عملیات مجاز نیست.',403);
         $_SESSION['flash']='عملیات با موفقیت ثبت شد.';
         header('Location: ?page='.rawurlencode($page),true,303);exit;
@@ -343,7 +355,12 @@ try {
     echo '<h1>'.esc(APP_TITLE).'</h1><p class="muted">اطلاعات خصوصی شرکت. واحد مبالغ مطابق کد ارز انتخابی است؛ اسناد مالی ثبت‌شده حذف یا ویرایش نمی‌شوند.</p>';
     if($page==='dashboard'){
         $stats=['اسناد حسابداری'=>(int)one($db,'SELECT COUNT(*) FROM journal_entries'),'فاکتورها'=>(int)one($db,'SELECT COUNT(*) FROM invoices'),'اشخاص'=>(int)one($db,'SELECT COUNT(*) FROM parties'),'کالاها'=>(int)one($db,'SELECT COUNT(*) FROM inventory'),'کارکنان'=>(int)one($db,'SELECT COUNT(*) FROM employees'),'پروژه‌ها'=>(int)one($db,'SELECT COUNT(*) FROM projects')];
-        echo '<div class="grid">';foreach($stats as $name=>$value)echo '<div class="card"><div class="metric">'.esc($value).'</div><h3>'.esc($name).'</h3></div>';echo '</div><section><h2>وضعیت بهره‌برداری</h2><p>دفترکل دوطرفه، فاکتور، دریافت و پرداخت، انبار، کارمندان، مکاتبات، پروژه‌ها، نقش‌های کاربران و گزارش حسابرسی در این سامانه ثبت می‌شوند. این پنل به بانک یا سامانه‌های دیگر وصل نیست؛ هیچ پرداخت خودکاری انجام نمی‌شود.</p></section>';
+        echo '<div class="grid">';foreach($stats as $name=>$value)echo '<div class="card"><div class="metric">'.esc($value).'</div><h3>'.esc($name).'</h3></div>';
+        echo '</div><section><h2>وضعیت بهره‌برداری</h2><p>این دفتر برای ثبت داخلی حسابداری، خرید و فروش، انبار، پرسنل، مکاتبات و پروژه‌هاست. ثبت پرسنل به معنی استخدام قطعی، ثبت سند به معنی تسویه بانکی و ثبت پروژه به معنی اجرای فیزیکی نیست. این پنل به بانک یا سامانه پرداخت زنده متصل نیست.</p></section>';
+        $services=['دفتر مالی داخلی'=>true,'فروشگاه داخلی'=>function_exists('zmStoreDb'),'ایجنت‌های سایت'=>function_exists('zmAgentDb'),'گزارش فارسی ساعتی'=>is_file(__DIR__.'/chatgpt_reports.php')&&!is_link(__DIR__.'/chatgpt_reports.php'),'دفتر مصوبات'=>is_file($private.'/approvals_snapshot.json')&&!is_link($private.'/approvals_snapshot.json')];
+        echo '<section><h2>پایش اجزای میز مدیریت</h2><p class="muted">این وضعیت فقط وجود ماژول را نشان می‌دهد؛ سلامت کامل عملیات، فروش واقعی و اتصال بانکی جداگانه باید بررسی شود.</p><div class="grid">';
+        foreach($services as $label=>$available)echo '<div class="card"><h3>'.esc($label).'</h3><p>'.($available?'ماژول موجود است':'ماژول یا منبع نصب نشده است').'</p></div>';
+        echo '</div></section>';
     } elseif($page==='agent_center'){
         authorize('view');
         if(!function_exists('zmAgentDb'))bail('موتور ایجنت در دسترس نیست.',503);
