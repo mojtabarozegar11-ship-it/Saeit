@@ -1,11 +1,8 @@
 name: ZM guarded independent admin access manager install
+# Never publish a private access endpoint as a side effect of changing tests.
+# Human-reviewed, explicitly dispatched release only; no push-triggered deploy.
 on:
-  push:
-    branches: [feature/zm-business-php-persian-reports-20261102]
-    paths:
-      - 'content/zomorod-business/access.php'
-      - 'tests/test_zm_business_access_http.py'
-      - '.github/workflows/zm-business-access-live-20261102.yml'
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -13,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   guarded-access:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
