@@ -101,6 +101,41 @@ class ActionIndexSafety(unittest.TestCase):
         with sqlite3.connect(self.index) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM actions").fetchone(), (0,))
 
+    def test_unhashable_status_quarantined_without_crashing_hourly_index(self):
+        # JSON lists and objects are valid syntax, but invalid status types.
+        # The prior set-membership check raised TypeError and stopped the cron.
+        for bad in ('[]', '{"unexpected":"completed"}'):
+            with self.subTest(status=bad):
+                body = receipt("05-0020", "ZM05-0020-A01")
+                body = body.replace('"status": "completed"', '"status": ' + bad)
+                self.assertEqual(parse_block(body, "05-0020"),
+                                 ("invalid_contract", []))
+        self.add(20, receipt("05-0020", "ZM05-0020-A01").replace(
+            '"status": "completed"', '"status": []'))
+        self.assertEqual(rebuild(self.archive, self.index), (0, 1, 1))
+        with sqlite3.connect(self.index) as db:
+            self.assertEqual(db.execute("SELECT reason FROM rejected").fetchone(),
+                             ("invalid_contract",))
+
+    def test_duplicate_json_keys_are_not_silently_accepted(self):
+        body = receipt("05-0020", "ZM05-0020-A01")
+        body = body.replace('"version": 1', '"version": 1, "version": 1')
+        self.assertEqual(parse_block(body, "05-0020"),
+                         ("invalid_contract", []))
+        nested = receipt("05-0020", "ZM05-0020-A01").replace(
+            '"status": "completed"',
+            '"status": "blocked", "status": "completed"')
+        self.assertEqual(parse_block(nested, "05-0020"),
+                         ("invalid_contract", []))
+
+    def test_extra_unclosed_receipt_marker_is_rejected(self):
+        valid = receipt("05-0020", "ZM05-0020-A01")
+        for injected in (valid + "\\nZM_ACTIONS_V1_START",
+                         "ZM_ACTIONS_V1_END\\n" + valid):
+            with self.subTest(marker=injected[:24]):
+                self.assertEqual(parse_block(injected, "05-0020"),
+                                 ("invalid_contract", []))
+
     def test_mutated_source_history_fails_without_overwriting_old_index(self):
         self.add(1, receipt("05-0001", "ZM05-0001-A01"))
         rebuild(self.archive, self.index)
