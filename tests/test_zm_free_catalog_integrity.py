@@ -165,6 +165,57 @@ catch(PDOException $e) {echo "PUBLIC_READ_ONLY=PASS";}
         self.assertNotIn("Verified free seed calculator", html)
         self.assertIn("کاتالوگ در حال تکمیل", html)
 
+    def test_legacy_free_case_variant_is_not_advertised(self):
+        # A pre-trigger import can create case-only duplicate identities.
+        # Do not expose either ambiguous release to anonymous visitors.
+        with sqlite3.connect(self.dbpath) as db:
+            db.execute("""INSERT INTO free_digital_products
+                (sku,title,description,download_path,artifact_sha256,
+                 license_text,price_irr,enabled)
+                VALUES(?,?,?,?,?,?,0,1)""",
+                ("WHEAT_SEED_RATE_V1", "Legacy duplicate", "Private legacy",
+                 "/store/free-products/legacy-copy/index.html",
+                 self.sha, "Free educational use"))
+        html = self.render()
+        self.assertNotIn('href="' + URL + '"', html)
+        self.assertIn("کاتالوگ در حال تکمیل", html)
+
+    def test_same_catalog_case_variant_imports_are_rejected(self):
+        # Validate SQLite boundary for direct importers, both INSERT and UPDATE.
+        script = self.home / "same_catalog_guards.php"
+        script.write_text(r"""<?php
+require $argv[1];
+$db=zmStoreDb($argv[2]);
+$db->exec("INSERT INTO products(sku,title,description,price_irr)
+ VALUES('paid_only','Paid','Private',1000)");
+$db->exec("INSERT INTO products(sku,title,description,price_irr)
+ VALUES('other_paid','Other','Private',1000)");
+$db->exec("INSERT INTO free_digital_products
+ (sku,title,description,download_path,artifact_sha256,license_text)
+ VALUES('other_free','Free','Private','/store/free-products/other/index.html',
+ 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','Free use')");
+$bad=[
+ "INSERT INTO products(sku,title,description,price_irr) VALUES('PAID_ONLY','Bad','Bad',1000)",
+ "UPDATE products SET sku='PAID_ONLY' WHERE sku='other_paid'",
+ "INSERT INTO free_digital_products(sku,title,description,download_path,artifact_sha256,license_text) VALUES('WHEAT_SEED_RATE_V1','Bad','Bad','/store/free-products/bad/index.html','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','Free')",
+ "UPDATE free_digital_products SET sku='WHEAT_SEED_RATE_V1' WHERE sku='other_free'",
+];
+foreach($bad as $sql){
+ try{$db->exec($sql);exit(21);}
+ catch(PDOException $e){
+  if(strpos($e->getMessage(),'same_catalog_sku_collision')===false)exit(22);
+ }
+}
+if((int)$db->query('SELECT COUNT(*) FROM products')->fetchColumn()!==2)exit(23);
+if((int)$db->query('SELECT COUNT(*) FROM free_digital_products')->fetchColumn()!==2)exit(24);
+echo 'SAME_CATALOG_CASE_GUARDS=PASS';
+""", encoding="utf8")
+        run = subprocess.run(
+            ["php", str(script), str(self.private / "site_store.php"),
+             str(self.private)], capture_output=True, text=True, timeout=15)
+        self.assertEqual(run.returncode, 0, run.stderr + run.stdout)
+        self.assertIn("SAME_CATALOG_CASE_GUARDS=PASS", run.stdout)
+
     def test_tampered_artifact_is_not_advertised(self):
         self.file.write_bytes(b"altered content after verified release")
         html = self.render()
