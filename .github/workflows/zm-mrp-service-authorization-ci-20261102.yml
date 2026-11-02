@@ -1,0 +1,45 @@
+name: ZM MRP service authorization exact-head CI
+on:
+  push:
+    branches:
+      - fix/zm-mrp-service-authorization-20261102
+  pull_request:
+    branches:
+      - fix/zm-mrp-stale-drafts-and-invalid-bom-20261102
+permissions:
+  contents: read
+jobs:
+  mrp-service-auth:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DEBUG: 'true'
+      SECRET_KEY: 'ci-only-not-production'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1,testserver'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact source SHA
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Django checks and MRP service authorization regression
+        run: |
+          python -m py_compile ecosystem_hub/procurement.py ecosystem_hub/test_procurement_service_authorization.py
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+          python manage.py test ecosystem_hub.test_procurement_service_authorization ecosystem_hub.test_procurement_integrity
+      - name: Nonproduction boundary
+        run: |
+          echo 'NO_HOST_CONTACT=1'
+          echo 'NO_FINANCIAL_OR_INVENTORY_POSTING=1'
+          echo 'NO_PURCHASE_PAYMENT_OR_DEPLOY=1'
