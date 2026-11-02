@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from secrets import token_hex
 
 MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
-MAX_SOURCE_BYTES = 12 * 1024**3
+MAX_SOURCE_BYTES = 64 * 1024**3  # Bound raw MySQL bytes; GPG zlib and free-space gates remain active.
 MAX_ENCRYPTED_BYTES = 12 * 1024**3
 # Initial admission cap is below the independently measured 13.61 GiB available;
 # encrypt_stream_to_file retains its per-chunk hard stop at 3 GiB free.
@@ -193,11 +193,24 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
     manifest = backups / (stem + "_" + kind + "_" + VERSION + ".manifest.json")
     if any(x.exists() or x.is_symlink() for x in (partial,complete,manifest)):
         raise RuntimeError("one-time output already exists; refusing overwrite")
-    total, digest = encrypt_stream_to_file(stream, partial, gnupg, key)
-    verified_total, verified_digest = verify_stream(partial, gnupg, key)
-    if total != verified_total or digest != verified_digest:
-        raise RuntimeError("OpenPGP round-trip integrity or size mismatch")
-    os.rename(partial, complete)
+    try:
+        total, digest = encrypt_stream_to_file(stream, partial, gnupg, key)
+        verified_total, verified_digest = verify_stream(partial, gnupg, key)
+        if total != verified_total or digest != verified_digest:
+            raise RuntimeError("OpenPGP round-trip integrity or size mismatch")
+        os.rename(partial, complete)
+    except BaseException:
+        # This run's unverified ciphertext must not consume persistent VPS space.
+        # Only the exact private, owner-created partial name is eligible.
+        try:
+            current = partial.lstat()
+            if stat.S_ISREG(current.st_mode) and current.st_uid == os.getuid():
+                partial.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            print("PARTIAL_CLEANUP_FAILED_NO_RELEASE", file=sys.stderr)
+        raise
     summary = {
         "kind": kind, "format": "OpenPGP-AES256-GPGv2",
         "archive_name": complete.name,
