@@ -168,7 +168,16 @@ def compile_index(rows):
     return actions, rejected
 
 
-def verify_old_index(target: Path, new_actions, new_rejected):
+def archive_fingerprint(rows):
+    """Bind every archived report, including reports with no structured actions."""
+    digest = hashlib.sha256()
+    for row in rows:
+        digest.update(json.dumps(row, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def verify_old_index(target: Path, new_actions, new_rejected, rows):
     if not target.exists():
         return
     guard_private(target, INDEX_NAME, must_exist=True)
@@ -180,6 +189,20 @@ def verify_old_index(target: Path, new_actions, new_rejected):
                                  "occurred_at,title_fa,action_status,impact_fa,evidence_url,"
                                  "receipt_sha256 FROM actions ORDER BY seq").fetchall()
         old_rejected = db.execute("SELECT report_code,reason FROM rejected ORDER BY report_code").fetchall()
+        previous = dict(db.execute("SELECT name,value FROM metadata").fetchall())
+    # Older indexes did not record the complete report fingerprint. Keep their
+    # action/rejection immutability checks and establish the new baseline once.
+    try:
+        old_count = int(previous["report_count"])
+    except (KeyError, ValueError, TypeError) as exc:
+        raise ValueError("OLD_INDEX_REPORT_COUNT_INVALID") from exc
+    if old_count < 0 or old_count > len(rows):
+        raise ValueError("IMMUTABLE_REPORT_HISTORY_CHANGED")
+    old_fingerprint = previous.get("archive_prefix_sha256")
+    if old_fingerprint is not None and (
+            not re.fullmatch(r"[a-f0-9]{64}", old_fingerprint)
+            or archive_fingerprint(rows[:old_count]) != old_fingerprint):
+        raise ValueError("IMMUTABLE_REPORT_HISTORY_CHANGED")
     if new_actions[:len(old_actions)] != old_actions:
         raise ValueError("IMMUTABLE_ACTION_HISTORY_CHANGED")
     if not set(old_rejected).issubset(set(new_rejected)):
@@ -201,7 +224,7 @@ def rebuild(source: Path, target: Path, *, now=None):
         fcntl.flock(fd, fcntl.LOCK_EX)
         rows = read_archive(source)
         actions, rejected = compile_index(rows)
-        verify_old_index(target, actions, rejected)
+        verify_old_index(target, actions, rejected, rows)
         timestamp = now or datetime.now(timezone.utc)
         if timestamp.tzinfo is None:
             raise ValueError("NAIVE_INDEX_TIMESTAMP")
@@ -215,7 +238,9 @@ def rebuild(source: Path, target: Path, *, now=None):
                 db.executemany("INSERT INTO rejected VALUES (?,?)", rejected)
                 db.executemany("INSERT INTO metadata VALUES (?,?)", [
                     ("source", SOURCE), ("built_at", timestamp.isoformat()),
-                    ("report_count", str(len(rows))), ("verification", "not_checked"),
+                    ("report_count", str(len(rows))),
+                    ("archive_prefix_sha256", archive_fingerprint(rows)),
+                    ("verification", "not_checked"),
                 ])
                 db.commit()
                 if db.execute("PRAGMA integrity_check").fetchone() != ("ok",):
