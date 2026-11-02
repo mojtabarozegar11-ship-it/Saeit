@@ -1,0 +1,41 @@
+name: ZM store cart HOLD offline exact-head regression
+on:
+  pull_request:
+    paths:
+      - 'content/zomorod-v11/store_cart_index.php'
+      - 'tests/test_zm_store_cart_hold.py'
+      - '.github/workflows/zm-store-cart-hold-offline-ci-20261102.yml'
+  push:
+    branches:
+      - 'fix/zm-store-cart-hold-20261102'
+    paths:
+      - 'content/zomorod-v11/store_cart_index.php'
+      - 'tests/test_zm_store_cart_hold.py'
+      - '.github/workflows/zm-store-cart-hold-offline-ci-20261102.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zm-store-cart-hold-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Pin exact tested source
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          echo "ZM_CART_EXACT_HEAD=$EXPECTED_HEAD"
+      - name: PHP syntax and offline HTTP regression
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-v11/store_cart_index.php
+          python3 -m unittest discover -s tests -p 'test_zm_store_cart_hold.py' -v
+          echo "ZM_CART_NO_HOST_NO_PAYMENT=PASS"
