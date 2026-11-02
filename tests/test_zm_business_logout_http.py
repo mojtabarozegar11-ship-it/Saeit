@@ -232,12 +232,12 @@ class LogoutHTTPTests(unittest.TestCase):
                 description="Isolated KPI regression record",
             ), 303)
 
-        invoice("QA-KPI-USD-SALE", "sale", "120.00", "USD", "2026-10-02")
-        invoice("QA-KPI-USD-PURCHASE", "purchase", "20.00", "USD", "2027-01-01", "service")
+        invoice("QA-KPI-AED-SALE", "sale", "120.00", "AED", "2026-10-02")
+        invoice("QA-KPI-AED-PURCHASE", "purchase", "20.00", "AED", "2027-01-01", "service")
         invoice("QA-KPI-EUR-SALE", "sale", "15.00", "EUR", "2027-01-01")
         with sqlite3.connect(self.private / "management.sqlite3") as conn:
             sale_id = conn.execute(
-                "SELECT id FROM invoices WHERE invoice_no='QA-KPI-USD-SALE'"
+                "SELECT id FROM invoices WHERE invoice_no='QA-KPI-AED-SALE'"
             ).fetchone()[0]
         self.assertEqual(post(
             "payments", "payment", invoice_id=str(sale_id), amount="30.00",
@@ -249,7 +249,7 @@ class LogoutHTTPTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("مطالبات و تعهدات پرداخت‌نشده", dashboard)
         self.assertIn("با بانک یا اسناد تسویه خارجی تطبیق داده نشده‌اند", dashboard)
-        self.assertRegex(dashboard, r"<td>USD</td><td>90\.00</td><td>90\.00</td><td>20\.00</td><td>0\.00</td>")
+        self.assertRegex(dashboard, r"<td>AED</td><td>90\.00</td><td>90\.00</td><td>20\.00</td><td>0\.00</td>")
         self.assertRegex(dashboard, r"<td>EUR</td><td>15\.00</td><td>0\.00</td><td>0\.00</td><td>0\.00</td>")
 
     def test_admin_can_revoke_access_without_deleting_user_history(self) -> None:
