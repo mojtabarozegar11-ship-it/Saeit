@@ -64,3 +64,24 @@ Production backup directory: `/home/zomorod2/.backups/zm-command-bridge-20261102
 - `crontab.before`: pre-install crontab snapshot, mode 600; contains potentially sensitive scheduled commands—never publish it.
 
 Rollback should be **selective**: remove only the uniquely marked `ZM_CMD_SCAN_20261102` cron entry, restore the backed-up command-center file if verification fails, and retain the audit tasks as historical internal work rather than deleting records. Do not replace the entire crontab if unrelated jobs have changed since the backup.
+
+## Subsequent same-day release — customer inquiry CRM and store acquisition
+
+The command-center bridge was extended to inspect `master_customer_inbox.sqlite3` **read-only** and create at most one task per real Zomorod inquiry ticket. It copies **no customer name, email or message body** into the task queue. Tenant scoping is exact (`tenant='zomorod'`), and claimed order references never count as verified sales.
+
+- New route: `/business/customer_inbox.php` — an authenticated, `admin`/`manager`-only private customer inbox. Reads the customer DB and management RBAC database with SQLite read-only connections and escapes all user-supplied fields.
+- The live private `app.php` navigation contains an exact, conditional `store_manager`-adjacent link to the customer inbox. The older GitHub app snapshot was **not deployed** over the live module.
+- The existing public `/store/` now offers an explicit enquiry CTA pointing to the existing authenticated-by-CSRF customer ingress `/ask-master/index.php`; it does **not** create an order or accept money.
+- The existing free wheat seed-rate calculator file had SHA-256 `32858e6be6eb909bd1607df4242750276ffcdf4ee8fa431b6954c7ecbeb9e331`, matching its recorded digest. It remains a free educational product, not a paid transaction.
+- At inspection the private store had **174 factory drafts**, including **125 `synth_` identifiers** and 49 non-`synth_` identifiers. All 174 were awaiting commercial approval. The customer inbox held **zero real questions** and the paid catalogue **zero products**. No false orders or leads were inserted.
+- The updated bridge passed a temporary isolated SQLite test: one Zomorod-only test inquiry yielded one control-plane task, re-scan yielded zero duplicates, one other-tenant inquiry was excluded, and attempts to mutate the inquiry SQLite database through the bridge were rejected. The temporary test DB was removed.
+
+Live acceptance checks: PHP lint clean for `app.php`, `command_integrations.php`, `customer_inbox.php`, and store `index.php`; store HTTP 200, customer ingress HTTP 200, anonymous inbox HTTP 403; inquiry callout appears exactly once on the public store page. The scheduled CLI still ran successfully twice after the bridge change, with no duplicate tasks.
+
+Exact second-release backups: `/home/zomorod2/.backups/zm-sales-crm-20261102/`:
+
+- `app.before.php` SHA-256 `2585a06ce7bbbd9b7aff4bac5fdd79a1ee7b2c45c8c13a8ad3aa647428e5652c`.
+- `command_integrations.before.php` SHA-256 `258d3cae64a60a217913d4b0a05acbea7d3012ee9859e5e81bce66c42c1ce949`.
+- `store.before.php` SHA-256 `0a57f8e974a67f54a973e6da7d5cb80202bf25a02d1171383f06ea94024267c6`.
+
+Rollback only the CRM-specific additions if needed. The customer-inbox public route can be disabled without touching the bank or existing accounting modules. Keep existing legitimate messages and accounting records intact.
