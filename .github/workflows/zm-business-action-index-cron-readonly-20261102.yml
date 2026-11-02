@@ -17,9 +17,9 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git hash-object content/zomorod-business/chatgpt_reports.php)" = "c668d5c12109f62c4b371823b1711860f63e4e30"
+          git cat-file -e c668d5c12109f62c4b371823b1711860f63e4e30^{blob}
           test "$(git hash-object scripts/zm_chatgpt_action_index.py)" = "c7c86781c2fbd90cdbebb578008dcce8af04f362"
-          sha256sum content/zomorod-business/chatgpt_reports.php | awk '{print $1}' > "$RUNNER_TEMP/viewer-live.sha"
+          git cat-file blob c668d5c12109f62c4b371823b1711860f63e4e30 | sha256sum | awk '{print $1}' > "$RUNNER_TEMP/viewer-live.sha"
       - name: Configure pinned GitHub to VPS to cPanel relay
         shell: bash
         env:
