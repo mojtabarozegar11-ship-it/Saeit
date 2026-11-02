@@ -20,6 +20,10 @@ def material_shortages(order):
     for row in recipe.materials.select_related("item").order_by("item__sku"):
         if row.item.unit_id != order.unit_id:
             raise ValidationError("ماده اولیه متعلق به واحد تولید نیست.")
+        # Legacy imports and QuerySet.update bypass model validators.
+        # Never turn malformed BOM inputs into understated procurement needs.
+        if row.quantity <= 0 or not Decimal("0") <= row.scrap_percent <= Decimal("100"):
+            raise ValidationError("مقدار یا درصد ضایعات مواد فرمول نامعتبر است.")
         required = (
             (order.quantity / recipe.yield_quantity)
             * row.quantity
@@ -47,12 +51,32 @@ def prepare_purchase_drafts(order_id, actor):
     ).get(pk=order_id)
     if order.state not in ("draft", "review", "approved"):
         raise ValidationError("برای سفارش مختومه یا لغوشده درخواست تأمین ساخته نمی‌شود.")
+    # A repeated POST is idempotent only while the original shortage is still
+    # current. A changed BOM, order quantity or confirmed stock must not leave
+    # an obsolete draft silently masquerading as a fresh recommendation.
+    shortage_rows = material_shortages(order)
+    expected = {
+        f"MRP-{order.pk}-{row['item'].pk}": row for row in shortage_rows
+    }
+    existing = {
+        need.reference: need for need in ProcurementNeed.objects.select_for_update().filter(
+            unit=order.unit, reference__startswith=f"MRP-{order.pk}-",
+        )
+    }
+    # Preflight before any insertion; atomicity covers all materials.
+    for reference, need in existing.items():
+        row = expected.get(reference)
+        if (row is None or need.item_id != row["item"].pk
+                or need.status != "draft" or row["shortage"] <= 0
+                or need.quantity != row["shortage"]):
+            raise ValidationError(
+                "درخواست تأمین قبلی با کسری فعلی تطابق ندارد؛ بازبینی انسانی لازم است."
+            )
     new_ids = []
-    for row in material_shortages(order):
-        if row["shortage"] <= 0:
+    for reference, row in expected.items():
+        if row["shortage"] <= 0 or reference in existing:
             continue
         item = row["item"]
-        reference = f"MRP-{order.pk}-{item.pk}"
         item_record, created = ProcurementNeed.objects.get_or_create(
             unit=order.unit,
             reference=reference,
