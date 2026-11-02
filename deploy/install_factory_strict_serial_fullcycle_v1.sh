@@ -24,8 +24,8 @@ test -f "$ops/license-safe-primary-fulltext-acquisition-sequential-v1.py"
 test -f "$ops/agri200-strict-qc-catalog.json"
 test -f "$base/operations/12-stage-governance/factory_12_stage_governance.py"
 
-# Pause only dedicated AGRI200 producers. Shared stage workers stay scheduled
-# with a verified exclusion of this specific owner-owned cohort.
+# Pause every known factory producer, including formerly shared stage workers.
+# Excluding only the AGRI200 cohort could allow an unrelated second product.
 legacy_markers=(
   SAEIT_SEQUENTIAL_SCIENCE_CASEWORK_20261025
   SAEIT_AGRI200_AUTONOMOUS_CLOSED_LOOP_V1
@@ -65,6 +65,12 @@ files=(
 command -v crontab >/dev/null
 command -v systemctl >/dev/null
 command -v flock >/dev/null
+command -v openssl >/dev/null
+command -v pgrep >/dev/null
+if [ ! -d /etc/saeit/hourly-cycle-receiver-public-keys ]; then
+  echo STRICT_SERIAL_TRUSTED_RECEIVER_KEYS_UNPROVISIONED >&2
+  exit 1
+fi
 cron_snapshot="$(crontab -l)" || {
   echo STRICT_SERIAL_CRON_INVENTORY_UNREADABLE >&2
   exit 1
@@ -84,6 +90,30 @@ timer_inventory="$(systemctl list-timers --all --no-legend --no-pager)" || {
 if printf '%s\n' "$timer_inventory" | grep -Eiq '(factory|agri200|qc1000|strict[-_]?serial|owner500).*\.timer'; then
   echo STRICT_SERIAL_COMPETING_SYSTEMD_TIMER >&2
   exit 1
+fi
+service_inventory="$(systemctl list-units --all --type=service --no-legend --no-pager)" || {
+  echo STRICT_SERIAL_SYSTEMD_SERVICE_INVENTORY_UNREADABLE >&2
+  exit 1
+}
+if printf '%s\n' "$service_inventory" | grep -Eiq '(factory|agri200|qc1000|strict[-_]?serial|owner500).*\.service'; then
+  echo STRICT_SERIAL_COMPETING_SYSTEMD_SERVICE >&2
+  exit 1
+fi
+# Never change executables or crons while a previous producer may still be
+# processing another SKU. Check again after scheduler replacement below.
+if pgrep -u githubops -f '/(agri200-autonomous-closed-loop|stage2-literature-scout|stage2-research|stage34-autonomous-handoff|stage5-evidence-workbook|stage5-substantive-rework|stage6-preflight-rework|agri200-strict-qc1000|strict-serial-fullcycle)\.py' >/dev/null; then
+  echo STRICT_SERIAL_PREEXISTING_FACTORY_WORKER_ACTIVE >&2
+  exit 1
+fi
+if command -v supervisorctl >/dev/null; then
+  supervisor_inventory="$(supervisorctl status)" || {
+    echo STRICT_SERIAL_SUPERVISOR_INVENTORY_UNREADABLE >&2
+    exit 1
+  }
+  if printf '%s\n' "$supervisor_inventory" | grep -Eiq '(factory|agri200|qc1000|strict[-_]?serial|owner500)'; then
+    echo STRICT_SERIAL_COMPETING_SUPERVISOR_WORKER >&2
+    exit 1
+  fi
 fi
 printf '%s\n' "$cron_snapshot" | python3 -B -c '
 import re
@@ -217,15 +247,13 @@ for line in rows:
         if (line.count(new_worker)==1 and line.count(old_worker)==0
                 and line.count('--exclude-owner-agri200')==1
                 and line.rstrip().endswith('# '+marker)):
-            out.append(line)
+            out.append('# PAUSED_BY_STRICT_SERIAL_20261025 '+line)
             continue
         if (line.count(old_worker)!=1 or ' >> ' not in line
                 or '--exclude-owner-agri200' in line
                 or not line.rstrip().endswith('# '+marker)):
             raise SystemExit('UNRECOGNIZED_SHARED_WORKER_CRON:'+marker)
-        updated=line.replace(old_worker,new_worker,1)
-        updated=updated.replace(' >> ',' --exclude-owner-agri200 >> ',1)
-        out.append(updated)
+        out.append('# PAUSED_BY_STRICT_SERIAL_20261025 '+line)
         continue
     if markers:
         if ("factory-runtime/operations/production-instructions/" not in line
@@ -245,11 +273,10 @@ for marker in "${legacy_markers[@]}"; do
   test "$(crontab -l | grep -F "$marker" | grep -vc '^#' || true)" -eq 0
 done
 for marker in "${shared_markers[@]}"; do
-  existing_count="$(grep -F "$marker" "$backup/crontab.before" | grep -vc '^#' || true)"
-  if [ "$existing_count" -gt 0 ]; then
-    test "$(crontab -l | grep -F "$marker" | grep -Fc -- '--exclude-owner-agri200')" -eq 1
-  fi
+  test "$(crontab -l | grep -F "$marker" | grep -vc '^#' || true)" -eq 0
 done
+"$python" -B "$ops/strict-serial-fullcycle-v1.py" --factory-private "$private" \
+  --operations "$ops" --dry-run --require-scheduler-scope
 command -v pgrep >/dev/null
 if pgrep -u githubops -f '/(agri200-autonomous-closed-loop|stage2-literature-scout|stage2-research|stage34-autonomous-handoff|stage5-evidence-workbook|stage5-substantive-rework|stage6-preflight-rework|agri200-strict-qc1000)\.py' >/dev/null; then
   echo LEGACY_AGRI_WORKER_STILL_RUNNING_RETRY_WHEN_QUIESCENT >&2
