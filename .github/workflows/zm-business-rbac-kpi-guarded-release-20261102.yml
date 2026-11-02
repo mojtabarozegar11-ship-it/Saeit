@@ -1,0 +1,187 @@
+name: ZM guarded accounting desk KPI and RBAC code-only release
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths: [".github/workflows/zm-business-rbac-kpi-guarded-release-20261102.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zm-live-php-private-reports-only
+  cancel-in-progress: false
+jobs:
+  guarded-app-patch:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite,sqlite3
+      - name: Exact revision, PHP and isolated real HTTP acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          base=e702433039759df4448656f25e3e96436fc4feba
+          git merge-base --is-ancestor "$base" "$GITHUB_SHA"
+          test "$(git hash-object content/zomorod-business/app.php)" = "427d7821c254f72e3ec08fe5a020f3e631571fa5"
+          php -l content/zomorod-business/app.php
+          python3 -m unittest discover -s tests -p 'test_zm_business_logout_http.py'
+          python3 -m unittest discover -s tests -p 'test_zm_business_private_db_bootstrap_http.py'
+          git diff --no-ext-diff --binary "$base" "$GITHUB_SHA" -- content/zomorod-business/app.php > "$RUNNER_TEMP/zm-app.patch"
+          test -s "$RUNNER_TEMP/zm-app.patch"
+          test "$(grep -c '^@@ ' "$RUNNER_TEMP/zm-app.patch")" -ge 3
+          sha256sum "$RUNNER_TEMP/zm-app.patch" | awk '{print $1}' > "$RUNNER_TEMP/zm-app-patch.sha"
+          echo 'FINANCIAL_SCHEMA_MIGRATION=no'
+          echo 'LIVE_DATA_TEST_RECORDS=no'
+      - name: Configure fingerprint-pinned two-hop SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-rbac-kpi"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump zm-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" zm-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Prepare only code stage and owner-recoverable backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-rbac-kpi"
+          ssh -F "$d/config" zm-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          root="$HOME/.private/zomorod-business"
+          app="$root/app.php"
+          ledger="$root/management.sqlite3"
+          stage="$root/.rbac-kpi-$sha"
+          backup="$HOME/.backups/zm-business-app/$sha"
+          test -d "$root" && test ! -L "$root"
+          for f in "$app" "$ledger" "$HOME/public_html/business/index.php"; do
+            test -f "$f" && test ! -L "$f"
+          done
+          test "$(stat -c %a "$app")" = 600
+          test "$(stat -c %a "$ledger")" = 600
+          test "$(stat -c %u "$app")" = "$(id -u)"
+          command -v patch >/dev/null
+          phpbin="/opt/cpanel/ea-php82/root/usr/bin/php"
+          test -x "$phpbin"
+          "$phpbin" -l "$app" >/dev/null
+          test ! -e "$stage" && test ! -L "$stage"
+          test ! -e "$backup" && test ! -L "$backup"
+          install -d -m 700 "$stage" "$backup"
+          cp -p "$app" "$backup/app.before.php"
+          cp -p "$app" "$stage/app.php"
+          sha256sum "$app" | awk '{print $1}' > "$stage/live.before.sha"
+          echo 'LIVE_APP_PREIMAGE_BACKUP=preserved_owner_only'
+          echo 'FINANCIAL_LEDGER=untouched'
+          REMOTE
+      - name: Send public-repository code delta to private host staging only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-rbac-kpi"
+          stage="/home/zomorod2/.private/zomorod-business/.rbac-kpi-$GITHUB_SHA"
+          ssh -F "$d/config" zm-cpanel "umask 077; cat > '$stage/app.patch'" < "$RUNNER_TEMP/zm-app.patch"
+      - name: Apply exact source delta to host copy and publish atomically with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-rbac-kpi"
+          ssh -F "$d/config" zm-cpanel bash -se -- "$GITHUB_SHA" "$(cat "$RUNNER_TEMP/zm-app-patch.sha")" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; digest="$2"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ && "$digest" =~ ^[a-f0-9]{64}$ ]]
+          root="$HOME/.private/zomorod-business"
+          app="$root/app.php"
+          stage="$root/.rbac-kpi-$sha"
+          backup="$HOME/.backups/zm-business-app/$sha"
+          phpbin="/opt/cpanel/ea-php82/root/usr/bin/php"
+          test "$(sha256sum "$stage/app.patch" | awk '{print $1}')" = "$digest"
+          previous="$(cat "$stage/live.before.sha")"
+          test "$(sha256sum "$app" | awk '{print $1}')" = "$previous"
+          test "$(sha256sum "$backup/app.before.php" | awk '{print $1}')" = "$previous"
+          patch --batch --forward --fuzz=0 "$stage/app.php" "$stage/app.patch" >/dev/null
+          "$phpbin" -l "$stage/app.php" >/dev/null
+          next="$(sha256sum "$stage/app.php" | awk '{print $1}')"
+          test "$previous" != "$next"
+          test ! -L "$app" && test "$(stat -c %a "$app")" = 600
+          test "$(sha256sum "$app" | awk '{print $1}')" = "$previous"
+          install -m 600 "$stage/app.php" "$stage/app.to_publish.php"
+          modified=0
+          rollback() {
+            set +e
+            if test "$modified" = 1; then
+              cp -p "$backup/app.before.php" "$stage/app.rollback.php"
+              if mv -f "$stage/app.rollback.php" "$app"; then echo 'CODE_ROLLBACK=restored'; else echo 'CODE_ROLLBACK=manual_backup_preserved' >&2; fi
+            fi
+          }
+          trap 'rc=$?; trap - EXIT; rollback; exit "$rc"' EXIT
+          modified=1
+          mv -f "$stage/app.to_publish.php" "$app"
+          "$phpbin" -l "$app" >/dev/null
+          test "$(sha256sum "$app" | awk '{print $1}')" = "$next"
+          test "$(stat -c %a "$app")" = 600
+          test "$(stat -c %a "$root/management.sqlite3")" = 600
+          code="$(curl -sSL --max-time 30 -o "$stage/anonymous.html" -w '%{http_code}' 'https://zomorodmelal.ir/business/?page=dashboard' || true)"
+          test "$code" = 200
+          grep -Fq 'ورود مدیر و حسابدار' "$stage/anonymous.html"
+          ! grep -Fq 'مطالبات و تعهدات پرداخت‌نشده' "$stage/anonymous.html"
+          modified=0
+          trap - EXIT
+          echo 'LIVE_ACCOUNTING_KPI_RBAC_PATCH=installed'
+          echo "LIVE_APP_NEW_SHA256=$next"
+          echo 'LIVE_LEDGER_SCHEMA_OR_RECORDS_CHANGED_BY_DEPLOY=no'
+          echo 'OFFHOST_OWNER_KEY_RESTORE=not_proven'
+          echo 'AUTHENTICATED_ROLE_ACCEPTANCE=not_proven'
+          echo 'CODE_ROLLBACK_BACKUP=preserved'
+          REMOTE
+      - name: Remove temporary relay keys and source patch
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/zm-rbac-kpi"
+          rm -f "$RUNNER_TEMP/zm-app.patch" "$RUNNER_TEMP/zm-app-patch.sha"
