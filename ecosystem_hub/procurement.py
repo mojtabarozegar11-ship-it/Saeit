@@ -13,6 +13,10 @@ from .models import MaterialRequirement, ProcurementNeed, ProductionOrder
 
 def material_shortages(order):
     recipe = order.formula
+    if not order.unit.active:
+        raise ValidationError("برنامه‌ریزی تأمین برای واحد غیرفعال مجاز نیست.")
+    if not recipe.product.active:
+        raise ValidationError("محصول نهایی غیرفعال است؛ فرمول تولید باید بازبینی شود.")
     if order.unit_id != recipe.unit_id:
         raise ValidationError("فرمول سفارش متعلق به واحد دیگری است.")
     if order.quantity <= 0 or recipe.yield_quantity <= 0:
@@ -21,6 +25,8 @@ def material_shortages(order):
     for row in recipe.materials.select_related("item").order_by("item__sku"):
         if row.item.unit_id != order.unit_id:
             raise ValidationError("ماده اولیه متعلق به واحد تولید نیست.")
+        if not row.item.active:
+            raise ValidationError("ماده اولیه غیرفعال است؛ درخواست تأمین جدید مجاز نیست.")
         # Legacy imports and QuerySet.update bypass model validators.
         # Never turn malformed BOM inputs into understated procurement needs.
         if row.quantity <= 0 or not Decimal("0") <= row.scrap_percent <= Decimal("100"):
