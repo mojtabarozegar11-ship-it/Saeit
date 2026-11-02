@@ -175,4 +175,8 @@ def verify():
 if __name__=="__main__":
     require(len(sys.argv)==2 and sys.argv[1] in ("prepare","verify"),
             "unsupported_staging_operation")
-    {"prepare":prepare,"verify":verify}[sys.argv[1]]()
+    if sys.argv[1]=="prepare" and STAGE.exists():
+        verify()
+        print("MPW_EXISTING_PRIVATE_STAGE_REUSED=PASS")
+    else:
+        {"prepare":prepare,"verify":verify}[sys.argv[1]]()
