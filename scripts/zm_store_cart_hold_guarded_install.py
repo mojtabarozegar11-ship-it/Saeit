@@ -143,7 +143,9 @@ def rollback(home, run_id, *, production=True):
         file, mark = target / "index.php", target / ".zm-owner"
         regular(file)
         regular(mark)
-        if (data.get("owner") != OWNER_MARK or data.get("previous_route") != "absent"
+        if (data.get("owner") != OWNER_MARK or data.get("run_id") != run_id
+                or data.get("payment_enabled") is not False
+                or data.get("previous_route") != "absent"
                 or data.get("relative_path") != "public_html/store/cart/index.php"
                 or mark.read_text(encoding="ascii") != OWNER_MARK + "\n"
                 or digest(file) != data.get("sha256")
