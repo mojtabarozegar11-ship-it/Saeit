@@ -163,3 +163,15 @@ class TycoonMarketingReceipt(models.Model):
     revision = models.PositiveBigIntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
 
+
+
+class LoginAttemptBucket(models.Model):
+    """Shared-database password-guessing limit; never store IPs or usernames."""
+
+    key_digest = models.CharField(max_length=64, unique=True, editable=False)
+    failures = models.PositiveSmallIntegerField(default=0)
+    first_failure_at = models.DateTimeField(default=django.utils.timezone.now)
+    blocked_until = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return "Living Cities login protection"
