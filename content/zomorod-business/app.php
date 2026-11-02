@@ -210,7 +210,7 @@ try {
     if($post){
         verifyCsrf();
         $action=req('action');
-        $accountActions=['journal','invoice','payment','account'];
+        $accountActions=['journal','journal_reverse','invoice','payment','account'];
         if($action!=='password_change') authorize(in_array($action,$accountActions,true)?'account':($action==='user'?'users':'manage'));
         if($action==='password_change'){
             $previous=req('previous_password');
@@ -235,18 +235,48 @@ try {
                 $lines[]=[$code,$dr!==''?cents($dr):0,$cr!==''?cents($cr):0];
             }
             $db->beginTransaction();try{record($db,$no,$date,$note,$cur,$lines);$db->commit();}catch(Throwable $e){$db->rollBack();throw $e;}
+        } elseif($action==='journal_reverse'){
+            // Correct an independent manual journal without erasing its source.
+            // Invoice/payment postings need their own controlled credit-note workflow.
+            $original=(int)req('entry_id');
+            $reason=req('reason');
+            $on=inputDate('date');
+            if($original<1||mbSafeLen($reason)<8||mbSafeLen($reason)>200)bail('شناسه سند یا علت برگشت معتبر نیست.');
+            $db->exec('BEGIN IMMEDIATE');
+            try{
+                $prior=q($db,'SELECT id,doc_no FROM journal_entries WHERE id=?',[$original]);
+                if(!$prior||str_starts_with((string)$prior[0]['doc_no'],'REV-'))bail('سند اولیه برای برگشت مجاز نیست.');
+                if(one($db,'SELECT id FROM invoices WHERE posted_entry=?',[$original])||
+                   one($db,'SELECT id FROM invoice_payments WHERE entry_id=?',[$original]))bail('برگشت سند وابسته به فاکتور/پرداخت مستلزم گردش اختصاصی است.');
+                $revNo='REV-'.$original;
+                if(one($db,'SELECT id FROM journal_entries WHERE doc_no=?',[$revNo]))bail('این سند قبلاً برگشت خورده است.');
+                $originalLines=q($db,'SELECT a.code,l.debit,l.credit,l.currency FROM journal_lines l JOIN ledger_accounts a ON a.id=l.account_id WHERE l.entry_id=? ORDER BY l.id',[$original]);
+                if(count($originalLines)<2||count($originalLines)>12)bail('ردیف‌های سند قابل برگشت نیست.');
+                $reversed=[];$cur=(string)$originalLines[0]['currency'];
+                foreach($originalLines as $line){
+                    if($line['currency']!==$cur)bail('سند دارای ارزهای ناسازگار است.');
+                    $reversed[]=[(string)$line['code'],(int)$line['credit'],(int)$line['debit']];
+                }
+                $reversedId=record($db,$revNo,$on,'برگشت سند '.$prior[0]['doc_no'].' | علت: '.$reason,$cur,$reversed);
+                audit($db,'reverse','journal',$original);
+                $db->exec('COMMIT');
+            }catch(Throwable $e){try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}throw $e;}
         } elseif($action==='party'){
             $name=req('name');$kind=req('kind');if($name===''||!in_array($kind,['customer','supplier','both'],true))bail('اطلاعات شخص نامعتبر است.');
             $db->prepare('INSERT INTO parties(name,kind,phone,details) VALUES(?,?,?,?)')->execute([$name,$kind,req('phone'),req('details')]);audit($db,'create','party',(int)$db->lastInsertId());
         } elseif($action==='invoice'){
             $kind=req('kind');if(!in_array($kind,['sale','purchase'],true))bail('نوع فاکتور نامعتبر است.');
+            $purchaseClass=req('purchase_class');
+            if($kind==='purchase'&&!in_array($purchaseClass,['inventory','service'],true))
+                bail('در خرید باید نوع دارایی/کالای انباری یا هزینه خدمات را مشخص کنید.');
+            $purchaseAccount=$purchaseClass==='service'?'5100':'1200';
             $party=(int)req('party');if(!one($db,'SELECT id FROM parties WHERE id=?',[$party]))bail('شخص پیدا نشد.');
             $amount=cents(req('amount'));if($amount<=0)bail('مبلغ باید مثبت باشد.');
             $cur=currency();$date=inputDate('date');$due=req('due_date',$date);if(!validDate($due))bail('سررسید نامعتبر است.');
             $desc=req('description');if($desc==='')bail('شرح فاکتور الزامی است.');
             $no=req('invoice_no');if($no==='')$no=uniqueNo('INV');if(strlen($no)>70)bail('شماره فاکتور طولانی است.');
             $db->beginTransaction();try{
-                $j=record($db,uniqueNo('IV'),$date,'فاکتور '.$no.' | '.$desc,$cur,$kind==='sale'?[['1100',$amount,0],['4000',0,$amount]]:[['1200',$amount,0],['2000',0,$amount]]);
+                $j=record($db,uniqueNo('IV'),$date,'فاکتور '.$no.' | '.($kind==='purchase'?('طبقه‌بندی خرید: '.$purchaseClass.' | '):'').$desc,$cur,$kind==='sale'?[['1100',$amount,0],['4000',0,$amount]]:[[$purchaseAccount,$amount,0],['2000',0,$amount]]);
                 $db->prepare('INSERT INTO invoices(invoice_no,kind,party_id,invoice_date,due_date,description,amount,currency,posted_entry,created_by) VALUES(?,?,?,?,?,?,?,?,?,?)')->execute([$no,$kind,$party,$date,$due,$desc,$amount,$cur,$j,actor()]);audit($db,'create','invoice',(int)$db->lastInsertId());$db->commit();
             }catch(Throwable $e){$db->rollBack();throw $e;}
         } elseif($action==='payment'){
@@ -260,7 +290,10 @@ try {
                 $inv=$rows[0];$amount=cents(req('amount'));$remaining=(int)$inv['amount']-(int)$inv['paid'];
                 if($amount<=0||$amount>$remaining)bail('مبلغ بیشتر از مانده فاکتور یا نامعتبر است.');
                 $on=inputDate('date');
-                $j=record($db,uniqueNo('PAY'),$on,'تسویه فاکتور '.$inv['invoice_no'],(string)$inv['currency'],$inv['kind']==='sale'?[['1010',$amount,0],['1100',0,$amount]]:[['2000',$amount,0],['1010',0,$amount]]);
+                $evidence=req('payment_evidence');
+                if(mbSafeLen($evidence)<5||mbSafeLen($evidence)>120||preg_match('/[\\x00-\\x1F\\x7F]/',$evidence))
+                    bail('شناسه یا شرح مدرک دریافت/پرداخت الزامی و محدود به ۵ تا ۱۲۰ نویسه است.');
+                $j=record($db,uniqueNo('PAY'),$on,'ثبت دستی دریافت/پرداخت فاکتور '.$inv['invoice_no'].' | مرجع اعلامی: '.$evidence.' | بدون راستی‌آزمایی بانکی',(string)$inv['currency'],$inv['kind']==='sale'?[['1010',$amount,0],['1100',0,$amount]]:[['2000',$amount,0],['1010',0,$amount]]);
                 $db->prepare('INSERT INTO invoice_payments(invoice_id,amount,paid_on,entry_id,created_by) VALUES(?,?,?,?,?)')->execute([$invoice,$amount,$on,$j,actor()]);
                 audit($db,'create','invoice-payment',(int)$db->lastInsertId());
                 $db->exec('COMMIT');
@@ -323,12 +356,12 @@ try {
         echo '<section><h2>کدینگ حساب‌ها</h2><div class="scroll"><table><tr><th>کد</th><th>نام</th><th>نوع</th></tr>';foreach(q($db,'SELECT * FROM ledger_accounts ORDER BY code') as $r)echo '<tr><td>'.esc($r['code']).'</td><td>'.esc($r['name']).'</td><td>'.esc($r['type']).'</td></tr>';echo '</table></div></section>';
         if(in_array(role(),['admin','accountant'],true)){echo '<section><h2>افزودن حساب جدید</h2>';formBegin('account');echo '<div class="form"><div><label>کد</label><input name="code" required pattern="[0-9]{3,8}"></div><div><label>عنوان حساب</label><input name="name" required></div><div><label>ماهیت</label><select name="type"><option value="asset">دارایی</option><option value="liability">بدهی</option><option value="equity">سرمایه</option><option value="income">درآمد</option><option value="expense">هزینه</option></select></div></div><button>ثبت حساب</button></form></section>';}
     } elseif($page==='journal'){
-        echo '<section><h2>دفتر روزنامه</h2><div class="scroll"><table><tr><th>سند</th><th>تاریخ</th><th>شرح</th><th>بدهکار</th><th>ارز</th></tr>';
-        foreach(q($db,'SELECT j.*,COALESCE(SUM(l.debit),0) total,MAX(l.currency) currency FROM journal_entries j LEFT JOIN journal_lines l ON j.id=l.entry_id GROUP BY j.id ORDER BY j.id DESC LIMIT 100') as $r)echo '<tr><td>'.esc($r['doc_no']).'</td><td>'.esc($r['doc_date']).'</td><td>'.esc($r['note']).'</td><td>'.money((int)$r['total']).'</td><td>'.esc($r['currency']).'</td></tr>';
+        echo '<section><h2>دفتر روزنامه</h2><div class="scroll"><table><tr><th>شناسه</th><th>سند</th><th>تاریخ</th><th>شرح</th><th>بدهکار</th><th>ارز</th></tr>';
+        foreach(q($db,'SELECT j.*,COALESCE(SUM(l.debit),0) total,MAX(l.currency) currency FROM journal_entries j LEFT JOIN journal_lines l ON j.id=l.entry_id GROUP BY j.id ORDER BY j.id DESC LIMIT 100') as $r)echo '<tr><td>'.(int)$r['id'].'</td><td>'.esc($r['doc_no']).'</td><td>'.esc($r['doc_date']).'</td><td>'.esc($r['note']).'</td><td>'.money((int)$r['total']).'</td><td>'.esc($r['currency']).'</td></tr>';
         echo '</table></div></section>';
         if(in_array(role(),['admin','accountant'],true)){echo '<section><h2>ثبت سند دوطرفه (۲ تا ۶ ردیف)</h2>';formBegin('journal');echo '<div class="form"><div><label>شماره سند اختیاری</label><input name="doc_no" placeholder="خودکار در صورت خالی بودن"></div><div><label>تاریخ میلادی</label><input name="date" type="date" value="'.today().'" required></div><div><label>ارز</label><select name="currency"><option>IRR</option><option>USD</option><option>EUR</option><option>AED</option></select></div><div class="full"><label>شرح سند</label><input name="note" required></div></div><h3>آرتیکل‌های سند</h3>';
             for($i=0;$i<6;$i++)echo '<div class="account-line"><select name="account_'.$i.'"><option value="">انتخاب حساب</option>'.options($db,'SELECT code,code||" — "||name AS label FROM ledger_accounts WHERE active=1 ORDER BY code',['code','label']).'</select><input name="debit_'.$i.'" placeholder="بدهکار، 1000.00"><input name="credit_'.$i.'" placeholder="بستانکار، 1000.00"></div>';
-            echo '<button>ثبت غیرقابل‌حذف سند</button></form></section>';}
+            echo '<button>ثبت غیرقابل‌حذف سند</button></form></section><section><h2>برگشت کنترل‌شده سند دستی</h2><p class="muted">فقط سند مستقلِ دستی برگشت‌پذیر است؛ سند اصلی حذف نمی‌شود. اسناد فاکتور و پرداخت به گردش اختصاصی نیاز دارند.</p>';formBegin('journal_reverse');echo '<label>شناسه عددی سند اصلی</label><input name="entry_id" type="number" min="1" required><label>علت مستند برگشت</label><input name="reason" minlength="8" maxlength="200" required><label>تاریخ برگشت</label><input name="date" type="date" value="'.today().'" required><button>ثبت سند برگشتی و ردپا</button></form></section>';}
     } elseif($page==='trial'){
         echo '<section><h2>تراز آزمایشی به تفکیک ارز</h2><div class="scroll"><table><tr><th>حساب</th><th>ارز</th><th>بدهکار</th><th>بستانکار</th><th>مانده</th></tr>';foreach(q($db,'SELECT a.code,a.name,l.currency,SUM(l.debit) AS dr,SUM(l.credit) AS cr FROM journal_lines l JOIN ledger_accounts a ON a.id=l.account_id GROUP BY a.id,l.currency ORDER BY a.code,l.currency') as $r)echo '<tr><td>'.esc($r['code'].' '.$r['name']).'</td><td>'.esc($r['currency']).'</td><td>'.money((int)$r['dr']).'</td><td>'.money((int)$r['cr']).'</td><td>'.money((int)$r['dr']-(int)$r['cr']).'</td></tr>';echo '</table></div></section>';
         echo '<section><h2>خلاصه سود و زیان (در هر ارز)</h2><div class="scroll"><table><tr><th>ارز</th><th>درآمد</th><th>هزینه</th><th>سود/زیان</th></tr>';foreach(q($db,"SELECT l.currency,SUM(CASE WHEN a.type='income' THEN l.credit-l.debit ELSE 0 END) income,SUM(CASE WHEN a.type='expense' THEN l.debit-l.credit ELSE 0 END) expenses FROM journal_lines l JOIN ledger_accounts a ON l.account_id=a.id WHERE a.type IN ('income','expense') GROUP BY l.currency") as $r)echo '<tr><td>'.esc($r['currency']).'</td><td>'.money((int)$r['income']).'</td><td>'.money((int)$r['expenses']).'</td><td>'.money((int)$r['income']-(int)$r['expenses']).'</td></tr>';echo '</table></div></section>';
@@ -336,12 +369,12 @@ try {
         echo '<section><h2>مشتریان و تأمین‌کنندگان</h2><div class="scroll"><table><tr><th>نام</th><th>نوع</th><th>تلفن</th><th>توضیحات</th></tr>';foreach(q($db,'SELECT * FROM parties ORDER BY id DESC LIMIT 120') as $r)echo '<tr><td>'.esc($r['name']).'</td><td>'.esc($r['kind']).'</td><td>'.esc($r['phone']).'</td><td>'.esc($r['details']).'</td></tr>';echo '</table></div></section>';
         if(role()!=='viewer'){echo '<section><h2>ثبت شخص</h2>';formBegin('party');echo '<div class="form"><div><label>نام</label><input name="name" required></div><div><label>نوع</label><select name="kind"><option value="customer">مشتری</option><option value="supplier">تأمین‌کننده</option><option value="both">هر دو</option></select></div><div><label>تلفن</label><input name="phone"></div><div><label>یادداشت</label><input name="details"></div></div><button>ثبت شخص</button></form></section>';}
     } elseif($page==='invoices'){
-        echo '<section><h2>فاکتورهای فروش و خرید</h2><div class="scroll"><table><tr><th>شماره</th><th>نوع</th><th>طرف حساب</th><th>مبلغ</th><th>دریافت/پرداخت</th><th>باقیمانده</th><th>ارز</th></tr>';
+        echo '<section><h2>فاکتورهای فروش و خرید</h2><div class="scroll"><table><tr><th>شماره</th><th>نوع</th><th>طرف حساب</th><th>مبلغ</th><th>ثبت دستی دریافت/پرداخت</th><th>مانده بر اساس ثبت دستی</th><th>ارز</th></tr>';
         foreach(q($db,'SELECT i.*,p.name AS party,COALESCE((SELECT SUM(amount) FROM invoice_payments WHERE invoice_id=i.id),0) paid FROM invoices i JOIN parties p ON p.id=i.party_id ORDER BY i.id DESC LIMIT 110') as $r)echo '<tr><td>'.esc($r['invoice_no']).'</td><td>'.($r['kind']==='sale'?'فروش':'خرید').'</td><td>'.esc($r['party']).'</td><td>'.money((int)$r['amount']).'</td><td>'.money((int)$r['paid']).'</td><td>'.money((int)$r['amount']-(int)$r['paid']).'</td><td>'.esc($r['currency']).'</td></tr>';echo '</table></div></section>';
-        if(in_array(role(),['admin','accountant'],true)){echo '<section><h2>ثبت و صدور فاکتور با سند مالی هم‌زمان</h2><p class="muted">فروش: بدهکار دریافتنی/بستانکار درآمد. خرید: بدهکار موجودی/بستانکار پرداختنی. ارقام بدون مالیات خودکار.</p>';formBegin('invoice');echo '<div class="form"><div><label>شماره فاکتور (خودکار)</label><input name="invoice_no" placeholder="در صورت خالی بودن خودکار"></div><div><label>نوع</label><select name="kind"><option value="sale">فروش</option><option value="purchase">خرید</option></select></div><div><label>طرف حساب</label><select name="party" required>'.options($db,'SELECT id,name FROM parties ORDER BY name',['id','name']).'</select></div><div><label>مبلغ</label><input name="amount" required placeholder="150000.00"></div><div><label>ارز</label><select name="currency"><option>IRR</option><option>USD</option><option>EUR</option><option>AED</option></select></div><div><label>تاریخ میلادی</label><input name="date" type="date" value="'.today().'" required></div><div><label>سررسید میلادی</label><input name="due_date" type="date" value="'.today().'" required></div><div><label>شرح</label><input name="description" required></div></div><button>صدور فاکتور و ثبت سند</button></form></section>';}
+        if(in_array(role(),['admin','accountant'],true)){echo '<section><h2>ثبت و صدور فاکتور با سند مالی هم‌زمان</h2><p class="muted">فروش: بدهکار دریافتنی/بستانکار درآمد. خرید: بدهکار موجودی/بستانکار پرداختنی. ارقام بدون مالیات خودکار.</p>';formBegin('invoice');echo '<div class="form"><div><label>شماره فاکتور (خودکار)</label><input name="invoice_no" placeholder="در صورت خالی بودن خودکار"></div><div><label>نوع</label><select name="kind"><option value="sale">فروش</option><option value="purchase">خرید</option></select></div><div><label>ماهیت خرید (برای فاکتور خرید الزامی)</label><select name="purchase_class"><option value="">انتخاب</option><option value="inventory">کالا/دارایی موجودی (۱۲۰۰)</option><option value="service">هزینه خدمات/عملیاتی (۵۱۰۰)</option></select></div><div><label>طرف حساب</label><select name="party" required>'.options($db,'SELECT id,name FROM parties ORDER BY name',['id','name']).'</select></div><div><label>مبلغ</label><input name="amount" required placeholder="150000.00"></div><div><label>ارز</label><select name="currency"><option>IRR</option><option>USD</option><option>EUR</option><option>AED</option></select></div><div><label>تاریخ میلادی</label><input name="date" type="date" value="'.today().'" required></div><div><label>سررسید میلادی</label><input name="due_date" type="date" value="'.today().'" required></div><div><label>شرح</label><input name="description" required></div></div><button>صدور فاکتور و ثبت سند</button></form></section>';}
     } elseif($page==='payments'){
-        echo '<section><h2>دریافت‌ها و پرداخت‌های ثبت‌شده</h2><div class="scroll"><table><tr><th>شماره فاکتور</th><th>تاریخ</th><th>مبلغ</th><th>ارز</th></tr>';foreach(q($db,'SELECT p.*,i.invoice_no,i.currency FROM invoice_payments p JOIN invoices i ON i.id=p.invoice_id ORDER BY p.id DESC LIMIT 130') as $r)echo '<tr><td>'.esc($r['invoice_no']).'</td><td>'.esc($r['paid_on']).'</td><td>'.money((int)$r['amount']).'</td><td>'.esc($r['currency']).'</td></tr>';echo '</table></div></section>';
-        if(in_array(role(),['admin','accountant'],true)){echo '<section><h2>ثبت دریافت یا پرداخت مرتبط با فاکتور</h2><p class="muted">ثبت نقدینگی از حساب بانک؛ مبلغ بیش از مانده رد می‌شود. این عملیات انتقال بانکی واقعی انجام نمی‌دهد.</p>';formBegin('payment');echo '<div class="form"><div><label>فاکتور</label><select name="invoice_id">'.options($db,'SELECT i.id,i.invoice_no||" / "||p.name AS label FROM invoices i JOIN parties p ON p.id=i.party_id ORDER BY i.id DESC',['id','label']).'</select></div><div><label>مبلغ</label><input name="amount" required></div><div><label>تاریخ</label><input name="date" type="date" value="'.today().'" required></div></div><button>ثبت تسویه و سند حسابداری</button></form></section>';}
+        echo '<section><h2>دریافت‌ها و پرداخت‌های ثبت‌شده (بدون اثبات بانکی)</h2><div class="scroll"><table><tr><th>شماره فاکتور</th><th>تاریخ</th><th>مبلغ</th><th>ارز</th></tr>';foreach(q($db,'SELECT p.*,i.invoice_no,i.currency FROM invoice_payments p JOIN invoices i ON i.id=p.invoice_id ORDER BY p.id DESC LIMIT 130') as $r)echo '<tr><td>'.esc($r['invoice_no']).'</td><td>'.esc($r['paid_on']).'</td><td>'.money((int)$r['amount']).'</td><td>'.esc($r['currency']).'</td></tr>';echo '</table></div></section>';
+        if(in_array(role(),['admin','accountant'],true)){echo '<section><h2>ثبت دریافت یا پرداخت مرتبط با فاکتور</h2><p class="muted">ثبت دستی بر مبنای مدرک اعلام‌شده است؛ مبلغ بیش از مانده رد می‌شود. این عملیات نه انتقال واقعی پول و نه تأیید مستقل بانکی است.</p>';formBegin('payment');echo '<div class="form"><div><label>فاکتور</label><select name="invoice_id">'.options($db,'SELECT i.id,i.invoice_no||" / "||p.name AS label FROM invoices i JOIN parties p ON p.id=i.party_id ORDER BY i.id DESC',['id','label']).'</select></div><div><label>مبلغ</label><input name="amount" required></div><div><label>مرجع مدرک اعلامی (شماره رسید/صورتحساب؛ تأییدنشده)</label><input name="payment_evidence" minlength="5" maxlength="120" required></div><div><label>تاریخ</label><input name="date" type="date" value="'.today().'" required></div></div><button>ثبت دستی با ردپای مدرک</button></form></section>';}
     } elseif($page==='inventory'){
         echo '<section><h2>کالاها و موجودی تعدادی</h2><div class="scroll"><table><tr><th>کد</th><th>نام</th><th>واحد</th><th>موجودی</th><th>نقطه سفارش</th></tr>';foreach(q($db,'SELECT i.*,COALESCE(SUM(m.qty),0) stock FROM inventory i LEFT JOIN inventory_movements m ON i.id=m.inventory_id GROUP BY i.id ORDER BY i.id DESC') as $r)echo '<tr><td>'.esc($r['sku']).'</td><td>'.esc($r['name']).'</td><td>'.esc($r['unit']).'</td><td>'.(int)$r['stock'].'</td><td>'.(int)$r['reorder_level'].'</td></tr>';echo '</table></div></section>';
         if(role()!=='viewer'){echo '<section><h2>تعریف کالا</h2>';formBegin('inventory');echo '<div class="form"><div><label>شناسه</label><input name="sku" required></div><div><label>نام کالا</label><input name="name" required></div><div><label>واحد</label><input name="unit" value="عدد"></div><div><label>نقطه سفارش</label><input name="reorder_level" type="number" min="0" value="0"></div></div><button>ثبت کالا</button></form></section><section><h2>ورود یا خروج کالا</h2><p>ورود با عدد مثبت، خروج با عدد منفی. این فرم فقط کنترل تعداد است و خودکار سند ارزش ریالی ایجاد نمی‌کند.</p>';formBegin('stock');echo '<div class="form"><div><label>کالا</label><select name="inventory_id">'.options($db,'SELECT id,sku||" — "||name label FROM inventory ORDER BY name',['id','label']).'</select></div><div><label>تغییر تعداد (مثلاً 10 یا -5)</label><input type="number" name="qty" required></div><div><label>تاریخ</label><input type="date" name="date" value="'.today().'"></div><div><label>شرح</label><input name="note"></div></div><button>ثبت حرکت</button></form></section>';}
