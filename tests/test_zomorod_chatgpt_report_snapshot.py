@@ -31,6 +31,15 @@ class SnapshotSafetyTests(unittest.TestCase):
         self.assertEqual(result["items"][0]["body"], original)
         self.assertIn("run_id ZM-CTRL", payload.decode("utf-8"))
 
+    def test_persian_execution_label_header_does_not_drop_real_report(self):
+        header = "## گزارش ۰۵-۰۰۱۰ | 2026-11-02 01:12 UTC | شناسه اجرا: ZM-CTRL-20261102-PR1795-CI41371103477"
+        original = header + "\nاقدام واقعی مستند برای سامانه کسب‌وکار.\n"
+        result, _ = build_snapshot([row(6566708686, original)])
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(result["items"][0]["report_code"], "05-0010")
+        self.assertEqual(result["items"][0]["comment_id"], 6566708686)
+        self.assertEqual(result["items"][0]["body"], original)
+
     def test_conflicting_same_number_and_overflow_fail(self):
         with self.assertRaisesRegex(ValueError, "CONFLICTING_REPORT"):
             build_snapshot([row(123), row(124)])
