@@ -153,6 +153,18 @@ catch(PDOException $e) {echo "PUBLIC_READ_ONLY=PASS";}
         self.assertNotIn("Verified free seed calculator", html)
         self.assertIn("کاتالوگ در حال تکمیل", html)
 
+    def test_legacy_paid_case_variant_hides_free_release(self):
+        # Legacy imports may predate database triggers; public catalog fails closed.
+        with sqlite3.connect(self.dbpath) as db:
+            db.execute(
+                "INSERT INTO products(sku,title,description,price_irr,enabled) "
+                "VALUES(?,?,?,?,0)",
+                ("WHEAT_SEED_RATE_V1", "Paid case variant", "Legacy draft", 1000))
+        html = self.render()
+        self.assertNotIn('href="' + URL + '"', html)
+        self.assertNotIn("Verified free seed calculator", html)
+        self.assertIn("کاتالوگ در حال تکمیل", html)
+
     def test_tampered_artifact_is_not_advertised(self):
         self.file.write_bytes(b"altered content after verified release")
         html = self.render()
@@ -391,6 +403,10 @@ $bad=[
  "INSERT INTO free_digital_products(sku,title,description,download_path,artifact_sha256,license_text) VALUES('paid_only','Bad','Bad','/store/free-products/bad/index.html','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','Free')",
  "UPDATE products SET sku='free_only' WHERE sku='paid_only'",
  "UPDATE free_digital_products SET sku='paid_only' WHERE sku='free_only'",
+ "INSERT INTO products(sku,title,description,price_irr) VALUES('FREE_ONLY','Bad','Bad',1000)",
+ "INSERT INTO free_digital_products(sku,title,description,download_path,artifact_sha256,license_text) VALUES('PAID_ONLY','Bad','Bad','/store/free-products/bad/index.html','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','Free')",
+ "UPDATE products SET sku='FREE_ONLY' WHERE sku='paid_only'",
+ "UPDATE free_digital_products SET sku='PAID_ONLY' WHERE sku='free_only'",
 ];
 foreach($bad as $sql){
  try{$db->exec($sql);exit(71);}catch(PDOException $e){
