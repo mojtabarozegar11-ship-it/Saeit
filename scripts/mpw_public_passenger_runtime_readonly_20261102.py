@@ -110,7 +110,7 @@ def _passenger_status_summary(raw=None):
         return {"available": available, "readable": False,
                 "public_root": False, "staging_root": False}
     body = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
-    roots = re.findall(r"(?im)^\\s*App root:\\s*([^\\r\\n]+)", body)
+    roots = re.findall(r"(?im)^\s*App root:\s*([^\r\n]+)", body)
     readable = bool(roots or "Application groups" in body)
     return {"available": available, "readable": readable,
             "public_root": any(_as_target_root(v) == "public" for v in roots),
