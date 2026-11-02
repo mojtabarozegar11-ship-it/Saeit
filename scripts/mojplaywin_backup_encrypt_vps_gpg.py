@@ -24,7 +24,8 @@ from datetime import datetime, timezone
 from secrets import token_hex
 
 MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
-MAX_SOURCE_BYTES = 12 * 1024**3
+MAX_SOURCE_BYTES = 12 * 1024**3  # Files and synthetic defaults.
+MAX_MYSQL_SOURCE_BYTES = 48 * 1024**3  # SQL-only raw stream ceiling.
 MAX_ENCRYPTED_BYTES = 12 * 1024**3
 # Initial admission cap is below the independently measured 13.61 GiB available;
 # encrypt_stream_to_file retains its per-chunk hard stop at 3 GiB free.
@@ -102,46 +103,52 @@ def disk_free(path: Path) -> int:
     return s.f_bavail * s.f_frsize
 
 
-def encrypt_stream_to_file(stream, target: Path, gpg_home: Path, key: bytes):
+def encrypt_stream_to_file(stream, target: Path, gpg_home: Path, key: bytes,
+                           *, max_source_bytes=MAX_SOURCE_BYTES):
     fd = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        proc = gpg_process(key, gpg_home, [
-            "--symmetric", "--cipher-algo", "AES256", "--compress-algo", "zlib",
-            "--s2k-digest-algo", "SHA256", "--s2k-mode", "3",
-            "--s2k-count", "65011712", "--output", "-",
-        ], input_pipe=True, stdout=fd)
-    finally:
-        os.close(fd)
-    total = 0
-    digest = hashlib.sha256()
-    tail = b""
-    try:
-        assert proc.stdin is not None
-        while True:
-            chunk = stream.read(BLOCK)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total > MAX_SOURCE_BYTES:
-                raise RuntimeError("source exceeds safety maximum")
-            digest.update(chunk)
-            tail = (tail + chunk)[-len(MARKER):]
-            proc.stdin.write(chunk)
-            if target.stat().st_size > MAX_ENCRYPTED_BYTES or disk_free(target.parent) < 3 * 1024**3:
-                raise RuntimeError("VPS storage safety cap")
-        proc.stdin.close()
-        if proc.wait(timeout=120):
-            raise RuntimeError("GPG encryption process failed")
-        if total < 1024 + len(MARKER) or tail != MARKER:
-            raise RuntimeError("source completion footer absent")
-        return total, digest.hexdigest()
-    finally:
-        if proc.poll() is None:
-            proc.kill()
-            proc.wait()
+        try:
+            proc = gpg_process(key, gpg_home, [
+                "--symmetric", "--cipher-algo", "AES256", "--compress-algo", "zlib",
+                "--s2k-digest-algo", "SHA256", "--s2k-mode", "3",
+                "--s2k-count", "65011712", "--output", "-",
+            ], input_pipe=True, stdout=fd)
+        finally:
+            os.close(fd)
+        total = 0
+        digest = hashlib.sha256()
+        tail = b""
+        try:
+            assert proc.stdin is not None
+            while True:
+                chunk = stream.read(BLOCK)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_source_bytes:
+                    raise RuntimeError("source exceeds safety maximum")
+                digest.update(chunk)
+                tail = (tail + chunk)[-len(MARKER):]
+                proc.stdin.write(chunk)
+                if target.stat().st_size > MAX_ENCRYPTED_BYTES or disk_free(target.parent) < 3 * 1024**3:
+                    raise RuntimeError("VPS storage safety cap")
+            proc.stdin.close()
+            if proc.wait(timeout=120):
+                raise RuntimeError("GPG encryption process failed")
+            if total < 1024 + len(MARKER) or tail != MARKER:
+                raise RuntimeError("source completion footer absent")
+            return total, digest.hexdigest()
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+    except BaseException:
+        # Target was opened O_EXCL in this call: only this incomplete ciphertext is removed.
+        target.unlink(missing_ok=True)
+        raise
 
-
-def verify_stream(target: Path, gpg_home: Path, key: bytes):
+def verify_stream(target: Path, gpg_home: Path, key: bytes,
+                  *, max_source_bytes=MAX_SOURCE_BYTES):
     proc = gpg_process(key, gpg_home, ["--decrypt", "--output", "-", str(target)],
                        input_pipe=False, stdout=subprocess.PIPE)
     n = 0
@@ -154,7 +161,7 @@ def verify_stream(target: Path, gpg_home: Path, key: bytes):
             if not b:
                 break
             n += len(b)
-            if n > MAX_SOURCE_BYTES:
+            if n > max_source_bytes:
                 raise RuntimeError("decryption exceeds source maximum")
             digest.update(b)
             tail = (tail + b)[-len(MARKER):]
@@ -193,11 +200,19 @@ def store(stream, kind: str, *, root: Path | None = None, keyroot: Path | None =
     manifest = backups / (stem + "_" + kind + "_" + VERSION + ".manifest.json")
     if any(x.exists() or x.is_symlink() for x in (partial,complete,manifest)):
         raise RuntimeError("one-time output already exists; refusing overwrite")
-    total, digest = encrypt_stream_to_file(stream, partial, gnupg, key)
-    verified_total, verified_digest = verify_stream(partial, gnupg, key)
-    if total != verified_total or digest != verified_digest:
-        raise RuntimeError("OpenPGP round-trip integrity or size mismatch")
-    os.rename(partial, complete)
+    source_cap = MAX_MYSQL_SOURCE_BYTES if kind == "mysql" else MAX_SOURCE_BYTES
+    total, digest = encrypt_stream_to_file(
+        stream, partial, gnupg, key, max_source_bytes=source_cap)
+    try:
+        verified_total, verified_digest = verify_stream(
+            partial, gnupg, key, max_source_bytes=source_cap)
+        if total != verified_total or digest != verified_digest:
+            raise RuntimeError("OpenPGP round-trip integrity or size mismatch")
+        os.rename(partial, complete)
+    except BaseException:
+        # The completed archive, if any, is never deleted or overwritten here.
+        partial.unlink(missing_ok=True)
+        raise
     summary = {
         "kind": kind, "format": "OpenPGP-AES256-GPGv2",
         "archive_name": complete.name,
@@ -256,7 +271,14 @@ if __name__ == "__main__":
         print(json.dumps(result, sort_keys=True))
     except SystemExit:
         raise
-    except Exception:
-        # Deliberately do not print errors, paths, filenames, key or DB content.
-        print("VPS_GPG_BACKUP_FAILED_NO_RELEASE", file=sys.stderr)
+    except Exception as exc:
+        # Only fixed categories; never expose paths, filenames, keys or DB bytes.
+        category = ("SQL_RAW_STREAM_CAP_EXCEEDED"
+                    if type(exc) is RuntimeError
+                    and str(exc) in ("source exceeds safety maximum",
+                                     "decryption exceeds source maximum")
+                    and len(sys.argv) == 2 and sys.argv[1] == "mysql"
+                    else "UNCLASSIFIED")
+        print("VPS_GPG_BACKUP_FAILED_NO_RELEASE category=" + category,
+              file=sys.stderr)
         raise SystemExit(1)
