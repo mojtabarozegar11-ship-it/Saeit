@@ -44,8 +44,10 @@ function zmStoreHandle(PDO $db,string $action):void{
  }elseif($action==='product_toggle'){
   $id=(int)req('product_id');
   if($id<=0) bail('شناسه محصول نامعتبر است.');
-  $stmt=$db->prepare('UPDATE products SET enabled=CASE enabled WHEN 1 THEN 0 ELSE 1 END WHERE id=?');$stmt->execute([$id]);
-  if($stmt->rowCount()!==1)bail('محصول وجود ندارد.');
+  // Paid products have no verified release-rights, fulfillment or merchant gate yet.
+  // Allow safe withdrawal of legacy enabled rows, never publication from this form.
+  $stmt=$db->prepare('UPDATE products SET enabled=0 WHERE id=? AND enabled=1');$stmt->execute([$id]);
+  if($stmt->rowCount()!==1)bail('محصول پولی پیش‌نویس است و تا احراز حقوق، تحویل و پذیرندگی قابل انتشار نیست.');
  }else bail('عملیات فروشگاه نامعتبر است.');
 }
 function zmFactoryDraftsPanel(PDO $db):void {
@@ -75,7 +77,8 @@ function zmStoreRender(PDO $db):void {
  echo '<section><h2>کاتالوگ محصولات واقعی</h2><div class="scroll"><table><tr><th>شناسه</th><th>محصول</th><th>قیمت (ریال)</th><th>نمایش عمومی</th><th>عملیات</th></tr>';
  foreach($db->query('SELECT * FROM products ORDER BY id DESC LIMIT 150')->fetchAll() as $p){
    echo '<tr><td>'.esc($p['sku']).'</td><td>'.esc($p['title']).'</td><td>'.number_format((int)$p['price_irr']).'</td><td>'.($p['enabled']?'فعال':'پیش‌نویس').'</td><td>';
-   if(role()==='admin')echo '<form method="post">'.tokenInput().'<input type="hidden" name="product_id" value="'.(int)$p['id'].'"><button name="action" value="product_toggle">'.($p['enabled']?'پنهان‌کردن':'نمایش عمومی').'</button></form>';
+   if(role()==='admin' && $p['enabled'])echo '<form method="post">'.tokenInput().'<input type="hidden" name="product_id" value="'.(int)$p['id'].'"><button name="action" value="product_toggle">پنهان‌کردن</button></form>';
+   elseif(role()==='admin')echo '<span>انتشار پولی تا احراز حقوق، تحویل و پذیرندگی مسدود است.</span>';
    echo '</td></tr>';
  }
  echo '</table></div></section>';
