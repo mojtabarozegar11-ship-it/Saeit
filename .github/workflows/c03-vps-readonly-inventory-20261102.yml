@@ -1,0 +1,76 @@
+name: C03 VPS private factory read-only inventory (no tests, no writes)
+on:
+  push:
+    branches:
+      - ops/c03-vps-readonly-20261102-2305
+    paths:
+      - .github/workflows/c03-vps-readonly-inventory-20261102.yml
+permissions:
+  contents: read
+concurrency:
+  group: c03-vps-readonly-20261102
+  cancel-in-progress: false
+jobs:
+  inventory:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Inspect private VPS only (no checkout, test, deployment, backup or mutation)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/c03-private-inventory"
+          mkdir -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          actual="$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo "C03_PINNED_HOST_KEY=VERIFIED"
+          opts=(-i "$d/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          timeout 160s ssh -T "${opts[@]}" githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          echo "C03_SNAPSHOT_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "C03_REMOTE_USER=$(id -un)"
+          echo "C03_REMOTE_HOST=$(hostname)"
+          echo "C03_DISK_KB"; df -Pk /home
+          echo "C03_INODES"; df -Pi /home
+          echo "C03_MEMORY_MB"; free -m | head -2
+          echo "C03_LOAD"; cat /proc/loadavg
+          base="$HOME/factory-runtime"
+          for path in "$base" "$base/operations" "$base/private/autonomous-product-cycle" "$base/private/autonomous-product-cycle/generated-product-recipes"; do
+            if [ -d "$path" ] && [ ! -L "$path" ]; then
+              echo "C03_DIRECTORY_PRESENT=${path#"$HOME"/}"
+            else
+              echo "C03_DIRECTORY_MISSING_OR_LINK=${path#"$HOME"/}"
+            fi
+          done
+          echo "C03_FACTORY_PROCESS_NAMES_AND_COUNTS"
+          ps -eo comm= | sort | uniq -c | grep -Ei 'python|cron|supervisor|celery|factory|worker' || true
+          echo "C03_USER_CRON_FACTORY_ENTRY_COUNT"
+          (crontab -l 2>/dev/null || true) | grep -Eic 'factory|autonomous-product|ten-generation' || true
+          echo "C03_SYSTEM_TIMER_FACTORY_ENTRY_COUNT"
+          (systemctl list-timers --all --no-pager --no-legend 2>/dev/null || true) | grep -Eic 'factory|autonomous|generation' || true
+          echo "C03_LOCK_OBSERVATIONS"
+          (lslocks -n -o PATH,PID,COMMAND 2>/dev/null || true) | grep -Ei 'factory-runtime|autonomous-product' | head -25 || true
+          echo "C03_LOCK_FILES_PRESENT"
+          for p in "$base/operations/autonomous-product-cycle.lock" "$base/private/autonomous-product-cycle/.production-cycle.lock"; do
+            if [ -f "$p" ] && [ ! -L "$p" ]; then echo "PRESENT:${p#"$HOME"/}"; else echo "ABSENT:${p#"$HOME"/}"; fi
+          done
+          echo "C03_HOLD_MARKER_NAMES"
+          if [ -d "$base/operations" ]; then
+            find "$base/operations" -maxdepth 2 -type f \( -iname '*hold*' -o -iname '*stop*' \) -printf '%f\n' 2>/dev/null | head -20
+          fi
+          echo "C03_ACTIVE_PRODUCT_COUNT=UNVERIFIED_WITHOUT_AUTHORITATIVE_QUEUE_RECEIPT"
+          echo "C03_LATEST_QC_VERIFIED=UNVERIFIED_WITHOUT_AUTHORITATIVE_RECEIPT"
+          echo "C03_LATEST_DELIVERY=UNVERIFIED_WITHOUT_AUTHORITATIVE_RECEIPT"
+          echo "C03_INDEPENDENT_RESTORE=UNVERIFIED_WITHOUT_OFFHOST_RESTORE_EVIDENCE"
+          echo "C03_FACTORY_START_PERFORMED=NO"
+          REMOTE
