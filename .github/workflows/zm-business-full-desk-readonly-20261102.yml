@@ -116,6 +116,7 @@ jobs:
               echo "PHP83_PRIVATE_MODULE_SYNTAX=$modules_ready"
             else
               echo 'PHP83_SQLITE_RUNTIME_READY=no'
+              "$php83" -r 'foreach(["pdo_sqlite","sqlite3"] as $ext){$name=strtoupper($ext);echo "PHP83_".$name."_LOADED=".(extension_loaded($ext)?"yes":"no")."\n";$so=rtrim(ini_get("extension_dir"),"/")."/".$ext.".so";echo "PHP83_".$name."_SHARED_LIBRARY_PRESENT=".(is_file($so)?"yes":"no")."\n";}'
             fi
           else
             echo 'PHP83_CLI_AVAILABLE=no'
