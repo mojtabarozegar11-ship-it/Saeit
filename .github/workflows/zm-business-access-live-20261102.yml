@@ -1,0 +1,176 @@
+name: ZM guarded independent admin access manager install
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths:
+      - 'content/zomorod-business/access.php'
+      - 'tests/test_zm_business_access_http.py'
+      - '.github/workflows/zm-business-access-live-20261102.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zm-live-php-private-reports-only
+  cancel-in-progress: false
+jobs:
+  guarded-access:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite,sqlite3
+      - name: PHP lint and isolated real HTTP security tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          php -l content/zomorod-business/access.php
+          python3 -m unittest discover -s tests -p 'test_zm_business_access_http.py' -v
+          echo 'ACCOUNT_DATA_IN_CI=synthetic_only'
+          echo 'LIVE_FINANCIAL_DATA_ACCESSED_BY_RUNNER=no'
+      - name: Configure pinned two-hop SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-access"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump zm-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" zm-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Host-local preflight for new route only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-access"
+          ssh -F "$d/config" zm-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          root="$HOME/.private/zomorod-business"
+          web="$HOME/public_html/business"
+          stage="$root/.access-install-$sha"
+          test -d "$root" && test ! -L "$root"
+          test -d "$web" && test ! -L "$web"
+          test -f "$root/management.sqlite3" && test ! -L "$root/management.sqlite3"
+          test "$(stat -c %a "$root/management.sqlite3")" = 600
+          test -f "$root/app.php" && test ! -L "$root/app.php"
+          test "$(stat -c %a "$root/app.php")" = 600
+          test -f "$web/index.php" && test ! -L "$web/index.php"
+          test ! -e "$web/access.php" && test ! -L "$web/access.php"
+          test ! -e "$web/.access-install-$sha.php" && test ! -L "$web/.access-install-$sha.php"
+          test ! -e "$stage" && test ! -L "$stage"
+          phpbin=/opt/cpanel/ea-php82/root/usr/bin/php
+          test -x "$phpbin"
+          "$phpbin" -m | grep -Fxq pdo_sqlite
+          "$phpbin" -l "$root/app.php" >/dev/null
+          install -d -m 700 "$stage"
+          sha256sum "$root/app.php" | awk '{print $1}' > "$stage/app.before.sha256"
+          echo 'MAIN_APP=unchanged'
+          echo 'FINANCIAL_LEDGER_DATA=untouched'
+          REMOTE
+      - name: Transfer reviewed public-source role module inward only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-access"
+          scp -F "$d/config" content/zomorod-business/access.php "zm-cpanel:/home/zomorod2/.private/zomorod-business/.access-install-$GITHUB_SHA/access.php"
+      - name: Guarded publish and anonymous-access smoke with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-access"
+          digest="$(sha256sum content/zomorod-business/access.php | awk '{print $1}')"
+          ssh -F "$d/config" zm-cpanel bash -se -- "$GITHUB_SHA" "$digest" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; digest="$2"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ && "$digest" =~ ^[a-f0-9]{64}$ ]]
+          root="$HOME/.private/zomorod-business"
+          web="$HOME/public_html/business"
+          stage="$root/.access-install-$sha"
+          dest="$web/access.php"
+          ready="$web/.access-install-$sha.php"
+          phpbin=/opt/cpanel/ea-php82/root/usr/bin/php
+          test -f "$stage/access.php" && test ! -L "$stage/access.php"
+          test "$(sha256sum "$stage/access.php" | awk '{print $1}')" = "$digest"
+          test "$(sha256sum "$root/app.php" | awk '{print $1}')" = "$(cat "$stage/app.before.sha256")"
+          test ! -e "$dest" && test ! -L "$dest"
+          test ! -e "$ready" && test ! -L "$ready"
+          "$phpbin" -l "$stage/access.php" >/dev/null
+          install -m 0644 "$stage/access.php" "$ready"
+          test "$(sha256sum "$ready" | awk '{print $1}')" = "$digest"
+          installed=0
+          rollback() {
+            set +e
+            if test "$installed" = 1 && test -f "$dest" && test ! -L "$dest" && test "$(sha256sum "$dest" | awk '{print $1}')" = "$digest"; then
+              mv "$dest" "$stage/failed-publication.php" && echo 'NEW_ACCESS_ROUTE_ROLLBACK=restored_absent'
+            fi
+            if test -f "$ready" && test ! -L "$ready"; then mv "$ready" "$stage/unpublished.php"; fi
+          }
+          trap 'rc=$?; trap - EXIT; rollback; exit "$rc"' EXIT
+          mv -n "$ready" "$dest"
+          installed=1
+          test -f "$dest" && test ! -L "$dest"
+          test "$(sha256sum "$dest" | awk '{print $1}')" = "$digest"
+          test "$(stat -c %a "$dest")" = 644
+          code="$(curl --silent --show-error --location --max-time 30 --output "$stage/anonymous.html" --write-out '%{http_code}' 'https://zomorodmelal.ir/business/access.php')"
+          test "$code" = 403
+          grep -Fq 'ابتدا به‌عنوان مدیر مجاز وارد شوید' "$stage/anonymous.html"
+          ! grep -Fq 'کاربران ثبت‌شده' "$stage/anonymous.html"
+          test "$(sha256sum "$root/app.php" | awk '{print $1}')" = "$(cat "$stage/app.before.sha256")"
+          test "$(stat -c %a "$root/management.sqlite3")" = 600
+          installed=0
+          trap - EXIT
+          echo 'LIVE_ADMIN_ACCESS_PAGE=installed'
+          echo 'ANONYMOUS_ACCESS=denied_403'
+          echo 'LIVE_USER_ROLES_OR_RECORDS_CHANGED_BY_RELEASE=no'
+          echo 'PRIVATE_SOURCE_EXPORT=no'
+          echo 'AUTHENTICATED_ADMIN_ACCEPTANCE=not_proven'
+          REMOTE
+      - name: Destroy temporary SSH credentials on runner
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/zm-access"
