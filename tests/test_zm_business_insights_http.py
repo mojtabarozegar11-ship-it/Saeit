@@ -183,8 +183,11 @@ class InsightsHTTPTests(unittest.TestCase):
 
     def test_readonly_access_does_not_touch_financial_database(self) -> None:
         def fingerprint() -> dict[str, str]:
+            # SQLite readers update the transient -shm lock/read-mark page.
+            # Only durable DB + WAL bytes must remain unchanged by a GET.
             return {file.name: hashlib.sha256(file.read_bytes()).hexdigest()
-                    for file in self.private.glob("management.sqlite3*") if file.is_file()}
+                    for file in self.private.glob("management.sqlite3*")
+                    if file.is_file() and file.name != "management.sqlite3-shm"}
         before = fingerprint()
         status, _, _ = self.http("GET", cookie=self.auth_cookie)
         self.assertEqual(status, 200)
