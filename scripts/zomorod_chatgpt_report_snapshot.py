@@ -7,6 +7,7 @@ endpoint installation. Any existing receipt edit/deletion fails closed.
 import argparse
 import hashlib
 import json
+import re
 import os
 import sqlite3
 from pathlib import Path
@@ -22,7 +23,7 @@ from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
 
 
-def fetch_issue_comments(*, pages, since=None):
+def fetch_issue_comments(*, pages, since=None, api=PUBLIC_ISSUE_API):
     headers = {"User-Agent": "ZM-Private-ReportSnapshot/1.0", "Accept": "application/vnd.github+json"}
     token = os.environ.get("ZM_GITHUB_REPORTS_READ_TOKEN", "")
     if token:
@@ -32,7 +33,7 @@ def fetch_issue_comments(*, pages, since=None):
             query = {"per_page": 100, "page": page}
             if since:
                 query["since"] = since
-            with urlopen(Request(PUBLIC_ISSUE_API + "?" + urlencode(query), headers=headers), timeout=10) as response:
+            with urlopen(Request(api + "?" + urlencode(query), headers=headers), timeout=10) as response:
                 data = response.read(2_000_001)
         except (HTTPError, URLError, TimeoutError, OSError) as e:
             raise ValueError("GITHUB_REPORT_SOURCE_UNAVAILABLE") from e
@@ -49,12 +50,50 @@ def fetch_issue_comments(*, pages, since=None):
 SOURCE = "github:mojtabarozegar11-ship-it/Saeit:issue:1725"
 FILENAME = "chatgpt_reports_snapshot.json"
 ARCHIVE_NAME = "chatgpt_reports_archive.sqlite3"
+PUBLIC_CYCLES_ARCHIVE_NAME = "chatgpt_reports_public_cycles.sqlite3"
+PUBLIC_CYCLES_SOURCE = "github:mojtabarozegar11-ship-it/Saeit:issue:1514"
+PUBLIC_CYCLES_API = "https://api.github.com/repos/mojtabarozegar11-ship-it/Saeit/issues/1514/comments"
+_PERSIAN_NUMERALS = str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")
+_PUBLIC_TITLE = re.compile(r"(?<![A-Za-z0-9])گزارش[ \t]+(01|02|04)[-–]([0-9]{4,8})(?![0-9])")
 
 
-def _normalized_rows(comments):
+def extract_public_cycle_receipt(comment):
+    """Accept only owner-published numbered cycle 01/02/04 receipts in issue 1514."""
+    if not isinstance(comment, dict) or not isinstance(comment.get("user"), dict):
+        return None
+    if comment["user"].get("login") != "mojtabarozegar11-ship-it":
+        return None
+    cid, body = comment.get("id"), comment.get("body")
+    if type(cid) is not int or cid <= 0 or not isinstance(body, str) or not 20 <= len(body) <= 8000:
+        return None
+    heading = body.splitlines()[0].translate(_PERSIAN_NUMERALS)
+    matches = list(_PUBLIC_TITLE.finditer(heading[:300]))
+    if len(matches) != 1:
+        return None
+    when = comment.get("created_at")
+    if not isinstance(when, str) or len(when) > 40:
+        return None
+    try:
+        date = datetime.fromisoformat(when.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if date.tzinfo is None:
+        return None
+    return {
+        "report_code": matches[0].group(1) + "-" + matches[0].group(2),
+        "occurred_at": date.astimezone(timezone.utc),
+        "body": body,
+        "evidence_url": (
+            "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514"
+            f"#issuecomment-{cid}"
+        ),
+    }
+
+
+def _normalized_rows(comments, extractor=extract_receipt):
     rows, seen = [], {}
     for comment in comments:
-        receipt = extract_receipt(comment)
+        receipt = extractor(comment)
         if receipt is None:
             continue
         row = {
@@ -88,8 +127,8 @@ def build_snapshot(comments):
     return _snapshot_from_rows(_normalized_rows(comments))
 
 
-def _archive_guard(target):
-    if target.name != ARCHIVE_NAME or not target.is_absolute() or target.is_symlink():
+def _archive_guard(target, *, archive_name=ARCHIVE_NAME):
+    if target.name != archive_name or not target.is_absolute() or target.is_symlink():
         raise ValueError("INVALID_REPORT_ARCHIVE_TARGET")
     parent = target.parent
     if not parent.is_dir() or parent.is_symlink() or (parent.stat().st_mode & 0o077):
@@ -105,15 +144,16 @@ def _archive_db(target, readonly):
                            uri=True, timeout=12)
 
 
-def archive_since(target):
-    _archive_guard(target)
+def archive_since(target, *, source=SOURCE, archive_name=ARCHIVE_NAME):
+    _archive_guard(target, archive_name=archive_name)
     if not target.exists():
         return None
     with _archive_db(target, True) as db:
         version = db.execute("PRAGMA user_version").fetchone()[0]
+        expected_source = source
         source = db.execute("SELECT value FROM metadata WHERE name='source'").fetchone()
         saved = db.execute("SELECT value FROM metadata WHERE name='last_checked_at'").fetchone()
-        if version != 1 or source != (SOURCE,) or not saved:
+        if version != 1 or source != (expected_source,) or not saved:
             raise ValueError("INVALID_REPORT_ARCHIVE_METADATA")
         last = datetime.fromisoformat(saved[0])
         if last.tzinfo is None or last > datetime.now(timezone.utc) + timedelta(minutes=2):
@@ -121,14 +161,14 @@ def archive_since(target):
         return (last - timedelta(days=1)).isoformat().replace("+00:00", "Z")
 
 
-def archive_sync(comments, target, *, now=None):
+def archive_sync(comments, target, *, now=None, source=SOURCE, archive_name=ARCHIVE_NAME, extractor=extract_receipt):
     """Append to a private non-financial SQLite archive; reject edits to old receipts.
 
     GitHub 'since' checks newly created and recently edited comments. Existing
     deleted comments stay historical; no claim of independent action verification.
     """
-    _archive_guard(target)
-    rows = _normalized_rows(comments)
+    _archive_guard(target, archive_name=archive_name)
+    rows = _normalized_rows(comments, extractor)
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError("ARCHIVE_TIMEZONE_REQUIRED")
@@ -148,9 +188,9 @@ def archive_sync(comments, target, *, now=None):
             db.execute("CREATE TABLE reports (seq INTEGER PRIMARY KEY, report_code TEXT NOT NULL UNIQUE, comment_id INTEGER NOT NULL UNIQUE, occurred_at TEXT NOT NULL, body TEXT NOT NULL, evidence_url TEXT NOT NULL)")
             db.execute("CREATE TABLE metadata (name TEXT PRIMARY KEY, value TEXT NOT NULL)")
             db.execute("PRAGMA user_version=1")
-            db.execute("INSERT INTO metadata VALUES ('source',?)", (SOURCE,))
+            db.execute("INSERT INTO metadata VALUES ('source',?)", (source,))
         elif (db.execute("PRAGMA user_version").fetchone()[0] != 1 or
-              db.execute("SELECT value FROM metadata WHERE name='source'").fetchone() != (SOURCE,)):
+              db.execute("SELECT value FROM metadata WHERE name='source'").fetchone() != (source,)):
             raise ValueError("INVALID_REPORT_ARCHIVE_SOURCE")
         old = db.execute("SELECT report_code,comment_id,occurred_at,body,evidence_url FROM reports ORDER BY seq").fetchall()
         by_code = {r[0]: r for r in old}
@@ -278,13 +318,32 @@ def main(argv=None):
             total, added, first_hundred = archive_sync(comments, archive_target)
             snapshot, payload = _snapshot_from_rows(first_hundred)
             result = install(snapshot, payload, args.output)
+            public_archive = args.output.with_name(PUBLIC_CYCLES_ARCHIVE_NAME)
+            public_since = archive_since(
+                public_archive, source=PUBLIC_CYCLES_SOURCE,
+                archive_name=PUBLIC_CYCLES_ARCHIVE_NAME
+            )
+            # This established public GitHub issue contains >600 comments, so
+            # the initial import needs seven pages; incremental runs use 'since'.
+            public_comments = list(fetch_issue_comments(
+                pages=max(args.pages, 10) if public_since is None else args.pages,
+                since=public_since, api=PUBLIC_CYCLES_API
+            ))
+            public_total, public_added, _ = archive_sync(
+                public_comments, public_archive, source=PUBLIC_CYCLES_SOURCE,
+                archive_name=PUBLIC_CYCLES_ARCHIVE_NAME,
+                extractor=extract_public_cycle_receipt
+            )
         else:
             snapshot, payload = build_snapshot(comments)
             total, added = snapshot["count"], 0
+            public_total, public_added = 0, 0
             result = "PREVIEW_ONLY"
         print("ZM_CHATGPT_SNAPSHOT=" + result)
         print("VALID_NUMBERED_REPORTS=" + str(total))
         print("IMMUTABLE_ARCHIVE_NEW_ROWS=" + str(added))
+        print("PUBLIC_CYCLES_ARCHIVE_REPORTS=" + str(public_total))
+        print("PUBLIC_CYCLES_ARCHIVE_NEW_ROWS=" + str(public_added))
         print("FINANCIAL_DB_TOUCHED=no")
         return 0
     except (ValueError, TypeError, OSError, sqlite3.Error, json.JSONDecodeError) as e:
