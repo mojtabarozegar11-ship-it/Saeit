@@ -51,6 +51,16 @@ function zmBusinessActionReceipt(string $body,string $reportCode):array {
  * authoritative; the index only rejects replay and malformed machine receipts.
  * Never upgrade an imported claim to an independently verified business act.
  */
+function zmBusinessReportVisibleFa(string $body,string $code):string {
+    // Keep immutable machine evidence in SQLite and the original GitHub link,
+    // while showing only Persian prose in the human-readable report card.
+    $parsed=zmBusinessActionReceipt($body,$code);
+    if($parsed['state']!=='valid')return $body;
+    $visible=preg_replace('/(?:^|\n)ZM_ACTIONS_V1_START\r?\n[^\x00]{1,7800}?\r?\nZM_ACTIONS_V1_END(?=\r?\n|$)/u',
+        "\n[فهرست ساختاریافتهٔ اقدامات در جدول اتاق فرمان نمایش داده می‌شود.]",$body,1);
+    return is_string($visible)?$visible:$body;
+}
+
 function zmBusinessActionIndexStatus(string $private,string $code):array {
     $missing=['state'=>'missing','unique_total'=>0,'latest_total'=>0,'latest_completed'=>0,'rejections'=>0,'latest_rejection'=>''];
     $path=$private.'/chatgpt_actions_index.sqlite3';
@@ -413,7 +423,8 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
                $r['evidence_url']!=='https://github.com/mojtabarozegar11-ship-it/Saeit/issues/'.($cycle==='05'?'1725':'1514').'#issuecomment-'.$id){
                 throw new RuntimeException('invalid archived report');
             }
-            $visible=$body;
+            $displayBody=zmBusinessReportVisibleFa($body,$code);
+            $visible=$displayBody;
             $translations=$cycle==='05'?$faRows:$publicFaRows;
             $hasPersianSummary=$cycle!=='05'&&isset($translations[$code]);
             if(isset($translations[$code])){
@@ -421,8 +432,8 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
                 if(!is_array($fa)||($fa['comment_id']??null)!==$id||!is_string($fa['text_fa']??null)||strlen($fa['text_fa'])<20||strlen($fa['text_fa'])>8000)throw new RuntimeException('invalid translation association');
                 $visible=$fa['text_fa'];
             }else{
-                preg_match_all('/[\x{0600}-\x{06FF}]/u',$body,$faChars);
-                preg_match_all('/[A-Za-z]/',$body,$latinChars);
+                preg_match_all('/[\x{0600}-\x{06FF}]/u',$displayBody,$faChars);
+                preg_match_all('/[A-Za-z]/',$displayBody,$latinChars);
                 if(count($latinChars[0])>count($faChars[0]))$visible='ترجمه فارسی این گزارش هنوز تأیید نشده است. متن اولیه در پیوند مدرک قابل مشاهده است.';
             }
             echo '<article class="card"><h3>'.esc($code).'</h3><p class="muted">زمان ثبت: '.esc($r['occurred_at']).'</p><details open><summary>'.($hasPersianSummary?'خلاصهٔ فارسی مستند از گزارش':'متن فارسی گزارش').'</summary><p lang="fa" dir="rtl" style="white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9">'.esc($visible).'</p></details><p><a href="'.esc($r['evidence_url']).'" target="_blank" rel="noopener noreferrer">مشاهده مدرک اولیه در GitHub</a></p></article>';
