@@ -18,7 +18,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git hash-object content/zomorod-business/chatgpt_reports.php)" = "c668d5c12109f62c4b371823b1711860f63e4e30"
-          test "$(git hash-object scripts/zm_chatgpt_action_index.py)" = "6ee7887f48140e4339c263acebecac68f3d2fcd8"
+          test "$(git hash-object scripts/zm_chatgpt_action_index.py)" = "c7c86781c2fbd90cdbebb578008dcce8af04f362"
           sha256sum content/zomorod-business/chatgpt_reports.php | awk '{print $1}' > "$RUNNER_TEMP/viewer-live.sha"
       - name: Configure pinned GitHub to VPS to cPanel relay
         shell: bash
@@ -101,15 +101,19 @@ jobs:
               meta=dict(db.execute("SELECT name,value FROM metadata"))
               assert meta["source"]=="github:mojtabarozegar11-ship-it/Saeit:issue:1725"
               assert meta["verification"]=="not_checked"
-              since=datetime.fromisoformat("2026-11-02T08:55:00+00:00")
+              since=datetime.fromisoformat("2026-11-02T09:25:00+00:00")
               built=datetime.fromisoformat(meta["built_at"])
               now=datetime.now(timezone.utc)
               assert built <= now and (now-built).total_seconds() < 10800
+              mtime=datetime.fromtimestamp(path.stat().st_mtime,timezone.utc)
+              assert abs((mtime-built).total_seconds()) < 120
               reports=int(meta["report_count"])
               actions=db.execute("SELECT COUNT(*) FROM actions").fetchone()[0]
               rejected=db.execute("SELECT COUNT(*) FROM rejected").fetchone()[0]
               assert reports >= 0 and 0 <= actions <= reports*20 and 0 <= rejected <= reports
-          print("ACTION_INDEX_SCHEDULED_EXECUTION="+("verified" if built>=since else "not_yet_observed"))
+          print("FIRST_POST_INSTALL_INDEX_BUILD="+("observed" if built>=since else "not_observed"))
+          print("INDEX_BUILD_IN_MINUTE_55_WINDOW="+("yes" if built>=since and built.minute in (25,26,27) else "no"))
+          print("CRON_PROCESS_EXECUTION_PROVEN_BY_LOG=no")
           print("INDEX_BUILT_UTC="+built.isoformat())
           print("INDEPENDENT_BUSINESS_VERIFICATION=not_claimed")
           PY
