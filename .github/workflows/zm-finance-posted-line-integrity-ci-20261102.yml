@@ -1,0 +1,40 @@
+name: ZM finance posted-line integrity exact-head CI
+on:
+  push:
+    branches:
+      - fix/zm-finance-cross-unit-posted-line-20261102
+permissions:
+  contents: read
+jobs:
+  posted-finance-integrity:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DEBUG: 'true'
+      SECRET_KEY: 'ci-only-not-production'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1,testserver'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify exact source SHA
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Finance isolation and posted-line regression
+        run: |
+          python -m py_compile ecosystem_hub/financial_reporting.py ecosystem_hub/test_financial_reporting.py
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+          python manage.py test ecosystem_hub.test_financial_reporting
+      - name: Nonproduction safety boundary
+        run: |
+          echo 'NO_HOST_CONTACT=1'
+          echo 'NO_FINANCIAL_DB_WRITE=1'
+          echo 'NO_PAYMENT_OR_DEPLOY=1'
