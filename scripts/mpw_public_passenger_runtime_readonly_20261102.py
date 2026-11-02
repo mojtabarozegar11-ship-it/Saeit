@@ -85,6 +85,38 @@ def _run_uapi():
         return None
 
 
+def _passenger_status_summary(raw=None):
+    """Parse Passenger app roots without disclosing other apps or raw status."""
+    available = True
+    readable = False
+    if raw is None:
+        executable = shutil.which("passenger-status")
+        available = executable is not None
+        if executable is None:
+            return {"available": False, "readable": False,
+                    "public_root": False, "staging_root": False}
+        try:
+            command = subprocess.run([executable], stdout=subprocess.PIPE,
+                                     stderr=subprocess.DEVNULL, timeout=25,
+                                     check=False)
+            if command.returncode or len(command.stdout) > 2_000_000:
+                return {"available": True, "readable": False,
+                        "public_root": False, "staging_root": False}
+            raw = command.stdout
+        except (OSError, subprocess.TimeoutExpired):
+            return {"available": True, "readable": False,
+                    "public_root": False, "staging_root": False}
+    if not isinstance(raw, (bytes, str)) or len(raw) > 2_000_000:
+        return {"available": available, "readable": False,
+                "public_root": False, "staging_root": False}
+    body = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
+    roots = re.findall(r"(?im)^\\s*App root:\\s*([^\\r\\n]+)", body)
+    readable = bool(roots or "Application groups" in body)
+    return {"available": available, "readable": readable,
+            "public_root": any(_as_target_root(v) == "public" for v in roots),
+            "staging_root": any(_as_target_root(v) == "staging" for v in roots)}
+
+
 def _owned_workers():
     """Only aggregate this user's candidate Python/Passenger processes."""
     result = {"candidate_count": 0, "cwd_public": 0, "cwd_staging": 0}
@@ -114,7 +146,7 @@ def _owned_workers():
     return result
 
 
-def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None):
+def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None, status_payload=None):
     if public == PUBLIC and app == APP and pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
         raise RuntimeError("WRONG_CPANEL_ACCOUNT")
     if public.is_symlink() or app.is_symlink() or not public.is_dir() or not app.is_dir():
@@ -133,6 +165,7 @@ def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None):
     if uapi_payload is None:
         uapi_payload = _run_uapi()
     api = _uapi_summary(uapi_payload)
+    status = _passenger_status_summary(status_payload)
     if workers is None:
         workers = _owned_workers()
     return {"classification": "MPW_PUBLIC_PASSENGER_READ_ONLY_RUNTIME_CONTRACT",
@@ -148,6 +181,10 @@ def inspect(*, public=PUBLIC, app=APP, uapi_payload=None, workers=None):
             "uapi_registers_public_root": api["public_root"],
             "uapi_registers_staging_root": api["staging_root"],
             "uapi_mentions_public_domain": api["mentions_domain"],
+            "passenger_status_cli_available": status["available"],
+            "passenger_status_registry_readable": status["readable"],
+            "passenger_status_public_root": status["public_root"],
+            "passenger_status_staging_root": status["staging_root"],
             "owned_candidate_worker_count_capped": min(100, workers["candidate_count"]),
             "owned_worker_cwd_public_count_capped": min(100, workers["cwd_public"]),
             "owned_worker_cwd_staging_count_capped": min(100, workers["cwd_staging"]),
