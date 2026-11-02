@@ -352,6 +352,36 @@ echo 'PRIVATE_PAID_STATUS=PASS';
         self.assertIn("PRIVATE_PAID_STATUS=PASS", run.stdout)
 
 
+    def test_factory_draft_panel_does_not_invent_technical_approval(self):
+        # Imported rows are not equivalent to verified sellable inventory.
+        php = r"""<?php
+function esc($s){return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');}
+require $argv[1];
+$db=zmStoreDb($argv[2]);
+$db->exec("CREATE TABLE factory_drafts(
+ id INTEGER PRIMARY KEY,product_id TEXT,title TEXT,family_id TEXT,
+ state TEXT,imported_at TEXT)");
+$db->exec("INSERT INTO factory_drafts(product_id,title,family_id,state,imported_at)
+ VALUES('p1','Draft A','f1','received','2026-11-02'),
+ ('p2','Draft B','f1','quality_hold','2026-11-02')");
+ob_start();
+zmFactoryDraftsPanel($db);
+$html=ob_get_clean();
+if(strpos($html,'تعداد ردیف‌های پیش‌نویس ثبت‌شده: 2')===false)exit(91);
+if(strpos($html,'received (1)')===false)exit(92);
+if(strpos($html,'quality_hold (1)')===false)exit(93);
+if(strpos($html,'تعداد بسته‌های تأیید فنی و دریافت‌شده')!==false)exit(94);
+if(strpos($html,'عرضه عمومی مسدود')===false)exit(95);
+echo 'FACTORY_DRAFT_TRUTH=PASS';
+"""
+        script = self.home / "factory_draft_truth.php"
+        script.write_text(php, encoding="utf8")
+        run = subprocess.run(
+            ["php", str(script), str(self.private / "site_store.php"), str(self.private)],
+            capture_output=True, text=True, timeout=15)
+        self.assertEqual(run.returncode, 0, run.stderr + run.stdout)
+        self.assertIn("FACTORY_DRAFT_TRUTH=PASS", run.stdout)
+
     def test_paid_draft_rejects_free_product_sku_collision(self):
         php = r"""<?php
 $sku='shared_catalog_sku';
