@@ -8,6 +8,16 @@ from pathlib import Path
 
 @unittest.skipUnless(shutil.which("gpg"), "GPG is required by dedicated backup workflow")
 class GpgStreamingBackupTests(unittest.TestCase):
+    def test_large_mysql_stream_bounds_align_with_recovery(self):
+        from scripts.mojplaywin_backup_stream_cpanel import MAX_MYSQL_STREAM, MAX_FILE_STREAM
+        from scripts.mojplaywin_backup_encrypt_vps_gpg import MAX_SOURCE_BYTES, MAX_ENCRYPTED_BYTES
+        from scripts.mojplaywin_recovery_stream_vps import MAX_PLAINTEXT_BYTES
+        self.assertEqual(MAX_MYSQL_STREAM, 64 * 1024**3)
+        self.assertEqual(MAX_MYSQL_STREAM, MAX_SOURCE_BYTES)
+        self.assertEqual(MAX_MYSQL_STREAM, MAX_PLAINTEXT_BYTES)
+        self.assertEqual(MAX_FILE_STREAM, 12 * 1024**3)
+        self.assertLess(MAX_ENCRYPTED_BYTES, MAX_SOURCE_BYTES)
+
     def test_synthetic_gpg_algorithm_operational(self):
         from scripts.mojplaywin_backup_encrypt_vps_gpg import selftest
         self.assertTrue(selftest())
@@ -44,6 +54,7 @@ class GpgStreamingBackupTests(unittest.TestCase):
             f=base/".private-mojplaywin-offhost-backups"
             self.assertFalse((f/(STEM+"_files_"+VERSION+".gpg")).exists())
             self.assertFalse((f/(STEM+"_files_"+VERSION+".manifest.json")).exists())
+            self.assertFalse((f/(STEM+"_files_"+VERSION+".gpg.partial")).exists())
 
     def test_tampered_file_fails_openpgp_integrity(self):
         from scripts.mojplaywin_backup_encrypt_vps_gpg import (
