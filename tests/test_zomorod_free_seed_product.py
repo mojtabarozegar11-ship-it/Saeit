@@ -84,7 +84,8 @@ echo "FREE_SEPARATE_FROM_PAID=PASS";
         self.assertIn("download rel=",body)
         self.assertIn("storeVerifiedFreeArtifact",body)
         self.assertIn("array_filter($free",body)
-        self.assertIn("foreach($items as $p)",body)
+        self.assertNotIn("foreach($items as $p)",body)
+        self.assertIn("Paid products are private drafts",body)
         self.assertNotIn("payment_intent",body.lower())
 
 if __name__=="__main__":
