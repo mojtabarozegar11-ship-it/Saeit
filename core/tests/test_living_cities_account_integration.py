@@ -1,6 +1,5 @@
 """MojPlayWin account game integration on the existing Django user/session database."""
 import json
-import re
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
@@ -63,11 +62,12 @@ class MojPlayWinLivingCitiesAccountTests(TestCase):
 
     def test_csrf_rotates_on_login_then_first_upgrade_and_logout_work(self):
         browser = Client(enforce_csrf_checks=True)
-        page = browser.get("/admin/login/", HTTP_HOST="mojplaywin.com")
+        page = browser.get("/api/living-cities/auth/csrf/", HTTP_HOST="mojplaywin.com")
         self.assertEqual(page.status_code, 200, page.content)
-        match = re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"', page.content.decode())
-        self.assertIsNotNone(match)
-        before_login = match.group(1)
+        self.assertEqual(page["Cache-Control"], "private, no-store")
+        before_login = page.json()["csrf_token"]
+        self.assertRegex(before_login, r"^[A-Za-z0-9]{64}$")
+        self.assertIn("csrftoken", page.cookies)
         credentials = json.dumps({
             "username": "mpw_existing_player",
             "password": "existing-account-password",
