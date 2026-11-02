@@ -103,6 +103,48 @@ function zmBusinessActionIndexStatus(string $private,string $code):array {
     }
 }
 
+/** Independent reference-availability audit, never financial/business proof. */
+function zmBusinessEvidenceAttestation(string $private):array {
+    $empty=['state'=>'missing','checked'=>0,'ci_success'=>0,'source_exists'=>0];
+    $path=$private.'/chatgpt_evidence_attestations.json';
+    if(!file_exists($path)&&!is_link($path))return $empty;
+    try{
+        $index=$private.'/chatgpt_actions_index.sqlite3';
+        if(is_link($private)||is_link($path)||is_link($index)||!is_file($path)||!is_file($index))throw new RuntimeException('unsafe evidence paths');
+        $stat=lstat($path);
+        if($stat===false||!is_int($stat['size'])||$stat['size']<100||$stat['size']>2000000||(((int)$stat['mode'])&0077)!==0)throw new RuntimeException('unsafe evidence attestation');
+        $raw=file_get_contents($path);
+        if($raw===false||strlen($raw)!==$stat['size'])throw new RuntimeException('short attestation read');
+        $data=json_decode($raw,true,20,JSON_THROW_ON_ERROR);
+        if(!is_array($data)||($data['schema_version']??null)!==1||
+           ($data['source']??'')!=='github:mojtabarozegar11-ship-it/Saeit:issue:1725'||
+           ($data['business_effect_verified']??null)!==false||
+           !is_string($data['index_sha256']??null)||
+           !hash_equals(hash_file('sha256',$index),(string)$data['index_sha256'])||
+           !is_array($data['results']??null)||!array_is_list($data['results']))throw new RuntimeException('attestation identity mismatch');
+        $checkedAt=strtotime((string)($data['checked_at']??''));
+        if($checkedAt===false||$checkedAt>time()+300)throw new RuntimeException('invalid evidence timestamp');
+        $allowed=['not_checked','invalid_reference','unavailable','source_exists','mismatch','ci_success','ci_not_successful','merged_source','proposal_only','issue_exists'];
+        $count=0;$green=0;$sources=0;$ids=[];
+        foreach($data['results'] as $row){
+            if(!is_array($row)||!is_string($row['action_id']??null)||
+               !preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/D',$row['action_id'])||
+               isset($ids[$row['action_id']])||
+               !is_string($row['receipt_sha256']??null)||
+               !preg_match('/^[a-f0-9]{64}$/D',$row['receipt_sha256'])||
+               !in_array($row['reference_status']??null,$allowed,true))throw new RuntimeException('invalid evidence row');
+            $ids[$row['action_id']]=true;
+            if($row['reference_status']!=='not_checked')$count++;
+            if($row['reference_status']==='ci_success')$green++;
+            if(in_array($row['reference_status'],['source_exists','merged_source','issue_exists'],true))$sources++;
+        }
+        return ['state'=>time()-$checkedAt>10800?'stale':'ready','checked'=>$count,'ci_success'=>$green,'source_exists'=>$sources];
+    }catch(Throwable $e){
+        error_log('ZM EVIDENCE ATTESTATION REJECTED ['.get_class($e).']');
+        return ['state'=>'invalid','checked'=>0,'ci_success'=>0,'source_exists'=>0];
+    }
+}
+
 function zmBusinessCommandCenter(SQLite3 $db,string $private):void {
     $latest=$db->query('SELECT report_code,occurred_at,body,evidence_url FROM reports WHERE substr(report_code,1,2)="05" ORDER BY seq DESC LIMIT 1');
     if($latest===false)throw new RuntimeException('command center latest query failed');
@@ -111,6 +153,7 @@ function zmBusinessCommandCenter(SQLite3 $db,string $private):void {
     $labels=['completed'=>'انجام واقعی (ادعای گزارش؛ نیازمند راستی‌آزمایی)','partial'=>'بخشی انجام‌شده','blocked'=>'مسدود','not_started'=>'انجام‌نشده'];
     $claimed=count(array_filter($contract['actions'],static fn($a)=>$a['status']==='completed'));
     $actionIndex=zmBusinessActionIndexStatus($private,is_array($report)?(string)$report['report_code']:'');
+    $referenceAudit=zmBusinessEvidenceAttestation($private);
     echo '<section aria-labelledby="zm-command-title"><h2 id="zm-command-title">اتاق فرمان چرخهٔ ساعتی ۰۵</h2>';
     echo '<p class="muted">فرمانده اجرایی این طرح وظیفهٔ زمان‌بندی‌شدهٔ ChatGPT است؛ این صفحه فقط وضعیت و شواهد آن را نمایش می‌دهد. مشاهدهٔ گزارش یا پیوند مدرک، اجرای واقعی و نتیجهٔ تجاری را اثبات نمی‌کند.</p>';
     echo '<div class="grid"><div class="card"><h3>هدف هر اجرای چرخهٔ ۰۵</h3><div class="metric">۲۰ اقدام</div><p class="muted">مستقل، ضروری و غیرتکراری</p></div>';
@@ -123,6 +166,13 @@ function zmBusinessCommandCenter(SQLite3 $db,string $private):void {
     if($actionIndex['state']==='ready'){
         echo '<p class="muted">نمایهٔ جلوگیری از تکرار: '.(int)$actionIndex['unique_total'].' شناسهٔ یکتا از کل تاریخچه · '.(int)$actionIndex['rejections'].' گزارش دارای رسید نامعتبر یا تکراری · '.(int)$actionIndex['latest_completed'].' ردیف کامل اظهاریِ غیرتکراری در گزارش آخر (بدون تأیید مستقل).</p>';
         if($actionIndex['latest_rejection']!=='')echo '<div class="notice danger">رسید جدید به علت ناسازگاری یا تکرار شناسه در تاریخچه رد شد؛ هیچ ردیف آن در نمایه یکتا محاسبه نشده است.</div>';
+    }
+    if($referenceAudit['state']==='ready'){
+        echo '<p class="muted">بازبینی جداگانهٔ پیوندهای GitHub: '.(int)$referenceAudit['checked'].' مرجع بررسی‌شده · '.(int)$referenceAudit['ci_success'].' اجرای CI موفق · '.(int)$referenceAudit['source_exists'].' مرجع منبع موجود. این‌ها اثبات انجام فعالیت تجاری، تسویه، استقرار زنده یا تأیید مستقل ۲۰ اقدام نیستند.</p>';
+    }elseif($referenceAudit['state']==='invalid'){
+        echo '<div class="notice danger">فایل بازبینی مستقل منابع معتبر نیست؛ هیچ نتیجه‌ای از آن نمایش داده نمی‌شود.</div>';
+    }elseif($referenceAudit['state']==='stale'){
+        echo '<div class="notice danger">بازبینی پیوندهای منبع بیش از سه ساعت به‌روزرسانی نشده است؛ نتایج قدیمی محاسبه نمی‌شوند.</div>';
     }
     if(is_array($report))echo '<p class="muted">مبنای نمایش: '.esc((string)$report['report_code']).' · '.esc((string)$report['occurred_at']).' · <a href="'.esc((string)$report['evidence_url']).'" target="_blank" rel="noopener noreferrer">منبع شماره‌دار</a></p>';
     if($contract['state']==='missing')echo '<div class="notice">در گزارش اخیر هنوز دفتر اقدامات با قالب استاندارد ثبت نشده است؛ تعداد اقدامات واقعی نامعلوم است. گزارش‌های قبلی به‌صورت خودکار به ۲۰ اقدام تبدیل نمی‌شوند.</div>';
