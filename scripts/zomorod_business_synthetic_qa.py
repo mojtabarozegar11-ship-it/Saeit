@@ -168,9 +168,9 @@ with sqlite3.connect(str(archive_file)) as archive:
     archive.execute("INSERT INTO metadata VALUES ('last_checked_at','2026-11-02T00:00:00+00:00')")
     for n in range(1,27):
         cid=987653+n
-        code=f'05-{n:04d}'
+        report_code=f'05-{n:04d}'
         archive.execute('INSERT INTO reports(report_code,comment_id,occurred_at,body,evidence_url) VALUES (?,?,?,?,?)',
-                        (code,cid,'2026-11-02T01:00:00+00:00',
+                        (report_code,cid,'2026-11-02T01:00:00+00:00',
                          'آزمایش فارسی صفحه‌بندی با <script>attack()</script> و رسید مستقل.',
                          'https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-'+str(cid)))
 archive_file.chmod(0o600)
