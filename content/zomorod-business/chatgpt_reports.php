@@ -101,7 +101,7 @@ function zmBusinessChatgptReports(string $private):void {
         echo '<div class="scroll"><table><tr><th>چرخه</th><th>گزارش ثبت‌شده</th><th>آخرین رسید معتبر</th><th>هدف اقدامات</th></tr>';
         foreach($cycleNames as $key=>$name){
             $data=$coverage[$key];
-            echo '<tr><td>'.esc($key.' · '.$name).'</td><td>'.(int)$data['count'].'</td><td>'.esc($data['latest']).'</td><td>'.($key==='05'?'۲۰ اقدام / تحقق احرازنشده':'—').'</td><td>'.($key==='05'?'دفتر مدیریتی ۰۵ · متصل':($key==='03'?'فاقد اتصال خودکار و خصوصی':($publicDb!==null?'دفتر عمومی ۱۵۱۴ · متصل':'در انتظار اتصال منبع'))).'</td></tr>';
+            echo '<tr><td>'.esc($key.' · '.$name).'</td><td>'.(int)$data['count'].'</td><td>'.esc($data['latest']).'</td><td>'.($key==='05'?'۲۰ اقدام / تحقق احرازنشده':'—').'</td><td>'.($key==='05'?'دفتر مدیریتی ۰۵ · متصل':'فاقد اتصال خودکار و خصوصی').'</td></tr>';
         }
         echo '</table></div>';
         echo '<p class="muted">آخرین تغییر پرونده گزارش روی هاست: '.esc(gmdate('Y-m-d H:i', (int)$stat['mtime'])).' UTC؛ ظرفیت این نسخه از نمای گزارش ۱۰۰ رسید است.</p></section>';
@@ -247,7 +247,7 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
         echo '<section><h3>پایش پنج چرخهٔ ساعتی</h3><p class="muted">شمار گزارش‌ها از تعداد اقدامات واقعی متمایز است؛ هدف چرخه پنجم ۲۰ اقدام در هر اجراست، اما تحقق آن احراز نشده است.</p><div class="scroll"><table><tr><th>چرخه</th><th>تعداد گزارش</th><th>آخرین رسید</th><th>هدف</th><th>منبع چرخه</th></tr>';
         foreach($cycleNames as $key=>$name){
             $c=$coverage[$key];
-            echo '<tr><td>'.esc($key.' · '.$name).'</td><td>'.(int)$c['count'].'</td><td>'.esc($c['latest']).'</td><td>'.($key==='05'?'۲۰ اقدام / تحقق احرازنشده':'—').'</td><td>'.($key==='05'?'متصل به دفتر مدیریت ۰۵':'فاقد اتصال خودکار و خصوصی').'</td></tr>';
+            echo '<tr><td>'.esc($key.' · '.$name).'</td><td>'.(int)$c['count'].'</td><td>'.esc($c['latest']).'</td><td>'.($key==='05'?'۲۰ اقدام / تحقق احرازنشده':'—').'</td><td>'.($key==='05'?'متصل به دفتر مدیریت ۰۵':($publicDb!==null&&in_array($key,['01','02','04'],true)&&$c['count']>0?'دفتر عمومی ۱۵۱۴ · متصل':'فاقد اتصال خودکار و خصوصی')).'</td></tr>';
         }
         echo '</table></div></section>';
         if($total===0)echo '<p>برای این چرخه هنوز گزارش شماره‌دار از منبع معتبر دریافت نشده است.</p>';
