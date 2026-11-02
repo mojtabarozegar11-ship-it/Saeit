@@ -1,5 +1,7 @@
 """No rotation on rework, no fabricated reviews, and strictly one target."""
 import importlib.util
+import hashlib
+import hmac
 import json
 from pathlib import Path
 import tempfile
@@ -10,6 +12,10 @@ SOURCE = Path(__file__).resolve().parents[1] / "scripts/factory_strict_serial_fu
 spec = importlib.util.spec_from_file_location("strict_serial_fullcycle", SOURCE)
 cycle = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cycle)
+GOVERNANCE_SOURCE = SOURCE.with_name("factory_12_stage_governance.py")
+governance_spec = importlib.util.spec_from_file_location("strict_serial_governance_test", GOVERNANCE_SOURCE)
+governance_module = importlib.util.module_from_spec(governance_spec)
+governance_spec.loader.exec_module(governance_module)
 
 
 def workspace(parent):
@@ -122,7 +128,7 @@ class StrictSerialTests(unittest.TestCase):
             self.assertFalse(result["certified_to_private_finished_goods"])
             self.assertEqual(result["active_order_after_cycle"], "WO-00000601")
 
-    def test_certified_real_stock_is_only_path_to_next_order(self):
+    def test_certified_stock_waits_for_independent_chatgpt_review_before_next_order(self):
         with tempfile.TemporaryDirectory() as folder:
             root, ops = workspace(Path(folder))
             with patch.object(cycle, "certified_finished", return_value=True):
@@ -131,8 +137,16 @@ class StrictSerialTests(unittest.TestCase):
                     disk_usage=lambda _:Disk())
             self.assertTrue(result["certified_to_private_finished_goods"])
             self.assertEqual(result["processed_order"], "WO-00000601")
-            self.assertEqual(result["active_order_after_cycle"], "WO-00000602")
+            self.assertFalse(result["independent_chatgpt_review_approved"])
+            self.assertEqual(result["active_order_after_cycle"], "WO-00000601")
+            self.assertEqual(result["stage_results"]["independent_chatgpt_review"],
+                             "AWAITING_SIGNED_EXTERNAL_REVIEW")
             self.assertEqual(result["stages_executed"], 0)
+            with patch.object(cycle, "certified_finished", return_value=True), patch.object(
+                    cycle, "independently_reviewed", return_value=True):
+                released = cycle.tick(root, ops, disk_usage=lambda _:Disk())
+            self.assertEqual(released["active_order_after_cycle"], "WO-00000602")
+            self.assertTrue(released["independent_chatgpt_review_approved"])
             # An arbitrary claim without real governance does not release.
             forged = root / "product-lifecycle/approved-finished-goods/WO-00000602"
             forged.mkdir(parents=True)
@@ -143,6 +157,73 @@ class StrictSerialTests(unittest.TestCase):
                                 disk_usage=lambda _:Disk(),monotonic=lambda:0)
             self.assertEqual(result["processed_order"], "WO-00000602")
             self.assertFalse(result["certified_to_private_finished_goods"])
+
+    def test_independent_review_requires_signed_receipt_and_exact_product_hash(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root, ops = workspace(Path(folder))
+            work_order = "WO-00000601"
+            archive = root / "product-lifecycle/approved-finished-goods" / work_order
+            archive.mkdir(parents=True)
+            (archive / "product.zip").write_bytes(b"only-a-test-artifact")
+            passport = root / "product-lifecycle/passports" / (work_order + ".json")
+            passport.parent.mkdir(parents=True)
+            passport.write_text(json.dumps({"producer_id":"factory-worker"}),encoding="utf8")
+            audit = ops.parent / "independent-product-reviews" / work_order
+            audit.mkdir(parents=True)
+            report = audit / "report.json"
+            report.write_text(json.dumps({"order":work_order,"decision":"approved",
+                    "tests_performed":["independent recalculation"],"blocking_findings":[]}),
+                    encoding="utf8")
+            key = "ab" * 32
+            keys = root / "product-lifecycle/reviewer-keys.json"
+            keys.write_text(json.dumps({"schema":"saeit.factory.reviewer-keys.v1",
+                "reviewers":{"chatgpt-independent":key}}),encoding="utf8")
+            keys.chmod(0o600)
+
+            def file_hash(path):
+                return hashlib.sha256(path.read_bytes()).hexdigest()
+
+            class ApprovedGovernance:
+                @staticmethod
+                def spec_path(_root, _order):
+                    return passport
+
+                @staticmethod
+                def sha(path):
+                    return file_hash(path)
+
+                @staticmethod
+                def verify_reviewer_signature(_root, review):
+                    return governance_module.verify_reviewer_signature(_root, review)
+
+            reviewer = ApprovedGovernance()
+            review = {
+                "schema":cycle.CHATGPT_REVIEW_SCHEMA,
+                "order":work_order,
+                "decision":"approved",
+                "producer_id":"factory-worker",
+                "reviewer_id":"chatgpt-independent",
+                "reviewer_role":"qualified_specialist",
+                "artifact_sha256":file_hash(archive / "product.zip"),
+                "passport_sha256":file_hash(passport),
+                "report_sha256":file_hash(report),
+                "criteria":{name:"pass" for name in cycle.REVIEW_CRITERIA},
+            }
+            receipt = audit / "review.json"
+            receipt.write_text(json.dumps(review),encoding="utf8")
+            self.assertFalse(cycle.independently_reviewed(root, ops, work_order, reviewer))
+            review["reviewer_signature"] = hmac.new(
+                bytes.fromhex(key), governance_module.signed_review_message(review),
+                hashlib.sha256).hexdigest()
+            receipt.write_text(json.dumps(review),encoding="utf8")
+            self.assertTrue(cycle.independently_reviewed(root, ops, work_order, reviewer))
+            report.write_text(report.read_text() + "tampered",encoding="utf8")
+            self.assertFalse(cycle.independently_reviewed(root, ops, work_order, reviewer))
+            report.write_text(json.dumps({"order":work_order,"decision":"approved",
+                "tests_performed":["independent recalculation"],"blocking_findings":[]}),
+                encoding="utf8")
+            (archive / "product.zip").write_bytes(b"changed-artifact")
+            self.assertFalse(cycle.independently_reviewed(root, ops, work_order, reviewer))
 
     def test_budget_does_not_create_false_pass(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -224,11 +305,13 @@ class StrictSerialTests(unittest.TestCase):
             state.write_text(json.dumps({"schema":cycle.SCHEMA,
                                          "active_order":"WO-00000800", "index":199,
                                          "ticks":19}))
-            with patch.object(cycle, "certified_finished", return_value=True):
+            with patch.object(cycle, "certified_finished", return_value=True), patch.object(
+                    cycle, "independently_reviewed", return_value=True):
                 done = cycle.tick(root,ops,disk_usage=lambda _:Disk())
             self.assertTrue(done["certified_to_private_finished_goods"])
             self.assertIsNone(done["active_order_after_cycle"])
-            with patch.object(cycle, "certified_finished", return_value=True):
+            with patch.object(cycle, "certified_finished", return_value=True), patch.object(
+                    cycle, "independently_reviewed", return_value=True):
                 final=cycle.tick(root,ops,dry_run=True)
             self.assertTrue(final["all_complete"])
 
