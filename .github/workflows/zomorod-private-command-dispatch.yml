@@ -546,6 +546,35 @@ jobs:
                          else "NOT_VERIFIED"))
               except (OSError, subprocess.TimeoutExpired):
                   print("MPW_PASSENGER_EXPLICIT_RESTART_HELP=UNAVAILABLE")
+          # CloudLinux Python Selector: inspect registered app roots; never restart.
+          selector = shutil.which("cloudlinux-selector")
+          if selector is None and os.path.isfile("/usr/sbin/cloudlinux-selector"):
+              selector = "/usr/sbin/cloudlinux-selector"
+          wrapper = "/bin/cagefs_enter.proxied"
+          print("MPW_CLOUDLINUX_CAGEFS_WRAPPER=" +
+                ("PRESENT" if os.path.isfile(wrapper) else "MISSING"))
+          if selector is None:
+              print("MPW_CLOUDLINUX_SELECTOR_BIN=MISSING")
+          else:
+              print("MPW_CLOUDLINUX_SELECTOR_BIN=PRESENT")
+              try:
+                  outcome = subprocess.run(
+                      [selector, "get", "--json", "--interpreter", "python"],
+                      capture_output=True, timeout=15, check=False,
+                  )
+                  if outcome.returncode or len(outcome.stdout) > 1000000:
+                      raise ValueError("SELECTOR_GET_UNAVAILABLE")
+                  info = json.loads(outcome.stdout)
+                  if not isinstance(info, dict) or info.get("result") not in ("success", True):
+                      raise ValueError("SELECTOR_GET_UNVERIFIED")
+                  text_data = json.dumps(info, sort_keys=True).lower()
+                  print("MPW_CLOUDLINUX_SELECTOR_GET=SUCCESS")
+                  print("MPW_CLOUDLINUX_RECOGNIZES_PUBLIC_ROOT=" +
+                        ("YES" if "mojplaywin.com" in text_data else "NO"))
+                  print("MPW_CLOUDLINUX_RECOGNIZES_STAGING_ROOT=" +
+                        ("YES" if "saeit-staging" in text_data else "NO"))
+              except (OSError, ValueError, subprocess.TimeoutExpired):
+                  print("MPW_CLOUDLINUX_SELECTOR_GET=UNAVAILABLE")
           print("MPW_PRODUCTION_FILE_WRITES=NONE")
           print("MPW_ORDERS_CREATED=0;PAYMENTS_CREATED=0")
           print("CPANEL_SITE_MUTATIONS=NONE")
