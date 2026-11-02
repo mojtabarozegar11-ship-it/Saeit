@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only copies of three live MojPlayWin SKUs to private VPS factory QA.
+"""Owner-held, single non-book SKU 879 factory QA candidate; no execution permitted.
 
 No storefront/model/checkout writes. No automatic substitution of live files.
 """
@@ -17,10 +17,10 @@ import tempfile
 import zipfile
 import zlib
 
-IDS = (72, 225, 879)
-SCHEMA = "saeit.mpw.live-three-private-qa-copy.v1"
+IDS = (879,)
+SCHEMA = "saeit.mpw.live-single-nonbook-private-qa-copy.v1"
 MAX_FILE = 150 * 1024 * 1024
-BASE = Path("/home/githubops/factory-runtime/private/autonomous-product-cycle/design-intake/mpw-live-three-sku-qa")
+BASE = Path("/home/githubops/factory-runtime/private/autonomous-product-cycle/design-intake/mpw-live-single-nonbook-sku-qa")
 
 
 def sha(path):
@@ -64,8 +64,8 @@ def validate_manifest(obj):
     if not isinstance(obj, dict) or obj.get("schema") != SCHEMA or obj.get("site") != "mojplaywin.com":
         raise RuntimeError("QA_WRONG_SOURCE")
     rows = obj.get("products")
-    if not isinstance(rows, list) or len(rows) != 3 or tuple(x.get("id") for x in rows if isinstance(x, dict)) != IDS:
-        raise RuntimeError("QA_EXACT_THREE_REQUIRED")
+    if not isinstance(rows, list) or len(rows) != len(IDS) or tuple(x.get("id") for x in rows if isinstance(x, dict)) != IDS:
+        raise RuntimeError("QA_SINGLE_NONBOOK_REQUIRED")
     for x in rows:
         if (not isinstance(x.get("size"), int) or isinstance(x["size"], bool)
                 or not 0 < x["size"] <= MAX_FILE
@@ -166,7 +166,7 @@ def vps_ingest(root=BASE, input_stream=None):
     private_dir(root)
     if input_stream is None:
         input_stream = sys.stdin.buffer
-    with tempfile.TemporaryDirectory(prefix=".incoming-three-", dir=str(root)) as temporary:
+    with tempfile.TemporaryDirectory(prefix=".incoming-single-", dir=str(root)) as temporary:
         staging = Path(temporary)
         os.chmod(staging, 0o700)
         observed = {}
@@ -219,11 +219,14 @@ def vps_ingest(root=BASE, input_stream=None):
             summaries.append({"product_id": ident, "copy_sha256": digest,
                               "technical_issues": len(report["issues"]),
                               "factory_quality_state": request["factory_quality_state"]})
-        print("MPW_LIVE_THREE_QA_PRIVATE_COPIES=" + json.dumps(summaries, sort_keys=True), flush=True)
+        print("MPW_LIVE_SINGLE_NONBOOK_QA_PRIVATE_COPIES=" + json.dumps(summaries, sort_keys=True), flush=True)
         return summaries
 
 
 def main():
+    # Owner directive 2026-11-02: no tests, site export, file transfer, or VPS ingest.
+    # The legacy workflow is inert on this isolated branch; this CLI fails closed too.
+    raise RuntimeError("QA_OWNER_HOLD_NO_TRANSFER_NO_TESTS")
     p = argparse.ArgumentParser()
     p.add_argument("mode", choices=["site-export", "vps-ingest"])
     a = p.parse_args()
