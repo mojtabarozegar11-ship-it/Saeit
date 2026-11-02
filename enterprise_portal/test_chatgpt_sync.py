@@ -30,6 +30,17 @@ class ReportSourceParsingTests(TestCase):
         self.assertEqual(row["occurred_at"].isoformat(), "2026-11-01T16:04:00+00:00")
         self.assertTrue(row["evidence_url"].endswith("#issuecomment-101"))
 
+    def test_accepts_explicit_run_id_label_on_owner_numbered_report(self):
+        # Real report 05-0009 used a safe 'run_id ' label before its run code.
+        labeled = BODY.replace(" | ZM-CTRL-", " | run_id ZM-CTRL-", 1)
+        row = extract_receipt(comment(cid=123, body=labeled))
+        self.assertIsNotNone(row)
+        self.assertEqual(row["report_code"], "05-0001")
+        self.assertEqual(row["run_reference"], "ZM-CTRL-20261101-PR1779-CI41324363802")
+        self.assertEqual(row["body"], labeled)
+        self.assertIsNone(extract_receipt(comment(cid=123, author="unknown", body=labeled)))
+        self.assertIsNone(extract_receipt(comment(cid=123, body=labeled.replace("run_id ", "run_id code "))))
+
     def test_rejects_spoofs_malformed_and_oversize(self):
         self.assertIsNone(extract_receipt(comment(author="anyone-else")))
         self.assertIsNone(extract_receipt(comment(cid=-9)))

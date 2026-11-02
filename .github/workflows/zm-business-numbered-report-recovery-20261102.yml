@@ -1,0 +1,189 @@
+name: ZM safe run-id report recovery and private hourly refresh
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths: [".github/workflows/zm-business-numbered-report-recovery-20261102.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zm-live-php-private-reports-only
+  cancel-in-progress: false
+jobs:
+  report-nine-recovery:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate exact source, append-only parser and real public report count
+        env:
+          ZM_GITHUB_REPORTS_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          python3 -m unittest discover -s tests -p 'test_zomorod_chatgpt_report_snapshot.py'
+          python3 -m py_compile enterprise_portal/github_chatgpt_reports.py
+          PYTHONPATH=. python3 scripts/zomorod_chatgpt_report_snapshot.py --pages 1 > "$RUNNER_TEMP/source-preview"
+          grep -Fxq 'ZM_CHATGPT_SNAPSHOT=PREVIEW_ONLY' "$RUNNER_TEMP/source-preview"
+          grep -Fxq 'FINANCIAL_DB_TOUCHED=no' "$RUNNER_TEMP/source-preview"
+          count="$(awk -F= '/^VALID_NUMBERED_REPORTS=/{print $2}' "$RUNNER_TEMP/source-preview")"
+          test "$count" -ge 9
+          test "$count" -le 100
+          git show 08e9b6143fae9235c9399167c2cec1ff826998ec:enterprise_portal/github_chatgpt_reports.py |
+            sha256sum | awk '{print $1}' > "$RUNNER_TEMP/expected-live-parser-sha"
+          echo "SOURCE_RUN_ID_RECOVERY_PREVIEW=passed"
+      - name: Configure pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-php-report-release"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Read-only identify installed worker and preserve precise rollback
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-report-release"
+          expected="$(cat "$RUNNER_TEMP/expected-live-parser-sha")"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$expected" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; expected="$2"
+          root="$HOME/.private/zomorod-business"
+          worker="$root/.chatgpt-report-sync"
+          parser="$worker/enterprise_portal/github_chatgpt_reports.py"
+          snapshot="$root/chatgpt_reports_snapshot.json"
+          fa="$root/chatgpt_reports_fa.json"
+          stage="$root/.report-runid-$sha"
+          backup="$HOME/.backups/zm-report-runid-recovery/$sha"
+          test -d "$root" && test ! -L "$root"
+          test -d "$worker" && test ! -L "$worker"
+          test -f "$parser" && test ! -L "$parser"
+          test -f "$snapshot" && test ! -L "$snapshot"
+          test -f "$fa" && test ! -L "$fa"
+          test -f "$worker/run-hourly.sh" && test ! -L "$worker/run-hourly.sh"
+          test "$(stat -c %a "$parser")" = 600
+          test "$(stat -c %a "$snapshot")" = 600
+          test "$(stat -c %a "$fa")" = 600
+          test "$(sha256sum "$parser" | awk '{print $1}')" = "$expected"
+          test ! -e "$stage" && test ! -e "$backup"
+          install -d -m 700 "$stage" "$backup"
+          cp -p "$parser" "$backup/parser.before.py"
+          cp -p "$snapshot" "$backup/snapshot.before.json"
+          test ! -f "$worker/last-status" || cp -p "$worker/last-status" "$backup/last-status.before"
+          sha256sum "$parser" "$snapshot" > "$backup/before.sha256"
+          echo 'SOURCE_PARSER_IDENTITY=matched'
+          echo 'PRIVATE_SNAPSHOT_BACKUP=preserved'
+          REMOTE
+      - name: Stage only validated parser replacement
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-report-release"
+          tar -cf - -C enterprise_portal github_chatgpt_reports.py |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.private/zomorod-business/.report-runid-$GITHUB_SHA"
+      - name: Atomic parser update, refresh and append-only receipt acceptance
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-report-release"
+          expected="$(cat "$RUNNER_TEMP/expected-live-parser-sha")"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$expected" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; expected="$2"
+          root="$HOME/.private/zomorod-business"
+          worker="$root/.chatgpt-report-sync"
+          parser="$worker/enterprise_portal/github_chatgpt_reports.py"
+          snapshot="$root/chatgpt_reports_snapshot.json"
+          fa="$root/chatgpt_reports_fa.json"
+          stage="$root/.report-runid-$sha"
+          backup="$HOME/.backups/zm-report-runid-recovery/$sha"
+          test -f "$stage/github_chatgpt_reports.py" && test ! -L "$stage/github_chatgpt_reports.py"
+          test "$(sha256sum "$parser" | awk '{print $1}')" = "$expected"
+          python3 -m py_compile "$stage/github_chatgpt_reports.py"
+          rollback() {
+            set +e
+            cp -p "$backup/parser.before.py" "$stage/parser.rollback.py" &&
+              mv -f "$stage/parser.rollback.py" "$parser"
+            cp -p "$backup/snapshot.before.json" "$stage/snapshot.rollback.json" &&
+              mv -f "$stage/snapshot.rollback.json" "$snapshot"
+            if test -f "$backup/last-status.before"; then cp -p "$backup/last-status.before" "$worker/last-status"; fi
+            echo 'RUN_ID_REPORT_ROLLBACK=restored_private_parser_and_snapshot'
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          install -m 600 "$stage/github_chatgpt_reports.py" "$stage/parser.new.py"
+          mv -f "$stage/parser.new.py" "$parser"
+          bash "$worker/run-hourly.sh"
+          grep -Fq 'outcome=success' "$worker/last-status"
+          python3 - "$backup/snapshot.before.json" "$snapshot" "$fa" <<'PY'
+          import json,sys
+          old=json.load(open(sys.argv[1],encoding='utf-8'))
+          new=json.load(open(sys.argv[2],encoding='utf-8'))
+          trans=json.load(open(sys.argv[3],encoding='utf-8'))
+          assert old['source']==new['source']==trans['source']
+          assert new['count']==len(new['items']) and new['count']>=9
+          assert new['items'][:len(old['items'])]==old['items']
+          rec=[x for x in new['items'] if x['report_code']=='05-0009']
+          assert len(rec)==1 and rec[0]['comment_id']==6566032989
+          assert trans['items']['05-0009']['comment_id']==rec[0]['comment_id']
+          print('APPEND_ONLY_PRESERVED=yes')
+          print('PERSIAN_REPORT_05_0009=available')
+          print('LIVE_NUMBERED_REPORTS='+str(new['count']))
+          PY
+          test "$(stat -c %a "$parser")" = 600
+          test "$(stat -c %a "$snapshot")" = 600
+          test "$(stat -c %a "$fa")" = 600
+          active=0
+          trap - EXIT
+          echo 'LIVE_PERSIAN_REPORT_NINE_RECOVERY=success'
+          echo 'EXISTING_CRON=unchanged'
+          echo 'FINANCIAL_DATABASE_TOUCHED=no'
+          echo 'ROLLBACK_BACKUP=preserved'
+          REMOTE
+      - name: Cleanup ephemeral relay credentials
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/zm-php-report-release"
+          rm -f "$RUNNER_TEMP/expected-live-parser-sha" "$RUNNER_TEMP/source-preview"

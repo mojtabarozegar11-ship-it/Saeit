@@ -58,7 +58,7 @@ dashboard=request('GET','dashboard')
 assert 'اسناد حسابداری' in dashboard
 request('POST','parties',{'csrf':csrf,'action':'party','name':'Synthetic Counterparty','kind':'customer'})
 request('POST','invoices',{'csrf':csrf,'action':'invoice','kind':'sale','party':'1','invoice_no':'SMOKE-INV-1','amount':'125.50','currency':'USD','date':'2026-10-18','due_date':'2026-10-18','description':'Synthetic invoice'})
-request('POST','payments',{'csrf':csrf,'action':'payment','invoice_id':'1','amount':'25.50','date':'2026-10-18'})
+request('POST','payments',{'csrf':csrf,'action':'payment','invoice_id':'1','amount':'25.50','date':'2026-10-18','payment_evidence':'SyntheticReceipt-001'})
 request('POST','journal',{'csrf':csrf,'action':'journal','currency':'USD','date':'2026-10-18','doc_no':'SMOKE-JV-1','note':'Balanced dummy','account_0':'1010','debit_0':'50.00','account_1':'3000','credit_1':'50.00'})
 bad=request('POST','journal',{'csrf':csrf,'action':'journal','currency':'USD','date':'2026-10-18','doc_no':'SMOKE-BAD','note':'Invalid dummy','account_0':'1010','debit_0':'80.00','account_1':'3000','credit_1':'50.00'})
 assert 'درخواست انجام نشد' in bad
@@ -129,10 +129,33 @@ report_data={
 report_file=private/'chatgpt_reports_snapshot.json'
 report_file.write_text(json.dumps(report_data,ensure_ascii=False),encoding='utf-8')
 report_file.chmod(0o600)
+# A separate, receipt-bound Persian pack must render by default, without
+# rewriting the original English source or allowing executable markup.
+fa_file=private/'chatgpt_reports_fa.json'
+fa_file.write_text(json.dumps({
+    'version':1,'source':report_data['source'],
+    'kind':'persian_management_rendering',
+    'items':{'05-0001':{'comment_id':987654,
+        'text_fa':'گزارش فارسی آزمایشی، بدون ادعای فروش. <script>injected()</script>'}}
+},ensure_ascii=False),encoding='utf-8')
+fa_file.chmod(0o600)
 page=request('GET','chatgpt_reports')
 assert 'گزارش‌های متنی اقدامات ChatGPT' in page
+assert 'پایش پنج چرخهٔ ساعتی' in page
+assert '۲۰ اقدام / تحقق احرازنشده' in page
+assert '01 · مقالات علمی' in page
+assert '05 · فرماندهی کسب‌وکار' in page
 assert '05-0001' in page
+assert 'گزارش فارسی آزمایشی' in page
+assert 'Synthetic private work report' not in page
 assert '&lt;script&gt;' in page and '<script>injected()</script>' not in page
+# If the source ID no longer matches, reject rather than misattribute a translation.
+fa_payload=json.loads(fa_file.read_text())
+fa_payload['items']['05-0001']['comment_id']=987655
+fa_file.write_text(json.dumps(fa_payload,ensure_ascii=False),encoding='utf-8')
+assert 'اعتبارسنجی پرونده گزارش ناموفق بود' in request('GET','chatgpt_reports')
+fa_file.unlink()
+assert 'ترجمه فارسی این گزارش هنوز' in request('GET','chatgpt_reports')
 assert 'گزارش‌های متنی ChatGPT' in request('GET','dashboard')
 with sqlite3.connect(str(private/'management.sqlite3')) as rw:
     rw.execute("UPDATE users SET role='viewer' WHERE username='TestOnlyAdmin'")

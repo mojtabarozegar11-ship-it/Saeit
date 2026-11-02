@@ -10,6 +10,7 @@ import http.client
 from pathlib import Path
 import re
 import shutil
+import sqlite3
 import socket
 import subprocess
 import tempfile
@@ -204,6 +205,118 @@ class LogoutHTTPTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("ورود مدیر و حسابدار", html)
         self.assertNotIn('name="action" value="logout"', html)
+
+
+    def test_financial_classification_evidence_and_immutable_reversal(self) -> None:
+        """End-to-end on the temporary database; never a real purchase/payment."""
+        csrf = self.csrf(self.dashboard)
+        def post(page: str, action: str, **values: str) -> int:
+            result, _, _ = self.request(
+                "POST", "/app.php?page=" + page, cookie=self.cookie,
+                form={"csrf": csrf, "action": action, **values},
+            )
+            return result
+
+        self.assertEqual(post("parties", "party", name="Synthetic Finance Party",
+                              kind="both"), 303)
+        db_path = self.private / "management.sqlite3"
+        with sqlite3.connect(db_path) as conn:
+            party = conn.execute(
+                "SELECT id FROM parties WHERE name='Synthetic Finance Party' ORDER BY id DESC"
+            ).fetchone()[0]
+
+        fields = {
+            "kind": "purchase", "party": str(party), "invoice_no": "QA-PURCHASE-SERVICE",
+            "amount": "64.50", "currency": "USD", "date": "2026-11-02",
+            "due_date": "2026-11-02", "description": "Synthetic software service",
+        }
+        self.assertEqual(post("invoices", "invoice", **fields), 422,
+                         "An unclassified purchase must not silently become inventory")
+        with sqlite3.connect(db_path) as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM invoices WHERE invoice_no='QA-PURCHASE-SERVICE'"
+            ).fetchone()[0], 0)
+
+        self.assertEqual(post("invoices", "invoice", purchase_class="service", **fields), 303)
+        with sqlite3.connect(db_path) as conn:
+            invoice_journal = conn.execute(
+                "SELECT posted_entry FROM invoices WHERE invoice_no='QA-PURCHASE-SERVICE'"
+            ).fetchone()[0]
+            postings = conn.execute(
+                "SELECT a.code,l.debit,l.credit FROM journal_lines l "
+                "JOIN ledger_accounts a ON a.id=l.account_id WHERE l.entry_id=? "
+                "ORDER BY a.code", (invoice_journal,)
+            ).fetchall()
+        self.assertEqual(postings, [("2000", 0, 6450), ("5100", 6450, 0)])
+        self.assertEqual(post("journal", "journal_reverse", entry_id=str(invoice_journal),
+                              reason="Synthetic invoice forbidden reversal",
+                              date="2026-11-02"), 422)
+
+        sale_fields = {
+            "kind": "sale", "party": str(party), "invoice_no": "QA-SALE-EVIDENCE",
+            "amount": "19.00", "currency": "USD", "date": "2026-11-02",
+            "due_date": "2026-11-02", "description": "Synthetic output",
+        }
+        self.assertEqual(post("invoices", "invoice", **sale_fields), 303)
+        with sqlite3.connect(db_path) as conn:
+            sale_id = conn.execute(
+                "SELECT id FROM invoices WHERE invoice_no='QA-SALE-EVIDENCE'"
+            ).fetchone()[0]
+        payment = {
+            "invoice_id": str(sale_id), "amount": "7.00", "date": "2026-11-02",
+        }
+        self.assertEqual(post("payments", "payment", **payment), 422)
+        self.assertEqual(post("payments", "payment",
+                              payment_evidence="Synthetic-Receipt-001", **payment), 303)
+        with sqlite3.connect(db_path) as conn:
+            note = conn.execute(
+                "SELECT j.note FROM invoice_payments p "
+                "JOIN journal_entries j ON j.id=p.entry_id WHERE p.invoice_id=?",
+                (sale_id,)
+            ).fetchone()[0]
+        self.assertIn("Synthetic-Receipt-001", note)
+        self.assertIn("بدون راستی‌آزمایی بانکی", note)
+
+        self.assertEqual(post(
+            "journal", "journal", currency="USD", date="2026-11-02",
+            doc_no="QA-INDEPENDENT-JOURNAL", note="Synthetic manual journal",
+            account_0="1010", debit_0="27.00",
+            account_1="3000", credit_1="27.00"
+        ), 303)
+        with sqlite3.connect(db_path) as conn:
+            manual_id = conn.execute(
+                "SELECT id FROM journal_entries WHERE doc_no='QA-INDEPENDENT-JOURNAL'"
+            ).fetchone()[0]
+            original_lines = conn.execute(
+                "SELECT debit,credit FROM journal_lines WHERE entry_id=? ORDER BY id",
+                (manual_id,)
+            ).fetchall()
+        reversal_fields = {
+            "entry_id": str(manual_id),
+            "reason": "Synthetic posting correction",
+            "date": "2026-11-02",
+        }
+        self.assertEqual(post("journal", "journal_reverse", **reversal_fields), 303)
+        self.assertEqual(post("journal", "journal_reverse", **reversal_fields), 422)
+        with sqlite3.connect(db_path) as conn:
+            reverse_id = conn.execute(
+                "SELECT id FROM journal_entries WHERE doc_no=?",
+                ("REV-" + str(manual_id),)
+            ).fetchone()[0]
+            reversed_lines = conn.execute(
+                "SELECT debit,credit FROM journal_lines WHERE entry_id=? ORDER BY id",
+                (reverse_id,)
+            ).fetchall()
+            self.assertEqual(conn.execute(
+                "SELECT debit,credit FROM journal_lines WHERE entry_id=? ORDER BY id",
+                (manual_id,)
+            ).fetchall(), original_lines)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE doc_no=?",
+                ("REV-" + str(manual_id),)
+            ).fetchone()[0], 1)
+        self.assertEqual(reversed_lines,
+                         [(credit, debit) for debit, credit in original_lines])
 
 
 if __name__ == "__main__":

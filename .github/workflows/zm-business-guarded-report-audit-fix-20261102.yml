@@ -1,0 +1,253 @@
+name: ZM guarded Persian five-cycle viewer and 05-0010 backfill release
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths: [".github/workflows/zm-business-guarded-report-audit-fix-20261102.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zm-live-php-private-reports-only
+  cancel-in-progress: false
+jobs:
+  report-audit-fix:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite,sqlite3
+      - name: Exact-head offline gate, parsers, source checks and bounded live-source preview
+        env:
+          ZM_GITHUB_REPORTS_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          php -l content/zomorod-business/chatgpt_reports.php
+          python3 -m unittest discover -s tests -p 'test_zomorod_chatgpt_report_snapshot.py'
+          python3 -m unittest discover -s tests -p 'test_zm_business_live_report_patch.py'
+          python3 -m py_compile scripts/zomorod_chatgpt_report_snapshot.py enterprise_portal/github_chatgpt_reports.py
+          PYTHONPATH=. python3 scripts/zomorod_chatgpt_report_snapshot.py --pages 1 > "$RUNNER_TEMP/source-preview"
+          grep -Fxq 'ZM_CHATGPT_SNAPSHOT=PREVIEW_ONLY' "$RUNNER_TEMP/source-preview"
+          grep -Fxq 'FINANCIAL_DB_TOUCHED=no' "$RUNNER_TEMP/source-preview"
+          count="$(awk -F= '/^VALID_NUMBERED_REPORTS=/{print $2}' "$RUNNER_TEMP/source-preview")"
+          test "$count" -ge 12 && test "$count" -le 100
+          git show 63bc0a9e577e7c90175adacfe7cba469c87a36a5:content/zomorod-business/chatgpt_reports.php | sha256sum | awk '{print $1}' > "$RUNNER_TEMP/old-viewer.sha"
+          git show 112119b42dd2cb4f2c92bbbd3b14d66c3dda179c:enterprise_portal/github_chatgpt_reports.py | sha256sum | awk '{print $1}' > "$RUNNER_TEMP/old-parser.sha"
+          git show 00a6ad070e25c0e09f84f800aa4b5804cd3108f8:scripts/zomorod_chatgpt_report_snapshot.py | sha256sum | awk '{print $1}' > "$RUNNER_TEMP/old-refresh.sha"
+          echo "REPORT_FIX_VERIFIED_SOURCE_COUNT=$count"
+      - name: Configure pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-php-report-release"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Verify exact live private files and preserve rollback backup
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-report-release"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$(cat "$RUNNER_TEMP/old-viewer.sha")" "$(cat "$RUNNER_TEMP/old-parser.sha")" "$(cat "$RUNNER_TEMP/old-refresh.sha")" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; old_viewer="$2"; old_parser="$3"; old_refresh="$4"
+          root="$HOME/.private/zomorod-business"
+          worker="$root/.chatgpt-report-sync"
+          viewer="$root/chatgpt_reports.php"
+          snapshot="$root/chatgpt_reports_snapshot.json"
+          pack="$root/chatgpt_reports_fa.json"
+          parser="$worker/enterprise_portal/github_chatgpt_reports.py"
+          refresh="$worker/refresh.py"
+          stage="$root/.report-unified-audit-$sha"
+          backup="$HOME/.backups/zm-report-audit-fix/$sha"
+          test -d "$root" && test ! -L "$root"
+          test -d "$worker" && test ! -L "$worker"
+          for path in "$viewer" "$snapshot" "$pack" "$parser" "$refresh" "$worker/run-hourly.sh"; do
+            test -f "$path" && test ! -L "$path"
+          done
+          for path in "$viewer" "$snapshot" "$pack" "$parser" "$refresh"; do
+            test "$(stat -c %a "$path")" = 600
+          done
+          test "$(sha256sum "$viewer" | awk '{print $1}')" = "$old_viewer"
+          test "$(sha256sum "$parser" | awk '{print $1}')" = "$old_parser"
+          test "$(sha256sum "$refresh" | awk '{print $1}')" = "$old_refresh"
+          test ! -e "$stage" && test ! -e "$backup"
+          install -d -m 700 "$stage" "$backup"
+          cp -p "$viewer" "$backup/viewer.before.php"
+          cp -p "$parser" "$backup/parser.before.py"
+          cp -p "$refresh" "$backup/refresh.before.py"
+          cp -p "$snapshot" "$backup/snapshot.before.json"
+          if test -f "$worker/last-status"; then cp -p "$worker/last-status" "$backup/status.before"; fi
+          sha256sum "$viewer" "$parser" "$refresh" "$snapshot" > "$backup/before.sha256"
+          echo 'LIVE_REPORT_SOURCE_IDENTITIES=matched'
+          echo 'INDEPENDENT_REPORT_ONLY_BACKUP=preserved'
+          REMOTE
+      - name: Transfer only verified report renderer and worker to isolated private stage
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-report-release"
+          stage="/home/zomorod2/.private/zomorod-business/.report-unified-audit-$GITHUB_SHA"
+          tar -cf - -C content/zomorod-business chatgpt_reports.php |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
+          tar -cf - -C scripts zomorod_chatgpt_report_snapshot.py |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
+          tar -cf - -C enterprise_portal github_chatgpt_reports.py |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
+      - name: Guarded private-only update, report 05-0010 backfill and live gate
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-report-release"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$(cat "$RUNNER_TEMP/old-viewer.sha")" "$(cat "$RUNNER_TEMP/old-parser.sha")" "$(cat "$RUNNER_TEMP/old-refresh.sha")" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; old_viewer="$2"; old_parser="$3"; old_refresh="$4"
+          root="$HOME/.private/zomorod-business"
+          worker="$root/.chatgpt-report-sync"
+          viewer="$root/chatgpt_reports.php"
+          parser="$worker/enterprise_portal/github_chatgpt_reports.py"
+          refresh="$worker/refresh.py"
+          snapshot="$root/chatgpt_reports_snapshot.json"
+          pack="$root/chatgpt_reports_fa.json"
+          stage="$root/.report-unified-audit-$sha"
+          backup="$HOME/.backups/zm-report-audit-fix/$sha"
+          phpbin="$(command -v php || echo /opt/cpanel/ea-php82/root/usr/bin/php)"
+          for name in chatgpt_reports.php github_chatgpt_reports.py zomorod_chatgpt_report_snapshot.py; do
+            test -f "$stage/$name" && test ! -L "$stage/$name"
+            chmod 600 "$stage/$name"
+          done
+          "$phpbin" -l "$stage/chatgpt_reports.php"
+          python3 -m py_compile "$stage/github_chatgpt_reports.py" "$stage/zomorod_chatgpt_report_snapshot.py"
+          test "$(sha256sum "$viewer" | awk '{print $1}')" = "$old_viewer"
+          test "$(sha256sum "$parser" | awk '{print $1}')" = "$old_parser"
+          test "$(sha256sum "$refresh" | awk '{print $1}')" = "$old_refresh"
+          changed=0
+          active=1
+          rollback() {
+            set +e
+            if test "$changed" = 1; then
+              if (
+                set -e
+                exec 8>"$worker/.lock"
+                flock -w 35 8
+                cp -p "$backup/viewer.before.php" "$stage/viewer.rollback.php"
+                mv -f "$stage/viewer.rollback.php" "$viewer"
+                cp -p "$backup/parser.before.py" "$stage/parser.rollback.py"
+                mv -f "$stage/parser.rollback.py" "$parser"
+                cp -p "$backup/refresh.before.py" "$stage/refresh.rollback.py"
+                mv -f "$stage/refresh.rollback.py" "$refresh"
+                cp -p "$backup/snapshot.before.json" "$stage/snapshot.rollback.json"
+                mv -f "$stage/snapshot.rollback.json" "$snapshot"
+                if test -f "$backup/status.before"; then cp -p "$backup/status.before" "$worker/last-status"; fi
+              ); then
+                echo 'REPORT_FIX_ROLLBACK=restored_private_viewer_worker_and_snapshot'
+              else
+                echo 'REPORT_FIX_ROLLBACK=FAILED_BACKUP_PRESERVED' >&2
+              fi
+            fi
+          }
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          changed=1
+          (
+            exec 8>"$worker/.lock"
+            flock -w 35 8
+            install -m 600 "$stage/chatgpt_reports.php" "$stage/viewer.new.php"
+            mv -f "$stage/viewer.new.php" "$viewer"
+            install -m 600 "$stage/github_chatgpt_reports.py" "$stage/parser.new.py"
+            mv -f "$stage/parser.new.py" "$parser"
+            install -m 600 "$stage/zomorod_chatgpt_report_snapshot.py" "$stage/refresh.new.py"
+            mv -f "$stage/refresh.new.py" "$refresh"
+          )
+          bash "$worker/run-hourly.sh"
+          grep -Fq 'outcome=success' "$worker/last-status"
+          "$phpbin" -l "$viewer"
+          python3 - "$backup/snapshot.before.json" "$snapshot" "$pack" <<'PY'
+          import json,sys
+          old=json.load(open(sys.argv[1],encoding="utf-8"))
+          new=json.load(open(sys.argv[2],encoding="utf-8"))
+          pack=json.load(open(sys.argv[3],encoding="utf-8"))
+          assert old["source"]==new["source"]==pack["source"]
+          previous=old["items"]; current=new["items"]
+          assert new["count"]==len(current) and 12<=new["count"]<=100
+          if previous != current[:len(previous)]:
+              extracted=[x for x in current if x["report_code"]=="05-0010" and x["comment_id"]==6566708686]
+              assert len(extracted)==1 and not any(x["report_code"]=="05-0010" for x in previous)
+              remainder=[x for x in current if x not in extracted]
+              assert previous==remainder[:len(previous)]
+          codes={x["report_code"]:x for x in current}
+          assert all("05-"+format(i,"04d") in codes for i in range(1,13))
+          assert codes["05-0010"]["comment_id"]==6566708686
+          assert pack["items"]["05-0009"]["comment_id"]==codes["05-0009"]["comment_id"]
+          print("HISTORICAL_REPORT_BACKFILL=05-0010")
+          print("OLD_NUMBERED_RECEIPTS=immutable")
+          print("LIVE_NUMBERED_REPORTS="+str(new["count"]))
+          PY
+          test "$(stat -c %a "$viewer")" = 600
+          test "$(stat -c %a "$parser")" = 600
+          test "$(stat -c %a "$refresh")" = 600
+          test "$(stat -c %a "$snapshot")" = 600
+          test "$(sha256sum "$viewer" | awk '{print $1}')" = "$(sha256sum "$stage/chatgpt_reports.php" | awk '{print $1}')"
+          test "$(sha256sum "$parser" | awk '{print $1}')" = "$(sha256sum "$stage/github_chatgpt_reports.py" | awk '{print $1}')"
+          test "$(sha256sum "$refresh" | awk '{print $1}')" = "$(sha256sum "$stage/zomorod_chatgpt_report_snapshot.py" | awk '{print $1}')"
+          crontab -l | grep -Fqx "50 * * * * /bin/bash $worker/run-hourly.sh >/dev/null 2>&1 # ZM_CHATGPT_REPORT_REFRESH"
+          code="$(curl -sS -L --max-time 25 -o "$stage/anonymous.html" -w '%{http_code}' 'https://zomorodmelal.ir/business/?page=chatgpt_reports' || true)"
+          test "$code" = 200
+          grep -Fq 'ورود مدیر و حسابدار' "$stage/anonymous.html"
+          ! grep -Fq 'پایش پنج چرخهٔ ساعتی' "$stage/anonymous.html"
+          active=0
+          trap - EXIT
+          echo 'LIVE_REPORT_FIX=success'
+          echo 'PERSIAN_FIVE_CYCLE_COVERAGE_VIEW=installed'
+          echo 'FINANCIAL_DATABASE_TOUCHED=no'
+          echo 'EXISTING_CRON=unchanged'
+          echo 'ROLLBACK_BACKUP=preserved'
+          REMOTE
+      - name: Cleanup ephemeral relay credentials
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/zm-php-report-release"
+          rm -f "$RUNNER_TEMP/old-viewer.sha" "$RUNNER_TEMP/old-parser.sha" "$RUNNER_TEMP/old-refresh.sha" "$RUNNER_TEMP/source-preview"
