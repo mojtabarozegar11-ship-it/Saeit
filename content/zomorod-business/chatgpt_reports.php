@@ -101,7 +101,7 @@ function zmBusinessChatgptReports(string $private):void {
         echo '<div class="scroll"><table><tr><th>چرخه</th><th>گزارش ثبت‌شده</th><th>آخرین رسید معتبر</th><th>هدف اقدامات</th></tr>';
         foreach($cycleNames as $key=>$name){
             $data=$coverage[$key];
-            echo '<tr><td>'.esc($key.' · '.$name).'</td><td>'.(int)$data['count'].'</td><td>'.esc($data['latest']).'</td><td>'.($key==='05'?'۲۰ اقدام / تحقق احرازنشده':'—').'</td></tr>';
+            echo '<tr><td>'.esc($key.' · '.$name).'</td><td>'.(int)$data['count'].'</td><td>'.esc($data['latest']).'</td><td>'.($key==='05'?'۲۰ اقدام / تحقق احرازنشده':'—').'</td><td>'.($key==='05'?'متصل به دفتر مدیریت ۰۵':'فاقد اتصال خودکار و خصوصی').'</td></tr>';
         }
         echo '</table></div>';
         echo '<p class="muted">آخرین تغییر پرونده گزارش روی هاست: '.esc(gmdate('Y-m-d H:i', (int)$stat['mtime'])).' UTC؛ ظرفیت این نسخه از نمای گزارش ۱۰۰ رسید است.</p></section>';
@@ -154,6 +154,11 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
         }
         $total=(int)$db->querySingle('SELECT COUNT(*) FROM reports');
         if($total<0||$total>100000)throw new RuntimeException('invalid report archive count');
+        $checked=$db->querySingle("SELECT value FROM metadata WHERE name='last_checked_at'");
+        if(!is_string($checked)||strlen($checked)>48)throw new RuntimeException('invalid refresh timestamp');
+        $checkedTime=strtotime($checked);
+        if($checkedTime===false||$checkedTime>time()+300)throw new RuntimeException('invalid refresh clock');
+        $age=max(0,time()-$checkedTime);
         $pageRaw=$_GET['p']??'1';
         if(!is_string($pageRaw)||!preg_match('/^[1-9][0-9]{0,4}$/D',$pageRaw))throw new RuntimeException('invalid page');
         $page=(int)$pageRaw;
@@ -170,6 +175,8 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
             $faRows=$faPayload['items'];
         }
         echo '<p class="notice">تعداد گزارش‌های بایگانی‌شده: '.$total.' · صفحه '.$page.' از '.$pageCount.' · راستی‌آزمایی مستقل محتوا انجام نشده است.</p>';
+        echo '<p class="muted">آخرین دریافت منبع: '.esc(gmdate('Y-m-d H:i',(int)$checkedTime)).' UTC · تأخیر: '.(int)floor($age/60).' دقیقه</p>';
+        if($age>7200)echo '<div class="notice danger">هشدار: از آخرین دریافت موفق گزارش بیش از دو ساعت گذشته است؛ وضعیت اجراکنندهٔ ساعتی باید بررسی شود.</div>';
         $cycleNames=['01'=>'مقالات علمی','02'=>'کتاب‌ها','03'=>'کارخانه و فروشگاه‌ها','04'=>'بازی‌ها','05'=>'فرماندهی کسب‌وکار'];
         $coverage=[];
         foreach($cycleNames as $key=>$name)$coverage[$key]=['count'=>0,'latest'=>'—'];
@@ -182,7 +189,7 @@ function zmBusinessChatgptReportsArchive(string $private):bool {
                 $coverage[$key]=['count'=>(int)$c['n'],'latest'=>(string)$latest];
             }
         }
-        echo '<section><h3>پایش پنج چرخهٔ ساعتی</h3><p class="muted">شمار گزارش‌ها از تعداد اقدامات واقعی متمایز است؛ هدف چرخه پنجم ۲۰ اقدام در هر اجراست، اما تحقق آن احراز نشده است.</p><div class="scroll"><table><tr><th>چرخه</th><th>تعداد گزارش</th><th>آخرین رسید</th><th>هدف</th></tr>';
+        echo '<section><h3>پایش پنج چرخهٔ ساعتی</h3><p class="muted">شمار گزارش‌ها از تعداد اقدامات واقعی متمایز است؛ هدف چرخه پنجم ۲۰ اقدام در هر اجراست، اما تحقق آن احراز نشده است.</p><div class="scroll"><table><tr><th>چرخه</th><th>تعداد گزارش</th><th>آخرین رسید</th><th>هدف</th><th>منبع چرخه</th></tr>';
         foreach($cycleNames as $key=>$name){
             $c=$coverage[$key];
             echo '<tr><td>'.esc($key.' · '.$name).'</td><td>'.(int)$c['count'].'</td><td>'.esc($c['latest']).'</td><td>'.($key==='05'?'۲۰ اقدام / تحقق احرازنشده':'—').'</td></tr>';
