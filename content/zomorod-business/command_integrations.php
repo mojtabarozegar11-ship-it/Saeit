@@ -37,6 +37,25 @@ function zmCcScanBridges(PDO $control, int $uid, ?string $private=null): array {
         }
     };
 
+    // Independent finance queue: unverified operator declarations must never
+    // be promoted to paid invoices or accounting entries by a scanner.
+    $bankClaims = zmCcBridgeReadOnly($private.'/management.sqlite3');
+    if ($bankClaims !== null) {
+        $available = (int)$bankClaims->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='bank_receipt_claims'")->fetchColumn();
+        if ($available) {
+            $pending = $bankClaims->query("SELECT id FROM bank_receipt_claims WHERE status='pending' ORDER BY id DESC LIMIT 30")->fetchAll();
+            foreach ($pending as $item) {
+                ++$inspected;
+                $claimId = (int)$item['id'];
+                if ($claimId<1) continue;
+                $queue('bank:unverified-claim:'.$claimId, 'finance',
+                    'بررسی اظهار بانکی تأییدنشده شماره '.$claimId,
+                    'درخواست بررسی در /business/banking.php؛ این اظهار، دلیل وصول واقعی، تسویه فاکتور یا اجازه تحویل نیست. تأیید فقط با استعلام مستقل بانک و روال کنترل‌شده امکان‌پذیر است.',
+                    'high');
+            }
+        }
+    }
+
     $flow = zmCcBridgeReadOnly($private.'/company-workflow.sqlite3');
     if ($flow !== null) {
         $items = $flow->query("SELECT id,category,risk FROM requests WHERE state='submitted' ORDER BY id DESC LIMIT 30")->fetchAll();
