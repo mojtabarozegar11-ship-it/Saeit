@@ -1,0 +1,172 @@
+name: ZM full business desk read-only production inventory
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths: [".github/workflows/zm-business-full-desk-readonly-20261102.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zm-live-php-private-reports-only
+  cancel-in-progress: false
+jobs:
+  full-desk-readonly:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite,sqlite3
+      - name: Confirm exact-head audit script without local mutation
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          php -l content/zomorod-business/app.php
+          python3 -m unittest discover -s tests -p 'test_zm_business_logout_http.py'
+          echo 'SOURCE_FINANCIAL_VALIDATION=passed'
+          sha256sum content/zomorod-business/app.php | awk '{print $1}' > "$RUNNER_TEMP/staged-app.sha"
+      - name: Configure pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-full-desk-readonly"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Read-only private host inventory and existing HTTP route acceptance
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-full-desk-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$(cat "$RUNNER_TEMP/staged-app.sha")" <<'REMOTE'
+          set -euo pipefail
+          staged="$1"
+          [[ "$staged" =~ ^[a-f0-9]{64}$ ]]
+          root="$HOME/.private/zomorod-business"
+          public="$HOME/public_html/business/index.php"
+          app="$root/app.php"
+          ledger="$root/management.sqlite3"
+          phpbin="$(command -v php || echo /opt/cpanel/ea-php82/root/usr/bin/php)"
+          test -d "$root" && test ! -L "$root"
+          test -f "$public" && test ! -L "$public"
+          test -f "$app" && test ! -L "$app"
+          test -f "$ledger" && test ! -L "$ledger"
+          "$phpbin" -l "$app" >/dev/null
+          "$phpbin" -r 'echo "EFFECTIVE_PHP_CLI=".PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION."\n";'
+          "$phpbin" -r 'exit(extension_loaded("pdo_sqlite")&&class_exists("SQLite3")?0:1);'
+          if test "$(sha256sum "$app" | awk '{print $1}')" = "$staged"; then
+            echo 'LIVE_APP_EQUALS_NEW_STAGED_FINANCIAL_PATCH=yes'
+          else
+            echo 'LIVE_APP_EQUALS_NEW_STAGED_FINANCIAL_PATCH=no'
+          fi
+          for name in site_agents.php site_store.php chatgpt_reports.php chatgpt_reports_fa.json chatgpt_reports_public_fa.json approvals_snapshot.json; do
+            path="$root/$name"
+            key="$(printf '%s' "$name" | tr '.' '_')"
+            if test -f "$path" && test ! -L "$path" && test "$(stat -c %a "$path")" = 600; then
+              if [[ "$name" == *.php ]]; then "$phpbin" -l "$path" >/dev/null; fi
+              echo "PRIVATE_MODULE_$key=present_secure"
+            elif test ! -e "$path" && test ! -L "$path"; then
+              echo "PRIVATE_MODULE_$key=missing"
+            else
+              echo "PRIVATE_MODULE_$key=UNSAFE"
+              exit 1
+            fi
+          done
+          python3 - "$root" <<'PY'
+          import json,pathlib,sqlite3,stat,sys
+          root=pathlib.Path(sys.argv[1])
+          db_path=root/"management.sqlite3"
+          st=db_path.lstat()
+          assert stat.S_ISREG(st.st_mode) and st.st_mode&0o077==0
+          with sqlite3.connect(db_path.as_uri()+"?mode=ro",uri=True,timeout=5) as db:
+              db.execute("PRAGMA query_only=ON")
+              assert db.execute("PRAGMA quick_check").fetchone()[0]=="ok"
+              names={x[0] for x in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              required={'users','ledger_accounts','journal_entries','journal_lines','parties','invoices','invoice_payments','inventory','inventory_movements','employees','documents','projects','audit_events'}
+              assert required<=names
+              assert db.execute("SELECT EXISTS(SELECT 1 FROM users WHERE active=1 AND role='admin')").fetchone()[0]==1
+              print("FINANCIAL_SCHEMA=complete_readonly")
+              print("ACTIVE_ADMIN_ACCOUNT=present")
+          for name,source in [("chatgpt_reports_archive.sqlite3","issue:1725"),("chatgpt_reports_public_cycles.sqlite3","issue:1514")]:
+              path=root/name
+              meta=path.lstat()
+              assert stat.S_ISREG(meta.st_mode) and meta.st_mode&0o077==0
+              with sqlite3.connect(path.as_uri()+"?mode=ro",uri=True) as db:
+                  db.execute("PRAGMA query_only=ON")
+                  assert db.execute("PRAGMA quick_check").fetchone()[0]=="ok"
+                  assert db.execute("PRAGMA user_version").fetchone()[0]==1
+                  assert source in db.execute("SELECT value FROM metadata WHERE name='source'").fetchone()[0]
+                  assert db.execute("SELECT COUNT(*) FROM reports").fetchone()[0]>0
+              print("REPORT_ARCHIVE_"+source.replace(":","_")+"=valid_readonly")
+          approvals=root/"approvals_snapshot.json"
+          if approvals.is_file() and not approvals.is_symlink():
+              data=json.load(open(approvals,encoding="utf-8"))
+              assert data.get("version")==1 and isinstance(data.get("items"),list)
+              print("APPROVAL_REGISTER=valid_json")
+          else:
+              print("APPROVAL_REGISTER=not_installed")
+          print("LEDGER_MODIFICATION=none")
+          PY
+          crontab -l | grep -Fqx "50 * * * * /bin/bash $root/.chatgpt-report-sync/run-hourly.sh >/dev/null 2>&1 # ZM_CHATGPT_REPORT_REFRESH"
+          echo 'HOURLY_REPORT_SCHEDULE=present'
+          for page in dashboard journal invoices store_manager agent_center chatgpt_reports; do
+            html="$(curl -fsSL --max-time 20 "https://zomorodmelal.ir/business/?page=$page")"
+            grep -Fq 'ورود مدیر و حسابدار' <<<"$html"
+            ! grep -Fq 'نام کاربری (انگلیسی)' <<<"$html"
+            echo "ANONYMOUS_$page=login_only"
+          done
+          echo 'REPORT_AND_FINANCE_DATA_WRITES=none'
+          echo 'OWNER_KEY_OFFSITE_RESTORE=not_proven'
+          echo 'PASSENGER_EFFECTIVE_DB_IDENTITY=not_proven'
+          echo 'LIVE_MFA_RBAC_USER_ACCEPTANCE=not_proven'
+          REMOTE
+      - name: Clean temporary relay keys
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/zm-full-desk-readonly"
+          rm -f "$RUNNER_TEMP/staged-app.sha"
