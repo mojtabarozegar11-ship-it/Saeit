@@ -119,6 +119,24 @@ jobs:
               with urllib.request.urlopen(req,timeout=25) as r:
                   if r.status!=200: raise RuntimeError('GUEST_ROUTE_NOT_200:'+route)
               print('MPW_GUEST_PUBLIC_ROUTE='+json.dumps({'route':route,'http':200,'anonymous':True,'payment_created':False}))
+          # Verify the exact previously broken anonymous GET via public Passenger,
+          # not only Django's local CLI URL resolver.
+          recovery='/commerce/trx-easy/purchases/'
+          req=urllib.request.Request(origin+recovery,headers={
+              'Cache-Control':'no-cache','Cookie':'',
+              'User-Agent':'MPWGuestPurchasesReleaseVerify/1.0'})
+          with urllib.request.urlopen(req,timeout=25) as r:
+              body=r.read(100000).decode('utf8','replace')
+              if r.status!=200: raise RuntimeError('GUEST_PURCHASES_PUBLIC_NOT_200')
+              if 'No active purchase session was found' not in body:
+                  raise RuntimeError('GUEST_PURCHASES_PUBLIC_RECOVERY_MISSING')
+              cache=r.headers.get('Cache-Control','').lower()
+              robots=r.headers.get('X-Robots-Tag','').lower()
+              vary=r.headers.get('Vary','').lower()
+              if ('no-store' not in cache or 'noindex' not in robots
+                      or 'cookie' not in vary):
+                  raise RuntimeError('GUEST_PURCHASES_PUBLIC_PRIVACY_HEADERS_MISSING')
+          print('MPW_GUEST_PURCHASES_PUBLIC=PASS;ANONYMOUS=TRUE;ORDERS_CREATED=0;PAYMENTS_CREATED=0')
           before=json.load(open('/tmp/mpw-guest-baseline.json'))
           for route,status in before.items():
               with urllib.request.urlopen(origin+route,timeout=25) as r:
