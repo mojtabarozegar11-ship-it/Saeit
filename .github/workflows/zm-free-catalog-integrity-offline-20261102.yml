@@ -1,0 +1,46 @@
+name: ZM free digital artifact integrity exact-head (offline)
+on:
+  pull_request:
+    paths:
+      - 'content/zomorod-v11/store_index.php'
+      - 'content/zomorod-v11/site_store.php'
+      - 'tests/test_zm_free_catalog_integrity.py'
+      - 'tests/test_zomorod_free_seed_product.py'
+      - '.github/workflows/zm-free-catalog-integrity-offline-20261102.yml'
+  push:
+    branches:
+      - 'fix/zm-free-catalog-artifact-integrity-20261102'
+permissions:
+  contents: read
+concurrency:
+  group: zm-free-artifact-integrity-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  offline:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3
+      - name: Verify immutable source and PHP syntax
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          php -l content/zomorod-v11/store_index.php
+          php -l content/zomorod-v11/site_store.php
+          echo "ZM_FREE_CATALOG_EXACT_HEAD=$EXPECTED_HEAD"
+      - name: Offline public catalog integrity and original free-product tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_zm_free_catalog_integrity.py' -v
+          python3 -m unittest discover -s tests -p 'test_zomorod_free_seed_product.py' -v
+          echo "ZM_FREE_CATALOG_NO_HOST_NO_PAYMENT=PASS"
