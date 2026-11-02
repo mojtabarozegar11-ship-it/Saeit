@@ -207,6 +207,103 @@ class LogoutHTTPTests(unittest.TestCase):
         self.assertNotIn('name="action" value="logout"', html)
 
 
+    def test_dashboard_shows_real_currency_balances_and_overdue_amounts(self) -> None:
+        """Operational totals must come from recorded invoices, not example figures."""
+        csrf = self.csrf(self.dashboard)
+        def post(page: str, action: str, **kwargs: str) -> int:
+            status, _, _ = self.request(
+                "POST", "/app.php?page="+page, cookie=self.cookie,
+                form={"csrf": csrf, "action": action, **kwargs},
+            )
+            return status
+
+        self.assertEqual(post("parties", "party", name="QA KPI Both", kind="both"), 303)
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            party_id = conn.execute(
+                "SELECT id FROM parties WHERE name='QA KPI Both' ORDER BY id DESC"
+            ).fetchone()[0]
+
+        def invoice(number: str, kind: str, amount: str, currency: str,
+                    due: str, purchase_class: str = "") -> None:
+            self.assertEqual(post(
+                "invoices", "invoice", invoice_no=number, kind=kind,
+                purchase_class=purchase_class, party=str(party_id), amount=amount,
+                currency=currency, date="2026-10-01", due_date=due,
+                description="Isolated KPI regression record",
+            ), 303)
+
+        invoice("QA-KPI-USD-SALE", "sale", "120.00", "USD", "2026-10-02")
+        invoice("QA-KPI-USD-PURCHASE", "purchase", "20.00", "USD", "2027-01-01", "service")
+        invoice("QA-KPI-EUR-SALE", "sale", "15.00", "EUR", "2027-01-01")
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            sale_id = conn.execute(
+                "SELECT id FROM invoices WHERE invoice_no='QA-KPI-USD-SALE'"
+            ).fetchone()[0]
+        self.assertEqual(post(
+            "payments", "payment", invoice_id=str(sale_id), amount="30.00",
+            date="2026-10-03", payment_evidence="QA-KPI-receipt-001",
+        ), 303)
+        status, _, dashboard = self.request(
+            "GET", "/app.php?page=dashboard", cookie=self.cookie
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("مطالبات و تعهدات پرداخت‌نشده", dashboard)
+        self.assertIn("با بانک یا اسناد تسویه خارجی تطبیق داده نشده‌اند", dashboard)
+        self.assertRegex(dashboard, r"<td>USD</td><td>90\.00</td><td>90\.00</td><td>20\.00</td><td>0\.00</td>")
+        self.assertRegex(dashboard, r"<td>EUR</td><td>15\.00</td><td>0\.00</td><td>0\.00</td><td>0\.00</td>")
+
+    def test_admin_can_revoke_access_without_deleting_user_history(self) -> None:
+        csrf = self.csrf(self.dashboard)
+        def post(action: str, **kwargs: str) -> int:
+            status, _, _ = self.request(
+                "POST", "/app.php?page=users", cookie=self.cookie,
+                form={"csrf": csrf, "action": action, **kwargs},
+            )
+            return status
+
+        status, _, users_html = self.request(
+            "GET", "/app.php?page=users", cookie=self.cookie
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("قفل تغییر", users_html)
+        self.assertEqual(post(
+            "user", username="qa_revoked_2026",
+            password="strictly-test-password-revoked-2026", role="viewer",
+        ), 303)
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            target = conn.execute(
+                "SELECT id FROM users WHERE username='qa_revoked_2026'"
+            ).fetchone()[0]
+            admin_id = conn.execute(
+                "SELECT id FROM users WHERE username=?", (USERNAME,)
+            ).fetchone()[0]
+
+        self.assertEqual(post(
+            "user_update", user_id=str(target), role="manager", active="1"
+        ), 303)
+        self.assertEqual(post(
+            "user_update", user_id=str(target), role="superadmin", active="0"
+        ), 422)
+        self.assertEqual(post(
+            "user_update", user_id=str(admin_id), role="viewer", active="0"
+        ), 403)
+        self.assertEqual(post(
+            "user_update", user_id=str(target), role="manager", active="0"
+        ), 303)
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            role, active = conn.execute(
+                "SELECT role,active FROM users WHERE id=?", (target,)
+            ).fetchone()
+            self.assertEqual((role, active), ("manager", 0))
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM audit_events WHERE subject='user-access' AND entity_id=?",
+                (target,),
+            ).fetchone()[0], 2)
+            self.assertEqual(conn.execute(
+                "SELECT role,active FROM users WHERE id=?", (admin_id,)
+            ).fetchone(), ("admin", 1))
+            self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+
     def test_financial_classification_evidence_and_immutable_reversal(self) -> None:
         """End-to-end on the temporary database; never a real purchase/payment."""
         csrf = self.csrf(self.dashboard)

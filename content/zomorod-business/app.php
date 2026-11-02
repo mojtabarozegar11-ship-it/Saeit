@@ -32,7 +32,7 @@ function cents(string $s): int {if(!preg_match('/^(?:0|[1-9][0-9]{0,11})(?:\.[0-
 function money(int $n): string {return number_format($n/100,2,'.',',');}
 function positiveId(string $key):int {$s=req($key);if(!preg_match('/^[1-9][0-9]{0,17}$/D',$s))bail('شناسه عددی نامعتبر است.');$id=filter_var($s,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);if($id===false)bail('شناسه خارج از محدوده مجاز است.');return $id;}
 function wholeNumber(string $key,int $min,int $max,string $default=''):int {$s=req($key,$default);if(!preg_match('/^-?(?:0|[1-9][0-9]*)$/D',$s))bail('مقدار عددی باید صحیح باشد.');$value=filter_var($s,FILTER_VALIDATE_INT);if($value===false||$value<$min||$value>$max)bail('مقدار عددی خارج از محدوده است.');return $value;}
-function today(): string {return gmdate('Y-m-d');}
+function today(): string {return (new DateTimeImmutable('now',new DateTimeZone('Asia/Tehran')))->format('Y-m-d');}
 function validDate(string $s): bool {$d=DateTimeImmutable::createFromFormat('!Y-m-d',$s);return $d!==false&&$d->format('Y-m-d')===$s;}
 function inputDate(string $k): string {$s=req($k,today());if(!validDate($s))bail('تاریخ باید میلادی و به صورت YYYY-MM-DD باشد.');return $s;}
 function currency(): string {$v=req('currency','IRR');if(!in_array($v,['IRR','USD','EUR','AED'],true))bail('ارز نامعتبر است.');return $v;}
@@ -221,7 +221,7 @@ try {
         verifyCsrf();
         $action=req('action');
         $accountActions=['journal','journal_reverse','invoice','payment','account'];
-        if($action!=='password_change') authorize(in_array($action,$accountActions,true)?'account':($action==='user'?'users':'manage'));
+        if($action!=='password_change') authorize(in_array($action,$accountActions,true)?'account':(in_array($action,['user','user_update'],true)?'users':'manage'));
         if($action==='password_change'){
             $previous=req('previous_password');
             $new=req('new_password');
@@ -349,6 +349,24 @@ try {
         } elseif($action==='user'){
             $username=req('username');$pass=req('password');$newRole=req('role');if(!preg_match('/^[A-Za-z0-9_]{5,40}$/',$username)||strlen($pass)<14||!in_array($newRole,['admin','accountant','manager','viewer'],true))bail('کاربر، گذرواژه یا نقش نامعتبر است.');
             auditedCreate($db,'INSERT INTO users(username,password_hash,role) VALUES(?,?,?)',[$username,password_hash($pass,PASSWORD_DEFAULT),$newRole],'user');
+        } elseif($action==='user_update'){
+            // The admin desk must be able to revoke access immediately without
+            // deleting identity/audit history or accidentally locking out its owner.
+            $target=positiveId('user_id');$newRole=req('role');$active=req('active');
+            if(!in_array($newRole,['admin','accountant','manager','viewer'],true)||!in_array($active,['0','1'],true))bail('سطح دسترسی یا وضعیت حساب نامعتبر است.');
+            if($target===actor())bail('تغییر نقش یا غیرفعال‌سازی حساب خود مدیر از این قسمت مجاز نیست.',403);
+            $db->exec('BEGIN IMMEDIATE');
+            try{
+                $current=q($db,'SELECT id,role,active FROM users WHERE id=?',[$target]);
+                if(!$current)bail('کاربر موردنظر وجود ندارد.');
+                if($current[0]['role']==='admin'&&(int)$current[0]['active']===1&&($newRole!=='admin'||$active==='0')){
+                    $otherAdmins=(int)one($db,"SELECT COUNT(*) FROM users WHERE id<>? AND role='admin' AND active=1",[$target]);
+                    if($otherAdmins<1)bail('آخرین مدیر فعال باید حفظ شود.',403);
+                }
+                $db->prepare('UPDATE users SET role=?,active=? WHERE id=?')->execute([$newRole,(int)$active,$target]);
+                audit($db,'update','user-access',$target);
+                $db->exec('COMMIT');
+            }catch(Throwable $e){try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}throw $e;}
         } else bail('عملیات مجاز نیست.',403);
         $_SESSION['flash']='عملیات با موفقیت ثبت شد.';
         header('Location: ?page='.rawurlencode($page),true,303);exit;
@@ -358,8 +376,23 @@ try {
     echo '<h1>'.esc(APP_TITLE).'</h1><p class="muted">اطلاعات خصوصی شرکت. واحد مبالغ مطابق کد ارز انتخابی است؛ اسناد مالی ثبت‌شده حذف یا ویرایش نمی‌شوند.</p>';
     if($page==='dashboard'){
         $stats=['اسناد حسابداری'=>(int)one($db,'SELECT COUNT(*) FROM journal_entries'),'فاکتورها'=>(int)one($db,'SELECT COUNT(*) FROM invoices'),'اشخاص'=>(int)one($db,'SELECT COUNT(*) FROM parties'),'کالاها'=>(int)one($db,'SELECT COUNT(*) FROM inventory'),'کارکنان'=>(int)one($db,'SELECT COUNT(*) FROM employees'),'پروژه‌ها'=>(int)one($db,'SELECT COUNT(*) FROM projects')];
-        echo '<div class="grid">';foreach($stats as $name=>$value)echo '<div class="card"><div class="metric">'.esc($value).'</div><h3>'.esc($name).'</h3></div>';
-        echo '</div><section><h2>وضعیت بهره‌برداری</h2><p>این دفتر برای ثبت داخلی حسابداری، خرید و فروش، انبار، پرسنل، مکاتبات و پروژه‌هاست. ثبت پرسنل به معنی استخدام قطعی، ثبت سند به معنی تسویه بانکی و ثبت پروژه به معنی اجرای فیزیکی نیست. این پنل به بانک یا سامانه پرداخت زنده متصل نیست.</p></section>';
+        echo '<div class="grid">';foreach($stats as $name=>$value)echo '<div class="card"><div class="metric">'.esc($value).'</div><h3>'.esc($name).'</h3></div>';echo '</div>';
+        $exposures=q($db,"SELECT i.currency,
+            SUM(CASE WHEN i.kind='sale' THEN i.amount-COALESCE(p.paid,0) ELSE 0 END) receivables,
+            SUM(CASE WHEN i.kind='purchase' THEN i.amount-COALESCE(p.paid,0) ELSE 0 END) payables,
+            SUM(CASE WHEN i.kind='sale' AND i.due_date<? THEN i.amount-COALESCE(p.paid,0) ELSE 0 END) overdue_receivables,
+            SUM(CASE WHEN i.kind='purchase' AND i.due_date<? THEN i.amount-COALESCE(p.paid,0) ELSE 0 END) overdue_payables
+            FROM invoices i LEFT JOIN (SELECT invoice_id,SUM(amount) paid FROM invoice_payments GROUP BY invoice_id) p ON p.invoice_id=i.id
+            GROUP BY i.currency ORDER BY i.currency",[today(),today()]);
+        echo '<section><h2>مطالبات و تعهدات پرداخت‌نشده</h2><p class="muted">فقط بر پایه فاکتورها و دریافت/پرداخت‌های ثبت‌شده داخلی؛ این ارقام با بانک یا اسناد تسویه خارجی تطبیق داده نشده‌اند. سررسیدها بر اساس تاریخ ثبت‌شده و روز ایران هستند. مبالغ به واحد ارز هر ردیف نمایش داده می‌شوند.</p>';
+        if(!$exposures){echo '<div class="notice">هنوز فاکتوری ثبت نشده است؛ مانده قابل محاسبه وجود ندارد.</div>';}
+        else{
+            echo '<div class="scroll"><table><tr><th>ارز</th><th>مانده مطالبات</th><th>مطالبات سررسیدگذشته</th><th>مانده بدهی‌ها</th><th>بدهی‌های سررسیدگذشته</th></tr>';
+            foreach($exposures as $r)echo '<tr><td>'.esc($r['currency']).'</td><td>'.money((int)$r['receivables']).'</td><td>'.money((int)$r['overdue_receivables']).'</td><td>'.money((int)$r['payables']).'</td><td>'.money((int)$r['overdue_payables']).'</td></tr>';
+            echo '</table></div>';
+        }
+        echo '</section>';
+        echo '<section><h2>وضعیت بهره‌برداری</h2><p>این دفتر برای ثبت داخلی حسابداری، خرید و فروش، انبار، پرسنل، مکاتبات و پروژه‌هاست. ثبت پرسنل به معنی استخدام قطعی، ثبت سند به معنی تسویه بانکی و ثبت پروژه به معنی اجرای فیزیکی نیست. این پنل به بانک یا سامانه پرداخت زنده متصل نیست.</p></section>';
         $services=['دفتر مالی داخلی'=>true,'فروشگاه داخلی'=>function_exists('zmStoreDb'),'ایجنت‌های سایت'=>function_exists('zmAgentDb'),'گزارش فارسی ساعتی'=>is_file(__DIR__.'/chatgpt_reports.php')&&!is_link(__DIR__.'/chatgpt_reports.php'),'دفتر مصوبات'=>is_file($private.'/approvals_snapshot.json')&&!is_link($private.'/approvals_snapshot.json')];
         echo '<section><h2>پایش اجزای میز مدیریت</h2><p class="muted">این وضعیت فقط وجود ماژول را نشان می‌دهد؛ سلامت کامل عملیات، فروش واقعی و اتصال بانکی جداگانه باید بررسی شود.</p><div class="grid">';
         foreach($services as $label=>$available)echo '<div class="card"><h3>'.esc($label).'</h3><p>'.($available?'ماژول موجود است':'ماژول یا منبع نصب نشده است').'</p></div>';
@@ -451,7 +484,18 @@ try {
         formBegin('password_change');
         echo '<label>گذرواژه فعلی</label><input type="password" name="previous_password" required autocomplete="current-password"><label>گذرواژه جدید (دست‌کم ۱۶ نویسه)</label><input type="password" name="new_password" required minlength="16" autocomplete="new-password"><label>تکرار گذرواژه جدید</label><input type="password" name="new_password_confirmation" required minlength="16" autocomplete="new-password"><button>ذخیره گذرواژه جدید</button></form></section>';
     } elseif($page==='users'){
-        authorize('users');echo '<section><h2>دسترسی کاربران</h2><div class="scroll"><table><tr><th>نام کاربری</th><th>سطح دسترسی</th><th>فعال</th></tr>';foreach(q($db,'SELECT username,role,active FROM users ORDER BY id') as $r)echo '<tr><td>'.esc($r['username']).'</td><td>'.esc($r['role']).'</td><td>'.($r['active']?'بله':'خیر').'</td></tr>';echo '</table></div></section><section><h2>ایجاد کاربر</h2>';formBegin('user');echo '<div class="form"><div><label>نام کاربری (انگلیسی)</label><input name="username" required></div><div><label>رمز دست‌کم ۱۴ نویسه</label><input name="password" type="password" required minlength="14"></div><div><label>نقش</label><select name="role"><option value="viewer">مشاهده‌گر</option><option value="manager">مدیر</option><option value="accountant">حسابدار</option><option value="admin">مدیر کل</option></select></div></div><button>ایجاد حساب کاربری</button></form></section>';
+        authorize('users');echo '<section><h2>دسترسی کاربران</h2><p class="muted">تغییر نقش یا غیرفعال‌سازی حساب دیگران فوراً در درخواست بعدی اعمال می‌شود. تاریخچه اسناد و ردپای کاربر حفظ می‌گردد. تغییر حساب مدیرِ واردشده از این جدول مجاز نیست.</p><div class="scroll"><table><tr><th>نام کاربری</th><th>وضعیت فعلی</th><th>ویرایش کنترل‌شده</th></tr>';
+        foreach(q($db,'SELECT id,username,role,active FROM users ORDER BY id') as $r){
+            echo '<tr><td>'.esc($r['username']).'</td><td>'.esc($r['role']).' · '.((int)$r['active']?'فعال':'غیرفعال').'</td><td>';
+            if((int)$r['id']===actor())echo 'حساب جاری — قفل تغییر';
+            else{
+                formBegin('user_update');echo '<input type="hidden" name="user_id" value="'.(int)$r['id'].'"><label>نقش جدید</label><select name="role">';
+                foreach(['viewer'=>'مشاهده‌گر','manager'=>'مدیر','accountant'=>'حسابدار','admin'=>'مدیر کل'] as $key=>$label)echo '<option value="'.$key.'"'.($key===$r['role']?' selected':'').'>'.$label.'</option>';
+                echo '</select><label>وضعیت</label><select name="active"><option value="1"'.((int)$r['active']===1?' selected':'').'>فعال</option><option value="0"'.((int)$r['active']===0?' selected':'').'>غیرفعال</option></select><button>ثبت تغییر دسترسی</button></form>';
+            }
+            echo '</td></tr>';
+        }
+        echo '</table></div></section><section><h2>ایجاد کاربر</h2>';formBegin('user');echo '<div class="form"><div><label>نام کاربری (انگلیسی)</label><input name="username" required></div><div><label>رمز دست‌کم ۱۴ نویسه</label><input name="password" type="password" required minlength="14"></div><div><label>نقش</label><select name="role"><option value="viewer">مشاهده‌گر</option><option value="manager">مدیر</option><option value="accountant">حسابدار</option><option value="admin">مدیر کل</option></select></div></div><button>ایجاد حساب کاربری</button></form></section>';
     } else{http_response_code(404);echo '<p class="notice danger">صفحه موجود نیست.</p>';}
     layoutEnd();
 }catch(Throwable $e){
