@@ -144,9 +144,17 @@ class StrictSerialTests(unittest.TestCase):
             self.assertEqual(result["stages_executed"], 0)
             with patch.object(cycle, "certified_finished", return_value=True), patch.object(
                     cycle, "independently_reviewed", return_value=True):
+                waiting_handoff = cycle.tick(root, ops, disk_usage=lambda _:Disk())
+            self.assertEqual(waiting_handoff["active_order_after_cycle"], "WO-00000601")
+            self.assertEqual(waiting_handoff["stage_results"]["private_store_handoff"],
+                             "AWAITING_SIGNED_PRIVATE_STORE_RECEIPT")
+            with patch.object(cycle, "certified_finished", return_value=True), patch.object(
+                    cycle, "independently_reviewed", return_value=True), patch.object(
+                    cycle, "store_handoff_verified", return_value=True):
                 released = cycle.tick(root, ops, disk_usage=lambda _:Disk())
             self.assertEqual(released["active_order_after_cycle"], "WO-00000602")
             self.assertTrue(released["independent_chatgpt_review_approved"])
+            self.assertTrue(released["private_store_handoff_verified"])
             # An arbitrary claim without real governance does not release.
             forged = root / "product-lifecycle/approved-finished-goods/WO-00000602"
             forged.mkdir(parents=True)
@@ -175,9 +183,11 @@ class StrictSerialTests(unittest.TestCase):
                     "tests_performed":["independent recalculation"],"blocking_findings":[]}),
                     encoding="utf8")
             key = "ab" * 32
+            store_key = "cd" * 32
             keys = root / "product-lifecycle/reviewer-keys.json"
             keys.write_text(json.dumps({"schema":"saeit.factory.reviewer-keys.v1",
-                "reviewers":{"chatgpt-independent":key}}),encoding="utf8")
+                "reviewers":{"chatgpt-independent":key,
+                             "store-handoff-operator":store_key}}),encoding="utf8")
             keys.chmod(0o600)
 
             def file_hash(path):
@@ -203,7 +213,7 @@ class StrictSerialTests(unittest.TestCase):
                 "decision":"approved",
                 "producer_id":"factory-worker",
                 "reviewer_id":"chatgpt-independent",
-                "reviewer_role":"qualified_specialist",
+                "reviewer_role":"ai_independent_technical_reviewer",
                 "artifact_sha256":file_hash(archive / "product.zip"),
                 "passport_sha256":file_hash(passport),
                 "report_sha256":file_hash(report),
@@ -224,6 +234,34 @@ class StrictSerialTests(unittest.TestCase):
                 encoding="utf8")
             (archive / "product.zip").write_bytes(b"changed-artifact")
             self.assertFalse(cycle.independently_reviewed(root, ops, work_order, reviewer))
+            (archive / "product.zip").write_bytes(b"only-a-test-artifact")
+            store_receipt = audit / "store-receipt.json"
+            store_receipt.write_text(json.dumps({
+                "order":work_order,"source_artifact_sha256":file_hash(archive / "product.zip"),
+                "state":"received_private_in_store"}),encoding="utf8")
+            handoff = {
+                "schema":cycle.STORE_HANDOFF_SCHEMA,
+                "order":work_order,
+                "state":"received_private_in_store",
+                "store_domain":"zomorodmelal.ir",
+                "reviewer_id":"store-handoff-operator",
+                "reviewer_role":"human_approver",
+                "artifact_sha256":file_hash(archive / "product.zip"),
+                "independent_review_sha256":file_hash(receipt),
+                "store_receipt_sha256":file_hash(store_receipt),
+                "public_enabled":False,
+                "payment_recorded":False,
+            }
+            handoff_file = audit / "store-handoff.json"
+            handoff_file.write_text(json.dumps(handoff),encoding="utf8")
+            self.assertFalse(cycle.store_handoff_verified(root, ops, work_order, reviewer))
+            handoff["reviewer_signature"] = hmac.new(
+                bytes.fromhex(store_key), governance_module.signed_review_message(handoff),
+                hashlib.sha256).hexdigest()
+            handoff_file.write_text(json.dumps(handoff),encoding="utf8")
+            self.assertTrue(cycle.store_handoff_verified(root, ops, work_order, reviewer))
+            store_receipt.write_text(store_receipt.read_text()+"tampered",encoding="utf8")
+            self.assertFalse(cycle.store_handoff_verified(root, ops, work_order, reviewer))
 
     def test_budget_does_not_create_false_pass(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -306,12 +344,14 @@ class StrictSerialTests(unittest.TestCase):
                                          "active_order":"WO-00000800", "index":199,
                                          "ticks":19}))
             with patch.object(cycle, "certified_finished", return_value=True), patch.object(
-                    cycle, "independently_reviewed", return_value=True):
+                    cycle, "independently_reviewed", return_value=True), patch.object(
+                    cycle, "store_handoff_verified", return_value=True):
                 done = cycle.tick(root,ops,disk_usage=lambda _:Disk())
             self.assertTrue(done["certified_to_private_finished_goods"])
             self.assertIsNone(done["active_order_after_cycle"])
             with patch.object(cycle, "certified_finished", return_value=True), patch.object(
-                    cycle, "independently_reviewed", return_value=True):
+                    cycle, "independently_reviewed", return_value=True), patch.object(
+                    cycle, "store_handoff_verified", return_value=True):
                 final=cycle.tick(root,ops,dry_run=True)
             self.assertTrue(final["all_complete"])
 
