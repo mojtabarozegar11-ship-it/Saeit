@@ -27,6 +27,12 @@ function zmPmClean(string $s,int $max=800):string {
         bail('متن لازم است و نباید دارای نویسه کنترلی یا طول غیرمجاز باشد.',422);
     return $s;
 }
+function zmPmIsArchiveOnly(string $title):bool {
+    return preg_match('/\\|\\s*ردشده\\s*(?:-|؛|\\|)/u',$title)===1;
+}
+function zmPmIsApproved(string $title):bool {
+    return preg_match('/\\|\\s*مصوب\\s*\\|/u',$title)===1;
+}
 function zmPmAllowed(string $current):array {
     return match($current) {
         'planned'=>['active','paused'],
@@ -50,10 +56,13 @@ function zmPmHandle(PDO $db,string $action):void {
         $check->execute([actor()]);$member=$check->fetch(PDO::FETCH_ASSOC);
         if(!$member||(int)$member['active']!==1||!in_array($member['role'],['admin','manager'],true))
             bail('مجوز مدیریت پروژه معتبر نیست.',403);
-        $find=$db->prepare('SELECT id,state FROM projects WHERE id=?');
+        $find=$db->prepare('SELECT id,state,title FROM projects WHERE id=?');
         $find->execute([$id]);$project=$find->fetch(PDO::FETCH_ASSOC);
         if(!$project)bail('پروژه یافت نشد.',404);
+        $archived=zmPmIsArchiveOnly((string)$project['title']);
+        $approved=zmPmIsApproved((string)$project['title']);
         if($action==='project_transition'){
+            if(!$approved)bail('پروژه بدون مصوبه صریح اجازه فعال‌سازی یا انتقال عملیاتی ندارد.',409);
             $expected=req('expected_state');
             $next=req('next_state');
             if($expected!==$project['state'] || !in_array($next,zmPmAllowed($expected),true))
@@ -68,6 +77,8 @@ function zmPmHandle(PDO $db,string $action):void {
             $audit->execute([actor(),'transition','project',$id]);
         } elseif($action==='project_update'){
             $cat=req('category');if(!in_array($cat,['progress','blocker','decision'],true))bail('نوع گزارش نامعتبر است.');
+            if($archived && $cat!=='decision')bail('برای پروژه ردشده تنها یادداشت تصمیم بایگانی مجاز است.',409);
+            if(!$approved && $cat==='progress')bail('گزارش پیشرفت اجرایی برای پرونده فاقد مصوبه مجاز نیست.',409);
             $description=zmPmClean(req('description'),1000);
             $pct=req('progress_pct');
             if($cat==='progress'){
@@ -98,7 +109,9 @@ function zmPmRender(PDO $db):void {
     foreach(q($db,'SELECT state,COUNT(*) n FROM projects GROUP BY state') as $r){
         if(isset($counts[$r['state']]))$counts[$r['state']]=(int)$r['n'];
     }
-    echo '<section><h2>داشبورد مدیریت پروژه‌های شرکت</h2><p class="muted">وضعیت هر پروژه ثبت اداری است؛ به‌تنهایی مجوز هزینه، استخدام، آغاز عملیات واقعی یا اثبات اتمام کار نیست.</p><div class="grid">';
+    $rejected=(int)one($db,"SELECT COUNT(*) FROM projects WHERE title LIKE '%| ردشده -%'");
+    echo '<section><h2>داشبورد مدیریت پروژه‌های شرکت</h2><p class="muted">وضعیت هر پروژه ثبت اداری است؛ به‌تنهایی مجوز هزینه، استخدام، آغاز عملیات واقعی یا اثبات اتمام کار نیست. پرونده‌های ردشده فقط بایگانی هستند.</p><div class="grid">';
+    echo '<div class="card"><div class="metric">'.$rejected.'</div>ردشده؛ فقط بایگانی</div>';
     foreach($counts as $key=>$n)echo '<div class="card"><div class="metric">'.$n.'</div>'.esc($labels[$key]).'</div>';
     if(function_exists('zmPiSchema')){
         zmPiSchema($db);
@@ -142,13 +155,13 @@ function zmPmRender(PDO $db):void {
         echo '<tr><td>'.(int)$p['id'].'</td><td>'.esc($p['title']).'</td><td>'.esc($p['owner']).'</td><td>'.esc($labels[$p['state']]??$p['state']).'</td><td>'.money((int)$p['budget']).'</td><td>'.($p['recorded_progress']===null?'ثبت نشده':(int)$p['recorded_progress'].'٪').'</td><td><a href="?page=project_links&amp;project_id='.(int)$p['id'].'">ارتباطات و اقدامات</a></td>';
         if($canManage){
             echo '<td>';
-            $choices=zmPmAllowed((string)$p['state']);
+            $choices=!zmPmIsApproved((string)$p['title'])?[]:zmPmAllowed((string)$p['state']);
             if($choices){
                 formBegin('project_transition');
                 echo '<input type="hidden" name="project_id" value="'.(int)$p['id'].'"><input type="hidden" name="expected_state" value="'.esc($p['state']).'"><select name="next_state" aria-label="وضعیت جدید پروژه">';
                 foreach($choices as $next)echo '<option value="'.esc($next).'">'.esc($labels[$next]).'</option>';
                 echo '</select><input name="reason" maxlength="800" required placeholder="دلیل مستند تغییر وضعیت"><button>ثبت تصمیم</button></form>';
-            } else echo '<span class="muted">مختومه؛ تغییر وضعیت مجاز نیست</span>';
+            } else echo '<span class="muted">'.(zmPmIsArchiveOnly((string)$p['title'])?'ردشده؛ فقط بایگانی':(!zmPmIsApproved((string)$p['title'])?'فاقد مصوبه؛ فقط بررسی اداری':'مختومه؛ تغییر وضعیت مجاز نیست')).'</span>';
             echo '</td>';
         }
         echo '</tr>';
