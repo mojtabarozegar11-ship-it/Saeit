@@ -117,6 +117,7 @@ jobs:
             else
               echo 'PHP83_SQLITE_RUNTIME_READY=no'
               "$php83" -r 'foreach(["pdo_sqlite","sqlite3"] as $ext){$name=strtoupper($ext);echo "PHP83_".$name."_LOADED=".(extension_loaded($ext)?"yes":"no")."\n";$so=rtrim(ini_get("extension_dir"),"/")."/".$ext.".so";echo "PHP83_".$name."_SHARED_LIBRARY_PRESENT=".(is_file($so)?"yes":"no")."\n";}'
+              "$php83" -r 'echo "PHP83_SQLITE3_CLASS=".(class_exists("SQLite3")?"yes":"no")."\n";echo "PHP83_PDO_DRIVER_SQLITE=".(class_exists("PDO")&&in_array("sqlite",PDO::getAvailableDrivers(),true)?"yes":"no")."\n";echo "PHP83_SQLITE3_CLASS_DISABLED=".(in_array("SQLite3",array_map("trim",explode(",",ini_get("disable_classes")?: "")),true)?"yes":"no")."\n";'
             fi
           else
             echo 'PHP83_CLI_AVAILABLE=no'
