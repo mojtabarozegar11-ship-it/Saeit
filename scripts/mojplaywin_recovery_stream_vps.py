@@ -249,6 +249,11 @@ if __name__=="__main__":
                           "source_kind": kind, "source_verified": True,
                           "plaintext_bytes": size, "release_permitted": False},
                          sort_keys=True), file=sys.stderr)
+    except BrokenPipeError:
+        # The isolated SQL consumer closed stdout. This does not implicate
+        # the already verified GPG archive; never log private SQL bytes.
+        print("PRIVATE_RESTORE_DOWNSTREAM_CLOSED_NO_RELEASE", file=sys.stderr)
+        raise SystemExit(1)
     except Exception:
         print("PRIVATE_RESTORE_STREAM_INTEGRITY_FAILURE", file=sys.stderr)
         raise SystemExit(1)
