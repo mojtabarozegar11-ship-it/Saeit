@@ -15,6 +15,12 @@ on:
       - "scripts/studio_raha_patch.py"
       - "templates/studio_raha/index.html"
   workflow_dispatch:
+    inputs:
+      confirm_release:
+        description: "Explicit owner-authorized release after backup, rollback and rights gates"
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -34,7 +40,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt && python -m pip install 'PyPDF2==3.0.1' && python -c 'import PyPDF2; assert PyPDF2.__version__ == "3.0.1"'
       - name: Django deployment checks
         env:
           SECRET_KEY: ci-secret-key
@@ -84,7 +90,7 @@ jobs:
           PY
 
   deploy:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirm_release == true && vars.S01_STUDIO_ROHAM_BACKUP_ROLLBACK_VERIFIED == 'true'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 30
