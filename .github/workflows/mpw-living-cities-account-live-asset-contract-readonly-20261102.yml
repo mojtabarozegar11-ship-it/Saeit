@@ -39,8 +39,8 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/farm-v4-ssh"
-          timeout 85s ssh -T -F "$d/config" host \\
-            'PYTHONDONTWRITEBYTECODE=1 python3 -B - check' \\
+          timeout 85s ssh -T -F "$d/config" host \
+            'PYTHONDONTWRITEBYTECODE=1 python3 -B - check' \
             < scripts/mpw_living_cities_account_asset_candidate.py
           echo 'MPW_GAME_ACCOUNT_ASSET_LIVE_READONLY_VERIFIED=YES'
           echo 'MPW_GAME_PUBLISH_PERFORMED=NO'
