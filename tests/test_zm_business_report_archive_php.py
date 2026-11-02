@@ -89,6 +89,8 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr[-500:])
         self.assertIn("1 / ۲۰", result.stdout)
         self.assertIn("ZM05-20261102-A01", result.stdout)
+        self.assertNotIn("ZM_ACTIONS_V1_START", result.stdout)
+        self.assertIn("فهرست ساختاریافتهٔ اقدامات در جدول اتاق فرمان", result.stdout)
         self.assertIn("&lt;خطر&gt;", result.stdout)
         self.assertNotIn("<خطر>", result.stdout)
         self.assertIn("نیازمند راستی‌آزمایی", result.stdout)
