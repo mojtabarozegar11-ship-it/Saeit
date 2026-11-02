@@ -13,30 +13,39 @@ declare(strict_types=1);
 function zmBusinessActionReceipt(string $body,string $reportCode):array {
     $none=['state'=>'missing','actions'=>[]];
     if(!str_contains($body,'ZM_ACTIONS_V1_START'))return $none;
+    // A partial or repeated marker cannot be treated as one valid receipt.
+    if(substr_count($body,'ZM_ACTIONS_V1_START')!==1||
+       substr_count($body,'ZM_ACTIONS_V1_END')!==1)return ['state'=>'invalid','actions'=>[]];
     $matches=[];
     $found=preg_match_all('/(?:^|\n)ZM_ACTIONS_V1_START\r?\n([^\x00]{1,7800}?)\r?\nZM_ACTIONS_V1_END(?=\r?\n|$)/u',$body,$matches);
     if($found!==1)return ['state'=>'invalid','actions'=>[]];
     try {$data=json_decode($matches[1][0],true,16,JSON_THROW_ON_ERROR);}
     catch(Throwable $e){return ['state'=>'invalid','actions'=>[]];}
-    if(!is_array($data)||($data['version']??null)!==1||
+    if(!is_array($data)||array_is_list($data)||($data['version']??null)!==1||
        ($data['report_code']??null)!==$reportCode||
        !isset($data['actions'])||!is_array($data['actions'])||
        !array_is_list($data['actions'])||count($data['actions'])>20){
         return ['state'=>'invalid','actions'=>[]];
     }
     $ids=[];$actions=[];
+    $numbered=preg_match('/^05-[0-9]{4,8}$/D',$reportCode)===1 &&
+              (int)substr($reportCode,3)>=18;
     foreach($data['actions'] as $item){
-        if(!is_array($item))return ['state'=>'invalid','actions'=>[]];
+        if(!is_array($item)||array_is_list($item))return ['state'=>'invalid','actions'=>[]];
         $id=$item['id']??null;$title=$item['title_fa']??null;
         $status=$item['status']??null;$url=$item['evidence_url']??null;
         $impact=$item['impact_fa']??'';
         if(!is_string($id)||!preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/D',$id)||isset($ids[$id])||
+           ($numbered&&!preg_match('/^ZM'.preg_quote($reportCode,'/').'-A(?:0[1-9]|1[0-9]|20)$/D',$id))||
            !is_string($title)||strlen($title)<8||strlen($title)>350||
-           !is_string($impact)||strlen($impact)>500||
+           preg_match('/[\x{0600}-\x{06FF}]/u',$title)!==1||
+           !is_string($impact)||strlen($impact)<1||strlen($impact)>500||
+           preg_match('/[\x{0600}-\x{06FF}]/u',$impact)!==1||
            !in_array($status,['completed','partial','blocked','not_started'],true)||
            !is_string($url)||strlen($url)>350||
-           ($url!==''&&!preg_match('~^https://github\.com/mojtabarozegar11-ship-it/Saeit/(?:commit/[a-f0-9]{40}|actions/runs/[1-9][0-9]*|pull/[1-9][0-9]*|issues/[1-9][0-9]*(?:#issuecomment-[1-9][0-9]*)?)$~D',$url))||
-           ($status==='completed'&&$url==='')){
+           ($url!==''&&!preg_match('~^https://github\\.com/mojtabarozegar11-ship-it/Saeit/(?:commit/[a-f0-9]{40}|actions/runs/[1-9][0-9]*|pull/[1-9][0-9]*|issues/[1-9][0-9]*(?:#issuecomment-[1-9][0-9]*)?)$~D',$url))||
+           ($status==='completed'&&$url==='')||
+           ($status!=='completed'&&$url!=='')){
             return ['state'=>'invalid','actions'=>[]];
         }
         $ids[$id]=true;
@@ -44,7 +53,6 @@ function zmBusinessActionReceipt(string $body,string $reportCode):array {
     }
     return ['state'=>'valid','actions'=>$actions];
 }
-
 
 /**
  * Optional derived, non-financial action index. The report source remains
