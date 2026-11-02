@@ -48,3 +48,14 @@ jobs:
           cp content/zomorod-business/app.php "$HOME/.private/zomorod-business/app.php"
           cp content/zomorod-business/index.php "$HOME/public_html/business/index.php"
           python3 scripts/zomorod_business_synthetic_qa.py "$GITHUB_SHA"
+      - name: Verify real numbered reports without production writes
+        env:
+          ZM_GITHUB_REPORTS_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PYTHONPATH=. python3 scripts/zomorod_chatgpt_report_snapshot.py --pages 1 > "$RUNNER_TEMP/zm-report-probe.log"
+          grep -Fq 'ZM_CHATGPT_SNAPSHOT=PREVIEW_ONLY' "$RUNNER_TEMP/zm-report-probe.log"
+          grep -Fq 'FINANCIAL_DB_TOUCHED=no' "$RUNNER_TEMP/zm-report-probe.log"
+          echo 'ZM_REPORT_SOURCE_READONLY=passed'
+          grep -E '^VALID_NUMBERED_REPORTS=[0-9]+
+ "$RUNNER_TEMP/zm-report-probe.log"
