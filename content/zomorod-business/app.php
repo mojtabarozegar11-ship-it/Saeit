@@ -12,6 +12,9 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; img-src \'self\' data:; form-action \'self\'; base-uri \'none\'; frame-ancestors \'none\'');
+// Hold the complete response until routing succeeds, so errors retain real HTTP status codes.
+$zmBusinessBufferLevel=ob_get_level();
+ob_start();
 if (extension_loaded('session') && !(PHP_SAPI==='cli' && realpath((string)($_SERVER['SCRIPT_FILENAME']??''))===__FILE__)) {
     session_name('ZM_BUSINESS');
     session_set_cookie_params(['lifetime'=>0, 'path'=>'/business/', 'secure'=>true, 'httponly'=>true, 'samesite'=>'Strict']);
@@ -452,6 +455,8 @@ try {
     } else{http_response_code(404);echo '<p class="notice danger">صفحه موجود نیست.</p>';}
     layoutEnd();
 }catch(Throwable $e){
+    // Discard partial authenticated tables/forms before emitting a clean error response.
+    while(ob_get_level()>$zmBusinessBufferLevel)ob_end_clean();
     $code=http_response_code();if($code<400)http_response_code(500);
     error_log('ZM BUSINESS ERROR ['.get_class($e).']: '.$e->getMessage());
     if(!headers_sent())header('Content-Type: text/html; charset=utf-8');
