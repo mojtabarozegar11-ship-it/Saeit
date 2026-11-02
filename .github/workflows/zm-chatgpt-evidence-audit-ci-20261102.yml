@@ -5,6 +5,7 @@ on:
       - 'scripts/zm_chatgpt_evidence_verify.py'
       - 'scripts/zm_chatgpt_action_index.py'
       - 'tests/test_zm_chatgpt_evidence_verify.py'
+      - 'tests/test_zm_business_report_archive_php.py'
       - 'content/zomorod-business/chatgpt_reports.php'
       - '.github/workflows/zm-chatgpt-evidence-audit-ci-20261102.yml'
   push:
@@ -13,6 +14,7 @@ on:
     paths:
       - 'scripts/zm_chatgpt_evidence_verify.py'
       - 'tests/test_zm_chatgpt_evidence_verify.py'
+      - 'tests/test_zm_business_report_archive_php.py'
       - 'content/zomorod-business/chatgpt_reports.php'
       - '.github/workflows/zm-chatgpt-evidence-audit-ci-20261102.yml'
 permissions:
@@ -38,6 +40,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_zm_chatgpt_evidence_verify.py' -v
           python3 -m unittest discover -s tests -p 'test_zm_chatgpt_action_index.py' -v
+          python3 -m unittest discover -s tests -p 'test_zm_business_report_archive_php.py' -v
           php -l content/zomorod-business/chatgpt_reports.php
           echo 'FINANCIAL_DB_TOUCHED=no'
           echo 'PRODUCTION_DEPLOY_PERFORMED=no'
