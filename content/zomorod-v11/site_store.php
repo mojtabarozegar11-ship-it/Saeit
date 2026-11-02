@@ -38,6 +38,25 @@ function zmStorePublicDb(string $private):PDO {
  $db->exec('PRAGMA query_only=ON');
  return $db;
 }
+/** Only advertise an enabled free artifact while its exact on-disk release matches the ledger. */
+function zmStoreVerifiedFreeArtifact(string $home,string $url,string $sha):bool {
+ $parts=[];
+ if(!preg_match('#\\A/store/free-products/([a-z0-9-]+)/index\\.html\\z#',$url,$parts)
+    || !preg_match('/\\A[a-f0-9]{64}\\z/',$sha))return false;
+ $public=$home.'/public_html';
+ $store=$public.'/store';
+ $free=$store.'/free-products';
+ $product=$free.'/'.$parts[1];
+ $file=$product.'/index.html';
+ foreach([$home,$public,$store,$free,$product] as $folder){
+  if(is_link($folder)||!is_dir($folder))return false;
+ }
+ if(is_link($file)||!is_file($file)||!is_readable($file))return false;
+ $size=@filesize($file);
+ if($size===false||$size<1||$size>2097152)return false;
+ $actual=@hash_file('sha256',$file);
+ return is_string($actual)&&hash_equals($sha,$actual);
+}
 function zmStoreHandle(PDO $db,string $action):void{
  if($action==='product_create'){
   $sku=req('sku');$title=req('title');$body=req('description');$amount=req('price_irr');
@@ -89,8 +108,8 @@ function zmStoreRender(PDO $db):void {
  }
  echo '</table></div></section>';
  echo '<section><h2>محصولات دیجیتال رایگان تأییدشده</h2><p>عرضه عمومی فقط پس از آزمون فایل، کنترل SHA-256 و ثبت مجوز انتشار انجام می‌شود. این بخش به درگاه پرداخت متصل نیست.</p><div class="scroll"><table><tr><th>شناسه</th><th>محصول</th><th>هش</th><th>مجوز</th><th>نمایش</th></tr>';
- foreach($db->query("SELECT sku,title,artifact_sha256,license_text,enabled FROM free_digital_products ORDER BY id DESC LIMIT 150")->fetchAll() as $item){
-  echo '<tr><td>'.esc((string)$item['sku']).'</td><td>'.esc((string)$item['title']).'</td><td><code>'.esc((string)$item['artifact_sha256']).'</code></td><td>'.esc((string)$item['license_text']).'</td><td>'.($item['enabled']?'عمومی':'تأییدنشده').'</td></tr>';
+ foreach($db->query("SELECT sku,title,download_path,artifact_sha256,license_text,enabled FROM free_digital_products ORDER BY id DESC LIMIT 150")->fetchAll() as $item){
+  echo '<tr><td>'.esc((string)$item['sku']).'</td><td>'.esc((string)$item['title']).'</td><td><code>'.esc((string)$item['artifact_sha256']).'</code></td><td>'.esc((string)$item['license_text']).'</td><td>'.((int)$item['enabled']===1 && trim((string)$item['license_text'])!=='' && zmStoreVerifiedFreeArtifact(dirname(__DIR__,2),(string)$item['download_path'],(string)$item['artifact_sha256'])?'فایل معتبر؛ قابل نمایش عمومی':'غیرفعال یا فایل/مجوز نامعتبر؛ عرضه عمومی تأییدنشده').'</td></tr>';
  }
  echo '</table></div></section>';
  zmFactoryDraftsPanel($db);
