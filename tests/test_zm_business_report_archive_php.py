@@ -48,11 +48,11 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
                 )
         self.archive.chmod(0o600)
 
-    def view(self, page="1", role="admin"):
+    def view(self, page="1", role="admin", cycle="05"):
         env = os.environ.copy()
         env.update({
             "FAKE_ROLE": role,
-            "FAKE_QUERY": json.dumps({"page": "chatgpt_reports", "p": page}),
+            "FAKE_QUERY": json.dumps({"page": "chatgpt_reports", "p": page, "cycle": cycle}),
             "FAKE_VIEWER": str(VIEWER),
             "FAKE_PRIVATE": str(self.folder),
         })
@@ -88,6 +88,46 @@ class PrivateReportArchivePhpTests(unittest.TestCase):
             db.execute("UPDATE metadata SET value='2099-01-01T00:00:00+00:00' WHERE name='last_checked_at'")
         invalid = self.view()
         self.assertIn("اعتبارسنجی آرشیو ناموفق بود", invalid.stdout)
+
+    def test_three_public_report_cycles_are_separate_and_readonly(self):
+        public = self.folder / "chatgpt_reports_public_cycles.sqlite3"
+        with sqlite3.connect(public) as db:
+            db.execute("CREATE TABLE reports (seq INTEGER PRIMARY KEY, report_code TEXT NOT NULL UNIQUE, comment_id INTEGER NOT NULL UNIQUE, occurred_at TEXT NOT NULL, body TEXT NOT NULL, evidence_url TEXT NOT NULL)")
+            db.execute("CREATE TABLE metadata (name TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            db.execute("PRAGMA user_version=1")
+            db.execute("INSERT INTO metadata VALUES ('source','github:mojtabarozegar11-ship-it/Saeit:issue:1514')")
+            db.execute("INSERT INTO metadata VALUES ('last_checked_at','2026-11-02T04:00:00+00:00')")
+            for cycle, number, cid in [("01", 13, 1013), ("02", 14, 2014), ("04", 14, 4014)]:
+                db.execute("INSERT INTO reports(report_code,comment_id,occurred_at,body,evidence_url) VALUES (?,?,?,?,?)",
+                           (f"{cycle}-{number:04d}", cid, "2026-11-02T04:00:00+00:00",
+                            "گزارش فارسی ساختگی از منبع عمومی <script>x()</script> بدون داده خصوصی.",
+                            f"https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514#issuecomment-{cid}"))
+        public.chmod(0o600)
+        dashboard=self.view()
+        self.assertEqual(dashboard.returncode, 0, dashboard.stderr[-200:])
+        self.assertIn("دفتر عمومی ۱۵۱۴ · متصل", dashboard.stdout)
+        self.assertIn("01-0013", dashboard.stdout)
+        self.assertIn("02-0014", dashboard.stdout)
+        self.assertIn("04-0014", dashboard.stdout)
+        for cycle, expected in [("01","01-0013"),("02","02-0014"),("04","04-0014")]:
+            page=self.view(cycle=cycle)
+            self.assertEqual(page.returncode, 0, page.stderr[-200:])
+            self.assertIn("<h3>"+expected+"</h3>", page.stdout)
+            self.assertIn("issues/1514#issuecomment-", page.stdout)
+            self.assertNotIn("<script>x()</script>", page.stdout)
+            self.assertIn("&lt;script&gt;x()&lt;/script&gt;", page.stdout)
+        missing=self.view(cycle="03")
+        self.assertIn("هنوز گزارش شماره‌دار از منبع معتبر دریافت نشده است", missing.stdout)
+        self.assertNotIn("<h3>01-0013</h3>", missing.stdout)
+        self.assertNotEqual(self.view(role="viewer", cycle="01").returncode, 0)
+        public.chmod(0o644)
+        blocked=self.view(cycle="01")
+        self.assertIn("اعتبارسنجی آرشیو ناموفق بود", blocked.stdout)
+        public.chmod(0o600)
+        with sqlite3.connect(public) as db:
+            db.execute("UPDATE metadata SET value='forged' WHERE name='source'")
+        rejected=self.view(cycle="04")
+        self.assertIn("اعتبارسنجی آرشیو ناموفق بود", rejected.stdout)
 
     def test_role_and_corrupt_permissions_are_closed(self):
         self.assertNotEqual(self.view(role="viewer").returncode, 0)
