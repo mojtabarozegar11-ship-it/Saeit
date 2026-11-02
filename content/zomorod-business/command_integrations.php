@@ -56,6 +56,32 @@ function zmCcScanBridges(PDO $control, int $uid, ?string $private=null): array {
         }
     }
 
+    // Project milestones feed only idempotent management follow-up tasks.
+    // Never change project status, approve expenses or create fake progress.
+    $projectDb = zmCcBridgeReadOnly($private.'/management.sqlite3');
+    if ($projectDb !== null) {
+        $exists=(int)$projectDb->query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='zm_project_milestones'")->fetchColumn();
+        if ($exists) {
+            $iranToday=(new DateTimeImmutable('now',new DateTimeZone('Asia/Tehran')))->format('Y-m-d');
+            $milestoneQuery=$projectDb->prepare("SELECT m.id,m.project_id,m.title,m.due_date
+                   FROM zm_project_milestones m
+                   WHERE m.due_date<? AND m.state IN ('todo','in_progress','blocked')
+                   ORDER BY m.due_date,m.id LIMIT 30");
+            $milestoneQuery->execute([$iranToday]);
+            foreach($milestoneQuery->fetchAll() as $mile){
+                ++$inspected;
+                $id=(int)$mile['id'];
+                $projectId=(int)$mile['project_id'];
+                if($id<1||$projectId<1)continue;
+                $queue('project:milestone-overdue:'.$id, 'projects',
+                    'پیگیری سررسید اقدام پروژه #'.$projectId.' — '.(string)$mile['title'],
+                    'سررسید: '.(string)$mile['due_date'].'؛ پیگیری در /business/?page=project_links&project_id='.$projectId.
+                    '؛ ثبت این وظیفه به معنای اتمام، شروع عملیات واقعی یا تخصیص اعتبار نیست.',
+                    'high');
+            }
+        }
+    }
+
     $flow = zmCcBridgeReadOnly($private.'/company-workflow.sqlite3');
     if ($flow !== null) {
         $items = $flow->query("SELECT id,category,risk FROM requests WHERE state='submitted' ORDER BY id DESC LIMIT 30")->fetchAll();
