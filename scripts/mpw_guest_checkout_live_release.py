@@ -27,8 +27,17 @@ def guard():
  wsgi=PUBLIC/'passenger_wsgi.py'
  if wsgi.is_symlink() or not wsgi.is_file() or "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
   fail('PASSENGER_APP_MISMATCH')
- for p in (APP/'tmp/restart.txt',):
-  if p.is_symlink() or not p.parent.is_dir(): fail('UNSAFE_RESTART_TARGET')
+ # PassengerAppRoot is the actual web process root, distinct from Django source.
+ # Reject deployment if cPanel's public .htaccess changes or goes missing.
+ htaccess=PUBLIC/'.htaccess'
+ if htaccess.is_symlink() or not htaccess.is_file() or htaccess.stat().st_size>100000:
+  fail('PASSENGER_ROOT_DIRECTIVE_UNSAFE')
+ roots=re.findall(r'(?im)^\s*PassengerAppRoot\s+([^\r\n#]+)',htaccess.read_text('utf8','replace'))
+ if len(roots)!=1 or roots[0].strip().strip('"').strip("'").rstrip('/') not in (str(PUBLIC),'mojplaywin.com'):
+  fail('PASSENGER_REGISTERED_ROOT_MISMATCH')
+ marker=PUBLIC/'tmp/restart.txt'
+ if marker.is_symlink() or marker.parent.is_symlink() or not marker.parent.is_dir():
+  fail('UNSAFE_PASSENGER_RESTART_TARGET')
  for key in ('pages','web'):
   p=TARGETS[key]
   if p.is_symlink() or not p.is_file() or p.parent.is_symlink() or APP not in p.parents: fail('UNSAFE_TARGET:'+key)
@@ -103,8 +112,11 @@ def atomic(path,raw,expected=None):
   if os.path.exists(tmp): os.unlink(tmp)
 
 def restart():
- marker=APP/'tmp/restart.txt'
- if marker.is_symlink(): fail('UNSAFE_RESTART_MARKER')
+ # cPanel .htaccess registers PUBLIC as PassengerAppRoot. Touching APP/tmp
+ # does not restart public workers, leaving the old guest handler live (404).
+ marker=PUBLIC/'tmp/restart.txt'
+ if marker.is_symlink() or marker.parent.is_symlink() or not marker.parent.is_dir():
+  fail('UNSAFE_PASSENGER_RESTART_MARKER')
  marker.touch()
 
 def publish(run,src_path):
