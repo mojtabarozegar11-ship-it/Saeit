@@ -83,6 +83,8 @@ try {
     $db->exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=12000;');
     foreach(['users','ledger_accounts','journal_entries','journal_lines','invoices','invoice_payments','audit_events'] as $required)
         if(!zbTableExists($db,$required))throw new RuntimeException('schema-incomplete');
+    if(!zbTableExists($db,'bank_receipt_claims'))throw new RuntimeException('claims-schema-unavailable');
+    require_once $private.'/bank_claims.php';
     $actor=zbRequireActor($db,$actorId);
     if(empty($_SESSION['csrf']))$_SESSION['csrf']=bin2hex(random_bytes(32));
     $csrf=(string)$_SESSION['csrf'];
@@ -115,62 +117,23 @@ try {
                 $audit->execute([$actorId,'configure','bank-subledgers']);
                 $db->exec('COMMIT');
             } catch(Throwable $e) {try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}throw $e;}
-        } elseif($action==='payment') {
+        } elseif($action==='claim') {
             if(!in_array($actor['role'],['admin','accountant'],true))zbReject('فقط حسابدار یا مدیر مجاز است.',403);
-            if($accounts===[] || !$registryReady)zbReject('ابتدا حساب‌های بانکی را تنظیم کنید.',409);
-            $invoiceText=zbPost('invoice_id');
-            if(!preg_match('/^[1-9][0-9]{0,17}$/D',$invoiceText))zbReject('شناسه فاکتور نامعتبر است.');
-            $invoiceId=filter_var($invoiceText,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
-            if($invoiceId===false)zbReject('شناسه فاکتور نامعتبر است.');
+            if($accounts===[] || !$registryReady)zbReject('حساب‌های بانکی آماده نیستند.',409);
             $bankCode=zbPost('bank_code');
             if(!in_array($bankCode,['1011','1012'],true))zbReject('حساب بانکی نامعتبر است.');
-            $bankId=(int)($accounts[$bankCode==='1011'?0:1]['id']);
-            $amount=zbCents(zbPost('amount'));
-            if($amount<1)zbReject('مبلغ باید مثبت باشد.');
-            $date=zbPost('date');
-            $when=DateTimeImmutable::createFromFormat('!Y-m-d',$date);
-            if(!$when || $when->format('Y-m-d')!==$date)zbReject('تاریخ نامعتبر است.');
-            $evidence=zbPost('evidence');
-            $length=function_exists('mb_strlen')?mb_strlen($evidence,'UTF-8'):strlen($evidence);
-            if($length<6||$length>100||preg_match('/[\x00-\x1f\x7f]/',$evidence))zbReject('شناسه مدرک باید ۶ تا ۱۰۰ نویسه و بدون کاراکتر کنترلی باشد.');
+            $bankId=(int)$accounts[$bankCode==='1011'?0:1]['id'];
             $db->exec('BEGIN IMMEDIATE');
             try {
                 $active=zbRequireActor($db,$actorId);
-                if(!in_array($active['role'],['admin','accountant'],true))zbReject('مجوز ثبت مالی لغو شده است.',403);
-                $already=$db->prepare('SELECT id FROM bank_payment_evidence WHERE bank_account_id=? AND evidence=? LIMIT 1');
-                $already->execute([$bankId,$evidence]);
-                if($already->fetchColumn()!==false)zbReject('این مرجع قبلاً برای همین بانک ثبت شده است.',409);
-                $s=$db->prepare("SELECT i.id,i.invoice_no,i.kind,i.currency,i.amount,
-                    COALESCE((SELECT SUM(p.amount) FROM invoice_payments p WHERE p.invoice_id=i.id),0) AS paid
-                    FROM invoices i WHERE i.id=?");
-                $s->execute([$invoiceId]);$invoice=$s->fetch();
-                if(!$invoice)zbReject('فاکتور وجود ندارد.',404);
-                if($invoice['currency']!=='IRR')zbReject('این دو حساب فقط برای فاکتور ریالی هستند.');
-                $remaining=(int)$invoice['amount']-(int)$invoice['paid'];
-                if($amount>$remaining)zbReject('مبلغ از مانده فاکتور بیشتر است.');
-                $docNo='BP-'.gmdate('YmdHis').'-'.strtoupper(bin2hex(random_bytes(6)));
-                $note='ثبت دستی و تأییدنشده '.$invoice['invoice_no'].' | '.($invoice['kind']==='sale'?'دریافت':'پرداخت').
-                    ' | حساب '.($bankCode==='1011'?'ملت':'شهر');
-                $db->prepare('INSERT INTO journal_entries(doc_no,doc_date,note,entered_by) VALUES(?,?,?,?)')
-                    ->execute([$docNo,$date,$note,$actorId]);
-                $entryId=(int)$db->lastInsertId();
-                $offsetCode=$invoice['kind']==='sale'?'1100':'2000';
-                $offset=$db->prepare('SELECT id FROM ledger_accounts WHERE code=? AND active=1');
-                $offset->execute([$offsetCode]);$offsetId=$offset->fetchColumn();
-                if($offsetId===false)zbReject('حساب مقابلِ فاکتور فعال نیست.',409);
-                $lines=$db->prepare('INSERT INTO journal_lines(entry_id,account_id,debit,credit,currency) VALUES(?,?,?,?,?)');
-                $sale=$invoice['kind']==='sale';
-                $lines->execute([$entryId,$bankId,$sale?$amount:0,$sale?0:$amount,'IRR']);
-                $lines->execute([$entryId,(int)$offsetId,$sale?0:$amount,$sale?$amount:0,'IRR']);
-                $db->prepare('INSERT INTO invoice_payments(invoice_id,amount,paid_on,entry_id,created_by) VALUES(?,?,?,?,?)')
-                    ->execute([$invoiceId,$amount,$date,$entryId,$actorId]);
-                $paymentId=(int)$db->lastInsertId();
-                $db->prepare('INSERT INTO bank_payment_evidence(payment_id,bank_account_id,evidence,created_by) VALUES(?,?,?,?)')
-                    ->execute([$paymentId,$bankId,$evidence,$actorId]);
-                $db->prepare('INSERT INTO audit_events(user_id,verb,subject,entity_id) VALUES(?,?,?,?)')
-                    ->execute([$actorId,'create','bank-invoice-payment',$paymentId]);
+                if(!in_array($active['role'],['admin','accountant'],true))zbReject('مجوز ثبت ادعا لغو شده است.',403);
+                zbClaimReceipt($db,$actorId,zbPost('invoice_id'),$bankId,
+                               zbPost('amount'),zbPost('date'),zbPost('evidence'));
                 $db->exec('COMMIT');
-            } catch(Throwable $e) {try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}throw $e;}
+            } catch(Throwable $e) {
+                try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}
+                throw $e;
+            }
         } else zbReject('عملیات ناشناخته است.',403);
         session_write_close();
         header('Location: /business/banking.php?saved=1',true,303);
@@ -195,6 +158,10 @@ try {
             JOIN invoice_payments p ON p.id=b.payment_id JOIN invoices i ON i.id=p.invoice_id
             ORDER BY b.id DESC LIMIT 100')->fetchAll();
     }
+    $claims=$db->query("SELECT c.id,c.amount,c.claimed_on,c.external_ref,c.status,
+         a.name AS bank_name,i.invoice_no
+         FROM bank_receipt_claims c JOIN ledger_accounts a ON a.id=c.bank_account_id
+         JOIN invoices i ON i.id=c.invoice_id ORDER BY c.id DESC LIMIT 150")->fetchAll();
     session_write_close();
 } catch(ZbUserError $e) {zbStop($e->getMessage(),$e->getCode());
 } catch(Throwable $e) {error_log('zm_banking_error: '.get_class($e));zbStop('دفتر بانکی در دسترس نیست؛ هیچ پرداختی ثبت نشد.',503);}
@@ -203,8 +170,8 @@ try {
 :root{font:16px/1.9 Tahoma,Arial;background:#102018;color:#f3ecd8}*{box-sizing:border-box}body{margin:0}main{max-width:1000px;margin:auto;padding:20px 16px 70px}header{background:#1c3223;border-bottom:1px solid #a9905c;padding:18px}a{color:#f3d289}h1,h2{color:#eacb87}.panel,.warning{background:#1b3023;border:1px solid #547053;border-radius:13px;padding:18px;margin:18px 0}.warning{border-color:#bc9251}label{display:block;margin-top:12px}input,select{font:inherit;padding:10px;color:#f9f2dc;background:#102018;border:1px solid #668368;border-radius:8px;max-width:100%;width:480px}button{padding:11px 20px;margin-top:16px;font:inherit;font-weight:bold;border:0;border-radius:8px;background:#e9cd83;color:#172418;cursor:pointer}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #47614d;text-align:right;padding:10px}.scroll{overflow-x:auto}.muted{color:#c2cdbc;font-size:14px}:focus-visible{outline:3px solid #f3d289;outline-offset:3px}
 </style></head><body><header><a href="/business/">میز مدیریت</a> · <a href="/business/insights.php">گزارش مالی</a> · <strong>دفتر حساب‌های بانکی</strong></header>
 <main><h1>بانک ملت و بانک شهر</h1>
-<div class="warning">ثبت‌های این صفحه صرفاً <strong>اظهار حسابداری</strong> هستند؛ موجودی واقعی، تسویه، وصول چک و موفقیت پرداخت بانکی را اثبات نمی‌کنند. هیچ تراکنش بانکی اجرا نمی‌شود.</div>
-<?php if(($_GET['saved']??'')==='1'): ?><div class="panel">عملیات در دفتر خصوصی ثبت شد.</div><?php endif; ?>
+<div class="warning"><strong>قانون ثبت مالی:</strong> اظهار واریز تنها به «صف بررسی» می‌رود و سند حسابداری یا تسویه فاکتور ایجاد نمی‌کند. موجودی واقعی و وصول چک باید مستقلاً از بانک احراز شود. این سامانه به درگاه بانکی متصل نیست.</div>
+<?php if(($_GET['saved']??'')==='1'): ?><div class="panel">اظهار واریز در صف بررسی ثبت شد؛ هیچ پول یا پرداختی تأیید و هیچ فاکتوری تسویه نشد.</div><?php endif; ?>
 <?php if($accounts===[]): ?>
 <div class="panel"><h2>راه‌اندازی کدینگ دو بانک</h2><p>حساب ۱۰۱۱: بانک ملت، جاری و دسته‌چک. حساب ۱۰۱۲: بانک شهر، پس‌انداز و کارت. این مرحله بدون ورود شماره حساب یا کارت، فقط دو زیرحساب دفتری می‌سازد و مانده افتتاحیه تعیین نمی‌کند.</p>
 <?php if($actor['role']==='admin'): ?><form method="post" action="/business/banking.php"><input type="hidden" name="csrf" value="<?=zbEsc($csrf)?>"><input type="hidden" name="action" value="configure"><button type="submit">ایجاد دو زیرحساب و دفتر رسیدها</button></form><?php endif; ?></div>
@@ -212,9 +179,9 @@ try {
 <div class="panel"><h2>مانده دفتری ثبت‌شده (ریال)</h2><div class="scroll"><table><tr><th>کد</th><th>حساب</th><th>مانده حسابداری</th></tr>
 <?php foreach($accounts as $account): ?><tr><td><?=zbEsc($account['code'])?></td><td><?=zbEsc($account['name'])?></td><td><?=zbMoney($balances[$account['code']]??0)?></td></tr><?php endforeach; ?></table></div><p class="muted">ارقام صرفاً گردش اسناد ثبت‌شده هستند؛ حساب ۱۰۱۰ عمومی جداست و برای تفکیک مانده‌های قبلی به بازبینی مستند نیاز دارد.</p></div>
 <?php if(in_array($actor['role'],['admin','accountant'],true)): ?>
-<section class="panel"><h2>ثبت دستی دریافت یا پرداختِ مستند فاکتور</h2><p class="muted">فقط فاکتور ریالی و تا سقف مانده پرداخت‌نشده. مرجع یکسان در همان بانک دوباره پذیرفته نمی‌شود. مدرک باید مستقل از بانک بررسی شود.</p>
+<section class="panel"><h2>ثبت اظهار دریافت یا پرداخت، بدون تسویه حسابداری</h2><p class="muted">فقط فاکتور ریالی و تا سقف مانده آزاد پس از کسر ادعاهای در انتظار. مرجع تکراری در همان بانک رد می‌شود. تا زمانی که اصالت رسید و تراکنش از بانک احراز نشده، فاکتور باز می‌ماند.</p>
 <form method="post" action="/business/banking.php" autocomplete="off">
-<input type="hidden" name="csrf" value="<?=zbEsc($csrf)?>"><input type="hidden" name="action" value="payment">
+<input type="hidden" name="csrf" value="<?=zbEsc($csrf)?>"><input type="hidden" name="action" value="claim">
 <label for="invoice">فاکتور</label><select name="invoice_id" id="invoice" required>
 <?php foreach($invoices as $invoice): $left=(int)$invoice['amount']-(int)$invoice['paid'];if($left<=0)continue; ?>
 <option value="<?=(int)$invoice['id']?>"><?=zbEsc($invoice['invoice_no'])?> · <?=$invoice['kind']==='sale'?'فروش':'خرید'?> · مانده <?=zbMoney($left)?> ریال</option>
@@ -223,7 +190,12 @@ try {
 <label for="amount">مبلغ ریالی (تا دو رقم اعشار مطابق دفتر)</label><input id="amount" name="amount" inputmode="decimal" required placeholder="100000.00">
 <label for="evidence">مرجع مستند انتقال یا رسید (۶ تا ۱۰۰ نویسه)</label><input id="evidence" name="evidence" maxlength="100" minlength="6" required>
 <label for="date">تاریخ سند میلادی</label><input id="date" name="date" type="date" value="<?=(new DateTimeImmutable('now',new DateTimeZone('Asia/Tehran')))->format('Y-m-d')?>" required>
-<button type="submit">ثبت سند متوازن با حساب بانکی انتخاب‌شده</button></form></section><?php endif; ?>
+<button type="submit">ثبت اظهار در صف بررسی، بدون سند مالی</button></form></section><?php endif; ?>
+<section class="panel"><h2>اظهارهای در انتظار راستی‌آزمایی بانکی</h2>
+<p class="muted">این موارد نه پرداخت قطعی‌اند، نه تسویه فاکتور، نه مبنای تحویل محصول. فقط پس از اتصال رسمی به بانک و اعتبارسنجی مستقل می‌توان درباره ثبت پرداخت تصمیم گرفت.</p>
+<div class="scroll"><table><tr><th>فاکتور</th><th>بانک</th><th>تاریخ اظهار</th><th>مبلغ دفتری</th><th>مرجع</th><th>وضعیت</th></tr>
+<?php foreach($claims as $row): ?><tr><td><?=zbEsc($row['invoice_no'])?></td><td><?=zbEsc($row['bank_name'])?></td><td><?=zbEsc($row['claimed_on'])?></td><td><?=zbMoney((int)$row['amount'])?></td><td><?=zbEsc($row['external_ref'])?></td><td>در انتظار بررسی</td></tr><?php endforeach; ?>
+<?php if(!$claims): ?><tr><td colspan="6">فعلاً اظهار واریز در انتظار بررسی وجود ندارد.</td></tr><?php endif; ?></table></div></section>
 <section class="panel"><h2>سابقه ثبت‌های بانکی مستندشده</h2><div class="scroll"><table><tr><th>فاکتور</th><th>حساب</th><th>تاریخ</th><th>مبلغ ریال</th><th>مرجع اعلامی</th></tr>
 <?php foreach($history as $row): ?><tr><td><?=zbEsc($row['invoice_no'])?></td><td><?=zbEsc($row['name'])?></td><td><?=zbEsc($row['paid_on'])?></td><td><?=zbMoney((int)$row['amount'])?></td><td><?=zbEsc($row['evidence'])?></td></tr><?php endforeach; ?></table></div></section>
 <?php endif; ?>
