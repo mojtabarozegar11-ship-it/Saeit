@@ -2,10 +2,12 @@
 import json
 import os
 from pathlib import Path
+import sqlite3
+from datetime import datetime, timezone
 import tempfile
 import unittest
 
-from scripts.zomorod_chatgpt_report_snapshot import build_snapshot, install
+from scripts.zomorod_chatgpt_report_snapshot import build_snapshot, install, archive_sync, archive_since
 
 HEADER = "## گزارش ۰۵-۰۰۰۱ | 2026-11-01 16:04 UTC | ZM-CTRL-20261101-PR1779-CI41324363802"
 
@@ -103,6 +105,49 @@ class SnapshotSafetyTests(unittest.TestCase):
             ])
             with self.assertRaisesRegex(ValueError, "NON_APPEND_ONLY"):
                 install(forged, forged_payload, target)
+
+    def test_nonfinancial_private_archive_grows_past_100_without_truncating_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "private"
+            folder.mkdir(mode=0o700)
+            archive = folder / "chatgpt_reports_archive.sqlite3"
+            first = [row(i + 1, HEADER.replace("۰۰۰۱", f"{i + 1:04d}") + "\nگزارش فارسی آزمایشی.\n") for i in range(120)]
+            total, added, window = archive_sync(first, archive)
+            self.assertEqual((total, added, len(window)), (120, 120, 100))
+            self.assertEqual(archive.stat().st_mode & 0o077, 0)
+            self.assertEqual(window[0]["report_code"], "05-0001")
+            self.assertEqual(window[-1]["report_code"], "05-0100")
+            self.assertIsNotNone(archive_since(archive))
+            total, added, window2 = archive_sync(first[-3:], archive)
+            self.assertEqual((total, added, window2), (120, 0, window))
+            extra = row(121, HEADER.replace("۰۰۰۱", "۰۱۲۱") + "\nگزارش فارسی جدید.\n")
+            total, added, _ = archive_sync([first[-1], extra], archive)
+            self.assertEqual((total, added), (121, 1))
+            with sqlite3.connect("file:" + str(archive) + "?mode=ro", uri=True) as db:
+                self.assertEqual(db.execute("PRAGMA quick_check").fetchone()[0], "ok")
+                self.assertEqual(db.execute("SELECT COUNT(DISTINCT report_code) FROM reports").fetchone()[0], 121)
+                self.assertEqual(db.execute("SELECT report_code FROM reports ORDER BY seq DESC LIMIT 1").fetchone()[0], "05-0121")
+            forged = dict(extra, body=extra["body"] + "changed")
+            with self.assertRaisesRegex(ValueError, "IMMUTABLE_REPORT_ARCHIVE_CONFLICT"):
+                archive_sync([forged], archive)
+            with self.assertRaisesRegex(ValueError, "HISTORICAL_INSERT_REJECTED"):
+                archive_sync([row(105, HEADER.replace("۰۰۰۱", "۰۹۹۹") + "\nرسید دیرهنگام نامعتبر.\n")], archive)
+
+    def test_archive_rejects_symlink_and_public_permissions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "private"
+            folder.mkdir(mode=0o700)
+            archive = folder / "chatgpt_reports_archive.sqlite3"
+            secret = Path(tmp) / "unrelated"
+            secret.write_text("untouched")
+            archive.symlink_to(secret)
+            with self.assertRaisesRegex(ValueError, "INVALID_REPORT_ARCHIVE_TARGET"):
+                archive_sync([row()], archive)
+            archive.unlink()
+            folder.chmod(0o755)
+            with self.assertRaisesRegex(ValueError, "REPORT_ARCHIVE_DIRECTORY_MUST_BE_PRIVATE"):
+                archive_sync([row()], archive)
+            self.assertEqual(secret.read_text(), "untouched")
 
     def test_never_follow_symlinks_or_public_parent(self):
         with tempfile.TemporaryDirectory() as tmp:
