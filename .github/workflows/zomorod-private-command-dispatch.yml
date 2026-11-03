@@ -979,6 +979,28 @@ jobs:
                   and len(node.value) <= 10000
                   and re.match(r"(?is)^\s*(CREATE|SELECT|INSERT|UPDATE|DELETE|REPLACE|ALTER|PRAGMA)\s", node.value))
           ][:100]
+          # Read only the bridge module used by ingress, still within the
+          # ephemeral encrypted report. Never echo source to public job logs.
+          bridge_path = private / "company_bridge.py"
+          if not bridge_path.exists():
+              bridge_path = private / "zomorod_company_private_bridge_v4.py"
+          if (bridge_path.is_symlink() or not bridge_path.is_file()
+                  or bridge_path.stat().st_size > 250000):
+              raise SystemExit("PRIVATE_BRIDGE_SOURCE_REJECTED")
+          bridge_text = bridge_path.read_text(encoding="utf-8")
+          bridge_tree = ast.parse(bridge_text)
+          bridge_functions = []
+          bridge_selected = {}
+          for node in ast.walk(bridge_tree):
+              if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                  continue
+              bridge_functions.append(node.name)
+              if any(token in node.name.lower() for token in
+                     ("task", "schema", "canonical", "event", "state",
+                      "receipt", "verify", "hmac", "migrate", "init_db")):
+                  segment = ast.get_source_segment(bridge_text, node)
+                  if isinstance(segment, str) and len(segment) <= 50000:
+                      bridge_selected[node.name] = segment
           tables = []
           with sqlite3.connect("file:" + str(database) + "?mode=ro&immutable=1", uri=True, timeout=5) as db:
               for (name,) in db.execute(
@@ -997,6 +1019,11 @@ jobs:
               "ingress_source_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
               "functions": defs,
               "selected_function_source": selected_functions,
+              "bridge_contract": {
+                  "source_sha256": hashlib.sha256(bridge_text.encode("utf-8")).hexdigest(),
+                  "functions": bridge_functions[:150],
+                  "selected_function_source": bridge_selected,
+              },
               "sql_literals": sql_literals,
               "tables": tables,
           }
