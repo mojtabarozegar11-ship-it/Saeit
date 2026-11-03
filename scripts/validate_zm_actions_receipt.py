@@ -53,7 +53,7 @@ def validate(document: str) -> list[str]:
         if identifier in ids:
             errors.append(f"action {i}: duplicate id")
         ids.add(identifier)
-        if action.get("status") not in STATUSES:
+        if not isinstance(action.get("status"), str) or action["status"] not in STATUSES:
             errors.append(f"action {i}: invalid status")
         for field in ("title_fa", "impact_fa"):
             if not isinstance(action.get(field), str) or not action[field].strip():
