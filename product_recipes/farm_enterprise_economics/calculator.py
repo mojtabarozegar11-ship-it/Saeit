@@ -9,8 +9,8 @@ import argparse
 import csv
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, localcontext
 from functools import wraps
+import html
 import json
-import math
 from pathlib import Path
 import sys
 
@@ -152,6 +152,27 @@ def evaluate(data):
                     "price_multiplier": str(price_factor),
                     "modeled_operating_profit": money(profit),
                 })
+    # Apply each correlated shock to the entire farm portfolio, rather than
+    # evaluating enterprises in isolation and double counting their fixed costs.
+    portfolio_scenarios = []
+    for quantity_factor in (Decimal("0.80"), Decimal("1.00"), Decimal("1.20")):
+        for price_factor in (Decimal("0.90"), Decimal("1.00"), Decimal("1.10")):
+            total_profit = Decimal(0)
+            for row in rows:
+                units = decimal_number(row["units_sold"], "units_sold", min_value=0)
+                unit_price = decimal_number(row["unit_price"], "unit_price", min_value=0)
+                unit_cost = decimal_number(row["variable_cost_per_unit"], "variable_cost_per_unit", min_value=0)
+                fixed_cost = decimal_number(row["allocated_fixed_cost"], "allocated_fixed_cost", min_value=0)
+                fee_rate = decimal_number(row.get("selling_fee_percent", 0),
+                                          "selling_fee_percent", min_value=0, max_value=100) / 100
+                total_profit += (units * quantity_factor *
+                                 (unit_price * price_factor * (1 - fee_rate) - unit_cost)
+                                 - fixed_cost)
+            portfolio_scenarios.append({
+                "volume_multiplier": str(quantity_factor),
+                "price_multiplier": str(price_factor),
+                "modeled_operating_profit": money(total_profit),
+            })
     return {
         "version": "1.1",
         "currency": currency,
@@ -172,7 +193,71 @@ def evaluate(data):
             "contribution_margin_total": total("contribution_margin_total"),
         },
         "scenario_results": scenarios,
+        "portfolio_scenario_results": portfolio_scenarios,
     }
+
+
+def render_html_report(report):
+    """Self-contained, accessible offline management report with escaped labels."""
+    e = lambda value: html.escape(str(value), quote=True)
+    def table(columns, data, keys):
+        header = "".join("<th scope=\"col\">" + e(label) + "</th>" for label in columns)
+        body = "".join(
+            "<tr>" + "".join("<td>" + e(row[key]) + "</td>" for key in keys) + "</tr>"
+            for row in data
+        )
+        return "<div class=\"scroll\"><table><thead><tr>" + header + (
+            "</tr></thead><tbody>" + body + "</tbody></table></div>"
+        )
+    rows = report["results"]
+    portfolio = report["portfolio"]
+    summary = "".join(
+        "<div class=\"kpi\"><span>" + e(label) + "</span><strong>" + e(portfolio[key])
+        + "</strong></div>"
+        for label, key in (
+            ("Revenue", "sales_revenue"),
+            ("Total operating costs", "total_cost"),
+            ("Operating profit", "operating_profit"),
+            ("Total contribution margin", "contribution_margin_total"),
+        )
+    )
+    enterprise_table = table(
+        ("Enterprise", "Sold units", "Unit price", "Operating profit", "Break-even units",
+         "Margin of safety (%)"),
+        rows,
+        ("name", "units_sold", "unit_price", "operating_profit",
+         "break_even_units", "margin_of_safety_percent"),
+    )
+    stress_table = table(
+        ("Volume factor", "Selling-price factor", "Portfolio operating profit"),
+        report["portfolio_scenario_results"],
+        ("volume_multiplier", "price_multiplier", "modeled_operating_profit"),
+    )
+    assumptions = "".join("<li>" + e(s) + "</li>" for s in report["assumptions"])
+    return """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Farm Enterprise Economics — Offline Report</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,sans-serif;color:#14352e;background:#f5f8f5}
+body{margin:0 auto;max-width:1100px;padding:2rem 1rem;line-height:1.55}
+header{padding:1.6rem;border-radius:1rem;background:#124537;color:white}
+header p{margin-bottom:0}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.8rem;margin:1rem 0}
+.kpi{background:white;padding:1.2rem;border:1px solid #d3ded9;border-radius:.7rem;display:grid;gap:.5rem}
+.kpi span{font-size:.9rem;color:#3c5b51}.kpi strong{font-size:1.5rem;overflow-wrap:anywhere}
+section{background:white;padding:1.2rem;border-radius:.7rem;margin:1rem 0;border:1px solid #d3ded9}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:620px}
+th,td{text-align:left;padding:.7rem;border-bottom:1px solid #d3ded9}th{background:#e7f0eb}
+aside{border-left:4px solid #a05b22;padding:1rem;background:#fff7e9}
+@media print{body{max-width:none;padding:0}header{print-color-adjust:exact}section{break-inside:avoid}}
+</style></head><body>
+<header><h1>Farm Enterprise Economics</h1><p>Private offline management report · Currency: """ + e(report["currency"]) + """</p></header>
+<main><div class="kpis">""" + summary + """</div>
+<section><h2>Enterprise operating results</h2>""" + enterprise_table + """</section>
+<section><h2>Whole-portfolio sensitivity</h2><p>Correlated volume and selling-price changes are applied to all enterprises at once. These are scenarios, not probabilities or forecasts.</p>""" + stress_table + """</section>
+<section><h2>Model boundaries</h2><ul>""" + assumptions + """</ul>
+<aside>Pre-tax, pre-financing contribution model. Results are not forecasts or investment recommendations. Verify all entered quantities, costs, allocations and market assumptions.</aside></section>
+</main><footer><small>Generated locally. No accounts, telemetry or network connection.</small></footer></body></html>
+"""
 
 
 def main(argv=None):
@@ -180,6 +265,7 @@ def main(argv=None):
     ap.add_argument("input_json", help="Local input JSON with user-supplied assumptions")
     ap.add_argument("--json-output", help="Write results to a local JSON file")
     ap.add_argument("--csv-output", help="Write all scenario results to local CSV file")
+    ap.add_argument("--html-output", help="Write a self-contained offline management report")
     args = ap.parse_args(argv)
     source = Path(args.input_json)
     data = json.loads(source.read_text(encoding="utf-8"))
@@ -189,6 +275,8 @@ def main(argv=None):
         Path(args.json_output).write_text(body, encoding="utf-8")
     else:
         print(body, end="")
+    if args.html_output:
+        Path(args.html_output).write_text(render_html_report(output), encoding="utf-8")
     if args.csv_output:
         with Path(args.csv_output).open("w", encoding="utf-8", newline="") as fp:
             writer = csv.DictWriter(fp, fieldnames=[
