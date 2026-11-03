@@ -167,6 +167,9 @@ function zmPiHandle(PDO $db,string $private,string $action):void {
             $ins=$db->prepare('INSERT INTO zm_project_milestones(project_id,title,due_date,created_by) VALUES(?,?,?,?)');
             $ins->execute([$projectId,$title,$due,actor()]);
             $mid=(int)$db->lastInsertId();
+            if(!function_exists('zmOpsAssignNew'))bail('دفتر ارجاع مسئول در دسترس نیست.',503);
+            zmOpsSchema($db);
+            zmOpsAssignNew($db,$mid,req('assigned_user_id'));
             $st=$db->prepare('INSERT INTO zm_project_milestone_events(milestone_id,old_state,new_state,note,actor_id) VALUES(?,?,?,?,?)');
             $st->execute([$mid,'','todo','ایجاد اقدام زمان‌دار بدون اجرای عملیات فیزیکی یا پرداخت.',actor()]);
             audit($db,'milestone','project',$projectId);
@@ -326,10 +329,16 @@ function zmPiRender(PDO $db,string $private):void {
     }
     if(!$milestones)echo '<tr><td colspan="'.($canEdit?4:3).'">اقدام زمان‌داری ثبت نشده است.</td></tr>';
     echo '</table></div></section>';
+    if(function_exists('zmOpsAssignmentSection'))
+        zmOpsAssignmentSection($db,$pid,$canEdit && $project['state']!=='done');
+    if(in_array(role(),['admin','accountant'],true))
+        echo '<p><a href="?page=project_finance&amp;project_id='.$pid.'">گزارش اسناد مالی ثبت‌شده این پروژه</a></p>';
     if($canEdit && $project['state']!=='done'){
       echo '<section><h2>تعریف اقدام با سررسید</h2>';formBegin('project_milestone');
       echo '<input type="hidden" name="project_id" value="'.$pid.'"><label>عنوان اقدام</label><input name="title" required maxlength="160">';
-      echo '<label>سررسید میلادی</label><input type="date" name="due_date" value="'.esc(today()).'" required><button>ثبت اقدام برنامه‌ای</button></form></section>';
+      echo '<label>سررسید میلادی</label><input type="date" name="due_date" value="'.esc(today()).'" required>';
+      echo '<label>کاربر مسئول در سامانه</label><select name="assigned_user_id" required>'.zmOpsUserOptions($db,actor()).'</select>';
+      echo '<button>ثبت اقدام و ارجاع به مسئول واقعی</button></form></section>';
     }
     echo '<section><h2>تاریخچه تصمیم‌های زمان‌دار</h2><div class="scroll"><table><tr><th>اقدام</th><th>از</th><th>به</th><th>دلیل</th><th>ثبت‌کننده</th><th>زمان UTC</th></tr>';
     foreach(q($db,'SELECT e.*,m.title,u.username FROM zm_project_milestone_events e JOIN zm_project_milestones m ON e.milestone_id=m.id JOIN users u ON u.id=e.actor_id WHERE m.project_id=? ORDER BY e.id DESC LIMIT 80',[$pid]) as $e)
