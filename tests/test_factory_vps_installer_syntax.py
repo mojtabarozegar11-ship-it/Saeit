@@ -21,7 +21,7 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn(gate, result.stderr)
         wf = (source / ".github/workflows/vps-autonomous-product-install.yml").read_text()
         deploy = wf.split("\n  deploy:\n", 1)[1]
-        self.assertIn("if: ${{ false }}", deploy)
+        self.assertIn("if: false", deploy)
 
     def test_installer_is_valid_bash(self):
         bash = shutil.which("bash")
