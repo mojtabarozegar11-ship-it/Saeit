@@ -15,7 +15,12 @@ REPORT = re.compile(r"^## گزارش ۰۵-([۰-۹0-9]{4,}) \| (\d{4}-\d\d-\d\d \
 EVIDENCE = re.compile(r"^https://github\.com/mojtabarozegar11-ship-it/Saeit/(?:commit/[0-9a-f]{40}|actions/runs/[0-9]+|pull/[0-9]+|issues/[0-9]+)$")
 STATUSES = {"completed", "partial", "blocked", "not_started"}
 
-def validate(document: str) -> list[str]:
+def validate(document: str, historical_ids=None) -> list[str]:
+    """Validate a receipt; historical_ids must come from a trusted complete index.
+
+    The caller must supply the existing IDs when enforcing cross-report uniqueness.
+    This function never reads or modifies the financial database.
+    """
     errors = []
     if document.count(START) != 1 or document.count(END) != 1:
         return ["expected exactly one receipt block"]
@@ -50,9 +55,12 @@ def validate(document: str) -> list[str]:
         expected_prefix = "ZM" + code
         if not isinstance(identifier, str) or not re.fullmatch(re.escape(expected_prefix) + r"-A(?:0[1-9]|1[0-9]|20)", identifier):
             errors.append(f"action {i}: invalid id")
-        if identifier in ids:
-            errors.append(f"action {i}: duplicate id")
-        ids.add(identifier)
+        if isinstance(identifier, str):
+            if identifier in ids:
+                errors.append(f"action {i}: duplicate id")
+            if historical_ids is not None and identifier in historical_ids:
+                errors.append(f"action {i}: id already exists in history")
+            ids.add(identifier)
         if not isinstance(action.get("status"), str) or action["status"] not in STATUSES:
             errors.append(f"action {i}: invalid status")
         for field in ("title_fa", "impact_fa"):
