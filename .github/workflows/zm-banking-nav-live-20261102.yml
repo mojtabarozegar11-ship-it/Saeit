@@ -125,7 +125,9 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zm-bank-nav"
-          scp -F "$d/config" "$RUNNER_TEMP/zm-bank-nav.patch" "zm-cpanel:/home/zomorod2/.private/zomorod-business/.bank-nav-$GITHUB_SHA/app.patch"
+          stage="/home/zomorod2/.private/zomorod-business/.bank-nav-$GITHUB_SHA"
+          scp -F "$d/config" "$RUNNER_TEMP/zm-bank-nav.patch" "zm-cpanel:$stage/app.patch"
+          scp -F "$d/config" scripts/zm_production_app_guard.py content/zomorod-business/app.production-20261103.php "zm-cpanel:$stage/"
       - name: Apply reversible exact navigation patch and verify live login
         shell: bash
         run: |
@@ -149,6 +151,13 @@ jobs:
           patch --batch --forward --fuzz=0 "$stage/app.php" "$stage/app.patch" >/dev/null
           grep -Fq 'href="/business/banking.php">بانک ملت و شهر' "$stage/app.php"
           "$phpbin" -l "$stage/app.php" >/dev/null
+          # The deployment candidate must match the attested live source.
+          # A changed candidate needs a separately reviewed reconciliation release.
+          python3 "$stage/zm_production_app_guard.py" \
+            --live "$app" \
+            --reference "$stage/app.production-20261103.php" \
+            --candidate "$stage/app.php" \
+            --expected-live-sha256 ad9c80fc1bcff01c53cb58acabd088890e9f1dd0b7e3c38c95bd1ff4d67f27a7
           next="$(sha256sum "$stage/app.php" | awk '{print $1}')"
           test "$next" != "$previous"
           install -m 600 "$stage/app.php" "$stage/app.publish.php"
