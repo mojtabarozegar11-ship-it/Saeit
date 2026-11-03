@@ -122,6 +122,38 @@ jobs:
             "$phpbin" -l "$file" >/dev/null
           done
           echo "PRODUCTION_REQUIRED_PHP_MODULES=15_present_and_lint_clean"
+          # These are the reviewed live dependencies, NOT files to overwrite.
+          # Seven modules are private-only; three other public-source modules
+          # differ from the branch version. Never silently substitute either.
+          while read -r module expected_blob; do
+            file="$root/$module"
+            test -f "$file" && test ! -L "$file"
+            observed_blob="$(git hash-object "$file")"
+            test "$observed_blob" = "$expected_blob"
+          done <<'REVIEWED_LIVE_MODULES'
+          workflow_desk.php 8eb08aace27c7f259cf6bd4ed7922b60dda1fb8c
+          project_control.php 288ad642c737f43c9c605a472bbcec97940bdef7
+          project_integrations.php 290ebef529145c91a53a2bed8d8465332c8e84e9
+          project_governance.php 727cb86b21f94097591835b8249d37fa950f2b14
+          project_ops.php cd39cfdc69a347891661eb2384be41d89207f1be
+          project_portfolio.php f7d2969a37affbe95bfb59345f0df9cc4e01cee5
+          industry_operations.php c0ea47deb93a981108eb7dcc6340533af1258b87
+          finance_audit.php b248207cbd8988e8c6a318e7e9330dda42871841
+          payroll_control.php 76ce2ed38588075cf9e5b257dd43c07d73295db7
+          payroll_ui.php 47261ea0632a2e2d6b41f7fb64c71cfc207dd04a
+          period_controls.php ef17c766336a9b4da00872588c239a05290a00a6
+          site_agents.php e0e749703ba1f97f7879ecc65e32ad7ffcfcc54d
+          site_store.php a7e85d081bec2c83982de5a80480125801e78fb1
+          command_center.php 10287639b126aa811c1c9585767404923795d74e
+          insights.php b113767f4564dc99a4703f2cfcbee37a58f03d06
+          chatgpt_reports.php c668d5c12109f62c4b371823b1711860f63e4e30
+          REVIEWED_LIVE_MODULES
+          for contract in 'project_governance.php:zmGovHandle' 'project_integrations.php:zmPiRender' 'project_ops.php:zmOpsAssignmentsDesk' 'period_controls.php:zmPeriodGuard' 'site_agents.php:zmAgentHandle' 'command_center.php:zmCcRender' 'chatgpt_reports.php:zmBusinessChatgptReports'; do
+            module="${contract%%:*}"
+            symbol="${contract#*:}"
+            grep -Eq "function[[:space:]]+${symbol}[[:space:]]*\\(" "$root/$module"
+          done
+          echo "PRODUCTION_DEPENDENCY_ABI=16_pinned_files_and_7_symbols"
           python3 - <<'PY'
           import sqlite3
           p="file:/home/zomorod2/.private/zomorod-business/management.sqlite3?mode=ro"
