@@ -343,6 +343,15 @@ def tick(factory_private, operations, *, dry_run=False, runner=None,
                 "handoff_accepted":handoff_accepted(root, order),
                 "storage_hold":disk_usage(root).free < RESERVE,
                 "stages_executed":0, "sites_modified":False}
+    # Claim the same durable factory-wide lane used by Line41. A process
+    # flock alone would permit a different product between minute ticks.
+    gate_path = Path(__file__).resolve().parent / "factory_global_singleton_v1.py"
+    gate_spec = importlib.util.spec_from_file_location("saeit_global_lane_v1", gate_path)
+    if gate_spec is None or gate_spec.loader is None:
+        raise RuntimeError("F01_GLOBAL_LANE_MODULE_MISSING")
+    gate = importlib.util.module_from_spec(gate_spec)
+    gate_spec.loader.exec_module(gate)
+    gate.reserve_lane(root, "agri200")
     lock = ops / ".strict-serial-fullcycle.lock"
     if lock.is_symlink():
         raise RuntimeError("STRICT_SERIAL_LOCK_UNSAFE")
