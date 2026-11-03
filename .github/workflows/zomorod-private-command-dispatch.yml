@@ -772,6 +772,76 @@ jobs:
           print("MPW_ORDERS_CREATED=0;PAYMENTS_CREATED=0")
           print("CPANEL_SITE_MUTATIONS=NONE")
           print("CPANEL_FACTORY_OPERATIONS=NONE")
+          # Private queue capability audit. Read code and SQLite schema only:
+          # never read task rows, command payloads, key material or secrets.
+          import ast
+          import sqlite3
+          private_root = Path("/home/zomorod2/.private/zomorod-business")
+          ingress_path = private_root / "company_ingress.py"
+          safe_verbs = {
+              "accept", "show-public-key", "run", "execute", "execute-pending",
+              "run-pending", "drain", "dispatch", "claim", "complete", "worker",
+          }
+          try:
+              if (ingress_path.is_symlink() or not ingress_path.is_file()
+                      or ingress_path.stat().st_size > 200000):
+                  raise ValueError("PRIVATE_INGRESS_UNSAFE_OR_MISSING")
+              syntax = ast.parse(ingress_path.read_text(encoding="utf-8"))
+              parser_verbs = set()
+              for node in ast.walk(syntax):
+                  if (isinstance(node, ast.Call)
+                          and isinstance(node.func, ast.Attribute)
+                          and node.func.attr == "add_parser"
+                          and node.args
+                          and isinstance(node.args[0], ast.Constant)
+                          and isinstance(node.args[0].value, str)
+                          and node.args[0].value in safe_verbs):
+                      parser_verbs.add(node.args[0].value)
+              print("PRIVATE_INGRESS_AST_AUDIT=OK")
+              print("PRIVATE_INGRESS_STATIC_PARSER_VERBS=" +
+                    (",".join(sorted(parser_verbs)) if parser_verbs else "NONE_DETECTED"))
+              print("PRIVATE_INGRESS_EXECUTOR_SUBCOMMAND_DETECTED=" +
+                    ("YES" if parser_verbs.intersection(
+                        {"run", "execute", "execute-pending", "run-pending",
+                         "drain", "dispatch", "worker"}) else "NO"))
+          except (OSError, UnicodeDecodeError, SyntaxError, ValueError):
+              print("PRIVATE_INGRESS_AST_AUDIT=UNAVAILABLE")
+          private_db = private_root / "command-center.sqlite3"
+          try:
+              if private_db.is_symlink() or not private_db.is_file():
+                  raise ValueError("PRIVATE_DB_UNSAFE_OR_MISSING")
+              uri = "file:" + str(private_db) + "?mode=ro"
+              with sqlite3.connect(uri, uri=True, timeout=4) as db:
+                  table_rows = db.execute(
+                      "SELECT name FROM sqlite_master WHERE type = 'table'"
+                  ).fetchall()
+                  matched = 0
+                  has_state = False
+                  has_result = False
+                  for (table_name,) in table_rows[:150]:
+                      if (not isinstance(table_name, str)
+                              or not any(word in table_name.lower()
+                                         for word in ("command", "queue", "task"))):
+                          continue
+                      matched += 1
+                      quoted_name = table_name.replace('"', '""')
+                      columns = {
+                          row[1].lower() for row in db.execute(
+                              'PRAGMA table_info("' + quoted_name + '")'
+                          ).fetchall() if isinstance(row[1], str)
+                      }
+                      has_state |= bool(columns.intersection(
+                          {"state", "status", "processed_at", "started_at"}))
+                      has_result |= bool(columns.intersection(
+                          {"result", "receipt", "completed_at", "finished_at"}))
+              print("PRIVATE_QUEUE_SCHEMA_AUDIT=OK")
+              print("PRIVATE_QUEUE_TABLES_DETECTED=" + str(matched))
+              print("PRIVATE_QUEUE_STATE_FIELD_DETECTED=" +
+                    ("YES" if has_state else "NO"))
+              print("PRIVATE_QUEUE_RESULT_FIELD_DETECTED=" +
+                    ("YES" if has_result else "NO"))
+          except (OSError, ValueError, sqlite3.Error):
+              print("PRIVATE_QUEUE_SCHEMA_AUDIT=UNAVAILABLE")
           CPANEL_READONLY_PY
       - name: Record private owner cutover decision and verify durable write
         if: steps.gate.outputs.operation == 'cutover_record'
