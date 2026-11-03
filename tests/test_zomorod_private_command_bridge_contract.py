@@ -63,7 +63,7 @@ def _inline_event_scripts():
 
 def test_embedded_event_scripts_are_valid_python():
     scripts = _inline_event_scripts()
-    assert len(scripts) == 2
+    assert len(scripts) == 1
     for script in scripts:
         ast.parse(script)
 
