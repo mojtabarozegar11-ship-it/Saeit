@@ -30,6 +30,18 @@ class ReceiptTests(unittest.TestCase):
     def test_duplicate_action_id(self):
         self.assertTrue(any("duplicate id" in e for e in validate(receipt([action(), action()]))))
 
+    def test_rejects_id_already_in_history(self):
+        self.assertTrue(any("already exists in history" in e for e in
+                            validate(receipt([action()]), historical_ids={"ZM05-0057-A01"})))
+
+    def test_accepts_new_id_against_history(self):
+        self.assertEqual(validate(receipt([action()]), historical_ids={"ZM05-0056-A01"}), [])
+
+    def test_malformed_unhashable_id_returns_error(self):
+        bad = action()
+        bad["id"] = {"unexpected": "object"}
+        self.assertTrue(any("invalid id" in e for e in validate(receipt([bad]))))
+
     def test_completed_without_evidence(self):
         self.assertTrue(any("completed without evidence" in e for e in validate(receipt([action(url="")]))))
 
