@@ -334,8 +334,8 @@ def test_emergency_direct_cpanel_path_never_lowers_identity_or_host_key_pins():
     assert "PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED" in source
     assert "PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE" in source
     assert 'printf \'command_host=%s\\n\' "$command_host" >> "$GITHUB_OUTPUT"' in source
-    assert source.count('case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct)') == 5
-    assert source.count('COMMAND_HOST: ${{ steps.link.outputs.command_host }}') == 5
+    assert source.count('case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct)') == 6
+    assert source.count('COMMAND_HOST: ${{ steps.link.outputs.command_host }}') == 6
     assert 'ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" "$COMMAND_HOST"' in source
     assert 'ssh -F "$d/config" "$COMMAND_HOST"' in source
     assert "UserKnownHostsFile /dev/null" not in source
