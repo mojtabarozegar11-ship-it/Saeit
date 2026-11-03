@@ -11,6 +11,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deliver:
+    # F-01 retired: legacy 3-item sender is not the signed QC1000 handoff.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
