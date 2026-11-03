@@ -1,0 +1,30 @@
+name: ZM management report backfill integrity
+on:
+  push:
+    branches: [feature/zm-bank-ledger-20261102]
+    paths:
+      - '.github/workflows/zm-management-reports-backfill-quality-20261103.yml'
+      - 'enterprise_portal/github_chatgpt_reports.py'
+      - 'scripts/zomorod_chatgpt_report_snapshot.py'
+      - 'tests/test_zomorod_chatgpt_report_snapshot.py'
+permissions:
+  contents: read
+jobs:
+  verify-real-receipt-backfill:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify report parser, archive preservation and exact recovered IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 -m py_compile enterprise_portal/github_chatgpt_reports.py scripts/zomorod_chatgpt_report_snapshot.py tests/test_zomorod_chatgpt_report_snapshot.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_zomorod_chatgpt_report_snapshot.py -v
+          echo 'HOST_PRODUCTION_CHANGED=no'
+          echo 'MISSING_RECEIPT_RECOVERY_VALIDATED=source_only'
