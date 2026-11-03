@@ -1,0 +1,323 @@
+name: Diagnose Zomorod messaging and PHP ERP navigation safely (read only)
+on:
+  push:
+    branches: [feature/zomorod-erp-v7-host-stage-20261031]
+    paths:
+      - ".github/workflows/zomorod-messaging-navigation-diagnostic-20261031.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-messaging-navigation-diagnostic
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up pinned GitHub to VPS to cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Diagnose recent Python exceptions without printing logs or private data
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+          LAST_FAILED_RELEASE: fdd628d09813bc9c30e73fdbb25d19960cad9dc0
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 80s ssh -F "$d/config" "$COMMAND_HOST" bash -se -- "$LAST_FAILED_RELEASE" <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          export DIAG_RELEASE_SHA="$1"
+          python3 -B - <<'PY'
+          import os,re,time,sys,pathlib
+          home=pathlib.Path.home()
+          candidates=[
+              home/"Saeit/stderr.log",
+              home/"Saeit/passenger.log",
+              home/"Saeit/error.log",
+              home/"Saeit/error_log",
+              home/"logs/error_log",
+              home/"logs/passenger.log",
+              home/"public_html/error_log",
+              home/"public_html/stderr.log",
+              home/"stderr.log",
+              home/"passenger.log",
+          ]
+          recent=[]
+          for p in candidates:
+              try:
+                  if p.is_file() and not p.is_symlink():
+                      st=p.stat()
+                      if st.st_size:
+                          recent.append((p,st.st_size,int(time.time()-st.st_mtime)))
+              except OSError:
+                  pass
+          print("LOG_CANDIDATE_COUNT="+str(len(recent)))
+          for p,n,age in recent:
+              print("LOG_CANDIDATE="+p.name+" bytes_band="+("large" if n>1000000 else "small")+" age_seconds="+str(max(age,0)))
+              try:
+                  with p.open("rb") as fh:
+                      fh.seek(max(0,n-600000))
+                      text=fh.read().decode("utf-8",errors="replace")
+                  trace=text.rfind("Traceback (most recent call last):")
+                  if trace>=0:
+                      block=text[trace:]
+                      classes=re.findall(r"(?m)^(?:django\.\w+(?:\.\w+)*\.)?(\w+(?:Error|Exception))\s*:",block)
+                      print("RECENT_EXCEPTION_CLASS="+(classes[-1] if classes else "unknown"))
+                      error_lines=[line for line in block.splitlines() if line.startswith("RuntimeError:")]
+                      last_error=error_lines[-1] if error_lines else ""
+                      for term,label in [
+                          ("doesn't declare an explicit app_label","UNREGISTERED_DJANGO_MODEL"),
+                          ("isn't in an application in INSTALLED_APPS","MODEL_NOT_IN_INSTALLED_APPS"),
+                          ("Missing staticfiles manifest entry","STATIC_MANIFEST_MISSING"),
+                          ("No module named","MODULE_IMPORT_MISSING"),
+                          ("database is locked","DATABASE_LOCKED"),
+                          ("no such table","DATABASE_TABLE_MISSING"),
+                          ("Settings cannot be imported","SETTINGS_IMPORT"),
+                      ]:
+                          if term in last_error:
+                              print("RECENT_EXCEPTION_REASON="+label)
+                              break
+                      else:
+                          print("RECENT_EXCEPTION_REASON=other")
+                      m=re.search(r"Model class ([A-Za-z0-9_.]+)",last_error)
+                      if m:print("RECENT_EXCEPTION_MODEL="+m.group(1))
+                      frames=re.findall(r'File "[^"]*/([^/"]+\.py)", line (\d+), in (\w+)',block)
+                      for name,lineno,func in frames[-6:]:
+                          print("RECENT_EXCEPTION_FRAME="+name+":"+lineno+":"+func)
+              except OSError: pass
+          root=home/".private/zomorod-office-live-releases"/os.environ["DIAG_RELEASE_SHA"]
+          manifest=root/"manifest.json"
+          if manifest.is_file() and not manifest.is_symlink():
+              import json
+              data=json.loads(manifest.read_text())
+              print("ROLLBACK_MANIFEST_STATUS="+str(data.get("status","unknown")))
+              print("ROLLBACK_QUARANTINE_EXISTS="+str((root/"failed_new_release").is_dir()).lower())
+          else: print("ROLLBACK_MANIFEST_STATUS=missing")
+          PY
+          REMOTE
+      - name: Probe public office routes without authentication or mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in / /business/ '/business/?page=workflow_desk' /company/office/login/ /company/office/secure-login/ /company/office/messages/ /company/office/marketing/ /company/office/; do
+            result="$(curl -sS --max-time 15 --connect-timeout 8 --output /dev/null --write-out '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "OFFICE_PUBLIC_ROUTE=$route HTTP=${result:-unavailable}"
+          done
+      - name: Compare current PHP management integration and Django module presence (read only)
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 85s ssh -F "$d/config" "$COMMAND_HOST" python3 -B - <<'PY'
+          import hashlib,pathlib,json
+          home=pathlib.Path('/home/zomorod2')
+          app=home/'.private/zomorod-business/app.php'
+          if not app.is_file() or app.is_symlink():raise SystemExit('ERP_LIVE_APP_UNSAFE')
+          raw=app.read_bytes()
+          digest=hashlib.sha256(raw).hexdigest()
+          print('ERP_APP_SHA256='+digest)
+          if digest!='6f352ce49d5cb700aef3a949368eaeb986365cc466c183c314948bb7c48ac8bc':raise SystemExit('ERP_LIVE_APP_UNEXPECTED_DRIFT')
+          print('ERP_NAV_MESSAGING_LINK_PRESENT='+str(b'/company/office/messages/' in raw).lower())
+          print('ERP_NAV_MARKETING_LINK_PRESENT='+str(b'/company/office/marketing/' in raw).lower())
+          django=home/'Saeit'
+          for n in ('company_messaging','company_marketing','enterprise_portal','ecosystem_hub'):
+              p=django/n
+              print('DJANGO_LIVE_MODULE_'+n.upper()+'='+str(p.is_dir() and not p.is_symlink()).lower())
+          for n in ('config/settings.py','config/urls.py','passenger_wsgi.py'):
+              p=django/n
+              print('DJANGO_LIVE_FILE_'+n.replace('/','_').upper()+'='+str(p.is_file() and not p.is_symlink()).lower())
+          backups=home/'.private/zomorod-office-live-releases'
+          if backups.is_dir() and not backups.is_symlink():
+              items=sorted((p for p in backups.iterdir() if p.is_dir() and not p.is_symlink()),key=lambda p:p.stat().st_mtime,reverse=True)
+              for p in items[:4]:
+                  manifest=p/'manifest.json'
+                  if manifest.is_file() and not manifest.is_symlink():
+                      meta=json.loads(manifest.read_text())
+                      print('OFFICE_RECENT_RELEASE_STATUS='+str(meta.get('status','unknown')))
+          PY
+      - name: Test fresh-process live and private-staged Django imports without database writes
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 100s ssh -F "$d/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          app="/home/zomorod2/Saeit"
+          py="/home/zomorod2/virtualenv/Saeit/3.10/bin/python"
+          test -x "$py" || py="/home/zomorod2/virtualenv/Saeit/3.11/bin/python"
+          test -x "$py"
+          for mode in LIVE STAGE; do
+            ZM_INSPECT_MODE="$mode" "$py" -B - <<'PY'
+          import os,pathlib,sys,traceback,importlib.util
+          home=pathlib.Path('/home/zomorod2')
+          app=home/'Saeit'
+          stage=home/'.private/zomorod-messaging-release-stages/fdd628d09813bc9c30e73fdbb25d19960cad9dc0/code'
+          mode=os.environ['ZM_INSPECT_MODE']
+          root=app if mode=='LIVE' else stage
+          if not (root/'config/settings.py').is_file():
+              print('DJANGO_'+mode+'_SOURCE=missing');raise SystemExit(0)
+          for line in (app/'.env').read_text(errors='replace').splitlines() if (app/'.env').is_file() else ():
+              if '=' not in line or line.lstrip().startswith('#'):continue
+              import re
+              key,value=line.split('=',1);key=key.strip()
+              if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*',key):
+                  os.environ.setdefault(key,value.strip().strip('"').strip("'"))
+          os.environ['DJANGO_SETTINGS_MODULE']='config.settings'
+          os.environ['COMPANY_MESSAGING_SEND_ENABLED']='false'
+          os.environ['COMPANY_MARKETING_PUBLISH_ENABLED']='false'
+          os.environ['DATABASE_URL']='sqlite:///'+str(stage/'isolation.sqlite3' if mode=='STAGE' else app/'db.sqlite3')
+          sys.path.insert(0,str(root))
+          if mode=='STAGE':sys.path.insert(1,str(app))
+          print('DJANGO_'+mode+'_PYTHON='+str(sys.version_info.major)+'.'+str(sys.version_info.minor))
+          try:
+              import django
+              django.setup()
+              from django.conf import settings
+              from django.urls import resolve,Resolver404
+              print('DJANGO_'+mode+'_SETUP=pass')
+              for name in ('enterprise_portal','ecosystem_hub','company_messaging','company_marketing'):
+                  print('DJANGO_'+mode+'_REGISTERED_'+name.upper()+'='+str(name in settings.INSTALLED_APPS or any(x.endswith('.'+name.title().replace('_','')+'Config') for x in settings.INSTALLED_APPS)).lower())
+              for route in ('/company/office/','/company/office/secure-login/','/company/office/messages/','/company/office/marketing/'):
+                  try:
+                      m=resolve(route)
+                      print('DJANGO_'+mode+'_RESOLVE='+route+':'+str(m.url_name))
+                  except Resolver404:
+                      print('DJANGO_'+mode+'_RESOLVE='+route+':404')
+          except Exception as exc:
+              print('DJANGO_'+mode+'_SETUP=failed')
+              print('DJANGO_'+mode+'_ERROR_CLASS='+type(exc).__name__)
+              for frame in traceback.extract_tb(exc.__traceback__)[-4:]:
+                  print('DJANGO_'+mode+'_ERROR_FRAME='+pathlib.Path(frame.filename).name+':'+str(frame.lineno)+':'+frame.name)
+          PY
+          done
+          REMOTE
+      - name: Erase transient private relay files
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
