@@ -1016,6 +1016,18 @@ jobs:
                   segment = ast.get_source_segment(bridge_text, node)
                   if isinstance(segment, str) and len(segment) <= 50000:
                       bridge_selected[node.name] = segment
+          bridge_protocol_assignments = []
+          permitted_bridge_constants = {
+              "TASK_FIELDS", "WORKSTREAMS", "PRIORITIES", "RISKS",
+          }
+          for node in bridge_tree.body:
+              if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                  targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                  if any(isinstance(target, ast.Name)
+                         and target.id in permitted_bridge_constants for target in targets):
+                      segment = ast.get_source_segment(bridge_text, node)
+                      if isinstance(segment, str) and len(segment) <= 3000:
+                          bridge_protocol_assignments.append(segment)
           tables = []
           with sqlite3.connect("file:" + str(database) + "?mode=ro&immutable=1", uri=True, timeout=5) as db:
               for (name,) in db.execute(
@@ -1039,6 +1051,7 @@ jobs:
                   "source_sha256": hashlib.sha256(bridge_text.encode("utf-8")).hexdigest(),
                   "functions": bridge_functions[:150],
                   "selected_function_source": bridge_selected,
+                  "protocol_assignments": bridge_protocol_assignments,
               },
               "sql_literals": sql_literals,
               "tables": tables,
