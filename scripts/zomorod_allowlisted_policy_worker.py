@@ -92,7 +92,9 @@ def ensure_policy_written() -> None:
         raise RuntimeError("POLICY_WRITE_VERIFY_FAILED")
 
 
-def apply() -> None:
+def apply(command_id: str) -> None:
+    if not re.fullmatch(r"[0-9a-f]{32}", command_id):
+        raise RuntimeError("INVALID_APPLY_ID")
     db = connect(readonly=False)
     try:
         db.execute("BEGIN IMMEDIATE")
@@ -112,7 +114,7 @@ def apply() -> None:
             FROM bridge_receipts r
             JOIN tasks t ON t.id = r.task_id
             JOIN task_quality q ON q.task_id = r.task_id
-            WHERE r.accepted_at BETWEEN ? AND ?
+            WHERE r.id = ? AND r.accepted_at BETWEEN ? AND ?
               AND t.actor_id = 0 AND t.request_key = r.id
               AND t.title = ? AND t.detail = ?
               AND EXISTS (
@@ -123,14 +125,16 @@ def apply() -> None:
               AND NOT EXISTS (
                   SELECT 1 FROM bridge_execution_receipts x WHERE x.id = r.id
               )
-        """, (now - 180, now + 30, TITLE, DETAIL)).fetchall()
+        """, (command_id, now - 180, now + 30, TITLE, DETAIL)).fetchall()
         if not rows:
             db.commit()
             print("POLICY_APPLIED=NOT_APPLICABLE")
             return
         if len(rows) != 1:
             raise RuntimeError("AMBIGUOUS_ALLOWLISTED_TASK")
-        command_id, task_id = rows[0]
+        matched_id, task_id = rows[0]
+        if matched_id != command_id:
+            raise RuntimeError("COMMAND_ID_MISMATCH")
         if not isinstance(command_id, str) or not re.fullmatch(r"[0-9a-f]{32}", command_id):
             raise RuntimeError("COMMAND_ID_REJECTED")
         ensure_policy_written()
@@ -178,8 +182,8 @@ def verify(command_id: str) -> None:
 
 
 def main() -> int:
-    if len(sys.argv) == 2 and sys.argv[1] == "apply":
-        apply()
+    if len(sys.argv) == 3 and sys.argv[1] == "apply":
+        apply(sys.argv[2])
     elif len(sys.argv) == 3 and sys.argv[1] == "verify":
         verify(sys.argv[2])
     else:
