@@ -1,0 +1,201 @@
+name: ZM project approval crosswalk guarded private release
+on:
+  push:
+    branches: [feature/zm-approval-project-crosswalk-20261103]
+    paths:
+      - 'content/zomorod-business/project_portfolio.php'
+      - '.github/workflows/zm-project-crosswalk-guarded-release-20261103.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zm-live-php-private-reports-only
+  cancel-in-progress: false
+jobs:
+  crosswalk-release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite,sqlite3
+      - name: Verify exact read-only candidate source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          file=content/zomorod-business/project_portfolio.php
+          test "$(sha256sum "$file" | awk '{print $1}')" = 'd225e527623e7326c40959cf143d4d9d179b250a728163c843b7b9e9f3f8b7e0'
+          php -l "$file"
+          grep -Fq "function zmPortfolioRender(PDO" "$file"
+          grep -Fq "authorize('view')" "$file"
+          grep -Fq "approvals_snapshot.json" "$file"
+          grep -Fq "تطبیق مستند مصوبات با پرونده‌های پروژه" "$file"
+          echo 'SOURCE=exact_hash_php_lint_valid'
+          echo 'PURCHASE_OR_PAYMENT_TESTS=none'
+      - name: Establish fingerprint pinned GitHub Actions to VPS to cPanel transport
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-project-crosswalk"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump zm-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" zm-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Preflight exact live source, private snapshot and reversible backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-project-crosswalk"
+          ssh -F "$d/config" zm-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          root="$HOME/.private/zomorod-business"
+          dest="$root/project_portfolio.php"
+          stage="$root/.crosswalk-release-$sha"
+          old=a9ef2b4b38645d0684b2618f811e21474bfdb35d0fa4ac3b1e51355b4c447231
+          test -d "$root" && test ! -L "$root"
+          test -f "$root/app.php" && test ! -L "$root/app.php"
+          test -f "$root/management.sqlite3" && test ! -L "$root/management.sqlite3"
+          test -f "$root/approvals_snapshot.json" && test ! -L "$root/approvals_snapshot.json"
+          test -f "$dest" && test ! -L "$dest"
+          test "$(stat -c %a "$dest")" = 600
+          test "$(sha256sum "$dest" | awk '{print $1}')" = "$old"
+          test ! -e "$stage" && test ! -L "$stage"
+          phpbin=/opt/cpanel/ea-php82/root/usr/bin/php
+          test -x "$phpbin"
+          "$phpbin" -l "$dest" >/dev/null
+          "$phpbin" -r '$d=json_decode(file_get_contents($argv[1]),true);exit(is_array($d)&&($d["version"]??null)===1&&is_array($d["items"]??null)&&count($d["items"])>0?0:1);' "$root/approvals_snapshot.json"
+          install -d -m 700 "$stage"
+          install -m 600 "$dest" "$stage/previous.php"
+          test "$(sha256sum "$stage/previous.php" | awk '{print $1}')" = "$old"
+          sha256sum "$root/app.php" | awk '{print $1}' > "$stage/app.before.sha"
+          echo 'EXACT_PREVIOUS_VERSION=backed_up'
+          echo 'PRIVATE_SNAPSHOT=valid'
+          echo 'DATABASE=untouched'
+          REMOTE
+      - name: Upload one read-only module through verified relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-project-crosswalk"
+          scp -F "$d/config" content/zomorod-business/project_portfolio.php "zm-cpanel:/home/zomorod2/.private/zomorod-business/.crosswalk-release-$GITHUB_SHA/candidate.php"
+      - name: Atomic guarded publication and rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-project-crosswalk"
+          ssh -F "$d/config" zm-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          root="$HOME/.private/zomorod-business"
+          dest="$root/project_portfolio.php"
+          stage="$root/.crosswalk-release-$sha"
+          old=a9ef2b4b38645d0684b2618f811e21474bfdb35d0fa4ac3b1e51355b4c447231
+          new=d225e527623e7326c40959cf143d4d9d179b250a728163c843b7b9e9f3f8b7e0
+          phpbin=/opt/cpanel/ea-php82/root/usr/bin/php
+          test -f "$stage/candidate.php" && test ! -L "$stage/candidate.php"
+          test "$(sha256sum "$stage/candidate.php" | awk '{print $1}')" = "$new"
+          test "$(sha256sum "$dest" | awk '{print $1}')" = "$old"
+          test "$(sha256sum "$stage/previous.php" | awk '{print $1}')" = "$old"
+          test "$(sha256sum "$root/app.php" | awk '{print $1}')" = "$(cat "$stage/app.before.sha")"
+          "$phpbin" -l "$stage/candidate.php" >/dev/null
+          ready="$root/.crosswalk-ready-$sha.php"
+          test ! -e "$ready" && test ! -L "$ready"
+          install -m 600 "$stage/candidate.php" "$ready"
+          test "$(sha256sum "$ready" | awk '{print $1}')" = "$new"
+          published=0
+          rollback() {
+            set +e
+            if test "$published" = 1 && test -f "$dest" && test ! -L "$dest" && test "$(sha256sum "$dest" | awk '{print $1}')" = "$new"; then
+              restore="$root/.crosswalk-restore-$sha.php"
+              if install -m 600 "$stage/previous.php" "$restore" && mv -f "$restore" "$dest"; then
+                echo 'CROSSWALK_ROLLBACK=previous_exact_source_restored'
+              else
+                echo 'CROSSWALK_ROLLBACK=manual_backup_preserved' >&2
+              fi
+            fi
+          }
+          trap 'rc=$?; trap - EXIT; rollback; exit "$rc"' EXIT
+          mv -f "$ready" "$dest"
+          published=1
+          test -f "$dest" && test ! -L "$dest"
+          test "$(stat -c %a "$dest")" = 600
+          test "$(sha256sum "$dest" | awk '{print $1}')" = "$new"
+          "$phpbin" -l "$dest" >/dev/null
+          grep -Fq 'تطبیق مستند مصوبات با پرونده‌های پروژه' "$dest"
+          test "$(sha256sum "$root/app.php" | awk '{print $1}')" = "$(cat "$stage/app.before.sha")"
+          published=0
+          trap - EXIT
+          echo 'LIVE_PROJECT_CROSSWALK=published_exact_hash'
+          echo 'PRIVATE_SNAPSHOT=read_only'
+          echo 'DATABASE=not_written_by_release'
+          echo 'APP_ROUTER=unchanged'
+          echo 'AUTHENTICATED_OWNER_RENDER=not_yet_attested'
+          REMOTE
+      - name: Report publication attestation
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '### ZM official approvals crosswalk'
+            echo '- Project portfolio source: exact pinned hash installed on private cPanel host.'
+            echo '- PHP 8.2 lint: passed on GitHub runner and cPanel.'
+            echo '- Private source, database, and router: not rewritten.'
+            echo '- Browser owner authentication/render: separate attestation required.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove transient runner secret keys
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zm-project-crosswalk"
+          if test -d "$d"; then
+            for key in vps.key host.key; do
+              test ! -f "$d/$key" || shred -u "$d/$key"
+            done
+          fi
