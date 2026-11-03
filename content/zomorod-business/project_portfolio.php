@@ -16,6 +16,9 @@ function zmPortfolioRender(PDO $db):void {
         }
     }
     $total=array_sum($byState);
+    $rejected=(int)one($db,"SELECT COUNT(*) FROM projects WHERE title LIKE '%| ردشده -%'");
+    $approved=(int)one($db,"SELECT COUNT(*) FROM projects WHERE title LIKE '%| مصوب |%'");
+    $uncategorized=max(0,$total-$rejected-$approved);
     $linkedProjects=(int)one($db,'SELECT COUNT(DISTINCT project_id) FROM zm_project_links');
     $allLinks=(int)one($db,'SELECT COUNT(*) FROM zm_project_links');
     $withMilestones=(int)one($db,'SELECT COUNT(DISTINCT project_id) FROM zm_project_milestones');
@@ -42,9 +45,10 @@ function zmPortfolioRender(PDO $db):void {
     echo '<section><h2>گزارش جامع سبد پروژه‌های زمرد ملل</h2>';
     echo '<p class="muted">آخرین بازخوانی: '.esc($today).'، ساعت ایران. گزارش از داده‌های واقعی دفتر پروژه استخراج می‌شود. بودجه صرفاً پیشنهادی است و هیچ هزینه یا اشتغالی از آن استنباط نمی‌شود.</p>';
     echo '<div class="grid">';
-    foreach(['کل پرونده‌ها'=>$total,'دارای ارتباط مستند'=>$linkedProjects,'فاقد ارتباط ثبت‌شده'=>max(0,$total-$linkedProjects),'دارای زمان‌بندی'=>$withMilestones,'اقدامات باز'=>$openMilestones,'اقدامات معوق'=>$overdue,'اقدامات مسدود'=>$blocked,'گزارش‌های پیشرفت و موانع'=>$updateCount] as $label=>$count)
+    foreach(['کل پرونده‌ها'=>$total,'مصوب در متن مصوبه'=>$approved,'ردشده؛ فقط بایگانی'=>$rejected,'بدون برچسب قطعی مصوبه'=>$uncategorized,'دارای ارتباط مستند'=>$linkedProjects,'فاقد ارتباط ثبت‌شده'=>max(0,$total-$linkedProjects),'دارای زمان‌بندی'=>$withMilestones,'اقدامات باز'=>$openMilestones,'اقدامات معوق'=>$overdue,'اقدامات مسدود'=>$blocked,'گزارش‌های پیشرفت و موانع'=>$updateCount] as $label=>$count)
         echo '<div class="card"><div class="metric">'.(int)$count.'</div><h3>'.esc($label).'</h3></div>';
     echo '</div><p><a href="?page=projects">جست‌وجو و مدیریت پروژه‌ها</a> · <a href="?page=project_links">پرونده یکپارچه</a> · <a href="?page=project_calendar">تقویم پروژه‌ها</a></p></section>';
+    echo '<p class="muted">مصوب و ردشده از برچسب صریح پرونده استخراج می‌شوند؛ وضعیت برنامه‌ریزی یا توقف به تنهایی ملاک مصوبه نیست.</p>';
     echo '<section><h2>وضعیت‌های اداری و بودجه برنامه‌ای</h2><div class="scroll"><table><tr><th>وضعیت</th><th>پروژه</th><th>جمع بودجه پیشنهادی ریالی</th></tr>';
     foreach($byState as $key=>$n)
         echo '<tr><td>'.esc($labels[$key]).'</td><td>'.(int)$n.'</td><td>'.money($forecast[$key]??0).'</td></tr>';
