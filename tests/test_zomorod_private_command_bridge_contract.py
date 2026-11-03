@@ -389,6 +389,10 @@ def test_private_queue_capability_audit_is_metadata_only_and_valid_python():
         "PRIVATE_QUEUE_TABLES_DETECTED=",
         "PRIVATE_QUEUE_STATE_FIELD_DETECTED=",
         "PRIVATE_QUEUE_RESULT_FIELD_DETECTED=",
+        "PRIVATE_INGRESS_KNOWN_CLI_LITERALS=",
+        "PRIVATE_INGRESS_EXECUTION_LITERAL_DETECTED=",
+        "PRIVATE_INGRESS_WORKER_FUNCTION_CANDIDATE=",
+        "PRIVATE_SCHEMA_RESULT_MARKER_ANY_TABLE=",
     ):
         assert marker in parsed
     assert "ast.parse(ingress_path.read_text" in parsed
@@ -398,4 +402,8 @@ def test_private_queue_capability_audit_is_metadata_only_and_valid_python():
     assert "SELECT *" not in parsed
     assert "shell=True" not in parsed
     assert "private_db.unlink" not in parsed
+    assert "node.value in safe_verbs" in parsed
+    assert "print(table_name" not in parsed
+    assert "print(ingress_path.read_text" not in parsed
+    assert "SELECT payload" not in parsed
     assert "db.execute(\"UPDATE" not in parsed
