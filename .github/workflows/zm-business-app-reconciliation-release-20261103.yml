@@ -61,12 +61,22 @@ jobs:
           set -euo pipefail
           expected=2ed9274affa87f3e9c51f7dff0c72d7461118c7aca0ae0ab732b1c81cbfd6005
           if test -z "${APPROVED_SHA:-}"; then
-            echo 'PUBLISH_APPROVAL_SECRET_STATE=missing'
+            approval_state=missing
           elif test "$APPROVED_SHA" = "$expected"; then
-            echo 'PUBLISH_APPROVAL_SECRET_STATE=hash_ready'
+            approval_state=hash_ready
           else
-            echo 'PUBLISH_APPROVAL_SECRET_STATE=hash_mismatch'
+            approval_state=hash_mismatch
           fi
+          echo "PUBLISH_APPROVAL_SECRET_STATE=$approval_state"
+          if test "$approval_state" != hash_ready; then
+            echo "::warning::This green read-only preflight is NOT publish-ready: private SHA approval is $approval_state."
+          fi
+          {
+            echo '### Zomorod management desk publication readiness'
+            echo '- Source and cPanel checks are separate from the private SHA publication decision.'
+            echo "- Private SHA approval: $approval_state"
+            echo '- Production publication in this preflight: not performed'
+          } >> "$GITHUB_STEP_SUMMARY"
           echo 'PUBLISH_PERFORMED=no'
       - name: Configure pinned two-hop transport
         shell: bash
