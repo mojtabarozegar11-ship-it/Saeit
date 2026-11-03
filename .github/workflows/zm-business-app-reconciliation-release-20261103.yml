@@ -131,7 +131,13 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/zm-app-reconciliation"
           live_sha="$(ssh -F "$d/config" zm-cpanel "sha256sum /home/zomorod2/.private/zomorod-business/app.php" | awk '{print $1}')"
-          test "$live_sha" = 'ad9c80fc1bcff01c53cb58acabd088890e9f1dd0b7e3c38c95bd1ff4d67f27a7'
+          # Read-only checks accept the already-promoted candidate; publishing
+          # remains pinned to the original baseline and fails closed on replay.
+          if [[ "${{ github.event_name }}" == workflow_dispatch && "${{ inputs.mode }}" == publish ]]; then
+            test "$live_sha" = 'ad9c80fc1bcff01c53cb58acabd088890e9f1dd0b7e3c38c95bd1ff4d67f27a7'
+          else
+            test "$live_sha" = '2ed9274affa87f3e9c51f7dff0c72d7461118c7aca0ae0ab732b1c81cbfd6005'
+          fi
           ssh -F "$d/config" zm-cpanel bash -se <<'REMOTE'
           set -euo pipefail
           root="$HOME/.private/zomorod-business"
