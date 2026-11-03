@@ -45,9 +45,9 @@ jobs:
           echo FACTORY_INVENTORY_BEGIN
           # Cross-scheduler singleton reconnaissance (read-only; never print raw command lines).
           # A per-line flock is NOT a global cross-workflow product lock.
-          ps -eo args= | awk '
-            /[f]actory_vps_product_cycle[.]py|[s]trict-serial-fullcycle|[r]un-local-cycle[.]sh|[v]ps-only-loop[.]sh|[p]roduction-warehouse|[f]actory_product_maker[.]py|[s]tage[1-6]-/ {
-              n++; if (n <= 20) { if (/factory_vps_product_cycle[.]py/) t["line41"]++; else if (/strict-serial-fullcycle/) t["agri200"]++; else t["other"]++; }
+          ps -eo comm=,args= | awk '
+            $1 != "awk" && /[f]actory_vps_product_cycle[.]py|[s]trict-serial-fullcycle|[r]un-local-cycle[.]sh|[v]ps-only-loop[.]sh|[p]roduction-warehouse|[f]actory_product_maker[.]py|[s]tage[1-6]-/ {
+              n++; if (/factory_vps_product_cycle[.]py/) t["line41"]++; else if (/strict-serial-fullcycle/) t["agri200"]++; else t["other"]++;
             }
             END {print "FACTORY_SINGLETON_PROCESS_CANDIDATES=" n+0; for (k in t) print "FACTORY_SINGLETON_PROCESS_CLASS_" toupper(k) "=" t[k] }
           '
