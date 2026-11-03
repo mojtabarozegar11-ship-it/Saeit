@@ -1,0 +1,21 @@
+{% extends "enterprise_portal/shell.html" %}
+{% block title %}جزئیات انتشار{% endblock %}
+{% block crumb %}جزئیات انتشار{% endblock %}
+{% block content %}
+<section class="panel"><h1>{{ publication.title }}</h1>
+<p><strong>کمپین:</strong> {{ publication.campaign }} · <strong>کانال:</strong> {{ publication.channel }} · <strong>وضعیت:</strong> {{ publication.get_status_display }}</p>
+<p><strong>زمان برنامه:</strong> {{ publication.scheduled_at }}</p>
+<p><strong>مرجع مالکیت محتوا:</strong> {{ publication.rights_reference|default:"ثبت نشده" }}</p>
+<p><strong>هش نسخه:</strong> {{ publication.content_sha256|default:"تأیید نشده" }}</p>
+<p><strong>پذیرش سرویس‌دهنده:</strong> {{ publication.provider_reference|default:"هنوز تأیید نشده" }}</p>
+<h2>محتوای تبلیغ</h2><div style="white-space:pre-wrap;overflow-wrap:anywhere">{{ publication.content }}</div>
+{% if publication.landing_url %}<p><a href="{{ publication.landing_url }}" rel="noopener noreferrer nofollow">{{ publication.landing_url }}</a></p>{% endif %}
+{% if error %}<p role="alert">{% for e in error %}{{ e }}{% endfor %}</p>{% endif %}
+{% if can_approve and publication.status == "draft" %}<form method="post" action="{% url 'company_marketing:approve' publication.pk %}">{% csrf_token %}
+<button type="submit" class="btn">تأیید نسخه و قرار دادن در صف</button></form>{% endif %}
+<p class="muted">تأیید نسخه فقط برای محتوای دارای مجوز، کانال احرازشده و دارای دسترسی اجرا می‌شود. این دکمه ارسال فوری نیست.</p>
+<h2>سوابق عملیاتی</h2><ul>{% for event in events %}<li>{{ event.created_at }} — {{ event.code }}</li>
+{% empty %}<li>سوابق خالی است.</li>{% endfor %}</ul>
+<p><a href="{% url 'company_marketing:dashboard' %}">بازگشت به مرکز بازاریابی</a></p>
+</section>
+{% endblock %}

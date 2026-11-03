@@ -1,0 +1,45 @@
+{% extends "enterprise_portal/shell.html" %}
+{% block title %}CRM مشتریان و فروش{% endblock %}
+{% block crumb %}بازاریابی / CRM{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="eyebrow">CUSTOMER RELATIONS · ZOMOROD MELAL</div>
+  <h1>مدیریت ارتباط مشتریان و قیف فروش</h1>
+  <p>سرنخ‌های واحدهای مجاز و مبلغ فروش صرفاً در صورت وجود سند مستقل نمایش داده می‌شوند. هیچ تماس یا هزینه‌ای با بازکردن این صفحه انجام نمی‌شود.</p>
+</section>
+<section class="stats-grid" aria-label="آمار ثبت‌شده">
+  <div class="stat"><span>سرنخ‌های ثبت‌شده</span><strong>{{ pipeline_count }}</strong><small>مبتنی بر سوابق CRM</small></div>
+  <div class="stat"><span>فروش مستند به ریال</span><strong>{{ closed_won_irr }}</strong><small>بدون ادعای تسویه بانکی</small></div>
+</section>
+<section class="panel">
+ <h2>مراحل فروش</h2>
+ <div class="calendar-toolbar">
+   <a class="module-action" href="{% url 'company_marketing:crm' %}">همه مراحل</a>
+   {% for key,label,count in stages %}<a class="module-action" href="?stage={{ key }}" {% if current_stage == key %}aria-current="page"{% endif %}>{{ label }} ({{ count }})</a>{% endfor %}
+ </div>
+ {% if can_add_lead %}<p><a class="primary-btn" href="{% url 'company_marketing:new_lead' %}">ثبت سرنخ مشتری +</a></p>{% endif %}
+ <div class="calendar-scroll">
+  <table>
+   <thead><tr><th>واحد</th><th>مخاطب</th><th>کمپین</th><th>مرحله</th><th>مسئول</th><th>منبع</th><th>ارزش برآوردی (ریال)</th><th>فروش مستند (ریال)</th></tr></thead>
+   <tbody>
+   {% for lead in leads %}
+    <tr>
+     <td>{{ lead.unit.name }}</td>
+     <td>{% if can_view_contact %}{{ lead.contact.name }}{% else %}مخاطب محرمانه{% endif %}</td>
+     <td>{{ lead.campaign.title|default:"—" }}</td>
+     <td>{{ lead.get_stage_display }}</td>
+     <td>{{ lead.owner.get_username }}</td>
+     <td>{{ lead.source }}</td>
+     <td>{{ lead.estimated_value_irr }}</td>
+     <td>{% if lead.stage == "won" and lead.sale_evidence_reference %}{{ lead.verified_sale_irr }}{% else %}—{% endif %}</td>
+    </tr>
+   {% empty %}<tr><td colspan="8">در این مرحله سرنخی ثبت نشده است.</td></tr>{% endfor %}
+   </tbody>
+  </table>
+ </div>
+</section>
+<section class="info-panel">
+ <p>به‌روزرسانی مراحل، ارسال پیام، تبلیغات پولی و صدور فاکتور تنها از مسیرهای دارای مجوز، تأیید و ردپای مستقل انجام می‌شوند.</p>
+ <a class="module-action" href="{% url 'company_marketing:dashboard' %}">بازگشت به مرکز بازاریابی ←</a>
+</section>
+{% endblock %}

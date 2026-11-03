@@ -1,0 +1,444 @@
+"""Login-only internal company workspace: all views scoped by Django permissions."""
+from decimal import Decimal
+from functools import wraps
+from django.conf import settings
+from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.views import redirect_to_login
+from django.core.exceptions import PermissionDenied
+from django.db.models import Q, Sum
+from django.db import transaction
+from django.http import HttpResponse, HttpResponseForbidden, FileResponse
+from pathlib import Path
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.http import require_GET, require_http_methods
+
+from .forms import CompanyAuthenticationForm, TaskForm, LetterForm, has_office_access
+from .models import (
+    AuditEvent, BudgetPlan, BusinessUnit, CommercialDocument, CompanyAsset,
+    InventoryItem, JournalEntry, JournalLine, ManagementProject, Meeting,
+    OfficeLetter, OfficeAttachment, Partner, StockMovement, WorkTask, ChatGPTActionReport,
+)
+from .task_workflow import TRANSITIONS, available_actions
+from .services import stock_balance
+from .php_ledger_bridge import LedgerUnavailable, read_php_finance_snapshot
+from ecosystem_hub.access import user_units, require_unit
+
+
+def no_cache(response):
+    response["Cache-Control"] = "private, no-store, no-cache, must-revalidate, max-age=0"
+    response["Pragma"] = "no-cache"
+    response["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    response["Referrer-Policy"] = "same-origin"
+    return response
+
+
+def ensure_tls(request):
+    # A finance/admin session must never be processed as cleartext outside tests.
+    return settings.DEBUG or request.is_secure()
+
+
+def office_access(view):
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        if not ensure_tls(request):
+            return no_cache(HttpResponseForbidden("ورود امن فقط از HTTPS امکان‌پذیر است."))
+        if not request.user.is_authenticated:
+            return no_cache(redirect_to_login(
+                request.get_full_path(),
+                reverse("enterprise_portal:login"),
+            ))
+        if not has_office_access(request.user):
+            raise PermissionDenied("مجوز ورود به میزکار خصوصی شرکت موجود نیست.")
+        if settings.COMPANY_OFFICE_REQUIRE_MFA:
+            verified = getattr(request.user, "is_verified", None)
+            if not callable(verified) or not verified():
+                return no_cache(redirect_to_login(
+                    request.get_full_path(), reverse("enterprise_portal:login"),
+                ))
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
+def required_permission(request, code):
+    if not (request.user.is_superuser or request.user.has_perm(f"enterprise_portal.{code}")):
+        raise PermissionDenied("مجوز مشاهده این بخش در حساب شما فعال نیست.")
+
+
+def page(request, template, context):
+    return no_cache(render(request, f"enterprise_portal/{template}.html", context))
+
+
+@method_decorator(never_cache, name="dispatch")
+class CompanyLogin(LoginView):
+    template_name = "enterprise_portal/login.html"
+    authentication_form = CompanyAuthenticationForm
+    redirect_authenticated_user = False
+
+    def dispatch(self, request, *args, **kwargs):
+        if not ensure_tls(request):
+            return no_cache(HttpResponseForbidden("ورود امن فقط از HTTPS امکان‌پذیر است."))
+        return no_cache(super().dispatch(request, *args, **kwargs))
+
+    def get_success_url(self):
+        return self.get_redirect_url() or reverse("enterprise_portal:dashboard")
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        # Financial office sessions expire after thirty minutes.
+        self.request.session.set_expiry(30 * 60)
+        return no_cache(response)
+
+
+class CompanyLogout(LogoutView):
+    next_page = "enterprise_portal:login"
+
+    def dispatch(self, request, *args, **kwargs):
+        return no_cache(super().dispatch(request, *args, **kwargs))
+
+
+@require_GET
+def office_stylesheet(request):
+    """Serve the immutable private-office CSS without changing the site's static manifest."""
+    asset = Path(__file__).resolve().parent / "static" / "enterprise_portal" / "app.css"
+    response = FileResponse(asset.open("rb"), content_type="text/css; charset=utf-8")
+    response["Cache-Control"] = "public, max-age=3600"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+    return response
+
+
+MODULES = [
+    {"key": "finance", "title": "حسابداری و دفتر کل", "text": "کدینگ حساب‌ها، سند دوطرفه، گزارش تراز به تفکیک ارز", "icon": "₿", "permission": "view_journalentry", "url": "enterprise_portal:finance"},
+    {"key": "trade", "title": "خرید، فروش و قراردادها", "text": "طرف‌های تجاری، فاکتورها، مبلغ، سررسید و وضعیت", "icon": "◈", "permission": "view_commercialdocument", "admin": "admin:enterprise_portal_commercialdocument_changelist"},
+    {"key": "stock", "title": "انبار و تولید", "text": "کالاها، ورود و خروج قطعی، موجودی و نقطه سفارش", "icon": "▣", "permission": "view_inventoryitem", "url": "enterprise_portal:inventory"},
+    {"key": "office", "title": "دبیرخانه و مکاتبات", "text": "نامه‌های وارده، صادره، داخلی و محرمانه", "icon": "✉", "permission": "view_officeletter", "url": "enterprise_portal:letters"},
+    {"key": "tasks", "title": "اتوماسیون وظایف", "text": "ارجاع کار، اولویت، پیگیری، سررسید و مسئولیت", "icon": "✓", "permission": "view_worktask", "url": "enterprise_portal:tasks"},
+    {"key": "meetings", "title": "تقویم هوشمند و جلسات", "text": "تقویم ماهانه، سررسید وظایف، جلسات، پیشگیری از تداخل و خروجی تقویم", "icon": "◷", "permission": "view_meeting", "url": "enterprise_portal:calendar"},
+    {"key": "projects", "title": "برنامه‌ها و پروژه‌ها", "text": "مدیریت طرح‌های صنعتی، تجاری و پژوهشی شرکت", "icon": "◇", "permission": "view_managementproject", "url": "enterprise_portal:project_register"},
+    {"key": "budgets", "title": "بودجه و برنامه مالی", "text": "اعتبار مصوب و پیشنهادی در واحدها و ارزهای جداگانه", "icon": "▤", "permission": "view_budgetplan", "admin": "admin:enterprise_portal_budgetplan_changelist"},
+    {"key": "assets", "title": "اموال و دارایی ثابت", "text": "ثبت تجهیزات، محل، تاریخ خرید و مسئول نگهداری", "icon": "⬡", "permission": "view_companyasset", "admin": "admin:enterprise_portal_companyasset_changelist"},
+    {"key": "audit", "title": "گزارش حسابرسی داخلی", "text": "سوابق قطعی‌سازی اسناد و گردش انبار", "icon": "≡", "permission": "view_auditevent", "admin": "admin:enterprise_portal_auditevent_changelist"},
+    {"key": "message_center", "title": "سامانه پیام و مکاتبات داخلی", "text": "صندوق پیام، مخاطبان و تاریخچه ارسال با رضایت و مجوز", "icon": "✉", "permission_app": "company_messaging", "permission": "view_message", "url": "company_messaging:inbox"},
+    {"key": "marketing", "title": "تبلیغات و بازاریابی", "text": "کمپین، برنامه انتشار، سنجش عملکرد و هزینه", "icon": "◎", "permission_app": "company_marketing", "permission": "view_campaign", "url": "company_marketing:dashboard"},
+    {"key": "crm", "title": "مدیریت ارتباط مشتریان", "text": "سرنخ، مراحل فروش و درآمد مستند به تفکیک واحد", "icon": "◇", "permission_app": "company_marketing", "permission": "view_lead", "url": "company_marketing:crm"},
+    {"key": "chatgpt_reports", "title": "گزارش‌های متنی اقدامات ChatGPT",
+     "text": "گزارش شماره‌دار، نتیجه، زمان و مدرک اقدامات ثبت‌شده در چرخه‌ها",
+     "icon": "≡", "permission": "view_chatgptactionreport",
+     "superuser_only": True, "url": "enterprise_portal:chatgpt_reports"},
+    {"key": "master_agent", "title": "مسترایجنت و فرماندهی", "text": "تحلیل، صف کارها و چرخه‌های کنترل‌شده با تأیید و ردپا", "icon": "✦", "permission_app": "ecosystem_hub", "permission": "view_organization", "url": "enterprise_portal:ecosystem_hub:master_command"},
+]
+
+
+@never_cache
+@office_access
+@require_GET
+def dashboard(request):
+    user = request.user
+    modules = [item for item in MODULES
+               if (not item.get("superuser_only") or user.is_superuser)
+               and (user.is_superuser or user.has_perm(
+                   item.get("permission_app", "enterprise_portal") + "." + item["permission"]))]
+    summary = []
+    if user.is_superuser or user.has_perm("enterprise_portal.view_businessunit"):
+        summary.append(("واحدهای شرکت", user_units(user).filter(active=True).count()))
+    if user.is_superuser or user.has_perm("enterprise_portal.view_worktask"):
+        tasks = WorkTask.objects.exclude(status="done")
+        if not user.is_superuser:
+            tasks = tasks.filter(unit__in=user_units(user))
+            if not user.has_perm("enterprise_portal.change_worktask"):
+                tasks = tasks.filter(Q(assigned_to=user) | Q(created_by=user))
+        summary.append(("کارهای باز", tasks.count()))
+    if user.is_superuser or user.has_perm("enterprise_portal.view_officeletter"):
+        qs = _visible_letters(user)
+        summary.append(("نامه‌های ثبت‌شده", qs.count()))
+    if user.is_superuser or user.has_perm("enterprise_portal.view_managementproject"):
+        summary.append(("پروژه‌های در اجرا", ManagementProject.objects.filter(status="active", unit__in=user_units(user)).count()))
+    return page(request, "dashboard", {
+        "modules": modules, "summary": summary, "section": "dashboard",
+    })
+
+
+def _visible_letters(user):
+    qs = OfficeLetter.objects.all()
+    # Unscoped legacy letters must never be visible to unrelated staff.
+    # The global confidential-letter permission does NOT bypass ownership.
+    if not user.is_superuser:
+        qs = qs.filter(Q(assigned_to=user) | Q(created_by=user))
+    return qs
+
+
+@never_cache
+@office_access
+@require_GET
+def finance(request):
+    required_permission(request, "view_journalentry")
+    totals = (
+        JournalLine.objects.filter(entry__status="posted", entry__unit__in=user_units(request.user))
+        .values("entry__unit__code", "entry__unit__name", "entry__currency")
+        .annotate(debit=Sum("debit"), credit=Sum("credit"))
+        .order_by("entry__unit__code", "entry__currency")
+    )
+    records = []
+    for item in totals:
+        records.append({
+            "code": item["entry__unit__code"], "unit": item["entry__unit__name"],
+            "currency": item["entry__currency"], "debit": item["debit"] or Decimal("0"),
+            "credit": item["credit"] or Decimal("0"),
+        })
+    return page(request, "finance", {
+        "section": "finance",
+        "records": records,
+        "posted_count": JournalEntry.objects.filter(status="posted", unit__in=user_units(request.user)).count(),
+        "draft_count": JournalEntry.objects.filter(status="draft", unit__in=user_units(request.user)).count(),
+    })
+
+
+
+@never_cache
+@office_access
+@require_GET
+def authoritative_finance(request):
+    """CEO-only aggregate view until a unit-level access map is independently audited."""
+    required_permission(request, "view_journalentry")
+    # PHP V7 has no verified Django business-unit mapping. A model-level view
+    # permission must never reveal every unit's finance to departmental staff.
+    if not request.user.is_superuser:
+        raise PermissionDenied("دفتر مالی اصلی فقط برای مدیرکل مجاز است.")
+    try:
+        snapshot = read_php_finance_snapshot(settings.ZM_PHP_LEDGER_READONLY_PATH)
+    except LedgerUnavailable:
+        return no_cache(HttpResponse(
+            "دفتر مالی مرجع در دسترس نیست؛ هیچ دادهٔ جایگزینی نمایش داده نمی‌شود.",
+            status=503, content_type="text/plain; charset=utf-8",
+        ))
+    return page(request, "php_finance", {
+        "section": "finance", "snapshot": snapshot,
+    })
+
+
+@never_cache
+@office_access
+@require_GET
+def inventory(request):
+    required_permission(request, "view_inventoryitem")
+    required_permission(request, "view_stockmovement")
+    products = InventoryItem.objects.select_related("unit").filter(active=True, unit__in=user_units(request.user)).order_by("unit__code", "sku")[:150]
+    records = []
+    for item in products:
+        balance = stock_balance(item.pk)
+        records.append({"item": item, "balance": balance,
+                        "needs_reorder": balance <= item.reorder_point})
+    return page(request, "inventory", {
+        "section": "inventory", "records": records,
+    })
+
+
+def _visible_tasks(user):
+    """The same row-level and unit-level privacy for task list and task detail."""
+    qs = WorkTask.objects.select_related("assigned_to", "created_by", "unit")
+    if not user.is_superuser:
+        qs = qs.filter(unit__in=user_units(user))
+        if not user.has_perm("enterprise_portal.change_worktask"):
+            qs = qs.filter(Q(assigned_to=user) | Q(created_by=user))
+    return qs
+
+
+@never_cache
+@office_access
+@require_GET
+def tasks(request):
+    required_permission(request, "view_worktask")
+    return page(request, "tasks", {
+        "section": "tasks",
+        "tasks": _visible_tasks(request.user).order_by("due_on", "-created_at")[:100],
+        "can_add": request.user.is_superuser or request.user.has_perm("enterprise_portal.add_worktask"),
+    })
+
+
+@never_cache
+@office_access
+@csrf_protect
+@require_http_methods(["GET", "POST"])
+def task_detail(request, pk):
+    """Human-reviewed task lifecycle; transition and immutable audit are atomic."""
+    required_permission(request, "view_worktask")
+    qs = _visible_tasks(request.user)
+    if request.method == "POST":
+        code = (request.POST.get("transition") or "").strip()
+        expected_status = (request.POST.get("expected_status") or "").strip()
+        note = (request.POST.get("note") or "").strip()
+        if code not in TRANSITIONS:
+            return no_cache(HttpResponse("نوع اقدام معتبر نیست.", status=400))
+        if not 5 <= len(note) <= 1200:
+            return no_cache(HttpResponse("شرح اقدام باید ۵ تا ۱۲۰۰ نویسه باشد.", status=400))
+        with transaction.atomic():
+            task = get_object_or_404(qs.select_for_update(), pk=pk)
+            if expected_status != task.status:
+                return no_cache(HttpResponse("وضعیت وظیفه تغییر کرده؛ صفحه را تازه کنید.", status=409))
+            if code not in {action["code"] for action in available_actions(request.user, task)}:
+                raise PermissionDenied("مجوز انجام این مرحله از گردش کار موجود نیست.")
+            old_status = task.status
+            task.status = TRANSITIONS[code][1]
+            task.full_clean()
+            task.save(update_fields=("status", "updated_at"))
+            AuditEvent.objects.create(
+                actor=request.user,
+                action="office_task_transition",
+                target=f"WorkTask:{task.pk}",
+                detail={
+                    "unit_id": task.unit_id,
+                    "transition": code,
+                    "from": old_status,
+                    "to": task.status,
+                    "note": note,
+                    "human_action": True,
+                    "superuser_self_review_override": bool(
+                        request.user.is_superuser and
+                        request.user.pk == task.assigned_to_id and
+                        code in ("approve", "rework")
+                    ),
+                    "no_external_side_effects": True,
+                },
+            )
+        return no_cache(redirect("enterprise_portal:task_detail", pk=pk))
+
+    task = get_object_or_404(qs, pk=pk)
+    events = AuditEvent.objects.filter(
+        target=f"WorkTask:{task.pk}", action="office_task_transition",
+    ).select_related("actor").order_by("-occurred_at", "-pk")[:50]
+    return page(request, "task_detail", {
+        "section": "tasks", "item": task,
+        "actions": available_actions(request.user, task),
+        "events": events,
+    })
+
+
+@never_cache
+@office_access
+@require_GET
+def letters(request):
+    required_permission(request, "view_officeletter")
+    qs = _visible_letters(request.user).select_related("assigned_to").prefetch_related("attachments").order_by("-sent_on", "-pk")
+    return page(request, "letters", {
+        "section": "letters", "letters": qs[:100],
+        "can_add": request.user.has_perm("enterprise_portal.add_officeletter"),
+    })
+
+
+@never_cache
+@office_access
+@require_http_methods(["GET", "POST"])
+def new_task(request):
+    required_permission(request, "add_worktask")
+    form = TaskForm(request.POST or None, user=request.user)
+    if request.method == "POST" and form.is_valid():
+        item = form.save(commit=False)
+        item.created_by = request.user
+        if item.unit_id:
+            require_unit(request.user, item.unit, write=True)
+        with transaction.atomic():
+            item.save()
+            AuditEvent.objects.create(actor=request.user, action="office_task_created",
+                                      target=f"WorkTask:{item.pk}", detail={"title": item.title})
+        return no_cache(redirect("enterprise_portal:tasks"))
+    return page(request, "form", {
+        "section": "tasks", "form": form, "heading": "ثبت و ارجاع کار جدید",
+        "submit_label": "ثبت وظیفه", "back_url": reverse("enterprise_portal:tasks"),
+    })
+
+
+@never_cache
+@office_access
+@require_http_methods(["GET", "POST"])
+def new_letter(request):
+    required_permission(request, "add_officeletter")
+    form = LetterForm(request.POST or None, request.FILES or None, user=request.user)
+    if request.method == "POST" and form.is_valid():
+        attachment = form.cleaned_data.get("attachment")
+        if attachment:
+            required_permission(request, "add_officeattachment")
+        item = form.save(commit=False)
+        item.created_by = request.user
+        from .private_uploads import remove_only_new_attachment, store_attachment
+        saved_key = None
+        try:
+            with transaction.atomic():
+                item.save()
+                AuditEvent.objects.create(
+                    actor=request.user, action="office_letter_created",
+                    target=f"OfficeLetter:{item.pk}",
+                    detail={"number": item.number, "classification": item.classification},
+                )
+                if attachment:
+                    stored = store_attachment(item, request.user, attachment)
+                    saved_key = stored.storage_key
+                    AuditEvent.objects.create(
+                        actor=request.user, action="office_attachment_uploaded",
+                        target=f"OfficeLetter:{item.pk}",
+                        detail={"attachment_id": stored.pk, "size_bytes": stored.size_bytes,
+                                "sha256": stored.sha256, "human_action": True},
+                    )
+        except Exception:
+            if saved_key:
+                remove_only_new_attachment(saved_key)
+            raise
+        return no_cache(redirect("enterprise_portal:letters"))
+    return page(request, "form", {
+        "section": "office", "form": form, "heading": "ثبت نامه در دبیرخانه",
+        "submit_label": "ثبت نامه", "back_url": reverse("enterprise_portal:letters"),
+    })
+
+
+@never_cache
+@office_access
+@require_GET
+def download_office_attachment(request, pk):
+    required_permission(request, "view_officeletter")
+    required_permission(request, "download_officeattachment")
+    record = get_object_or_404(
+        OfficeAttachment.objects.select_related("letter").filter(
+            letter__in=_visible_letters(request.user),
+        ),
+        pk=pk,
+    )
+    from .private_uploads import download_attachment
+    return download_attachment(record)
+
+
+@never_cache
+@office_access
+@require_GET
+def chatgpt_reports(request):
+    """Private read-only text ledger: only recorded receipts, not chat history."""
+    if not request.user.is_superuser:
+        raise PermissionDenied("سوابق جامع اقدامات ChatGPT فقط برای مدیر ارشد مجاز است.")
+    from django.core.paginator import Paginator
+    from django.http import HttpResponseBadRequest
+
+    state = (request.GET.get("outcome") or "").strip()
+    cycle = (request.GET.get("cycle") or "").strip()
+    valid_states = {code for code, _ in ChatGPTActionReport._meta.get_field("outcome").choices}
+    if state and state not in valid_states:
+        return no_cache(HttpResponseBadRequest("وضعیت گزارش نامعتبر است."))
+    if len(cycle) > 16 or (cycle and not cycle.isascii()):
+        return no_cache(HttpResponseBadRequest("شناسه چرخه نامعتبر است."))
+    reports = ChatGPTActionReport.objects.select_related("unit", "evidence_reviewed_by")
+    if state:
+        reports = reports.filter(outcome=state)
+    if cycle:
+        reports = reports.filter(cycle_code=cycle)
+    page_obj = Paginator(reports.order_by("-occurred_at", "-pk"), 25).get_page(
+        request.GET.get("page", "1")
+    )
+    return page(request, "chatgpt_reports", {
+        "section": "chatgpt_reports",
+        "records": page_obj.object_list,
+        "page_obj": page_obj,
+        "outcome": state,
+        "cycle": cycle,
+        "outcome_choices": ChatGPTActionReport._meta.get_field("outcome").choices,
+    })

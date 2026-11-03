@@ -1,0 +1,26 @@
+{% extends 'enterprise_portal/shell.html' %}
+{% block title %}دفتر مالی مرجع ـ فقط‌خواندنی{% endblock %}
+{% block crumb %}دفتر مالی مرجع{% endblock %}
+{% block content %}
+<div class="page-head"><div class="eyebrow">AUTHORITATIVE PHP LEDGER · READ ONLY</div>
+<h1>گزارش مالی سامانهٔ اصلی زمرد ملل</h1>
+<p>این گزارش مستقیماً از دیتابیس موجود سامانهٔ PHP خوانده می‌شود. از این صفحه هیچ سند، فاکتور، پرداخت یا تغییری ثبت نمی‌شود.</p></div>
+<div class="stats-grid">
+  <div class="stat"><span>اسناد حسابداری</span><strong>{{ snapshot.document_count }}</strong><small>تعداد سند در دفتر مرجع</small></div>
+  <div class="stat"><span>فاکتورها</span><strong>{{ snapshot.invoice_count }}</strong><small>فروش و خرید</small></div>
+  <div class="stat"><span>موارد عدم تراز</span><strong>{{ snapshot.imbalance_count }}</strong><small>کنترل هر سند و ارز جداگانه</small></div>
+</div>
+<div class="section-heading"><h2>گردش حساب‌ها به تفکیک ارز</h2></div>
+<div class="table-frame"><table><thead><tr><th>ارز</th><th>بدهکار</th><th>بستانکار</th><th>اختلاف</th><th>کنترل</th></tr></thead>
+<tbody>{% for row in snapshot.turnovers %}<tr><td>{{ row.currency }}</td>
+<td class="number">{{ row.debit }}</td><td class="number">{{ row.credit }}</td>
+<td class="number">{{ row.difference }}</td><td>{% if row.balanced %}متوازن{% else %}نیازمند بررسی{% endif %}</td></tr>
+{% empty %}<tr><td colspan="5">هنوز گردش مالی ثبت نشده است.</td></tr>{% endfor %}</tbody></table></div>
+<div class="section-heading"><h2>خلاصهٔ فاکتور و تسویه به تفکیک ارز</h2></div>
+<div class="table-frame"><table><thead><tr><th>ارز</th><th>نوع</th><th>تعداد</th><th>مبلغ</th><th>تسویه‌شده</th><th>مانده</th></tr></thead>
+<tbody>{% for row in snapshot.invoices %}<tr><td>{{ row.currency }}</td><td>{% if row.kind == "sale" %}فروش{% else %}خرید{% endif %}</td>
+<td>{{ row.count }}</td><td class="number">{{ row.amount }}</td><td class="number">{{ row.paid }}</td><td class="number">{{ row.outstanding }}</td></tr>
+{% if row.overpaid %}<tr><td colspan="6">هشدار: مجموع پرداخت از مبلغ فاکتور بیشتر است؛ بررسی حسابداری ضروری است.</td></tr>{% endif %}
+{% empty %}<tr><td colspan="6">فاکتوری ثبت نشده است.</td></tr>{% endfor %}</tbody></table></div>
+<p class="hint">مبالغ مطابق قرارداد PHP به واحد فرعی (دو رقم اعشار) تبدیل شده‌اند. ارزهای مختلف هرگز جمع یا به‌طور خودکار تبدیل نمی‌شوند. این گزارش جایگزین حسابرسی مستقل و دفاتر قانونی نیست.</p>
+{% endblock %}

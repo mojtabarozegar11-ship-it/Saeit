@@ -1,0 +1,60 @@
+{% extends 'enterprise_portal/shell.html' %}
+{% block title %}تقویم هوشمند شرکت{% endblock %}
+{% block crumb %}تقویم و جلسات{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="eyebrow">EXECUTIVE CALENDAR · ZOMOROD MELAL</div>
+  <h1>تقویم هوشمند مدیریت و عملیات</h1>
+  <p>جلسات و سررسید کارهای سازمانی، بر اساس مجوز و مسئولیت شما. تاریخ این نما میلادی است؛ هیچ پیام یا یادآوری بدون دستور ارسال نمی‌شود.</p>
+</div>
+<section class="calendar-toolbar" aria-label="پیمایش ماه">
+  <a class="module-action" href="?month={{ previous_month }}">ماه قبل →</a>
+  <form method="get" class="calendar-month-form">
+    <label for="calendar-month">ماه موردنظر</label>
+    <input id="calendar-month" name="month" type="month" value="{{ current_month|date:'Y-m' }}" required>
+    <button type="submit">نمایش</button>
+  </form>
+  <a class="module-action" href="?month={{ next_month }}">← ماه بعد</a>
+  {% if can_add_meeting %}<a class="primary-btn" href="{% url 'enterprise_portal:new_meeting' %}">ثبت جلسه جدید +</a>{% endif %}
+</section>
+<div class="calendar-legend">
+  {% if show_meetings %}<span><b class="calendar-badge meeting">جلسه</b> زمان‌بندی و خروجی تقویم</span>{% endif %}
+  {% if show_tasks %}<span><b class="calendar-badge task">وظیفه</b> پیگیری کار سازمانی</span>{% endif %}
+  <span><b class="calendar-badge overdue">معوق</b> کار سررسیدگذشته و باز</span>
+</div>
+<div class="calendar-scroll" role="region" aria-label="تقویم ماهانه" tabindex="0">
+<table class="calendar-grid">
+  <caption>تقویم {{ current_month|date:'Y / m' }} · فقط موارد دارای مجوز</caption>
+  <thead><tr><th scope="col">شنبه</th><th scope="col">یکشنبه</th><th scope="col">دوشنبه</th><th scope="col">سه‌شنبه</th><th scope="col">چهارشنبه</th><th scope="col">پنجشنبه</th><th scope="col">جمعه</th></tr></thead>
+  <tbody>
+  {% for week in weeks %}
+  <tr>
+    {% for day in week %}
+    <td class="{% if not day.in_month %}calendar-muted{% endif %} {% if day.today %}calendar-today{% endif %}">
+      <span class="calendar-day-number"><time datetime="{{ day.date|date:'Y-m-d' }}">{{ day.date|date:'j' }}</time></span>
+      <ul class="calendar-events">
+        {% for event in day.events %}
+        <li>
+          <a href="{{ event.url }}" class="calendar-event {% if event.overdue %}is-overdue{% endif %}"
+             {% if event.type == 'meeting' %}title="دریافت قرار جلسه در قالب تقویم"{% else %}title="مشاهده و پیگیری وظیفه"{% endif %}>
+            <b class="calendar-badge {{ event.type }} {% if event.overdue %}overdue{% endif %}">{% if event.type == 'meeting' %}جلسه{% else %}کار{% endif %}</b>
+            {% if event.time %}<small>{{ event.time|date:'H:i' }}</small>{% endif %}
+            <span>{{ event.title|truncatechars:48 }}</span>
+          </a>
+        </li>
+        {% endfor %}
+        {% if day.overflow %}<li class="calendar-more">+{{ day.overflow }} مورد دیگر در این روز</li>{% endif %}
+      </ul>
+    </td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<section class="info-panel">
+ <h2>فرماندهی از میز مدیریت</h2>
+ <p>ایجاد جلسه، ارجاع کار و نمایش سررسید در همین میزکار انجام می‌شود. اجرای چرخه‌های ایجنت، ارسال پیام، تصمیم مالی یا هزینهٔ تبلیغات نیازمند مجوزهای مستقل و ثبت ردپای عملیات است.</p>
+ {% if perms.ecosystem_hub.view_organization %}<a class="module-action" href="{% url 'enterprise_portal:ecosystem_hub:master_command' %}">ورود به مسترایجنت و فرماندهی →</a>{% endif %}
+</section>
+{% endblock %}

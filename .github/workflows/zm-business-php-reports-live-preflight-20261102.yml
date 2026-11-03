@@ -1,0 +1,159 @@
+name: ZM existing PHP business text-report release read-only preflight
+on:
+  push:
+    branches:
+      - feature/zm-business-php-chatgpt-reports-20261102
+    paths:
+      - ".github/workflows/zm-business-php-reports-live-preflight-20261102.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zm-php-text-reports-cpanel-readonly
+  cancel-in-progress: false
+jobs:
+  preflight-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify exact source and independently known base
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -s content/zomorod-business/app.php
+          test -s content/zomorod-business/chatgpt_reports.php
+          git cat-file -e b0ab815daeb8c49aca94fb21106f4dab060777a5^{commit}
+          git show b0ab815daeb8c49aca94fb21106f4dab060777a5:content/zomorod-business/app.php | sha256sum | awk '{print $1}' > "$RUNNER_TEMP/php-business-baseline.sha"
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/chatgpt_reports.php
+      - name: Configure authenticated two-hop relay with both pinned host keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-report-preflight"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Compare live PHP source identity and private snapshot status, read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-report-preflight"
+          expected="$(cat "$RUNNER_TEMP/php-business-baseline.sha")"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$expected" <<'REMOTE'
+          set -euo pipefail
+          expected="$1"
+          app="$HOME/.private/zomorod-business/app.php"
+          ledger="$HOME/.private/zomorod-business/management.sqlite3"
+          snapshot="$HOME/.private/zomorod-business/chatgpt_reports_snapshot.json"
+          test -f "$app" && test ! -L "$app"
+          test -f "$ledger" && test ! -L "$ledger"
+          live="$(sha256sum "$app" | awk '{print $1}')"
+          if test "$live" = "$expected"; then
+            echo "LIVE_PHP_SOURCE_MATCHES_KNOWN_BASE=yes"
+          else
+            echo "LIVE_PHP_SOURCE_MATCHES_KNOWN_BASE=no"
+          fi
+          if test -f "$snapshot" && test ! -L "$snapshot"; then
+            echo "PRIVATE_CHATGPT_REPORT_SNAPSHOT=present"
+          else
+            echo "PRIVATE_CHATGPT_REPORT_SNAPSHOT=absent_or_untrusted"
+          fi
+          if test -f "$HOME/.private/zomorod-business/chatgpt_reports.php"; then
+            echo "LIVE_PHP_REPORT_MODULE=present"
+          else
+            echo "LIVE_PHP_REPORT_MODULE=not_installed"
+          fi
+          python3 - "$app" <<'PYTHON_SOURCE'
+          import sys
+          from pathlib import Path
+          text = Path(sys.argv[1]).read_text(encoding="utf-8")
+          anchors = {
+              "NAV": "'audit'=>'ردپای عملیات'",
+              "ROLE": "if($key==='users'&&role()!=='admin')continue;",
+              "ROUTE": "    } elseif($page==='audit'){",
+          }
+          compatible = True
+          for label, pattern in anchors.items():
+              count = text.count(pattern)
+              print("LIVE_PHP_PATCH_ANCHOR_" + label + "=" + ("one" if count == 1 else "missing_or_ambiguous"))
+              compatible = compatible and count == 1
+          print("LIVE_PHP_TARGETED_PATCH_READY=" + ("yes" if compatible else "no"))
+          PYTHON_SOURCE
+          echo "PHP_FINANCE_DATABASE_TOUCHED=no"
+          module="$HOME/.private/zomorod-business/chatgpt_reports.php"
+          if test -f "$module" && test ! -L "$module" && grep -Fq 'zmBusinessChatgptReports($private)' "$app"; then
+            phpbin="$(command -v php || echo /opt/cpanel/ea-php82/root/usr/bin/php)"
+            "$phpbin" -l "$app" >/dev/null
+            "$phpbin" -l "$module" >/dev/null
+            echo "LIVE_CHATGPT_REPORT_PAGE_SOURCE=present_and_syntax_valid"
+          else
+            echo "LIVE_CHATGPT_REPORT_PAGE_SOURCE=not_installed"
+          fi
+          python3 - "$snapshot" <<'PYTHON_SNAPSHOT'
+          import json, stat, sys
+          from pathlib import Path
+          p=Path(sys.argv[1])
+          if not p.is_file() or p.is_symlink() or (p.stat().st_mode & 0o077):
+              print("LIVE_REPORT_SNAPSHOT_VALID=no")
+          else:
+              try:
+                  raw=p.read_bytes()
+                  d=json.loads(raw)
+                  if not isinstance(d,dict) or d.get("version") != 1 or d.get("source") != "github:mojtabarozegar11-ship-it/Saeit:issue:1725" or not isinstance(d.get("items"),list) or d.get("count") != len(d["items"]):
+                      raise ValueError("invalid private snapshot")
+                  print("LIVE_REPORT_SNAPSHOT_VALID=yes")
+                  print("LIVE_REPORT_SNAPSHOT_COUNT="+str(d["count"]))
+              except (OSError,ValueError):
+                  print("LIVE_REPORT_SNAPSHOT_VALID=no")
+          PYTHON_SNAPSHOT
+          echo "DEPLOY_MERGE_MIGRATION_EXECUTED=no"
+          REMOTE
+      - name: Cleanup ephemeral relay keys
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zm-report-preflight" "$RUNNER_TEMP/php-business-baseline.sha"

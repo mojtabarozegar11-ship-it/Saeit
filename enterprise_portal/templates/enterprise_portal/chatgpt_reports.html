@@ -1,0 +1,53 @@
+
+{% extends "enterprise_portal/shell.html" %}
+{% block title %}گزارش‌های متنی اقدامات چت‌جی‌پی‌تی{% endblock %}
+{% block crumb %}گزارش اقدامات ChatGPT{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div class="eyebrow">CHATGPT ACTION EVIDENCE · PRIVATE</div>
+  <h1>گزارش‌های متنی کارهای انجام‌شده توسط ChatGPT</h1>
+  <p>دفتر خصوصیِ گزارش‌های ثبت‌شده با شناسه، زمان، نتیجه و پیوند شاهد. این صفحه فقط داده‌های ثبت‌شده را نمایش می‌دهد و محتوای گفتگوها را خودکار دریافت نمی‌کند.</p>
+</section>
+<section class="panel">
+  <h2>جست‌وجوی گزارش‌ها</h2>
+  <form method="get" action="{% url 'enterprise_portal:chatgpt_reports' %}">
+    <label for="cycle">شناسه چرخه</label>
+    <input id="cycle" name="cycle" maxlength="16" value="{{ cycle }}" placeholder="05">
+    <label for="outcome">نتیجه</label>
+    <select id="outcome" name="outcome">
+      <option value="">همه وضعیت‌ها</option>
+      {% for code, label in outcome_choices %}
+        <option value="{{ code }}" {% if outcome == code %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button class="primary-btn" type="submit">فیلتر</button>
+    <a class="module-action" href="{% url 'enterprise_portal:chatgpt_reports' %}">حذف فیلتر</a>
+  </form>
+  <p class="muted">تعداد صفحه: {{ page_obj.paginator.count }} گزارش. «مدرک بررسی‌شده» به معنی تأیید فروش، انتقال وجه یا استقرار زنده نیست.</p>
+</section>
+<section class="panel">
+  <h2>دفتر گزارش‌های ثبت‌شده</h2>
+  {% for item in records %}
+  <article class="info-panel" style="margin-bottom:1rem;overflow-wrap:anywhere">
+    <h3>{{ item.report_code }} | {{ item.title }}</h3>
+    <p><strong>زمان اقدام:</strong> {{ item.occurred_at|date:"Y/m/d H:i" }}
+    · <strong>چرخه:</strong> {{ item.cycle_code }}
+    · <strong>واحد:</strong> {{ item.unit.name }}</p>
+    <p><strong>نتیجه اعلامی:</strong> {{ item.get_outcome_display }}
+    · <strong>بررسی مرجع:</strong> {% if item.evidence_reviewed %}بررسی دستی توسط مدیر ارشد{% else %}هنوز مستقلاً بررسی نشده{% endif %}</p>
+    <p><strong>شناسه اجرا:</strong> <code>{{ item.run_reference }}</code></p>
+    <div style="white-space:pre-wrap;line-height:1.9">{{ item.body }}</div>
+    <p><a class="module-action" href="{{ item.evidence_url }}" target="_blank" rel="noopener noreferrer">مشاهده مدرک اصلی</a></p>
+  </article>
+  {% empty %}
+  <div class="empty-state">هنوز گزارش اقدامی با این شرایط در پایگاه داده خصوصی ثبت نشده است؛ این به معنی انجام‌شدن یا نشدن کار در گفتگوهای دیگر نیست.</div>
+  {% endfor %}
+</section>
+{% if page_obj.has_other_pages %}
+<nav class="calendar-toolbar" aria-label="صفحه‌بندی">
+  {% if page_obj.has_previous %}<a class="module-action" href="?cycle={{ cycle|urlencode }}&amp;outcome={{ outcome|urlencode }}&amp;page={{ page_obj.previous_page_number }}">صفحه قبل</a>{% endif %}
+  <span>صفحه {{ page_obj.number }} از {{ page_obj.paginator.num_pages }}</span>
+  {% if page_obj.has_next %}<a class="module-action" href="?cycle={{ cycle|urlencode }}&amp;outcome={{ outcome|urlencode }}&amp;page={{ page_obj.next_page_number }}">صفحه بعد</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

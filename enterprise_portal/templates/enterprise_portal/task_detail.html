@@ -1,0 +1,59 @@
+{% extends 'enterprise_portal/shell.html' %}
+{% block title %}گردش کار وظیفه{% endblock %}{% block crumb %}اتوماسیون / وظایف / گردش کار{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="eyebrow">HUMAN-REVIEWED WORKFLOW</div>
+  <h1>{{ item.title }}</h1>
+  <p>جزئیات مأموریت و سابقه تغییر وضعیت در واحد مجاز؛ همه اقدامات انسانی و قابل حسابرسی هستند.</p>
+</div>
+<div class="toolbar"><a href="{% url 'enterprise_portal:tasks' %}">بازگشت به وظایف</a></div>
+<section class="stat-grid">
+  <div class="stat-card"><span>وضعیت</span><strong>{{ item.get_status_display }}</strong></div>
+  <div class="stat-card"><span>اولویت</span><strong>{{ item.get_priority_display }}</strong></div>
+  <div class="stat-card"><span>سررسید</span><strong>{{ item.due_on|default:"تعیین‌نشده" }}</strong></div>
+  <div class="stat-card"><span>مسئول</span><strong>{{ item.assigned_to.get_username }}</strong></div>
+</section>
+<section class="panel">
+  <h2>شرح مأموریت</h2>
+  <p>{{ item.description|linebreaksbr }}</p>
+  <p>واحد: {{ item.unit.name|default:"دفتر مرکزی" }} | ثبت‌کننده: {{ item.created_by.get_username }}</p>
+</section>
+<section class="panel">
+  <h2>ثبت نتیجه و تغییر مرحله</h2>
+  <p>برای هر تغییر وضعیت، دلیل یا شواهد کاری را بنویسید. تأیید تکمیل به مجوز مدیریت وظایف و بازبینی مستقل نیاز دارد؛ مدیر ارشد سامانه می‌تواند با ثبت حسابرسی استثنا قائل شود.</p>
+  {% if actions %}
+  <form method="post" action="{% url 'enterprise_portal:task_detail' item.pk %}" autocomplete="off">
+    {% csrf_token %}
+    <input type="hidden" name="expected_status" value="{{ item.status }}">
+    <label for="task-transition-note">شرح اقدام، نتیجه یا دلیل (الزامی)</label>
+    <textarea id="task-transition-note" name="note" rows="4" minlength="5" maxlength="1200" required placeholder="شواهد انجام کار یا علت برگشت برای اصلاح را ثبت کنید."></textarea>
+    <div class="toolbar">
+      {% for action in actions %}
+      <button type="submit" name="transition" value="{{ action.code }}">{{ action.label }}</button>
+      {% endfor %}
+    </div>
+  </form>
+  {% else %}
+  <p>در وضعیت فعلی، مرحله قابل اجرا توسط این حساب وجود ندارد.</p>
+  {% endif %}
+  <p>این گردش کار هیچ پرداخت، پیام خارجی، انتشار تبلیغ یا عملیات کارخانه‌ای را به‌طور خودکار اجرا نمی‌کند.</p>
+</section>
+<section class="panel">
+  <h2>سابقه حسابرسی این مأموریت</h2>
+  <div class="table-frame"><table>
+    <thead><tr><th>زمان</th><th>اقدام‌کننده</th><th>تغییر وضعیت</th><th>شرح ثبت‌شده</th></tr></thead>
+    <tbody>
+    {% for event in events %}
+    <tr>
+      <td>{{ event.occurred_at|date:"Y/m/d H:i" }}</td>
+      <td>{{ event.actor.get_username }}</td>
+      <td>{{ event.detail.from }} ← {{ event.detail.to }}</td>
+      <td>{{ event.detail.note|linebreaksbr }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">هنوز تغییری در وضعیت این مأموریت ثبت نشده است.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}

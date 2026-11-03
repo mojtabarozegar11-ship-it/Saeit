@@ -1,0 +1,55 @@
+name: Zomorod office exact-head no-host release checks
+on:
+  push:
+    branches:
+      - feature/zomorod-messaging-main-integration-20261030
+      - integration/zm-unified-business-command-center-20261101
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-office-nohost-exact-head
+  cancel-in-progress: true
+jobs:
+  offline-release-safety:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/feature/zomorod-messaging-main-integration-20261030' || github.ref == 'refs/heads/integration/zm-unified-business-command-center-20261101')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate exact immutable head and unchanged live-deploy block
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          python3 -B - <<'PY'
+          from pathlib import Path
+          workflow = Path('.github/workflows/zomorod-office-guarded-production-release.yml').read_text(encoding='utf-8')
+          if "&& false # blocked pending production HTTP 500 root cause" not in workflow:
+              raise SystemExit('LIVE_DEPLOY_SAFETY_GATE_CHANGED')
+          evidence = Path('.github/workflows/zomorod-marketing-release-evidence.yml').read_text(encoding='utf-8')
+          if 'PRODUCTION_DEPLOY_ALLOWED=no' not in evidence:
+              raise SystemExit('READONLY_PRODUCTION_GATE_CHANGED')
+          print('NO_HOST_EXACT_HEAD=verified')
+          print('PRODUCTION_DEPLOY_REMAINS_BLOCKED=true')
+          PY
+      - name: Compile and run only offline release regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/zomorod_office_guarded_release_20261031.py
+          python3 -B -m unittest -v scripts/test_zomorod_office_guarded_release_20261031.py
+          python3 -O -B -m unittest -v scripts/test_zomorod_office_guarded_release_20261031.py
+          echo 'NO_HOST_RELEASE_REGRESSION=passed'
+          echo 'LIVE_HOST_CONTACTED=false'
+          echo 'DATABASE_CHANGED=false'
+          echo 'MERGE_OR_DEPLOY_EXECUTED=false'
