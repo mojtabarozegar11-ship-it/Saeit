@@ -1,8 +1,12 @@
 name: ZM guarded accounting desk KPI and RBAC code-only release
 on:
-  push:
-    branches: [feature/zm-business-php-persian-reports-20261102]
-    paths: [".github/workflows/zm-business-rbac-kpi-guarded-release-20261102.yml"]
+  workflow_dispatch:
+    inputs:
+      historical_patch_acknowledged:
+        description: 'Retired legacy release; require explicit authorization and separate review (use 20261103 reconciled workflow for current app)'
+        required: true
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
@@ -10,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   guarded-app-patch:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && inputs.historical_patch_acknowledged == true
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     steps:
