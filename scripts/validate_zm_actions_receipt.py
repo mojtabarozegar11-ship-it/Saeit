@@ -26,7 +26,9 @@ def validate(document: str) -> list[str]:
         payload = json.loads(document.split(START, 1)[1].split(END, 1)[0].strip())
     except (ValueError, IndexError):
         return errors + ["invalid JSON receipt"]
-    if not isinstance(payload, dict) or payload.get("version") != 1:
+    if not isinstance(payload, dict):
+        return errors + ["receipt must be a JSON object"]
+    if payload.get("version") != 1:
         errors.append("invalid receipt version")
     code = payload.get("report_code")
     if header:
