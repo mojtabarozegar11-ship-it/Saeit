@@ -268,6 +268,12 @@ def main(argv=None):
     ap.add_argument("--html-output", help="Write a self-contained offline management report")
     args = ap.parse_args(argv)
     source = Path(args.input_json)
+    # Protect the customer's source data and prevent multiple formats from
+    # silently replacing one another when a CLI argument repeats a path.
+    output_paths = [Path(path) for path in (args.json_output, args.csv_output, args.html_output) if path]
+    canonical_paths = [source.resolve()] + [path.resolve() for path in output_paths]
+    if len(canonical_paths) != len(set(canonical_paths)):
+        raise ValueError("input and output file paths must be distinct")
     data = json.loads(source.read_text(encoding="utf-8"))
     output = evaluate(data)
     body = json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
