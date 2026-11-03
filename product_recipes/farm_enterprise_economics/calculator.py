@@ -43,6 +43,14 @@ def decimal_number(value, field, *, min_value=None, max_value=None):
         raise ValueError(field + ": below minimum")
     if max_value is not None and x > Decimal(str(max_value)):
         raise ValueError(field + ": above maximum")
+    # Exponent-only strings such as 1e-1000000000 are short inputs but
+    # formatting them as fixed-point text can allocate gigabytes. Reject
+    # nonzero magnitudes finer than the documented 24 decimal places.
+    # Normalize signed or exponent-scaled zero before downstream formatting.
+    if x.is_zero():
+        return Decimal(0)
+    if abs(x) < Decimal("1e-24"):
+        raise ValueError(field + ": nonzero magnitude finer than supported 1e-24")
     return x
 
 

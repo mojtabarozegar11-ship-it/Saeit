@@ -138,8 +138,12 @@ Consequently, results are **contribution accounting illustrations**, not full
 investment appraisal, tax accounting, or professional financial advice.
 
 Each numeric input must be finite, no longer than 64 characters, and have
-absolute magnitude no greater than 10^20; this prevents unbounded precision,
-resource exhaustion and obscure decimal runtime failures. Internal arithmetic
+absolute magnitude no greater than 10^20. Nonzero magnitudes finer than 1e-24
+are rejected; zero with exponent notation is canonicalized to 0. This avoids
+short exponent strings (for example, `1e-1000000000`) expanding into enormous
+fixed-point report fields and exhausting memory. The 24-decimal-place lower
+bound is a supported engineering precision limit, not a farming measurement
+claim. It also limits resource exhaustion and obscure decimal runtime failures. Internal arithmetic
 uses 80 significant digits to support aggregate totals for high-unit currencies,
 including IRR, without failing during cents rounding. Monetary displays are
 rounded to two decimal places; this is not an exchange-rate conversion.

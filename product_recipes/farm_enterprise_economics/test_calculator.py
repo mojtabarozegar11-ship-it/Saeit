@@ -178,6 +178,21 @@ class EconomicsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             enterprise(dict(row, units_sold="NaN"))
 
+    def test_extreme_negative_decimal_exponents_are_bounded(self):
+        """Short exponent notation must not expand into giant report strings."""
+        original = self.example["enterprises"][0]
+        for value in ("1e-25", "1e-1000000000", "9e-1000000000"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "finer than supported"):
+                    enterprise(dict(original, unit_price=value))
+        # Zero with an enormous exponent is valid but must be canonicalized.
+        zero = enterprise(dict(original, unit_price="0e-1000000000"))
+        self.assertEqual(zero["unit_price_exact"], "0")
+        self.assertEqual(zero["sales_revenue"], "0.00")
+        self.assertEqual(zero["contribution_per_unit_exact"], "-4")
+        edge = enterprise(dict(original, unit_price="1e-24"))
+        self.assertEqual(edge["unit_price_exact"], "0.000000000000000000000001")
+
     def test_duplicate_enterprise_names_rejected(self):
         bad = dict(self.example)
         bad["enterprises"] = self.example["enterprises"] * 2
