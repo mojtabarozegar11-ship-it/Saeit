@@ -91,7 +91,18 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn("scripts/factory_evidence_quality.py", wf)
         self.assertIn("workflow_dispatch:", wf)
         self.assertIn("branches: [main]", wf)
-        self.assertIn("[approved-factory-unlimited-builds-20261019]", wf)
+        # The former mass-production installer must stay locked until an
+        # independently reviewed global one-product controller replaces it.
+        deploy_gate = wf.split("\n  deploy:\n", 1)[1].split("\n    steps:\n", 1)[0]
+        self.assertIn("    if: false", deploy_gate)
+        installer = (source / "deploy/install_autonomous_factory_products.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "F01_LEGACY_MULTIPRODUCT_INSTALL_DISABLED_UNTIL_GLOBAL_SINGLETON_PROVEN",
+            installer,
+        )
+        self.assertLess(installer.index("exit 3"), installer.index("repo="))
         self.assertIn("product_recipes/**", wf)
 
     def test_customer_acceptance_module_is_in_real_vps_test_archive(self):
