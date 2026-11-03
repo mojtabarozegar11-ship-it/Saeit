@@ -15,6 +15,7 @@ on:
   pull_request:
     branches:
       - main
+      - integration/zm-unified-business-command-center-20261101
       - feature/zm-business-os-unified-dashboard-20261101
       - feature/zm-master-agent-hourly-command-20261101
       - feature/zm-intent-router-marketing-agent-20261101

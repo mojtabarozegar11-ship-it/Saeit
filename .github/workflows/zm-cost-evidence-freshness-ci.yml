@@ -1,0 +1,52 @@
+name: ZM cost evidence freshness exact-head regression
+on:
+  pull_request:
+    branches:
+      - integration/zm-unified-business-command-center-20261101
+    paths:
+      - ecosystem_hub/costing.py
+      - ecosystem_hub/test_cost_rate_freshness.py
+      - .github/workflows/zm-cost-evidence-freshness-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  cost-evidence-freshness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      DEBUG: "true"
+      SECRET_KEY: "offline-ci-only"
+      ALLOWED_HOSTS: "localhost,127.0.0.1,testserver"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout exact proposed head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify exact source SHA
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install application dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Django checks and migration consistency
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+      - name: Verify price freshness and original manufacturing cost regressions
+        run: |
+          python manage.py test ecosystem_hub.test_cost_rate_freshness ecosystem_hub.tests.HubSuite.test_cost_estimate_remains_incomplete_without_verified_material_rate
+      - name: Explicit no-production boundary
+        run: |
+          echo "CI_ONLY=1"
+          echo "NO_HOST_CONTACT=1"
+          echo "NO_PRODUCTION_DB_WRITES=1"
+          echo "NO_MERGE_DEPLOY=1"
