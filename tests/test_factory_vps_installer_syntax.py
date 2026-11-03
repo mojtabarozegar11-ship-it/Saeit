@@ -101,6 +101,7 @@ class VPSProductInstallerTests(unittest.TestCase):
                 self.assertIn(module, install_inventory)
                 self.assertIn("scripts/" + module, transport)
         self.assertIn("VPS_FACTORY_MASTER_GENETICS_MODULE_STAGED=PASS", wf)
+        self.assertIn('test ! -L "$repo/scripts/factory_global_singleton_v1.py"', installer)
 
     def test_manual_or_owner_requested_gated_deployment_is_packaged(self):
         source = Path(__file__).resolve().parents[1]
@@ -108,7 +109,10 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn("scripts/factory_evidence_quality.py", wf)
         self.assertIn("workflow_dispatch:", wf)
         self.assertIn("branches: [main]", wf)
-        self.assertIn("[approved-factory-unlimited-builds-20261019]", wf)
+        # The historic mass-build approval token must not unlock deployment.
+        self.assertNotIn("[approved-factory-unlimited-builds-20261019]", wf)
+        deploy_job = wf.split("\n  deploy:\n", 1)[1]
+        self.assertIn("if: false", deploy_job.split("runs-on:", 1)[0])
         self.assertIn("product_recipes/**", wf)
 
     def test_customer_acceptance_module_is_in_real_vps_test_archive(self):
