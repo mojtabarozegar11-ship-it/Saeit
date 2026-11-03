@@ -20,7 +20,7 @@ import time
 PRIVATE = Path("/home/zomorod2/.private/zomorod-business")
 DB = PRIVATE / "command-center.sqlite3"
 POLICY_FILE = PRIVATE / "factory-single-product-policy-v1.json"
-TITLE = "Enforce the one-product factory production and independent release rule"
+TITLE = "Record the one-product factory policy and independent release gate"
 DETAIL = (
     "Record the owner's binding operational rule: the VPS factory may process "
     "one non-book product at a time; only after independent QC 1000/1000, a "
