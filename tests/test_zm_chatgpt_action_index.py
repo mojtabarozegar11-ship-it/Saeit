@@ -214,6 +214,23 @@ class ActionIndexSafety(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "UNSAFE_ACTION_FILE"):
             rebuild(self.archive, self.index)
 
+    def test_non_utc_or_malformed_archive_timestamp_never_replaces_index(self):
+        # Historical receipts are bound to GitHub UTC timestamps, not local
+        # server time or arbitrary text supplied in the source archive.
+        self.add(1, receipt("05-0001", "ZM05-0001-A01"))
+        self.assertEqual(rebuild(self.archive, self.index), (1, 0, 1))
+        good_index = self.index.read_bytes()
+        for invalid in ("not-a-time", "2026-11-02T08:00:00",
+                        "2026-11-02T11:30:00+03:30"):
+            with self.subTest(timestamp=invalid):
+                with sqlite3.connect(self.archive) as db:
+                    db.execute("UPDATE reports SET occurred_at=? WHERE report_code='05-0001'",
+                               (invalid,))
+                self.archive.chmod(0o600)
+                with self.assertRaisesRegex(ValueError, "INVALID_SOURCE_TIMESTAMP"):
+                    rebuild(self.archive, self.index)
+                self.assertEqual(self.index.read_bytes(), good_index)
+
     def test_financial_database_never_opened_or_changed(self):
         self.add(1, receipt("05-0001", "ZM05-0001-A01"))
         finance = self.root / "management.sqlite3"
