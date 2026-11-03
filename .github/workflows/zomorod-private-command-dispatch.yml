@@ -997,7 +997,8 @@ jobs:
               bridge_functions.append(node.name)
               if any(token in node.name.lower() for token in
                      ("task", "schema", "canonical", "event", "state",
-                      "receipt", "verify", "hmac", "migrate", "init_db")):
+                      "receipt", "verify", "hmac", "migrate", "init_db",
+                      "auth", "open_control_db")):
                   segment = ast.get_source_segment(bridge_text, node)
                   if isinstance(segment, str) and len(segment) <= 50000:
                       bridge_selected[node.name] = segment
