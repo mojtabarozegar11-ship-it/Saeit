@@ -189,7 +189,7 @@ class EconomicsTests(unittest.TestCase):
         zero = enterprise(dict(original, unit_price="0e-1000000000"))
         self.assertEqual(zero["unit_price_exact"], "0")
         self.assertEqual(zero["sales_revenue"], "0.00")
-        self.assertEqual(zero["contribution_per_unit_exact"], "-4")
+        self.assertEqual(zero["contribution_per_unit_exact"], "-4.00")
         edge = enterprise(dict(original, unit_price="1e-24"))
         self.assertEqual(edge["unit_price_exact"], "0.000000000000000000000001")
 
