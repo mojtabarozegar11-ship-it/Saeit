@@ -367,6 +367,13 @@ jobs:
               val=state.get(key,"missing")
               if isinstance(val,(str,int,float,bool)):
                   print("FACTORY_PRIVATE_PRODUCT_"+key.upper()+"="+str(val))
+          built = state.get("built_product_recipes", [])
+          if isinstance(built, list):
+              names = [name for name in built if isinstance(name, str)
+                       and __import__("re").fullmatch(r"[a-z][a-z0-9_]{1,65}", name)]
+              print("F01_RECORDED_BUILT_RECIPE_COUNT="+str(len(names)))
+              for name in names[:3]:
+                  print("F01_RECORDED_BUILT_RECIPE="+name)
           candidates=[]
           for item in sorted((root/"digital-products").glob("*/*-internal-qa.zip")) if (root/"digital-products").is_dir() else []:
               if item.is_file():
