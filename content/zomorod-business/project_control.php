@@ -63,6 +63,9 @@ function zmPmHandle(PDO $db,string $action):void {
         $approved=zmPmIsApproved((string)$project['title']);
         if($action==='project_transition'){
             if(!$approved)bail('پروژه بدون مصوبه صریح اجازه فعال‌سازی یا انتقال عملیاتی ندارد.',409);
+            if(in_array(req('next_state'),['active','done'],true) &&
+               (!function_exists('zmGovHasExecutionClearance') || !zmGovHasExecutionClearance($db,$id)))
+                bail('تا ثبت تصمیم مستقل و مستند اجازه اجرای پروژه، فعال‌سازی یا اعلام اتمام مجاز نیست.',409);
             $expected=req('expected_state');
             $next=req('next_state');
             if($expected!==$project['state'] || !in_array($next,zmPmAllowed($expected),true))
