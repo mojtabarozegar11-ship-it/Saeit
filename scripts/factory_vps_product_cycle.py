@@ -415,11 +415,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
     root = Path(output).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(str(root), 0o700)
-    # Persistent cross-controller admission comes BEFORE science, design, or
-    # manufacturing writes. Another F-01 lane remains blocked across reboot.
-    singleton = load("saeit_factory_global_singleton_v1",
-                     SCRIPTS / "factory_global_singleton_v1.py")
-    singleton.reserve_lane(root, "line41")
+    # Acquire this line's process mutex BEFORE persisting a global claim.
+    # Otherwise a duplicate, non-running invocation could strand the shared
+    # lane if it recorded ownership before noticing another active tick.
     lock = root / ".production-cycle.lock"
     with lock.open("a+b") as file:
         os.chmod(str(lock), 0o600)
@@ -427,6 +425,11 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return {"status": "already_running", "processed": 0, "manufactured": 0}
+        # Durable cross-controller admission must still precede every science,
+        # design, or manufacturing write. A different active lane fails closed.
+        singleton = load("saeit_factory_global_singleton_v1",
+                         SCRIPTS / "factory_global_singleton_v1.py")
+        singleton.reserve_lane(root, "line41")
         genetics = load("saeit_factory_master_agent_genetics", SCRIPTS / "factory_master_agent_genetics_v1.py")
         master_genome = genetics.begin_cycle(root)
         portfolio = load("saeit_factory_portfolio_cycle",
