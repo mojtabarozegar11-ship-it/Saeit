@@ -45,11 +45,9 @@ def validate(document: str) -> list[str]:
             errors.append(f"action {i}: not an object")
             continue
         identifier = action.get("id")
-        if not isinstance(identifier, str) or not re.fullmatch(r"ZM" + re.escape(code) .replace("05-", "05-") + r"-A(?:0[1-9]|1[0-9]|20)", identifier):
-            # Canonical form ZM05-NNNN-A01.
-            expected_prefix = "ZM" + code
-            if not isinstance(identifier, str) or not re.fullmatch(re.escape(expected_prefix) + r"-A(?:0[1-9]|1[0-9]|20)", identifier):
-                errors.append(f"action {i}: invalid id")
+        expected_prefix = "ZM" + code
+        if not isinstance(identifier, str) or not re.fullmatch(re.escape(expected_prefix) + r"-A(?:0[1-9]|1[0-9]|20)", identifier):
+            errors.append(f"action {i}: invalid id")
         if identifier in ids:
             errors.append(f"action {i}: duplicate id")
         ids.add(identifier)
