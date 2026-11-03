@@ -114,6 +114,15 @@ uses 80 significant digits to support aggregate totals for high-unit currencies,
 including IRR, without failing during cents rounding. Monetary displays are
 rounded to two decimal places; this is not an exchange-rate conversion.
 
+## Customer data and report file safety
+
+Keep your original input JSON. The CLI refuses to use the same resolved path for
+its input and any of its JSON, CSV or HTML outputs; it also refuses to assign
+the same destination to two different output formats. Such collisions exit
+with `INPUT_ERROR` before any output file is written. Use separate filenames
+for each report. Reusing an existing, distinct output filename still replaces
+that previous report, so select your destination deliberately.
+
 ## Spreadsheet security
 
 Enterprise names must start with a Unicode letter or number and may not
