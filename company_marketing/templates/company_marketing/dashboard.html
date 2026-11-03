@@ -11,9 +11,9 @@
     {% if can_add_lead %}<a class="btn" href="{% url 'company_marketing:new_lead' %}">+ سرنخ</a>{% endif %}
     {% if can_add_metric %}<a class="btn" href="{% url 'company_marketing:new_metric' %}">+ عملکرد</a>{% endif %}</div>
   </div>
-  <p><strong>فروش مستند (ریال):</strong> {{ verified_sale_irr }} &nbsp; <strong>هزینه ثبت‌شده (ریال):</strong> {{ recorded_cost_irr }} &nbsp; <strong>سرنخ‌های CRM:</strong> {{ lead_count }}</p>
-  <p><strong>نمایش مستند:</strong> {{ impressions }} &nbsp; <strong>کلیک مستند:</strong> {{ clicks }} &nbsp; <strong>سرنخ اعلامی کانال‌ها:</strong> {{ reported_leads }} &nbsp; <strong>CTR:</strong> {% if ctr_percent is not None %}{{ ctr_percent }}٪{% else %}ناموجود{% endif %}</p>
-  <p class="muted">این ارقام بر اساس ثبت داخلیِ دارای مرجع سند هستند، نه تأیید تراکنش بانکی. پذیرش API معادل مشاهده یا تحویل پیام نیست.</p>
+  {% if can_view_leads %}<p><strong>فروش مستند (ریال):</strong> {{ verified_sale_irr }} &nbsp; <strong>سرنخ‌های CRM:</strong> {{ lead_count }}</p>{% else %}<p class="muted">آمار فروش و CRM: نیازمند مجوز مشاهده سرنخ.</p>{% endif %}
+  {% if can_view_metrics %}<p><strong>هزینه ثبت‌شده (ریال):</strong> {{ recorded_cost_irr }} &nbsp; <strong>نمایش مستند:</strong> {{ impressions }} &nbsp; <strong>کلیک مستند:</strong> {{ clicks }} &nbsp; <strong>سرنخ اعلامی کانال‌ها:</strong> {{ reported_leads }} &nbsp; <strong>CTR:</strong> {% if ctr_percent is not None %}{{ ctr_percent }}٪{% else %}ناموجود{% endif %}</p>{% else %}<p class="muted">شاخص‌های عملکرد و هزینه: نیازمند مجوز مشاهده عملکرد.</p>{% endif %}
+  <p class="muted">این ارقام، در صورت مجاز بودن مشاهده، بر اساس ثبت داخلی هستند و به‌تنهایی تأیید تسویه بانکی نیستند.</p>
 </section>
 <section class="panel"><h2>کمپین‌ها</h2>
 <div style="overflow-x:auto"><table><thead><tr><th>کد</th><th>عنوان</th><th>واحد</th><th>وضعیت</th><th>بازه</th><th>سقف بودجه (ریال)</th></tr></thead><tbody>
@@ -24,17 +24,21 @@
 <button type="submit" name="status" value="closed">بستن کمپین</button></form></td></tr>{% endif %}
 {% empty %}<tr><td colspan="6">کمپینی ثبت نشده است.</td></tr>{% endfor %}
 </tbody></table></div></section>
+{% if can_view_publications %}
 <section class="panel"><h2>تقویم و صف انتشار</h2>
 <div style="overflow-x:auto"><table><thead><tr><th>عنوان</th><th>کانال</th><th>زمان</th><th>وضعیت</th><th>پیگیری</th></tr></thead><tbody>
 {% for x in publications %}<tr><td>{{ x.title }}</td><td>{{ x.channel }}</td><td>{{ x.scheduled_at }}</td><td>{{ x.get_status_display }}</td><td><a href="{% url 'company_marketing:detail' x.pk %}">جزئیات / شواهد</a></td></tr>
 {% empty %}<tr><td colspan="5">برنامه انتشار خالی است.</td></tr>{% endfor %}
 </tbody></table></div></section>
+{% endif %}
+{% if can_view_accounts %}
 <section class="panel"><h2>حساب‌های شبکه اجتماعی و پیام‌رسان</h2>
 <p class="muted">بله، روبیکا، ایتا، سروش پلاس، گپ، آی‌گپ، تلگرام، اینستاگرام، فیسبوک، لینکدین، یوتیوب و وب‌سایت. حساب‌های فاقد API معتبر صرفاً برای برنامه‌ریزی و ثبت عملکرد هستند.</p>
 <div style="overflow-x:auto"><table><thead><tr><th>شبکه</th><th>حساب</th><th>شناسه مقصد</th><th>احراز مالکیت</th></tr></thead><tbody>
 {% for x in accounts %}<tr><td>{{ x.get_platform_display }}</td><td>{{ x.title }}</td><td>{{ x.destination }}</td><td>{% if x.is_company_owned and x.verified_at %}احراز شده{% else %}نیازمند احراز{% if can_verify_channel %}<form method="post" action="{% url 'company_marketing:verify_channel' x.pk %}">{% csrf_token %}<label>مرجع سند مالکیت <input name="evidence" required minlength="8" maxlength="255"></label><button type="submit">ثبت تأیید</button></form>{% endif %}{% endif %}</td></tr>
 {% empty %}<tr><td colspan="4">هنوز حساب سازمانی ثبت نشده؛ مدیر مجاز می‌تواند از مدیریت داده‌ها آن را ثبت کند.</td></tr>{% endfor %}
 </tbody></table></div>
-<p><a href="{% url 'admin:company_marketing_channelaccount_changelist' %}">مدیریت حساب‌ها</a> · <a href="{% url 'admin:company_marketing_lead_changelist' %}">مدیریت سرنخ‌ها و فروش</a> · <a href="{% url 'admin:company_marketing_performancemetric_changelist' %}">ثبت عملکرد مستند</a></p>
+<p><a href="{% url 'admin:company_marketing_channelaccount_changelist' %}">مدیریت حساب‌ها</a>{% if can_view_leads %} · <a href="{% url 'admin:company_marketing_lead_changelist' %}">مدیریت سرنخ‌ها و فروش</a>{% endif %}{% if can_view_metrics %} · <a href="{% url 'admin:company_marketing_performancemetric_changelist' %}">ثبت عملکرد مستند</a>{% endif %}</p>
 </section>
+{% endif %}
 {% endblock %}

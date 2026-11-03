@@ -28,22 +28,34 @@ def dashboard(request):
     require_perm(request.user, "view_campaign")
     units = user_units(request.user)
     campaigns = Campaign.objects.filter(unit__in=units)
-    pubs = visible_publications(request.user)
-    leads = Lead.objects.filter(unit__in=units)
-    metrics = PerformanceMetric.objects.filter(publication__campaign__unit__in=units)
+    # Access to campaigns must not imply access to CRM sales, publication
+    # drafts, destination identifiers or performance/cost records.
+    can_view_publications = request.user.is_superuser or request.user.has_perm("company_marketing.view_publication")
+    can_view_accounts = request.user.is_superuser or request.user.has_perm("company_marketing.view_channelaccount")
+    can_view_leads = request.user.is_superuser or request.user.has_perm("company_marketing.view_lead")
+    can_view_metrics = request.user.is_superuser or request.user.has_perm("company_marketing.view_performancemetric")
+    pubs = visible_publications(request.user) if can_view_publications else Publication.objects.none()
+    leads = Lead.objects.filter(unit__in=units) if can_view_leads else Lead.objects.none()
+    metrics = (PerformanceMetric.objects.filter(publication__campaign__unit__in=units)
+               if can_view_metrics else PerformanceMetric.objects.none())
     totals = metrics.aggregate(impressions=Sum("impressions"), clicks=Sum("clicks"),
-                               recorded_leads=Sum("leads"), cost_irr=Sum("cost_irr"))
+                               recorded_leads=Sum("leads"), cost_irr=Sum("cost_irr")) if can_view_metrics else {}
     return no_cache(render(request, "company_marketing/dashboard.html", {
         "campaigns": campaigns[:80], "publications": pubs[:100],
-        "accounts": ChannelAccount.objects.filter(unit__in=units)[:100],
-        "lead_count": leads.count(),
-        "verified_sale_irr": leads.filter(stage="won").aggregate(v=Sum("verified_sale_irr"))["v"] or 0,
-        "recorded_cost_irr": totals["cost_irr"] or 0,
-        "impressions": totals["impressions"] or 0,
-        "clicks": totals["clicks"] or 0,
-        "reported_leads": totals["recorded_leads"] or 0,
-        "ctr_percent": round((100 * (totals["clicks"] or 0) / totals["impressions"]), 2)
-        if totals["impressions"] else None,
+        "accounts": ChannelAccount.objects.filter(unit__in=units)[:100] if can_view_accounts else [],
+        "lead_count": leads.count() if can_view_leads else None,
+        "verified_sale_irr": (leads.filter(stage="won").aggregate(v=Sum("verified_sale_irr"))["v"] or 0)
+        if can_view_leads else None,
+        "recorded_cost_irr": (totals.get("cost_irr") or 0) if can_view_metrics else None,
+        "impressions": (totals.get("impressions") or 0) if can_view_metrics else None,
+        "clicks": (totals.get("clicks") or 0) if can_view_metrics else None,
+        "reported_leads": (totals.get("recorded_leads") or 0) if can_view_metrics else None,
+        "ctr_percent": round((100 * (totals.get("clicks") or 0) / totals["impressions"]), 2)
+        if can_view_metrics and totals.get("impressions") else None,
+        "can_view_publications": can_view_publications,
+        "can_view_accounts": can_view_accounts,
+        "can_view_leads": can_view_leads,
+        "can_view_metrics": can_view_metrics,
         "can_add_campaign": request.user.is_superuser or request.user.has_perm("company_marketing.add_campaign"),
         "can_add_publication": request.user.is_superuser or request.user.has_perm("company_marketing.add_publication"),
         "can_add_channel": request.user.is_superuser or request.user.has_perm("company_marketing.add_channelaccount"),
