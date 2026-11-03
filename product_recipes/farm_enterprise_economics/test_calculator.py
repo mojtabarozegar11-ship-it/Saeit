@@ -249,5 +249,33 @@ class EconomicsTests(unittest.TestCase):
             self.assertIn("Illustrative orchard", text)
 
 
+    def test_cli_protects_customer_input_and_distinct_report_destinations(self):
+        with tempfile.TemporaryDirectory() as temp_root:
+            base = Path(temp_root)
+            input_file = base / "customer-input.json"
+            output_file = base / "reports.json"
+            original = json.dumps(self.example)
+            input_file.write_text(original, encoding="utf8")
+            unsafe_options = (
+                ("--json-output", str(input_file)),
+                ("--csv-output", str(input_file)),
+                ("--html-output", str(input_file)),
+                ("--json-output", str(output_file), "--csv-output", str(output_file)),
+                ("--json-output", str(output_file), "--html-output", str(output_file)),
+                ("--csv-output", str(output_file), "--html-output", str(output_file)),
+            )
+            for options in unsafe_options:
+                with self.subTest(options=options):
+                    proc = subprocess.run(
+                        [sys.executable, str(Path(__file__).with_name("calculator.py")),
+                         str(input_file), *options],
+                        text=True, capture_output=True, timeout=15,
+                    )
+                    self.assertEqual(proc.returncode, 2, proc.stderr)
+                    self.assertIn("must be distinct", proc.stderr)
+                    self.assertEqual(input_file.read_text(encoding="utf8"), original)
+                    self.assertFalse(output_file.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
