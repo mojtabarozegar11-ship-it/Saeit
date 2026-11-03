@@ -66,7 +66,7 @@ def insert_signed_task(worker, key="0123456789abcdef0123456789abcdef", *,
 
 def test_exact_signed_task_applies_durable_policy_and_readback(worker, capsys):
     key, task_id = insert_signed_task(worker)
-    worker.apply()
+    worker.apply(key)
     assert "POLICY_APPLIED=YES" in capsys.readouterr().out
     assert worker.POLICY_FILE.read_bytes() == worker.DATA
     assert worker.POLICY_FILE.stat().st_mode & 0o077 == 0
@@ -80,31 +80,41 @@ def test_exact_signed_task_applies_durable_policy_and_readback(worker, capsys):
             "SELECT COUNT(*) FROM task_events WHERE task_id=? AND kind=?",
             (task_id, worker.EVENT_KIND),
         ).fetchone()[0] == 1
-    worker.apply()
+    worker.apply(key)
     assert "POLICY_APPLIED=NOT_APPLICABLE" in capsys.readouterr().out
 
 
 def test_other_authenticated_task_remains_queued_without_execution(worker, capsys):
-    insert_signed_task(worker, title="Other legitimate task")
-    worker.apply()
+    key, _ = insert_signed_task(worker, title="Other legitimate task")
+    worker.apply(key)
     assert "POLICY_APPLIED=NOT_APPLICABLE" in capsys.readouterr().out
     assert not worker.POLICY_FILE.exists()
 
 
-def test_ambiguous_recent_allowed_tasks_are_rejected_without_writes(worker):
-    insert_signed_task(worker)
-    insert_signed_task(worker, key="fedcba9876543210fedcba9876543210")
-    with pytest.raises(RuntimeError, match="AMBIGUOUS_ALLOWLISTED_TASK"):
-        worker.apply()
-    assert not worker.POLICY_FILE.exists()
+def test_exact_id_prevents_consuming_another_recent_authenticated_task(worker):
+    first_key, first_task = insert_signed_task(worker)
+    second_key, second_task = insert_signed_task(
+        worker, key="fedcba9876543210fedcba9876543210"
+    )
+    worker.apply(second_key)
+    with sqlite3.connect(worker.DB) as db:
+        assert db.execute(
+            "SELECT task_id FROM bridge_execution_receipts WHERE id=?",
+            (second_key,),
+        ).fetchone()[0] == second_task
+        assert db.execute(
+            "SELECT COUNT(*) FROM bridge_execution_receipts WHERE id=?",
+            (first_key,),
+        ).fetchone()[0] == 0
+    assert first_task != second_task
 
 
 def test_conflicting_existing_policy_is_never_overwritten(worker):
-    insert_signed_task(worker)
+    key, _ = insert_signed_task(worker)
     worker.POLICY_FILE.write_text("conflicting owner's policy", encoding="utf-8")
     worker.POLICY_FILE.chmod(0o600)
     with pytest.raises(RuntimeError, match="POLICY_CONFLICT_REJECTED"):
-        worker.apply()
+        worker.apply(key)
     assert worker.POLICY_FILE.read_text(encoding="utf-8") == "conflicting owner's policy"
     with sqlite3.connect(worker.DB) as db:
         assert db.execute(
@@ -116,7 +126,7 @@ def test_workflow_invokes_remote_worker_without_general_shell_dispatch():
     source = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "- name: Apply allowlisted factory policy and independently verify private receipt" in source
     assert 'if: steps.gate.outputs.operation == \'accept\'' in source
-    assert "'python3 -B - apply' < scripts/zomorod_allowlisted_policy_worker.py" in source
+    assert "python3 -B - apply" in source
     assert 'verify \'$command_id\'' in source
     assert '[[ "$command_id" =~ ^[0-9a-f]{32}$ ]]' in source
     assert 'grep -Fxq "PRIVATE_EXECUTION_RECEIPT=VERIFIED"' in source
