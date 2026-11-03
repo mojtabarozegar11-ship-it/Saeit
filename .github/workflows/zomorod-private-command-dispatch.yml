@@ -964,6 +964,15 @@ jobs:
               ]} for node in ast.walk(tree)
               if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
           ][:120]
+          # These four source segments reveal the exact serialized task contract
+          # only inside the RSA-sealed owner diagnostic; they are never logged.
+          selected_functions = {}
+          for node in ast.walk(tree):
+              if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                      and node.name in {"accept", "decrypt", "load_bridge", "main"}):
+                  segment = ast.get_source_segment(source, node)
+                  if isinstance(segment, str) and len(segment) <= 40000:
+                      selected_functions[node.name] = segment
           sql_literals = [
               node.value.strip()[:1500] for node in ast.walk(tree)
               if (isinstance(node, ast.Constant) and isinstance(node.value, str)
@@ -987,6 +996,7 @@ jobs:
               "schema": "ZMR-OWNER-SEALED-QUEUE-CONTRACT-V1",
               "ingress_source_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
               "functions": defs,
+              "selected_function_source": selected_functions,
               "sql_literals": sql_literals,
               "tables": tables,
           }

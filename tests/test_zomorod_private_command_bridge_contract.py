@@ -441,6 +441,8 @@ def test_owner_sealed_schema_contract_is_encrypted_before_log_output(tmp_path):
     assert "if: steps.gate.outputs.operation == 'sealed_schema'" in step
     assert "<<'ZMR_PRIVATE_SCHEMA' > \"$d/private-queue-schema.json\"" in step
     assert 'mode=ro&immutable=1' in step
+    assert 'node.name in {"accept", "decrypt", "load_bridge", "main"}' in step
+    assert '"selected_function_source": selected_functions' in step
     assert "ZMR_SEALED_SCHEMA=ENCRYPTED_ONLY" in step
     assert "openssl\", \"pkeyutl\", \"-encrypt" in step
     assert "rsa_padding_mode:oaep" in step
