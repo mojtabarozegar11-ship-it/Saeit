@@ -810,7 +810,7 @@ jobs:
           try:
               if private_db.is_symlink() or not private_db.is_file():
                   raise ValueError("PRIVATE_DB_UNSAFE_OR_MISSING")
-              uri = "file:" + str(private_db) + "?mode=ro"
+              uri = "file:" + str(private_db) + "?mode=ro&immutable=1"
               with sqlite3.connect(uri, uri=True, timeout=4) as db:
                   table_rows = db.execute(
                       "SELECT name FROM sqlite_master WHERE type = 'table'"
