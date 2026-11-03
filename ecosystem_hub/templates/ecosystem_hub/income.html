@@ -1,0 +1,55 @@
+{% extends "ecosystem_hub/base.html" %}
+{% block title %}گزارش درآمد و هزینه واحدها{% endblock %}
+{% block hub_title %}درآمد، هزینه و نتیجه مدیریتی{% endblock %}
+{% block hub_subtitle %}بر اساس اسناد قطعی در بازه انتخابی؛ تفکیک کامل واحد سازمانی و ارز{% endblock %}
+{% block hub_content %}
+<div class="hub-notice" role="note">
+<strong>گزارش مدیریتی اولیه، نه صورت سود و زیان قانونی</strong>
+<p>این محاسبات تنها از حساب‌های درآمد و هزینه در کدینگ موجود استخراج می‌شوند.
+طبقه‌بندی نادرست حساب‌ها، مانده افتتاحیه، اسناد تسویه دوره، مالیات، بهای فروش‌رفته و حذف معاملات درون‌گروهی می‌تواند نتیجه را تغییر دهد. هیچ تبدیل ارز، تجمیع شخصیت‌های حقوقی یا ثبت سند جدید انجام نمی‌شود.</p>
+</div>
+<form method="get" role="search" aria-label="فیلتر درآمد و هزینه" class="form-card">
+<div class="form-row"><label for="unit">واحد شرکت</label>
+<select name="unit" id="unit">
+<option value="">همه واحدهای مجاز (هرکدام جداگانه)</option>
+{% for candidate in units %}
+<option value="{{ candidate.code }}" {% if unit_code == candidate.code %}selected{% endif %}>{{ candidate.name }} — {{ candidate.code }}</option>
+{% endfor %}
+</select></div>
+<div class="form-row"><label for="currency">ارز</label><select name="currency" id="currency">
+<option value="">همه ارزها (هرکدام جداگانه)</option>
+{% for code,label in currencies %}<option value="{{ code }}" {% if currency == code %}selected{% endif %}>{{ code }} — {{ label }}</option>{% endfor %}
+</select></div>
+<div class="form-row"><label for="start">از تاریخ میلادی</label>
+<input type="date" id="start" name="start" value="{{ start|date:'Y-m-d' }}" required></div>
+<div class="form-row"><label for="end">تا تاریخ میلادی</label>
+<input type="date" id="end" name="end" value="{{ end|date:'Y-m-d' }}" required></div>
+<div class="form-actions"><button type="submit" class="primary-btn">محاسبه گزارش ←</button>
+<a href="{% url 'enterprise_portal:ecosystem_hub:income_report' %}">بازنشانی فیلتر</a></div>
+</form>
+<div class="toolbar">
+<a class="primary-link" href="{% url 'enterprise_portal:ecosystem_hub:income_csv' %}?unit={{ unit_code|urlencode }}&amp;currency={{ currency|urlencode }}&amp;start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}">دریافت CSV تفکیکی</a>
+<a href="{% url 'enterprise_portal:finance' %}">بازگشت به حسابداری</a>
+</div>
+<h2>نتایج مستقل واحدها و ارزها</h2>
+<div class="table-frame"><table>
+<thead><tr><th>واحد</th><th>ارز</th><th>درآمد خالص</th><th>هزینه خالص</th><th>نتیجه دوره</th></tr></thead>
+<tbody>{% for item in totals %}<tr>
+<td>{{ item.unit_name }}</td><td>{{ item.currency }}</td>
+<td class="number">{{ item.income|floatformat:2 }}</td>
+<td class="number">{{ item.expense|floatformat:2 }}</td>
+<td class="number">{{ item.result|floatformat:2 }}</td>
+</tr>{% empty %}<tr><td colspan="5">در این بازه، سند قطعی با حساب درآمد یا هزینه ثبت نشده است.</td></tr>{% endfor %}</tbody>
+</table></div>
+<h2>جزئیات حساب‌ها</h2>
+<div class="table-frame"><table>
+<thead><tr><th>واحد</th><th>ارز</th><th>کد حساب</th><th>نام حساب</th><th>طبقه</th><th>بدهکار</th><th>بستانکار</th><th>خالص</th></tr></thead>
+<tbody>{% for row in details %}<tr>
+<td>{{ row.unit_name }}</td><td>{{ row.currency }}</td>
+<td>{{ row.account_code }}</td><td>{{ row.account_name }}</td><td>{{ row.category }}</td>
+<td class="number">{{ row.debit|floatformat:2 }}</td>
+<td class="number">{{ row.credit|floatformat:2 }}</td>
+<td class="number">{{ row.amount|floatformat:2 }}</td>
+</tr>{% empty %}<tr><td colspan="8">آرتیکل درآمد یا هزینه‌ای در بازه موجود نیست.</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endblock %}

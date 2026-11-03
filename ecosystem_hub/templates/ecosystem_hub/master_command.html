@@ -1,0 +1,135 @@
+{% extends "ecosystem_hub/base.html" %}
+{% block title %}چت فرماندهی مسترایجنت زمرد ملل{% endblock %}
+{% block hub_title %}مسترایجنت | میز فرمان عملیاتی{% endblock %}
+{% block hub_subtitle %}ثبت فرمان متنی مدیر، ارجاع به دستیار تخصصی و تحویل گزارش مستند در واحد انتخاب‌شده{% endblock %}
+{% block hub_content %}
+<div class="hub-notice" role="note">
+این گفت‌وگوی خصوصی به داده‌های ثبت‌شده شرکت متصل است. متن فرمان به‌صورت قابل پیگیری ذخیره می‌شود،
+اما در این نسخه تنها تحلیل داخلیِ دستیار انتخاب‌شده اجرا می‌شود؛ هیچ دستور پرداخت،
+ارسال پیام، انتشار تبلیغ، جابه‌جایی انبار یا کنترل تجهیزات کارخانه از این صفحه اجرا نمی‌شود.
+متن فرمان ثبت و با قواعد موضوعی محلی به دستیار مناسب ارجاع می‌شود. در دستورهای مبهم، انتخاب تخصصی مدیر الزامی است؛ استفاده از مدل زبانی بیرونی فعال نیست. خروجی همیشه پیش‌نویسِ نیازمند بازبینی است.
+</div>
+<section class="hub-section">
+  <div class="hub-section-title"><h2>فرمان جدید برای {{ selected_unit.name }}</h2></div>
+  {% if routing_error %}<p class="hub-empty" role="alert">{{ routing_error }}</p>{% endif %}
+  {% if specialists %}
+  <form class="hub-command-form" method="post" action="{% url 'enterprise_portal:ecosystem_hub:master_command' %}" autocomplete="off">
+    {% csrf_token %}
+    <input type="hidden" name="unit" value="{{ selected_unit.code }}">
+    <input type="hidden" name="request_key" value="{{ request_key }}">
+    <label for="master-command-text">دستور یا پرسش مدیریتی</label>
+    <textarea id="master-command-text" name="instruction" maxlength="2000" minlength="1"
+      required rows="5" placeholder="مثلاً: کمپین‌های تبلیغاتی و سرنخ‌های فروش این واحد را تحلیل کن.">{{ prefill_instruction }}</textarea>
+    <label for="master-command-agent">دستیار مسئول بررسی</label>
+    <select id="master-command-agent" name="assistant_code" required>
+      <option value="auto" selected>تشخیص خودکار موضوع (در صورت اطمینان)</option>
+      {% for item in specialists %}
+      <option value="{{ item.code }}">{{ item.title }} — {{ item.description }}</option>
+      {% endfor %}
+    </select>
+    {% if perms.enterprise_portal.add_worktask %}
+    <fieldset class="hub-command-task">
+      <legend>تبدیل فرمان به کار اجرایی تقویم</legend>
+      <label class="hub-task-choice">
+        <input type="checkbox" name="create_task" value="1" checked>
+        یک مأموریت پیگیری برای خودم در میز مدیریت ثبت شود
+      </label>
+      <div class="hub-task-fields">
+        <div>
+          <label for="master-due">سررسید پیگیری</label>
+          <input id="master-due" name="due_on" type="date" value="{{ default_due_on }}">
+        </div>
+        <div>
+          <label for="master-priority">اولویت</label>
+          <select id="master-priority" name="priority">
+            <option value="normal">عادی</option>
+            <option value="high">مهم</option>
+            <option value="urgent">فوری</option>
+          </select>
+        </div>
+      </div>
+      <p class="hub-command-hint">مسئول اولیه خودِ صادرکننده فرمان است. متن محرمانه فرمان در وظیفه عمومی کپی نمی‌شود؛ فقط شناسه گزارش و ارجاع مدیریتی ثبت می‌شود.</p>
+    </fieldset>
+    {% endif %}
+    <button type="submit">ثبت فرمان و ایجاد خروجی قابل‌پیگیری</button>
+    <p class="hub-command-hint">هر فرمان یک شناسه یکتا و سابقه حسابرسی دارد. تکرار ارسال همان فرم، گزارش را دوباره تولید نمی‌کند.</p>
+  </form>
+  {% else %}
+  <p class="hub-empty">برای این حساب، دستیار تحلیل‌گر دارای موتور و مجوز مشاهده داده‌های منبع موجود نیست.</p>
+  {% endif %}
+</section>
+{% if task_watch %}
+<section class="hub-section" aria-label="تقویم هوشمند کارهای واحد">
+  <div class="hub-section-title"><h2>تقویم هوشمند پیگیری — {{ selected_unit.name }}</h2></div>
+  <p class="hub-command-hint">وضعیت زنده وظایف ثبت‌شده این واحد؛ فقط برای اشخاص دارای مجوز مشاهده وظایف. یادآوری‌ها پیش‌نویس داخلی هستند و پیام خودکار ارسال نمی‌شود.</p>
+  <div class="hub-task-watch-summary">
+    <span>باز: <strong>{{ task_watch.counts.open }}</strong></span>
+    <span>معوق: <strong>{{ task_watch.counts.overdue }}</strong></span>
+    <span>امروز: <strong>{{ task_watch.counts.due_today }}</strong></span>
+    <span>۷ روز آینده: <strong>{{ task_watch.counts.due_soon }}</strong></span>
+    <span>فوری: <strong>{{ task_watch.counts.urgent }}</strong></span>
+    <span>بدون سررسید: <strong>{{ task_watch.counts.no_due }}</strong></span>
+  </div>
+  <div class="table-frame"><table>
+    <thead><tr><th>کار نیازمند پیگیری</th><th>مسئول</th><th>اولویت</th><th>سررسید</th><th>وضعیت</th></tr></thead>
+    <tbody>
+      {% for item in task_watch.tasks %}
+      <tr>
+        <td><a href="{% url 'enterprise_portal:task_detail' item.pk %}">{{ item.title }}</a></td>
+        <td>{{ item.assigned_to.username }}</td>
+        <td>{{ item.get_priority_display }}</td>
+        <td>{{ item.due_on|date:"Y/m/d"|default:"تعیین‌نشده" }}</td>
+        <td>{{ item.get_status_display }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">وظیفه معوق، فوری یا سررسید هفت روز آینده یافت نشد.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="hub-links">
+    <a href="{% url 'enterprise_portal:tasks' %}">مشاهده تمامی وظایف و پیگیری‌ها</a>
+  </div>
+</section>
+{% endif %}
+<section class="hub-section">
+  <div class="hub-section-title"><h2>چرخه‌های ساعتی دستیارها</h2></div>
+  <p>زمان‌بندی «ساعتی» برای گزارش‌های داخلی قابل انتخاب است؛ فعال‌شدن یک قاعده به‌تنهایی به معنی نصب و اجرای کارگر پس‌زمینه نیست.</p>
+  <div class="hub-links">
+    {% if perms.ecosystem_hub.add_proposedautomation %}
+    <a href="{% url 'admin:ecosystem_hub_proposedautomation_add' %}">ثبت برنامه ساعتی مجاز</a>
+    {% endif %}
+    {% if perms.ecosystem_hub.view_proposedautomation and perms.ecosystem_hub.view_assistantrun %}
+    <a href="{% url 'enterprise_portal:ecosystem_hub:assistant_operations' %}">پایش برنامه‌ها و آخرین گزارش‌ها</a>
+    {% endif %}
+  </div>
+</section>
+<section class="hub-section">
+  <div class="hub-section-title"><h2>تاریخچه فرمان‌های واحد</h2></div>
+  <div class="table-frame"><table>
+    <thead><tr><th>دستور</th><th>دستیار</th><th>صادرکننده</th><th>وضعیت</th><th>ثبت</th><th>گزارش</th><th>مأموریت</th></tr></thead>
+    <tbody>
+    {% for item in commands %}
+    <tr>
+      <td class="hub-command-instruction">{{ item.instruction }}</td>
+      <td>{{ item.assistant_code }}</td>
+      <td>{{ item.issued_by.username }}</td>
+      <td>{{ item.get_status_display }}</td>
+      <td>{{ item.created_at|date:"Y/m/d H:i" }}</td>
+      <td>
+        {% if item.report and item.assistant_code in allowed_codes %}
+        <a href="{% url 'enterprise_portal:ecosystem_hub:report' item.report.pk %}">مشاهده گزارش</a>
+        {% else %}—{% endif %}
+      </td>
+      <td>
+        {% if item.task and perms.enterprise_portal.view_worktask %}
+        <a href="{% url 'enterprise_portal:task_detail' item.task.pk %}">{{ item.task.get_status_display }} — {{ item.task.due_on|date:"Y/m/d" }}</a>
+        {% else %}—{% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="7">هنوز فرمانی برای این واحد ثبت نشده است.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}

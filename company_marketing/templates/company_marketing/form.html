@@ -1,0 +1,16 @@
+{% extends "enterprise_portal/shell.html" %}
+{% block title %}{{ heading }}{% endblock %}
+{% block crumb %}{{ heading }}{% endblock %}
+{% block content %}
+<section class="panel"><h1>{{ heading }}</h1>
+<p class="muted">اطلاعات فقط در واحد سازمانی مجاز ثبت می‌شود. ثبت فرم هیچ پیام یا تبلیغی را ارسال نمی‌کند.</p>
+<form method="post">{% csrf_token %}
+{{ form.non_field_errors }}
+{% for field in form %}
+<div style="margin:1.2rem 0"><label for="{{ field.id_for_label }}"><strong>{{ field.label }}</strong></label>
+<div>{{ field }}</div>{% for e in field.errors %}<p role="alert">{{ e }}</p>{% endfor %}
+{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}</div>
+{% endfor %}<button class="btn" type="submit">{{ submit }}</button>
+<a href="{% url 'company_marketing:dashboard' %}">انصراف</a>
+</form></section>
+{% endblock %}

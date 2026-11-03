@@ -1,0 +1,36 @@
+{% extends "enterprise_portal/shell.html" %}
+{% block title %}تراز آزمایشی حساب‌ها{% endblock %}
+{% block crumb %}مالی / تراز آزمایشی{% endblock %}
+{% block content %}
+<div class="page-head"><div class="eyebrow">ACCOUNT-LEVEL FINANCIAL CONTROL</div>
+<h1>تراز آزمایشی حساب‌های زمرد ملل</h1>
+<p>گزارش گردش و مانده حساب‌های قطعی به تفکیک واحد شرکت و ارز؛ هیچ نرخ تبدیل یا مانده ساختگی اعمال نمی‌شود.</p></div>
+<form method="get" class="form-card" role="search" aria-label="فیلتر حساب‌ها">
+<div class="form-row"><label for="unit">واحد تجاری</label><select id="unit" name="unit">
+<option value="">همه واحدها ـ با تفکیک</option>
+{% for unit in units %}<option value="{{ unit.code }}" {% if selected_unit == unit.code %}selected{% endif %}>{{ unit.name }} — {{ unit.code }}</option>{% endfor %}
+</select></div>
+<div class="form-row"><label for="currency">ارز</label><select id="currency" name="currency">
+<option value="">همه ارزها ـ با تفکیک</option>
+{% for code,name in currencies %}<option value="{{ code }}" {% if selected_currency == code %}selected{% endif %}>{{ code }} — {{ name }}</option>{% endfor %}
+</select></div>
+<div class="form-actions"><button type="submit" class="primary-btn">اعمال فیلتر ←</button>
+<a href="{% url 'enterprise_portal:trial_balance' %}">حذف فیلتر</a></div>
+</form>
+<div class="toolbar"><a class="primary-link" href="{% url 'enterprise_portal:trial_balance_csv' %}?unit={{ selected_unit|urlencode }}&amp;currency={{ selected_currency|urlencode }}">دریافت CSV</a>
+<a href="{% url 'enterprise_portal:finance' %}">بازگشت به دفتر کل</a></div>
+<div class="table-frame"><table><thead><tr><th>واحد</th><th>ارز</th><th>کد حساب</th><th>نام حساب</th><th>طبقه</th>
+<th>گردش بدهکار</th><th>گردش بستانکار</th><th>مانده بدهکار</th><th>مانده بستانکار</th></tr></thead>
+<tbody>{% for row in records %}<tr><td>{{ row.unit_name }}</td><td>{{ row.currency }}</td>
+<td class="number">{{ row.code }}</td><td>{{ row.name }}</td><td>{{ row.category }}</td>
+<td class="number">{{ row.debit|floatformat:2 }}</td><td class="number">{{ row.credit|floatformat:2 }}</td>
+<td class="number">{{ row.closing_debit|floatformat:2 }}</td><td class="number">{{ row.closing_credit|floatformat:2 }}</td></tr>
+{% empty %}<tr><td colspan="9">هنوز سند قطعی برای این گزارش ثبت نشده است.</td></tr>{% endfor %}</tbody></table></div>
+<h2>جمع مستقل هر واحد و ارز</h2>
+<div class="table-frame"><table><thead><tr><th>واحد</th><th>ارز</th><th>بدهکار</th><th>بستانکار</th><th>مانده بدهکار</th><th>مانده بستانکار</th></tr></thead><tbody>
+{% for row in totals %}<tr><td>{{ row.unit_name }}</td><td>{{ row.currency }}</td>
+<td class="number">{{ row.debit|floatformat:2 }}</td><td class="number">{{ row.credit|floatformat:2 }}</td>
+<td class="number">{{ row.closing_debit|floatformat:2 }}</td><td class="number">{{ row.closing_credit|floatformat:2 }}</td></tr>
+{% empty %}<tr><td colspan="6">گزارش مالی خالی است.</td></tr>{% endfor %}</tbody></table></div>
+<p class="hint">این گزارش، کنترل تجمعی اسناد قطعی ثبت‌شده در این سامانه است؛ تا زمانی که مانده‌های افتتاحیه، دوره‌های مالی، تعدیلات و ضوابط حسابداری تأیید نشوند، جایگزین صورت مالی قانونی یا حسابرسی‌شده نیست.</p>
+{% endblock %}
