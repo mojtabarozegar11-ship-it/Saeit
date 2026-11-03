@@ -85,8 +85,13 @@ def enterprise(entry):
     operating_profit = contribution - fixed
     total_cost = fees + total_variable + fixed
     break_even = None
+    break_even_quantity_continuous = None
     if contribution_unit > 0:
-        break_even = int((fixed / contribution_unit).to_integral_value(rounding=ROUND_CEILING))
+        # Farm produce is often traded in fractional tonnes, litres or hectares.
+        # Preserve the mathematically exact quantity alongside the conservative
+        # legacy whole-unit ceiling used by integer-piece enterprises.
+        break_even_quantity_continuous = fixed / contribution_unit
+        break_even = int(break_even_quantity_continuous.to_integral_value(rounding=ROUND_CEILING))
     # These are planning thresholds, not predictions. A fee of 100% makes a
     # positive break-even unit price impossible at the selected sales volume.
     price_denominator = Decimal(1) - fee_rate
@@ -100,6 +105,14 @@ def enterprise(entry):
     safety_percent = (
         (safety_units * 100 / quantity).quantize(Decimal("0.01"))
         if safety_units is not None and quantity > 0 else None
+    )
+    continuous_safety = (
+        quantity - break_even_quantity_continuous
+        if break_even_quantity_continuous is not None else None
+    )
+    continuous_safety_percent = (
+        (continuous_safety * 100 / quantity).quantize(Decimal("0.01"))
+        if continuous_safety is not None and quantity > 0 else None
     )
     return {
         "name": name,
@@ -119,11 +132,22 @@ def enterprise(entry):
         "contribution_per_unit_exact": format(contribution_unit, "f"),
         "operating_profit": money(operating_profit),
         "break_even_units": break_even,
+        "break_even_quantity_continuous": (
+            format(break_even_quantity_continuous, "f")
+            if break_even_quantity_continuous is not None else None
+        ),
         "break_even_reachable": contribution_unit > 0,
         "break_even_unit_price_at_planned_volume": break_even_unit_price,
         "break_even_unit_price_unrounded": break_even_unit_price_unrounded,
         "margin_of_safety_units": str(safety_units) if safety_units is not None else None,
         "margin_of_safety_percent": str(safety_percent) if safety_percent is not None else None,
+        "margin_of_safety_quantity_continuous": (
+            format(continuous_safety, "f") if continuous_safety is not None else None
+        ),
+        "margin_of_safety_percent_continuous": (
+            str(continuous_safety_percent)
+            if continuous_safety_percent is not None else None
+        ),
     }
 
 
@@ -260,12 +284,13 @@ def render_html_report(report):
     )
     enterprise_table = table(
         ("Enterprise", "Sold units", "Unit price (input precision)", "Variable cost/unit (input precision)",
-         "Contribution/unit (model precision)", "Operating profit", "Break-even units",
-         "Margin of safety (%)"),
+         "Contribution/unit (model precision)", "Operating profit", "Break-even whole units",
+         "Break-even quantity (continuous)", "Margin of safety (% continuous)"),
         rows,
         ("name", "units_sold", "unit_price_exact", "variable_cost_per_unit_exact",
          "contribution_per_unit_exact", "operating_profit",
-         "break_even_units", "margin_of_safety_percent"),
+         "break_even_units", "break_even_quantity_continuous",
+         "margin_of_safety_percent_continuous"),
     )
     stress_table = table(
         ("Volume factor", "Selling-price factor", "Portfolio operating profit"),

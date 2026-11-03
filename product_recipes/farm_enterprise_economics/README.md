@@ -49,12 +49,24 @@ Unit contribution = unit_price * (1 - selling_fee_percent / 100)
 Operating profit BEFORE depreciation, financing and taxes =
 revenue - selling fees - variable costs - allocated fixed costs.
 
-Break-even units = ceil(allocated_fixed_cost / unit contribution), provided
-unit contribution is greater than zero. Otherwise break-even quantity is
-undefined: selling more units at that unit contribution will not cover
-positive fixed costs. When fixed costs are zero and unit contribution is
-positive, the mathematical threshold is zero; commercial feasibility still
-depends on real sales and constraints.
+For fractional commodity sales (for example, 1.8 tonnes), the mathematical
+break-even quantity is `allocated_fixed_cost / unit contribution`, provided
+unit contribution is positive. The JSON field `break_even_quantity_continuous`
+preserves this threshold at model precision; likewise,
+`margin_of_safety_quantity_continuous` and
+`margin_of_safety_percent_continuous` measure the fractional quantity cushion.
+The offline HTML report displays these continuous values.
+
+The legacy `break_even_units` field deliberately rounds the break-even
+quantity UP to the next whole unit, and the legacy `margin_of_safety_units`
+and `margin_of_safety_percent` fields use that whole-unit threshold for
+compatibility with existing integer-piece consumers. This can misleadingly
+show a negative cushion for profitable fractional sales, so use the continuous
+fields for kilograms, litres, tonnes and other fractional trade units. When
+unit contribution is nonpositive, break-even quantity is undefined: selling
+more units cannot offset positive fixed costs through a nonpositive unit
+contribution. With zero fixed costs and positive contribution, the threshold
+is zero; commercial feasibility still depends on real demand and constraints.
 
 Nine stress tests per enterprise vary realized volume by -20%, 0%, +20%
 and unit selling price by -10%, 0%, +10%. Selling-fee percentage, variable

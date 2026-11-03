@@ -84,6 +84,37 @@ class EconomicsTests(unittest.TestCase):
                          "contribution_profit_before_depreciation_financing_tax")
         self.assertFalse(result["input_values_independently_validated"])
 
+    def test_continuous_break_even_quantity_for_fractional_crop_sales(self):
+        """A fraction of a tonne should not be judged against a whole-tonne ceiling."""
+        row = {
+            "name": "Illustrative grain tonnes", "units_sold": "1.8",
+            "unit_price": "10", "variable_cost_per_unit": "6",
+            "allocated_fixed_cost": "7", "selling_fee_percent": 0,
+        }
+        report = evaluate({"currency": "USD", "enterprises": [row]})
+        result = report["results"][0]
+        self.assertEqual(result["operating_profit"], "0.20")
+        self.assertEqual(result["break_even_units"], 2)  # Backward compatibility.
+        self.assertEqual(result["break_even_quantity_continuous"], "1.75")
+        self.assertEqual(result["margin_of_safety_units"], "-0.2")  # Legacy whole-unit metric.
+        self.assertEqual(result["margin_of_safety_quantity_continuous"], "0.05")
+        self.assertEqual(result["margin_of_safety_percent_continuous"], "2.78")
+        page = render_html_report(report)
+        self.assertIn("Break-even quantity (continuous)", page)
+        self.assertIn("<td>1.75</td>", page)
+        self.assertIn("<td>2.78</td>", page)
+
+    def test_continuous_break_even_null_when_contribution_nonpositive(self):
+        row = {
+            "name": "Illustrative loss", "units_sold": "0.5",
+            "unit_price": "3", "variable_cost_per_unit": "5",
+            "allocated_fixed_cost": "1",
+        }
+        item = enterprise(row)
+        self.assertIsNone(item["break_even_quantity_continuous"])
+        self.assertIsNone(item["margin_of_safety_quantity_continuous"])
+        self.assertIsNone(item["margin_of_safety_percent_continuous"])
+
     def test_negative_contribution_has_no_break_even(self):
         row = enterprise({
             "name": "Loss-making", "units_sold": 50, "unit_price": 3,
