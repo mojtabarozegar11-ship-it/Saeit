@@ -167,6 +167,13 @@ Input numbers in the supplied example are synthetic and are **not** claims
 about agriculture in any particular country or market. The tool does not
 pretend to use scientific sources or current prices.
 
+## International market and scientific comparison
+
+A six-provider, first-party-sourced comparative evidence register and honest
+quality-gap list is maintained in [BENCHMARKS_2026-11-03.md](BENCHMARKS_2026-11-03.md).
+It is documentary research only; no independent market superiority or QC1000
+acceptance is claimed.
+
 ## Verification and support
 
 To run the included automated tests:
