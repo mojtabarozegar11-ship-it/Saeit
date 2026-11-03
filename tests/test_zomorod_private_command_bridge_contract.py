@@ -63,7 +63,7 @@ def _inline_event_scripts():
 
 def test_embedded_event_scripts_are_valid_python():
     scripts = _inline_event_scripts()
-    assert len(scripts) == 2
+    assert len(scripts) == 1
     for script in scripts:
         ast.parse(script)
 
@@ -334,8 +334,8 @@ def test_emergency_direct_cpanel_path_never_lowers_identity_or_host_key_pins():
     assert "PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED" in source
     assert "PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE" in source
     assert 'printf \'command_host=%s\\n\' "$command_host" >> "$GITHUB_OUTPUT"' in source
-    assert source.count('case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct)') == 5
-    assert source.count('COMMAND_HOST: ${{ steps.link.outputs.command_host }}') == 5
+    assert source.count('case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct)') == 6
+    assert source.count('COMMAND_HOST: ${{ steps.link.outputs.command_host }}') == 6
     assert 'ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" "$COMMAND_HOST"' in source
     assert 'ssh -F "$d/config" "$COMMAND_HOST"' in source
     assert "UserKnownHostsFile /dev/null" not in source
@@ -449,6 +449,8 @@ def test_owner_sealed_schema_contract_is_encrypted_before_log_output(tmp_path):
     assert '"selected_function_source": bridge_selected' in step
     assert '"auth", "open_control_db"' in step
     assert '"protocol_assignments": protocol_assignments' in step
+    assert '"protocol_assignments": bridge_protocol_assignments' in step
+    assert '"TASK_FIELDS", "WORKSTREAMS", "PRIORITIES", "RISKS"' in step
     assert '"MAGIC", "OUTER_FIELDS", "INNER_FIELDS", "TASK_FIELDS"' in step
     assert "ZMR_SEALED_SCHEMA=ENCRYPTED_ONLY" in step
     assert "openssl\", \"pkeyutl\", \"-encrypt" in step

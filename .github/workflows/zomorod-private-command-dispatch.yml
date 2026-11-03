@@ -1016,6 +1016,18 @@ jobs:
                   segment = ast.get_source_segment(bridge_text, node)
                   if isinstance(segment, str) and len(segment) <= 50000:
                       bridge_selected[node.name] = segment
+          bridge_protocol_assignments = []
+          permitted_bridge_constants = {
+              "TASK_FIELDS", "WORKSTREAMS", "PRIORITIES", "RISKS",
+          }
+          for node in bridge_tree.body:
+              if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                  targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                  if any(isinstance(target, ast.Name)
+                         and target.id in permitted_bridge_constants for target in targets):
+                      segment = ast.get_source_segment(bridge_text, node)
+                      if isinstance(segment, str) and len(segment) <= 3000:
+                          bridge_protocol_assignments.append(segment)
           tables = []
           with sqlite3.connect("file:" + str(database) + "?mode=ro&immutable=1", uri=True, timeout=5) as db:
               for (name,) in db.execute(
@@ -1039,6 +1051,7 @@ jobs:
                   "source_sha256": hashlib.sha256(bridge_text.encode("utf-8")).hexdigest(),
                   "functions": bridge_functions[:150],
                   "selected_function_source": bridge_selected,
+                  "protocol_assignments": bridge_protocol_assignments,
               },
               "sql_literals": sql_literals,
               "tables": tables,
@@ -1172,24 +1185,44 @@ jobs:
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           d="$RUNNER_TEMP/zomorod-command-channel"
           p="/home/zomorod2/.private/zomorod-business"
-          python3 - "$GITHUB_EVENT_PATH" <<'PY' | ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" "$COMMAND_HOST" "python3 -B '/home/zomorod2/.private/zomorod-business/company_ingress.py' accept --db '/home/zomorod2/.private/zomorod-business/command-center.sqlite3' --hmac-key '/home/zomorod2/.private/zomorod-business/.company-bridge.key' --recipient-key '/home/zomorod2/.private/zomorod-business/.chat-command-rsa.key'" > "$d/receipt.txt"
-          import os
-          import sys
-          from pathlib import Path
-          encrypted_path = Path(os.environ["RUNNER_TEMP"]) / "zomorod-sealed-command.txt"
-          sys.stdout.write(encrypted_path.read_text(encoding="utf-8"))
-          PY
+          # An adapter runs on the pinned private cPanel host. Only ciphertext
+          # crosses SSH stdin, while the accepted ID stays in runner temp.
+          adapter_b64="$(base64 -w0 scripts/zomorod_private_accept_with_id.py)"
+          ssh -T -F "$d/config" "$COMMAND_HOST" "python3 -B -c 'import base64;exec(base64.b64decode(\"$adapter_b64\"))'" < "$RUNNER_TEMP/zomorod-sealed-command.txt" > "$d/receipt.txt"
           grep -Fq "COMMAND_RECEIPT=ACCEPTED" "$d/receipt.txt"
           grep -Fq "COMMAND_QUEUE=UPDATED" "$d/receipt.txt"
           echo "PRIVATE_COMMAND_RECEIPT=ACCEPTED"
           echo "PRIVATE_TASK_QUEUE=UPDATED"
-          echo "COMPANY_WORK_EXECUTION=NOT_PERFORMED"
           ssh -F "$d/config" "$COMMAND_HOST" "python3 -B '$p/company_ingress.py' show-public-key --db '$p/command-center.sqlite3' --hmac-key '$p/.company-bridge.key' --recipient-key '$p/.chat-command-rsa.key'" > "$d/recipient-key.txt"
           grep -Fq -- "-----BEGIN PUBLIC KEY-----" "$d/recipient-key.txt"
           grep -Fq -- "-----END PUBLIC KEY-----" "$d/recipient-key.txt"
           echo "ROTATED_RECIPIENT_PUBLIC_KEY_BEGIN"
           sed -n '/^-----BEGIN PUBLIC KEY-----$/,/^-----END PUBLIC KEY-----$/p' "$d/recipient-key.txt"
           echo "ROTATED_RECIPIENT_PUBLIC_KEY_END"
+      - name: Apply allowlisted factory policy and independently verify private receipt
+        if: steps.gate.outputs.operation == 'accept'
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          command_id="$(sed -n 's/^PRIVATE_COMMAND_ID=//p' "$d/receipt.txt")"
+          [[ "$command_id" =~ ^[0-9a-f]{32}$ ]]
+          ssh -T -F "$d/config" "$COMMAND_HOST" "python3 -B - apply '$command_id'" < scripts/zomorod_allowlisted_policy_worker.py > "$d/policy-apply.txt"
+          if grep -Fxq "POLICY_APPLIED=NOT_APPLICABLE" "$d/policy-apply.txt"; then
+            echo "COMPANY_WORK_EXECUTION=NOT_PERFORMED"
+          else
+            grep -Fxq "POLICY_APPLIED=YES" "$d/policy-apply.txt"
+            applied_id="$(sed -n 's/^POLICY_COMMAND_ID=//p' "$d/policy-apply.txt")"
+            test "$applied_id" = "$command_id"
+            ssh -T -F "$d/config" "$COMMAND_HOST" "python3 -B - verify '$command_id'" < scripts/zomorod_allowlisted_policy_worker.py > "$d/policy-verify.txt"
+            grep -Fxq "PRIVATE_POLICY_READBACK=VERIFIED" "$d/policy-verify.txt"
+            grep -Fxq "PRIVATE_EXECUTION_RECEIPT=VERIFIED" "$d/policy-verify.txt"
+            echo "COMPANY_WORK_EXECUTION=ALLOWLISTED_POLICY_APPLIED"
+            echo "PRIVATE_POLICY_DURABILITY=INDEPENDENTLY_VERIFIED"
+          fi
       - name: Remove temporary relay credentials and receipts
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-command-channel" "$RUNNER_TEMP/recipient-key.txt" "$RUNNER_TEMP/zomorod-sealed-command.txt"
