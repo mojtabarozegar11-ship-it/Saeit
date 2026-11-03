@@ -1,10 +1,12 @@
 name: ZM live PHP business ChatGPT report-only guarded release
 on:
-  push:
-    branches:
-      - feature/zm-business-php-chatgpt-reports-20261102
-    paths:
-      - ".github/workflows/zm-business-php-chatgpt-report-guarded-release-20261102.yml"
+  workflow_dispatch:
+    inputs:
+      historical_patch_acknowledged:
+        description: 'Retired legacy release; require explicit authorization and separate review (use 20261103 reconciled workflow for current app)'
+        required: true
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
@@ -12,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   report-only-release:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && inputs.historical_patch_acknowledged == true
     runs-on: ubuntu-24.04
     timeout-minutes: 17
     steps:
