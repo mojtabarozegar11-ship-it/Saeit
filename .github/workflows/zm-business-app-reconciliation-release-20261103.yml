@@ -1,0 +1,28 @@
+# Dispatch anchor only. The reviewed deployment implementation lives on
+# feature/zm-bank-ledger-20261102. GitHub requires workflow_dispatch to
+# exist on the default branch before a non-default ref can be selected.
+# This default-branch copy NEVER deploys and never reads credentials.
+name: ZM reconciled business app guarded promotion
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Select reviewed feature/zm-bank-ledger-20261102 branch. Main refuses all modes.'
+        type: choice
+        required: true
+        default: preflight
+        options: [preflight, publish]
+permissions:
+  contents: read
+jobs:
+  reject-default-branch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Refuse execution of default-branch dispatch anchor
+        shell: bash
+        run: |
+          echo '::error::This main-branch file is only a safe dispatch anchor and contains no deployment logic.'
+          echo '::error::Choose feature/zm-bank-ledger-20261102 in the Run workflow branch selector.'
+          echo '::error::The reviewed branch performs source SHA, host module, SQLite, private approval, backup and rollback gates.'
+          exit 78
