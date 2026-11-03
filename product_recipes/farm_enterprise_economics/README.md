@@ -1,4 +1,4 @@
-# Farm Enterprise Economics Toolkit — Edition 1.2
+# Farm Enterprise Economics Toolkit — Edition 1.3
 
 A working, offline agricultural enterprise calculator written in Python 3.8+.
 It estimates contribution margin, annual operating result, break-even sales
@@ -59,6 +59,30 @@ depends on real sales and constraints.
 Nine stress tests per enterprise vary realized volume by -20%, 0%, +20%
 and unit selling price by -10%, 0%, +10%. Selling-fee percentage, variable
 cost per sold unit, and fixed cost remain unchanged.
+
+## Precision of unit prices and unit costs
+
+Edition 1.3 preserves per-unit quantities at the actual user-entered decimal
+precision. This matters when a commodity is priced per gram, litre fraction,
+seed, kilowatt-hour, or another small unit: `0.005` must not be displayed as
+`0.00` and mistaken for a zero price in the offline management report.
+
+Each enterprise JSON result includes additive fields:
+
+- `unit_price_exact`: entered unit selling price without cents rounding.
+- `variable_cost_per_unit_exact`: entered unit variable cost without cents rounding.
+- `contribution_per_unit_exact`: derived unit contribution at model precision.
+- `break_even_unit_price_unrounded`: model-precision break-even selling price
+  at the planned sold volume, or null when undefined.
+
+The pre-existing `unit_price`, `variable_cost_per_unit`, `contribution_per_unit`
+and `break_even_unit_price_at_planned_volume` fields remain cents-rounded for
+existing consumers. Do NOT use those legacy display fields to make decisions
+about sub-cent commodities. The HTML table uses the precision-preserving values.
+Portfolio monetary totals still display two decimals in the declared currency;
+this is a presentation choice, not a claim about minor currency units or
+rounding rules in a particular country. Calculations use unrounded Decimal
+inputs, subject to the documented 80-digit model precision.
 
 ## Whole-farm portfolio risk overview
 
