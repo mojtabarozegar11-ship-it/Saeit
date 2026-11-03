@@ -24,3 +24,15 @@
 #objectiveRange{color:#8cf2cb;font-size:10px;white-space:nowrap}
 .interact{position:absolute;left:12px;bottom:calc(env(safe-area-inset-bottom) + 194px);padding:8px 13px;color:#f8e1a0;background:linear-gradient(145deg,#305e45,#153127);font-size:17px;z-index:6}
 @media(max-height:650px){#missionObjective{top:97px;padding:5px 8px;font-size:10px;max-width:62%;min-width:230px}.interact{bottom:calc(env(safe-area-inset-bottom) + 150px)}}
+
+/* Respect OS motion sensitivity without changing gameplay or input timing. */
+@media (prefers-reduced-motion: reduce) {
+ #game.firing #weaponArt { animation: none !important; }
+ #game.playing #missionBackdrop { background-position: center 58% !important; transition: none !important; }
+ #objectiveArrow, .toast, .bar i { transition: none !important; }
+}
+.reload { position:absolute;left:104px;top:calc(env(safe-area-inset-top) + 9px);width:44px;height:38px;font-size:21px;line-height:1;z-index:6;pointer-events:auto; }
+.reload:disabled { opacity:.55;cursor:not-allowed; }
+
+/* R24: persistent at-risk campaign warning on the home screen. */
+.save-warning:not([hidden]){display:block;margin:12px 0;padding:12px 14px;border:2px solid #f5bf63;border-radius:12px;background:#412515;color:#fff2d5;font-size:13px;line-height:1.7;text-align:right}
