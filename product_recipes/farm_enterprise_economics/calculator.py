@@ -234,6 +234,46 @@ def evaluate(data):
                 "price_multiplier": str(price_factor),
                 "modeled_operating_profit": money(total_profit),
             })
+    # Extended joint-stress matrix: input-cost inflation can coincide with
+    # a lower realized sales price and reduced volume. Preserve the original
+    # two-factor outputs for existing integrations; do not assign probabilities.
+    three_factor_scenarios = []
+    three_factor_portfolio = []
+    for quantity_factor in (Decimal("0.80"), Decimal("1.00"), Decimal("1.20")):
+        for price_factor in (Decimal("0.90"), Decimal("1.00"), Decimal("1.10")):
+            for variable_cost_factor in (Decimal("0.90"), Decimal("1.00"), Decimal("1.10")):
+                total_profit = Decimal(0)
+                for row in rows:
+                    name = str(row["name"]).strip()
+                    units = decimal_number(row["units_sold"], name + ".units_sold", min_value=0)
+                    price = decimal_number(row["unit_price"], name + ".unit_price", min_value=0)
+                    variable_unit = decimal_number(
+                        row["variable_cost_per_unit"], name + ".variable_cost_per_unit", min_value=0
+                    )
+                    fixed_cost = decimal_number(
+                        row["allocated_fixed_cost"], name + ".allocated_fixed_cost", min_value=0
+                    )
+                    fee_rate = decimal_number(
+                        row.get("selling_fee_percent", 0), name + ".selling_fee_percent",
+                        min_value=0, max_value=100
+                    ) / Decimal(100)
+                    profit = (units * quantity_factor *
+                              (price * price_factor * (1 - fee_rate) -
+                               variable_unit * variable_cost_factor) - fixed_cost)
+                    three_factor_scenarios.append({
+                        "enterprise": name,
+                        "volume_multiplier": str(quantity_factor),
+                        "price_multiplier": str(price_factor),
+                        "variable_cost_multiplier": str(variable_cost_factor),
+                        "modeled_operating_profit": money(profit),
+                    })
+                    total_profit += profit
+                three_factor_portfolio.append({
+                    "volume_multiplier": str(quantity_factor),
+                    "price_multiplier": str(price_factor),
+                    "variable_cost_multiplier": str(variable_cost_factor),
+                    "modeled_operating_profit": money(total_profit),
+                })
     return {
         "version": "1.3",
         "currency": currency,
@@ -243,7 +283,8 @@ def evaluate(data):
             "All prices, quantities and costs must be entered by the user.",
             "Fixed costs are allocated per enterprise, not counted again in totals.",
             "This is a deterministic planning model, not a prediction of actual sales.",
-            "Scenario changes affect only sold quantity and unit selling price.",
+            "Legacy nine-scenario analysis changes sold quantity and unit selling price.",
+            "Extended 27-scenario analysis additionally changes unit variable input costs; fixed costs remain unchanged.",
             "Tax, financing, capital expenditure, depreciation, working capital, and seasonality are excluded.",
         ],
         "results": results,
@@ -255,6 +296,8 @@ def evaluate(data):
         },
         "scenario_results": scenarios,
         "portfolio_scenario_results": portfolio_scenarios,
+        "three_factor_scenario_results": three_factor_scenarios,
+        "three_factor_portfolio_results": three_factor_portfolio,
     }
 
 
@@ -297,6 +340,12 @@ def render_html_report(report):
         report["portfolio_scenario_results"],
         ("volume_multiplier", "price_multiplier", "modeled_operating_profit"),
     )
+    joint_stress_table = table(
+        ("Volume factor", "Selling-price factor", "Variable-cost factor", "Portfolio operating profit"),
+        report["three_factor_portfolio_results"],
+        ("volume_multiplier", "price_multiplier", "variable_cost_multiplier",
+         "modeled_operating_profit"),
+    )
     assumptions = "".join("<li>" + e(s) + "</li>" for s in report["assumptions"])
     return """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -318,6 +367,7 @@ aside{border-left:4px solid #a05b22;padding:1rem;background:#fff7e9}
 <main><div class="kpis">""" + summary + """</div>
 <section><h2>Enterprise operating results</h2>""" + enterprise_table + """</section>
 <section><h2>Whole-portfolio sensitivity</h2><p>Correlated volume and selling-price changes are applied to all enterprises at once. These are scenarios, not probabilities or forecasts.</p>""" + stress_table + """</section>
+<section><h2>Three-factor agricultural cost stress</h2><p>All enterprises face the same relative changes in sales volume (80/100/120%), selling price (90/100/110%) and variable cost per unit (90/100/110%). Fixed costs and selling fee rates remain unchanged. These 27 outcomes are illustrative stress calculations, not probabilities or forecasts.</p>""" + joint_stress_table + """</section>
 <section><h2>Model boundaries</h2><ul>""" + assumptions + """</ul>
 <aside>Pre-tax, pre-financing contribution model. Per-unit figures retain input/model decimal precision; displayed money totals are rounded to 0.01 currency units. Results are not forecasts or investment recommendations. Verify all entered quantities, costs, allocations and market assumptions.</aside></section>
 </main><footer><small>Generated locally. No accounts, telemetry or network connection.</small></footer></body></html>

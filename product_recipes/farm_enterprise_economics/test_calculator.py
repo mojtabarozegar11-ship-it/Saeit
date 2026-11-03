@@ -130,6 +130,47 @@ class EconomicsTests(unittest.TestCase):
         self.assertLess(min(outcomes), 2500)
         self.assertGreater(max(outcomes), 2500)
 
+    def test_three_factor_input_cost_stress_matches_explicit_farm_economics(self):
+        report = evaluate(self.example)
+        farm = report["three_factor_scenario_results"]
+        portfolio = report["three_factor_portfolio_results"]
+        self.assertEqual(len(farm), 27)
+        self.assertEqual(len(portfolio), 27)
+        def scenario(rows, volume, price, cost):
+            return next(x for x in rows
+                        if x["volume_multiplier"] == volume
+                        and x["price_multiplier"] == price
+                        and x["variable_cost_multiplier"] == cost)
+        baseline = scenario(portfolio, "1.00", "1.00", "1.00")
+        downside = scenario(portfolio, "0.80", "0.90", "1.10")
+        upside = scenario(portfolio, "1.20", "1.10", "0.90")
+        self.assertEqual(baseline["modeled_operating_profit"], "2500.00")
+        self.assertEqual(downside["modeled_operating_profit"], "320.00")
+        self.assertEqual(upside["modeled_operating_profit"], "5220.00")
+        self.assertEqual(baseline["modeled_operating_profit"],
+                         report["portfolio"]["operating_profit"])
+        self.assertEqual(scenario(farm, "0.80", "0.90", "1.10")["modeled_operating_profit"], "320.00")
+        page = render_html_report(report)
+        self.assertIn("Three-factor agricultural cost stress", page)
+        self.assertIn("Variable-cost factor", page)
+
+    def test_three_factor_cost_stress_does_not_double_count_shared_fixed_costs(self):
+        second = {
+            "name": "Field crop", "units_sold": 100, "unit_price": 20,
+            "variable_cost_per_unit": 15, "allocated_fixed_cost": 100,
+            "selling_fee_percent": 0,
+        }
+        report = evaluate({"currency": "USD", "enterprises": [
+            self.example["enterprises"][0], second,
+        ]})
+        self.assertEqual(len(report["three_factor_scenario_results"]), 54)
+        row = next(x for x in report["three_factor_portfolio_results"]
+                   if x["volume_multiplier"] == "0.80"
+                   and x["price_multiplier"] == "0.90"
+                   and x["variable_cost_multiplier"] == "1.10")
+        # Orchard 320 + field crop (80 * (18 - 16.5) - 100) = 340.
+        self.assertEqual(row["modeled_operating_profit"], "340.00")
+
     def test_portfolio_aggregation_without_double_fixed_costs(self):
         data = dict(self.example)
         data["enterprises"] = self.example["enterprises"] + [{

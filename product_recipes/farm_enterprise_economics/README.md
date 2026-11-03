@@ -68,9 +68,24 @@ more units cannot offset positive fixed costs through a nonpositive unit
 contribution. With zero fixed costs and positive contribution, the threshold
 is zero; commercial feasibility still depends on real demand and constraints.
 
-Nine stress tests per enterprise vary realized volume by -20%, 0%, +20%
-and unit selling price by -10%, 0%, +10%. Selling-fee percentage, variable
-cost per sold unit, and fixed cost remain unchanged.
+The original nine stress tests per enterprise vary realized sales volume by
+-20%, 0%, +20% and selling price by -10%, 0%, +10%; those legacy outputs remain
+unchanged for existing consumers. The new `three_factor_scenario_results` and
+`three_factor_portfolio_results` add 27 combinations of volume (80/100/120%),
+selling price (90/100/110%) and **variable cost per unit** (90/100/110%).
+For example, an adverse combination of less sold product, a lower farm-gate
+price and more expensive inputs can be evaluated jointly. The whole-farm figure
+applies each common shock across all enterprises and deducts each allocated
+fixed cost once. Fixed costs and selling-fee rates stay constant in all
+scenarios. The HTML report includes the 27 whole-farm outcomes.
+
+These figures are scenario arithmetic, not estimated probabilities, yield
+forecasts or predictive confidence intervals. Price, output and input-cost
+changes can interact in reality; this deterministic model holds all other
+factors fixed. Penn State Extension discusses enterprise budgets and the
+importance of input-cost and sale-price sensitivity:
+https://extension.psu.edu/budgeting-for-agricultural-decision-making
+https://extension.psu.edu/cost-of-production-the-most-important-number-on-your-farm
 
 ## Precision of unit prices and unit costs
 
