@@ -39,3 +39,19 @@ The direct cPanel read-only audit found the PHP modules present, without symlink
 6. No fabricated project links, ledger entries, payments, appointments, employees or independent reviewers.
 
 Evidence: preflight GitHub Actions run [41585778062](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41585778062) succeeded after the module-identity gate was added.
+
+## Live app release route ownership (2026-11-03)
+
+An additional read-only review identified historical workflows that could write to the live `app.php` only when their own obsolete files were changed on specific feature branches. To avoid accidental execution of conflicting patches, their automatic `push` triggers have been removed; they now require an explicit manual `workflow_dispatch` with `historical_patch_acknowledged=true` and retain their preexisting remote checks. This manual switch **does not** constitute publication approval, a successful acceptance test, or permission to bypass the dedicated reconciled release.
+
+| Historical workflow | Historical branch | Retirement commit |
+| --- | --- | --- |
+| `zm-banking-nav-live-20261102.yml` | `feature/zm-bank-ledger-20261102` | `be38fead3a926d63a4de4cd5a25c816e9b69f013` |
+| `zm-business-rbac-kpi-guarded-release-20261102.yml` | `feature/zm-business-php-persian-reports-20261102` | `6685dcc5eb81a92fff6b5e25026e0c6d0e23be70` |
+| `zm-business-php-chatgpt-report-guarded-release-20261102.yml` | `feature/zm-business-php-chatgpt-reports-20261102` | `6a1d9750dfec60b65992454402b233beb2f21e00` |
+
+For the current management desk, use `.github/workflows/zm-business-app-reconciliation-release-20261103.yml`, with its read-only push preflight and **separately authorized**, hash-verified `workflow_dispatch: mode=publish` path. The first-install `zomorod-business-release.yml` on `main` has an existing-directory refusal and is not a route for overwriting this live installation.
+
+### Authenticity boundary for project–document references
+
+Production currently has a real project whose full title (`projects.id=39`) appears in `documents.id=1` (the Foundation properties/employment dossier). `zm_project_links` has no rows. This is **only a candidate** for a legitimate reference: the application must record any link using the existing `project_integrations.php` authorized actor, role, CSRF, transaction and audit flow. Do not insert directly into SQLite, invent a current authenticated actor, or count a candidate as an approved project link. Financial/accounting data are unchanged.
