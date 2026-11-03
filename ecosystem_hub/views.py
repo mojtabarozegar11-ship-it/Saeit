@@ -294,7 +294,11 @@ def production_material_plan(request, pk):
         .select_related("formula", "unit", "formula__product"),
         pk=pk,
     )
-    materials = material_shortages(order)
+    try:
+        materials = material_shortages(order)
+    except ValidationError:
+        # Legacy-invalid BOM data must not produce a 500 or a misleading plan.
+        return no_cache(HttpResponseBadRequest("فرمول مواد نیازمند اصلاح و بازبینی است."))
     draft_refs = ProcurementNeed.objects.filter(
         unit=order.unit, reference__startswith=f"MRP-{order.pk}-",
     ).select_related("item").order_by("reference") if permission(request.user, "view_procurementneed") else []
