@@ -210,5 +210,73 @@ class SnapshotSafetyTests(unittest.TestCase):
             self.assertEqual(secret.read_text(), "no access")
 
 
+    def test_exact_legacy_management_receipts_recovered_with_immutable_fields(self):
+        # All identifiers and title shapes match the four actual issue comments.
+        real = [
+            (6594492539, "0041", "ZM-APP-GUARDED-RECONCILIATION"),
+            (6594657783, "0042", "ZM-RECOVERABLE-APP-PROMOTION"),
+            (6594791099, "0043", "ZM-ISOLATED-REAL-DATA-ACCEPTANCE"),
+            (6594862748, "0044", "ZM-RELEASE-DEPENDENCY-GATE"),
+        ]
+        def receipt(cid, heading):
+            return {"id": cid, "body": heading + "\nاقدامات واقعی ثبت شده با شواهد و بدون تغییر داده مالی.\n",
+                    "created_at": "2026-11-03T03:50:00Z",
+                    "user": {"login": "mojtabarozegar11-ship-it"}}
+        early = receipt(6593992560, "## گزارش 05-0040 | 2026-11-03 02:35 UTC | ZM-LIVE-APP-RECONCILIATION-20261103")
+        late = receipt(6595877483, "## گزارش ۰۵-۰۰۴۵ | 2026-11-03 05:01 UTC | ZM-CTRL-20261103-0CB48E650B3D")
+        recovered = [
+            receipt(cid, f"## گزارش اجرایی ۰۵-{number} — ۳ نوامبر ۲۰۲۶ | {run}")
+            for cid, number, run in real
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp) / "private"
+            parent.mkdir(mode=0o700)
+            archive = parent / "chatgpt_reports_archive.sqlite3"
+            snapshot_file = parent / "chatgpt_reports_snapshot.json"
+            original, initial_payload = build_snapshot([early, late])
+            self.assertEqual(install(original, initial_payload, snapshot_file), "UPDATED")
+            self.assertEqual(archive_sync([early, late], archive)[:2], (2, 2))
+            with sqlite3.connect(str(archive)) as db:
+                old_fields = db.execute(
+                    "SELECT report_code,comment_id,occurred_at,body,evidence_url FROM reports WHERE report_code='05-0045'"
+                ).fetchone()
+            all_comments = [early, *recovered, late]
+            total, added, window = archive_sync(all_comments, archive)
+            self.assertEqual((total, added), (6, 4))
+            self.assertEqual([r["report_code"] for r in window],
+                             [f"05-{n:04d}" for n in range(40, 46)])
+            with sqlite3.connect(str(archive)) as db:
+                new_fields = db.execute(
+                    "SELECT report_code,comment_id,occurred_at,body,evidence_url FROM reports WHERE report_code='05-0045'"
+                ).fetchone()
+                self.assertEqual(old_fields, new_fields)
+                self.assertEqual(db.execute("PRAGMA quick_check").fetchone()[0], "ok")
+            updated, payload = build_snapshot(all_comments)
+            self.assertEqual(install(updated, payload, snapshot_file), "UPDATED")
+            self.assertEqual(install(updated, payload, snapshot_file), "UNCHANGED")
+            self.assertEqual(json.loads(snapshot_file.read_text())["count"], 6)
+            tampered = dict(recovered[1], body=recovered[1]["body"] + "changed")
+            with self.assertRaisesRegex(ValueError, "IMMUTABLE_REPORT_ARCHIVE_CONFLICT"):
+                archive_sync([tampered], archive)
+            unauthorized = receipt(6594000000, "## گزارش 05-0046 | 2026-11-03 02:36 UTC | ZM-UNAPPROVED-HISTORY")
+            with self.assertRaisesRegex(ValueError, "HISTORICAL_INSERT_REJECTED"):
+                archive_sync([unauthorized], archive)
+
+    def test_legacy_backfill_has_exact_owner_id_run_and_timestamp_gate(self):
+        valid = {"id": 6594492539,
+                 "body": "## گزارش اجرایی ۰۵-۰۰۴۱ — ۳ نوامبر ۲۰۲۶ | ZM-APP-GUARDED-RECONCILIATION\nمتن واقعی و مستند گزارش مدیریت.\n",
+                 "created_at": "2026-11-03T03:02:00Z",
+                 "user": {"login": "mojtabarozegar11-ship-it"}}
+        self.assertEqual(build_snapshot([valid])[0]["items"][0]["report_code"], "05-0041")
+        for altered in [
+            dict(valid, id=123),
+            dict(valid, user={"login": "attacker"}),
+            dict(valid, created_at="invalid"),
+            dict(valid, body=valid["body"].replace("RECONCILIATION", "FORGERY")),
+            dict(valid, body=valid["body"].replace("۳ نوامبر", "۴ نوامبر")),
+        ]:
+            self.assertEqual(build_snapshot([altered])[0]["count"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
