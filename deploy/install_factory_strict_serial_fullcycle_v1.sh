@@ -45,6 +45,7 @@ shared_markers=(
 )
 files=(
   'factory_strict_serial_fullcycle_v1.py:strict-serial-fullcycle-v1.py'
+  'factory_global_singleton_v1.py:factory_global_singleton_v1.py'
   'factory_strict_serial_scope_v1.py:factory_strict_serial_scope_v1.py'
   'factory_sequential_scientific_casework_v1.py:sequential-scientific-casework-v1.py'
   'factory_stage2_literature_scout.py:stage2-literature-scout-serial.py'
