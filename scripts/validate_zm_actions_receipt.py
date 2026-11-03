@@ -11,8 +11,8 @@ from pathlib import Path
 
 START = "ZM_ACTIONS_V1_START"
 END = "ZM_ACTIONS_V1_END"
-REPORT = re.compile(r"^## گزارش ۰۵-([۰-۹0-9]{4,}) \\| (\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d UTC) \\| ([A-Za-z0-9_-]{8,128})$", re.M)
-EVIDENCE = re.compile(r"^https://github\\.com/mojtabarozegar11-ship-it/Saeit/(?:commit/[0-9a-f]{40}|actions/runs/[0-9]+|pull/[0-9]+|issues/[0-9]+)$")
+REPORT = re.compile(r"^## گزارش ۰۵-([۰-۹0-9]{4,}) \| (\d{4}-\d\d-\d\d \d\d:\d\d UTC) \| ([A-Za-z0-9_-]{8,128})$", re.M)
+EVIDENCE = re.compile(r"^https://github\.com/mojtabarozegar11-ship-it/Saeit/(?:commit/[0-9a-f]{40}|actions/runs/[0-9]+|pull/[0-9]+|issues/[0-9]+)$")
 STATUSES = {"completed", "partial", "blocked", "not_started"}
 
 def validate(document: str) -> list[str]:
