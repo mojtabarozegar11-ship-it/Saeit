@@ -258,10 +258,26 @@ jobs:
           test "$(sha256sum "$app" | awk '{print $1}')" = "$after"
           test "$(stat -c %a "$app")" = 600
           test "$(stat -c %a "$root/management.sqlite3")" = 600
-          code="$(curl --silent --show-error --proto '=https' --max-redirs 0 --max-time 30 -o "$stage/anonymous.html" -w '%{http_code}' 'https://zomorodmelal.ir/business/?page=dashboard')"
-          test "$code" = 200
-          grep -Fq 'ورود مدیر و حسابدار' "$stage/anonymous.html"
-          ! grep -Fq 'کدینگ حساب‌ها' "$stage/anonymous.html"
+          # Real, data-preserving post-publish acceptance: protected routes
+          # must require authentication for all anonymous visitors.
+          for page in dashboard project_links project_calendar project_portfolio project_governance project_finance project_assignments chatgpt_reports command_center accounts journal invoices payments users; do
+            response="$stage/anonymous-$page.html"
+            code="$(curl --silent --show-error --proto '=https' --max-redirs 0 --max-time 20 -o "$response" -w '%{http_code}' "https://zomorodmelal.ir/business/?page=$page")"
+            test "$code" = 200
+            grep -Fq 'ورود مدیر و حسابدار' "$response"
+            grep -Fq 'name="password"' "$response"
+            ! grep -Fq '<nav aria-label="پیمایش مدیریت">' "$response"
+            ! grep -Fq '<table' "$response"
+          done
+          echo 'ANONYMOUS_PRIVATE_ROUTES=14_login_required'
+          python3 - "$root/management.sqlite3" <<'PY'
+          import sqlite3,sys
+          db=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True)
+          assert db.execute("PRAGMA quick_check").fetchone()[0]=="ok"
+          assert not db.execute("PRAGMA foreign_key_check").fetchall()
+          db.close()
+          print("POST_PUBLISH_SQLITE_INTEGRITY=pass")
+          PY
           published=0
           trap - EXIT
           echo 'RECONCILED_APP_LIVE=published_with_code_rollback'
