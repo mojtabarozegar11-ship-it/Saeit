@@ -105,10 +105,9 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_factory_build50_workbook.py' -v
   deploy:
     needs: measured-qa
-    # Retired F-01 multi-product activation gate. The historical owner token
-    # [approved-factory-unlimited-builds-20261019] and workflow_dispatch MUST
-    # NOT bypass the new global one-product rule. Tests remain runnable.
-    if: ${{ false }}
+    # F-01 owner directive: never deploy the obsolete 25-product installer.
+    # Strict one-product activation requires a separate reviewed controller.
+    if: false
     runs-on: ubuntu-latest
     # Measured VPS regressions and private manufacturing already consumed the
     # old 12-minute budget before the final signed-off integrity readbacks.
