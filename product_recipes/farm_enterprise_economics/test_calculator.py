@@ -277,5 +277,43 @@ class EconomicsTests(unittest.TestCase):
                     self.assertFalse(output_file.exists())
 
 
+    def test_subcent_unit_costs_remain_visible_without_changing_legacy_money_fields(self):
+        """Commodity units can cost less than one hundredth of a currency unit."""
+        fine_grained = {
+            "name": "Grain grams", "units_sold": 10000,
+            "unit_price": "0.005", "variable_cost_per_unit": "0.0035",
+            "allocated_fixed_cost": "2", "selling_fee_percent": 0,
+        }
+        result = evaluate({"currency": "USD", "enterprises": [fine_grained]})
+        entry = result["results"][0]
+        self.assertEqual(result["version"], "1.3")
+        self.assertEqual(entry["unit_price"], "0.00")  # Legacy cents-rounded field.
+        self.assertEqual(entry["unit_price_exact"], "0.005")
+        self.assertEqual(entry["variable_cost_per_unit_exact"], "0.0035")
+        self.assertEqual(entry["contribution_per_unit_exact"], "0.0015")
+        self.assertEqual(entry["break_even_unit_price_unrounded"], "0.0037")
+        self.assertEqual(entry["sales_revenue"], "50.00")
+        self.assertEqual(entry["operating_profit"], "13.00")
+        self.assertEqual(entry["break_even_units"], 1334)
+        page = render_html_report(result)
+        self.assertIn("<td>0.005</td>", page)
+        self.assertIn("<td>0.0035</td>", page)
+        self.assertIn("<td>0.0015</td>", page)
+        self.assertIn("rounded to 0.01", page)
+
+    def test_unreachable_break_even_is_not_rendered_as_literal_none(self):
+        entry = {
+            "name": "Loss enterprise", "units_sold": 50, "unit_price": 3,
+            "variable_cost_per_unit": 5, "allocated_fixed_cost": 100,
+        }
+        result = evaluate({"currency": "USD", "enterprises": [entry]})
+        row = result["results"][0]
+        self.assertIsNone(row["break_even_units"])
+        self.assertEqual(row["break_even_unit_price_unrounded"], "7")
+        html = render_html_report(result)
+        self.assertIn("<td>N/A</td>", html)
+        self.assertNotIn("<td>None</td>", html)
+
+
 if __name__ == "__main__":
     unittest.main()
