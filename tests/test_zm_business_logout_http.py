@@ -36,6 +36,7 @@ class LogoutHTTPTests(unittest.TestCase):
         shutil.copy2(SOURCE, cls.docroot / "app.php")
         cls.private = cls.root / ".private/zomorod-business"
         cls.private.mkdir(parents=True)
+        shutil.copy2(Path(__file__).resolve().parent / "fixtures/zm_period_controls_fixture.php", cls.private / "period_controls.php")
         # The protected accounting DB is created only by its one-time local installer,
         # never as a side effect of the first anonymous GET.
         install = subprocess.run(
@@ -528,6 +529,54 @@ class LogoutHTTPTests(unittest.TestCase):
                 self.assertIn("درخواست انجام نشد", html)
 
 
+
+    def test_v7_pages_remain_routed_and_fail_closed_when_modules_are_absent(self) -> None:
+        """Previously live V7 screens must return 503, never silently disappear as 404."""
+        for page in (
+            "insights", "command_center", "workflow_desk",
+            "industry_ops", "period_controls", "finance_audit", "payroll",
+        ):
+            with self.subTest(page=page):
+                status, _, html = self.request(
+                    "GET", "/app.php?page=" + page, cookie=self.cookie,
+                )
+                self.assertEqual(status, 503)
+                self.assertIn("درخواست انجام نشد", html)
+
+    def test_v7_actions_remain_routed_and_fail_closed_when_modules_are_absent(self) -> None:
+        """Absent optional private handlers must be a 503 and never an unknown-action 403."""
+        for action in (
+            "cc_create", "cc_scan", "cc_transition", "cc_plan", "cc_evidence",
+            "cc_review", "flow_create", "flow_transition", "industry_create",
+            "industry_advance", "period_freeze", "period_close",
+            "payroll_create", "payroll_decision",
+        ):
+            with self.subTest(action=action):
+                status, _, html = self.request(
+                    "POST", "/app.php?page=dashboard", cookie=self.cookie,
+                    form={"csrf": self.csrf(self.dashboard), "action": action},
+                )
+                self.assertEqual(status, 503)
+                self.assertIn("درخواست انجام نشد", html)
+
+    def test_journal_guard_rejects_fixture_locked_period_without_posting(self) -> None:
+        """Test-only private guard fixture denies a known locked date; original ledger unchanged."""
+        doc_no = "QA-V7-PERIOD-LOCK-202602"
+        status, _, _ = self.request(
+            "POST", "/app.php?page=journal", cookie=self.cookie,
+            form={
+                "csrf": self.csrf(self.dashboard), "action": "journal",
+                "doc_no": doc_no, "date": "2026-02-12", "note": "period lock regression",
+                "currency": "IRR", "account_0": "1000", "debit_0": "10.00",
+                "account_1": "3000", "credit_1": "10.00",
+            },
+        )
+        self.assertEqual(status, 403)
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE doc_no=?", (doc_no,),
+            ).fetchone()[0]
+        self.assertEqual(count, 0)
 
     def test_role_permissions_and_live_session_downgrade(self) -> None:
         """Verify every role on the isolated HTTP ledger; no production credentials."""

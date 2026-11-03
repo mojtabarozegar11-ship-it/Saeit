@@ -25,6 +25,13 @@ $home = dirname(__DIR__, 2);
 $private = $home.'/.private/zomorod-business';
 if(is_file($private.'/site_agents.php')) require_once $private.'/site_agents.php';
 if(is_file($private.'/site_store.php')) require_once $private.'/site_store.php';
+if(is_file($private.'/command_center.php')&&!is_link($private.'/command_center.php')) require_once $private.'/command_center.php';
+if(is_file($private.'/workflow_desk.php')&&!is_link($private.'/workflow_desk.php')) require_once $private.'/workflow_desk.php';
+if(is_file($private.'/industry_operations.php')&&!is_link($private.'/industry_operations.php')) require_once $private.'/industry_operations.php';
+if(is_file($private.'/finance_audit.php')&&!is_link($private.'/finance_audit.php')) require_once $private.'/finance_audit.php';
+if(is_file($private.'/payroll_control.php')&&!is_link($private.'/payroll_control.php')) require_once $private.'/payroll_control.php';
+if(is_file($private.'/payroll_ui.php')&&!is_link($private.'/payroll_ui.php')) require_once $private.'/payroll_ui.php';
+if(is_file($private.'/period_controls.php')&&!is_link($private.'/period_controls.php')) require_once $private.'/period_controls.php';
 function esc(mixed $s): string {return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');}
 function req(string $k, string $default=''): string {$value=$_POST[$k]??$default;if(!is_string($value))bail('ساختار فیلد ورودی نامعتبر است.');return trim($value);}
 function bail(string $m, int $code=422): never {http_response_code($code); throw new RuntimeException($m);}
@@ -116,6 +123,10 @@ function auditedCreate(PDO $db,string $sql,array $args,string $subject):void {
 }
 function record(PDO $db,string $number,string $date,string $note,string $cur,array $lines):int {
     if(strlen($number)>60||strlen($note)>800||!validDate($date))bail('اطلاعات سند نامعتبر است.');
+    // Period control is mandatory for every posting, including reversals.
+    // Missing private module is a hard stop, never an unrestricted fallback.
+    if(!function_exists('zmPeriodGuard'))bail('قفل دوره مالی در دسترس نیست.',503);
+    zmPeriodGuard($db,$date);
     if(count($lines)<2||count($lines)>12)bail('سند باید بین دو تا دوازده ردیف داشته باشد.');
     $debits=0;$credits=0;
     foreach($lines as $row){[$code,$dr,$cr]=$row;if($dr<0||$cr<0||($dr>0)==($cr>0))bail('در هر ردیف فقط بدهکار یا بستانکار مجاز است.');$debits+=$dr;$credits+=$cr;}
@@ -131,7 +142,7 @@ function record(PDO $db,string $number,string $date,string $note,string $cur,arr
 }
 function uniqueNo(string $prefix):string {return $prefix.'-'.gmdate('YmdHis').'-'.strtoupper(substr(bin2hex(random_bytes(5)),0,8));}
 function layoutStart(string $page,?array $user=null):void {
-    $nav=['dashboard'=>'داشبورد','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','documents'=>'مکاتبات','projects'=>'پروژه‌ها','approval_register'=>'دفتر مصوبات','chatgpt_reports'=>'گزارش‌های متنی ChatGPT','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
+    $nav=['dashboard'=>'داشبورد','insights'=>'گزارش مدیریتی','command_center'=>'مرکز فرمان هوشمند','workflow_desk'=>'اتوماسیون و کارتابل','industry_ops'=>'عملیات کشاورزی و تولید','period_controls'=>'کنترل دوره مالی','finance_audit'=>'کنترل مالی','payroll'=>'کنترل حقوق','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','documents'=>'مکاتبات','projects'=>'پروژه‌ها','approval_register'=>'دفتر مصوبات','chatgpt_reports'=>'گزارش‌های متنی ChatGPT','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
     $navHtml='';foreach($nav as $key=>$label){if(($key==='users'||$key==='chatgpt_reports')&&role()!=='admin')continue;$navHtml.='<a class="'.($page===$key?'sel':'').'" href="?page='.esc($key).'">'.esc($label).'</a>';}
     echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.esc(APP_TITLE).'</title><link rel="icon" type="image/webp" href="/static/site/zomorod-v7/company-logo.webp"><style>\n    :root{font-family:Tahoma,Arial,sans-serif;color:#e9e7d9;background:#0c1811}*{box-sizing:border-box}body{margin:0;background:#203b23;min-height:100vh}a{color:#d9bc72;text-decoration:none}header{padding:20px 4%;background:#1a341e;border-bottom:3px double #e5c374;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:21px;color:#edcd79;font-weight:bold}.small{font-size:12px;color:#b9c0ae}nav{display:flex;overflow:auto;gap:8px;padding:16px 4%;background:#1a341e;scrollbar-width:thin}nav a{white-space:nowrap;padding:11px 13px;background:#284c30;border:1px solid #e1c47f;border-radius:12px}nav .sel{color:#081509;background:#d8ba6e;border-color:#f3d590}main{max-width:1260px;margin:auto;padding:26px 20px 70px}h1,h2,h3{color:#edcf88}h1{font-size:clamp(23px,3vw,32px)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:15px;margin:18px 0}.card,section{background:#18291e;border:1px solid #546545;border-radius:18px;padding:20px;margin:16px 0;box-shadow:0 8px 28px #0002}.metric{font-size:28px;color:#f1d68e;font-weight:bold}table{border-collapse:collapse;width:100%;min-width:580px}th,td{padding:12px;text-align:right;border-bottom:1px solid #405243}th{color:#e4cb83}.scroll{overflow:auto}label{display:block;color:#d1dcbf;margin:9px 0 5px}input,textarea,select{font:inherit;color:#f3eedc;background:#0c1a12;border:1px solid #647153;border-radius:9px;padding:11px;width:100%;max-width:440px}textarea{min-height:88px}button{background:linear-gradient(120deg,#a98741,#f3d584);border:1px solid #f8dd9a;color:#15200e;padding:12px 19px;border-radius:12px;cursor:pointer;font-weight:bold;margin-top:13px}button:hover{filter:brightness(1.1)}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 18px}.form .full{grid-column:1/-1}.notice{border:1px solid #b99550;background:#354027;padding:15px;border-radius:12px}.danger{background:#4d1e20;border-color:#c26b6b}.muted{color:#bec8b6}.account-line{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}.sign{max-width:540px;margin:70px auto;padding:30px}footer{padding:24px 4%;border-top:1px solid #52613b;text-align:center;color:#bdc7ae;font-size:12px}.tags{display:flex;flex-wrap:wrap;gap:8px}.tags span{border:1px solid #6b7050;border-radius:15px;padding:4px 10px}@media(max-width:650px){.account-line{grid-template-columns:1fr 1fr}.account-line select{grid-column:1/-1}main{padding:14px 12px}header{padding:15px}.form{grid-template-columns:1fr}input,textarea,select{max-width:none;font-size:16px}nav{padding:10px 12px}section,.card{padding:15px;border-radius:13px}}:focus-visible{outline:3px solid #f3d584;outline-offset:3px}nav a,button{min-height:44px}table caption{text-align:right;color:#d8dfc4;padding:8px}input:invalid{box-shadow:none}\n    </style></head><body><header><div><div class="brand"><img src="/static/site/zomorod-v7/company-logo.webp" alt="نشان شرکت زمرد ملل" width="48" height="48" style="width:48px;height:48px;border-radius:50%;border:2px solid #e5c377;vertical-align:middle;margin-left:12px;background:#fff">زمرد ملل · مدیریت جامع</div><div class="small">مدیریت سازمان · دفاتر مالی · ثبت عملیات با کنترل دسترسی</div></div><div><a href="https://zomorodmelal.ir/">بازگشت به سایت</a>';
     if($user)echo ' · <span class="small">'.esc($user['username']).' ('.esc($user['role']).')</span> · <form method="post" action="/business/" style="display:inline;margin:0">'.tokenInput().'<input type="hidden" name="action" value="logout"><button type="submit" style="margin:0;padding:8px 13px">خروج امن</button></form>';
@@ -346,6 +357,21 @@ try {
             if(!function_exists('zmStoreDb'))bail('مدیریت فروشگاه آماده نیست.',503);
             zmStoreHandle(zmStoreDb($private),$action);
             audit($db,'store',$action);
+        } elseif(in_array($action,['cc_create','cc_scan','cc_transition','cc_plan','cc_evidence','cc_review'],true)){
+            if(!function_exists('zmCcHandle')||!function_exists('zmCcDb'))bail('مرکز فرمان در دسترس نیست.',503);
+            zmCcHandle($db,zmCcDb($private),$action);
+        } elseif(in_array($action,['flow_create','flow_transition'],true)){
+            if(!function_exists('zmFlowHandle')||!function_exists('zmFlowDb'))bail('گردش‌کار سازمانی در دسترس نیست.',503);
+            zmFlowHandle(zmFlowDb($private),$action);
+        } elseif(in_array($action,['industry_create','industry_advance'],true)){
+            if(!function_exists('zmIndustryHandle')||!function_exists('zmIndustryDb'))bail('سامانه عملیاتی در دسترس نیست.',503);
+            zmIndustryHandle(zmIndustryDb($private),$action);
+        } elseif(in_array($action,['period_freeze','period_close'],true)){
+            if(!function_exists('zmPeriodAction'))bail('کنترل دوره مالی در دسترس نیست.',503);
+            zmPeriodAction($db,$action,req('period_key'),req('note'),actor(),role());
+        } elseif(in_array($action,['payroll_create','payroll_decision'],true)){
+            if(!function_exists('zmPayrollUiHandle')||!function_exists('zmPayrollDb'))bail('کنترل حقوق در دسترس نیست.',503);
+            zmPayrollUiHandle(zmPayrollDb($private),$action);
         } elseif($action==='user'){
             $username=req('username');$pass=req('password');$newRole=req('role');if(!preg_match('/^[A-Za-z0-9_]{5,40}$/',$username)||strlen($pass)<14||!in_array($newRole,['admin','accountant','manager','viewer'],true))bail('کاربر، گذرواژه یا نقش نامعتبر است.');
             auditedCreate($db,'INSERT INTO users(username,password_hash,role) VALUES(?,?,?)',[$username,password_hash($pass,PASSWORD_DEFAULT),$newRole],'user');
@@ -397,6 +423,34 @@ try {
         echo '<section><h2>پایش اجزای میز مدیریت</h2><p class="muted">این وضعیت فقط وجود ماژول را نشان می‌دهد؛ سلامت کامل عملیات، فروش واقعی و اتصال بانکی جداگانه باید بررسی شود.</p><div class="grid">';
         foreach($services as $label=>$available)echo '<div class="card"><h3>'.esc($label).'</h3><p>'.($available?'ماژول موجود است':'ماژول یا منبع نصب نشده است').'</p></div>';
         echo '</div></section>';
+    } elseif($page==='insights'){
+        authorize('view');
+        if(!is_file($private.'/insights.php')||is_link($private.'/insights.php'))bail('گزارش مدیریتی در دسترس نیست.',503);
+        require $private.'/insights.php';
+    } elseif($page==='command_center'){
+        authorize('users');
+        if(!function_exists('zmCcRender')||!function_exists('zmCcDb'))bail('مرکز فرمان در دسترس نیست.',503);
+        zmCcRender(zmCcDb($private));
+    } elseif($page==='workflow_desk'){
+        authorize('view');
+        if(!function_exists('zmFlowRender')||!function_exists('zmFlowDb'))bail('اتوماسیون سازمانی در دسترس نیست.',503);
+        zmFlowRender(zmFlowDb($private));
+    } elseif($page==='industry_ops'){
+        authorize('view');
+        if(!function_exists('zmIndustryRender')||!function_exists('zmIndustryDb'))bail('سامانه صنعت در دسترس نیست.',503);
+        zmIndustryRender(zmIndustryDb($private));
+    } elseif($page==='period_controls'){
+        authorize('account');
+        if(!function_exists('zmPeriodRender'))bail('کنترل دوره مالی در دسترس نیست.',503);
+        zmPeriodRender($db);
+    } elseif($page==='finance_audit'){
+        authorize('account');
+        if(!function_exists('zmFinanceAuditRender'))bail('ممیزی مالی در دسترس نیست.',503);
+        zmFinanceAuditRender($db);
+    } elseif($page==='payroll'){
+        authorize('view');
+        if(!function_exists('zmPayrollUiRender')||!function_exists('zmPayrollDb'))bail('پنل حقوق در دسترس نیست.',503);
+        zmPayrollUiRender(zmPayrollDb($private));
     } elseif($page==='agent_center'){
         authorize('view');
         if(!function_exists('zmAgentDb'))bail('موتور ایجنت در دسترس نیست.',503);

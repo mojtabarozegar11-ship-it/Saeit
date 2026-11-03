@@ -31,6 +31,7 @@ class ZmAccessHTTPTests(unittest.TestCase):
             shutil.copy2(SOURCE / filename, cls.web / filename)
         cls.private = cls.root / ".private/zomorod-business"
         cls.private.mkdir(parents=True)
+        shutil.copy2(Path(__file__).resolve().parent / "fixtures/zm_period_controls_fixture.php", cls.private / "period_controls.php")
         shutil.copy2(SOURCE.parent / "zomorod-v11/site_store.php", cls.private / "site_store.php")
         cls.database = cls.private / "management.sqlite3"
         result = subprocess.run(["php", str(cls.web / "app.php"), "--initialize-private-db"],
