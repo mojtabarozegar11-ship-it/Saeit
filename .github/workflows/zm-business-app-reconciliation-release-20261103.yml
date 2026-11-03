@@ -226,7 +226,7 @@ jobs:
           test "$(sha256sum "$app" | awk '{print $1}')" = "$after"
           test "$(stat -c %a "$app")" = 600
           test "$(stat -c %a "$root/management.sqlite3")" = 600
-          code="$(curl -sSL --max-time 30 -o "$stage/anonymous.html" -w '%{http_code}' 'https://zomorodmelal.ir/business/?page=dashboard')"
+          code="$(curl --silent --show-error --proto '=https' --max-redirs 0 --max-time 30 -o "$stage/anonymous.html" -w '%{http_code}' 'https://zomorodmelal.ir/business/?page=dashboard')"
           test "$code" = 200
           grep -Fq 'ورود مدیر و حسابدار' "$stage/anonymous.html"
           ! grep -Fq 'کدینگ حساب‌ها' "$stage/anonymous.html"
