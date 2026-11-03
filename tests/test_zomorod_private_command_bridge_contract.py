@@ -371,3 +371,31 @@ def test_owner_only_cutover_record_is_a_fixed_private_write_with_independent_rea
             "\n          " + marker, 1
         )[0]
         ast.parse("\n".join(line[10:] for line in body.splitlines()) + "\n")
+
+
+
+def test_private_queue_capability_audit_is_metadata_only_and_valid_python():
+    source = _source()
+    body = source.split("<<'CPANEL_READONLY_PY'\n", 1)[1].split(
+        "\n          CPANEL_READONLY_PY", 1
+    )[0]
+    parsed = "\n".join(line[10:] for line in body.splitlines()) + "\n"
+    ast.parse(parsed)
+    for marker in (
+        "PRIVATE_INGRESS_AST_AUDIT=OK",
+        "PRIVATE_INGRESS_STATIC_PARSER_VERBS=",
+        "PRIVATE_INGRESS_EXECUTOR_SUBCOMMAND_DETECTED=",
+        "PRIVATE_QUEUE_SCHEMA_AUDIT=OK",
+        "PRIVATE_QUEUE_TABLES_DETECTED=",
+        "PRIVATE_QUEUE_STATE_FIELD_DETECTED=",
+        "PRIVATE_QUEUE_RESULT_FIELD_DETECTED=",
+    ):
+        assert marker in parsed
+    assert "ast.parse(ingress_path.read_text" in parsed
+    assert "mode=ro&immutable=1" in parsed
+    assert "SELECT name FROM sqlite_master WHERE type = 'table'" in parsed
+    assert "PRAGMA table_info" in parsed
+    assert "SELECT *" not in parsed
+    assert "shell=True" not in parsed
+    assert "private_db.unlink" not in parsed
+    assert "db.execute(\"UPDATE" not in parsed
