@@ -17,6 +17,7 @@ import tempfile
 from datetime import datetime, timezone, timedelta
 
 from enterprise_portal.github_chatgpt_reports import extract_receipt
+from enterprise_portal.github_chatgpt_reports import LEGACY_MANAGEMENT_RECOVERY
 from enterprise_portal.github_chatgpt_reports import PUBLIC_ISSUE_API
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
@@ -168,7 +169,7 @@ def archive_sync(comments, target, *, now=None, source=SOURCE, archive_name=ARCH
     deleted comments stay historical; no claim of independent action verification.
     """
     _archive_guard(target, archive_name=archive_name)
-    rows = _normalized_rows(comments, extractor)
+    rows = sorted(_normalized_rows(comments, extractor), key=lambda row: row["comment_id"])
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError("ARCHIVE_TIMEZONE_REQUIRED")
@@ -204,10 +205,31 @@ def archive_sync(comments, target, *, now=None, source=SOURCE, archive_name=ARCH
                     raise ValueError("IMMUTABLE_REPORT_ARCHIVE_CONFLICT")
                 continue
             if item["comment_id"] <= last_id:
-                raise ValueError("REPORT_ARCHIVE_HISTORICAL_INSERT_REJECTED")
-            db.execute("INSERT INTO reports(report_code,comment_id,occurred_at,body,evidence_url) VALUES (?,?,?,?,?)", record)
+                # Only four exact owner-authored receipts may be recovered out
+                # of chronological order. Existing report fields remain immutable.
+                expected = LEGACY_MANAGEMENT_RECOVERY.get(item["report_code"])
+                if (source != SOURCE or archive_name != ARCHIVE_NAME
+                        or expected is None or expected[0] != item["comment_id"]):
+                    raise ValueError("REPORT_ARCHIVE_HISTORICAL_INSERT_REJECTED")
+                position = 1 + db.execute(
+                    "SELECT COUNT(*) FROM reports WHERE comment_id < ?",
+                    (item["comment_id"],)
+                ).fetchone()[0]
+                # Shift ordering keys only, in reverse to avoid collisions.
+                # Do not edit existing report text, dates, IDs, or evidence.
+                for (seq,) in db.execute(
+                    "SELECT seq FROM reports WHERE seq >= ? ORDER BY seq DESC",
+                    (position,)
+                ).fetchall():
+                    db.execute("UPDATE reports SET seq=? WHERE seq=?", (seq + 1, seq))
+                db.execute(
+                    "INSERT INTO reports(seq,report_code,comment_id,occurred_at,body,evidence_url) VALUES (?,?,?,?,?,?)",
+                    (position,) + record
+                )
+            else:
+                db.execute("INSERT INTO reports(report_code,comment_id,occurred_at,body,evidence_url) VALUES (?,?,?,?,?)", record)
             by_code[item["report_code"]] = record
-            last_id = item["comment_id"]
+            last_id = max(last_id, item["comment_id"])
             added += 1
         if db.execute("SELECT COUNT(*) FROM reports").fetchone()[0] > 100000:
             raise ValueError("REPORT_ARCHIVE_MAX_RECORDS")
@@ -249,21 +271,21 @@ def install(snapshot, payload, target):
         if len(prior) > len(updated):
             raise ValueError("NON_APPEND_ONLY_SNAPSHOT_CHANGE")
         if prior != updated[:len(prior)]:
-            # Only historical recovery permitted: the precise real 05-0010
-            # comment was previously excluded by an over-strict title parser.
-            # A later 05-0011 may already be in the live snapshot, so a strict
-            # prefix check alone would reject recovery. No older row may change.
+            # Recover only pinned real receipts excluded by an old title
+            # parser. Existing rows must match exactly and in original order.
+            allowed = {"05-0010": 6566708686}
+            allowed.update({code: spec[0] for code, spec in LEGACY_MANAGEMENT_RECOVERY.items()})
+            prior_codes = {row.get("report_code") for row in prior}
             recovered = [
                 row for row in updated
-                if row.get("report_code") == "05-0010"
-                and row.get("comment_id") == 6566708686
+                if row.get("report_code") not in prior_codes
+                and row.get("comment_id") == allowed.get(row.get("report_code"))
                 and row.get("evidence_url") ==
-                "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-6566708686"
+                "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725"
+                + "#issuecomment-" + str(row.get("comment_id"))
             ]
             remaining = [row for row in updated if row not in recovered]
-            if (len(recovered) != 1
-                    or any(row.get("report_code") == "05-0010" for row in prior)
-                    or prior != remaining[:len(prior)]):
+            if not recovered or prior != remaining[:len(prior)]:
                 raise ValueError("NON_APPEND_ONLY_SNAPSHOT_CHANGE")
         if prior == updated:
             return "UNCHANGED"
