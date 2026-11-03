@@ -439,7 +439,7 @@ def test_owner_sealed_schema_contract_is_encrypted_before_log_output(tmp_path):
         "- name: Record private owner cutover decision and verify durable write", 1
     )[0]
     assert "if: steps.gate.outputs.operation == 'sealed_schema'" in step
-    assert 'ZMR_PRIVATE_SCHEMA\' > "$d/private-queue-schema.json"' in step
+    assert "<<'ZMR_PRIVATE_SCHEMA' > \"$d/private-queue-schema.json\"" in step
     assert 'mode=ro&immutable=1' in step
     assert "ZMR_SEALED_SCHEMA=ENCRYPTED_ONLY" in step
     assert "openssl\", \"pkeyutl\", \"-encrypt" in step
