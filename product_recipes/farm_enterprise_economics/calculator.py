@@ -174,7 +174,7 @@ def evaluate(data):
                 "modeled_operating_profit": money(total_profit),
             })
     return {
-        "version": "1.1",
+        "version": "1.2",
         "currency": currency,
         "accounting_scope": "contribution_profit_before_depreciation_financing_tax",
         "input_values_independently_validated": False,
