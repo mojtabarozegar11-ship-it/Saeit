@@ -311,7 +311,10 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         for file in generated.glob('test_*.py'): file.unlink()
         result=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
         self.assertEqual(result['status'],'ok')
-        self.assertEqual(result['registered_recipes'],5)
+        # The exclusive Line 41 slot keeps one generated SKU until signed
+        # QC1000 handoff; repair must work without admitting a second SKU.
+        self.assertEqual(result['registered_recipes'],4)
+        self.assertEqual(result['new_recipe_count'],0)
         self.assertTrue(list(generated.glob('test_*.py')))
         state=json.loads((self.output/'production-state.json').read_text())
         self.assertEqual(len(state['source_recoveries']),1)
@@ -357,10 +360,13 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         self.assertEqual(first["registered_recipes"],4)
         self.assertEqual(first["new_recipe_count"],1)
         second = cycle.run_cycle(self.db, self.output, self.recipes, enable_designer=True)
-        self.assertEqual(second["registered_recipes"],5)
-        self.assertEqual(second["new_recipe_count"],1)
+        # A second tick must maintain the existing SKU, not synthesize another
+        # while a product still holds the unapproved singleton slot.
+        self.assertEqual(second["registered_recipes"],4)
+        self.assertEqual(second["new_recipe_count"],0)
         self.assertEqual(sorted(x.name for x in self.recipes.iterdir()),static_before)
         generated_root=self.output/"generated-product-recipes"
+        self.assertEqual(len([p for p in generated_root.iterdir() if p.is_dir()]),1)
         active_recipe=next(path.name for path in generated_root.iterdir() if path.is_dir())
         slot_path=self.output/"quality-excellence/product-flow/active-slots/current.json"
         slots=json.loads(slot_path.read_text())
