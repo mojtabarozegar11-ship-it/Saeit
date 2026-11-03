@@ -69,3 +69,11 @@ Authorized release sequence:
 5. The sole current live admin's authenticated acceptance of management, accounting, projects, calendar, reports and role permissions remains outstanding. Do not invent a second reviewer, approve real transactions or claim completion solely from a green CI run.
 
 Source: [GitHub's workflow_dispatch default-branch prerequisite](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onworkflow_dispatch).
+
+## Read-only secret readiness attestation (cycle 05-0050, 2026-11-03)
+
+The current GitHub connector does **not** expose a workflow-dispatch or repository-secret write operation; the cPanel host has `git` but no installed `gh` CLI. A new **read-only** check was added to the feature-branch workflow to report whether `ZM_APP_RELEASE_APPROVED_SHA256` is absent, matches the immutable candidate hash, or mismatches, without printing the secret.
+
+At 2026-11-03 06:36 UTC, GitHub Actions run [41590864841](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41590864841) succeeded for the source/cPanel preflight, and its actual executable log line was `PUBLISH_APPROVAL_SECRET_STATE=missing`. All publish/backup/transfer steps were skipped because it was a push preflight, so the source remained unchanged. Later runs may have a different approval state; re-check before publishing.
+
+The owner/admin must configure the named secret through a duly authorized GitHub Settings action (or an approved credential-management integration). Merely supplying a hash in an issue, modifying the workflow to skip the gate, or directly replacing the live PHP file is **not** an acceptable substitute for this approval. After a properly authorized workflow dispatch publishes, a real authenticated admin session must still accept protected desk operations.
