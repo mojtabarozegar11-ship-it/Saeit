@@ -47,7 +47,8 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
   deploy:
     needs: contract
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && (contains(github.event.head_commit.message, '[approved-factory-minute-20261019]') || contains(github.event.head_commit.message, '[approved-factory-work-orders-20261019]'))
+    # F-01: obsolete minute-cadence production cannot be reactivated by old commit tokens.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
