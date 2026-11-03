@@ -846,6 +846,11 @@ jobs:
                   has_state = False
                   has_result = False
                   has_result_any_table = False
+                  keyed_payload_tables = 0
+                  integrity_field_tables = 0
+                  timestamp_field_tables = 0
+                  lease_field_tables = 0
+                  worker_contract_tables = 0
                   for (table_name,) in table_rows[:150]:
                       if not isinstance(table_name, str):
                           continue
@@ -863,8 +868,27 @@ jobs:
                                  for word in ("command", "queue", "task")):
                           continue
                       matched += 1
-                      has_state |= bool(columns.intersection(
+                      identifiers = bool(columns.intersection(
+                          {"id", "command_id", "request_id", "task_id", "uuid", "nonce"}))
+                      payload = bool(columns.intersection(
+                          {"payload", "command", "command_json", "envelope",
+                           "data", "body", "request_json", "task_payload"}))
+                      integrity = bool(columns.intersection(
+                          {"hmac", "signature", "mac", "digest",
+                           "payload_hmac", "command_hmac"}))
+                      state = bool(columns.intersection(
                           {"state", "status", "processed_at", "started_at"}))
+                      created = bool(columns.intersection(
+                          {"created_at", "received_at", "queued_at"}))
+                      lease = bool(columns.intersection(
+                          {"locked_at", "claimed_at", "lease_until"}))
+                      keyed_payload_tables += int(identifiers and payload)
+                      integrity_field_tables += int(integrity)
+                      timestamp_field_tables += int(created)
+                      lease_field_tables += int(lease)
+                      worker_contract_tables += int(
+                          identifiers and payload and integrity and state and created)
+                      has_state |= state
                       has_result |= result_markers
               print("PRIVATE_QUEUE_SCHEMA_AUDIT=OK")
               print("PRIVATE_QUEUE_TABLES_DETECTED=" + str(matched))
@@ -874,6 +898,13 @@ jobs:
                     ("YES" if has_result else "NO"))
               print("PRIVATE_SCHEMA_RESULT_MARKER_ANY_TABLE=" +
                     ("YES" if has_result_any_table else "NO"))
+              # Only bounded aggregate field-shape flags leave cPanel. Never
+              # report table/column names, row contents, SQL DDL or secrets.
+              print("PRIVATE_QUEUE_KEYED_PAYLOAD_TABLES=" + str(keyed_payload_tables))
+              print("PRIVATE_QUEUE_INTEGRITY_FIELD_TABLES=" + str(integrity_field_tables))
+              print("PRIVATE_QUEUE_TIMESTAMP_FIELD_TABLES=" + str(timestamp_field_tables))
+              print("PRIVATE_QUEUE_LEASE_FIELD_TABLES=" + str(lease_field_tables))
+              print("PRIVATE_QUEUE_WORKER_CONTRACT_TABLES=" + str(worker_contract_tables))
           except (OSError, ValueError, sqlite3.Error):
               print("PRIVATE_QUEUE_SCHEMA_AUDIT=UNAVAILABLE")
           CPANEL_READONLY_PY
