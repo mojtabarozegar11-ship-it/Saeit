@@ -55,6 +55,116 @@ function zmPortfolioRender(PDO $db):void {
     if(in_array(role(),['admin','accountant'],true))echo ' · <a href="?page=project_finance">گزارش مالی پروژه‌ها</a>';
     echo '</p></section>';
     echo '<p class="muted">مصوب و ردشده از برچسب صریح پرونده استخراج می‌شوند؛ وضعیت برنامه‌ریزی یا توقف به تنهایی ملاک مصوبه نیست.</p>';
+    // Read-only provenance crosswalk. A matched plan code is not a subsystem link
+    // and cannot authorize execution, expense, hiring, or milestone completion.
+    $crosswalkError='';
+    $crosswalk=null;
+    $snapshotPath=__DIR__.'/approvals_snapshot.json';
+    if(!is_file($snapshotPath)||is_link($snapshotPath)||!is_readable($snapshotPath)){
+        $crosswalkError='فایل منبع خصوصی دفتر مصوبات در دسترس نیست.';
+    }else{
+        $snapshotSize=filesize($snapshotPath);
+        $snapshotRaw=$snapshotSize!==false&&$snapshotSize>0&&$snapshotSize<=2000000?file_get_contents($snapshotPath):false;
+        $snapshot=$snapshotRaw!==false?json_decode($snapshotRaw,true,16):null;
+        if(!is_array($snapshot)||($snapshot['version']??null)!==1||!isset($snapshot['items'])
+            ||!is_array($snapshot['items'])||count($snapshot['items'])<1||count($snapshot['items'])>1000){
+            $crosswalkError='نسخه یا ساختار دفتر مصوبات معتبر نیست؛ تطبیق نمایش داده نمی‌شود.';
+        }else{
+            $plans=[];
+            $allowedDecisions=['approved'=>true,'rejected'=>true,'undetermined'=>true];
+            foreach($snapshot['items'] as $item){
+                $key=is_array($item)?($item['external_key']??null):null;
+                $decision=is_array($item)?($item['decision']??null):null;
+                if(!is_string($key)||!preg_match('/^ZM-[A-Z0-9-]{2,40}$/D',$key)
+                    ||!is_string($decision)||!isset($allowedDecisions[$decision])||isset($plans[$key])){
+                    $crosswalkError='شناسه تکراری یا ردیف نامعتبر در دفتر مصوبات؛ تطبیق متوقف شد.';
+                    break;
+                }
+                $plans[$key]=$decision;
+            }
+            if($crosswalkError===''){
+                $planProjects=[];
+                $unregisteredProjects=[];
+                foreach(q($db,'SELECT id,title FROM projects ORDER BY id') as $projectRow){
+                    $title=(string)$projectRow['title'];
+                    $prefix=trim(explode('|',$title,2)[0]);
+                    if(preg_match('/^ZM-[A-Z0-9-]{2,40}$/D',$prefix)){
+                        if(!isset($planProjects[$prefix]))$planProjects[$prefix]=[];
+                        $planProjects[$prefix][]=['id'=>(int)$projectRow['id'],'title'=>$title];
+                    }else{
+                        $unregisteredProjects[]=['id'=>(int)$projectRow['id'],'title'=>$title];
+                    }
+                }
+                $matched=[];
+                $missing=[];
+                $contradictions=[];
+                $duplicateProjects=[];
+                $undetermined=0;
+                foreach($plans as $key=>$decision){
+                    if($decision==='undetermined')$undetermined++;
+                    if(!isset($planProjects[$key])){
+                        $missing[]=$key;
+                        continue;
+                    }
+                    if(count($planProjects[$key])!==1){
+                        $duplicateProjects[]=$key;
+                        continue;
+                    }
+                    $projectRow=$planProjects[$key][0];
+                    $title=$projectRow['title'];
+                    $approvedLabel=(bool)preg_match('/\|\s*مصوب\s*\|/u',$title);
+                    $rejectedLabel=(bool)preg_match('/\|\s*ردشده(?:\s*[-|]|$)/u',$title);
+                    if(($decision==='approved'&&!$approvedLabel)
+                        ||($decision==='rejected'&&!$rejectedLabel)
+                        ||($decision==='undetermined'&&($approvedLabel||$rejectedLabel))
+                        ||($approvedLabel&&$rejectedLabel)){
+                        $contradictions[]=$key;
+                    }else{
+                        $matched[]=$key;
+                    }
+                }
+                $orphanCodes=array_values(array_diff(array_keys($planProjects),array_keys($plans)));
+                $crosswalk=[
+                    'plans'=>count($plans),'matched'=>count($matched),'missing'=>$missing,
+                    'independent'=>$unregisteredProjects,'orphan'=>$orphanCodes,
+                    'duplicate'=>$duplicateProjects,'conflict'=>$contradictions,
+                    'undetermined'=>$undetermined
+                ];
+            }
+        }
+    }
+    echo '<section><h2>تطبیق مستند مصوبات با پرونده‌های پروژه</h2>';
+    echo '<p class="muted">مبنای تطبیق: شناسه یکتای طرح در دفتر مصوبات خصوصی و پیشوند عنوان پرونده. این تطبیق فقط شناسنامه طرح است، نه «ارتباط مستند» با زیرسامانه‌های عملیاتی، تأیید اجرا، استخدام یا پرداخت.</p>';
+    if($crosswalk===null){
+        echo '<p class="warn">'.esc($crosswalkError).'</p>';
+    }else{
+        echo '<div class="grid">';
+        foreach([
+            'ردیف‌های معتبر دفتر مصوبات'=>$crosswalk['plans'],
+            'پرونده با برچسب و تصمیم منطبق'=>$crosswalk['matched'],
+            'طرح فاقد پرونده'=>$crosswalk['missing']?count($crosswalk['missing']):0,
+            'پرونده مستقل از دفتر شماره‌دار'=>count($crosswalk['independent']),
+            'کد پرونده بدون سند متناظر'=>count($crosswalk['orphan']),
+            'کد تکراری در پرونده‌ها'=>count($crosswalk['duplicate']),
+            'تعارض برچسب و تصمیم رسمی'=>count($crosswalk['conflict']),
+            'تصمیم رسمی هنوز نامشخص'=>$crosswalk['undetermined']
+        ] as $label=>$count)
+            echo '<div class="card"><div class="metric">'.(int)$count.'</div><h3>'.esc($label).'</h3></div>';
+        echo '</div>';
+        $anomalies=array_merge($crosswalk['missing'],$crosswalk['orphan'],$crosswalk['duplicate'],$crosswalk['conflict']);
+        if($anomalies){
+            echo '<p>شناسه‌های نیازمند بررسی: '.esc(implode('، ',array_unique($anomalies))).'</p>';
+        }else{
+            echo '<p class="muted">برای شناسه‌های دفتر مصوبات مغایرتی در تعداد پرونده‌ها یا برچسب تصمیم شناسایی نشد.</p>';
+        }
+        if($crosswalk['independent']){
+            echo '<p class="muted">پرونده‌های مستقل بدون کد مصوبه شماره‌دار (بدون تغییر تصمیم یا وضعیت):</p><ul>';
+            foreach(array_slice($crosswalk['independent'],0,20) as $independent)
+                echo '<li><a href="?page=project_links&amp;project_id='.(int)$independent['id'].'">'.esc($independent['title']).'</a></li>';
+            echo '</ul>';
+        }
+    }
+    echo '</section>';
     echo '<section><h2>وضعیت‌های اداری و بودجه برنامه‌ای</h2><div class="scroll"><table><tr><th>وضعیت</th><th>پروژه</th><th>جمع بودجه پیشنهادی ریالی</th></tr>';
     foreach($byState as $key=>$n)
         echo '<tr><td>'.esc($labels[$key]).'</td><td>'.(int)$n.'</td><td>'.money($forecast[$key]??0).'</td></tr>';
