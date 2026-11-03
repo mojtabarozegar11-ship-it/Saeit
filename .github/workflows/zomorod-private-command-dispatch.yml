@@ -42,6 +42,7 @@ jobs:
             || startsWith(github.event.comment.body, 'ZMR-SEALED-COMMAND-V1')
             || github.event.comment.body == 'ZMR-CPANEL-READONLY-V1'
             || github.event.comment.body == 'ZMR-CUTOVER-RECORD-V1'
+            || github.event.comment.body == 'ZMR-SEALED-SCHEMA-V1'
           )
         )
       )
@@ -111,6 +112,8 @@ jobs:
                   operation, raw = "cpanel_readonly", None
               elif body == "ZMR-CUTOVER-RECORD-V1":
                   operation, raw = "cutover_record", None
+              elif body == "ZMR-SEALED-SCHEMA-V1":
+                  operation, raw = "sealed_schema", None
               elif isinstance(body, str) and body.startswith("ZMR-SEALED-COMMAND-V1\n"):
                   operation, raw = "accept", body.split("\n", 1)[1]
               else:
@@ -118,7 +121,7 @@ jobs:
           else:
               raise SystemExit("EVENT_REJECTED")
 
-          if operation not in ("show_public_key", "accept", "cpanel_readonly", "cutover_record"):
+          if operation not in ("show_public_key", "accept", "cpanel_readonly", "cutover_record", "sealed_schema"):
               raise SystemExit("OPERATION_REJECTED")
           if operation == "accept":
               try:
@@ -908,6 +911,121 @@ jobs:
           except (OSError, ValueError, sqlite3.Error):
               print("PRIVATE_QUEUE_SCHEMA_AUDIT=UNAVAILABLE")
           CPANEL_READONLY_PY
+      - name: Return private queue contract as sealed owner-only receipt
+        if: steps.gate.outputs.operation == 'sealed_schema'
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          umask 077
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          cat > "$d/ephemeral-owner-public.pem" <<'ZMR_OWNER_PUBLIC'
+          -----BEGIN PUBLIC KEY-----
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAqJJBZbdIPYZfg7/cbsc1
+          z5Oi+ySSnxLoj4wXSk2xJ8tkhTPhwI5sZRt1jQbVRl1J/oXl5zLIg/kCLPf10FF9
+          b8ub+gfKNZuyX4K4WW3QgK5V9BgsUuZfcSHrywC79muZ4HU0r261mnHYx6qlomBt
+          L5tppw4LjI0x8NOlc7KUxtea/+xIXPEK2ZGX8oLTrWILFg7NUK9s/c9hxO9J+bJI
+          1M6UEX2RIgBzVDZB3l/FOTBASMNkHa4S+hS2TKdCohwD0oz2koz223D8pb6zCqoO
+          I18TpoQcGwyZXAUL89r7lf+/YtftKbepWsf99jH68zuAquRpmwrkh0A1ctSxH8SR
+          yBpKsU3mXwfsXHaXNXO/JK13o+rLvoU/R1gqs2GzftQAuRrX4wXzii052Ta3GbaK
+          kxFnY17vrhJnKCUy2dJKxRsnMtRt/cVMZBuwTkoK4UqJyJWk3bJu/nRGz8MmyF9i
+          RchrJbqq2mfh/R0+iZgFWnWHDzhwcqxFZrxwuwKdivi5b/O9cvsB66+twIbX35/y
+          81rIiEwDhTLq1z8kH3En89Cl1Ok6XQD9EsMfPKm5dBAm/UA1GfYHGp/CvaAhiJ+P
+          /XeEeARohi1etWLuBig4ud+dHBPEvDeNtBgjEhRXo9qVgql0DIHonDOXvwWITp8p
+          JdAIgPoLYmv+kpCQhWSo13cCAwEAAQ==
+          -----END PUBLIC KEY-----
+          ZMR_OWNER_PUBLIC
+          ssh -T -F "$d/config" "$COMMAND_HOST" 'python3 -B -' <<'ZMR_PRIVATE_SCHEMA' > "$d/private-queue-schema.json"
+          import ast
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import pwd
+          import re
+          import sqlite3
+          
+          if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
+              raise SystemExit("PRIVATE_SCHEMA_OWNER_REJECTED")
+          private = Path("/home/zomorod2/.private/zomorod-business")
+          ingress = private / "company_ingress.py"
+          database = private / "command-center.sqlite3"
+          if (private.is_symlink() or not private.is_dir() or ingress.is_symlink()
+                  or not ingress.is_file() or database.is_symlink()
+                  or not database.is_file() or ingress.stat().st_size > 200000):
+              raise SystemExit("PRIVATE_SCHEMA_SOURCE_REJECTED")
+          source = ingress.read_text(encoding="utf-8")
+          tree = ast.parse(source)
+          defs = [
+              {"name": node.name, "args": [
+                  arg.arg for arg in node.args.posonlyargs + node.args.args
+              ]} for node in ast.walk(tree)
+              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+          ][:120]
+          sql_literals = [
+              node.value.strip()[:1500] for node in ast.walk(tree)
+              if (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                  and len(node.value) <= 10000
+                  and re.match(r"(?is)^\s*(CREATE|SELECT|INSERT|UPDATE|DELETE|REPLACE|ALTER|PRAGMA)\s", node.value))
+          ][:100]
+          tables = []
+          with sqlite3.connect("file:" + str(database) + "?mode=ro&immutable=1", uri=True, timeout=5) as db:
+              for (name,) in db.execute(
+                      "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchmany(150):
+                  if not isinstance(name, str) or len(name) > 128:
+                      continue
+                  quoted = name.replace('"', '""')
+                  fields = [
+                      {"name": row[1], "type": row[2], "notnull": row[3], "pk": row[5]}
+                      for row in db.execute(
+                          'PRAGMA table_info("' + quoted + '")').fetchmany(150)
+                  ]
+                  tables.append({"table": name, "fields": fields})
+          report = {
+              "schema": "ZMR-OWNER-SEALED-QUEUE-CONTRACT-V1",
+              "ingress_source_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+              "functions": defs,
+              "sql_literals": sql_literals,
+              "tables": tables,
+          }
+          print(json.dumps(report, sort_keys=True, separators=(",", ":")))
+          ZMR_PRIVATE_SCHEMA
+          python3 - "$d/private-queue-schema.json" "$d/ephemeral-owner-public.pem" <<'ZMR_ENCRYPT_SCHEMA'
+          import base64
+          from pathlib import Path
+          import subprocess
+          import sys
+          import zlib
+          
+          report = Path(sys.argv[1])
+          recipient = Path(sys.argv[2])
+          if (report.is_symlink() or not report.is_file()
+                  or report.stat().st_size > 150000
+                  or recipient.is_symlink() or not recipient.is_file()):
+              raise SystemExit("ZMR_SCHEMA_REPORT_UNSAFE")
+          compressed = zlib.compress(report.read_bytes(), 9)
+          if len(compressed) > 18000:
+              raise SystemExit("ZMR_SCHEMA_COMPRESSED_TOO_LARGE")
+          pieces = [compressed[n:n + 300] for n in range(0, len(compressed), 300)]
+          if not pieces or len(pieces) > 60:
+              raise SystemExit("ZMR_SCHEMA_PART_COUNT_REJECTED")
+          for index, payload in enumerate(pieces, start=1):
+              command = [
+                  "openssl", "pkeyutl", "-encrypt", "-pubin",
+                  "-inkey", str(recipient), "-pkeyopt", "rsa_padding_mode:oaep",
+                  "-pkeyopt", "rsa_oaep_md:sha256", "-pkeyopt", "rsa_mgf1_md:sha256",
+              ]
+              outcome = subprocess.run(
+                  command, input=payload, capture_output=True, timeout=15, check=False)
+              if outcome.returncode != 0 or len(outcome.stdout) != 512:
+                  raise SystemExit("ZMR_SCHEMA_ENCRYPTION_FAILED")
+              print("ZMR_SEALED_SCHEMA_PART_%03d=%s" % (
+                  index, base64.b64encode(outcome.stdout).decode("ascii")))
+          print("ZMR_SEALED_SCHEMA_PARTS=" + str(len(pieces)))
+          print("ZMR_SEALED_SCHEMA=ENCRYPTED_ONLY")
+          ZMR_ENCRYPT_SCHEMA
       - name: Record private owner cutover decision and verify durable write
         if: steps.gate.outputs.operation == 'cutover_record'
         shell: bash

@@ -79,6 +79,7 @@ def test_dispatch_is_owner_main_only_for_manual_or_exact_issue_comment():
     assert "github.event.comment.body == 'ZMR-PUBLIC-KEY-V1'" in source
     assert "github.event.comment.body == 'ZMR-CPANEL-READONLY-V1'" in source
     assert "github.event.comment.body == 'ZMR-CUTOVER-RECORD-V1'" in source
+    assert "github.event.comment.body == 'ZMR-SEALED-SCHEMA-V1'" in source
     assert "startsWith(github.event.comment.body, 'ZMR-SEALED-COMMAND-V1')" in source
     for forbidden in (
         "\n  push:", "\n  pull_request:", "\n  schedule:",
@@ -195,6 +196,8 @@ def test_manual_input_gate_rejects_bad_envelopes(
         (_owner_comment("ZMR-PUBLIC-KEY-V1"), True, "show_public_key"),
         (_owner_comment("ZMR-CPANEL-READONLY-V1"), True, "cpanel_readonly"),
         (_owner_comment("ZMR-CUTOVER-RECORD-V1"), True, "cutover_record"),
+        (_owner_comment("ZMR-SEALED-SCHEMA-V1"), True, "sealed_schema"),
+        (_owner_comment("ZMR-SEALED-SCHEMA-V1\\nsecret"), False, None),
         (_owner_comment("ZMR-SEALED-COMMAND-V1\n" + json.dumps(VALID_ENVELOPE)), True, "accept"),
         (_owner_comment("ZMR-PUBLIC-KEY-V1", issue_number=1601), False, None),
         (_owner_comment("ZMR-PUBLIC-KEY-V1", user="another-user"), False, None),
@@ -331,8 +334,8 @@ def test_emergency_direct_cpanel_path_never_lowers_identity_or_host_key_pins():
     assert "PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED" in source
     assert "PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE" in source
     assert 'printf \'command_host=%s\\n\' "$command_host" >> "$GITHUB_OUTPUT"' in source
-    assert source.count('case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct)') == 4
-    assert source.count('COMMAND_HOST: ${{ steps.link.outputs.command_host }}') == 4
+    assert source.count('case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct)') == 5
+    assert source.count('COMMAND_HOST: ${{ steps.link.outputs.command_host }}') == 5
     assert 'ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" "$COMMAND_HOST"' in source
     assert 'ssh -F "$d/config" "$COMMAND_HOST"' in source
     assert "UserKnownHostsFile /dev/null" not in source
@@ -420,3 +423,34 @@ def test_private_queue_capability_audit_is_metadata_only_and_valid_python():
         assert private_data not in parsed
     assert "worker_contract_tables += int(" in parsed
     assert "identifiers and payload and integrity and state and created" in parsed
+
+
+def test_owner_sealed_schema_contract_is_encrypted_before_log_output(tmp_path):
+    result, outputs, encrypted = _run_gate(
+        _owner_comment("ZMR-SEALED-SCHEMA-V1"), "issue_comment", tmp_path
+    )
+    assert result.returncode == 0
+    assert "operation=sealed_schema" in outputs.read_text(encoding="utf-8")
+    assert not encrypted.exists()
+    source = _source()
+    step = source.split(
+        "- name: Return private queue contract as sealed owner-only receipt", 1
+    )[1].split(
+        "- name: Record private owner cutover decision and verify durable write", 1
+    )[0]
+    assert "if: steps.gate.outputs.operation == 'sealed_schema'" in step
+    assert "<<'ZMR_PRIVATE_SCHEMA' > \"$d/private-queue-schema.json\"" in step
+    assert 'mode=ro&immutable=1' in step
+    assert "ZMR_SEALED_SCHEMA=ENCRYPTED_ONLY" in step
+    assert "openssl\", \"pkeyutl\", \"-encrypt" in step
+    assert "rsa_padding_mode:oaep" in step
+    assert "rsa_oaep_md:sha256" in step
+    assert "shell=True" not in step
+    assert "set -x" not in step
+    assert "echo \"$d/private-queue-schema.json\"" not in step
+    assert "-----BEGIN PUBLIC KEY-----" in step
+    for marker in ("ZMR_PRIVATE_SCHEMA", "ZMR_ENCRYPT_SCHEMA"):
+        body = step.split("<<'" + marker + "'", 1)[1].split("\n", 1)[1].split(
+            "\n          " + marker, 1
+        )[0]
+        ast.parse("\n".join(line[10:] for line in body.splitlines()) + "\n")
