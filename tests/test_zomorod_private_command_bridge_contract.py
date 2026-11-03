@@ -443,6 +443,10 @@ def test_owner_sealed_schema_contract_is_encrypted_before_log_output(tmp_path):
     assert 'mode=ro&immutable=1' in step
     assert 'node.name in {"accept", "decrypt", "load_bridge", "main"}' in step
     assert '"selected_function_source": selected_functions' in step
+    assert 'bridge_path = private / "company_bridge.py"' in step
+    assert 'bridge_path = private / "zomorod_company_private_bridge_v4.py"' in step
+    assert '"bridge_contract": {' in step
+    assert '"selected_function_source": bridge_selected' in step
     assert "ZMR_SEALED_SCHEMA=ENCRYPTED_ONLY" in step
     assert "openssl\", \"pkeyutl\", \"-encrypt" in step
     assert "rsa_padding_mode:oaep" in step
