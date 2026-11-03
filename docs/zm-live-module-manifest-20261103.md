@@ -55,3 +55,17 @@ For the current management desk, use `.github/workflows/zm-business-app-reconcil
 ### Authenticity boundary for project–document references
 
 Production currently has a real project whose full title (`projects.id=39`) appears in `documents.id=1` (the Foundation properties/employment dossier). `zm_project_links` has no rows. This is **only a candidate** for a legitimate reference: the application must record any link using the existing `project_integrations.php` authorized actor, role, CSRF, transaction and audit flow. Do not insert directly into SQLite, invent a current authenticated actor, or count a candidate as an approved project link. Financial/accounting data are unchanged.
+
+## Manual dispatch entrypoint and post-publication gate (2026-11-03, cycle 05-0049)
+
+GitHub Actions `workflow_dispatch` requires the workflow to exist on the **default branch**. The reviewed publication workflow existed only on `feature/zm-bank-ledger-20261102`, so no manual branch-selector launch was available through the default-branch workflow list. An inert default-branch anchor was created at the **same path** `.github/workflows/zm-business-app-reconciliation-release-20261103.yml` in `main` (commit `5c2b64b2b96825d0a8d9444d9ebd3c964e8b3fa7`). This anchor contains no SSH secrets and always fails with instructions if selected on `main`.
+
+Authorized release sequence:
+
+1. In Actions select **ZM reconciled business app guarded promotion**, then select branch `feature/zm-bank-ledger-20261102` (not `main`). `mode=preflight` is read-only.
+2. Production publication requires `mode=publish` **and** the separately provisioned repository secret `ZM_APP_RELEASE_APPROVED_SHA256`, equal to the reviewed candidate digest `2ed9274affa87f3e9c51f7dff0c72d7461118c7aca0ae0ab732b1c81cbfd6005`. The secret value is not stored or retrieved by this document.
+3. The feature workflow checks immutable source, private module Git blobs, cPanel SSH host pins, DB schema/integrity and production `app.php` baseline; it makes an owner-only code and SQLite backup before its guarded atomic swap.
+4. After publishing, it must verify all **14 anonymous protected routes** still display the login form with no management navigation or data table, plus a read-only `PRAGMA quick_check` and foreign-key check. Failure triggers code rollback. This is only an *anonymous access gate*, **not authenticated acceptance**.
+5. The sole current live admin's authenticated acceptance of management, accounting, projects, calendar, reports and role permissions remains outstanding. Do not invent a second reviewer, approve real transactions or claim completion solely from a green CI run.
+
+Source: [GitHub's workflow_dispatch default-branch prerequisite](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onworkflow_dispatch).
