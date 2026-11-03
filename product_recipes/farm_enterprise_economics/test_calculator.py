@@ -7,7 +7,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from calculator import enterprise, evaluate
+from calculator import enterprise, evaluate, render_html_report
 
 
 class EconomicsTests(unittest.TestCase):
@@ -202,6 +202,51 @@ class EconomicsTests(unittest.TestCase):
             self.assertEqual(len(rows), 9)
             self.assertTrue(all(row["enterprise"] == 'Farm "A", west' for row in rows))
 
+
+
+    def test_portfolio_correlated_stress_is_not_single_enterprise_stress(self):
+        second = {
+            "name": "Field crop", "units_sold": 100,
+            "unit_price": 20, "variable_cost_per_unit": 15,
+            "allocated_fixed_cost": 100, "selling_fee_percent": 0,
+        }
+        result = evaluate(dict(self.example, enterprises=[
+            self.example["enterprises"][0], second,
+        ]))
+        portfolio = result["portfolio_scenario_results"]
+        self.assertEqual(len(portfolio), 9)
+        base = next(x for x in portfolio if x["volume_multiplier"] == "1.00"
+                    and x["price_multiplier"] == "1.00")
+        self.assertEqual(base["modeled_operating_profit"], result["portfolio"]["operating_profit"])
+        downside = next(x for x in portfolio if x["volume_multiplier"] == "0.80"
+                        and x["price_multiplier"] == "0.90")
+        self.assertEqual(downside["modeled_operating_profit"], "780.00")
+
+    def test_offline_html_report_escapes_customer_labels(self):
+        customer_name = "Orchard <script>alert(1)</script>"
+        item = dict(self.example["enterprises"][0], name=customer_name)
+        html = render_html_report(evaluate(dict(self.example, enterprises=[item])))
+        self.assertIn("Orchard &lt;script&gt;alert(1)&lt;/script&gt;", html)
+        self.assertNotIn("<script>", html)
+        self.assertIn("Whole-portfolio sensitivity", html)
+        self.assertIn('name="viewport"', html)
+        self.assertNotIn("https://", html)
+        self.assertNotIn("<iframe", html)
+
+    def test_offline_html_cli_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            input_file = home / "inputs.json"
+            report_file = home / "farm-report.html"
+            input_file.write_text(json.dumps(self.example), encoding="utf8")
+            proc = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("calculator.py")),
+                 str(input_file), "--html-output", str(report_file)],
+                text=True, capture_output=True, timeout=15)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            text = report_file.read_text(encoding="utf8")
+            self.assertTrue(text.startswith("<!doctype html>"))
+            self.assertIn("Illustrative orchard", text)
 
 
 if __name__ == "__main__":
