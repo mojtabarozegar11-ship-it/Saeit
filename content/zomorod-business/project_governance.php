@@ -49,6 +49,8 @@ function zmGovHasExecutionClearance(PDO $db,int $projectId):bool {
     $stmt=$db->prepare("SELECT c.evidence_sha256,d.title,d.body
        FROM zm_project_approval_cases c
        JOIN documents d ON d.id=c.evidence_doc_id
+       JOIN users reviewer ON reviewer.id=c.reviewed_by
+         AND reviewer.active=1 AND reviewer.role='admin'
        JOIN zm_project_links l ON l.project_id=c.project_id
          AND l.source='document' AND l.reference=CAST(c.evidence_doc_id AS TEXT)
        WHERE c.project_id=? AND c.kind='execution' AND c.status='approved'
