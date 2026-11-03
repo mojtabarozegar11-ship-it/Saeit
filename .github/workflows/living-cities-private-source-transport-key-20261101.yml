@@ -1,0 +1,63 @@
+name: Living Cities secure source transfer key
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/living-cities-private-source-transport-key-20261101.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: living-cities-transport-key
+  cancel-in-progress: false
+jobs:
+  install-public-key-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish pinned SSH relay to private VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Create confined RSA-OAEP transport key on VPS (never reveal private material)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 70s ssh -T -F "$d/config" vps 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          dir="$HOME/.private/living-cities-transport"
+          test ! -L "$HOME/.private" && test ! -L "$dir"
+          install -d -m 700 "$HOME/.private" "$dir"
+          key="$dir/private.pem"
+          pub="$dir/public.pem"
+          if ! test -e "$key"; then
+            test ! -e "$pub"
+            openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "$dir/private.pending"
+            chmod 600 "$dir/private.pending"
+            openssl pkey -in "$dir/private.pending" -pubout -out "$dir/public.pending"
+            mv -T "$dir/private.pending" "$key"
+            mv -T "$dir/public.pending" "$pub"
+          fi
+          test -f "$key" && test ! -L "$key"
+          test -f "$pub" && test ! -L "$pub"
+          openssl pkey -in "$key" -pubout | cmp -s - "$pub"
+          test "$(stat -c '%a' "$key")" = 600
+          echo LIVING_CITIES_RSA_PUBLIC_BEGIN
+          cat "$pub"
+          echo LIVING_CITIES_RSA_PUBLIC_END
+          openssl pkey -pubin -in "$pub" -outform DER | sha256sum | awk '{print "LIVING_CITIES_PUBKEY_SHA256="$1}'
+          echo PRIVATE_SOURCE_TRANSPORT_KEY=READY
+          REMOTE
+      - name: Erase runner SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"

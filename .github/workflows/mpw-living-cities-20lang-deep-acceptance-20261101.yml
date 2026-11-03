@@ -1,0 +1,26 @@
+name: MojPlayWin Deep Localized Twenty-Language Live Browser Acceptance
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mpw-living-cities-20lang-deep-acceptance-20261101.yml
+      - tests/mpw_living_cities_deep_localization_browser_acceptance.mjs
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  real-browser:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: "24"}
+      - name: Install standalone browser testing dependency without touching production
+        run: |
+          npm install --no-save --no-package-lock --ignore-scripts playwright@1.58.0
+          npx playwright install --with-deps chromium
+      - name: Verify actual live languages, mission progression, controls, local save and mobile
+        run: |
+          node tests/mpw_living_cities_deep_localization_browser_acceptance.mjs

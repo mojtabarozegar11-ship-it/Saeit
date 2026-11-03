@@ -24,9 +24,11 @@ VERSION = "gpgv2"
 # One owner-approved run; newer archives get independent timestamp/nonce stems.
 NEW_RUN_DAY = "20261021"
 STEM_RE = re.compile(r"^mojplaywin_(?:20261017|[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16})$")
+EXPLICIT_STEM_RE = re.compile(r"^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}$")
 NEW_MANIFEST_RE = re.compile(r"^(mojplaywin_20261021T[0-9]{6}Z_[0-9a-f]{16})_(mysql|files)_gpgv2[.]manifest[.]json$")
 MARKER = b"\n-- MJWP-RECOVERY-20261017-COMPLETE-F91D7C40 --\n"
-MAX_PLAINTEXT_BYTES = 12 * 1024**3
+MAX_PLAINTEXT_BYTES = 12 * 1024**3  # Scoped files only.
+MAX_MYSQL_PLAINTEXT_BYTES = 48 * 1024**3  # Matches the producer SQL hard cap.
 
 
 def safe_regular(path, *, private=False):
@@ -66,7 +68,8 @@ def load(kind, home=None, stem=None):
             not isinstance(meta.get("plaintext_sha256"), str) or
             len(meta["plaintext_sha256"]) != 64 or
             not isinstance(meta.get("plaintext_bytes"), int) or
-            not (1024 <= meta["plaintext_bytes"] <= MAX_PLAINTEXT_BYTES)):
+            not (1024 <= meta["plaintext_bytes"] <= (
+                 MAX_MYSQL_PLAINTEXT_BYTES if kind == "mysql" else MAX_PLAINTEXT_BYTES))):
         raise RuntimeError("backup manifest incomplete or invalid")
     key = keyfile.read_bytes()
     if len(key) != 32:
@@ -91,6 +94,40 @@ def discover(home=None):
     for kind, stem in stems.items():
         load(kind, home=home, stem=stem)
     return stems
+
+
+def discover_explicit_pair(stem, home=None):
+    """Select exactly the two manifests from the one explicitly named new set.
+
+    No silent fallback to the historical 2026-10-21 discovery is permitted.
+    This checks metadata, not yet authenticated stream restore.
+    """
+    if not isinstance(stem, str) or not EXPLICIT_STEM_RE.fullmatch(stem):
+        raise RuntimeError("invalid explicit backup-set identity")
+    chosen = {}
+    for kind in ("mysql", "files"):
+        _, meta, _, _ = load(kind, home=home, stem=stem)
+        if (meta.get("backup_set_stem") != stem or
+                meta.get("explicit_backup_set_id") is not True or
+                meta.get("archive_name") != f"{stem}_{kind}_{VERSION}.gpg" or
+                meta.get("release_permitted") is not False):
+            raise RuntimeError("backup set provenance mismatch")
+        chosen[kind] = stem
+    return chosen
+
+
+def explicit_pair_readiness(stem, home=None):
+    try:
+        discover_explicit_pair(stem, home=home)
+        selectable = True
+    except Exception:
+        selectable = False
+    return {"classification": "EXPLICIT_BACKUP_PAIR_MANIFEST_READINESS",
+            "both_manifests_selectable": selectable,
+            "gpg_stream_reverified": False,
+            "isolated_restore_performed": False,
+            "passenger_effective_database_proven": False,
+            "release_permitted": False}
 
 
 def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
@@ -118,7 +155,7 @@ def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
         assert proc.stdout is not None
         for block in iter(lambda:proc.stdout.read(131072),b""):
             size+=len(block)
-            if size>MAX_PLAINTEXT_BYTES:
+            if size>(MAX_MYSQL_PLAINTEXT_BYTES if kind == "mysql" else MAX_PLAINTEXT_BYTES):
                 raise RuntimeError("stream too large")
             digest.update(block)
             tail=(tail+block)[-len(MARKER):]
@@ -137,6 +174,31 @@ def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
     return size
 
 
+class _VerifyOnlySink:
+    """Discard decrypted bytes in-process; never print or persist SQL rows."""
+    def write(self, payload):
+        return len(payload)
+
+    def flush(self):
+        pass
+
+
+def verify_resumable_sql(stem, home=None):
+    """Reverify the existing immutable SQL archive before a files-only resume."""
+    if not isinstance(stem, str) or not EXPLICIT_STEM_RE.fullmatch(stem):
+        raise RuntimeError("invalid explicit backup-set identity")
+    _, meta, _, _ = load("mysql", home=home, stem=stem)
+    if (meta.get("backup_set_stem") != stem or
+            meta.get("explicit_backup_set_id") is not True or
+            meta.get("archive_name") != f"{stem}_mysql_{VERSION}.gpg" or
+            meta.get("release_permitted") is not False):
+        raise RuntimeError("backup set provenance mismatch")
+    size = decrypt_to_stdout("mysql", home=home, stem=stem, out=_VerifyOnlySink())
+    return {"classification": "EXISTING_SQL_BACKUP_REVERIFIED_FOR_FILES_RESUME",
+            "source_verified": True, "plaintext_bytes": size,
+            "isolated_restore_performed": False, "release_permitted": False}
+
+
 def readiness(home=None):
     try:
         discover(home)
@@ -153,23 +215,65 @@ def readiness(home=None):
                 "release_permitted":False}
 
 
+def pair_mode_to_kind(mode):
+    """Compatible with the older Python 3 interpreters on the private VPS.
+
+    str.removesuffix is unavailable until Python 3.9. An AttributeError at
+    this point previously appeared as a generic private restore failure.
+    """
+    if mode not in ("mysql-pair", "files-pair"):
+        raise ValueError("invalid private stream mode")
+    return mode[:-len("-pair")]
+
+
 if __name__=="__main__":
-    if len(sys.argv)!=2:
+    if len(sys.argv) not in (2, 3):
         raise SystemExit(2)
-    mode=sys.argv[1]
-    if mode=="check":
-        report=readiness()
-        print(json.dumps(report,sort_keys=True))
+    mode = sys.argv[1]
+    if mode == "check" and len(sys.argv) == 2:
+        report = readiness()  # Historical, date-pinned API only.
+        print(json.dumps(report, sort_keys=True))
         raise SystemExit(0 if report["both_primary_archives_complete"] else 1)
+    if mode == "check-pair" and len(sys.argv) == 3:
+        report = explicit_pair_readiness(sys.argv[2])
+        print(json.dumps(report, sort_keys=True))
+        raise SystemExit(0 if report["both_manifests_selectable"] else 1)
+    if mode == "verify-resume-sql" and len(sys.argv) == 3:
+        try:
+            report = verify_resumable_sql(sys.argv[2])
+        except Exception:
+            print("SQL_RESUME_SOURCE_REJECTED_NO_RELEASE", file=sys.stderr)
+            raise SystemExit(1)
+        print(json.dumps(report, sort_keys=True))
+        raise SystemExit(0)
     try:
-        if mode not in ("mysql","files"):
+        if mode in ("mysql-pair", "files-pair") and len(sys.argv) == 3:
+            kind = pair_mode_to_kind(mode)
+            stems = discover_explicit_pair(sys.argv[2])
+        elif mode in ("mysql", "files") and len(sys.argv) == 2:
+            kind = mode
+            stems = discover()  # Historical, date-pinned API only.
+        else:
             raise RuntimeError("unsupported operation")
-        stems=discover()
-        size=decrypt_to_stdout(mode,stem=stems[mode])
-        print(json.dumps({"classification":"PRIVATE_STREAM_VERIFIED",
-                          "source_kind":mode,"source_verified":True,
-                          "plaintext_bytes":size,"release_permitted":False},
-                         sort_keys=True),file=sys.stderr)
-    except Exception:
-        print("PRIVATE_RESTORE_STREAM_INTEGRITY_FAILURE",file=sys.stderr)
+        size = decrypt_to_stdout(kind, stem=stems[kind])
+        print(json.dumps({"classification": "PRIVATE_STREAM_VERIFIED",
+                          "source_kind": kind, "source_verified": True,
+                          "plaintext_bytes": size, "release_permitted": False},
+                         sort_keys=True), file=sys.stderr)
+    except BrokenPipeError:
+        # The isolated SQL consumer closed stdout. This does not implicate
+        # the already verified GPG archive; never log private SQL bytes.
+        print("PRIVATE_RESTORE_DOWNSTREAM_CLOSED_NO_RELEASE", file=sys.stderr)
+        raise SystemExit(1)
+    except Exception as error:
+        # Exception messages can contain private filesystem paths or SQL;
+        # disclose only a fixed type category, never the exception text.
+        category = type(error).__name__
+        if category not in (
+                "AttributeError", "FileNotFoundError", "PermissionError",
+                "BrokenPipeError", "OSError", "RuntimeError", "ValueError",
+                "TimeoutExpired", "TypeError", "KeyError"):
+            category = "OTHER"
+        print("PRIVATE_RESTORE_STREAM_INTEGRITY_FAILURE category=" + category,
+              file=sys.stderr)
         raise SystemExit(1)

@@ -27,8 +27,17 @@ def guard():
  wsgi=PUBLIC/'passenger_wsgi.py'
  if wsgi.is_symlink() or not wsgi.is_file() or "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
   fail('PASSENGER_APP_MISMATCH')
- for p in (APP/'tmp/restart.txt',):
-  if p.is_symlink() or not p.parent.is_dir(): fail('UNSAFE_RESTART_TARGET')
+ # PassengerAppRoot is the actual web process root, distinct from Django source.
+ # Reject deployment if cPanel's public .htaccess changes or goes missing.
+ htaccess=PUBLIC/'.htaccess'
+ if htaccess.is_symlink() or not htaccess.is_file() or htaccess.stat().st_size>100000:
+  fail('PASSENGER_ROOT_DIRECTIVE_UNSAFE')
+ roots=re.findall(r'(?im)^\s*PassengerAppRoot\s+([^\r\n#]+)',htaccess.read_text('utf8','replace'))
+ if len(roots)!=1 or roots[0].strip().strip('"').strip("'").rstrip('/') not in (str(PUBLIC),'mojplaywin.com'):
+  fail('PASSENGER_REGISTERED_ROOT_MISMATCH')
+ marker=PUBLIC/'tmp/restart.txt'
+ if marker.is_symlink() or marker.parent.is_symlink() or not marker.parent.is_dir():
+  fail('UNSAFE_PASSENGER_RESTART_TARGET')
  for key in ('pages','web'):
   p=TARGETS[key]
   if p.is_symlink() or not p.is_file() or p.parent.is_symlink() or APP not in p.parents: fail('UNSAFE_TARGET:'+key)
@@ -55,8 +64,8 @@ def plan(src):
   if live.is_symlink() or not live.is_file(): fail('GUEST_MODULE_MISSING')
   installed=source_from(live)
   if installed==src: return old,old,False
-  # Restrict the first upgrade to the exact version installed in successful run 41109493749.
-  if digest(installed)!='0db371611ef61b052e368505297af0808cb0108e56c5d99a9f11f66338da19ba':
+  # Restrict this upgrade to the exact live version installed by successful run 41120996466.
+  if digest(installed)!='7693254e4ed72141b6de7fc283c5a3214159ea49d838318337e47e86953f5f2f':
    fail('UNRECOGNIZED_GUEST_UPGRADE_BASE')
   return old,old,True
  # A module without both verified caller hooks is never safe to overwrite.
@@ -103,8 +112,11 @@ def atomic(path,raw,expected=None):
   if os.path.exists(tmp): os.unlink(tmp)
 
 def restart():
- marker=APP/'tmp/restart.txt'
- if marker.is_symlink(): fail('UNSAFE_RESTART_MARKER')
+ # cPanel .htaccess registers PUBLIC as PassengerAppRoot. Touching APP/tmp
+ # does not restart public workers, leaving the old guest handler live (404).
+ marker=PUBLIC/'tmp/restart.txt'
+ if marker.is_symlink() or marker.parent.is_symlink() or not marker.parent.is_dir():
+  fail('UNSAFE_PASSENGER_RESTART_MARKER')
  marker.touch()
 
 def publish(run,src_path):
@@ -146,6 +158,17 @@ def publish(run,src_path):
  print('MPW_GUEST_RELEASE=APPLIED;MODE='+('UPGRADE' if upgrading else 'INSTALL')+
        ';FILES='+('1' if upgrading else '3')+';ORDERS_CREATED=0;PAYMENTS_CREATED=0')
 
+def publish_onefile(run,src_path):
+ guard()
+ live=TARGETS['guest']
+ expected='7693254e4ed72141b6de7fc283c5a3214159ea49d838318337e47e86953f5f2f'
+ if live.is_symlink() or not live.is_file() or digest(live.read_bytes())!=expected:
+  fail('ONE_FILE_EXACT_OLD_SHA_REQUIRED')
+ old,new,needed=plan(source_from(src_path))
+ if not needed or any(new[k]!=old[k] for k in ('pages','web')):
+  fail('ONE_FILE_ONLY_PLAN_REQUIRED')
+ publish(run,src_path)
+
 def preview(src_path):
  guard();src=source_from(src_path);old,new,needed=plan(src)
  print('MPW_GUEST_RELEASE_PREFLIGHT='+json.dumps({'needs_install':needed,
@@ -173,6 +196,24 @@ def verify():
   body=response.content.decode('utf8','replace')
   if 'Create invoice and pay with TRX' not in body: fail('TRX_CTA_MISSING:'+str(pid))
   print('MPW_GUEST_CHECKOUT_ROUTE='+json.dumps({'product':pid,'http':response.status_code,'handler':getattr(target,'__name__','?'),'order_created':False}))
+ recovery_route = '/commerce/trx-easy/purchases/'
+ try:
+  handler = resolve(recovery_route).func
+ except Exception:
+  fail('PURCHASES_ROUTE_UNRESOLVED')
+ recovery = Client(enforce_csrf_checks=True).get(
+  recovery_route, secure=True, HTTP_HOST='mojplaywin.com')
+ if recovery.status_code != 200:
+  fail('ANONYMOUS_PURCHASES_HTTP:'+str(recovery.status_code))
+ if b'No active purchase session' not in recovery.content:
+  fail('PURCHASES_SAFE_RECOVERY_BODY_MISSING')
+ if recovery.headers.get('X-Robots-Tag') != 'noindex, nofollow':
+  fail('PURCHASES_NOINDEX_MISSING')
+ if 'no-store' not in recovery.headers.get('Cache-Control',''):
+  fail('PURCHASES_NOSTORE_MISSING')
+ print('MPW_GUEST_PURCHASES_ROUTE='+json.dumps({
+  'http': recovery.status_code, 'handler': getattr(handler,'__name__','?'),
+  'anonymous': True, 'order_created': False, 'payment_created': False}))
  print('MPW_GUEST_RELEASE=VERIFIED;READ_ONLY=TRUE')
 
 def rollback(run):
@@ -202,6 +243,7 @@ def rollback(run):
 if __name__=='__main__':
  if len(sys.argv)==3 and sys.argv[1]=='preview': preview(sys.argv[2])
  elif len(sys.argv)==4 and sys.argv[1]=='publish': publish(sys.argv[2],sys.argv[3])
+ elif len(sys.argv)==4 and sys.argv[1]=='publish-onefile': publish_onefile(sys.argv[2],sys.argv[3])
  elif len(sys.argv)==2 and sys.argv[1]=='verify': verify()
  elif len(sys.argv)==3 and sys.argv[1]=='rollback': rollback(sys.argv[2])
- else: raise SystemExit('preview GUEST_MODULE | publish RUN_ID GUEST_MODULE | verify | rollback RUN_ID')
+ else: raise SystemExit('preview GUEST_MODULE | publish-onefile RUN_ID GUEST_MODULE | verify | rollback RUN_ID')

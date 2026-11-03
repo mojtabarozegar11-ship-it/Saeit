@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# F-01: retired quality upgrade executes disposable and live multi-product cycles.
+# Stop before touching VPS scripts, operations, backups, or production records.
+echo 'F01_LEGACY_QUALITY_MULTIPRODUCT_SYNC_DISABLED' >&2
+exit 3
 # Upgrade only the private VPS autonomous product runtime research QA modules.
 # Never change factory DB, hourly schedules, public website, customer orders or payments.
 set -Eeuo pipefail

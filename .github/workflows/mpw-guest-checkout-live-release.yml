@@ -1,12 +1,7 @@
 name: MojPlayWin production guest TRX checkout release
 on:
-  push:
-    branches: [main]
-    paths:
-      - "services/mpw_trx_guest_commerce.py"
-      - "scripts/mpw_guest_checkout_live_release.py"
-      - "scripts/test_mpw_guest_first_order_identity.py"
-      - ".github/workflows/mpw-guest-checkout-live-release.yml"
+  issue_comment:
+    types: [created]
 permissions:
   contents: read
 concurrency:
@@ -14,7 +9,17 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    # Owner-only, exact issue-comment trigger. No PR/push/manual auto-release.
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'issue_comment' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.number == 1600 &&
+      !github.event.issue.pull_request &&
+      github.event.comment.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.comment.author_association == 'OWNER' &&
+      github.event.comment.body == 'MPW-PURCHASES-404-ONEFILE-RELEASE-20261102'
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
@@ -25,6 +30,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/mpw_guest_checkout_live_release.py services/mpw_trx_guest_commerce.py scripts/test_mpw_guest_first_order_identity.py
           python3 scripts/test_mpw_guest_first_order_identity.py
+          python3 -m unittest discover -s tests -p 'test_mpw_onefile_release_gate.py'
       - name: Record storefront baseline
         run: |
           python3 - <<'PY'
@@ -43,22 +49,37 @@ jobs:
           with open('/tmp/mpw-guest-baseline.json','w') as f: json.dump(state,f)
           print('MPW_GUEST_STORE_BASELINE=PASS')
           PY
-      - name: Establish fingerprint-pinned VPS to cPanel relay
+      - name: Establish fingerprint-pinned VPS relay with direct same-host cPanel fallback
+        id: link
+        shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
           d="$RUNNER_TEMP/mpw-guest-ssh"
           install -d -m 700 "$d"
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
-          chmod 600 "$d/"*
+          chmod 600 "$d/"*.key
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
           cat > "$d/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
@@ -67,52 +88,122 @@ jobs:
             IdentityFile $d/vps.key
             UserKnownHostsFile $d/vps.known
           Host saeit-cpanel
-            HostName zohal.pws-dns.net
+            HostName 178.239.147.125
             User zomorod2
             Port 1396
             IdentityFile $d/host.key
             UserKnownHostsFile $d/host.known
             ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
           Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
-            ConnectTimeout 10
-            ConnectionAttempts 1
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
             ForwardAgent no
             RequestTTY no
           EOF
           chmod 600 "$d/config"
-          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          mv "$d/host.candidate" "$d/host.known"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -d /home/zomorod2/Saeit-staging' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -d /home/zomorod2/Saeit-staging' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
       - name: Stage the adapter and release controller
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           remote="/home/zomorod2/.mpw-guest-release-$GITHUB_RUN_ID"
           config="$RUNNER_TEMP/mpw-guest-ssh/config"
-          timeout 45s ssh -T -F "$config" saeit-cpanel "install -d -m 700 '$remote'"
-          timeout 50s scp -O -q -F "$config" scripts/mpw_guest_checkout_live_release.py "saeit-cpanel:$remote/release.py"
-          timeout 50s scp -O -q -F "$config" services/mpw_trx_guest_commerce.py "saeit-cpanel:$remote/guest.py"
-          timeout 45s ssh -T -F "$config" saeit-cpanel "chmod 600 '$remote/release.py' '$remote/guest.py'"
+          timeout 45s ssh -T -F "$config" "$COMMAND_HOST" "install -d -m 700 '$remote'"
+          timeout 50s scp -O -q -F "$config" scripts/mpw_guest_checkout_live_release.py "${COMMAND_HOST}:$remote/release.py"
+          timeout 50s scp -O -q -F "$config" services/mpw_trx_guest_commerce.py "${COMMAND_HOST}:$remote/guest.py"
+          timeout 45s ssh -T -F "$config" "$COMMAND_HOST" "chmod 600 '$remote/release.py' '$remote/guest.py'"
       - name: Fail closed unless exact modules can accept the reviewed adapter
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           remote="/home/zomorod2/.mpw-guest-release-$GITHUB_RUN_ID"
-          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-guest-ssh/config" saeit-cpanel \
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-guest-ssh/config" "$COMMAND_HOST" \
             "python3 '$remote/release.py' preview '$remote/guest.py'"
       - name: Atomically install guest checkout over the existing TRX order and ledger
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         id: install
         run: |
           set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           remote="/home/zomorod2/.mpw-guest-release-$GITHUB_RUN_ID"
-          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-guest-ssh/config" saeit-cpanel \
-            "python3 '$remote/release.py' publish '$GITHUB_RUN_ID' '$remote/guest.py'"
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mpw-guest-ssh/config" "$COMMAND_HOST" \
+            "python3 '$remote/release.py' publish-onefile '$GITHUB_RUN_ID' '$remote/guest.py'"
       - name: Verify anonymous checkout pages without creating an order or payment
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           remote="/home/zomorod2/.mpw-guest-release-$GITHUB_RUN_ID"
-          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-guest-ssh/config" saeit-cpanel \
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-guest-ssh/config" "$COMMAND_HOST" \
             "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python '$remote/release.py' verify"
       - name: Verify the public buyer pages remain healthy
         run: |
@@ -124,6 +215,43 @@ jobs:
               with urllib.request.urlopen(req,timeout=25) as r:
                   if r.status!=200: raise RuntimeError('GUEST_ROUTE_NOT_200:'+route)
               print('MPW_GUEST_PUBLIC_ROUTE='+json.dumps({'route':route,'http':200,'anonymous':True,'payment_created':False}))
+          # Passenger can continue serving old workers briefly after restart.txt.
+          # Bounded readiness window, unique no-cache URLs, two consecutive healthy
+          # anonymous responses. No order, payment or auth session is created.
+          import os,time,urllib.error
+          recovery='/commerce/trx-easy/purchases/'
+          healthy=0
+          for attempt in range(1,13):
+              nonce=str(os.environ.get('GITHUB_RUN_ID','0'))+'-'+str(attempt)
+              req=urllib.request.Request(origin+recovery+'?release_probe='+nonce,headers={
+                  'Cache-Control':'no-cache, no-store','Pragma':'no-cache','Cookie':'',
+                  'User-Agent':'MPWGuestPurchasesReleaseVerify/1.0'})
+              try:
+                  with urllib.request.urlopen(req,timeout=25) as r:
+                      body=r.read(100000).decode('utf8','replace')
+                      if r.status!=200: raise RuntimeError('GUEST_PURCHASES_PUBLIC_NOT_200')
+                      if 'No active purchase session was found' not in body:
+                          raise RuntimeError('GUEST_PURCHASES_PUBLIC_RECOVERY_MISSING')
+                      cache=r.headers.get('Cache-Control','').lower()
+                      robots=r.headers.get('X-Robots-Tag','').lower()
+                      vary=r.headers.get('Vary','').lower()
+                      if ('no-store' not in cache or 'noindex' not in robots
+                              or 'cookie' not in vary):
+                          raise RuntimeError('GUEST_PURCHASES_PUBLIC_PRIVACY_HEADERS_MISSING')
+                  healthy+=1
+                  print('MPW_PURCHASES_PUBLIC_READY_ATTEMPT='+str(attempt))
+                  if healthy==2:
+                      break
+              except urllib.error.HTTPError as exc:
+                  if exc.code not in (404,502,503,504):
+                      raise
+                  healthy=0
+                  print('MPW_PURCHASES_PUBLIC_RETRY='+str(attempt)+';HTTP='+str(exc.code))
+              if attempt<12:
+                  time.sleep(10)
+          if healthy!=2:
+              raise RuntimeError('GUEST_PURCHASES_PUBLIC_NOT_READY_AFTER_BOUNDED_WAIT')
+          print('MPW_GUEST_PURCHASES_PUBLIC=PASS;ANONYMOUS=TRUE;ORDERS_CREATED=0;PAYMENTS_CREATED=0')
           before=json.load(open('/tmp/mpw-guest-baseline.json'))
           for route,status in before.items():
               with urllib.request.urlopen(origin+route,timeout=25) as r:
@@ -131,13 +259,17 @@ jobs:
           print('MPW_GUEST_PUBLIC_SMOKE=PASS')
           PY
       - name: Restore exact prior modules if release verification fails
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         if: failure() && steps.install.outcome == 'success'
         run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           remote="/home/zomorod2/.mpw-guest-release-$GITHUB_RUN_ID"
-          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-guest-ssh/config" saeit-cpanel \
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-guest-ssh/config" "$COMMAND_HOST" \
             "python3 '$remote/release.py' rollback '$GITHUB_RUN_ID'"
       - name: Remove runner-only SSH material
         if: always()
         run: |
           d="$RUNNER_TEMP/mpw-guest-ssh"
-          if [ -d "$d" ]; then rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config"; rmdir "$d"; fi
+          if [ -d "$d" ]; then rm -f "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/host.candidate" "$d/config" "$d/cpanel.sock" "$d/direct.sock"; rmdir "$d"; fi

@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; media-src blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Private Media Library</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0c121b;--panel:#161f2d;--line:#344156;--text:#f4f6fb;--sub:#b9c4d8;--gold:#d9b875;--red:#f0a1a6}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0%,#1d2d41 0,transparent 45%),var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh}
+    button,input,textarea,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.6;cursor:wait}
+    a{color:var(--gold)}.wrap{max-width:1050px;margin:auto;padding:24px 18px 65px}
+    .head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-bottom:22px;border-bottom:1px solid var(--line)}
+    h1{font-size:clamp(1.55rem,4vw,2.25rem);margin:0;direction:ltr;text-align:right;letter-spacing:.01em}
+    .eyebrow{font-size:.75rem;color:var(--gold);letter-spacing:.12em;text-transform:uppercase;margin:0 0 8px}
+    .muted{color:var(--sub);line-height:1.85}.note{font-size:.88rem}
+    .panel{background:rgba(22,31,45,.96);border:1px solid var(--line);border-radius:20px;padding:clamp(18px,4vw,28px);margin-top:22px;box-shadow:0 18px 38px #0003}
+    h2{font-size:1.35rem;margin:0 0 12px}h3{margin:0 0 8px;font-size:1.1rem}
+    label{display:grid;gap:7px;font-size:.94rem;color:var(--sub)}
+    input,textarea,select{width:100%;min-width:0;padding:12px 13px;border:1px solid #536279;border-radius:11px;background:#0b1421;color:var(--text);outline-offset:3px}
+    input:focus,textarea:focus,select:focus{outline:2px solid var(--gold)}
+    textarea{resize:vertical;min-height:92px}form{display:grid;gap:16px}.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.actions{display:flex;gap:10px;flex-wrap:wrap}
+    .btn{min-height:44px;padding:10px 17px;border:1px solid #7f8ea3;border-radius:11px;background:#26344b;color:var(--text);font-weight:650}
+    .btn.primary{background:var(--gold);color:#14171d;border-color:var(--gold)}.btn.danger{border-color:#9a6067;color:#ffc2c5}
+    .btn:hover{filter:brightness(1.13)}.status{min-height:28px;margin:15px 0;color:var(--gold);line-height:1.7}.status.error{color:var(--red)}
+    [hidden]{display:none!important}.search{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.search>*{flex:1 1 180px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px;margin-top:20px}
+    .item{display:flex;flex-direction:column;gap:10px;background:#121c29;border:1px solid #37445b;border-radius:15px;padding:18px;min-width:0}
+    .item small{color:var(--gold)}.item p{color:var(--sub);white-space:pre-wrap;overflow-wrap:anywhere;margin:0;line-height:1.7}
+    .item .actions{margin-top:auto}.item .btn{padding:7px 12px;min-height:37px;font-size:.85rem}
+    .empty{padding:22px;text-align:center;color:var(--sub);border:1px dashed var(--line);border-radius:14px;margin-top:18px}
+    .backup-reminder{padding:13px 15px;border:1px solid #ae8653;border-radius:12px;color:#f9dda9;background:#3a2a1f;line-height:1.8}
+    .foot{font-size:.82rem;margin-top:27px;color:var(--sub);line-height:1.8}
+    @media(max-width:640px){.two{grid-template-columns:1fr}.head{align-items:start}.wrap{padding:17px 13px 50px}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <div><p class="eyebrow">Local · Personal · Encrypted</p><h1>Private Media Library</h1></div>
+      <button class="btn" id="lock" hidden>قفل‌کردن</button>
+    </header>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <section class="panel" id="setup" hidden>
+      <h2>ساخت کتابخانه شخصی</h2>
+      <p class="muted">اطلاعات در همین مرورگر رمزگذاری می‌شود. چون ماندگاری ذخیره‌سازی فایل‌های محلی در همه مرورگرها یکسان نیست، پس از ساخت و پس از هر تغییر، حتماً پشتیبان رمزدار بگیرید. رمز را جایی امن نگه دارید؛ بازیابی آن ممکن نیست.</p>
+      <form id="setup-form" autocomplete="off">
+        <label>نام کاربری<input id="new-user" minlength="3" maxlength="80" required autocomplete="off"></label>
+        <div class="two">
+          <label>رمز عبور اصلی (حداقل ۱۲ نویسه)<input id="new-pass" type="password" minlength="12" required autocomplete="new-password"></label>
+          <label>تکرار رمز عبور<input id="confirm-pass" type="password" minlength="12" required autocomplete="new-password"></label>
+        </div>
+        <div class="actions"><button class="btn primary" type="submit">ایجاد و ورود</button><button class="btn" type="button" data-import>بازیابی از فایل پشتیبان</button></div>
+      </form>
+    </section>
+
+    <section class="panel" id="login" hidden>
+      <h2>ورود اختصاصی</h2>
+      <form id="login-form" autocomplete="off">
+        <label>نام کاربری<input id="user" required autocomplete="username"></label>
+        <label>رمز عبور<input id="pass" type="password" required autocomplete="current-password"></label>
+        <div class="actions"><button class="btn primary" type="submit">ورود</button><button class="btn" type="button" data-import>بازیابی از فایل پشتیبان</button><button class="btn" type="button" id="cancel-import" hidden>لغو بازیابی</button></div>
+      </form>
+    </section>
+
+    <section id="library" hidden>
+      <div class="panel">
+        <h2>پخش فایل شخصی روی دستگاه</h2>
+        <p class="muted note">فقط فایل‌های مجاز خودتان را انتخاب کنید. ویدئو در همین مرورگر پخش می‌شود، جایی ارسال یا در کتابخانه ذخیره نمی‌شود و با قفل‌شدن برنامه از پخش‌کننده پاک می‌شود.</p>
+        <label>انتخاب فایل ویدئویی<input id="local-video" type="file" accept="video/*"></label>
+        <p id="preview-name" class="muted note" hidden></p>
+        <video id="preview" controls playsinline preload="metadata" style="width:100%;max-height:65vh;margin-top:12px;border-radius:12px;background:#000" hidden></video>
+        <div class="actions"><button id="clear-preview" class="btn" type="button" hidden>بستن پخش‌کننده</button></div>
+      </div>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between"><div><h2>فهرست شخصی</h2><p class="muted note" id="count"></p></div><div class="actions"><button id="export" class="btn primary">دریافت پشتیبان رمزدار</button><button class="btn" data-import>بازیابی</button></div></div>
+        <p id="backup-reminder" class="backup-reminder" role="status" hidden>تغییرات هنوز در فایل پشتیبان جدید ثبت نشده‌اند. روی «دریافت پشتیبان رمزدار» بزنید و وجود فایل دانلودشده را بررسی کنید. فضای مرورگر برای نگهداری بلندمدت قابل اتکا نیست.</p>
+        <p class="muted note">این برنامه ویدئو بارگیری یا بازنشر نمی‌کند؛ پیوندها فقط به منبع رسمی مجاز باز می‌شوند. انتخاب و بررسی حق انتشار هر مورد با شماست.</p>
+        <div class="search"><label>جست‌وجو<input id="query" type="search" placeholder="عنوان یا یادداشت"></label><label>دسته<select id="filter"><option value="">همه دسته‌ها</option></select></label></div>
+        <div id="items" class="grid"></div><p id="empty" class="empty" hidden>موردی پیدا نشد. نخستین پیوند شخصی را اضافه کنید.</p>
+      </div>
+      <div class="panel">
+        <h2 id="form-title">افزودن پیوند</h2>
+        <form id="item-form">
+          <div class="two"><label>عنوان<input id="title" maxlength="180" required></label><label>دسته‌بندی<input id="category" maxlength="70" placeholder="مثلاً: منتخب"></label></div>
+          <label>نشانی رسمی (HTTPS)<input id="url" type="url" inputmode="url" placeholder="https://example.com/..." maxlength="1800" required></label>
+          <label>یادداشت شخصی<textarea id="notes" maxlength="1500"></textarea></label>
+          <div class="actions"><button id="save" class="btn primary" type="submit">ذخیره رمزگذاری‌شده</button><button id="cancel" class="btn" type="button" hidden>لغو ویرایش</button></div>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>بررسی مستقل فایل پشتیبان</h2>
+        <p class="muted note">فایل رمزدار را انتخاب کنید و رمز اصلی همان فایل را وارد کنید. برنامه فقط صحت رمزگشایی و تعداد موارد را بررسی می‌کند؛ هیچ اطلاعاتی جایگزین، حذف یا ارسال نمی‌شود.</p>
+        <form id="verify-form" autocomplete="off">
+          <label>انتخاب فایل پشتیبان<input id="verify-file" type="file" accept=".json,application/json" required></label>
+          <label>رمز اصلی فایل<input id="verify-pass" type="password" autocomplete="off" required></label>
+          <div class="actions"><button class="btn primary" type="submit">بررسی بدون بازیابی</button></div>
+        </form>
+      </div>
+    </section>
+
+    <p class="foot">مستقل از همه سایت‌ها · بدون سرویس تبلیغات یا تحلیل ترافیک · بدون ارسال اطلاعات به سرور · فقط برای پیوندهای مجاز و استفاده شخصی. جابه‌جایی فایل برنامه یا پاک‌کردن داده‌های مرورگر ممکن است اطلاعات محلی را از دسترس خارج کند؛ بعد از هر تغییر پشتیبان رمزدار بگیرید و در محل امن نگه دارید.</p>
+    <input type="file" id="import-file" accept=".json,application/json" hidden>
+  </main>
+  <script>
+  'use strict';
+  (() => {
+    const STORE = 'private-media-library-v1';
+    const ITERATIONS = 450000;
+    const $ = id => document.getElementById(id);
+    const te = new TextEncoder();
+    const td = new TextDecoder();
+    let envelope = null, pendingEnvelope = null, key = null, vault = null, editId = null, idleTimer = null, previewUrl = null;
+    let sessionEpoch = 0, commitBusy = false;
+
+    function message(value, error = false) { $('status').textContent = value; $('status').className = error ? 'status error' : 'status'; }
+    function show(which) { for (const id of ['setup','login','library']) $(id).hidden = id !== which; $('lock').hidden = which !== 'library'; $('cancel-import').hidden = which !== 'login' || !pendingEnvelope; }
+    function bytesTo64(bytes) { let s=''; for(const b of bytes) s+=String.fromCharCode(b); return btoa(s); }
+    function b64ToBytes(s) { const b=atob(s); return Uint8Array.from(b,c=>c.charCodeAt(0)); }
+    function random(n) { return crypto.getRandomValues(new Uint8Array(n)); }
+    function validate(record) {
+      return record && record.version===1 && Number.isInteger(record.iterations) && record.iterations>=250000 && record.iterations<=1500000 &&
+        ['salt','iv','ciphertext'].every(k=>typeof record[k]==='string' && record[k].length>0 && record[k].length<10000000) &&
+        b64ToBytes(record.salt).length===16 && b64ToBytes(record.iv).length===12;
+    }
+    async function derive(password,salt,iterations) {
+      const material = await crypto.subtle.importKey('raw',te.encode(password),'PBKDF2',false,['deriveKey']);
+      return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+    }
+    async function encrypt(data,cryptoKey,salt,iterations) {
+      const iv=random(12);
+      const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv},cryptoKey,te.encode(JSON.stringify(data)));
+      return {version:1,iterations,salt:bytesTo64(salt),iv:bytesTo64(iv),ciphertext:bytesTo64(new Uint8Array(ciphertext))};
+    }
+    async function decrypt(record,cryptoKey) {
+      const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64ToBytes(record.iv)},cryptoKey,b64ToBytes(record.ciphertext));
+      const data=JSON.parse(td.decode(plain));
+      if(!data || typeof data.username!=='string' || data.username.length<3 || data.username.length>80 || !Array.isArray(data.items) || data.items.length>10000) throw new Error('Invalid vault');
+      for(const item of data.items) {
+        if(!item || typeof item.id!=='string' || typeof item.title!=='string' || item.title.length>180 ||
+          typeof item.category!=='string' || item.category.length>70 || typeof item.notes!=='string' || item.notes.length>1500 ||
+          !Number.isFinite(item.created) || typeof item.url!=='string') throw new Error('Invalid entry');
+        safeUrl(item.url);
+      }
+      return data;
+    }
+    function store(record) { localStorage.setItem(STORE,JSON.stringify(record)); }
+    function backupReminder(needed) { $('backup-reminder').hidden=!needed; }
+    function resetEdit() { editId=null; $('item-form').reset(); $('form-title').textContent='افزودن پیوند'; $('cancel').hidden=true; }
+    function clearPreview() {
+      const video=$('preview'); video.pause(); video.removeAttribute('src'); video.load();
+      if(previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl=null; $('local-video').value=''; $('preview-name').textContent=''; $('preview-name').hidden=true;
+      video.hidden=true; $('clear-preview').hidden=true;
+    }
+    function lock() {
+      sessionEpoch++;
+      clearPreview();
+      backupReminder(false);
+      key=null; vault=null; editId=null; pendingEnvelope=null; if(idleTimer) clearTimeout(idleTimer);
+      $('pass').value=''; $('new-pass').value=''; $('confirm-pass').value=''; $('verify-pass').value=''; $('verify-file').value='';
+      show(envelope?'login':'setup'); message('کتابخانه قفل شد.');
+    }
+    function activity() {
+      if(!vault) return;
+      if(idleTimer) clearTimeout(idleTimer);
+      idleTimer=setTimeout(lock,15*60*1000);
+    }
+    async function commit(next) {
+      if(commitBusy || !vault || !key || !envelope) throw new Error('Not available for save');
+      commitBusy=true;
+      const currentEpoch=sessionEpoch, currentKey=key, currentEnvelope=envelope;
+      try {
+        const record=await encrypt(next,currentKey,b64ToBytes(currentEnvelope.salt),currentEnvelope.iterations);
+        if(currentEpoch!==sessionEpoch || currentKey!==key || currentEnvelope!==envelope || !vault) throw new Error('Session changed');
+        store(record); envelope=record; vault=next; backupReminder(true); activity(); render();
+      } finally {commitBusy=false;}
+    }
+    function makeButton(label,fn,extra='') { const b=document.createElement('button'); b.type='button'; b.textContent=label; b.className='btn '+extra; b.addEventListener('click',fn); return b; }
+    function render() {
+      if(!vault) return;
+      const values=[...new Set(vault.items.map(i=>i.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fa'));
+      const selected=$('filter').value; $('filter').replaceChildren(new Option('همه دسته‌ها',''));
+      for(const x of values) $('filter').add(new Option(x,x)); $('filter').value=values.includes(selected)?selected:'';
+      const q=$('query').value.trim().toLocaleLowerCase();
+      const filtered=vault.items.filter(i=>(!$('filter').value || i.category===$('filter').value) && [i.title,i.category,i.notes].join(' ').toLocaleLowerCase().includes(q));
+      filtered.sort((a,b)=>b.created-a.created);
+      $('count').textContent=`${vault.items.length} مورد ثبت‌شده · ${filtered.length} مورد نمایشی`;
+      const holder=$('items'); holder.replaceChildren(); $('empty').hidden=filtered.length!==0;
+      for(const item of filtered) {
+        const card=document.createElement('article'); card.className='item';
+        const small=document.createElement('small'); small.textContent=item.category||'بدون دسته';
+        const title=document.createElement('h3'); title.textContent=item.title;
+        const note=document.createElement('p'); note.textContent=item.notes||'بدون یادداشت';
+        const actions=document.createElement('div'); actions.className='actions';
+        const link=document.createElement('a'); link.className='btn primary'; link.textContent='بازکردن منبع'; link.href=item.url; link.rel='noopener noreferrer'; link.referrerPolicy='no-referrer'; link.target='_blank';
+        actions.append(link,makeButton('ویرایش',()=>{
+          editId=item.id; $('title').value=item.title; $('category').value=item.category; $('url').value=item.url; $('notes').value=item.notes;
+          $('form-title').textContent='ویرایش پیوند'; $('cancel').hidden=false; $('item-form').scrollIntoView({behavior:'smooth'});
+        }),makeButton('حذف',async()=>{
+          if(!confirm('این مورد از کتابخانه حذف شود؟')) return;
+          try { await commit({...vault,items:vault.items.filter(x=>x.id!==item.id)}); if(editId===item.id) resetEdit(); message('مورد حذف شد. پشتیبان تازه بگیرید.'); }
+          catch(e) {message(e.message==='Session changed'?'جلسه هنگام حذف قفل شد؛ تغییر ذخیره نشد.':'حذف ذخیره نشد؛ وضعیت جلسه یا فضای ذخیره‌سازی را بررسی کنید.',true);}
+        },'danger'));
+        card.append(small,title,note,actions); holder.append(card);
+      }
+    }
+    function safeUrl(raw) {
+      const u=new URL(raw.trim());
+      if(u.protocol!=='https:' || !u.hostname || u.username || u.password) throw new Error('HTTPS only');
+      return u.href;
+    }
+    $('setup-form').addEventListener('submit',async e=>{
+      e.preventDefault(); const username=$('new-user').value.trim(), password=$('new-pass').value;
+      if(username.length<3 || password.length<12 || password!==$('confirm-pass').value) return message('نام کاربری و رمز عبور را بررسی کنید.',true);
+      const btn=e.submitter; btn.disabled=true; message('در حال ایجاد کلید رمزگذاری...');
+      const startingEpoch=sessionEpoch;
+      try {
+        const salt=random(16); const nextKey=await derive(password,salt,ITERATIONS);
+        const data={username,items:[]}; const record=await encrypt(data,nextKey,salt,ITERATIONS);
+        if(startingEpoch!==sessionEpoch || envelope || pendingEnvelope) throw new Error('Session changed');
+        store(record); sessionEpoch++; key=nextKey; vault=data; envelope=record; $('setup-form').reset(); show('library'); backupReminder(true); render(); activity(); message('کتابخانه ساخته شد. همین حالا یک پشتیبان رمزدار بگیرید.');
+      } catch(err) {message('ساخت یا ذخیره‌سازی ممکن نشد. مرورگر باید ذخیره‌سازی محلی امن داشته باشد.',true);}
+      finally {btn.disabled=false;}
+    });
+    $('login-form').addEventListener('submit',async e=>{
+      e.preventDefault(); const btn=e.submitter; btn.disabled=true; message('در حال بازگشایی رمزگذاری...');
+      const startingEpoch=sessionEpoch, startingEnvelope=envelope, startingPending=pendingEnvelope;
+      try {
+        const target=startingPending||startingEnvelope;
+        const candidate=await derive($('pass').value,b64ToBytes(target.salt),target.iterations);
+        const data=await decrypt(target,candidate);
+        if(startingEpoch!==sessionEpoch || startingEnvelope!==envelope || startingPending!==pendingEnvelope) throw new Error('Session changed');
+        if(data.username!==$('user').value.trim()) throw new Error('Invalid credentials');
+        if(pendingEnvelope) {
+          if(envelope && !confirm('پشتیبان تأیید شد. آیا اطلاعات رمزگذاری‌شده فعلی جایگزین شوند؟')) {
+            pendingEnvelope=null; $('pass').value=''; show('login'); message('بازیابی لغو شد؛ اطلاعات قبلی تغییر نکرد.'); return;
+          }
+          store(pendingEnvelope); envelope=pendingEnvelope; pendingEnvelope=null;
+        }
+        sessionEpoch++; key=candidate; vault=data; $('pass').value=''; show('library'); backupReminder(true); render(); activity(); message('ورود موفق. آخرین فایل پشتیبان را بررسی کنید.');
+      } catch(err) {message('نام کاربری یا رمز عبور نادرست است، یا فایل آسیب دیده است.',true);}
+      finally {btn.disabled=false;}
+    });
+    $('item-form').addEventListener('submit',async e=>{
+      e.preventDefault(); let url;
+      try {url=safeUrl($('url').value);} catch(err){return message('تنها نشانی معتبر HTTPS بدون اطلاعات ورود پذیرفته می‌شود.',true);}
+      const item={id:editId||crypto.randomUUID(),title:$('title').value.trim(),category:$('category').value.trim(),url,notes:$('notes').value.trim(),created:Date.now()};
+      if(!item.title) return message('عنوان لازم است.',true);
+      const previous=vault.items.find(i=>i.id===editId); if(previous) item.created=previous.created;
+      const items=previous?vault.items.map(i=>i.id===editId?item:i):[...vault.items,item];
+      try {await commit({...vault,items}); resetEdit(); message('رمزگذاری و ذخیره شد. نسخه پشتیبان تازه بگیرید.');}
+      catch(err){message(err.message==='Session changed'?'هنگام ذخیره جلسه قفل شد؛ تغییر ثبت نشد. دوباره وارد شوید.':'ذخیره‌سازی انجام نشد. وضعیت جلسه یا فضای مرورگر را بررسی کنید.',true);}
+    });
+    $('cancel').addEventListener('click',resetEdit);
+    $('cancel-import').addEventListener('click',()=>{pendingEnvelope=null; $('pass').value=''; show(envelope?'login':'setup'); message('بازیابی لغو شد؛ اطلاعات قبلی تغییر نکرد.');});
+    $('query').addEventListener('input',render); $('filter').addEventListener('change',render);
+    $('lock').addEventListener('click',lock);
+    $('clear-preview').addEventListener('click',()=>{clearPreview(); message('پخش‌کننده بسته شد.');});
+    $('local-video').addEventListener('change',e=>{
+      const file=e.target.files[0]; clearPreview(); if(!file) return;
+      if(!file.type.startsWith('video/')) return message('لطفاً یک فایل ویدئویی پشتیبانی‌شده انتخاب کنید.',true);
+      try {
+        previewUrl=URL.createObjectURL(file); $('preview').src=previewUrl;
+        $('preview').hidden=false; $('preview-name').textContent=file.name;
+        $('preview-name').hidden=false; $('clear-preview').hidden=false;
+        message('فایل تنها روی همین دستگاه باز شد و آپلود نمی‌شود.'); activity();
+      } catch(err) {clearPreview(); message('بازکردن فایل محلی ممکن نشد.',true);}
+    });
+    window.addEventListener('pagehide',clearPreview);
+    document.addEventListener('pointerdown',activity,{passive:true}); document.addEventListener('keydown',activity);
+    document.addEventListener('visibilitychange',()=>{if(document.hidden && vault) activity();});
+    $('export').addEventListener('click',()=>{
+      if(!envelope) return;
+      const blob=new Blob([JSON.stringify(envelope,null,2)],{type:'application/json'});
+      const url=URL.createObjectURL(blob), a=document.createElement('a');
+      a.href=url; a.download='private-media-library-backup.json'; document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),15000);
+      backupReminder(false); message('دانلود فایل پشتیبان آغاز شد. حتماً وجود فایل دانلودشده و سالم‌بودن آن را بررسی کنید.');
+    });
+    $('verify-form').addEventListener('submit',async e=>{
+      e.preventDefault(); const file=$('verify-file').files[0];
+      if(!file || file.size>9_000_000) return message('فایل پشتیبان انتخاب نشده یا بیش از حد بزرگ است.',true);
+      const btn=e.submitter; btn.disabled=true; const startingEpoch=sessionEpoch;
+      message('در حال بررسی رمزگذاری فایل پشتیبان...');
+      try {
+        const record=JSON.parse(await file.text()); if(!validate(record)) throw new Error('Invalid backup');
+        const candidate=await derive($('verify-pass').value,b64ToBytes(record.salt),record.iterations);
+        const data=await decrypt(record,candidate);
+        if(startingEpoch!==sessionEpoch || !vault) throw new Error('Session changed');
+        message(`پشتیبان سالم و قابل رمزگشایی است: ${data.items.length} مورد. اطلاعات فعلی تغییر نکرد.`);
+      } catch(err) {message('بررسی موفق نبود: رمز صحیح نیست، فایل آسیب دیده یا جلسه تغییر کرده است.',true);}
+      finally { $('verify-pass').value=''; $('verify-file').value=''; btn.disabled=false; }
+    });
+    document.querySelectorAll('[data-import]').forEach(el=>el.addEventListener('click',()=>$('import-file').click()));
+    $('import-file').addEventListener('change',async e=>{
+      const file=e.target.files[0]; e.target.value=''; if(!file) return;
+      if(file.size>9_000_000) return message('فایل پشتیبان بیش از حد بزرگ است.',true);
+      const startingEpoch=sessionEpoch;
+      try {
+        const record=JSON.parse(await file.text()); if(!validate(record)) throw new Error('Invalid backup');
+        if(startingEpoch!==sessionEpoch) throw new Error('Session changed');
+        sessionEpoch++; clearPreview(); backupReminder(false); pendingEnvelope=record; key=null; vault=null; show('login'); message('پشتیبان انتخاب شد. با رمز اصلی آن وارد شوید؛ تا پیش از تأیید رمز، اطلاعات فعلی جایگزین نمی‌شوند.');
+      } catch(err) {message('پشتیبان معتبر نیست یا ذخیره نشد.',true);}
+    });
+    try {
+      if(!crypto?.subtle || !window.isSecureContext) throw new Error('Secure context required');
+      const raw=localStorage.getItem(STORE);
+      if(raw){const parsed=JSON.parse(raw); if(!validate(parsed)) throw new Error('Invalid stored data'); envelope=parsed; show('login'); message('کتابخانه آماده ورود است.');}
+      else {show('setup'); message('برای شروع، نام کاربری و رمز اصلی ایجاد کنید.');}
+    } catch(err){show('setup'); document.querySelectorAll('button,input').forEach(x=>x.disabled=true); message('این مرورگر یا شیوه بازکردن فایل، رمزگذاری و ذخیره‌سازی محلی را پشتیبانی نمی‌کند. آن را با یک مرورگر به‌روز در محیط امن باز کنید.',true);}
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+name: MojPlayWin Global Living Cities Catalog Source Gate
+on:
+  push:
+    branches: [mpw/living-cities-global-games-catalog-source-20261101]
+  pull_request:
+    branches: [main]
+    paths:
+      - core/templates/brands/mojplaywin/page.html
+      - tests/test_mpw_global_living_cities_catalog_source.py
+permissions: {contents: read}
+jobs:
+  source-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Check canonical public game featured card and all protected legacy sections
+        run: python3 -m unittest discover -s tests -p 'test_mpw_global_living_cities_catalog_source.py' -v

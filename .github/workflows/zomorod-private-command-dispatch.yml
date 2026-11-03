@@ -41,6 +41,7 @@ jobs:
             github.event.comment.body == 'ZMR-PUBLIC-KEY-V1'
             || startsWith(github.event.comment.body, 'ZMR-SEALED-COMMAND-V1')
             || github.event.comment.body == 'ZMR-CPANEL-READONLY-V1'
+            || github.event.comment.body == 'ZMR-CUTOVER-RECORD-V1'
           )
         )
       )
@@ -108,6 +109,8 @@ jobs:
                   operation, raw = "show_public_key", None
               elif body == "ZMR-CPANEL-READONLY-V1":
                   operation, raw = "cpanel_readonly", None
+              elif body == "ZMR-CUTOVER-RECORD-V1":
+                  operation, raw = "cutover_record", None
               elif isinstance(body, str) and body.startswith("ZMR-SEALED-COMMAND-V1\n"):
                   operation, raw = "accept", body.split("\n", 1)[1]
               else:
@@ -115,7 +118,7 @@ jobs:
           else:
               raise SystemExit("EVENT_REJECTED")
 
-          if operation not in ("show_public_key", "accept", "cpanel_readonly"):
+          if operation not in ("show_public_key", "accept", "cpanel_readonly", "cutover_record"):
               raise SystemExit("OPERATION_REJECTED")
           if operation == "accept":
               try:
@@ -330,9 +333,649 @@ jobs:
                       print("CPANEL_LOCAL_QUOTA_HEADROOM_GIB_FLOOR=" + str(max(0, limit - used) // 1073741824))
                   else:
                       print("CPANEL_LOCAL_QUOTA_DATA=UNVERIFIED")
+          # Targeted, bounded source-only MojPlayWin readiness evidence.
+          # No imports of the live Django app, DB queries, plaintext secrets or writes.
+          from pathlib import Path
+          import hashlib
+
+          app = Path("/home/zomorod2/Saeit-staging")
+          public = Path("/home/zomorod2/mojplaywin.com")
+          marker = "# MPW_GUEST_CHECKOUT_LIVE_V1"
+
+          def small_regular(path, ceiling=300000):
+              try:
+                  if path.is_symlink() or not path.is_file():
+                      return None
+                  size = path.stat().st_size
+                  if size <= 0 or size > ceiling:
+                      return None
+                  return path.read_bytes()
+              except OSError:
+                  return None
+
+          if app.is_symlink() or public.is_symlink() or not app.is_dir() or not public.is_dir():
+              print("MPW_PRODUCTION_ROOTS=UNVERIFIED")
+          else:
+              print("MPW_PRODUCTION_ROOTS=REGULAR_DIRECTORIES")
+              wsgi = small_regular(public / "passenger_wsgi.py", 100000)
+              wsgi_match = (wsgi is not None
+                            and b"APP='/home/zomorod2/Saeit-staging'" in wsgi)
+              print("MPW_PASSENGER_WSGI_APP_LINK=" +
+                    ("EXPECTED_STATIC_PATH" if wsgi_match else "UNVERIFIED"))
+              guest = small_regular(app / "services/mpw_trx_guest_commerce.py")
+              pages = small_regular(app / "services/mpw_trx_public_pages.py")
+              commerce = small_regular(app / "services/mpw_trx_commercial_web.py")
+              old_sha = "7693254e4ed72141b6de7fc283c5a3214159ea49d838318337e47e86953f5f2f"
+              if guest is None:
+                  guest_status = "MISSING_OR_UNREADABLE"
+              elif hashlib.sha256(guest).hexdigest() == old_sha:
+                  guest_status = "EXPECTED_PRE_RECOVERY_BASE"
+              elif (b"No active purchase session was found" in guest
+                    and b"def patch_public(namespace):" in guest
+                    and b"def patch_commercial(namespace):" in guest):
+                  guest_status = "RECOVERY_SOURCE_ON_DISK_UNVERIFIED_RUNTIME"
+              else:
+                  guest_status = "UNRECOGNIZED_SOURCE"
+              print("MPW_GUEST_ADAPTER_SOURCE=" + guest_status)
+              def hook_status(payload, method):
+                  if payload is None:
+                      return "MISSING_OR_UNREADABLE"
+                  text = payload.decode("utf-8", "replace")
+                  hook = ("from services.mpw_trx_guest_commerce import patch_" + method)
+                  if text.count(marker) == 1 and hook in text:
+                      return "INSTALLED_ON_DISK"
+                  if marker not in text and hook not in text:
+                      return "NOT_INSTALLED"
+                  return "UNRECOGNIZED_OR_PARTIAL"
+              print("MPW_PUBLIC_PAGES_GUEST_HOOK=" + hook_status(pages, "public"))
+              print("MPW_COMMERCIAL_WEB_GUEST_HOOK=" + hook_status(commerce, "commercial"))
+              print("MPW_EFFECTIVE_PASSENGER_DB_IDENTITY=NOT_VERIFIED_BY_STATIC_SOURCE")
+              print("MPW_RUNNING_WORKER_RESTART_STATE=NOT_VERIFIED_BY_STATIC_SOURCE")
+          # Bounded, redacted diagnostics for Passenger's registered application root.
+          # These do not read application secrets or execute the live Django app.
+          import re
+          import time
+          def root_category(value):
+              if not isinstance(value, str):
+                  return "UNSET"
+              value = value.strip().strip(chr(39)).strip(chr(34)).rstrip("/")
+              if value in ("/home/zomorod2/Saeit-staging", "Saeit-staging"):
+                  return "STAGING"
+              if value in ("/home/zomorod2/mojplaywin.com", "mojplaywin.com"):
+                  return "PUBLIC"
+              if "Saeit-staging" in value:
+                  return "REFERS_TO_STAGING"
+              if "mojplaywin.com" in value:
+                  return "REFERS_TO_PUBLIC"
+              return "OTHER"
+
+          for label, root in (("PUBLIC", public), ("STAGING", app)):
+              htaccess = small_regular(root / ".htaccess", 100000)
+              if htaccess is None:
+                  print("MPW_" + label + "_HTACCESS=ABSENT_OR_UNREADABLE")
+              else:
+                  text = htaccess.decode("utf8", "replace")
+                  roots = re.findall(r"(?im)^\s*PassengerAppRoot\s+([^\s#]+)", text)
+                  enabled = re.findall(r"(?im)^\s*PassengerEnabled\s+(on|off)\b", text)
+                  print("MPW_" + label + "_HTACCESS=READABLE")
+                  print("MPW_" + label + "_PASSENGER_APP_ROOT=" +
+                        (root_category(roots[-1]) if roots else "NOT_DECLARED"))
+                  print("MPW_" + label + "_PASSENGER_ENABLED=" +
+                        (enabled[-1].upper() if enabled else "NOT_DECLARED"))
+              restart_path = root / "tmp" / "restart.txt"
+              if restart_path.is_symlink() or not restart_path.is_file():
+                  state = "MISSING"
+              else:
+                  age = time.time() - restart_path.stat().st_mtime
+                  state = "RECENT_15M" if -120 <= age <= 900 else "OLDER"
+              print("MPW_" + label + "_PASSENGER_RESTART_MARKER=" + state)
+
+          try:
+              response = subprocess.run(
+                  [command, "--output=json", "PassengerApps", "list_applications"],
+                  capture_output=True, timeout=15, check=False,
+              )
+              if response.returncode or len(response.stdout) > 1000000:
+                  raise ValueError("UAPI_UNAVAILABLE")
+              record = json.loads(response.stdout)
+              result = record.get("result", {}) if isinstance(record, dict) else {}
+              if not isinstance(result, dict) or result.get("status") not in (1, True, "1"):
+                  raise ValueError("UAPI_INVALID")
+              data = result.get("data")
+              print("MPW_PASSENGER_UAPI_DATA_TYPE=" + type(data).__name__.upper())
+              pending = [data]
+              checks = 0
+              seen = set()
+              while pending and checks < 500:
+                  item = pending.pop()
+                  checks += 1
+                  if isinstance(item, list):
+                      pending.extend(item[:100])
+                  elif isinstance(item, dict):
+                      for field in ("app_root", "application_root", "app_path",
+                                    "path", "document_root", "startup_file"):
+                          if field in item:
+                              seen.add(field.upper() + "_" + root_category(item[field]))
+                      pending.extend(list(item.values())[:100])
+              relevant = sorted(x for x in seen if
+                                "STAGING" in x or "PUBLIC" in x)
+              print("MPW_PASSENGER_UAPI_ROOT_SIGNALS=" +
+                    (",".join(relevant) if relevant else "NO_RECOGNIZED_PATH"))
+          except (OSError, ValueError, subprocess.TimeoutExpired):
+              print("MPW_PASSENGER_UAPI_ROOT_SIGNALS=UNAVAILABLE")
+          # Read-only domain-to-document-root proof. No hostname inventory or raw paths in logs.
+          try:
+              output = subprocess.run(
+                  [command, "--output=json", "DomainInfo", "domains_data", "format=hash"],
+                  capture_output=True, timeout=15, check=False,
+              )
+              if output.returncode or len(output.stdout) > 1000000:
+                  raise ValueError("DOMAININFO_UNAVAILABLE")
+              record = json.loads(output.stdout)
+              result = record.get("result", {}) if isinstance(record, dict) else {}
+              if not isinstance(result, dict) or result.get("status") not in (1, True, "1"):
+                  raise ValueError("DOMAININFO_INVALID")
+              data = result.get("data")
+              pending = [(data, False)]
+              matched = False
+              document_roots = set()
+              inspected = 0
+              while pending and inspected < 600:
+                  value, related = pending.pop()
+                  inspected += 1
+                  if isinstance(value, list):
+                      pending.extend((entry, related) for entry in value[:100])
+                  elif isinstance(value, dict):
+                      marker = any(
+                          str(value.get(field, "")).lower().rstrip(".") == "mojplaywin.com"
+                          for field in ("domain", "domain_name", "domainname", "name")
+                      )
+                      marker = marker or any(
+                          str(key).lower().rstrip(".") == "mojplaywin.com"
+                          for key in value
+                      )
+                      related = related or marker
+                      if marker:
+                          matched = True
+                      if related:
+                          for field in ("documentroot", "document_root", "docroot",
+                                        "document_root_directory"):
+                              path_value = value.get(field)
+                              if isinstance(path_value, str):
+                                  document_roots.add(root_category(path_value))
+                      for key, child in list(value.items())[:100]:
+                          pending.append((child, related or str(key).lower() == "mojplaywin.com"))
+              print("MPW_DOMAININFO_DOMAINS_DATA=OK")
+              print("MPW_DOMAININFO_MATCHES_MOJPLAYWIN=" + ("YES" if matched else "NO"))
+              print("MPW_DOMAININFO_DOCROOT_CATEGORY=" +
+                    (",".join(sorted(document_roots)) if document_roots else "NOT_EXPOSED"))
+          except (OSError, ValueError, subprocess.TimeoutExpired):
+              print("MPW_DOMAININFO_DOMAINS_DATA=UNAVAILABLE")
+
+          # Inspect effective app grouping directives without printing other domains.
+          ht = small_regular(public / ".htaccess", 100000)
+          if ht is not None:
+              t = ht.decode("utf8", "replace")
+              groups = re.findall(r"(?im)^\s*PassengerAppGroupName\s+([^\s#]+)", t)
+              starts = re.findall(r"(?im)^\s*PassengerStartupFile\s+([^\s#]+)", t)
+              print("MPW_PUBLIC_PASSENGER_GROUP=" +
+                    (root_category(groups[-1]) if groups else "NOT_DECLARED"))
+              print("MPW_PUBLIC_PASSENGER_STARTUP_FILE=" +
+                    ("PASSENGER_WSGI" if starts and starts[-1].endswith("passenger_wsgi.py")
+                     else "OTHER" if starts else "NOT_DECLARED"))
+          else:
+              print("MPW_PUBLIC_PASSENGER_GROUP=UNVERIFIED")
+              print("MPW_PUBLIC_PASSENGER_STARTUP_FILE=UNVERIFIED")
+
+          # Read-only worker metadata: never print PIDs, commands, paths or environment.
+          # Compare process age with the now-confirmed PUBLIC restart marker.
+          try:
+              proc = subprocess.run(
+                  ["ps", "-u", "zomorod2", "-o", "etimes=,comm=,args="],
+                  capture_output=True, timeout=10, check=False, text=True,
+              )
+              if proc.returncode or len(proc.stdout) > 250000:
+                  raise ValueError("PS_UNAVAILABLE")
+              ages = []
+              app_ages = []
+              for line in proc.stdout.splitlines()[:500]:
+                  match = re.match(r"^\s*(\d+)\s+(\S+)\s+(.*)$", line)
+                  if not match:
+                      continue
+                  age = int(match.group(1))
+                  name = match.group(2).lower()
+                  args = match.group(3).lower()
+                  if ("passenger" in name or "passenger" in args
+                          or "wsgi" in args or
+                          ("python" in name and
+                           ("mojplaywin" in args or "saeit-staging" in args))):
+                      ages.append(age)
+                      if "mojplaywin" in args or "saeit-staging" in args:
+                          app_ages.append(age)
+              print("MPW_PROCESS_PASSENGER_LIKE_COUNT=" + str(len(ages)))
+              print("MPW_PROCESS_MOJPLAYWIN_LIKE_COUNT=" + str(len(app_ages)))
+              marker_age = time.time() - (public / "tmp/restart.txt").stat().st_mtime
+              if ages and marker_age >= 0:
+                  old_count = sum(age > marker_age + 10 for age in ages)
+                  print("MPW_PASSENGER_LIKE_OLDER_THAN_RESTART_COUNT=" + str(old_count))
+              else:
+                  print("MPW_PASSENGER_LIKE_OLDER_THAN_RESTART_COUNT=UNKNOWN")
+          except (OSError, ValueError, subprocess.TimeoutExpired):
+              print("MPW_PASSENGER_PROCESS_METADATA=UNAVAILABLE")
+
+          # Honor PassengerRestartDir if a public app-specific override exists.
+          htaccess = small_regular(public / ".htaccess", 100000)
+          if htaccess is not None:
+              config_text = htaccess.decode("utf8", "replace")
+              dirs = re.findall(r"(?im)^\s*PassengerRestartDir\s+([^\r\n#]+)",
+                                config_text)
+              if not dirs:
+                  restart_dir = "DEFAULT_TMP"
+              else:
+                  configured = dirs[-1].strip().strip(chr(39)).strip(chr(34)).rstrip("/")
+                  if configured == "tmp":
+                      restart_dir = "DEFAULT_TMP"
+                  elif configured in (str(public / "tmp"), "mojplaywin.com/tmp"):
+                      restart_dir = "PUBLIC_TMP"
+                  elif configured in (str(app / "tmp"), "Saeit-staging/tmp"):
+                      restart_dir = "STAGING_TMP"
+                  else:
+                      restart_dir = "OTHER"
+              print("MPW_PUBLIC_PASSENGER_RESTART_DIR=" + restart_dir)
+          else:
+              print("MPW_PUBLIC_PASSENGER_RESTART_DIR=UNVERIFIED")
+          # Detect a supported, user-scoped explicit Passenger restart control,
+          # without invoking any restart or changing the running service.
+          config_cli = shutil.which("passenger-config")
+          if config_cli is None:
+              for candidate in (
+                  "/usr/bin/passenger-config",
+                  "/usr/local/bin/passenger-config",
+                  "/opt/cpanel/ea-ruby27/root/usr/bin/passenger-config",
+              ):
+                  if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                      config_cli = candidate
+                      break
+          if config_cli is None:
+              print("MPW_PASSENGER_EXPLICIT_RESTART_CLI=MISSING")
+          else:
+              print("MPW_PASSENGER_EXPLICIT_RESTART_CLI=PRESENT")
+              try:
+                  help_run = subprocess.run(
+                      [config_cli, "restart-app", "--help"],
+                      capture_output=True, timeout=10, check=False, text=True,
+                  )
+                  help_text = (help_run.stdout + help_run.stderr)[:100000]
+                  print("MPW_PASSENGER_EXPLICIT_RESTART_HELP=" +
+                        ("AVAILABLE" if help_run.returncode == 0 else "FAILED"))
+                  print("MPW_PASSENGER_SCOPED_RESTART_OPTION=" +
+                        ("AVAILABLE" if "ignore-app-not-running" in help_text
+                         else "NOT_VERIFIED"))
+              except (OSError, subprocess.TimeoutExpired):
+                  print("MPW_PASSENGER_EXPLICIT_RESTART_HELP=UNAVAILABLE")
+          # CloudLinux Python Selector: inspect registered app roots; never restart.
+          selector = shutil.which("cloudlinux-selector")
+          if selector is None and os.path.isfile("/usr/sbin/cloudlinux-selector"):
+              selector = "/usr/sbin/cloudlinux-selector"
+          wrapper = "/bin/cagefs_enter.proxied"
+          print("MPW_CLOUDLINUX_CAGEFS_WRAPPER=" +
+                ("PRESENT" if os.path.isfile(wrapper) else "MISSING"))
+          if selector is None:
+              print("MPW_CLOUDLINUX_SELECTOR_BIN=MISSING")
+          else:
+              print("MPW_CLOUDLINUX_SELECTOR_BIN=PRESENT")
+              try:
+                  outcome = subprocess.run(
+                      [selector, "get", "--json", "--interpreter", "python"],
+                      capture_output=True, timeout=15, check=False,
+                  )
+                  if outcome.returncode or len(outcome.stdout) > 1000000:
+                      raise ValueError("SELECTOR_GET_UNAVAILABLE")
+                  info = json.loads(outcome.stdout)
+                  if not isinstance(info, dict) or info.get("result") not in ("success", True):
+                      raise ValueError("SELECTOR_GET_UNVERIFIED")
+                  text_data = json.dumps(info, sort_keys=True).lower()
+                  print("MPW_CLOUDLINUX_SELECTOR_GET=SUCCESS")
+                  print("MPW_CLOUDLINUX_RECOGNIZES_PUBLIC_ROOT=" +
+                        ("YES" if "mojplaywin.com" in text_data else "NO"))
+                  print("MPW_CLOUDLINUX_RECOGNIZES_STAGING_ROOT=" +
+                        ("YES" if "saeit-staging" in text_data else "NO"))
+                  # Match the registered application, not just a directory token.
+                  registrations = []
+                  pending = [info]
+                  visited = 0
+                  while pending and visited < 500:
+                      node = pending.pop()
+                      visited += 1
+                      if isinstance(node, dict):
+                          apps = node.get("applications")
+                          if isinstance(apps, dict):
+                              for app_root, record in list(apps.items())[:100]:
+                                  if (isinstance(app_root, str)
+                                          and isinstance(record, dict)):
+                                      root = app_root.strip("/").lower()
+                                      if root.endswith("saeit-staging") or root.endswith("mojplaywin.com"):
+                                          domain = record.get("domain")
+                                          domain_status = (
+                                              "MOJPLAYWIN" if domain in ("mojplaywin.com", "www.mojplaywin.com")
+                                              else "OTHER_DOMAIN" if isinstance(domain, str) and domain
+                                              else "MISSING")
+                                          startup = record.get("startup_file")
+                                          startup_status = (
+                                              "PASSENGER_WSGI" if startup == "passenger_wsgi.py"
+                                              else "OTHER" if isinstance(startup, str) and startup
+                                              else "MISSING")
+                                          registration = (
+                                              "STAGING" if root.endswith("saeit-staging") else "PUBLIC",
+                                              domain_status, startup_status,
+                                              record.get("app_status") == "started")
+                                          registrations.append(registration)
+                          pending.extend(list(node.values())[:100])
+                      elif isinstance(node, list):
+                          pending.extend(node[:100])
+                  for root in ("STAGING", "PUBLIC"):
+                      selected = [item for item in registrations if item[0] == root]
+                      print("MPW_CLOUDLINUX_" + root + "_APP_REGISTRATIONS=" +
+                            str(len(selected)))
+                      print("MPW_CLOUDLINUX_" + root + "_DOMAIN_BINDING=" +
+                            ("MOJPLAYWIN" if any(x[1] == "MOJPLAYWIN" for x in selected)
+                             else "OTHER_DOMAIN" if selected else "UNREGISTERED"))
+                      print("MPW_CLOUDLINUX_" + root + "_STARTUP_FILE=" +
+                            ("PASSENGER_WSGI" if any(x[2] == "PASSENGER_WSGI" for x in selected)
+                             else "OTHER_OR_MISSING"))
+
+              except (OSError, ValueError, subprocess.TimeoutExpired):
+                  print("MPW_CLOUDLINUX_SELECTOR_GET=UNAVAILABLE")
+          # Categorize effective account-owned Python/Passenger process cwd.
+          # Do not log process IDs, arguments, environment values or arbitrary paths.
+          try:
+              snapshot = subprocess.run(
+                  ["ps", "-u", "zomorod2", "-o", "pid=,etimes=,comm=,args="],
+                  capture_output=True, timeout=10, check=False, text=True,
+              )
+              if snapshot.returncode or len(snapshot.stdout) > 250000:
+                  raise ValueError("PS_UNAVAILABLE")
+              process_cwd = {"PUBLIC": 0, "STAGING": 0, "OTHER": 0, "UNREADABLE": 0}
+              app_tag = {"PUBLIC": 0, "STAGING": 0, "BOTH": 0, "NEITHER": 0}
+              candidates = 0
+              for line in snapshot.stdout.splitlines()[:500]:
+                  fields = re.match(r"^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$", line)
+                  if not fields:
+                      continue
+                  pid, age, name, args = fields.groups()
+                  name, args = name.lower(), args.lower()
+                  if not ("passenger" in name or "passenger" in args
+                          or "wsgi" in args or "python" in name):
+                      continue
+                  candidates += 1
+                  has_public = "mojplaywin.com" in args
+                  has_staging = "saeit-staging" in args
+                  app_tag["BOTH" if has_public and has_staging else
+                          "PUBLIC" if has_public else "STAGING" if has_staging
+                          else "NEITHER"] += 1
+                  try:
+                      proc_root = os.readlink("/proc/" + pid + "/cwd")
+                      if proc_root == str(public) or proc_root.startswith(str(public) + "/"):
+                          process_cwd["PUBLIC"] += 1
+                      elif proc_root == str(app) or proc_root.startswith(str(app) + "/"):
+                          process_cwd["STAGING"] += 1
+                      else:
+                          process_cwd["OTHER"] += 1
+                  except OSError:
+                      process_cwd["UNREADABLE"] += 1
+              print("MPW_PROCESS_CWD_CANDIDATES=" + str(candidates))
+              for key, count in process_cwd.items():
+                  print("MPW_PROCESS_CWD_" + key + "=" + str(count))
+              for key, count in app_tag.items():
+                  print("MPW_PROCESS_COMMAND_TAG_" + key + "=" + str(count))
+          except (OSError, ValueError, subprocess.TimeoutExpired):
+              print("MPW_PROCESS_CWD_AUDIT=UNAVAILABLE")
+
+          # Check whether PassengerApps UAPI knows the manually configured public app.
+          try:
+              resp = subprocess.run(
+                  [command, "--output=json", "PassengerApps", "list_applications"],
+                  capture_output=True, timeout=15, check=False,
+              )
+              if resp.returncode or len(resp.stdout) > 1000000:
+                  raise ValueError("UAPI_UNAVAILABLE")
+              doc = json.loads(resp.stdout)
+              info = doc.get("result", {}) if isinstance(doc, dict) else {}
+              if not isinstance(info, dict) or info.get("status") not in (1, True, "1"):
+                  raise ValueError("UAPI_INVALID")
+              encoded = json.dumps(info.get("data"), sort_keys=True).lower()
+              print("MPW_PASSENGER_UAPI_MENTIONS_PUBLIC=" +
+                    ("YES" if "mojplaywin.com" in encoded else "NO"))
+              print("MPW_PASSENGER_UAPI_MENTIONS_STAGING=" +
+                    ("YES" if "saeit-staging" in encoded else "NO"))
+          except (OSError, ValueError, subprocess.TimeoutExpired):
+              print("MPW_PASSENGER_UAPI_BINDING=UNAVAILABLE")
+
+          public_htaccess = small_regular(public / ".htaccess", 100000)
+          if public_htaccess is not None:
+              config = public_htaccess.decode("utf8", "replace")
+              python_paths = re.findall(
+                  r"(?im)^\s*PassengerPython\s+([^\r\n#]+)", config)
+              if python_paths:
+                  selected = python_paths[-1].lower()
+                  interpreter = ("STAGING_VENV" if "saeit-staging" in selected else
+                                 "PUBLIC_VENV" if "mojplaywin.com" in selected else "OTHER")
+              else:
+                  interpreter = "NOT_DECLARED"
+              base_uris = re.findall(
+                  r"(?im)^\s*PassengerBaseURI\s+([^\r\n#]+)", config)
+              base = "ROOT" if base_uris and base_uris[-1].strip() == "/" else (
+                  "OTHER" if base_uris else "NOT_DECLARED")
+              print("MPW_PUBLIC_PASSENGER_PYTHON=" + interpreter)
+              print("MPW_PUBLIC_PASSENGER_BASE_URI=" + base)
+          print("MPW_PRODUCTION_FILE_WRITES=NONE")
+          print("MPW_ORDERS_CREATED=0;PAYMENTS_CREATED=0")
           print("CPANEL_SITE_MUTATIONS=NONE")
           print("CPANEL_FACTORY_OPERATIONS=NONE")
+          # Private queue capability audit. Read code and SQLite schema only:
+          # never read task rows, command payloads, key material or secrets.
+          import ast
+          import sqlite3
+          private_root = Path("/home/zomorod2/.private/zomorod-business")
+          ingress_path = private_root / "company_ingress.py"
+          safe_verbs = {
+              "accept", "show-public-key", "run", "execute", "execute-pending",
+              "run-pending", "drain", "dispatch", "claim", "complete", "worker",
+          }
+          try:
+              if (ingress_path.is_symlink() or not ingress_path.is_file()
+                      or ingress_path.stat().st_size > 200000):
+                  raise ValueError("PRIVATE_INGRESS_UNSAFE_OR_MISSING")
+              syntax = ast.parse(ingress_path.read_text(encoding="utf-8"))
+              parser_verbs = set()
+              for node in ast.walk(syntax):
+                  if (isinstance(node, ast.Call)
+                          and isinstance(node.func, ast.Attribute)
+                          and node.func.attr == "add_parser"
+                          and node.args
+                          and isinstance(node.args[0], ast.Constant)
+                          and isinstance(node.args[0].value, str)
+                          and node.args[0].value in safe_verbs):
+                      parser_verbs.add(node.args[0].value)
+              # The private CLI may dispatch via sys.argv or positional choices
+              # instead of argparse subparsers. Only expose fixed known tokens,
+              # never free-form source text, identifiers or command payloads.
+              literal_verbs = {
+                  node.value for node in ast.walk(syntax)
+                  if (isinstance(node, ast.Constant)
+                      and isinstance(node.value, str)
+                      and node.value in safe_verbs)
+              }
+              function_candidates = {
+                  node.name for node in ast.walk(syntax)
+                  if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                      and any(term in node.name.lower()
+                              for term in ("execute", "worker", "drain",
+                                           "dispatch", "process_queue",
+                                           "run_pending")))
+              }
+              print("PRIVATE_INGRESS_KNOWN_CLI_LITERALS=" +
+                    ("BOTH" if {"accept", "show-public-key"}.issubset(literal_verbs)
+                     else "PARTIAL" if {"accept", "show-public-key"} & literal_verbs
+                     else "NONE_DETECTED"))
+              print("PRIVATE_INGRESS_EXECUTION_LITERAL_DETECTED=" +
+                    ("YES" if literal_verbs.intersection(
+                        {"run", "execute", "execute-pending", "run-pending",
+                         "drain", "dispatch", "worker"}) else "NO"))
+              print("PRIVATE_INGRESS_WORKER_FUNCTION_CANDIDATE=" +
+                    ("YES" if function_candidates else "NO"))
+              print("PRIVATE_INGRESS_AST_AUDIT=OK")
+              print("PRIVATE_INGRESS_STATIC_PARSER_VERBS=" +
+                    (",".join(sorted(parser_verbs)) if parser_verbs else "NONE_DETECTED"))
+              print("PRIVATE_INGRESS_EXECUTOR_SUBCOMMAND_DETECTED=" +
+                    ("YES" if parser_verbs.intersection(
+                        {"run", "execute", "execute-pending", "run-pending",
+                         "drain", "dispatch", "worker"}) else "NO"))
+          except (OSError, UnicodeDecodeError, SyntaxError, ValueError):
+              print("PRIVATE_INGRESS_AST_AUDIT=UNAVAILABLE")
+          private_db = private_root / "command-center.sqlite3"
+          try:
+              if private_db.is_symlink() or not private_db.is_file():
+                  raise ValueError("PRIVATE_DB_UNSAFE_OR_MISSING")
+              uri = "file:" + str(private_db) + "?mode=ro&immutable=1"
+              with sqlite3.connect(uri, uri=True, timeout=4) as db:
+                  table_rows = db.execute(
+                      "SELECT name FROM sqlite_master WHERE type = 'table'"
+                  ).fetchall()
+                  matched = 0
+                  has_state = False
+                  has_result = False
+                  has_result_any_table = False
+                  keyed_payload_tables = 0
+                  integrity_field_tables = 0
+                  timestamp_field_tables = 0
+                  lease_field_tables = 0
+                  worker_contract_tables = 0
+                  for (table_name,) in table_rows[:150]:
+                      if not isinstance(table_name, str):
+                          continue
+                      quoted_name = table_name.replace('"', '""')
+                      columns = {
+                          row[1].lower() for row in db.execute(
+                              'PRAGMA table_info("' + quoted_name + '")'
+                          ).fetchall() if isinstance(row[1], str)
+                      }
+                      result_markers = bool(columns.intersection(
+                          {"result", "receipt", "completed_at", "finished_at",
+                           "outcome", "response", "execution_status"}))
+                      has_result_any_table |= result_markers
+                      if not any(word in table_name.lower()
+                                 for word in ("command", "queue", "task")):
+                          continue
+                      matched += 1
+                      identifiers = bool(columns.intersection(
+                          {"id", "command_id", "request_id", "task_id", "uuid", "nonce"}))
+                      payload = bool(columns.intersection(
+                          {"payload", "command", "command_json", "envelope",
+                           "data", "body", "request_json", "task_payload"}))
+                      integrity = bool(columns.intersection(
+                          {"hmac", "signature", "mac", "digest",
+                           "payload_hmac", "command_hmac"}))
+                      state = bool(columns.intersection(
+                          {"state", "status", "processed_at", "started_at"}))
+                      created = bool(columns.intersection(
+                          {"created_at", "received_at", "queued_at"}))
+                      lease = bool(columns.intersection(
+                          {"locked_at", "claimed_at", "lease_until"}))
+                      keyed_payload_tables += int(identifiers and payload)
+                      integrity_field_tables += int(integrity)
+                      timestamp_field_tables += int(created)
+                      lease_field_tables += int(lease)
+                      worker_contract_tables += int(
+                          identifiers and payload and integrity and state and created)
+                      has_state |= state
+                      has_result |= result_markers
+              print("PRIVATE_QUEUE_SCHEMA_AUDIT=OK")
+              print("PRIVATE_QUEUE_TABLES_DETECTED=" + str(matched))
+              print("PRIVATE_QUEUE_STATE_FIELD_DETECTED=" +
+                    ("YES" if has_state else "NO"))
+              print("PRIVATE_QUEUE_RESULT_FIELD_DETECTED=" +
+                    ("YES" if has_result else "NO"))
+              print("PRIVATE_SCHEMA_RESULT_MARKER_ANY_TABLE=" +
+                    ("YES" if has_result_any_table else "NO"))
+              # Only bounded aggregate field-shape flags leave cPanel. Never
+              # report table/column names, row contents, SQL DDL or secrets.
+              print("PRIVATE_QUEUE_KEYED_PAYLOAD_TABLES=" + str(keyed_payload_tables))
+              print("PRIVATE_QUEUE_INTEGRITY_FIELD_TABLES=" + str(integrity_field_tables))
+              print("PRIVATE_QUEUE_TIMESTAMP_FIELD_TABLES=" + str(timestamp_field_tables))
+              print("PRIVATE_QUEUE_LEASE_FIELD_TABLES=" + str(lease_field_tables))
+              print("PRIVATE_QUEUE_WORKER_CONTRACT_TABLES=" + str(worker_contract_tables))
+          except (OSError, ValueError, sqlite3.Error):
+              print("PRIVATE_QUEUE_SCHEMA_AUDIT=UNAVAILABLE")
           CPANEL_READONLY_PY
+      - name: Record private owner cutover decision and verify durable write
+        if: steps.gate.outputs.operation == 'cutover_record'
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          ssh -T -F "$RUNNER_TEMP/zomorod-command-channel/config" "$COMMAND_HOST" 'python3 -B -' <<'CUTOVER_WRITE_PY'
+          import hashlib
+          import json
+          import os
+          import pwd
+          import stat
+          from pathlib import Path
+          if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
+              raise SystemExit("CUTOVER_WRONG_ACCOUNT")
+          root = Path("/home/zomorod2/.private/zomorod-business")
+          if not root.is_dir() or root.is_symlink():
+              raise SystemExit("CUTOVER_PRIVATE_ROOT_INVALID")
+          target = root / "chat-relay-cutover-20261103.json"
+          document = {
+              "schema_version": 1,
+              "owner_decision": "retire_remote_desktop_commander_after_verified_chat_execution",
+              "primary_route": "ChatGPT-GitHub-Actions-pinned-VPS-cPanel",
+              "chat_readonly_evidence_run": 41547325620,
+              "scheduled_private_db_write_evidence_run": 41546326289,
+              "chat_cutover_record": "written_on_cpanel",
+              "generic_sealed_queue_execution": "not_verified",
+              "remote_desktop_commander": "not_disabled",
+              "recorded_date": "2026-11-03",
+          }
+          raw = (json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+          try:
+              fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+          except FileExistsError:
+              if target.is_symlink() or not target.is_file() or target.read_bytes() != raw:
+                  raise SystemExit("CUTOVER_EXISTING_RECORD_UNSAFE_OR_DIFFERENT")
+              print("CUTOVER_PRIVATE_WRITE=ALREADY_RECORDED")
+          else:
+              with os.fdopen(fd, "wb") as handle:
+                  handle.write(raw)
+                  handle.flush()
+                  os.fsync(handle.fileno())
+              print("CUTOVER_PRIVATE_WRITE=COMMITTED")
+          if not stat.S_ISREG(target.stat().st_mode) or target.stat().st_mode & 0o077:
+              raise SystemExit("CUTOVER_RECEIPT_PERMISSIONS_INVALID")
+          print("CUTOVER_RECEIPT_SHA256=" + hashlib.sha256(raw).hexdigest())
+          CUTOVER_WRITE_PY
+          ssh -T -F "$RUNNER_TEMP/zomorod-command-channel/config" "$COMMAND_HOST" 'python3 -B -' <<'CUTOVER_VERIFY_PY'
+          import json
+          import os
+          import pwd
+          from pathlib import Path
+          if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
+              raise SystemExit("CUTOVER_VERIFY_WRONG_ACCOUNT")
+          target = Path("/home/zomorod2/.private/zomorod-business/chat-relay-cutover-20261103.json")
+          if target.is_symlink() or not target.is_file() or target.stat().st_mode & 0o077:
+              raise SystemExit("CUTOVER_VERIFY_UNSAFE_RECORD")
+          document = json.loads(target.read_bytes())
+          if (document.get("chat_cutover_record") != "written_on_cpanel"
+                  or document.get("remote_desktop_commander") != "not_disabled"
+                  or document.get("chat_readonly_evidence_run") != 41547325620):
+              raise SystemExit("CUTOVER_VERIFY_CONTENT_MISMATCH")
+          print("CHAT_MUTATING_COMMAND_EXECUTED=YES")
+          print("PRIVATE_RECEIPT_VERIFIED=YES")
+          print("REMOTE_DISABLED=NO")
+          CUTOVER_VERIFY_PY
       - name: Read the current recipient public key
         if: steps.gate.outputs.operation == 'show_public_key'
         shell: bash

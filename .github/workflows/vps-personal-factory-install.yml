@@ -11,6 +11,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inspect:
+    # F-01 retired: 20-item scan plus recurring parallel private handoff.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

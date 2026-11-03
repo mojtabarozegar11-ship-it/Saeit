@@ -15,6 +15,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   install:
+    # F-01 retired: legacy 3-item sender cron bypasses signed singleton handoff.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

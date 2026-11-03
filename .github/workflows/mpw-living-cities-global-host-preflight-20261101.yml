@@ -1,0 +1,68 @@
+name: MojPlayWin Living Cities global hosting exact read-only preflight
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-living-cities-global-host-preflight-20261101.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Pinned connection to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Strict read-only inspect MojPlayWin site and game route
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 65s ssh -T -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          import os,shutil,re,hashlib
+          home=Path("/home/zomorod2")
+          root=home/"mojplaywin.com"
+          print("MPW_ROOT_DIR="+str(root.is_dir() and not root.is_symlink()))
+          print("MPW_ROOT_OWNER_MATCH="+str(root.stat().st_uid==os.geteuid()))
+          print("MPW_FREE_MIB="+str(shutil.disk_usage(str(root)).free//1048576))
+          for rel in ("living-cities","living-cities/play","games","games/index.html",
+                      "passenger_wsgi.py",".htaccess","game-releases","static"):
+              p=root/rel
+              print("MPW_PATH="+rel+" exists="+str(p.exists())+" link="+str(p.is_symlink())+
+                    " file="+str(p.is_file())+" dir="+str(p.is_dir()))
+          for name in ("index.html","games/index.html",".htaccess","games/.htaccess"):
+              p=root/name
+              if p.is_file() and not p.is_symlink():
+                  b=p.read_bytes()
+                  print("MPW_FILE="+name+" bytes="+str(len(b))+
+                        " sha256="+hashlib.sha256(b).hexdigest()+
+                        " living_cities_reference="+str(b"living-cities" in b.lower()))
+                  if name==".htaccess":
+                      for key in ("PassengerBaseURI","PassengerEnabled","PassengerAppRoot","RewriteRule"):
+                          print("MPW_ROOT_"+key+"_COUNT="+str(len(re.findall(
+                            r"^\s*"+key+r"\s",b.decode("utf-8","replace"),re.I|re.M))))
+          print("MPW_PREFLIGHT_READ_ONLY=PASS")
+          PY
+      - name: Compare live host status without changing public content
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 55s ssh -T -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          ip="$(getent ahostsv4 mojplaywin.com | awk 'NR==1{print $1}')"
+          test -n "$ip"
+          for route in / /games/ /living-cities/play/; do
+            code="$(curl -ksS -4 --connect-timeout 5 --max-time 12 --resolve "mojplaywin.com:443:$ip" -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route" || true)"
+            echo "MPW_BASELINE_ORIGIN=$route HTTP=$code"
+          done
+          REMOTE
+      - name: Scrub temporary SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"

@@ -1,0 +1,102 @@
+name: MojPlayWin Living Cities Global Featured Games Listing
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-global-game-catalog-publish-20261101.yml]
+  workflow_dispatch:
+permissions: {contents: read}
+concurrency: {group: mpw-global-living-cities-games-catalog, cancel-in-progress: false}
+jobs:
+  publish-feature:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check exact scope and own game before touching shared template
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_global_game_catalog_add.py
+          grep -Fq 'f4150c91aa0a6294b5b6d1536bbdab32fd4d7c3fe6e6e151241a5335d483dddc' scripts/mpw_global_game_catalog_add.py
+          grep -Fq 'Saeit-staging' scripts/mpw_global_game_catalog_add.py
+          echo MPW_CATALOG_BOUNDED_SCRIPT=PASS
+      - name: Pinned relay to MojPlayWin host
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Protect actual template using exact hash and offsite backup
+        id: patch
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 55s ssh -T -F "$d/config" host 'python3 - publish' < scripts/mpw_global_game_catalog_add.py
+          timeout 50s ssh -T -F "$d/config" host 'python3 - verify' < scripts/mpw_global_game_catalog_add.py
+          timeout 60s ssh -T -F "$d/config" host 'cat "$HOME/.private/mpw-living-cities-global/catalog/games-page-before-global.html"' |
+            timeout 60s ssh -T -F "$d/config" vps 'umask 077; cat > "$HOME/.private/living-cities-transport/mpw-global-games-catalog-original-20261101.html"'
+          timeout 45s ssh -T -F "$d/config" vps 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          p="$HOME/.private/living-cities-transport/mpw-global-games-catalog-original-20261101.html"
+          test "$(sha256sum "$p" | awk '{print $1}')" = f4150c91aa0a6294b5b6d1536bbdab32fd4d7c3fe6e6e151241a5335d483dddc
+          chmod 600 "$p"
+          echo MPW_GAMES_CATALOG_OFFHOST_RESTORE_CHECK=PASS
+          REMOTE
+      - name: Restart only MojPlayWin Passenger app after verified template installation
+        id: restart
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 45s ssh -T -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          site="$HOME/mojplaywin.com"
+          test -d "$site" && test ! -L "$site" && test -f "$site/passenger_wsgi.py"
+          test ! -L "$site/tmp"
+          install -d -m 700 "$site/tmp"
+          test ! -L "$site/tmp/restart.txt"
+          touch "$site/tmp/restart.txt"
+          echo MPW_PASSENGER_TEMPLATE_REFRESH_REQUESTED=PASS
+          REMOTE
+      - name: Confirm visible game card and preserved MojPlayWin live routes
+        id: smoke
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 150s ssh -T -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          ip="$(getent ahostsv4 mojplaywin.com | awk 'NR==1{print $1}')"
+          test -n "$ip"
+          for path in /games/ /living-cities/ /living-cities/play/ / /studio/ /store/; do
+            response="$(mktemp)"
+            code=000
+            for i in 1 2 3 4; do
+              code="$(curl -ksSL -4 --connect-timeout 7 --max-time 22 --resolve "mojplaywin.com:443:$ip" -o "$response" -w '%{http_code}' "https://mojplaywin.com$path" || true)"
+              test "$code" = 200 && break
+              sleep 3
+            done
+            echo "MPW_GLOBAL_FEATURED_ROUTE=$path HTTP=$code"
+            if test "$code" != 200; then rm -f "$response";exit 1;fi
+            if test "$path" = /games/; then
+              grep -Fq 'mpw-global-living-cities-feature-20261101' "$response"
+              grep -Fq 'href="/living-cities/play/"' "$response"
+              grep -Fq 'First Realm' "$response"
+            fi
+            if test "$path" = /living-cities/play/; then
+              grep -Fq 'data-lc-edition="browser"' "$response"
+            fi
+            rm -f "$response"
+          done
+          echo MPW_GLOBAL_GAME_DISCOVERY_PUBLIC=PASS
+          REMOTE
+      - name: Restore exact original game listing only on regression
+        if: failure() && steps.patch.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          if test -f "$d/config"; then
+            timeout 65s ssh -T -F "$d/config" host 'python3 - rollback' < scripts/mpw_global_game_catalog_add.py
+            timeout 35s ssh -T -F "$d/config" host 'touch "$HOME/mojplaywin.com/tmp/restart.txt"'
+          fi
+      - name: Wipe temporary SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
