@@ -26,7 +26,14 @@ class QualityModuleUpgradeTests(unittest.TestCase):
         self.assertIn("scripts/factory_evidence_quality.py", workflow)
         self.assertIn("workflow_dispatch:", workflow)
         self.assertIn("branches: [main]", workflow)
-        self.assertIn("[approved-factory-unlimited-builds-20261019]", workflow)
+        # F-01 supersedes the legacy unlimited-build authorization.
+        deploy_gate = workflow.split("\n  deploy:\n", 1)[1].split("\n    steps:\n", 1)[0]
+        self.assertIn("    if: false", deploy_gate)
+        self.assertIn(
+            "F01_LEGACY_MULTIPRODUCT_INSTALL_DISABLED_UNTIL_GLOBAL_SINGLETON_PROVEN",
+            content,
+        )
+        self.assertLess(content.index("exit 3"), content.index("repo="))
 
     def test_upgrade_is_guarded_and_can_roll_back_code(self):
         s = UPGRADE.read_text(encoding="utf-8")
