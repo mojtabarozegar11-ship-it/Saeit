@@ -45,6 +45,8 @@ HOURLY_HANDOFF_SCHEMA = "saeit.factory.hourly-cycle-handoff.v1"
 RECEIVER_CYCLES = frozenset({"R-01", "B-01", "S-01", "G-01"})
 # Operator-managed trust anchor: NEVER load keys from factory-writable output.
 RECEIVER_TRUST_ROOT = Path("/etc/saeit/hourly-cycle-receiver-public-keys")
+# Independent reviewer public keys are provisioned by an operator, not the factory.
+REVIEWER_TRUST_ROOT = Path("/etc/saeit/factory-quality-reviewer-public-keys")
 
 
 def _read_private_json(path):
@@ -80,6 +82,40 @@ def _write_private_json(path, value):
             os.unlink(temporary)
 
 
+def _verified_clearance_signatures(clearance_path, roles):
+    """Require three detached, independently verifiable quality sign-offs.
+
+    The factory must not be able to generate or modify review trust keys.
+    A claimed valid_signed_roles list is not cryptographic evidence.
+    """
+    trust = REVIEWER_TRUST_ROOT
+    try:
+        if (trust.is_symlink() or trust.parent.is_symlink()
+                or not trust.is_dir() or trust.stat().st_mode & 0o022):
+            return False
+        baseline = hashlib.sha256(clearance_path.read_bytes()).hexdigest()
+        if clearance_path.is_symlink():
+            return False
+        for role in sorted(roles):
+            public_key = trust / (role + ".pem")
+            signature = clearance_path.parent / (role + ".sig")
+            if (public_key.is_symlink() or signature.is_symlink()
+                    or not public_key.is_file() or not signature.is_file()
+                    or not 0 < signature.stat().st_size <= 4096
+                    or not 0 < public_key.stat().st_size <= 16384
+                    or public_key.stat().st_mode & 0o022):
+                return False
+            check = subprocess.run(
+                ["openssl", "dgst", "-sha256", "-verify", str(public_key),
+                 "-signature", str(signature), str(clearance_path)],
+                capture_output=True, timeout=5, check=False)
+            if check.returncode != 0:
+                return False
+        return hashlib.sha256(clearance_path.read_bytes()).hexdigest() == baseline
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
+
+
 def _verified_quality_exit(root, recipe):
     """Only a current, signed 1000/1000 clearance frees a production slot."""
     manifest_path = root / "digital-products" / recipe / "manufacturing_manifest.json"
@@ -113,6 +149,8 @@ def _verified_quality_exit(root, recipe):
             or clearance.get("owner_authorization_kind") not in ("direct_owner", "verified_delegated_agent")
             or clearance.get("publication_executed") is not False
             or clearance.get("payment_activated") is not False):
+        return None
+    if not _verified_clearance_signatures(clearance_path, independent_roles):
         return None
     return {"artifact_sha256": artifact_sha,
             "clearance_sha256": hashlib.sha256(clearance_path.read_bytes()).hexdigest()}
