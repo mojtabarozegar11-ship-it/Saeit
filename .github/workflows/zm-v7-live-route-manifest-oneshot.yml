@@ -1,0 +1,104 @@
+name: ZM V7 one-time private route manifest (read-only)
+on:
+  push:
+    branches:
+      - audit/zm-v7-oneshot-20261103-56pcm4
+    paths:
+      - '.github/workflows/zm-v7-live-route-manifest-oneshot.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zm-v7-oneshot-structure-20261103
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-business-source-readonly"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo "VPS_HOSTKEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # Resolve cPanel from the already pinned VPS, then compare its ED25519
+          # fingerprint before any connection to the production account.
+          scan="$(timeout 35s ssh -T -F "$d/config" saeit-vps 'timeout 10s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOSTKEY=verified"
+          timeout 100s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import hashlib, os, pathlib, re, stat, sys
+          path=pathlib.Path(os.path.expanduser('~/.private/zomorod-business/app.php'))
+          parent=path.parent
+          if parent.is_symlink() or not parent.is_dir(): raise SystemExit('PRIVATE_DIRECTORY_UNSAFE')
+          meta=path.lstat()
+          if not stat.S_ISREG(meta.st_mode) or meta.st_uid!=os.getuid() or not (1024<meta.st_size<1000000): raise SystemExit('LIVE_FILE_UNSAFE')
+          data=path.read_bytes()
+          src=data.decode('utf-8')
+          print('AUDIT_MODE=read_only_bounded')
+          print('LIVE_APP_SHA256='+hashlib.sha256(data).hexdigest())
+          print('LIVE_APP_BYTES='+str(len(data)))
+          pages=['insights','command_center','workflow_desk','industry_ops','period_controls','finance_audit','payroll']
+          actions=['cc_create','cc_scan','cc_transition','cc_plan','cc_evidence','cc_review','flow_create','flow_transition','industry_create','industry_advance','period_freeze','period_close','payroll_create','payroll_decision']
+          page_names=set(re.findall(r"\$page\s*===\s*['\"]([a-z_]+)['\"]",src))
+          action_names=set(re.findall(r"\$action\s*===\s*['\"]([a-z_]+)['\"]",src))
+          for group in re.findall(r"in_array\s*\(\s*\$action\s*,\s*\[([^\]]+)\]",src):
+              action_names.update(re.findall(r"['\"]([a-z_]+)['\"]",group))
+          for key in pages: print('ROUTE_'+key.upper()+'='+('present' if key in page_names else 'absent'))
+          for key in actions: print('ACTION_'+key.upper()+'='+('present' if key in action_names else 'absent'))
+          for key in ['workflow_desk.php','industry_operations.php','finance_audit.php','payroll_control.php','payroll_ui.php','period_controls.php']:
+              print('MODULE_'+key.replace('.php','').upper()+'='+('referenced' if key in src else 'unreferenced'))
+          pos=src.find('function record(')
+          next_pos=src.find('\nfunction ',pos+1) if pos>=0 else -1
+          body=src[pos:(next_pos if next_pos>=0 else len(src))] if pos>=0 else ''
+          guard=bool(re.search(r'\bzmPeriodGuard\s*\(',body))
+          print('RECORD_PERIOD_GUARD='+('present' if guard else 'absent'))
+          print('LIVE_SOURCE_EXPORTED=no')
+          PY
+          REMOTE
