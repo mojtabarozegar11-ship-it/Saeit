@@ -409,6 +409,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         raise ValueError('DESIGN_CAPACITY_INVALID')
     # Line 41 accepts only one product input per manufacturing cycle.
     design_capacity = min(design_capacity, PRODUCT_SLOT_CAPACITY)
+    # Research candidate preparation shares the same one-SKU tick budget.
+    max_products = min(max_products, PRODUCT_SLOT_CAPACITY)
     started=time.time()
     root = Path(output).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
