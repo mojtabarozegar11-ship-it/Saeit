@@ -973,6 +973,20 @@ jobs:
                   segment = ast.get_source_segment(source, node)
                   if isinstance(segment, str) and len(segment) <= 40000:
                       selected_functions[node.name] = segment
+          # Only protocol parameter definitions, never private keys or runtime data.
+          protocol_assignments = []
+          permitted_protocol_names = {
+              "MAGIC", "OUTER_FIELDS", "INNER_FIELDS", "TASK_FIELDS",
+              "MAX_ENVELOPE", "MAX_PLAINTEXT", "HEX32",
+          }
+          for node in tree.body:
+              if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                  targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                  if any(isinstance(target, ast.Name)
+                         and target.id in permitted_protocol_names for target in targets):
+                      segment = ast.get_source_segment(source, node)
+                      if isinstance(segment, str) and len(segment) <= 2000:
+                          protocol_assignments.append(segment)
           sql_literals = [
               node.value.strip()[:1500] for node in ast.walk(tree)
               if (isinstance(node, ast.Constant) and isinstance(node.value, str)
@@ -1020,6 +1034,7 @@ jobs:
               "ingress_source_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
               "functions": defs,
               "selected_function_source": selected_functions,
+              "protocol_assignments": protocol_assignments,
               "bridge_contract": {
                   "source_sha256": hashlib.sha256(bridge_text.encode("utf-8")).hexdigest(),
                   "functions": bridge_functions[:150],
