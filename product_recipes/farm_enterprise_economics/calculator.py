@@ -83,9 +83,11 @@ def enterprise(entry):
     # positive break-even unit price impossible at the selected sales volume.
     price_denominator = Decimal(1) - fee_rate
     break_even_unit_price = None
+    break_even_unit_price_unrounded = None
     if quantity > 0 and price_denominator > 0:
         required = (variable + fixed / quantity) / price_denominator
         break_even_unit_price = str(required.quantize(Decimal("0.01"), rounding=ROUND_CEILING))
+        break_even_unit_price_unrounded = format(required, "f")
     safety_units = quantity - Decimal(break_even) if break_even is not None else None
     safety_percent = (
         (safety_units * 100 / quantity).quantize(Decimal("0.01"))
@@ -95,7 +97,9 @@ def enterprise(entry):
         "name": name,
         "units_sold": str(quantity),
         "unit_price": money(unit_price),
+        "unit_price_exact": format(unit_price, "f"),
         "variable_cost_per_unit": money(variable),
+        "variable_cost_per_unit_exact": format(variable, "f"),
         "allocated_fixed_cost": money(fixed),
         "selling_fee_percent": str(fee_pct),
         "sales_revenue": money(revenue),
@@ -104,10 +108,12 @@ def enterprise(entry):
         "total_cost": money(total_cost),
         "contribution_margin_total": money(contribution),
         "contribution_per_unit": money(contribution_unit),
+        "contribution_per_unit_exact": format(contribution_unit, "f"),
         "operating_profit": money(operating_profit),
         "break_even_units": break_even,
         "break_even_reachable": contribution_unit > 0,
         "break_even_unit_price_at_planned_volume": break_even_unit_price,
+        "break_even_unit_price_unrounded": break_even_unit_price_unrounded,
         "margin_of_safety_units": str(safety_units) if safety_units is not None else None,
         "margin_of_safety_percent": str(safety_percent) if safety_percent is not None else None,
     }
@@ -174,7 +180,7 @@ def evaluate(data):
                 "modeled_operating_profit": money(total_profit),
             })
     return {
-        "version": "1.2",
+        "version": "1.3",
         "currency": currency,
         "accounting_scope": "contribution_profit_before_depreciation_financing_tax",
         "input_values_independently_validated": False,
@@ -203,7 +209,7 @@ def render_html_report(report):
     def table(columns, data, keys):
         header = "".join("<th scope=\"col\">" + e(label) + "</th>" for label in columns)
         body = "".join(
-            "<tr>" + "".join("<td>" + e(row[key]) + "</td>" for key in keys) + "</tr>"
+            "<tr>" + "".join("<td>" + e("N/A" if row[key] is None else row[key]) + "</td>" for key in keys) + "</tr>"
             for row in data
         )
         return "<div class=\"scroll\"><table><thead><tr>" + header + (
@@ -222,10 +228,12 @@ def render_html_report(report):
         )
     )
     enterprise_table = table(
-        ("Enterprise", "Sold units", "Unit price", "Operating profit", "Break-even units",
+        ("Enterprise", "Sold units", "Unit price (input precision)", "Variable cost/unit (input precision)",
+         "Contribution/unit (model precision)", "Operating profit", "Break-even units",
          "Margin of safety (%)"),
         rows,
-        ("name", "units_sold", "unit_price", "operating_profit",
+        ("name", "units_sold", "unit_price_exact", "variable_cost_per_unit_exact",
+         "contribution_per_unit_exact", "operating_profit",
          "break_even_units", "margin_of_safety_percent"),
     )
     stress_table = table(
@@ -255,7 +263,7 @@ aside{border-left:4px solid #a05b22;padding:1rem;background:#fff7e9}
 <section><h2>Enterprise operating results</h2>""" + enterprise_table + """</section>
 <section><h2>Whole-portfolio sensitivity</h2><p>Correlated volume and selling-price changes are applied to all enterprises at once. These are scenarios, not probabilities or forecasts.</p>""" + stress_table + """</section>
 <section><h2>Model boundaries</h2><ul>""" + assumptions + """</ul>
-<aside>Pre-tax, pre-financing contribution model. Results are not forecasts or investment recommendations. Verify all entered quantities, costs, allocations and market assumptions.</aside></section>
+<aside>Pre-tax, pre-financing contribution model. Per-unit figures retain input/model decimal precision; displayed money totals are rounded to 0.01 currency units. Results are not forecasts or investment recommendations. Verify all entered quantities, costs, allocations and market assumptions.</aside></section>
 </main><footer><small>Generated locally. No accounts, telemetry or network connection.</small></footer></body></html>
 """
 
