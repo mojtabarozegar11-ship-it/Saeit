@@ -43,7 +43,10 @@ def require_active_merchant_wallet(settings, receiver: str, *, report_path=None,
     The watcher cannot switch commerce on: activation review is a separate,
     explicit server setting, in addition to the existing public release gate.
     """
-    if getattr(settings, "MPW_WALLETLESS_TRX_ACTIVATION_REVIEW_APPROVED", False) is not True:
+    approval = getattr(settings, "MPW_WALLETLESS_TRX_ACTIVATION_REVIEW_APPROVED", None)
+    if approval is None:
+        approval = os.environ.get("MPW_WALLETLESS_TRX_ACTIVATION_REVIEW_APPROVED", "0") == "1"
+    if approval is not True:
         raise PaymentHold("Merchant TRON activation requires explicit review approval")
     if (not isinstance(receiver, str) or not ADDRESS.fullmatch(receiver)
             or receiver != "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73"):
