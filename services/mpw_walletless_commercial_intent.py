@@ -31,6 +31,58 @@ LC_RESERVED_MIN_SUN = 1_000
 LC_RESERVED_MAX_SUN = 99_999
 SUN_PER_TRX = 1_000_000
 
+# The same independently monitored mainnet receiver is used by the game and
+# the storefront. This private, local-only evidence never initiates a transfer.
+TRON_READINESS_REPORT = "/home/zomorod2/.lc-isolated-stage/.tron-readiness.json"
+
+
+def require_active_merchant_wallet(settings, receiver: str, *, report_path=None, now=None):
+    """Fail closed for NEW payable invoices until activation + operator review.
+
+    Never gate settled buyer entitlements or blockchain reconciliation here.
+    The watcher cannot switch commerce on: activation review is a separate,
+    explicit server setting, in addition to the existing public release gate.
+    """
+    if getattr(settings, "MPW_WALLETLESS_TRX_ACTIVATION_REVIEW_APPROVED", False) is not True:
+        raise PaymentHold("Merchant TRON activation requires explicit review approval")
+    if (not isinstance(receiver, str) or not ADDRESS.fullmatch(receiver)
+            or receiver != "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73"):
+        raise PaymentHold("Merchant receiver does not match the approved TRON wallet")
+    path = report_path if report_path is not None else TRON_READINESS_REPORT
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(path, flags)
+        try:
+            info = os.fstat(fd)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                    or info.st_mode & 0o077 or info.st_size > 8192
+                    or info.st_size == 0 or info.st_nlink != 1):
+                raise PaymentHold("Untrusted merchant readiness evidence")
+            raw = os.read(fd, 8193)
+        finally:
+            os.close(fd)
+        report = json.loads(raw)
+        checked = datetime.fromisoformat(report["checked_at_utc"])
+        first = datetime.fromisoformat(report["first_positive_utc"])
+        current = now if now is not None else datetime.now(timezone.utc)
+        if (checked.tzinfo is None or first.tzinfo is None
+                or current.tzinfo is None or not 0 <=
+                (current - checked).total_seconds() <= 1800
+                or (checked - first).total_seconds() < 600):
+            raise PaymentHold("Merchant activation proof is stale or incomplete")
+        if (report.get("status") != "WALLET_ACTIVE_REVIEW_REQUIRED"
+                or report.get("receiver_address") != receiver
+                or report.get("receiver_configured") is not True
+                or report.get("full_rpc_reachable") is not True
+                or report.get("solid_rpc_reachable") is not True
+                or report.get("full_wallet_active") is not True
+                or report.get("solid_wallet_active") is not True
+                or report.get("incoming_index_ready") is not True
+                or report.get("main_gateway_authorized") is not True):
+            raise PaymentHold("Merchant TRON wallet is not confirmed active")
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        raise PaymentHold("Merchant TRON activation evidence is unavailable") from exc
+
 
 def reserved_for_living_cities(amount_sun: int) -> bool:
     return (type(amount_sun) is int and amount_sun > 0
@@ -185,6 +237,7 @@ def reserve_commercial_intent(order_id: int, buyer_id: int, *, rate_provider,
     except (TypeError, ValueError) as exc:
         raise PaymentHold("Invalid merchant-owned TRON address") from exc
     current = now or django_timezone.now()
+    require_active_merchant_wallet(settings, recipient, now=current)
 
     # Other payment rails are disabled in this controlled test. This check
     # also avoids ambiguous reuse of CommerceInvoice's signed invoice table.
