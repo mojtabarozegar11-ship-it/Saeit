@@ -385,6 +385,75 @@ jobs:
           PY
           else echo FACTORY_PRIVATE_PRODUCT_STATE_MISSING; fi
           echo FACTORY_PRIVATE_PRODUCT_SNAPSHOT_DONE
+          echo FACTORY_F01_READONLY_ACCEPTANCE_BEGIN
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+          root = Path.home() / "factory-runtime/private/autonomous-product-cycle"
+          area = root / "production-instructions"
+          def safe_json(path):
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size > 2000000:
+                      return None
+                  obj = json.loads(path.read_text(encoding="utf8"))
+                  return obj if isinstance(obj, dict) else None
+              except (OSError, UnicodeError, ValueError):
+                  return None
+          reservation = safe_json(root / ".f01-global-production-lane.json")
+          owner = reservation.get("owner") if reservation else None
+          print("F01_GLOBAL_LANE_OWNER=" + (owner if owner in ("line41", "agri200") else "UNVERIFIED"))
+          line = safe_json(root / "quality-excellence/product-flow/active-slots/current.json")
+          slots = line.get("active") if line else None
+          valid_slots = (isinstance(slots, list) and len(slots) <= 1
+                         and all(isinstance(item, dict)
+                                 and re.fullmatch(r"[a-z][a-z0-9_]{1,65}",
+                                                  str(item.get("recipe", "")))
+                                 for item in slots))
+          print("F01_LINE41_SLOT_STATE=" + ("VALID" if valid_slots else "UNVERIFIED"))
+          print("F01_LINE41_ACTIVE_COUNT=" + (str(len(slots)) if valid_slots else "UNKNOWN"))
+          if valid_slots and slots:
+              print("F01_LINE41_ACTIVE_RECIPE=" + slots[0]["recipe"])
+          orders = safe_json(area / "owner-agri200-p0-index.json")
+          ids = orders.get("order_ids_ranked") if orders else None
+          valid_ids = (orders is not None and orders.get("topic_count") == 200
+                       and isinstance(ids, list) and len(ids) == 200
+                       and len(set(str(x) for x in ids)) == 200
+                       and all(isinstance(x, str)
+                               and re.fullmatch(r"[A-Za-z0-9_-]{3,100}", x)
+                               for x in ids))
+          print("F01_AGRI200_INDEX=" + ("VALID_200" if valid_ids else "UNVERIFIED"))
+          present = sum((area / "orders" / (name + ".json")).is_file()
+                        for name in ids) if valid_ids else 0
+          print("F01_AGRI200_ORDER_FILES_PRESENT=" + str(present))
+          active = safe_json(area / "stage-06/strict-serial-active-v1.json")
+          print("F01_AGRI200_STATE=" + ("PRESENT" if active else "UNVERIFIED"))
+          def trusted_pem(folder, name):
+              directory = Path("/etc/saeit") / folder
+              key = directory / (name + ".pem")
+              try:
+                  return (directory.is_dir() and not directory.is_symlink()
+                          and not directory.parent.is_symlink()
+                          and not directory.stat().st_mode & 0o022
+                          and key.is_file() and not key.is_symlink()
+                          and 0 < key.stat().st_size <= 16384
+                          and not key.stat().st_mode & 0o022)
+              except OSError:
+                  return False
+          reviewers = ("domain_specialist", "independent_quality_auditor", "rights_reviewer")
+          for role in reviewers:
+              print("F01_REVIEWER_KEY_" + role.upper() + "="
+                    + ("READY" if trusted_pem("factory-quality-reviewer-public-keys", role)
+                       else "MISSING_OR_UNTRUSTED"))
+          cycles = ("R-01", "B-01", "S-01", "G-01")
+          verified = sum(trusted_pem("hourly-cycle-receiver-public-keys", c) for c in cycles)
+          print("F01_RECEIVER_PUBLIC_KEYS_VERIFIED=" + str(verified))
+          print("F01_GLOBAL_SCHEDULER_AUDIT_SCOPE=PROCESS_LIST_GITHUBOPS_CRON_AND_SYSTEMD")
+          print("F01_QC1000_AUTHORIZATION=NOT_ESTABLISHED_BY_READONLY_AUDIT")
+          print("F01_LIVE_PRODUCTION_ACTIVATION=FORBIDDEN_UNTIL_GLOBAL_PROOF")
+          PY
+          echo FACTORY_F01_READONLY_ACCEPTANCE_DONE
           echo FACTORY_INVENTORY_READ_ONLY_DONE
           REMOTE
 # 2026-10-14 dynamic factory verification requested by operator
