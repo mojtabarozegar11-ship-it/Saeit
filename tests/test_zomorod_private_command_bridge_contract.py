@@ -392,7 +392,7 @@ def test_private_queue_capability_audit_is_metadata_only_and_valid_python():
     ):
         assert marker in parsed
     assert "ast.parse(ingress_path.read_text" in parsed
-    assert "mode=ro" in parsed
+    assert "mode=ro&immutable=1" in parsed
     assert "SELECT name FROM sqlite_master WHERE type = 'table'" in parsed
     assert "PRAGMA table_info" in parsed
     assert "SELECT *" not in parsed
