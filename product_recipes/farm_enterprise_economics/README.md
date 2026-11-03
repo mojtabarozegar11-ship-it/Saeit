@@ -81,8 +81,14 @@ existing consumers. Do NOT use those legacy display fields to make decisions
 about sub-cent commodities. The HTML table uses the precision-preserving values.
 Portfolio monetary totals still display two decimals in the declared currency;
 this is a presentation choice, not a claim about minor currency units or
-rounding rules in a particular country. Calculations use unrounded Decimal
-inputs, subject to the documented 80-digit model precision.
+rounding rules in a particular country. Portfolio revenue, expenses, contribution
+and profit are summed from original Decimal quantities and costs **before**
+final display rounding. As a result, the portfolio total can differ by a few
+minor units from the sum of the individually rounded enterprise display rows.
+This is intentional: the model does not silently discard sub-cent values.
+The unshocked portfolio scenario must equal the portfolio operating profit.
+Calculations use unrounded Decimal inputs, subject to the documented 80-digit
+model precision.
 
 ## Whole-farm portfolio risk overview
 

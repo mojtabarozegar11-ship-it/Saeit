@@ -109,6 +109,36 @@ class EconomicsTests(unittest.TestCase):
         self.assertEqual(result["portfolio"]["operating_profit"], "2400.00")
         self.assertEqual(len(result["scenario_results"]), 18)
 
+    def test_portfolio_rounds_once_after_aggregating_subcent_enterprises(self):
+        # Rounding each enterprise first would incorrectly turn both the
+        # portfolio's revenue and operating profit into zero.
+        row = {
+            "units_sold": "1",
+            "unit_price": "0.005",
+            "variable_cost_per_unit": "0.001",
+            "allocated_fixed_cost": "0.001",
+            "selling_fee_percent": "0",
+        }
+        report = evaluate({"currency": "USD", "enterprises": [
+            dict(row, name="Small unit A"),
+            dict(row, name="Small unit B"),
+        ]})
+        self.assertEqual([r["sales_revenue"] for r in report["results"]],
+                         ["0.00", "0.00"])
+        self.assertEqual([r["operating_profit"] for r in report["results"]],
+                         ["0.00", "0.00"])
+        self.assertEqual(report["portfolio"], {
+            "sales_revenue": "0.01",
+            "total_cost": "0.00",
+            "operating_profit": "0.01",
+            "contribution_margin_total": "0.01",
+        })
+        base = next(row for row in report["portfolio_scenario_results"]
+                    if row["volume_multiplier"] == "1.00"
+                    and row["price_multiplier"] == "1.00")
+        self.assertEqual(base["modeled_operating_profit"],
+                         report["portfolio"]["operating_profit"])
+
     def test_rejects_invalid_inputs(self):
         bad = dict(self.example)
         bad["enterprises"] = [dict(self.example["enterprises"][0], units_sold=-1)]

@@ -131,14 +131,37 @@ def evaluate(data):
         raise ValueError("enterprises must be a list of 1 to 100 items")
     names = set()
     results = []
+    # Aggregate the raw Decimal metrics and round once for each portfolio KPI.
+    # Adding the already-rounded per-enterprise display fields can lose
+    # significant money when many commodity transactions are sub-cent.
+    raw_totals = {
+        "sales_revenue": Decimal(0),
+        "total_cost": Decimal(0),
+        "operating_profit": Decimal(0),
+        "contribution_margin_total": Decimal(0),
+    }
     for obj in rows:
         item = enterprise(obj)
         if item["name"].casefold() in names:
             raise ValueError("enterprise names must be unique")
         names.add(item["name"].casefold())
         results.append(item)
+        quantity = Decimal(item["units_sold"])
+        unit_price = Decimal(item["unit_price_exact"])
+        variable_unit = Decimal(item["variable_cost_per_unit_exact"])
+        fixed = decimal_number(obj["allocated_fixed_cost"],
+                               item["name"] + ".allocated_fixed_cost", min_value=0)
+        fee_rate = Decimal(item["selling_fee_percent"]) / Decimal(100)
+        revenue = quantity * unit_price
+        selling_fees = revenue * fee_rate
+        variable_total = quantity * variable_unit
+        contribution = revenue - selling_fees - variable_total
+        raw_totals["sales_revenue"] += revenue
+        raw_totals["total_cost"] += selling_fees + variable_total + fixed
+        raw_totals["contribution_margin_total"] += contribution
+        raw_totals["operating_profit"] += contribution - fixed
     def total(key):
-        return money(sum((Decimal(r[key]) for r in results), Decimal(0)))
+        return money(raw_totals[key])
     scenarios = []
     for r in rows:
         name = str(r["name"]).strip()
