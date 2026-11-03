@@ -1,9 +1,12 @@
 name: ZM guarded bank navigation inside private accounting desk
 on:
-  push:
-    branches: [feature/zm-bank-ledger-20261102]
-    paths:
-      - '.github/workflows/zm-banking-nav-live-20261102.yml'
+  workflow_dispatch:
+    inputs:
+      historical_patch_acknowledged:
+        description: 'Obsolete one-hunk bank navigation patch: use only when independently reviewed; normal app release uses the 20261103 workflow'
+        required: true
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
@@ -11,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   guarded-bank-navigation:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && inputs.historical_patch_acknowledged == true
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
