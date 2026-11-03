@@ -449,6 +449,8 @@ def test_owner_sealed_schema_contract_is_encrypted_before_log_output(tmp_path):
     assert '"selected_function_source": bridge_selected' in step
     assert '"auth", "open_control_db"' in step
     assert '"protocol_assignments": protocol_assignments' in step
+    assert '"protocol_assignments": bridge_protocol_assignments' in step
+    assert '"TASK_FIELDS", "WORKSTREAMS", "PRIORITIES", "RISKS"' in step
     assert '"MAGIC", "OUTER_FIELDS", "INNER_FIELDS", "TASK_FIELDS"' in step
     assert "ZMR_SEALED_SCHEMA=ENCRYPTED_ONLY" in step
     assert "openssl\", \"pkeyutl\", \"-encrypt" in step
