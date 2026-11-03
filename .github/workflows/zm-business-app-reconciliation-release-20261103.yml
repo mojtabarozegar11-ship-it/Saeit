@@ -53,6 +53,21 @@ jobs:
           done
           echo 'RECONCILED_SOURCE=hash_pinned_and_php_syntax_valid'
           echo 'REAL_FINANCIAL_EVENTS_CREATED=no'
+      - name: Report private hash-approval readiness without exposing its value
+        shell: bash
+        env:
+          APPROVED_SHA: ${{ secrets.ZM_APP_RELEASE_APPROVED_SHA256 }}
+        run: |
+          set -euo pipefail
+          expected=2ed9274affa87f3e9c51f7dff0c72d7461118c7aca0ae0ab732b1c81cbfd6005
+          if test -z "${APPROVED_SHA:-}"; then
+            echo 'PUBLISH_APPROVAL_SECRET_STATE=missing'
+          elif test "$APPROVED_SHA" = "$expected"; then
+            echo 'PUBLISH_APPROVAL_SECRET_STATE=hash_ready'
+          else
+            echo 'PUBLISH_APPROVAL_SECRET_STATE=hash_mismatch'
+          fi
+          echo 'PUBLISH_PERFORMED=no'
       - name: Configure pinned two-hop transport
         shell: bash
         env:
