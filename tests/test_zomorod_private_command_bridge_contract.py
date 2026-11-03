@@ -450,7 +450,7 @@ def test_owner_sealed_schema_contract_is_encrypted_before_log_output(tmp_path):
     assert "echo \"$d/private-queue-schema.json\"" not in step
     assert "-----BEGIN PUBLIC KEY-----" in step
     for marker in ("ZMR_PRIVATE_SCHEMA", "ZMR_ENCRYPT_SCHEMA"):
-        body = step.split("<<'" + marker + "'\n", 1)[1].split(
+        body = step.split("<<'" + marker + "'", 1)[1].split("\n", 1)[1].split(
             "\n          " + marker, 1
         )[0]
         ast.parse("\n".join(line[10:] for line in body.splitlines()) + "\n")
