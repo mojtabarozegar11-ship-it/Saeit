@@ -393,6 +393,11 @@ def test_private_queue_capability_audit_is_metadata_only_and_valid_python():
         "PRIVATE_INGRESS_EXECUTION_LITERAL_DETECTED=",
         "PRIVATE_INGRESS_WORKER_FUNCTION_CANDIDATE=",
         "PRIVATE_SCHEMA_RESULT_MARKER_ANY_TABLE=",
+        "PRIVATE_QUEUE_KEYED_PAYLOAD_TABLES=",
+        "PRIVATE_QUEUE_INTEGRITY_FIELD_TABLES=",
+        "PRIVATE_QUEUE_TIMESTAMP_FIELD_TABLES=",
+        "PRIVATE_QUEUE_LEASE_FIELD_TABLES=",
+        "PRIVATE_QUEUE_WORKER_CONTRACT_TABLES=",
     ):
         assert marker in parsed
     assert "ast.parse(ingress_path.read_text" in parsed
@@ -407,3 +412,11 @@ def test_private_queue_capability_audit_is_metadata_only_and_valid_python():
     assert "print(ingress_path.read_text" not in parsed
     assert "SELECT payload" not in parsed
     assert "db.execute(\"UPDATE" not in parsed
+    for private_data in (
+        "print(columns)", "print(table_name)", "print(table_rows)",
+        "SELECT *", "SELECT payload", "SELECT command",
+        "print(ingress_path.read_text",
+    ):
+        assert private_data not in parsed
+    assert "worker_contract_tables += int(" in parsed
+    assert "identifiers and payload and integrity and state and created" in parsed
