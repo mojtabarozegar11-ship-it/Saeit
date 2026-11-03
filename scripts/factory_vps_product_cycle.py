@@ -260,6 +260,24 @@ def _cleanup_completed_product_extras(root, recipe):
             raise RuntimeError("PRODUCT_CLEANUP_NON_DIRECTORY_BLOCKED")
 
 
+def _has_unreleased_line41_slot(root):
+    """Do not design another SKU while an existing SKU or queue owns Line 41."""
+    path = (Path(root) / "quality-excellence" / "product-flow"
+            / "active-slots" / "current.json")
+    state = _read_private_json(path)
+    if state is None:
+        if path.exists() or path.is_symlink():
+            raise RuntimeError("F01_PRODUCT_SLOT_UNREADABLE")
+        return False
+    active = state.get("active")
+    waiting = state.get("waiting")
+    if (state.get("schema") != SLOT_SCHEMA
+            or not isinstance(active, list) or len(active) > 1
+            or not isinstance(waiting, list)):
+        raise RuntimeError("F01_PRODUCT_SLOT_UNTRUSTED")
+    return bool(active or waiting)
+
+
 def _maintain_product_slots(root, recipe_names):
     """Line 41 releases a product only after QC1000 AND signed cycle delivery."""
     state_path = (Path(root) / "quality-excellence" / "product-flow"
@@ -438,15 +456,17 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         evolution_attempted_count = 0
         invention_state={"enabled":False,"new_technical_briefs_this_tick":0}
         if enable_designer:
+            # Existing active or waiting products take exclusive design priority.
+            design_deferred = _has_unreleased_line41_slot(root)
             designer = load("saeit_factory_recipe_designer", SCRIPTS / "factory_recipe_designer.py")
-            if enable_design_intake and enable_invention_supply:
+            if not design_deferred and enable_design_intake and enable_invention_supply:
                 try:
                     inventor=load('saeit_factory_continuous_invention',SCRIPTS/'factory_continuous_invention.py')
                     invention_state=inventor.propose(root,max_new=1,max_pending=5)
                     invention_state['enabled']=True
                 except (ValueError,RuntimeError,OSError,ArithmeticError) as error:
                     designer_failures.append({'type':'invention_supply','reason':str(error)[:400]})
-            if enable_design_intake:
+            if not design_deferred and enable_design_intake:
                 try:
                     intake=load('saeit_factory_design_intake',SCRIPTS/'factory_design_intake.py')
                     engineering_state=intake.cycle(root,supply=SCRIPTS.parent/'factory_config/internal_design_supply.json')
@@ -455,12 +475,15 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     if blocked:designer_failures.append({'type':'engineering_rework','source_revisions':blocked})
                 except (ValueError,OSError,RuntimeError) as error:
                     designer_failures.append({'type':'engineering_intake','reason':str(error)[:400]})
-            try:
-                design_state = designer.cycle(root, seed_file=SCRIPTS.parent / "factory_config" / "design_opportunities.json",
-                                              database=database, max_designs=design_capacity)
-            except (ValueError, OSError, ArithmeticError, sqlite3.Error) as error:
-                designer_failures.append({"type": type(error).__name__, "reason": str(error)[:400]})
-                design_state["status"] = "needs_rework"
+            if not design_deferred:
+                try:
+                    design_state = designer.cycle(root, seed_file=SCRIPTS.parent / "factory_config" / "design_opportunities.json",
+                                                  database=database, max_designs=design_capacity)
+                except (ValueError, OSError, ArithmeticError, sqlite3.Error) as error:
+                    designer_failures.append({"type": type(error).__name__, "reason": str(error)[:400]})
+                    design_state["status"] = "needs_rework"
+            else:
+                design_state["deferred_due_to_exclusive_product_slot"] = True
             designer_failures.extend(design_state.get("intake_failures",[]))
             designer_failures.extend(design_state.get("rework",[]))
             if design_state.get("deferred_rework_requests",0):
