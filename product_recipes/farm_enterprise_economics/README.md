@@ -212,6 +212,17 @@ with `INPUT_ERROR` before any output file is written. Use separate filenames
 for each report. Reusing an existing, distinct output filename still replaces
 that previous report, so select your destination deliberately.
 
+The software now fully stages ALL requested JSON/CSV/HTML report files in
+temporary files on their destination filesystems, flushes the content, and
+only then begins to atomically replace each destination. A failure while
+staging one format leaves all existing report files untouched and removes
+temporary staging files. Each replacement is atomic, so a destination
+never contains a half-written report. **Multiple destination files are not
+one cross-file transaction:** if a filesystem fails between final renames,
+some new complete reports and some old complete reports may remain; the
+saved input fingerprint and read-only verification help identify such a
+mixed-version set. Maintain backups of valuable existing reports.
+
 ## Spreadsheet security
 
 Enterprise names must start with a Unicode letter or number and may not

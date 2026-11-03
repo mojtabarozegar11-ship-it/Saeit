@@ -287,6 +287,41 @@ class EconomicsTests(unittest.TestCase):
         self.assertIn(fingerprint, render_html_report(original))
         self.assertEqual(original["results"][0]["allocated_fixed_cost_exact"], "3000")
 
+    def test_cli_stages_all_formats_before_replacing_any_existing_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            original = base / "input.json"
+            preserved = base / "old-results.json"
+            nonexistent_html = base / "missing-folder" / "report.html"
+            original.write_text(json.dumps(self.example), encoding="utf-8")
+            preserved.write_text("KEEP_EXISTING_REPORT", encoding="utf-8")
+            cmd = [sys.executable, str(Path(__file__).with_name("calculator.py")),
+                   str(original), "--json-output", str(preserved),
+                   "--html-output", str(nonexistent_html)]
+            done = subprocess.run(cmd, text=True, capture_output=True, timeout=15)
+            self.assertEqual(done.returncode, 2)
+            self.assertIn("INPUT_ERROR:", done.stderr)
+            self.assertEqual(preserved.read_text(encoding="utf-8"), "KEEP_EXISTING_REPORT")
+            self.assertFalse(nonexistent_html.exists())
+            self.assertEqual(list(base.glob(".old-results.json.*.tmp")), [])
+
+    def test_atomic_report_success_has_no_staging_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            source = base / "input.json"
+            source.write_text(json.dumps(self.example), encoding="utf-8")
+            cmd = [sys.executable, str(Path(__file__).with_name("calculator.py")),
+                   str(source), "--json-output", str(base / "out.json"),
+                   "--html-output", str(base / "out.html"),
+                   "--csv-output", str(base / "out.csv")]
+            done = subprocess.run(cmd, text=True, capture_output=True, timeout=15)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            self.assertEqual(json.loads((base / "out.json").read_text(encoding="utf-8"))
+                             ["portfolio"]["operating_profit"], "2500.00")
+            self.assertIn("<!doctype html>", (base / "out.html").read_text(encoding="utf-8"))
+            self.assertEqual(len((base / "out.csv").read_text(encoding="utf-8").splitlines()), 10)
+            self.assertEqual(list(base.glob(".*.tmp")), [])
+
     def test_cli_verification_recalculates_and_rejects_tampering_without_writes(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)

@@ -11,9 +11,12 @@ from decimal import Decimal, InvalidOperation, ROUND_CEILING, localcontext
 from functools import wraps
 import hashlib
 import html
+import io
 import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 
 
 def bounded_model_precision(function):
@@ -397,6 +400,35 @@ aside{border-left:4px solid #a05b22;padding:1rem;background:#fff7e9}
 """
 
 
+def stage_and_replace_reports(exports):
+    """Stage every requested report before replacing any destination.
+
+    Each individual replacement is atomic on the destination filesystem.
+    A multi-file group is not an all-or-nothing transaction if a rename fails.
+    """
+    staged = []
+    try:
+        for destination, content in exports:
+            fd, temp_name = tempfile.mkstemp(
+                prefix="." + destination.name + ".", suffix=".tmp",
+                dir=str(destination.parent)
+            )
+            temporary = Path(temp_name)
+            staged.append((temporary, destination))
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+        for temporary, destination in staged:
+            os.replace(str(temporary), str(destination))
+    finally:
+        for temporary, _ in staged:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Farm enterprise economics and sensitivity analysis")
     ap.add_argument("input_json", help="Local input JSON with user-supplied assumptions")
@@ -424,19 +456,22 @@ def main(argv=None):
               + output["input_fingerprint_sha256"] + ")")
         return 0
     body = json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    exports = []
     if args.json_output:
-        Path(args.json_output).write_text(body, encoding="utf-8")
-    else:
-        print(body, end="")
+        exports.append((Path(args.json_output), body))
     if args.html_output:
-        Path(args.html_output).write_text(render_html_report(output), encoding="utf-8")
+        exports.append((Path(args.html_output), render_html_report(output)))
     if args.csv_output:
-        with Path(args.csv_output).open("w", encoding="utf-8", newline="") as fp:
-            writer = csv.DictWriter(fp, fieldnames=[
-                "enterprise", "volume_multiplier", "price_multiplier", "modeled_operating_profit"
-            ], quoting=csv.QUOTE_ALL)
-            writer.writeheader()
-            writer.writerows(output["scenario_results"])
+        buffer = io.StringIO(newline="")
+        writer = csv.DictWriter(buffer, fieldnames=[
+            "enterprise", "volume_multiplier", "price_multiplier", "modeled_operating_profit"
+        ], quoting=csv.QUOTE_ALL)
+        writer.writeheader()
+        writer.writerows(output["scenario_results"])
+        exports.append((Path(args.csv_output), buffer.getvalue()))
+    stage_and_replace_reports(exports)
+    if not args.json_output:
+        print(body, end="")
     return 0
 
 
