@@ -23,8 +23,20 @@ if (extension_loaded('session') && !(PHP_SAPI==='cli' && realpath((string)($_SER
 const APP_TITLE = 'میز مدیریت و حسابداری زمرد ملل';
 $home = dirname(__DIR__, 2);
 $private = $home.'/.private/zomorod-business';
+if(is_file($private.'/workflow_desk.php')) require_once $private.'/workflow_desk.php';
+if(is_file($private.'/project_control.php')) require_once $private.'/project_control.php';
+if(is_file($private.'/project_integrations.php')) require_once $private.'/project_integrations.php';
+if(is_file($private.'/project_governance.php')) require_once $private.'/project_governance.php';
+if(is_file($private.'/project_ops.php')) require_once $private.'/project_ops.php';
+if(is_file($private.'/project_portfolio.php')) require_once $private.'/project_portfolio.php';
+if(is_file($private.'/industry_operations.php')) require_once $private.'/industry_operations.php';
+if(is_file($private.'/finance_audit.php')) require_once $private.'/finance_audit.php';
+if(is_file($private.'/payroll_control.php')) require_once $private.'/payroll_control.php';
+if(is_file($private.'/payroll_ui.php')) require_once $private.'/payroll_ui.php';
+require_once $private.'/period_controls.php';
 if(is_file($private.'/site_agents.php')) require_once $private.'/site_agents.php';
 if(is_file($private.'/site_store.php')) require_once $private.'/site_store.php';
+if(is_file($private.'/command_center.php')) require_once $private.'/command_center.php';
 function esc(mixed $s): string {return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');}
 function req(string $k, string $default=''): string {$value=$_POST[$k]??$default;if(!is_string($value))bail('ساختار فیلد ورودی نامعتبر است.');return trim($value);}
 function bail(string $m, int $code=422): never {http_response_code($code); throw new RuntimeException($m);}
@@ -88,6 +100,7 @@ function initializePrivateDb(string $private): void {
     $db->exec("CREATE TABLE IF NOT EXISTS audit_events (id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), verb TEXT NOT NULL, subject TEXT NOT NULL, entity_id INTEGER, occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     $seed=['1000'=>['صندوق','asset'],'1010'=>['بانک','asset'],'1100'=>['حساب‌های دریافتنی','asset'],'1200'=>['موجودی کالا','asset'],'1500'=>['دارایی ثابت','asset'],'2000'=>['حساب‌های پرداختنی','liability'],'2100'=>['مالیات پرداختنی','liability'],'3000'=>['سرمایه','equity'],'4000'=>['درآمد فروش','income'],'5000'=>['بهای تمام‌شده','expense'],'5100'=>['هزینه عملیاتی','expense'],'5200'=>['هزینه حقوق','expense']];
     $s=$db->prepare('INSERT OR IGNORE INTO ledger_accounts(code,name,type) VALUES (?,?,?)');foreach($seed as $code=>$parts)$s->execute([$code,$parts[0],$parts[1]]);
+    zmPeriodSchema($db);
         $db->commit();
         $token=bin2hex(random_bytes(32))."\n";
         $tokenHandle=@fopen($tokenFile,'x');
@@ -115,6 +128,7 @@ function auditedCreate(PDO $db,string $sql,array $args,string $subject):void {
     catch(Throwable $e){if($db->inTransaction())$db->rollBack();throw $e;}
 }
 function record(PDO $db,string $number,string $date,string $note,string $cur,array $lines):int {
+    zmPeriodGuard($db,$date);
     if(strlen($number)>60||strlen($note)>800||!validDate($date))bail('اطلاعات سند نامعتبر است.');
     if(count($lines)<2||count($lines)>12)bail('سند باید بین دو تا دوازده ردیف داشته باشد.');
     $debits=0;$credits=0;
@@ -131,15 +145,23 @@ function record(PDO $db,string $number,string $date,string $note,string $cur,arr
 }
 function uniqueNo(string $prefix):string {return $prefix.'-'.gmdate('YmdHis').'-'.strtoupper(substr(bin2hex(random_bytes(5)),0,8));}
 function layoutStart(string $page,?array $user=null):void {
-    $nav=['dashboard'=>'داشبورد','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','documents'=>'مکاتبات','projects'=>'پروژه‌ها','approval_register'=>'دفتر مصوبات','chatgpt_reports'=>'گزارش‌های متنی ChatGPT','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
+    $nav=['dashboard'=>'داشبورد','insights'=>'گزارش مدیریتی','command_center'=>'مرکز فرمان هوشمند','workflow_desk'=>'اتوماسیون و کارتابل','industry_ops'=>'عملیات کشاورزی و تولید','finance_audit'=>'کنترل مالی','payroll'=>'حقوق و دستمزد','period_controls'=>'بستن دورهٔ مالی','accounts'=>'کدینگ حساب‌ها','journal'=>'اسناد حسابداری','trial'=>'تراز و گزارش','parties'=>'اشخاص','invoices'=>'فروش و خرید','payments'=>'دریافت و پرداخت','inventory'=>'انبار','employees'=>'منابع انسانی','documents'=>'مکاتبات','projects'=>'پروژه‌ها','approval_register'=>'دفتر مصوبات','project_links'=>'پرونده یکپارچه پروژه‌ها','project_calendar'=>'تقویم پروژه‌ها','project_portfolio'=>'گزارش سبد پروژه‌ها','project_governance'=>'مصوبات مستند پروژه‌ها','project_finance'=>'مالی پروژه‌ها','project_assignments'=>'کارتابل مسئولیت‌ها','agent_center'=>'ربات‌ها و ایجنت‌ها','store_manager'=>'مدیریت فروشگاه','chatgpt_reports'=>'گزارش‌های متنی ChatGPT','audit'=>'ردپای عملیات','security'=>'تغییر گذرواژه','users'=>'کاربران'];
     $navHtml='';
     foreach($nav as $key=>$label){
         if(($key==='users'||$key==='chatgpt_reports')&&role()!=='admin')continue;
+        if($key==='project_finance' && !in_array(role(),['admin','accountant'],true))continue;
         $navHtml.='<a class="'.($page===$key?'sel':'').'" href="?page='.esc($key).'">'.esc($label).'</a>';
+        if($key==='dashboard')$navHtml.='<a href="/business/operations.php">پایش جامع عملیات</a>';
         if($key==='payments')$navHtml.='<a href="/business/banking.php">بانک ملت و شهر</a>';
+        if($key==='store_manager' && in_array(role(),['admin','manager'],true))$navHtml.='<a href="/business/customer_inbox.php">صندوق مشتریان</a>';
     }
-    echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.esc(APP_TITLE).'</title><link rel="icon" type="image/webp" href="/static/site/zomorod-v7/company-logo.webp"><style>\n    :root{font-family:Tahoma,Arial,sans-serif;color:#e9e7d9;background:#0c1811}*{box-sizing:border-box}body{margin:0;background:#203b23;min-height:100vh}a{color:#d9bc72;text-decoration:none}header{padding:20px 4%;background:#1a341e;border-bottom:3px double #e5c374;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:21px;color:#edcd79;font-weight:bold}.small{font-size:12px;color:#b9c0ae}nav{display:flex;overflow:auto;gap:8px;padding:16px 4%;background:#1a341e;scrollbar-width:thin}nav a{white-space:nowrap;padding:11px 13px;background:#284c30;border:1px solid #e1c47f;border-radius:12px}nav .sel{color:#081509;background:#d8ba6e;border-color:#f3d590}main{max-width:1260px;margin:auto;padding:26px 20px 70px}h1,h2,h3{color:#edcf88}h1{font-size:clamp(23px,3vw,32px)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:15px;margin:18px 0}.card,section{background:#18291e;border:1px solid #546545;border-radius:18px;padding:20px;margin:16px 0;box-shadow:0 8px 28px #0002}.metric{font-size:28px;color:#f1d68e;font-weight:bold}table{border-collapse:collapse;width:100%;min-width:580px}th,td{padding:12px;text-align:right;border-bottom:1px solid #405243}th{color:#e4cb83}.scroll{overflow:auto}label{display:block;color:#d1dcbf;margin:9px 0 5px}input,textarea,select{font:inherit;color:#f3eedc;background:#0c1a12;border:1px solid #647153;border-radius:9px;padding:11px;width:100%;max-width:440px}textarea{min-height:88px}button{background:linear-gradient(120deg,#a98741,#f3d584);border:1px solid #f8dd9a;color:#15200e;padding:12px 19px;border-radius:12px;cursor:pointer;font-weight:bold;margin-top:13px}button:hover{filter:brightness(1.1)}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 18px}.form .full{grid-column:1/-1}.notice{border:1px solid #b99550;background:#354027;padding:15px;border-radius:12px}.danger{background:#4d1e20;border-color:#c26b6b}.muted{color:#bec8b6}.account-line{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}.sign{max-width:540px;margin:70px auto;padding:30px}footer{padding:24px 4%;border-top:1px solid #52613b;text-align:center;color:#bdc7ae;font-size:12px}.tags{display:flex;flex-wrap:wrap;gap:8px}.tags span{border:1px solid #6b7050;border-radius:15px;padding:4px 10px}@media(max-width:650px){.account-line{grid-template-columns:1fr 1fr}.account-line select{grid-column:1/-1}main{padding:14px 12px}header{padding:15px}.form{grid-template-columns:1fr}input,textarea,select{max-width:none;font-size:16px}nav{padding:10px 12px}section,.card{padding:15px;border-radius:13px}}:focus-visible{outline:3px solid #f3d584;outline-offset:3px}nav a,button{min-height:44px}table caption{text-align:right;color:#d8dfc4;padding:8px}input:invalid{box-shadow:none}\n    </style></head><body><header><div><div class="brand"><img src="/static/site/zomorod-v7/company-logo.webp" alt="نشان شرکت زمرد ملل" width="48" height="48" style="width:48px;height:48px;border-radius:50%;border:2px solid #e5c377;vertical-align:middle;margin-left:12px;background:#fff">زمرد ملل · مدیریت جامع</div><div class="small">مدیریت سازمان · دفاتر مالی · ثبت عملیات با کنترل دسترسی</div></div><div><a href="https://zomorodmelal.ir/">بازگشت به سایت</a>';
-    if($user)echo ' · <span class="small">'.esc($user['username']).' ('.esc($user['role']).')</span> · <form method="post" action="/business/" style="display:inline;margin:0">'.tokenInput().'<input type="hidden" name="action" value="logout"><button type="submit" style="margin:0;padding:8px 13px">خروج امن</button></form>';
+    echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'.esc(APP_TITLE).'</title><link rel="icon" type="image/webp" href="/static/site/zomorod-v7/company-logo.webp"><style>\n    :root{font-family:Tahoma,Arial,sans-serif;color:#e9e7d9;background:#0c1811}*{box-sizing:border-box}body{margin:0;background:#203b23;min-height:100vh}a{color:#d9bc72;text-decoration:none}header{padding:20px 4%;background:#1a341e;border-bottom:3px double #e5c374;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.brand{font-size:21px;color:#edcd79;font-weight:bold}.small{font-size:12px;color:#b9c0ae}nav{display:flex;overflow:auto;gap:8px;padding:16px 4%;background:#1a341e;scrollbar-width:thin}nav a{white-space:nowrap;padding:11px 13px;background:#284c30;border:1px solid #e1c47f;border-radius:12px}nav .sel{color:#081509;background:#d8ba6e;border-color:#f3d590}main{max-width:1260px;margin:auto;padding:26px 20px 70px}.sign p,.sign code{color:#f2efdc!important}h1,h2,h3{color:#edcf88}h1{font-size:clamp(23px,3vw,32px)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:15px;margin:18px 0}.card,section{background:#18291e;border:1px solid #546545;border-radius:18px;padding:20px;margin:16px 0;box-shadow:0 8px 28px #0002}.metric{font-size:28px;color:#f1d68e;font-weight:bold}table{border-collapse:collapse;width:100%;min-width:580px}th,td{padding:12px;text-align:right;border-bottom:1px solid #405243}th{color:#e4cb83}.scroll{overflow:auto}label{display:block;color:#d1dcbf;margin:9px 0 5px}input,textarea,select{font:inherit;color:#f3eedc;background:#0c1a12;border:1px solid #647153;border-radius:9px;padding:11px;width:100%;max-width:440px}textarea{min-height:88px}button{background:linear-gradient(120deg,#a98741,#f3d584);border:1px solid #f8dd9a;color:#15200e;padding:12px 19px;border-radius:12px;cursor:pointer;font-weight:bold;margin-top:13px}button:hover{filter:brightness(1.1)}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px 18px}.form .full{grid-column:1/-1}.notice{border:1px solid #b99550;background:#354027;padding:15px;border-radius:12px}.danger{background:#4d1e20;border-color:#c26b6b}.muted{color:#bec8b6}.account-line{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px}.sign{max-width:540px;margin:70px auto;padding:30px}footer{padding:24px 4%;border-top:1px solid #52613b;text-align:center;color:#bdc7ae;font-size:12px}.tags{display:flex;flex-wrap:wrap;gap:8px}.tags span{border:1px solid #6b7050;border-radius:15px;padding:4px 10px}@media(max-width:650px){.account-line{grid-template-columns:1fr 1fr}.account-line select{grid-column:1/-1}main{padding:14px 12px}header{padding:15px}}\n    /* ZM private desk readable text palette: readable on all dark content surfaces */
+    main, main section, main article, main .card {color:#e9e7d9}
+    main p:not(.muted), main li, main td, main dd, main dt, main blockquote, main summary, main figcaption {color:#e9e7d9 !important}
+    main .muted {color:#bec8b6 !important}
+    main pre, main code {color:#f3d584}
+    </style></head><body><header><div><div class="brand"><img src="/static/site/zomorod-v7/company-logo.webp" alt="نشان شرکت زمرد ملل" width="48" height="48" style="width:48px;height:48px;border-radius:50%;border:2px solid #e5c377;vertical-align:middle;margin-left:12px;background:#fff">زمرد ملل · مدیریت جامع</div><div class="small">مدیریت سازمان · دفاتر مالی · ثبت عملیات با کنترل دسترسی</div></div><div><a href="https://zomorodmelal.ir/">بازگشت به سایت</a>';
+    if($user)echo ' · <span class="small">'.esc($user['username']).' ('.esc($user['role']).')</span> · <form method="post" style="display:inline">'.tokenInput().'<input type="hidden" name="action" value="logout"><button type="submit" class="logout">خروج</button></form>';
     echo '</div></header>';
     if($user)echo '<nav aria-label="پیمایش مدیریت">'.$navHtml.'</nav>';
     echo '<main>';
@@ -182,7 +204,7 @@ try {
             header('Location: ?page=dashboard',true,303);exit;
         }
         layoutStart('setup');echo '<section class="sign"><h1>راه‌اندازی امن میز مدیریت</h1><p>برای نخستین ورود، توکن یک‌بارمصرف نگهداری‌شده در <code>~/.private/zomorod-business/setup.token</code> را از فایل‌منیجر cPanel یا SSH بخوانید. این رمز در کد یا گزارش GitHub منتشر نمی‌شود.</p>';
-        formBegin('setup');echo '<label>توکن فعال‌سازی</label><input name="setup_token" type="password" required autocomplete="off"><label>نام کاربری مدیر</label><input name="username" required minlength="5" maxlength="40"><label>گذرواژه جدید</label><input name="password" type="password" required minlength="14" autocomplete="new-password"><button>ایجاد مدیر و فعال‌سازی</button></form></section>';layoutEnd();exit;
+        formBegin('setup');echo '<label for="zm-setup-token">توکن فعال‌سازی</label><input id="zm-setup-token" name="setup_token" type="password" required autocomplete="off"><label for="zm-setup-user">نام کاربری مدیر</label><input id="zm-setup-user" name="username" required minlength="5" maxlength="40"><label for="zm-setup-password">گذرواژه جدید</label><input id="zm-setup-password" name="password" type="password" required minlength="14" autocomplete="new-password"><button>ایجاد مدیر و فعال‌سازی</button></form></section>';layoutEnd();exit;
     }
     // Logout must be a CSRF-protected POST; a GET or external link cannot end an accounting session.
     if($_SERVER['REQUEST_METHOD']==='POST' && req('action')==='logout'){
@@ -298,24 +320,9 @@ try {
                 $db->prepare('INSERT INTO invoices(invoice_no,kind,party_id,invoice_date,due_date,description,amount,currency,posted_entry,created_by) VALUES(?,?,?,?,?,?,?,?,?,?)')->execute([$no,$kind,$party,$date,$due,$desc,$amount,$cur,$j,actor()]);audit($db,'create','invoice',(int)$db->lastInsertId());$db->commit();
             }catch(Throwable $e){$db->rollBack();throw $e;}
         } elseif($action==='payment'){
-            $invoice=positiveId('invoice_id');
-            // Acquire the writer lock before reading the outstanding balance.
-            // Validation errors must release it; concurrent payments re-check the latest balance.
-            $db->exec('BEGIN IMMEDIATE');
-            try{
-                $rows=q($db,'SELECT i.*,COALESCE((SELECT SUM(amount) FROM invoice_payments WHERE invoice_id=i.id),0) AS paid FROM invoices i WHERE i.id=?',[$invoice]);
-                if(!$rows)bail('فاکتور پیدا نشد.');
-                $inv=$rows[0];$amount=cents(req('amount'));$remaining=(int)$inv['amount']-(int)$inv['paid'];
-                if($amount<=0||$amount>$remaining)bail('مبلغ بیشتر از مانده فاکتور یا نامعتبر است.');
-                $on=inputDate('date');
-                $evidence=req('payment_evidence');
-                if(mbSafeLen($evidence)<5||mbSafeLen($evidence)>120||preg_match('/[\\x00-\\x1F\\x7F]/',$evidence))
-                    bail('شناسه یا شرح مدرک دریافت/پرداخت الزامی و محدود به ۵ تا ۱۲۰ نویسه است.');
-                $j=record($db,uniqueNo('PAY'),$on,'ثبت دستی دریافت/پرداخت فاکتور '.$inv['invoice_no'].' | مرجع اعلامی: '.$evidence.' | بدون راستی‌آزمایی بانکی',(string)$inv['currency'],$inv['kind']==='sale'?[['1010',$amount,0],['1100',0,$amount]]:[['2000',$amount,0],['1010',0,$amount]]);
-                $db->prepare('INSERT INTO invoice_payments(invoice_id,amount,paid_on,entry_id,created_by) VALUES(?,?,?,?,?)')->execute([$invoice,$amount,$on,$j,actor()]);
-                audit($db,'create','invoice-payment',(int)$db->lastInsertId());
-                $db->exec('COMMIT');
-            }catch(Throwable $e){try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}throw $e;}
+            // Legacy generic bank (1010) posting is intentionally retired.
+            // Use /business/banking.php with an explicit account and evidence.
+            bail('برای ثبت دریافت یا پرداخت فاکتور ریالی از «بانک ملت و شهر» استفاده کنید. حساب عمومی ۱۰۱۰ دیگر برای این عملیات مجاز نیست؛ فاکتور ارزی نیازمند مسیر کنترل‌شده جداگانه است.',409);
         } elseif($action==='inventory'){
             $sku=req('sku');$name=req('name');$unit=req('unit','عدد');$reorder=wholeNumber('reorder_level',0,100000000,'0');
             if($sku===''||strlen($sku)>80||preg_match('/[\\x00-\\x1F\\x7F]/',$sku)||$name===''||mbSafeLen($name)>140||$unit===''||mbSafeLen($unit)>40)bail('شناسه، عنوان یا واحد کالا نامعتبر است.');
@@ -338,8 +345,22 @@ try {
             $title=req('title');$body=req('body');$category=req('category','اداری');
             if($title===''||mbSafeLen($title)>200||$body===''||mbSafeLen($body)>25000||$category===''||mbSafeLen($category)>80)bail('عنوان، گروه یا متن سند نامعتبر است.');
             auditedCreate($db,'INSERT INTO documents(title,category,body,created_by) VALUES(?,?,?,?)',[$title,$category,$body,actor()],'document');
+        } elseif(in_array($action,['project_approval_submit','project_approval_decide','project_approval_withdraw'],true)){
+            if(!function_exists('zmGovHandle'))bail('سامانه مصوبات مستند در دسترس نیست.',503);
+            zmGovHandle($db,$action);
+        } elseif($action==='project_assignment'){
+            if(!function_exists('zmOpsTransfer'))bail('دفتر ارجاع مسئول در دسترس نیست.',503);
+            zmOpsSchema($db);
+            zmOpsTransfer($db);
+        } elseif(in_array($action,['project_link','project_document','project_milestone','project_milestone_state'],true)){
+            if(!function_exists('zmPiHandle'))bail('پرونده یکپارچه پروژه در دسترس نیست.',503);
+            zmPiHandle($db,$private,$action);
+        } elseif(in_array($action,['project_transition','project_update'],true)){
+            if(!function_exists('zmPmHandle'))bail('مدیریت پروژه در دسترس نیست.',503);
+            zmPmSchema($db);
+            zmPmHandle($db,$action);
         } elseif($action==='project'){
-            $title=req('title');$owner=req('owner');$state=req('state','planned');if($title===''||$owner===''||mbSafeLen($title)>200||mbSafeLen($owner)>120||!in_array($state,['planned','active','paused','done'],true))bail('مشخصات پروژه ناقص است.');
+            $title=req('title');$owner=req('owner');$state=req('state','planned');if($title===''||$owner===''||mbSafeLen($title)>160||mbSafeLen($owner)>120||!in_array($state,['planned','paused'],true))bail('پروژه جدید صرفاً برنامه‌ریزی‌شده یا متوقف و با مشخصات معتبر ثبت می‌شود.');
             auditedCreate($db,'INSERT INTO projects(title,owner,state,budget) VALUES(?,?,?,?)',[$title,$owner,$state,cents(req('budget','0'))],'project');
         } elseif(in_array($action,['agent_toggle','agent_run'],true)){
             if(role()!=='admin')bail('فقط مدیر اصلی مجاز است.',403);
@@ -351,6 +372,20 @@ try {
             if(!function_exists('zmStoreDb'))bail('مدیریت فروشگاه آماده نیست.',503);
             zmStoreHandle(zmStoreDb($private),$action);
             audit($db,'store',$action);
+        } elseif(in_array($action,['cc_create','cc_scan','cc_transition','cc_plan','cc_evidence','cc_review'],true)){
+            if(!function_exists('zmCcHandle')) bail('مرکز فرمان در دسترس نیست.',503);
+            zmCcHandle($db,zmCcDb($private),$action);
+        } elseif(in_array($action,['flow_create','flow_transition'],true)){
+            if(!function_exists('zmFlowHandle'))bail('گردش‌کار سازمانی در دسترس نیست.',503);
+            zmFlowHandle(zmFlowDb($private),$action);
+        } elseif(in_array($action,['industry_create','industry_advance'],true)){
+            if(!function_exists('zmIndustryHandle'))bail('سامانه عملیاتی در دسترس نیست.',503);
+            zmIndustryHandle(zmIndustryDb($private),$action);
+        } elseif(in_array($action,['period_freeze','period_close'],true)){
+            zmPeriodAction($db,$action,req('period_key'),req('note'),actor(),role());
+        } elseif(in_array($action,['payroll_create','payroll_decision'],true)){
+            if(!function_exists('zmPayrollUiHandle'))bail('کنترل حقوق در دسترس نیست.',503);
+            zmPayrollUiHandle(zmPayrollDb($private),$action);
         } elseif($action==='user'){
             $username=req('username');$pass=req('password');$newRole=req('role');if(!preg_match('/^[A-Za-z0-9_]{5,40}$/',$username)||strlen($pass)<14||!in_array($newRole,['admin','accountant','manager','viewer'],true))bail('کاربر، گذرواژه یا نقش نامعتبر است.');
             auditedCreate($db,'INSERT INTO users(username,password_hash,role) VALUES(?,?,?)',[$username,password_hash($pass,PASSWORD_DEFAULT),$newRole],'user');
@@ -374,34 +409,80 @@ try {
             }catch(Throwable $e){try{$db->exec('ROLLBACK');}catch(Throwable $ignored){}throw $e;}
         } else bail('عملیات مجاز نیست.',403);
         $_SESSION['flash']='عملیات با موفقیت ثبت شد.';
-        header('Location: ?page='.rawurlencode($page),true,303);exit;
+        $return='?page='.rawurlencode($page);
+        if(in_array($action,['project_approval_submit','project_approval_decide','project_approval_withdraw'],true)){
+            $return='?page=project_governance';
+            $governanceProject=req('project_id');
+            if($governanceProject!=='' && preg_match('/^[1-9][0-9]{0,17}$/D',$governanceProject))
+                $return.='&project_id='.rawurlencode($governanceProject);
+        }
+        if(in_array($action,['project_link','project_document','project_milestone','project_milestone_state','project_assignment'],true)){
+            $return='?page=project_links&project_id='.rawurlencode(req('project_id'));
+        }
+        header('Location: '.$return,true,303);exit;
     }
     layoutStart($page,$user);
     if(isset($_SESSION['flash'])){echo '<div class="notice">'.esc($_SESSION['flash']).'</div>';unset($_SESSION['flash']);}
     echo '<h1>'.esc(APP_TITLE).'</h1><p class="muted">اطلاعات خصوصی شرکت. واحد مبالغ مطابق کد ارز انتخابی است؛ اسناد مالی ثبت‌شده حذف یا ویرایش نمی‌شوند.</p>';
     if($page==='dashboard'){
         $stats=['اسناد حسابداری'=>(int)one($db,'SELECT COUNT(*) FROM journal_entries'),'فاکتورها'=>(int)one($db,'SELECT COUNT(*) FROM invoices'),'اشخاص'=>(int)one($db,'SELECT COUNT(*) FROM parties'),'کالاها'=>(int)one($db,'SELECT COUNT(*) FROM inventory'),'کارکنان'=>(int)one($db,'SELECT COUNT(*) FROM employees'),'پروژه‌ها'=>(int)one($db,'SELECT COUNT(*) FROM projects')];
-        echo '<div class="grid">';foreach($stats as $name=>$value)echo '<div class="card"><div class="metric">'.esc($value).'</div><h3>'.esc($name).'</h3></div>';echo '</div>';
-        $exposures=q($db,"SELECT i.currency,
-            SUM(CASE WHEN i.kind='sale' THEN i.amount-COALESCE(p.paid,0) ELSE 0 END) receivables,
-            SUM(CASE WHEN i.kind='purchase' THEN i.amount-COALESCE(p.paid,0) ELSE 0 END) payables,
-            SUM(CASE WHEN i.kind='sale' AND i.due_date<? THEN i.amount-COALESCE(p.paid,0) ELSE 0 END) overdue_receivables,
-            SUM(CASE WHEN i.kind='purchase' AND i.due_date<? THEN i.amount-COALESCE(p.paid,0) ELSE 0 END) overdue_payables
-            FROM invoices i LEFT JOIN (SELECT invoice_id,SUM(amount) paid FROM invoice_payments GROUP BY invoice_id) p ON p.invoice_id=i.id
-            GROUP BY i.currency ORDER BY i.currency",[today(),today()]);
-        echo '<section><h2>مطالبات و تعهدات پرداخت‌نشده</h2><p class="muted">فقط بر پایه فاکتورها و دریافت/پرداخت‌های ثبت‌شده داخلی؛ این ارقام با بانک یا اسناد تسویه خارجی تطبیق داده نشده‌اند. سررسیدها بر اساس تاریخ ثبت‌شده و روز ایران هستند. مبالغ به واحد ارز هر ردیف نمایش داده می‌شوند.</p>';
-        if(!$exposures){echo '<div class="notice">هنوز فاکتوری ثبت نشده است؛ مانده قابل محاسبه وجود ندارد.</div>';}
-        else{
-            echo '<div class="scroll"><table><tr><th>ارز</th><th>مانده مطالبات</th><th>مطالبات سررسیدگذشته</th><th>مانده بدهی‌ها</th><th>بدهی‌های سررسیدگذشته</th></tr>';
-            foreach($exposures as $r)echo '<tr><td>'.esc($r['currency']).'</td><td>'.money((int)$r['receivables']).'</td><td>'.money((int)$r['overdue_receivables']).'</td><td>'.money((int)$r['payables']).'</td><td>'.money((int)$r['overdue_payables']).'</td></tr>';
-            echo '</table></div>';
+        echo '<div class="grid">';foreach($stats as $name=>$value)echo '<div class="card"><div class="metric">'.esc($value).'</div><h3>'.esc($name).'</h3></div>';echo '</div><section><h2>وضعیت بهره‌برداری</h2><p>دفترکل دوطرفه، فاکتور، دریافت و پرداخت، انبار، کارمندان، مکاتبات، پروژه‌ها، نقش‌های کاربران و گزارش حسابرسی در این سامانه ثبت می‌شوند. این پنل به بانک یا سامانه‌های دیگر وصل نیست؛ هیچ پرداخت خودکاری انجام نمی‌شود.</p></section>';
+        // Internal management status: reported project states, not real-world execution.
+        $projectStates=['planned'=>0,'active'=>0,'paused'=>0,'done'=>0];
+        foreach(q($db,'SELECT state,COUNT(*) n FROM projects GROUP BY state') as $pr){
+            if(array_key_exists($pr['state'],$projectStates))$projectStates[$pr['state']]=(int)$pr['n'];
         }
-        echo '</section>';
-        echo '<section><h2>وضعیت بهره‌برداری</h2><p>این دفتر برای ثبت داخلی حسابداری، خرید و فروش، انبار، پرسنل، مکاتبات و پروژه‌هاست. ثبت پرسنل به معنی استخدام قطعی، ثبت سند به معنی تسویه بانکی و ثبت پروژه به معنی اجرای فیزیکی نیست. این پنل به بانک یا سامانه پرداخت زنده متصل نیست.</p></section>';
-        $services=['دفتر مالی داخلی'=>true,'فروشگاه داخلی'=>function_exists('zmStoreDb'),'ایجنت‌های سایت'=>function_exists('zmAgentDb'),'گزارش فارسی ساعتی'=>is_file(__DIR__.'/chatgpt_reports.php')&&!is_link(__DIR__.'/chatgpt_reports.php'),'دفتر مصوبات'=>is_file($private.'/approvals_snapshot.json')&&!is_link($private.'/approvals_snapshot.json')];
-        echo '<section><h2>پایش اجزای میز مدیریت</h2><p class="muted">این وضعیت فقط وجود ماژول را نشان می‌دهد؛ سلامت کامل عملیات، فروش واقعی و اتصال بانکی جداگانه باید بررسی شود.</p><div class="grid">';
-        foreach($services as $label=>$available)echo '<div class="card"><h3>'.esc($label).'</h3><p>'.($available?'ماژول موجود است':'ماژول یا منبع نصب نشده است').'</p></div>';
-        echo '</div></section>';
+        echo '<section><h2>پرونده‌های مدیریت پروژه</h2><p class="muted">وضعیت پرونده‌ها لزوماً به معنی آغاز فعالیت اجرایی، تخصیص بودجه یا تحقق اشتغال نیست.</p><div class="grid">';
+        $pLabels=['planned'=>'برنامه‌ریزی','active'=>'فعال ثبت‌شده','paused'=>'متوقف','done'=>'مختومه ثبت‌شده'];
+        foreach($projectStates as $key=>$num)echo '<div class="card"><div class="metric">'.$num.'</div>'.esc($pLabels[$key]).'</div>';
+        echo '</div><p><a href="?page=projects">پیگیری پروژه‌ها، ثبت پیشرفت، موانع و تصمیم‌ها</a> · <a href="?page=workflow_desk">کارتابل و مصوبات سازمانی</a> · <a href="?page=chatgpt_reports">گزارش چرخه‌های ChatGPT (مدیرکل)</a></p></section>';
+        // Linked project operations; source records are referenced, not modified.
+        if(function_exists('zmPiSchema')){
+            zmPiSchema($db);
+            $totalLinks=(int)one($db,'SELECT COUNT(*) FROM zm_project_links');
+            $totalMilestones=(int)one($db,'SELECT COUNT(*) FROM zm_project_milestones');
+            $overdueMilestones=(int)one($db,"SELECT COUNT(*) FROM zm_project_milestones WHERE due_date<? AND state NOT IN ('done','cancelled')",[today()]);
+            echo '<section><h2>یکپارچگی و تقویم پروژه‌ها</h2><div class="grid">';
+            foreach(['ارتباطات مستند با زیرسامانه‌ها'=>$totalLinks,'اقدامات زمان‌دار ثبت‌شده'=>$totalMilestones,'اقدامات عقب‌افتاده'=>$overdueMilestones] as $label=>$val)
+               echo '<div class="card"><div class="metric">'.(int)$val.'</div>'.esc($label).'</div>';
+            echo '</div><p><a href="?page=project_links">بازکردن پرونده یکپارچه</a> · <a href="?page=project_calendar">تقویم و سررسیدها</a> · <a href="?page=projects">فهرست کامل پروژه‌ها</a></p>';
+            echo '<p class="muted">ارتباطات مستند و سررسیدهای برنامه‌ای، به خودی خود هزینه واقعی، تولید، پرداخت یا اشتغال تأییدشده نیستند.</p></section>';
+        }
+        $bankAccounts=(int)one($db,"SELECT COUNT(*) FROM ledger_accounts WHERE code IN ('1011','1012') AND active=1");
+        $bankEvidence=(int)one($db,"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='bank_payment_evidence'");
+        $payCount=(int)one($db,'SELECT COUNT(*) FROM invoice_payments');
+        echo '<section><h2>راهنمای شروع بهره‌برداری</h2><p>این اطلاعات از دفتر حسابداری واقعی خوانده می‌شود و هیچ درآمد یا معامله‌ای به‌صورت فرضی ایجاد نمی‌کند.</p><div class="tags">';
+        echo '<span>حساب‌های بانکی دفتری: '.esc($bankAccounts).' از ۲</span><span>دفتر مستندات بانکی: '.($bankEvidence?'موجود':'نیازمند تنظیم').'</span><span>ثبت‌های دریافت/پرداخت فاکتور: '.esc($payCount).'</span></div>';
+        echo '<p><a href="?page=parties">۱. معرفی مشتری و تأمین‌کننده</a> · <a href="?page=invoices">۲. صدور فاکتور مستند</a> · <a href="/business/banking.php">۳. ثبت دریافت و پرداخت با بانک مشخص</a> · <a href="/business/insights.php">۴. کنترل مانده و سلامت دفتر</a></p>';
+        echo '<p><a href="?page=project_links">پرونده یکپارچه پروژه‌ها</a> · <a href="?page=project_calendar">تقویم پروژه‌ها</a> · <a href="?page=project_portfolio">گزارش سبد و کنترل پوشش</a> · <a href="?page=project_assignments">پیگیری مسئولان</a></p>';
+        echo '<p><a href="?page=projects">پروژه‌ها</a> · <a href="?page=command_center">مرکز فرمان</a> · <a href="/business/customer_inbox.php">درخواست‌های مشتریان (مدیر)</a> · <a href="/business/access.php">دسترسی کاربران (مدیر)</a></p>';
+        echo '<p class="muted">ثبت اسناد حسابداری با اتصال مستقیم به بانک یا فروش واقعی متفاوت است. هر دریافت یا تسویه باید با مدرک مستقل تطبیق شود.</p></section>';
+    } elseif($page==='insights'){
+        authorize('view');
+        require $private.'/insights.php';
+    } elseif($page==='command_center'){
+        authorize('users');
+        if(!function_exists('zmCcRender')) bail('مرکز فرمان در دسترس نیست.',503);
+        zmCcRender(zmCcDb($private));
+    } elseif($page==='workflow_desk'){
+        if(!in_array(role(),['admin','manager','accountant'],true))bail('دسترسی کافی ندارید.',403);
+        if(!function_exists('zmFlowRender'))bail('اتوماسیون سازمانی در دسترس نیست.',503);
+        zmFlowRender(zmFlowDb($private));
+    } elseif($page==='industry_ops'){
+        authorize('view');
+        if(!function_exists('zmIndustryRender'))bail('سامانه صنعت در دسترس نیست.',503);
+        zmIndustryRender(zmIndustryDb($private));
+    } elseif($page==='period_controls'){
+        authorize('account');
+        zmPeriodRender($db);
+    } elseif($page==='finance_audit'){
+        authorize('account');
+        if(!function_exists('zmFinanceAuditRender'))bail('ممیزی مالی در دسترس نیست.',503);
+        zmFinanceAuditRender($db);
+    } elseif($page==='payroll'){
+        if(!in_array(role(),['admin','manager','accountant'],true))bail('دسترسی کافی ندارید.',403);
+        if(!function_exists('zmPayrollUiRender'))bail('پنل حقوق در دسترس نیست.',503);
+        zmPayrollUiRender(zmPayrollDb($private));
     } elseif($page==='agent_center'){
         authorize('view');
         if(!function_exists('zmAgentDb'))bail('موتور ایجنت در دسترس نیست.',503);
@@ -431,8 +512,8 @@ try {
         foreach(q($db,'SELECT i.*,p.name AS party,COALESCE((SELECT SUM(amount) FROM invoice_payments WHERE invoice_id=i.id),0) paid FROM invoices i JOIN parties p ON p.id=i.party_id ORDER BY i.id DESC LIMIT 110') as $r)echo '<tr><td>'.esc($r['invoice_no']).'</td><td>'.($r['kind']==='sale'?'فروش':'خرید').'</td><td>'.esc($r['party']).'</td><td>'.money((int)$r['amount']).'</td><td>'.money((int)$r['paid']).'</td><td>'.money((int)$r['amount']-(int)$r['paid']).'</td><td>'.esc($r['currency']).'</td></tr>';echo '</table></div></section>';
         if(in_array(role(),['admin','accountant'],true)){echo '<section><h2>ثبت و صدور فاکتور با سند مالی هم‌زمان</h2><p class="muted">فروش: بدهکار دریافتنی/بستانکار درآمد. خرید: بدهکار موجودی/بستانکار پرداختنی. ارقام بدون مالیات خودکار.</p>';formBegin('invoice');echo '<div class="form"><div><label>شماره فاکتور (خودکار)</label><input name="invoice_no" placeholder="در صورت خالی بودن خودکار"></div><div><label>نوع</label><select name="kind"><option value="sale">فروش</option><option value="purchase">خرید</option></select></div><div><label>ماهیت خرید (برای فاکتور خرید الزامی)</label><select name="purchase_class"><option value="">انتخاب</option><option value="inventory">کالا/دارایی موجودی (۱۲۰۰)</option><option value="service">هزینه خدمات/عملیاتی (۵۱۰۰)</option></select></div><div><label>طرف حساب</label><select name="party" required>'.options($db,'SELECT id,name FROM parties ORDER BY name',['id','name']).'</select></div><div><label>مبلغ</label><input name="amount" required placeholder="150000.00"></div><div><label>ارز</label><select name="currency"><option>IRR</option><option>USD</option><option>EUR</option><option>AED</option></select></div><div><label>تاریخ میلادی</label><input name="date" type="date" value="'.today().'" required></div><div><label>سررسید میلادی</label><input name="due_date" type="date" value="'.today().'" required></div><div><label>شرح</label><input name="description" required></div></div><button>صدور فاکتور و ثبت سند</button></form></section>';}
     } elseif($page==='payments'){
-        echo '<section><h2>دریافت‌ها و پرداخت‌های ثبت‌شده (بدون اثبات بانکی)</h2><div class="scroll"><table><tr><th>شماره فاکتور</th><th>تاریخ</th><th>مبلغ</th><th>ارز</th></tr>';foreach(q($db,'SELECT p.*,i.invoice_no,i.currency FROM invoice_payments p JOIN invoices i ON i.id=p.invoice_id ORDER BY p.id DESC LIMIT 130') as $r)echo '<tr><td>'.esc($r['invoice_no']).'</td><td>'.esc($r['paid_on']).'</td><td>'.money((int)$r['amount']).'</td><td>'.esc($r['currency']).'</td></tr>';echo '</table></div></section>';
-        if(in_array(role(),['admin','accountant'],true)){echo '<section><h2>ثبت دریافت یا پرداخت مرتبط با فاکتور</h2><p class="muted">ثبت دستی بر مبنای مدرک اعلام‌شده است؛ مبلغ بیش از مانده رد می‌شود. این عملیات نه انتقال واقعی پول و نه تأیید مستقل بانکی است.</p>';formBegin('payment');echo '<div class="form"><div><label>فاکتور</label><select name="invoice_id">'.options($db,'SELECT i.id,i.invoice_no||" / "||p.name AS label FROM invoices i JOIN parties p ON p.id=i.party_id ORDER BY i.id DESC',['id','label']).'</select></div><div><label>مبلغ</label><input name="amount" required></div><div><label>مرجع مدرک اعلامی (شماره رسید/صورتحساب؛ تأییدنشده)</label><input name="payment_evidence" minlength="5" maxlength="120" required></div><div><label>تاریخ</label><input name="date" type="date" value="'.today().'" required></div></div><button>ثبت دستی با ردپای مدرک</button></form></section>';}
+        echo '<section><h2>دریافت‌ها و پرداخت‌های ثبت‌شده</h2><div class="scroll"><table><tr><th>شماره فاکتور</th><th>تاریخ</th><th>مبلغ</th><th>ارز</th></tr>';foreach(q($db,'SELECT p.*,i.invoice_no,i.currency FROM invoice_payments p JOIN invoices i ON i.id=p.invoice_id ORDER BY p.id DESC LIMIT 130') as $r)echo '<tr><td>'.esc($r['invoice_no']).'</td><td>'.esc($r['paid_on']).'</td><td>'.money((int)$r['amount']).'</td><td>'.esc($r['currency']).'</td></tr>';echo '</table></div></section>';
+        echo '<section><h2>ثبت دریافت و پرداخت مستند</h2><p>برای فاکتورهای ریالی، از دفتر بانکی با انتخاب مشخص بانک ملت یا بانک شهر و ثبت مرجع مستند استفاده کنید. ثبت سند به معنای تأیید تراکنش از طرف بانک نیست.</p><p><a href="/business/banking.php">ورود به دفتر بانکی ملت و شهر</a></p><p class="muted">ثبت مستقیم از حساب عمومی ۱۰۱۰ بسته شده است. برای پرداخت ارزی، تا زمان ایجاد مسیر دارای حساب و مدارک مشخص، از این فرم استفاده نکنید.</p></section>';
     } elseif($page==='inventory'){
         echo '<section><h2>کالاها و موجودی تعدادی</h2><div class="scroll"><table><tr><th>کد</th><th>نام</th><th>واحد</th><th>موجودی</th><th>نقطه سفارش</th></tr>';foreach(q($db,'SELECT i.*,COALESCE(SUM(m.qty),0) stock FROM inventory i LEFT JOIN inventory_movements m ON i.id=m.inventory_id GROUP BY i.id ORDER BY i.id DESC') as $r)echo '<tr><td>'.esc($r['sku']).'</td><td>'.esc($r['name']).'</td><td>'.esc($r['unit']).'</td><td>'.(int)$r['stock'].'</td><td>'.(int)$r['reorder_level'].'</td></tr>';echo '</table></div></section>';
         if(role()!=='viewer'){echo '<section><h2>تعریف کالا</h2>';formBegin('inventory');echo '<div class="form"><div><label>شناسه</label><input name="sku" required></div><div><label>نام کالا</label><input name="name" required></div><div><label>واحد</label><input name="unit" value="عدد"></div><div><label>نقطه سفارش</label><input name="reorder_level" type="number" min="0" value="0"></div></div><button>ثبت کالا</button></form></section><section><h2>ورود یا خروج کالا</h2><p>ورود با عدد مثبت، خروج با عدد منفی. این فرم فقط کنترل تعداد است و خودکار سند ارزش ریالی ایجاد نمی‌کند.</p>';formBegin('stock');echo '<div class="form"><div><label>کالا</label><select name="inventory_id">'.options($db,'SELECT id,sku||" — "||name label FROM inventory ORDER BY name',['id','label']).'</select></div><div><label>تغییر تعداد (مثلاً 10 یا -5)</label><input type="number" name="qty" required></div><div><label>تاریخ</label><input type="date" name="date" value="'.today().'"></div><div><label>شرح</label><input name="note"></div></div><button>ثبت حرکت</button></form></section>';}
@@ -443,8 +524,26 @@ try {
         echo '<section><h2>نامه‌ها و مکاتبات اداری</h2>';foreach(q($db,'SELECT * FROM documents ORDER BY id DESC LIMIT 50') as $r)echo '<article class="card"><h3>'.esc($r['title']).' · '.esc($r['category']).'</h3><p>'.nl2br(esc($r['body'])).'</p><small class="muted">'.esc($r['created_at']).'</small></article>';echo '</section>';
         if(role()!=='viewer'){echo '<section><h2>ثبت نامه یا دستورکار</h2>';formBegin('document');echo '<label>عنوان</label><input name="title" required><label>دسته</label><input name="category" value="اداری"><label>متن</label><textarea name="body" required></textarea><br><button>ثبت سند اداری</button></form></section>';}
     } elseif($page==='projects'){
-        echo '<section><h2>پروژه‌های شرکت</h2><div class="scroll"><table><tr><th>نام</th><th>مسئول</th><th>وضعیت</th><th>بودجه IRR</th></tr>';foreach(q($db,'SELECT * FROM projects ORDER BY id DESC') as $r)echo '<tr><td>'.esc($r['title']).'</td><td>'.esc($r['owner']).'</td><td>'.esc($r['state']).'</td><td>'.money((int)$r['budget']).'</td></tr>';echo '</table></div></section>';
-        if(role()!=='viewer'){echo '<section><h2>افزودن پروژه</h2>';formBegin('project');echo '<div class="form"><div><label>عنوان پروژه</label><input name="title" required></div><div><label>مسئول</label><input name="owner" required></div><div><label>وضعیت</label><select name="state"><option value="planned">برنامه‌ریزی</option><option value="active">فعال</option><option value="paused">متوقف</option><option value="done">خاتمه‌یافته</option></select></div><div><label>بودجه IRR</label><input name="budget" value="0"></div></div><button>ثبت پروژه</button></form></section>';}
+        if(!function_exists('zmPmRender'))bail('مدیریت پروژه در دسترس نیست.',503);
+        zmPmRender($db);
+    } elseif($page==='project_links'){
+        if(!function_exists('zmPiRender'))bail('پیوندهای پروژه در دسترس نیست.',503);
+        zmPiRender($db,$private);
+    } elseif($page==='project_calendar'){
+        if(!function_exists('zmPiCalendar'))bail('تقویم پروژه در دسترس نیست.',503);
+        zmPiCalendar($db);
+    } elseif($page==='project_portfolio'){
+        if(!function_exists('zmPortfolioRender'))bail('گزارش سبد پروژه‌ها در دسترس نیست.',503);
+        zmPortfolioRender($db);
+    } elseif($page==='project_governance'){
+        if(!function_exists('zmGovRender'))bail('مصوبات مستند در دسترس نیست.',503);
+        zmGovRender($db);
+    } elseif($page==='project_finance'){
+        if(!function_exists('zmOpsFinanceRoute'))bail('گزارش مالی پروژه در دسترس نیست.',503);
+        zmOpsFinanceRoute($db);
+    } elseif($page==='project_assignments'){
+        if(!function_exists('zmOpsAssignmentsDesk'))bail('کارتابل مسئولیت‌ها در دسترس نیست.',503);
+        zmOpsAssignmentsDesk($db);
     } elseif($page==='chatgpt_reports'){
         authorize('users');
         $module=__DIR__.'/chatgpt_reports.php';
