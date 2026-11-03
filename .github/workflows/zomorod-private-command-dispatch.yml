@@ -1183,13 +1183,34 @@ jobs:
           grep -Fq "COMMAND_QUEUE=UPDATED" "$d/receipt.txt"
           echo "PRIVATE_COMMAND_RECEIPT=ACCEPTED"
           echo "PRIVATE_TASK_QUEUE=UPDATED"
-          echo "COMPANY_WORK_EXECUTION=NOT_PERFORMED"
           ssh -F "$d/config" "$COMMAND_HOST" "python3 -B '$p/company_ingress.py' show-public-key --db '$p/command-center.sqlite3' --hmac-key '$p/.company-bridge.key' --recipient-key '$p/.chat-command-rsa.key'" > "$d/recipient-key.txt"
           grep -Fq -- "-----BEGIN PUBLIC KEY-----" "$d/recipient-key.txt"
           grep -Fq -- "-----END PUBLIC KEY-----" "$d/recipient-key.txt"
           echo "ROTATED_RECIPIENT_PUBLIC_KEY_BEGIN"
           sed -n '/^-----BEGIN PUBLIC KEY-----$/,/^-----END PUBLIC KEY-----$/p' "$d/recipient-key.txt"
           echo "ROTATED_RECIPIENT_PUBLIC_KEY_END"
+      - name: Apply allowlisted factory policy and independently verify private receipt
+        if: steps.gate.outputs.operation == 'accept'
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          d="$RUNNER_TEMP/zomorod-command-channel"
+          ssh -T -F "$d/config" "$COMMAND_HOST" 'python3 -B - apply' < scripts/zomorod_allowlisted_policy_worker.py > "$d/policy-apply.txt"
+          if grep -Fxq "POLICY_APPLIED=NOT_APPLICABLE" "$d/policy-apply.txt"; then
+            echo "COMPANY_WORK_EXECUTION=NOT_PERFORMED"
+          else
+            grep -Fxq "POLICY_APPLIED=YES" "$d/policy-apply.txt"
+            command_id="$(sed -n 's/^POLICY_COMMAND_ID=//p' "$d/policy-apply.txt")"
+            [[ "$command_id" =~ ^[0-9a-f]{32}$ ]]
+            ssh -T -F "$d/config" "$COMMAND_HOST" "python3 -B - verify '$command_id'" < scripts/zomorod_allowlisted_policy_worker.py > "$d/policy-verify.txt"
+            grep -Fxq "PRIVATE_POLICY_READBACK=VERIFIED" "$d/policy-verify.txt"
+            grep -Fxq "PRIVATE_EXECUTION_RECEIPT=VERIFIED" "$d/policy-verify.txt"
+            echo "COMPANY_WORK_EXECUTION=ALLOWLISTED_POLICY_APPLIED"
+            echo "PRIVATE_POLICY_DURABILITY=INDEPENDENTLY_VERIFIED"
+          fi
       - name: Remove temporary relay credentials and receipts
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-command-channel" "$RUNNER_TEMP/recipient-key.txt" "$RUNNER_TEMP/zomorod-sealed-command.txt"
