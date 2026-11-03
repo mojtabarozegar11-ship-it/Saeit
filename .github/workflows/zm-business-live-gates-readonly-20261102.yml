@@ -1,0 +1,157 @@
+name: ZM live business desk read-only release gates audit
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths: [".github/workflows/zm-business-live-gates-readonly-20261102.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zm-business-live-gates-readonly
+  cancel-in-progress: false
+jobs:
+  attest-live-gates:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read-only public routing and HTTPS privacy check
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          landing="$RUNNER_TEMP/zm-login-noauth.html"
+          code="$(curl --max-time 25 -sSL -o "$landing" -w '%{http_code}' 'https://zomorodmelal.ir/business/?page=chatgpt_reports')"
+          test "$code" = "200"
+          grep -Fq 'ورود مدیر و حسابدار' "$landing"
+          ! grep -Fq 'پایش پنج چرخهٔ ساعتی' "$landing"
+          echo 'PUBLIC_BUSINESS_ROUTE=HTTP_200_LOGIN_GATED'
+          echo 'UNAUTHENTICATED_PRIVATE_REPORT_LEAK=no'
+      - name: Configure pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-live-gate-readonly"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Audit cPanel private data boundaries without financial writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-live-gate-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/.private/zomorod-business"
+          entry="$HOME/public_html/business/index.php"
+          phpbin="$(command -v php || echo /opt/cpanel/ea-php82/root/usr/bin/php)"
+          test -f "$entry" && test ! -L "$entry"
+          "$phpbin" -r 'exit(extension_loaded("pdo_sqlite")?0:1);'
+          "$phpbin" -r 'exit(class_exists("SQLite3")?0:1);'
+          "$phpbin" -r 'echo "PHP_CLI_VERSION=".PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION."\n";'
+          python3 - "$root" <<'PY'
+          import pathlib, stat, sqlite3, sys
+          root=pathlib.Path(sys.argv[1])
+          ledger=root/"management.sqlite3"
+          app=root/"app.php"
+          report=root/"chatgpt_reports_archive.sqlite3"
+          def file_secure(path):
+              try:
+                  info=path.lstat()
+                  return stat.S_ISREG(info.st_mode) and (info.st_mode & 0o077)==0 and info.st_size>0
+              except OSError:
+                  return False
+          root_info=root.lstat()
+          assert stat.S_ISDIR(root_info.st_mode) and (root_info.st_mode & 0o077)==0 and not root.is_symlink()
+          assert file_secure(app)
+          assert file_secure(ledger)
+          assert file_secure(report)
+          with ledger.open("rb") as handle:
+              assert handle.read(16)==b"SQLite format 3\x00"
+          print("PRIVATE_ACCOUNTING_ROOT_ACCESS=owner_only")
+          print("LIVE_FINANCIAL_LEDGER_FILE=secure_regular_file")
+          print("LIVE_REPORT_ARCHIVE_FILE=secure_regular_file")
+          # Only read-only SQLite queries; no migration, writes or file deletion.
+          with sqlite3.connect(ledger.as_uri()+"?mode=ro",uri=True,timeout=3) as db:
+              db.execute("PRAGMA query_only=ON")
+              status=db.execute("PRAGMA quick_check(1)").fetchone()
+              names={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              expected={"users","journal_entries","journal_lines","invoices","invoice_payments"}
+              assert status==("ok",) and expected <= names
+              print("PHP_LEDGER_READONLY_SCHEMA=valid")
+          with sqlite3.connect(report.as_uri()+"?mode=ro",uri=True,timeout=3) as db:
+              db.execute("PRAGMA query_only=ON")
+              version=db.execute("PRAGMA user_version").fetchone()[0]
+              count=db.execute("SELECT COUNT(*) FROM reports").fetchone()[0]
+              assert version==1 and count>=13
+              print("PRIVATE_REPORT_ARCHIVE_READONLY=valid")
+              print("NUMBERED_REPORTS_AT_AUDIT="+str(count))
+          # Verify the live store catalogue is owner-only without altering its
+          # financial or product records. This is a release gate, not a merchant test.
+          catalogue=root/"site_store.sqlite3"
+          assert file_secure(catalogue)
+          with sqlite3.connect(catalogue.as_uri()+"?mode=ro",uri=True,timeout=3) as db:
+              db.execute("PRAGMA query_only=ON")
+              assert db.execute("PRAGMA quick_check(1)").fetchone()==("ok",)
+              tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              assert {"products","free_digital_products","payment_state"} <= tables
+              state=db.execute("SELECT state FROM payment_state WHERE id=1").fetchone()
+              assert state and isinstance(state[0],str)
+              print("LIVE_STORE_PAYMENT_STATE="+("not_configured" if state[0]=="not_configured" else "requires_merchant_attestation"))
+          print("LIVE_STORE_CATALOG_FILE=owner_only_readonly_verified")
+          source=app.read_text(encoding="utf-8",errors="replace")
+          cookie_present=all(t in source for t in ("samesite","httponly","secure"))
+          print("SESSION_COOKIE_SOURCE_CONTROLS="+("present" if cookie_present else "NOT_PROVEN"))
+          print("PASSENGER_PROCESS_EFFECTIVE_DB_IDENTITY=NOT_PROVEN_BY_FILE_STAT")
+          print("INDEPENDENT_OWNER_KEY_OFFHOST_RESTORE=NOT_PROVEN")
+          print("LIVE_MFA_AND_ROLE_ACCEPTANCE=NOT_PROVEN")
+          print("FINANCIAL_DATA_WRITES=none")
+          PY
+          crontab -l | grep -Fq 'ZM_CHATGPT_REPORT_REFRESH'
+          echo 'REPORT_HOURLY_CRON=present'
+          echo 'VPS_FACTORY_ACTIONS=none'
+          REMOTE
+      - name: Clean ephemeral relay identity
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/zm-live-gate-readonly"

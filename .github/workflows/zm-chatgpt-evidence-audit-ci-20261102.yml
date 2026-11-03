@@ -1,0 +1,46 @@
+name: ZM source-reference attestation offline CI
+on:
+  pull_request:
+    paths:
+      - 'scripts/zm_chatgpt_evidence_verify.py'
+      - 'scripts/zm_chatgpt_action_index.py'
+      - 'tests/test_zm_chatgpt_evidence_verify.py'
+      - 'tests/test_zm_business_report_archive_php.py'
+      - 'content/zomorod-business/chatgpt_reports.php'
+      - '.github/workflows/zm-chatgpt-evidence-audit-ci-20261102.yml'
+  push:
+    branches:
+      - feature/zm-business-php-persian-reports-20261102
+    paths:
+      - 'scripts/zm_chatgpt_evidence_verify.py'
+      - 'tests/test_zm_chatgpt_evidence_verify.py'
+      - 'tests/test_zm_business_report_archive_php.py'
+      - 'content/zomorod-business/chatgpt_reports.php'
+      - '.github/workflows/zm-chatgpt-evidence-audit-ci-20261102.yml'
+permissions:
+  contents: read
+jobs:
+  verify-source-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: sqlite3,pdo_sqlite
+      - name: Offline evidence and immutable-index regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -m unittest discover -s tests -p 'test_zm_chatgpt_evidence_verify.py' -v
+          python3 -m unittest discover -s tests -p 'test_zm_chatgpt_action_index.py' -v
+          python3 -m unittest discover -s tests -p 'test_zm_business_report_archive_php.py' -v
+          php -l content/zomorod-business/chatgpt_reports.php
+          echo 'FINANCIAL_DB_TOUCHED=no'
+          echo 'PRODUCTION_DEPLOY_PERFORMED=no'

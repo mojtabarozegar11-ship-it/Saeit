@@ -1,0 +1,196 @@
+name: ZM live PHP management Persian ChatGPT report-only release
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths: [".github/workflows/zm-business-persian-report-guarded-release-20261102.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zm-live-php-private-reports-only
+  cancel-in-progress: false
+jobs:
+  persian-report-only-release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3
+      - name: Verify exact source, Persian pack and isolated regressions before host contact
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          case "$GITHUB_SHA" in *[!0-9a-f]*|'') exit 3 ;; esac
+          test "${#GITHUB_SHA}" = 40
+          php -l content/zomorod-business/chatgpt_reports.php
+          python3 -m unittest discover -s tests -p 'test_zomorod_chatgpt_report_snapshot.py'
+          python3 -m unittest discover -s tests -p 'test_zm_business_live_report_patch.py'
+          python3 -m py_compile scripts/zomorod_business_synthetic_qa.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=json.loads(Path('content/zomorod-business/chatgpt_reports_fa.json').read_text(encoding='utf-8'))
+          assert p['version']==1 and p['kind']=='persian_management_rendering'
+          assert p['source']=='github:mojtabarozegar11-ship-it/Saeit:issue:1725'
+          assert set(p['items'])=={f'05-{i:04d}' for i in range(2,10)}
+          assert len({x['comment_id'] for x in p['items'].values()})==8
+          for x in p['items'].values():
+              assert len(x['text_fa'])>=100
+              assert any('\u0600'<=ch<='\u06ff' for ch in x['text_fa'])
+          print('PERSIAN_PACK_VALIDATED=8')
+          PY
+          git show 08e9b6143fae9235c9399167c2cec1ff826998ec:content/zomorod-business/chatgpt_reports.php > "$RUNNER_TEMP/original-live-module.php"
+          sha256sum "$RUNNER_TEMP/original-live-module.php" | awk '{print $1}' > "$RUNNER_TEMP/expected-live-module-sha"
+          echo 'OFFLINE_PERSIAN_REPORT_GATE=passed'
+      - name: Configure pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-php-report-release"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Prepare remote isolated stage and original-module rollback
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-report-release"
+          expected="$(cat "$RUNNER_TEMP/expected-live-module-sha")"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$expected" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; expected="$2"
+          private="$HOME/.private/zomorod-business"
+          module="$private/chatgpt_reports.php"
+          snapshot="$private/chatgpt_reports_snapshot.json"
+          translation="$private/chatgpt_reports_fa.json"
+          stage="$private/.report-fa-$sha"
+          backup="$HOME/.backups/zm-business-report-fa/$sha"
+          test -d "$private" && test ! -L "$private"
+          test -f "$module" && test ! -L "$module"
+          test -f "$snapshot" && test ! -L "$snapshot"
+          test "$(stat -c %a "$module")" = 600
+          test "$(stat -c %a "$snapshot")" = 600
+          test ! -e "$translation" && test ! -L "$translation"
+          test ! -e "$stage" && test ! -e "$backup"
+          test "$(sha256sum "$module" | awk '{print $1}')" = "$expected"
+          install -d -m 700 "$stage" "$backup"
+          cp -p "$module" "$backup/chatgpt_reports.php"
+          sha256sum "$module" > "$backup/active-before.sha256"
+          echo 'ORIGINAL_PRIVATE_MODULE_BACKUP=preserved'
+          echo 'FINANCIAL_DATABASE_TOUCHED=no'
+          REMOTE
+      - name: Stage only Persian report viewer and receipt-bound translation pack
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-report-release"
+          tar -cf - -C content/zomorod-business chatgpt_reports.php chatgpt_reports_fa.json |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.private/zomorod-business/.report-fa-$GITHUB_SHA"
+      - name: PHP lint, guarded update and live anonymous-role acceptance
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-report-release"
+          expected="$(cat "$RUNNER_TEMP/expected-live-module-sha")"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$expected" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; expected="$2"
+          private="$HOME/.private/zomorod-business"
+          module="$private/chatgpt_reports.php"
+          translation="$private/chatgpt_reports_fa.json"
+          snapshot="$private/chatgpt_reports_snapshot.json"
+          stage="$private/.report-fa-$sha"
+          backup="$HOME/.backups/zm-business-report-fa/$sha"
+          test -f "$stage/chatgpt_reports.php" && test ! -L "$stage/chatgpt_reports.php"
+          test -f "$stage/chatgpt_reports_fa.json" && test ! -L "$stage/chatgpt_reports_fa.json"
+          test -f "$backup/chatgpt_reports.php"
+          test ! -e "$translation"
+          test "$(sha256sum "$module" | awk '{print $1}')" = "$expected"
+          phpbin="$(command -v php || echo /opt/cpanel/ea-php82/root/usr/bin/php)"
+          "$phpbin" -l "$stage/chatgpt_reports.php"
+          "$phpbin" -r '
+            $p=json_decode(file_get_contents($argv[1]),true,32,JSON_THROW_ON_ERROR);
+            if(($p["version"]??0)!==1||count($p["items"]??[])!==8)exit(1);
+            foreach($p["items"] as $k=>$v){
+              if(!preg_match("/^05-000[2-9]$/D",$k)||!is_int($v["comment_id"])||
+                 !is_string($v["text_fa"])||strlen($v["text_fa"])<100)exit(2);
+            }
+          ' "$stage/chatgpt_reports_fa.json"
+          test "$(stat -c %a "$snapshot")" = 600
+          rollback() {
+            set +e
+            cp -p "$backup/chatgpt_reports.php" "$stage/module.rollback.php" &&
+              mv -f "$stage/module.rollback.php" "$module"
+            rm -f "$translation"
+            echo 'PERSIAN_REPORT_ROLLBACK=restored_private_module'
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          install -m 600 "$stage/chatgpt_reports_fa.json" "$translation"
+          install -m 600 "$stage/chatgpt_reports.php" "$stage/module.new.php"
+          mv -f "$stage/module.new.php" "$module"
+          "$phpbin" -l "$module"
+          test "$(stat -c %a "$module")" = 600
+          test "$(stat -c %a "$translation")" = 600
+          test "$(sha256sum "$module" | awk '{print $1}')" = "$(sha256sum "$stage/chatgpt_reports.php" | awk '{print $1}')"
+          test "$(sha256sum "$translation" | awk '{print $1}')" = "$(sha256sum "$stage/chatgpt_reports_fa.json" | awk '{print $1}')"
+          code="$(curl -sS -L --max-time 25 -o "$stage/anonymous.html" -w '%{http_code}' 'https://zomorodmelal.ir/business/?page=chatgpt_reports' || true)"
+          test "$code" = 200
+          grep -Fq 'ورود مدیر و حسابدار' "$stage/anonymous.html"
+          ! grep -Fq 'متن گزارش به فارسی' "$stage/anonymous.html"
+          active=0
+          trap - EXIT
+          echo 'LIVE_PERSIAN_CHATGPT_REPORTS=installed'
+          echo 'HISTORICAL_PERSIAN_REPORTS=8'
+          echo 'ORIGINAL_NUMBERED_SOURCE=unchanged'
+          echo 'FINANCIAL_DATABASE_TOUCHED=no'
+          echo 'ORIGINAL_PRIVATE_MODULE_BACKUP=preserved'
+          REMOTE
+      - name: Cleanup temporary relay keys
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/zm-php-report-release"
+          rm -f "$RUNNER_TEMP/expected-live-module-sha" "$RUNNER_TEMP/original-live-module.php"

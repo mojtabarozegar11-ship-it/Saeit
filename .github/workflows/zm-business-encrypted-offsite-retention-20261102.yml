@@ -1,0 +1,135 @@
+name: ZM preserve verified encrypted financial recovery on VPS
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths: [".github/workflows/zm-business-encrypted-offsite-retention-20261102.yml"]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: zm-business-verified-encrypted-recovery-retention
+  cancel-in-progress: false
+jobs:
+  preserve-ciphertext:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify exact source head
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+      - name: Download previously restored and encrypted immutable backup artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: zm-business-recovery-41367339384
+          run-id: 41367339384
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/zm-business-backup-immutable
+      - name: Check original ciphertext identity before offsite retention
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-business-backup-immutable"
+          test -f "$dir/business.sqlite3.f01enc" && test ! -L "$dir/business.sqlite3.f01enc"
+          test -f "$dir/manifest.txt" && test ! -L "$dir/manifest.txt"
+          bytes="$(stat -c %s "$dir/business.sqlite3.f01enc")"
+          test "$bytes" -ge 10000 && test "$bytes" -le 2000000
+          expected="77f2afabdc3dba7a596d8634f66b7a4a45f5da7db8d7185318a52ba6ac4691ae"
+          actual="$(sha256sum "$dir/business.sqlite3.f01enc" | awk '{print $1}')"
+          test "$actual" = "$expected"
+          grep -Fxq 'format=F01ENC-RSA3072-AES256GCM-V1' "$dir/manifest.txt"
+          grep -Eq '^snapshot_sha256=[a-f0-9]{64}$' "$dir/manifest.txt"
+          echo 'IMMUTABLE_FINANCIAL_BACKUP_CIPHERTEXT_SHA256=verified'
+          echo 'SOURCE_RECOVERY_RUN=41367339384'
+          echo 'FINANCIAL_PLAINTEXT_DOWNLOADED=no'
+      - name: Configure fingerprint-pinned VPS connection
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          dir="$RUNNER_TEMP/zm-business-vps-retention"
+          install -d -m 700 "$dir"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$dir/vps.key"
+          chmod 600 "$dir/vps.key"
+          ssh-keygen -y -P "" -f "$dir/vps.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$dir/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$dir/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$dir/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $dir/vps.key
+            UserKnownHostsFile $dir/vps.known
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$dir/config"
+      - name: Preflight new owner-only ciphertext destination
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-business-vps-retention"
+          ssh -F "$dir/config" saeit-vps bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "githubops"
+          test "$HOME" = "/home/githubops"
+          test ! -L "$HOME/.private"
+          target="$HOME/.private/zm-business-offsite"
+          test ! -L "$target"
+          install -d -m 700 "$target"
+          test "$(stat -c %a "$target")" = 700
+          test "$(stat -c %u "$target")" = "$(id -u)"
+          available="$(df -Pk "$target" | awk 'END{print $4}')"
+          test "$available" -gt 10240
+          test ! -e "$target/zm-business-41367339384.f01enc"
+          test ! -L "$target/zm-business-41367339384.f01enc"
+          test ! -e "$target/zm-business-41367339384.f01enc.pending"
+          test ! -L "$target/zm-business-41367339384.f01enc.pending"
+          echo 'VPS_OFFSITE_DESTINATION=owner_only_free_space_verified'
+          REMOTE
+      - name: Transfer only encrypted ciphertext to durable VPS owner space
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-business-vps-retention"
+          source="$RUNNER_TEMP/zm-business-backup-immutable/business.sqlite3.f01enc"
+          scp -q -F "$dir/config" "$source" saeit-vps:/home/githubops/.private/zm-business-offsite/zm-business-41367339384.f01enc.pending
+          ssh -F "$dir/config" saeit-vps bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "githubops"
+          target="$HOME/.private/zm-business-offsite"
+          temp="$target/zm-business-41367339384.f01enc.pending"
+          final="$target/zm-business-41367339384.f01enc"
+          expected="77f2afabdc3dba7a596d8634f66b7a4a45f5da7db8d7185318a52ba6ac4691ae"
+          test -f "$temp" && test ! -L "$temp"
+          test "$(sha256sum "$temp" | awk '{print $1}')" = "$expected"
+          test ! -e "$final" && test ! -L "$final"
+          chmod 600 "$temp"
+          ln "$temp" "$final"
+          test -f "$final" && test ! -L "$final"
+          test "$(stat -c %a "$final")" = 600
+          test "$(sha256sum "$final" | awk '{print $1}')" = "$expected"
+          rm -f -- "$temp"
+          echo 'VPS_ENCRYPTED_BUSINESS_BACKUP=durably_preserved'
+          echo 'OFFHOST_CIPHERTEXT_SHA256=verified'
+          echo 'SOURCE_LIVE_FINANCIAL_DB_WRITES=none'
+          echo 'OWNER_KEY_INDEPENDENT_DECRYPT_RESTORE=not_yet_proven'
+          REMOTE
+      - name: Remove ephemeral runner keys and ciphertext copies
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/zm-business-vps-retention"
+          rm -rf -- "$RUNNER_TEMP/zm-business-backup-immutable"

@@ -10,6 +10,7 @@ import http.client
 from pathlib import Path
 import re
 import shutil
+import sqlite3
 import socket
 import subprocess
 import tempfile
@@ -204,6 +205,465 @@ class LogoutHTTPTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("ورود مدیر و حسابدار", html)
         self.assertNotIn('name="action" value="logout"', html)
+
+
+    def test_dashboard_shows_real_currency_balances_and_overdue_amounts(self) -> None:
+        """Operational totals must come from recorded invoices, not example figures."""
+        csrf = self.csrf(self.dashboard)
+        def post(page: str, action: str, **kwargs: str) -> int:
+            status, _, _ = self.request(
+                "POST", "/app.php?page="+page, cookie=self.cookie,
+                form={"csrf": csrf, "action": action, **kwargs},
+            )
+            return status
+
+        self.assertEqual(post("parties", "party", name="QA KPI Both", kind="both"), 303)
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            party_id = conn.execute(
+                "SELECT id FROM parties WHERE name='QA KPI Both' ORDER BY id DESC"
+            ).fetchone()[0]
+
+        def invoice(number: str, kind: str, amount: str, currency: str,
+                    due: str, purchase_class: str = "") -> None:
+            self.assertEqual(post(
+                "invoices", "invoice", invoice_no=number, kind=kind,
+                purchase_class=purchase_class, party=str(party_id), amount=amount,
+                currency=currency, date="2026-10-01", due_date=due,
+                description="Isolated KPI regression record",
+            ), 303)
+
+        invoice("QA-KPI-AED-SALE", "sale", "120.00", "AED", "2026-10-02")
+        invoice("QA-KPI-AED-PURCHASE", "purchase", "20.00", "AED", "2027-01-01", "service")
+        invoice("QA-KPI-EUR-SALE", "sale", "15.00", "EUR", "2027-01-01")
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            sale_id = conn.execute(
+                "SELECT id FROM invoices WHERE invoice_no='QA-KPI-AED-SALE'"
+            ).fetchone()[0]
+        self.assertEqual(post(
+            "payments", "payment", invoice_id=str(sale_id), amount="30.00",
+            date="2026-10-03", payment_evidence="QA-KPI-receipt-001",
+        ), 303)
+        status, _, dashboard = self.request(
+            "GET", "/app.php?page=dashboard", cookie=self.cookie
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("مطالبات و تعهدات پرداخت‌نشده", dashboard)
+        self.assertIn("با بانک یا اسناد تسویه خارجی تطبیق داده نشده‌اند", dashboard)
+        self.assertRegex(dashboard, r"<td>AED</td><td>90\.00</td><td>90\.00</td><td>20\.00</td><td>0\.00</td>")
+        self.assertRegex(dashboard, r"<td>EUR</td><td>15\.00</td><td>0\.00</td><td>0\.00</td><td>0\.00</td>")
+
+    def test_admin_can_revoke_access_without_deleting_user_history(self) -> None:
+        csrf = self.csrf(self.dashboard)
+        def post(action: str, **kwargs: str) -> int:
+            status, _, _ = self.request(
+                "POST", "/app.php?page=users", cookie=self.cookie,
+                form={"csrf": csrf, "action": action, **kwargs},
+            )
+            return status
+
+        status, _, users_html = self.request(
+            "GET", "/app.php?page=users", cookie=self.cookie
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("قفل تغییر", users_html)
+        self.assertEqual(post(
+            "user", username="qa_revoked_2026",
+            password="strictly-test-password-revoked-2026", role="viewer",
+        ), 303)
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            target = conn.execute(
+                "SELECT id FROM users WHERE username='qa_revoked_2026'"
+            ).fetchone()[0]
+            admin_id = conn.execute(
+                "SELECT id FROM users WHERE username=?", (USERNAME,)
+            ).fetchone()[0]
+
+        self.assertEqual(post(
+            "user_update", user_id=str(target), role="manager", active="1"
+        ), 303)
+        self.assertEqual(post(
+            "user_update", user_id=str(target), role="superadmin", active="0"
+        ), 422)
+        self.assertEqual(post(
+            "user_update", user_id=str(admin_id), role="viewer", active="0"
+        ), 403)
+        self.assertEqual(post(
+            "user_update", user_id=str(target), role="manager", active="0"
+        ), 303)
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            role, active = conn.execute(
+                "SELECT role,active FROM users WHERE id=?", (target,)
+            ).fetchone()
+            self.assertEqual((role, active), ("manager", 0))
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM audit_events WHERE subject='user-access' AND entity_id=?",
+                (target,),
+            ).fetchone()[0], 2)
+            self.assertEqual(conn.execute(
+                "SELECT role,active FROM users WHERE id=?", (admin_id,)
+            ).fetchone(), ("admin", 1))
+            self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+
+    def test_financial_classification_evidence_and_immutable_reversal(self) -> None:
+        """End-to-end on the temporary database; never a real purchase/payment."""
+        csrf = self.csrf(self.dashboard)
+        def post(page: str, action: str, **values: str) -> int:
+            result, _, _ = self.request(
+                "POST", "/app.php?page=" + page, cookie=self.cookie,
+                form={"csrf": csrf, "action": action, **values},
+            )
+            return result
+
+        self.assertEqual(post("parties", "party", name="Synthetic Finance Party",
+                              kind="both"), 303)
+        db_path = self.private / "management.sqlite3"
+        with sqlite3.connect(db_path) as conn:
+            party = conn.execute(
+                "SELECT id FROM parties WHERE name='Synthetic Finance Party' ORDER BY id DESC"
+            ).fetchone()[0]
+
+        fields = {
+            "kind": "purchase", "party": str(party), "invoice_no": "QA-PURCHASE-SERVICE",
+            "amount": "64.50", "currency": "USD", "date": "2026-11-02",
+            "due_date": "2026-11-02", "description": "Synthetic software service",
+        }
+        self.assertEqual(post("invoices", "invoice", **fields), 422,
+                         "An unclassified purchase must not silently become inventory")
+        with sqlite3.connect(db_path) as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM invoices WHERE invoice_no='QA-PURCHASE-SERVICE'"
+            ).fetchone()[0], 0)
+
+        self.assertEqual(post("invoices", "invoice", purchase_class="service", **fields), 303)
+        with sqlite3.connect(db_path) as conn:
+            invoice_journal = conn.execute(
+                "SELECT posted_entry FROM invoices WHERE invoice_no='QA-PURCHASE-SERVICE'"
+            ).fetchone()[0]
+            postings = conn.execute(
+                "SELECT a.code,l.debit,l.credit FROM journal_lines l "
+                "JOIN ledger_accounts a ON a.id=l.account_id WHERE l.entry_id=? "
+                "ORDER BY a.code", (invoice_journal,)
+            ).fetchall()
+        self.assertEqual(postings, [("2000", 0, 6450), ("5100", 6450, 0)])
+        self.assertEqual(post("journal", "journal_reverse", entry_id=str(invoice_journal),
+                              reason="Synthetic invoice forbidden reversal",
+                              date="2026-11-02"), 422)
+
+        sale_fields = {
+            "kind": "sale", "party": str(party), "invoice_no": "QA-SALE-EVIDENCE",
+            "amount": "19.00", "currency": "USD", "date": "2026-11-02",
+            "due_date": "2026-11-02", "description": "Synthetic output",
+        }
+        self.assertEqual(post("invoices", "invoice", **sale_fields), 303)
+        with sqlite3.connect(db_path) as conn:
+            sale_id = conn.execute(
+                "SELECT id FROM invoices WHERE invoice_no='QA-SALE-EVIDENCE'"
+            ).fetchone()[0]
+        payment = {
+            "invoice_id": str(sale_id), "amount": "7.00", "date": "2026-11-02",
+        }
+        self.assertEqual(post("payments", "payment", **payment), 422)
+        self.assertEqual(post("payments", "payment",
+                              payment_evidence="Synthetic-Receipt-001", **payment), 303)
+        with sqlite3.connect(db_path) as conn:
+            note = conn.execute(
+                "SELECT j.note FROM invoice_payments p "
+                "JOIN journal_entries j ON j.id=p.entry_id WHERE p.invoice_id=?",
+                (sale_id,)
+            ).fetchone()[0]
+        self.assertIn("Synthetic-Receipt-001", note)
+        self.assertIn("بدون راستی‌آزمایی بانکی", note)
+
+        self.assertEqual(post(
+            "journal", "journal", currency="USD", date="2026-11-02",
+            doc_no="QA-INDEPENDENT-JOURNAL", note="Synthetic manual journal",
+            account_0="1010", debit_0="27.00",
+            account_1="3000", credit_1="27.00"
+        ), 303)
+        with sqlite3.connect(db_path) as conn:
+            manual_id = conn.execute(
+                "SELECT id FROM journal_entries WHERE doc_no='QA-INDEPENDENT-JOURNAL'"
+            ).fetchone()[0]
+            original_lines = conn.execute(
+                "SELECT debit,credit FROM journal_lines WHERE entry_id=? ORDER BY id",
+                (manual_id,)
+            ).fetchall()
+        reversal_fields = {
+            "entry_id": str(manual_id),
+            "reason": "Synthetic posting correction",
+            "date": "2026-11-02",
+        }
+        self.assertEqual(post("journal", "journal_reverse", **reversal_fields), 303)
+        self.assertEqual(post("journal", "journal_reverse", **reversal_fields), 422)
+        with sqlite3.connect(db_path) as conn:
+            reverse_id = conn.execute(
+                "SELECT id FROM journal_entries WHERE doc_no=?",
+                ("REV-" + str(manual_id),)
+            ).fetchone()[0]
+            reversed_lines = conn.execute(
+                "SELECT debit,credit FROM journal_lines WHERE entry_id=? ORDER BY id",
+                (reverse_id,)
+            ).fetchall()
+            self.assertEqual(conn.execute(
+                "SELECT debit,credit FROM journal_lines WHERE entry_id=? ORDER BY id",
+                (manual_id,)
+            ).fetchall(), original_lines)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM journal_entries WHERE doc_no=?",
+                ("REV-" + str(manual_id),)
+            ).fetchone()[0], 1)
+        self.assertEqual(reversed_lines,
+                         [(credit, debit) for debit, credit in original_lines])
+
+
+    def test_all_module_validation_and_atomic_audit(self) -> None:
+        """One isolated HTTP regression batch across accounting and administrative modules."""
+        self.assertIn("پایش اجزای میز مدیریت", self.dashboard)
+        self.assertIn("ثبت پرسنل به معنی استخدام قطعی", self.dashboard)
+        self.assertIn(":focus-visible", self.dashboard)
+        csrf = self.csrf(self.dashboard)
+        def post(page: str, action: str, **values: str) -> int:
+            status, _, _ = self.request(
+                "POST", "/app.php?page="+page, cookie=self.cookie,
+                form={"csrf": csrf, "action": action, **values}
+            )
+            return status
+        db_path=self.private / "management.sqlite3"
+        # Invalid native PHP array input must not become the literal value "Array".
+        self.assertEqual(post("parties","party",**{"name[]":"Injected", "kind":"customer"}),422)
+        self.assertEqual(post("parties","party",name="QA-Customer-Strict",kind="customer"),303)
+        self.assertEqual(post("parties","party",name="QA-Supplier-Strict",kind="supplier"),303)
+        with sqlite3.connect(db_path) as conn:
+            customer=conn.execute("SELECT id FROM parties WHERE name='QA-Customer-Strict'").fetchone()[0]
+            supplier=conn.execute("SELECT id FROM parties WHERE name='QA-Supplier-Strict'").fetchone()[0]
+        invoice=dict(invoice_no="QA-STRICT-INV",amount="8.50",currency="USD",
+                     date="2026-11-02",due_date="2026-11-02",description="Synthetic bound invoice")
+        self.assertEqual(post("invoices","invoice",kind="sale",party=str(supplier),**invoice),422)
+        self.assertEqual(post("invoices","invoice",kind="purchase",purchase_class="service",
+                              party=str(customer),**invoice),422)
+        self.assertEqual(post("invoices","invoice",kind="sale",party=str(customer),
+                              **{**invoice,"due_date":"2026-11-01"}),422)
+        self.assertEqual(post("invoices","invoice",kind="sale",party="1.5",**invoice),422)
+        with sqlite3.connect(db_path) as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM invoices WHERE invoice_no='QA-STRICT-INV'").fetchone()[0],0)
+        self.assertEqual(post("invoices","invoice",kind="sale",party=str(customer),**invoice),303)
+        self.assertEqual(post("inventory","inventory",sku="QA-STRICT-ITEM",name="Strict inventory",
+                              reorder_level="-1"),422)
+        self.assertEqual(post("inventory","inventory",sku="QA-STRICT-ITEM",name="Strict inventory",
+                              reorder_level="3.5"),422)
+        self.assertEqual(post("inventory","inventory",sku="QA-STRICT-ITEM",name="Strict inventory",
+                              reorder_level="3"),303)
+        with sqlite3.connect(db_path) as conn:
+            item=conn.execute("SELECT id FROM inventory WHERE sku='QA-STRICT-ITEM'").fetchone()[0]
+        self.assertEqual(post("inventory","stock",inventory_id=str(item),qty="2.5",date="2026-11-02"),422)
+        self.assertEqual(post("inventory","stock",inventory_id=str(item),qty="-1",date="2026-11-02"),422)
+        self.assertEqual(post("inventory","stock",inventory_id=str(item),qty="5",date="2026-11-02"),303)
+        with sqlite3.connect(db_path) as conn:
+            self.assertEqual(conn.execute(
+                "SELECT SUM(qty) FROM inventory_movements WHERE inventory_id=?", (item,)
+            ).fetchone()[0],5)
+            # If writing the audit ledger fails, the corresponding new party must rollback.
+            conn.execute("""
+                CREATE TRIGGER qa_reject_party_audit BEFORE INSERT ON audit_events
+                WHEN NEW.subject='party' BEGIN SELECT RAISE(ABORT,'synthetic audit unavailable'); END
+            """)
+        self.assertEqual(post("parties","party",name="QA-ATOMIC-ROLLBACK",kind="both"),500)
+        with sqlite3.connect(db_path) as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM parties WHERE name='QA-ATOMIC-ROLLBACK'").fetchone()[0],0)
+            conn.execute("DROP TRIGGER qa_reject_party_audit")
+        self.assertEqual(post("parties","party",name="QA-ATOMIC-ROLLBACK",kind="both"),303)
+        self.assertEqual(post("documents","document",title="QA-document",body="A"*25001),422)
+        self.assertEqual(post("projects","project",title="QA-project",owner="Operator",
+                              state="active",budget="-1"),422)
+        with sqlite3.connect(db_path) as conn:
+            self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0],"ok")
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM parties WHERE name='QA-ATOMIC-ROLLBACK'").fetchone()[0],1)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM audit_events WHERE subject='party' AND entity_id="
+                "(SELECT id FROM parties WHERE name='QA-ATOMIC-ROLLBACK')").fetchone()[0],1)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM documents WHERE title='QA-document'").fetchone()[0],0)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM projects WHERE title='QA-project'").fetchone()[0],0)
+
+
+
+    def test_every_core_desk_page_is_reachable_and_optional_sources_fail_closed(self) -> None:
+        """Navigation acceptance for the entire logged-in accounting and admin desk."""
+        expected = {
+            "dashboard": "پایش اجزای میز مدیریت",
+            "accounts": "کدینگ حساب‌ها",
+            "journal": "دفتر روزنامه",
+            "trial": "تراز آزمایشی",
+            "parties": "مشتریان و تأمین‌کنندگان",
+            "invoices": "فاکتورهای فروش و خرید",
+            "payments": "دریافت‌ها و پرداخت‌های ثبت‌شده",
+            "inventory": "کالاها و موجودی تعدادی",
+            "employees": "پرسنل",
+            "documents": "نامه‌ها و مکاتبات اداری",
+            "projects": "پروژه‌های شرکت",
+            "approval_register": "دفتر مصوبات",
+            "audit": "ردپای عملیات ثبت‌شده",
+            "security": "تغییر گذرواژه حساب",
+            "users": "دسترسی کاربران",
+        }
+        for page, marker in expected.items():
+            with self.subTest(page=page):
+                status, _, html = self.request(
+                    "GET", "/app.php?page=" + page, cookie=self.cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertIn(marker, html)
+                self.assertNotIn("درخواست انجام نشد", html)
+        for page in ("store_manager", "agent_center", "chatgpt_reports"):
+            with self.subTest(optional_page=page):
+                status, _, html = self.request(
+                    "GET", "/app.php?page=" + page, cookie=self.cookie
+                )
+                # In the isolated fixture no optional private module exists.
+                self.assertEqual(status, 503)
+                self.assertIn("درخواست انجام نشد", html)
+
+
+
+    def test_role_permissions_and_live_session_downgrade(self) -> None:
+        """Verify every role on the isolated HTTP ledger; no production credentials."""
+        csrf = self.csrf(self.dashboard)
+        role_password = "QA-role-password-strong-2026"
+        identities = {
+            "viewer": "qa_viewer_role_2026",
+            "manager": "qa_manager_role_2026",
+            "accountant": "qa_accountant_role_2026",
+        }
+        for role_name, username in identities.items():
+            status, _, _ = self.request(
+                "POST", "/app.php?page=users", cookie=self.cookie,
+                form={
+                    "csrf": csrf, "action": "user", "username": username,
+                    "password": role_password, "role": role_name,
+                },
+            )
+            self.assertEqual(status, 303, f"create {role_name}")
+
+        def login(username: str) -> tuple[str, str]:
+            status, headers, page = self.request("GET", "/app.php")
+            self.assertEqual(status, 200)
+            anonymous_cookie = self.cookie_value(headers)
+            self.assertIsNotNone(anonymous_cookie)
+            status, headers, _ = self.request(
+                "POST", "/app.php", cookie=anonymous_cookie,
+                form={
+                    "csrf": self.csrf(page), "action": "login",
+                    "username": username, "password": role_password,
+                },
+            )
+            self.assertEqual(status, 303)
+            cookie = self.cookie_value(headers)
+            self.assertIsNotNone(cookie)
+            status, _, dashboard = self.request(
+                "GET", "/app.php?page=dashboard", cookie=cookie
+            )
+            self.assertEqual(status, 200)
+            return cookie, self.csrf(dashboard)
+
+        sessions = {role: login(username) for role, username in identities.items()}
+
+        for role_name in identities:
+            cookie, token = sessions[role_name]
+            for page in ("users", "chatgpt_reports"):
+                with self.subTest(role=role_name, denied_page=page):
+                    status, _, html = self.request(
+                        "GET", "/app.php?page=" + page, cookie=cookie
+                    )
+                    self.assertEqual(status, 403)
+                    self.assertIn("درخواست انجام نشد", html)
+                    self.assertNotIn("دسترسی کاربران</h2>", html)
+            status, _, _ = self.request(
+                "POST", "/app.php?page=users", cookie=cookie,
+                form={
+                    "csrf": token, "action": "user",
+                    "username": "qa_forbidden_user_2026",
+                    "password": role_password, "role": "admin",
+                },
+            )
+            self.assertEqual(status, 403)
+
+        for role_name, expected in (("viewer", 403), ("manager", 403),
+                                    ("accountant", 303)):
+            cookie, token = sessions[role_name]
+            status, _, _ = self.request(
+                "POST", "/app.php?page=accounts", cookie=cookie,
+                form={
+                    "csrf": token, "action": "account",
+                    "code": "889001", "name": "QA role-based ledger",
+                    "type": "expense",
+                },
+            )
+            self.assertEqual(status, expected, f"{role_name} account mutation")
+
+        manager_cookie, manager_csrf = sessions["manager"]
+        viewer_cookie, viewer_csrf = sessions["viewer"]
+        for cookie, token, expected, name in [
+            (viewer_cookie, viewer_csrf, 403, "QA Forbidden Viewer Party"),
+            (manager_cookie, manager_csrf, 303, "QA Authorized Manager Party"),
+        ]:
+            status, _, _ = self.request(
+                "POST", "/app.php?page=parties", cookie=cookie,
+                form={
+                    "csrf": token, "action": "party",
+                    "name": name, "kind": "both",
+                },
+            )
+            self.assertEqual(status, expected)
+
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM users WHERE username='qa_forbidden_user_2026'"
+            ).fetchone()[0], 0)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM parties WHERE name='QA Forbidden Viewer Party'"
+            ).fetchone()[0], 0)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM ledger_accounts WHERE code='889001'"
+            ).fetchone()[0], 1)
+            conn.execute(
+                "UPDATE users SET role='viewer' WHERE username=?",
+                (identities["manager"],),
+            )
+
+        status, _, html = self.request(
+            "GET", "/app.php?page=dashboard", cookie=manager_cookie
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("(viewer)", html)
+        status, _, _ = self.request(
+            "POST", "/app.php?page=parties", cookie=manager_cookie,
+            form={
+                "csrf": manager_csrf, "action": "party",
+                "name": "QA Downgraded Manager Party", "kind": "both",
+            },
+        )
+        self.assertEqual(status, 403, "existing session must honor role downgrade")
+
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            conn.execute(
+                "UPDATE users SET active=0 WHERE username=?",
+                (identities["manager"],),
+            )
+        status, _, html = self.request(
+            "GET", "/app.php?page=dashboard", cookie=manager_cookie
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("ورود مدیر و حسابدار", html)
+        self.assertNotIn('name="action" value="logout"', html)
+        with sqlite3.connect(self.private / "management.sqlite3") as conn:
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM parties WHERE name='QA Downgraded Manager Party'"
+            ).fetchone()[0], 0)
+            self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
 
 
 if __name__ == "__main__":

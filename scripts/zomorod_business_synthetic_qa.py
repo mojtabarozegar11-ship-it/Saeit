@@ -35,7 +35,7 @@ code="session_id(getenv('SID'));$_SERVER['REQUEST_METHOD']=getenv('REQ_METHOD');
 def request(method='GET',page=None,post=None):
     global sid
     env=os.environ.copy()
-    env.update({'SID':sid,'SID_RESULT':str(base/'sid.result'),'INDEX':str(web/'index.php'),'REQ_METHOD':method,'QUERY_JSON':json.dumps({'page':page} if page else {}),'POST_JSON':json.dumps(post or {})})
+    env.update({'SID':sid,'SID_RESULT':str(base/'sid.result'),'INDEX':str(web/'index.php'),'REQ_METHOD':method,'QUERY_JSON':json.dumps(page if isinstance(page,dict) else ({'page':page} if page else {})),'POST_JSON':json.dumps(post or {})})
     result=subprocess.run([php,'-d','session.save_path='+str(sessions),'-r',code],env=env,capture_output=True,text=True,timeout=25)
     assert result.returncode==0,('PHP test failed',result.stderr[-400:])
     sid=(base/'sid.result').read_text().strip()
@@ -58,7 +58,7 @@ dashboard=request('GET','dashboard')
 assert 'اسناد حسابداری' in dashboard
 request('POST','parties',{'csrf':csrf,'action':'party','name':'Synthetic Counterparty','kind':'customer'})
 request('POST','invoices',{'csrf':csrf,'action':'invoice','kind':'sale','party':'1','invoice_no':'SMOKE-INV-1','amount':'125.50','currency':'USD','date':'2026-10-18','due_date':'2026-10-18','description':'Synthetic invoice'})
-request('POST','payments',{'csrf':csrf,'action':'payment','invoice_id':'1','amount':'25.50','date':'2026-10-18'})
+request('POST','payments',{'csrf':csrf,'action':'payment','invoice_id':'1','amount':'25.50','date':'2026-10-18','payment_evidence':'SyntheticReceipt-001'})
 request('POST','journal',{'csrf':csrf,'action':'journal','currency':'USD','date':'2026-10-18','doc_no':'SMOKE-JV-1','note':'Balanced dummy','account_0':'1010','debit_0':'50.00','account_1':'3000','credit_1':'50.00'})
 bad=request('POST','journal',{'csrf':csrf,'action':'journal','currency':'USD','date':'2026-10-18','doc_no':'SMOKE-BAD','note':'Invalid dummy','account_0':'1010','debit_0':'80.00','account_1':'3000','credit_1':'50.00'})
 assert 'درخواست انجام نشد' in bad
@@ -129,11 +129,65 @@ report_data={
 report_file=private/'chatgpt_reports_snapshot.json'
 report_file.write_text(json.dumps(report_data,ensure_ascii=False),encoding='utf-8')
 report_file.chmod(0o600)
+# A separate, receipt-bound Persian pack must render by default, without
+# rewriting the original English source or allowing executable markup.
+fa_file=private/'chatgpt_reports_fa.json'
+fa_file.write_text(json.dumps({
+    'version':1,'source':report_data['source'],
+    'kind':'persian_management_rendering',
+    'items':{'05-0001':{'comment_id':987654,
+        'text_fa':'گزارش فارسی آزمایشی، بدون ادعای فروش. <script>injected()</script>'}}
+},ensure_ascii=False),encoding='utf-8')
+fa_file.chmod(0o600)
 page=request('GET','chatgpt_reports')
 assert 'گزارش‌های متنی اقدامات ChatGPT' in page
+assert 'پایش پنج چرخهٔ ساعتی' in page
+assert '۲۰ اقدام / تحقق احرازنشده' in page
+assert '01 · مقالات علمی' in page
+assert '05 · فرماندهی کسب‌وکار' in page
 assert '05-0001' in page
+assert 'گزارش فارسی آزمایشی' in page
+assert 'Synthetic private work report' not in page
 assert '&lt;script&gt;' in page and '<script>injected()</script>' not in page
+# If the source ID no longer matches, reject rather than misattribute a translation.
+fa_payload=json.loads(fa_file.read_text())
+fa_payload['items']['05-0001']['comment_id']=987655
+fa_file.write_text(json.dumps(fa_payload,ensure_ascii=False),encoding='utf-8')
+assert 'اعتبارسنجی پرونده گزارش ناموفق بود' in request('GET','chatgpt_reports')
+fa_file.unlink()
+assert 'ترجمه فارسی این گزارش هنوز' in request('GET','chatgpt_reports')
 assert 'گزارش‌های متنی ChatGPT' in request('GET','dashboard')
+# Independent immutable report archive: paging after 25 rows, Persian labels,
+# XSS escaping and unchanged accounting tables. This is a disposable DB only.
+archive_file=private/'chatgpt_reports_archive.sqlite3'
+with sqlite3.connect(str(archive_file)) as archive:
+    archive.execute('CREATE TABLE reports (seq INTEGER PRIMARY KEY, report_code TEXT NOT NULL UNIQUE, comment_id INTEGER NOT NULL UNIQUE, occurred_at TEXT NOT NULL, body TEXT NOT NULL, evidence_url TEXT NOT NULL)')
+    archive.execute('CREATE TABLE metadata (name TEXT PRIMARY KEY, value TEXT NOT NULL)')
+    archive.execute('PRAGMA user_version=1')
+    archive.execute("INSERT INTO metadata VALUES ('source','github:mojtabarozegar11-ship-it/Saeit:issue:1725')")
+    archive.execute("INSERT INTO metadata VALUES ('last_checked_at','2026-11-02T00:00:00+00:00')")
+    for n in range(1,27):
+        cid=987653+n
+        report_code=f'05-{n:04d}'
+        archive.execute('INSERT INTO reports(report_code,comment_id,occurred_at,body,evidence_url) VALUES (?,?,?,?,?)',
+                        (report_code,cid,'2026-11-02T01:00:00+00:00',
+                         'آزمایش فارسی صفحه‌بندی با <script>attack()</script> و رسید مستقل.',
+                         'https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-'+str(cid)))
+archive_file.chmod(0o600)
+first_page=request('GET','chatgpt_reports')
+assert 'تعداد گزارش‌های بایگانی‌شده: 26' in first_page
+assert '05-0026' in first_page and '05-0001' not in first_page
+assert '&lt;script&gt;attack()&lt;/script&gt;' in first_page
+assert '<script>attack()</script>' not in first_page
+assert 'صفحه قدیمی‌تر' in first_page
+second_page=request('GET',{'page':'chatgpt_reports','p':'2'})
+assert '05-0001' in second_page and 'صفحه جدیدتر' in second_page
+assert 'پایش پنج چرخهٔ ساعتی' in second_page
+archive_file.chmod(0o644)
+assert 'اعتبارسنجی آرشیو ناموفق بود' in request('GET','chatgpt_reports')
+archive_file.chmod(0o600)
+print('PRIVATE_IMMUTABLE_REPORT_ARCHIVE_PAGINATION_SYNTHETIC=PASS')
+archive_file.unlink()
 with sqlite3.connect(str(private/'management.sqlite3')) as rw:
     rw.execute("UPDATE users SET role='viewer' WHERE username='TestOnlyAdmin'")
 assert 'درخواست انجام نشد' in request('GET','chatgpt_reports')

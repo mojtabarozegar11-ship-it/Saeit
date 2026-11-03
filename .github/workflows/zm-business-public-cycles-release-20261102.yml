@@ -1,0 +1,286 @@
+name: ZM guarded Persian public cycles 01 02 04 report-only release
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths: [".github/workflows/zm-business-public-cycles-release-20261102.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zm-live-php-private-reports-only
+  cancel-in-progress: false
+jobs:
+  public-cycles-report-release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite,sqlite3
+      - name: Verify exact source and independent report-only QA
+        env:
+          ZM_GITHUB_REPORTS_READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          php -l content/zomorod-business/chatgpt_reports.php
+          php -r 'exit(class_exists("SQLite3")?0:1);'
+          python3 -m unittest discover -s tests -p 'test_zomorod_chatgpt_report_snapshot.py'
+          python3 -m unittest discover -s tests -p 'test_zm_business_report_archive_php.py'
+          python3 -m unittest discover -s tests -p 'test_zm_business_live_report_patch.py'
+          python3 -m py_compile scripts/zomorod_chatgpt_report_snapshot.py
+          PYTHONPATH=. python3 scripts/zomorod_chatgpt_report_snapshot.py --pages 1 > "$RUNNER_TEMP/source-preview"
+          grep -Fxq 'ZM_CHATGPT_SNAPSHOT=PREVIEW_ONLY' "$RUNNER_TEMP/source-preview"
+          grep -Fxq 'FINANCIAL_DB_TOUCHED=no' "$RUNNER_TEMP/source-preview"
+          git show adb92852513e8bd6acf5c8d076e29cbba4bd640b:content/zomorod-business/chatgpt_reports.php | sha256sum | awk '{print $1}' > "$RUNNER_TEMP/old-viewer.sha"
+          git show adb92852513e8bd6acf5c8d076e29cbba4bd640b:scripts/zomorod_chatgpt_report_snapshot.py | sha256sum | awk '{print $1}' > "$RUNNER_TEMP/old-refresh.sha"
+          sha256sum content/zomorod-business/chatgpt_reports.php | awk '{print $1}' > "$RUNNER_TEMP/new-viewer.sha"
+          sha256sum scripts/zomorod_chatgpt_report_snapshot.py | awk '{print $1}' > "$RUNNER_TEMP/new-refresh.sha"
+          echo 'PUBLIC_CYCLES_OFFLINE_TESTS=passed'
+      - name: Configure pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-php-public-cycles"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Verify live versions and preserve private report-only rollback evidence
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-public-cycles"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$(cat "$RUNNER_TEMP/old-viewer.sha")" "$(cat "$RUNNER_TEMP/old-refresh.sha")" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; old_viewer="$2"; old_refresh="$3"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          root="$HOME/.private/zomorod-business"
+          worker="$root/.chatgpt-report-sync"
+          viewer="$root/chatgpt_reports.php"
+          refresh="$worker/refresh.py"
+          archive="$root/chatgpt_reports_archive.sqlite3"
+          public="$root/chatgpt_reports_public_cycles.sqlite3"
+          snapshot="$root/chatgpt_reports_snapshot.json"
+          stage="$root/.report-public-cycles-$sha"
+          backup="$HOME/.backups/zm-report-public-cycles/$sha"
+          test -d "$root" && test ! -L "$root"
+          test -d "$worker" && test ! -L "$worker"
+          for path in "$viewer" "$refresh" "$archive" "$snapshot" "$worker/run-hourly.sh"; do
+            test -f "$path" && test ! -L "$path"
+          done
+          for path in "$viewer" "$refresh" "$archive" "$snapshot"; do
+            test "$(stat -c %a "$path")" = 600
+          done
+          test "$(sha256sum "$viewer" | awk '{print $1}')" = "$old_viewer"
+          test "$(sha256sum "$refresh" | awk '{print $1}')" = "$old_refresh"
+          test ! -e "$public" && test ! -L "$public"
+          test ! -e "$stage" && test ! -L "$stage"
+          test ! -e "$backup" && test ! -L "$backup"
+          install -d -m 700 "$stage" "$backup"
+          (
+            exec 8>"$worker/.lock"
+            flock -w 35 8
+            test "$(sha256sum "$viewer" | awk '{print $1}')" = "$old_viewer"
+            test "$(sha256sum "$refresh" | awk '{print $1}')" = "$old_refresh"
+            cp -p "$viewer" "$backup/viewer.before.php"
+            cp -p "$refresh" "$backup/refresh.before.py"
+            cp -p "$archive" "$backup/main-archive.before.sqlite3"
+            cp -p "$snapshot" "$backup/snapshot.before.json"
+            if test -f "$worker/last-status"; then cp -p "$worker/last-status" "$backup/status.before"; fi
+            sha256sum "$viewer" "$refresh" "$archive" "$snapshot" > "$backup/before.sha256"
+          )
+          echo 'LIVE_REPORT_VERSIONS=exact_preflight_match'
+          echo 'PRIVATE_REPORT_ROLLBACK_BACKUP=preserved'
+          REMOTE
+      - name: Transfer only Persian report viewer and hourly report refresh worker
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-public-cycles"
+          stage="/home/zomorod2/.private/zomorod-business/.report-public-cycles-$GITHUB_SHA"
+          tar -cf - -C content/zomorod-business chatgpt_reports.php |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
+          tar -cf - -C scripts zomorod_chatgpt_report_snapshot.py |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$stage'"
+      - name: Atomically release report-only files, verify four source-connected cycles and rollback on failure
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-php-public-cycles"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$(cat "$RUNNER_TEMP/old-viewer.sha")" "$(cat "$RUNNER_TEMP/old-refresh.sha")" "$(cat "$RUNNER_TEMP/new-viewer.sha")" "$(cat "$RUNNER_TEMP/new-refresh.sha")" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; old_viewer="$2"; old_refresh="$3"; new_viewer="$4"; new_refresh="$5"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ ]]
+          root="$HOME/.private/zomorod-business"
+          worker="$root/.chatgpt-report-sync"
+          viewer="$root/chatgpt_reports.php"
+          refresh="$worker/refresh.py"
+          archive="$root/chatgpt_reports_archive.sqlite3"
+          public="$root/chatgpt_reports_public_cycles.sqlite3"
+          snapshot="$root/chatgpt_reports_snapshot.json"
+          stage="$root/.report-public-cycles-$sha"
+          backup="$HOME/.backups/zm-report-public-cycles/$sha"
+          phpbin="$(command -v php || echo /opt/cpanel/ea-php82/root/usr/bin/php)"
+          "$phpbin" -r 'exit(class_exists("SQLite3")?0:1);'
+          for name in chatgpt_reports.php zomorod_chatgpt_report_snapshot.py; do
+            test -f "$stage/$name" && test ! -L "$stage/$name"
+            chmod 600 "$stage/$name"
+          done
+          test -f "$backup/viewer.before.php" && test -f "$backup/refresh.before.py"
+          test -f "$backup/main-archive.before.sqlite3"
+          test ! -e "$public" && test ! -L "$public"
+          test "$(sha256sum "$viewer" | awk '{print $1}')" = "$old_viewer"
+          test "$(sha256sum "$refresh" | awk '{print $1}')" = "$old_refresh"
+          test "$(sha256sum "$stage/chatgpt_reports.php" | awk '{print $1}')" = "$new_viewer"
+          test "$(sha256sum "$stage/zomorod_chatgpt_report_snapshot.py" | awk '{print $1}')" = "$new_refresh"
+          "$phpbin" -l "$stage/chatgpt_reports.php"
+          python3 -m py_compile "$stage/zomorod_chatgpt_report_snapshot.py"
+          changed=0
+          active=1
+          rollback() {
+            set +e
+            if test "$changed" = 1; then
+              if (
+                set -e
+                exec 8>"$worker/.lock"
+                flock -w 35 8
+                install -m 600 "$backup/viewer.before.php" "$stage/viewer.rollback.php"
+                mv -f "$stage/viewer.rollback.php" "$viewer"
+                install -m 600 "$backup/refresh.before.py" "$stage/refresh.rollback.py"
+                mv -f "$stage/refresh.rollback.py" "$refresh"
+                if test -f "$public" && test ! -L "$public"; then
+                  mv -f "$public" "$backup/public.failed.sqlite3"
+                fi
+                if test -f "$backup/status.before"; then cp -p "$backup/status.before" "$worker/last-status"; fi
+                # Main append-only source is deliberately retained, never truncated.
+              ); then
+                echo 'REPORT_PUBLIC_CYCLES_ROLLBACK=restored_previous_viewer_and_refresh'
+              else
+                echo 'REPORT_PUBLIC_CYCLES_ROLLBACK=FAILED_BACKUP_PRESERVED' >&2
+              fi
+            fi
+          }
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          changed=1
+          (
+            exec 8>"$worker/.lock"
+            flock -w 35 8
+            test "$(sha256sum "$viewer" | awk '{print $1}')" = "$old_viewer"
+            test "$(sha256sum "$refresh" | awk '{print $1}')" = "$old_refresh"
+            test ! -e "$public" && test ! -L "$public"
+            install -m 600 "$stage/chatgpt_reports.php" "$stage/viewer.new.php"
+            mv -f "$stage/viewer.new.php" "$viewer"
+            install -m 600 "$stage/zomorod_chatgpt_report_snapshot.py" "$stage/refresh.new.py"
+            mv -f "$stage/refresh.new.py" "$refresh"
+          )
+          bash "$worker/run-hourly.sh"
+          grep -Fq 'outcome=success' "$worker/last-status"
+          "$phpbin" -l "$viewer"
+          for path in "$viewer" "$refresh" "$archive" "$public" "$snapshot"; do
+            test -f "$path" && test ! -L "$path"
+            test "$(stat -c %a "$path")" = 600
+          done
+          test "$(sha256sum "$viewer" | awk '{print $1}')" = "$new_viewer"
+          test "$(sha256sum "$refresh" | awk '{print $1}')" = "$new_refresh"
+          python3 - "$archive" "$public" "$snapshot" "$backup/main-archive.before.sqlite3" "$backup/snapshot.before.json" <<'PY'
+          import collections
+          import json
+          import sqlite3
+          import sys
+          main_path,public_path,snapshot_path,main_backup,snapshot_backup=sys.argv[1:]
+          def read_archive(path,source):
+              with sqlite3.connect("file:"+path+"?mode=ro",uri=True) as db:
+                  assert db.execute("PRAGMA quick_check").fetchone()[0]=="ok"
+                  assert db.execute("PRAGMA user_version").fetchone()[0]==1
+                  assert db.execute("SELECT value FROM metadata WHERE name='source'").fetchone()==(source,)
+                  assert db.execute("SELECT value FROM metadata WHERE name='last_checked_at'").fetchone()
+                  rows=db.execute("SELECT report_code,comment_id,occurred_at,body,evidence_url FROM reports ORDER BY seq").fetchall()
+                  assert len(rows)==len({r[0] for r in rows})==len({r[1] for r in rows})
+                  assert [r[1] for r in rows]==sorted(r[1] for r in rows)
+                  return rows
+          main_source="github:mojtabarozegar11-ship-it/Saeit:issue:1725"
+          public_source="github:mojtabarozegar11-ship-it/Saeit:issue:1514"
+          old_main=read_archive(main_backup,main_source)
+          current_main=read_archive(main_path,main_source)
+          assert len(current_main)>=13 and current_main[:len(old_main)]==old_main
+          before=json.load(open(snapshot_backup,encoding="utf-8"))
+          after=json.load(open(snapshot_path,encoding="utf-8"))
+          assert before['source']==after['source']==main_source
+          assert before['version']==after['version']==1
+          assert after['items'][:len(before['items'])]==before['items']
+          assert after['count']==len(after['items']) and after['count']<=100
+          public=read_archive(public_path,public_source)
+          counts=collections.Counter(r[0][:2] for r in public)
+          assert set(counts).issubset({"01","02","04"})
+          assert counts["01"]>=12 and counts["02"]>=13 and counts["04"]>=14, counts
+          assert all(r[4]=="https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514#issuecomment-"+str(r[1]) for r in public)
+          assert all(isinstance(r[3],str) and len(r[3])>=20 for r in public)
+          print("LIVE_PUBLIC_CYCLES_01="+str(counts["01"]))
+          print("LIVE_PUBLIC_CYCLES_02="+str(counts["02"]))
+          print("LIVE_PUBLIC_CYCLES_04="+str(counts["04"]))
+          print("LIVE_REPORT_CYCLE_05="+str(len(current_main)))
+          print("CYCLE_03_SOURCE=not_connected")
+          print("PUBLIC_RECEIPT_EVIDENCE=verified_source_urls")
+          print("MAIN_ARCHIVE_AND_FIRST_100_RECEIPTS=preserved")
+          PY
+          crontab -l | grep -Fqx "50 * * * * /bin/bash $worker/run-hourly.sh >/dev/null 2>&1 # ZM_CHATGPT_REPORT_REFRESH"
+          code="$(curl -sS -L --max-time 25 -o "$stage/anonymous.html" -w '%{http_code}' 'https://zomorodmelal.ir/business/?page=chatgpt_reports' || true)"
+          test "$code" = 200
+          grep -Fq 'ورود مدیر و حسابدار' "$stage/anonymous.html"
+          ! grep -Fq 'پایش پنج چرخهٔ ساعتی' "$stage/anonymous.html"
+          active=0
+          trap - EXIT
+          echo 'LIVE_PERSIAN_FIVE_CYCLE_REPORTS=01_02_04_05_connected'
+          echo 'ADMIN_REPORT_VIEW=role_gated'
+          echo 'FINANCIAL_DATABASE_TOUCHED=no'
+          echo 'HOURLY_CRON=unchanged'
+          echo 'ROLLBACK_BACKUP=preserved'
+          REMOTE
+      - name: Cleanup ephemeral SSH relay keys
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/zm-php-public-cycles"
+          rm -f "$RUNNER_TEMP/old-viewer.sha" "$RUNNER_TEMP/old-refresh.sha" "$RUNNER_TEMP/new-viewer.sha" "$RUNNER_TEMP/new-refresh.sha" "$RUNNER_TEMP/source-preview"

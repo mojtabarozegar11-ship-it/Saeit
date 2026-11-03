@@ -1,0 +1,195 @@
+name: ZM read-only accounting insights guarded live upgrade
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths:
+      - 'content/zomorod-business/insights.php'
+      - 'tests/test_zm_business_insights_http.py'
+      - '.github/workflows/zm-business-insights-live-20261102.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zm-live-php-private-reports-only
+  cancel-in-progress: false
+jobs:
+  guarded-insights:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite,sqlite3
+      - name: Isolated real-HTTP, authentication and read-only regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          php -l content/zomorod-business/insights.php
+          python3 -m unittest discover -s tests -p 'test_zm_business_insights_http.py' -v
+          echo 'TEST_DATA=synthetic_isolated_only'
+          echo 'PRIVATE_SOURCE_EXPORT=no'
+          echo 'LIVE_ACCOUNTING_DB_ACCESS_FROM_RUNNER=no'
+      - name: Configure fingerprint-pinned two-hop SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-insights"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump zm-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" zm-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Host preflight and exact known-version rollback backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-insights"
+          digest="$(sha256sum content/zomorod-business/insights.php | awk '{print $1}')"
+          ssh -F "$d/config" zm-cpanel bash -se -- "$GITHUB_SHA" "$digest" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; digest="$2"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ && "$digest" =~ ^[a-f0-9]{64}$ ]]
+          root="$HOME/.private/zomorod-business"
+          web="$HOME/public_html/business"
+          stage="$root/.insights-install-$sha"
+          test -d "$root" && test ! -L "$root"
+          test -d "$web" && test ! -L "$web"
+          test -f "$root/app.php" && test ! -L "$root/app.php"
+          test -f "$root/management.sqlite3" && test ! -L "$root/management.sqlite3"
+          test "$(stat -c %a "$root/management.sqlite3")" = 600
+          test "$(stat -c %a "$root/app.php")" = 600
+          test -f "$web/index.php" && test ! -L "$web/index.php"
+          old=6906dee8c0071853720cf984e8621566d58a7cd9313ed15f5c32e1eee585f726
+          test -f "$web/insights.php" && test ! -L "$web/insights.php"
+          test "$(sha256sum "$web/insights.php" | awk '{print $1}')" = "$old"
+          test "$(stat -c %a "$web/insights.php")" = 644
+          test ! -e "$web/.insights-install-$sha.php" && test ! -L "$web/.insights-install-$sha.php"
+          test ! -e "$stage" && test ! -L "$stage"
+          phpbin=/opt/cpanel/ea-php82/root/usr/bin/php
+          test -x "$phpbin"
+          "$phpbin" -m | grep -Fxq pdo_sqlite
+          "$phpbin" -l "$root/app.php" >/dev/null
+          install -d -m 700 "$stage"
+          install -m 600 "$web/insights.php" "$stage/insights.before.php"
+          test "$(sha256sum "$stage/insights.before.php" | awk '{print $1}')" = "$old"
+          sha256sum "$root/app.php" | awk '{print $1}' > "$stage/original-app.sha256"
+          echo 'EXISTING_INSIGHTS=exact_known_version_backed_up'
+          echo 'LIVE_APP_SOURCE=not_modified'
+          echo 'FINANCIAL_DATABASE=not_modified'
+          REMOTE
+      - name: Upload only new public insights module to owner-only staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-insights"
+          scp -F "$d/config" content/zomorod-business/insights.php "zm-cpanel:/home/zomorod2/.private/zomorod-business/.insights-install-$GITHUB_SHA/insights.php"
+      - name: Upgrade insights route with anonymous protection smoke and rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-insights"
+          digest="$(sha256sum content/zomorod-business/insights.php | awk '{print $1}')"
+          ssh -F "$d/config" zm-cpanel bash -se -- "$GITHUB_SHA" "$digest" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; digest="$2"
+          [[ "$sha" =~ ^[a-f0-9]{40}$ && "$digest" =~ ^[a-f0-9]{64}$ ]]
+          root="$HOME/.private/zomorod-business"
+          web="$HOME/public_html/business"
+          stage="$root/.insights-install-$sha"
+          dest="$web/insights.php"
+          ready="$web/.insights-install-$sha.php"
+          phpbin=/opt/cpanel/ea-php82/root/usr/bin/php
+          test -f "$stage/insights.php" && test ! -L "$stage/insights.php"
+          test "$(sha256sum "$stage/insights.php" | awk '{print $1}')" = "$digest"
+          test "$(sha256sum "$root/app.php" | awk '{print $1}')" = "$(cat "$stage/original-app.sha256")"
+          old=6906dee8c0071853720cf984e8621566d58a7cd9313ed15f5c32e1eee585f726
+          test -f "$dest" && test ! -L "$dest"
+          test "$(sha256sum "$dest" | awk '{print $1}')" = "$old"
+          test "$(sha256sum "$stage/insights.before.php" | awk '{print $1}')" = "$old"
+          test ! -e "$ready" && test ! -L "$ready"
+          "$phpbin" -l "$stage/insights.php" >/dev/null
+          install -m 0644 "$stage/insights.php" "$ready"
+          test "$(sha256sum "$ready" | awk '{print $1}')" = "$digest"
+          published=0
+          rollback() {
+            set +e
+            if test "$published" = 1 && test -f "$dest" && test ! -L "$dest" && test "$(sha256sum "$dest" | awk '{print $1}')" = "$digest"; then
+              restore="$web/.insights-restore-$sha.php"
+              if install -m 0644 "$stage/insights.before.php" "$restore" && mv -f "$restore" "$dest"; then
+                echo 'INSIGHTS_ROLLBACK=restored_exact_previous_version'
+              else
+                echo 'INSIGHTS_ROLLBACK=manual_backup_preserved' >&2
+              fi
+            fi
+            if test -f "$ready" && test ! -L "$ready"; then mv "$ready" "$stage/unpublished.php"; fi
+          }
+          trap 'rc=$?; trap - EXIT; rollback; exit "$rc"' EXIT
+          mv -f "$ready" "$dest"
+          published=1
+          test -f "$dest" && test ! -L "$dest"
+          test "$(sha256sum "$dest" | awk '{print $1}')" = "$digest"
+          test "$(stat -c %a "$dest")" = 644
+          code="$(curl --silent --show-error --location --max-time 30 --output "$stage/anonymous.html" --write-out '%{http_code}' 'https://zomorodmelal.ir/business/insights.php')"
+          test "$code" = 403
+          grep -Fq 'برای دیدن گزارش ابتدا وارد حساب مجاز شوید' "$stage/anonymous.html"
+          ! grep -Fq 'مانده به تفکیک ارز' "$stage/anonymous.html"
+          test "$(sha256sum "$root/app.php" | awk '{print $1}')" = "$(cat "$stage/original-app.sha256")"
+          test "$(stat -c %a "$root/management.sqlite3")" = 600
+          published=0
+          trap - EXIT
+          echo 'LIVE_READONLY_INSIGHTS=installed'
+          echo 'LIVE_PRIVATE_QUALITY_CONTROLS=visible_only_after_login'
+          echo 'QUALITY_RESULTS_TO_GITHUB=none'
+          echo 'ANONYMOUS_ACCESS=denied_403'
+          echo 'PRIVATE_APP=unchanged'
+          echo 'PRIVATE_FINANCIAL_DATABASE=not_written_by_release'
+          echo 'AUTHENTICATED_OWNER_SMOKE=not_proven'
+          REMOTE
+      - name: Remove temporary SSH keys on runner
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/zm-insights"

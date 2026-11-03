@@ -1,0 +1,40 @@
+name: ZM private store manager read-only offline regression
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths:
+      - 'content/zomorod-business/app.php'
+      - 'content/zomorod-v11/site_store.php'
+      - 'tests/test_zm_business_access_http.py'
+      - '.github/workflows/zm-store-manager-readonly-offline-ci-20261102.yml'
+  pull_request:
+    paths:
+      - 'content/zomorod-business/app.php'
+      - 'content/zomorod-v11/site_store.php'
+      - 'tests/test_zm_business_access_http.py'
+      - '.github/workflows/zm-store-manager-readonly-offline-ci-20261102.yml'
+permissions:
+  contents: read
+jobs:
+  readonly-manager:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite,sqlite3
+      - name: Exact-head syntax and isolated HTTP regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || test "$GITHUB_EVENT_NAME" = "pull_request"
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-v11/site_store.php
+          python3 -m unittest discover -v -s tests -p 'test_zm_business_access_http.py'
+          echo 'STORE_MANAGER_GET_READONLY_TESTED=yes'
+          echo 'FINANCIAL_DB_IN_CI=synthetic_only'
+          echo 'LIVE_HOST_OR_PAYMENT_ACCESSED=no'

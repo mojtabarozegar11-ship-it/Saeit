@@ -1,0 +1,41 @@
+name: ZM free release status and safe PHP bootstrap (offline exact-head)
+on:
+  push:
+    branches: [feature/zm-business-php-persian-reports-20261102]
+    paths:
+      - 'content/zomorod-v11/store_index.php'
+      - 'content/zomorod-v11/site_store.php'
+      - 'tests/test_zm_free_catalog_integrity.py'
+      - 'tests/test_zomorod_free_seed_product.py'
+      - '.github/workflows/zm-store-release-truth-offline-20261102.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zm-store-release-truth-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3
+      - name: Verify exact commit, PHP syntax and isolated public/private catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          php -l content/zomorod-v11/site_store.php
+          php -l content/zomorod-v11/store_index.php
+          python3 -m unittest discover -s tests -p 'test_zm_free_catalog_integrity.py' -v
+          python3 -m unittest discover -s tests -p 'test_zomorod_free_seed_product.py' -v
+          echo 'ZM_STORE_TEST_HEAD='"${GITHUB_SHA}"
+          echo 'PRODUCTION_STORE_MODIFIED=no'
+          echo 'PAYMENTS_PROCESSED=no'
