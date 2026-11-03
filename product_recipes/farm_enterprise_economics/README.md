@@ -1,8 +1,10 @@
-# Farm Enterprise Economics Toolkit — Edition 1.0
+# Farm Enterprise Economics Toolkit — Edition 1.2
 
 A working, offline agricultural enterprise calculator written in Python 3.8+.
 It estimates contribution margin, annual operating result, break-even sales
-quantity, and nine price/quantity sensitivity cases for each enterprise.
+quantity, nine price/quantity sensitivity cases for each enterprise, and nine
+correlated portfolio-wide stress scenarios. It can export an accessible,
+self-contained HTML management report for offline viewing or printing.
 All numerical assumptions are entered by the user. No external data feeds,
 API keys, payment accounts or network connections are required.
 
@@ -12,9 +14,10 @@ API keys, payment accounts or network connections are required.
 2. Copy example_inputs.json and replace ALL illustrative values with your own.
 3. Run:
 
-   python calculator.py example_inputs.json --json-output results.json --csv-output scenarios.csv
+   python calculator.py example_inputs.json --json-output results.json --csv-output scenarios.csv --html-output management-report.html
 
-4. Review the outputs. Never treat scenarios as guaranteed forecasts.
+4. Open management-report.html in any browser, including without an internet
+   connection. Review the outputs; never treat scenarios as forecasts.
 
 ## Inputs
 
@@ -56,6 +59,31 @@ depends on real sales and constraints.
 Nine stress tests per enterprise vary realized volume by -20%, 0%, +20%
 and unit selling price by -10%, 0%, +10%. Selling-fee percentage, variable
 cost per sold unit, and fixed cost remain unchanged.
+
+## Whole-farm portfolio risk overview
+
+The JSON output contains `portfolio_scenario_results` with nine stress rows.
+Each row applies the SAME sales-volume multiplier (0.80, 1.00 or 1.20) and
+selling-price multiplier (0.90, 1.00 or 1.10) across every enterprise.
+For each enterprise, the selected sold-volume, received unit price, variable
+unit cost, allocated fixed cost and selling fee determine operating profit;
+portfolio totals add enterprise operating profits once. The middle scenario
+must equal the baseline portfolio operating profit.
+
+The correlated model is deliberately conservative about shared movements but
+does not estimate probabilities, correlations from data or risk-adjusted returns.
+It cannot establish likelihoods or investment suitability. It is useful for
+spotting portfolio exposure to the same shock.
+
+## Offline HTML management report
+
+`--html-output management-report.html` creates a complete HTML document with
+portfolio key figures, enterprise operating results, and a whole-portfolio
+stress table. It contains no remote links, scripts, trackers or external
+resources. User-entered labels are HTML-escaped; the report works offline,
+supports browser printing and has horizontally scrollable tables on narrow
+screens. Keep the generated report private when it contains sensitive business
+assumptions or financial information.
 
 ## How to interpret a scenario
 
