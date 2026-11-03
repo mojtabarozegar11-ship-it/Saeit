@@ -357,6 +357,11 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
     root = Path(output).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(str(root), 0o700)
+    # Persistent cross-controller admission comes BEFORE science, design, or
+    # manufacturing writes. Another F-01 lane remains blocked across reboot.
+    singleton = load("saeit_factory_global_singleton_v1",
+                     SCRIPTS / "factory_global_singleton_v1.py")
+    singleton.reserve_lane(root, "line41")
     lock = root / ".production-cycle.lock"
     with lock.open("a+b") as file:
         os.chmod(str(lock), 0o600)
