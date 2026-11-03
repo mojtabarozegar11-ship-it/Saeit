@@ -402,4 +402,8 @@ def test_private_queue_capability_audit_is_metadata_only_and_valid_python():
     assert "SELECT *" not in parsed
     assert "shell=True" not in parsed
     assert "private_db.unlink" not in parsed
+    assert "node.value in safe_verbs" in parsed
+    assert "print(table_name" not in parsed
+    assert "print(ingress_path.read_text" not in parsed
+    assert "SELECT payload" not in parsed
     assert "db.execute(\"UPDATE" not in parsed
