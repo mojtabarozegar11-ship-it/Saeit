@@ -1,0 +1,130 @@
+name: ZM V7 one-time additive staging on private host
+on:
+  push:
+    branches:
+      - audit/zm-v7-additive-oneshot-20261103-r3m7
+    paths:
+      - '.github/workflows/zm-v7-additive-oneshot.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zm-v7-additive-oneshot-20261103
+  cancel-in-progress: false
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: d18ea8aeda2bd5801ff74e363b87d633e2270a65
+          fetch-depth: 1
+      - name: Static public-source checks and bundled staging payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$(git rev-parse HEAD)" = d18ea8aeda2bd5801ff74e363b87d633e2270a65
+          php -l content/zomorod-business/app.php >/dev/null
+          python3 -c 'import ast,pathlib;ast.parse(pathlib.Path("scripts/zm_v7_additive_reconcile.py").read_text("utf-8"))'
+          install -d -m 700 "$RUNNER_TEMP/zm-additive"
+          tar -czf "$RUNNER_TEMP/zm-additive/public.tar.gz" scripts/zm_v7_additive_reconcile.py content/zomorod-business/app.php
+          test -s "$RUNNER_TEMP/zm-additive/public.tar.gz"
+          echo "PUBLIC_SOURCE_LINT=pass"
+          echo "BUNDLE_SCOPE=public_candidate_and_reconciler"
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-business-source-readonly"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo "VPS_HOSTKEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # Resolve cPanel from the already pinned VPS, then compare its ED25519
+          # fingerprint before any connection to the production account.
+          scan="$(timeout 35s ssh -T -F "$d/config" saeit-vps 'timeout 10s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOSTKEY=verified"
+          payload_b64="$(base64 -w0 "$RUNNER_TEMP/zm-additive/public.tar.gz")"
+          test -n "$payload_b64" && test "${#payload_b64}" -lt 160000
+          timeout 180s ssh -F "$d/config" saeit-cpanel bash -se -- "$payload_b64" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = zomorod2
+          payload_b64="$1"
+          test "${#payload_b64}" -gt 100 && test "${#payload_b64}" -lt 160000
+          private="$HOME/.private/zomorod-business"
+          live="$private/app.php"
+          test -d "$private" && test ! -L "$private"
+          test -s "$live" && test ! -L "$live"
+          test "$(stat -c %U "$live")" = zomorod2
+          live_sha="$(sha256sum "$live" | awk '{print $1}')"
+          echo "LIVE_APP_SHA256=$live_sha"
+          echo "AUDIT_MODE=private_temporary_staging_only"
+          if test "$live_sha" != 2ed9274affa87f3e9c51f7dff0c72d7461118c7aca0ae0ab732b1c81cbfd6005; then
+            echo "ADDITIVE_STAGE=blocked"
+            echo "BLOCK_REASON=LIVE_SHA_CHANGED"
+            exit 5
+          fi
+          if php -l "$live" >/dev/null 2>&1; then echo "LIVE_PHP_LINT=pass"; else echo "LIVE_PHP_LINT=fail"; exit 2; fi
+          if ! command -v python3 >/dev/null; then echo "HOST_PYTHON3=missing"; exit 3; fi
+          tmp="$(mktemp -d "$private/.v7-additive-staging.XXXXXXXX")"
+          test -n "$tmp" && test -d "$tmp" && test ! -L "$tmp"
+          trap 'test -n "$tmp" && rm -rf -- "$tmp"' EXIT
+          printf '%s' "$payload_b64" | base64 -d > "$tmp/public.tar.gz"
+          tar -xzf "$tmp/public.tar.gz" -C "$tmp" --no-same-owner
+          test -s "$tmp/scripts/zm_v7_additive_reconcile.py"
+          test -s "$tmp/content/zomorod-business/app.php"
+          chmod 600 "$tmp/public.tar.gz" "$tmp/scripts/zm_v7_additive_reconcile.py" "$tmp/content/zomorod-business/app.php"
+          if test -s "$private/chatgpt_reports.php" && test ! -L "$private/chatgpt_reports.php"; then echo "REPORTS_MODULE=installed"; else echo "REPORTS_MODULE=missing"; fi
+          if test -s "$private/approvals_snapshot.json" && test ! -L "$private/approvals_snapshot.json"; then echo "APPROVAL_SNAPSHOT=installed"; else echo "APPROVAL_SNAPSHOT=missing"; fi
+          PYTHONDONTWRITEBYTECODE=1 python3 -B "$tmp/scripts/zm_v7_additive_reconcile.py" \
+            --live "$live" \
+            --candidate "$tmp/content/zomorod-business/app.php" \
+            --out "$tmp/staged.php" \
+            --expected-sha 2ed9274affa87f3e9c51f7dff0c72d7461118c7aca0ae0ab732b1c81cbfd6005
+          if php -l "$tmp/staged.php" >/dev/null 2>&1; then echo "STAGED_PHP_LINT=pass"; else echo "STAGED_PHP_LINT=fail"; exit 4; fi
+          echo "STAGING=structural_pass"
+          echo "EFFECTIVE_APP_REPLACED=no"
+          echo "LIVE_DATABASE_WRITTEN=no"
+          echo "PRIVATE_SOURCE_EXPORTED=no"
+          REMOTE
