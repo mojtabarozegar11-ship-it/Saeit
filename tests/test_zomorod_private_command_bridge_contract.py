@@ -78,6 +78,7 @@ def test_dispatch_is_owner_main_only_for_manual_or_exact_issue_comment():
     assert "github.event.comment.user.login == 'mojtabarozegar11-ship-it'" in source
     assert "github.event.comment.body == 'ZMR-PUBLIC-KEY-V1'" in source
     assert "github.event.comment.body == 'ZMR-CPANEL-READONLY-V1'" in source
+    assert "github.event.comment.body == 'ZMR-CUTOVER-RECORD-V1'" in source
     assert "startsWith(github.event.comment.body, 'ZMR-SEALED-COMMAND-V1')" in source
     for forbidden in (
         "\n  push:", "\n  pull_request:", "\n  schedule:",
@@ -193,6 +194,7 @@ def test_manual_input_gate_rejects_bad_envelopes(
     [
         (_owner_comment("ZMR-PUBLIC-KEY-V1"), True, "show_public_key"),
         (_owner_comment("ZMR-CPANEL-READONLY-V1"), True, "cpanel_readonly"),
+        (_owner_comment("ZMR-CUTOVER-RECORD-V1"), True, "cutover_record"),
         (_owner_comment("ZMR-SEALED-COMMAND-V1\n" + json.dumps(VALID_ENVELOPE)), True, "accept"),
         (_owner_comment("ZMR-PUBLIC-KEY-V1", issue_number=1601), False, None),
         (_owner_comment("ZMR-PUBLIC-KEY-V1", user="another-user"), False, None),
@@ -329,8 +331,8 @@ def test_emergency_direct_cpanel_path_never_lowers_identity_or_host_key_pins():
     assert "PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED" in source
     assert "PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE" in source
     assert 'printf \'command_host=%s\\n\' "$command_host" >> "$GITHUB_OUTPUT"' in source
-    assert source.count('case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct)') == 3
-    assert source.count('COMMAND_HOST: ${{ steps.link.outputs.command_host }}') == 3
+    assert source.count('case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct)') == 4
+    assert source.count('COMMAND_HOST: ${{ steps.link.outputs.command_host }}') == 4
     assert 'ssh -F "$RUNNER_TEMP/zomorod-command-channel/config" "$COMMAND_HOST"' in source
     assert 'ssh -F "$d/config" "$COMMAND_HOST"' in source
     assert "UserKnownHostsFile /dev/null" not in source
@@ -345,3 +347,27 @@ def test_ssh_control_socket_paths_fit_github_runner_unix_limit():
     assert source.count("ControlMaster auto") == 2
     assert 'install -d -m 700 "$d"' in source
     assert "ControlPath /tmp/" not in source
+
+def test_owner_only_cutover_record_is_a_fixed_private_write_with_independent_readback(tmp_path):
+    result, outputs, encrypted = _run_gate(
+        _owner_comment("ZMR-CUTOVER-RECORD-V1"), "issue_comment", tmp_path
+    )
+    assert result.returncode == 0
+    assert "operation=cutover_record" in outputs.read_text(encoding="utf-8")
+    assert not encrypted.exists()
+    source = _source()
+    step = source.split(
+        "- name: Record private owner cutover decision and verify durable write", 1
+    )[1].split("- name: Read the current recipient public key", 1)[0]
+    assert "if: steps.gate.outputs.operation == 'cutover_record'" in step
+    assert 'case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct)' in step
+    assert "os.O_EXCL" in step and "O_NOFOLLOW" in step
+    assert "CHAT_MUTATING_COMMAND_EXECUTED=YES" in step
+    assert "PRIVATE_RECEIPT_VERIFIED=YES" in step
+    assert "REMOTE_DISABLED=NO" in step
+    assert "shell=True" not in step
+    for marker in ("CUTOVER_WRITE_PY", "CUTOVER_VERIFY_PY"):
+        body = step.split("<<'" + marker + "'\n", 1)[1].split(
+            "\n          " + marker, 1
+        )[0]
+        ast.parse("\n".join(line[10:] for line in body.splitlines()) + "\n")

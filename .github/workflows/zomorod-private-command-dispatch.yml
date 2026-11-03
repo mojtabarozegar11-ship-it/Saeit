@@ -41,6 +41,7 @@ jobs:
             github.event.comment.body == 'ZMR-PUBLIC-KEY-V1'
             || startsWith(github.event.comment.body, 'ZMR-SEALED-COMMAND-V1')
             || github.event.comment.body == 'ZMR-CPANEL-READONLY-V1'
+            || github.event.comment.body == 'ZMR-CUTOVER-RECORD-V1'
           )
         )
       )
@@ -108,6 +109,8 @@ jobs:
                   operation, raw = "show_public_key", None
               elif body == "ZMR-CPANEL-READONLY-V1":
                   operation, raw = "cpanel_readonly", None
+              elif body == "ZMR-CUTOVER-RECORD-V1":
+                  operation, raw = "cutover_record", None
               elif isinstance(body, str) and body.startswith("ZMR-SEALED-COMMAND-V1\n"):
                   operation, raw = "accept", body.split("\n", 1)[1]
               else:
@@ -115,7 +118,7 @@ jobs:
           else:
               raise SystemExit("EVENT_REJECTED")
 
-          if operation not in ("show_public_key", "accept", "cpanel_readonly"):
+          if operation not in ("show_public_key", "accept", "cpanel_readonly", "cutover_record"):
               raise SystemExit("OPERATION_REJECTED")
           if operation == "accept":
               try:
@@ -770,6 +773,74 @@ jobs:
           print("CPANEL_SITE_MUTATIONS=NONE")
           print("CPANEL_FACTORY_OPERATIONS=NONE")
           CPANEL_READONLY_PY
+      - name: Record private owner cutover decision and verify durable write
+        if: steps.gate.outputs.operation == 'cutover_record'
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          ssh -T -F "$RUNNER_TEMP/zomorod-command-channel/config" "$COMMAND_HOST" 'python3 -B -' <<'CUTOVER_WRITE_PY'
+          import hashlib
+          import json
+          import os
+          import pwd
+          import stat
+          from pathlib import Path
+          if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
+              raise SystemExit("CUTOVER_WRONG_ACCOUNT")
+          root = Path("/home/zomorod2/.private/zomorod-business")
+          if not root.is_dir() or root.is_symlink():
+              raise SystemExit("CUTOVER_PRIVATE_ROOT_INVALID")
+          target = root / "chat-relay-cutover-20261103.json"
+          document = {
+              "schema_version": 1,
+              "owner_decision": "retire_remote_desktop_commander_after_verified_chat_execution",
+              "primary_route": "ChatGPT-GitHub-Actions-pinned-VPS-cPanel",
+              "chat_readonly_evidence_run": 41547325620,
+              "scheduled_private_db_write_evidence_run": 41546326289,
+              "chat_cutover_record": "written_on_cpanel",
+              "generic_sealed_queue_execution": "not_verified",
+              "remote_desktop_commander": "not_disabled",
+              "recorded_date": "2026-11-03",
+          }
+          raw = (json.dumps(document, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+          try:
+              fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+          except FileExistsError:
+              if target.is_symlink() or not target.is_file() or target.read_bytes() != raw:
+                  raise SystemExit("CUTOVER_EXISTING_RECORD_UNSAFE_OR_DIFFERENT")
+              print("CUTOVER_PRIVATE_WRITE=ALREADY_RECORDED")
+          else:
+              with os.fdopen(fd, "wb") as handle:
+                  handle.write(raw)
+                  handle.flush()
+                  os.fsync(handle.fileno())
+              print("CUTOVER_PRIVATE_WRITE=COMMITTED")
+          if not stat.S_ISREG(target.stat().st_mode) or target.stat().st_mode & 0o077:
+              raise SystemExit("CUTOVER_RECEIPT_PERMISSIONS_INVALID")
+          print("CUTOVER_RECEIPT_SHA256=" + hashlib.sha256(raw).hexdigest())
+          CUTOVER_WRITE_PY
+          ssh -T -F "$RUNNER_TEMP/zomorod-command-channel/config" "$COMMAND_HOST" 'python3 -B -' <<'CUTOVER_VERIFY_PY'
+          import json
+          import os
+          import pwd
+          from pathlib import Path
+          if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2":
+              raise SystemExit("CUTOVER_VERIFY_WRONG_ACCOUNT")
+          target = Path("/home/zomorod2/.private/zomorod-business/chat-relay-cutover-20261103.json")
+          if target.is_symlink() or not target.is_file() or target.stat().st_mode & 0o077:
+              raise SystemExit("CUTOVER_VERIFY_UNSAFE_RECORD")
+          document = json.loads(target.read_bytes())
+          if (document.get("chat_cutover_record") != "written_on_cpanel"
+                  or document.get("remote_desktop_commander") != "not_disabled"
+                  or document.get("chat_readonly_evidence_run") != 41547325620):
+              raise SystemExit("CUTOVER_VERIFY_CONTENT_MISMATCH")
+          print("CHAT_MUTATING_COMMAND_EXECUTED=YES")
+          print("PRIVATE_RECEIPT_VERIFIED=YES")
+          print("REMOTE_DISABLED=NO")
+          CUTOVER_VERIFY_PY
       - name: Read the current recipient public key
         if: steps.gate.outputs.operation == 'show_public_key'
         shell: bash
