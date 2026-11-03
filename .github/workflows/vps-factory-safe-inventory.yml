@@ -43,6 +43,25 @@ jobs:
           ops="$base/operations"
           app="$base/django-app"
           echo FACTORY_INVENTORY_BEGIN
+          # Cross-scheduler singleton reconnaissance (read-only; never print raw command lines).
+          # A per-line flock is NOT a global cross-workflow product lock.
+          ps -eo args= | awk '
+            /[f]actory_vps_product_cycle[.]py|[s]trict-serial-fullcycle|[r]un-local-cycle[.]sh|[v]ps-only-loop[.]sh|[p]roduction-warehouse|[f]actory_product_maker[.]py|[s]tage[1-6]-/ {
+              n++; if (n <= 20) { if (/factory_vps_product_cycle[.]py/) t["line41"]++; else if (/strict-serial-fullcycle/) t["agri200"]++; else t["other"]++; }
+            }
+            END {print "FACTORY_SINGLETON_PROCESS_CANDIDATES=" n+0; for (k in t) print "FACTORY_SINGLETON_PROCESS_CLASS_" toupper(k) "=" t[k] }
+          '
+          cron_inventory="$(crontab -l 2>/dev/null || true)"
+          printf '%s\n' "$cron_inventory" | awk '
+            /^[[:space:]]*#/ || /^[[:space:]]*$/ {next}
+            /[f]actory|[a]gri200|[p]roduct|[w]arehouse|[r]esearch/ {n++}
+            END {print "FACTORY_SINGLETON_CRON_CANDIDATES=" n+0}
+          '
+          timer_inventory="$(systemctl list-timers --all --no-legend --no-pager 2>/dev/null || true)"
+          printf '%s\n' "$timer_inventory" | awk 'tolower($0) ~ /factory|agri200|warehouse|product/ {n++} END {print "FACTORY_SINGLETON_TIMER_CANDIDATES=" n+0}'
+          service_inventory="$(systemctl list-units --all --type=service --no-legend --no-pager 2>/dev/null || true)"
+          printf '%s\n' "$service_inventory" | awk 'tolower($0) ~ /factory|agri200|warehouse/ {n++} END {print "FACTORY_SINGLETON_SERVICE_CANDIDATES=" n+0}'
+          echo FACTORY_SINGLETON_PROOF=NOT_ESTABLISHED_BY_INVENTORY
           echo "VPS_USER=$(id -un)"
           echo "VPS_HOSTNAME=$(hostname)"
           echo "VPS_UPTIME=$(uptime -p)"
