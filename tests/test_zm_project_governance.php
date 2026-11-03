@@ -53,6 +53,12 @@ denied(fn()=>zmGovHandle($db,'project_approval_decide'),403,'inactive admin cann
 $ROLE='admin';$ACTOR=2;
 zmGovHandle($db,'project_approval_decide');
 ok(zmGovHasExecutionClearance($db,1),'independent admin approval grants clearance');
+$db->exec("UPDATE users SET active=0 WHERE id=2");
+ok(!zmGovHasExecutionClearance($db,1),'deactivated reviewer cannot confer operational clearance');
+$db->exec("UPDATE users SET active=1,role='viewer' WHERE id=2");
+ok(!zmGovHasExecutionClearance($db,1),'reviewer without admin permission cannot confer operational clearance');
+$db->exec("UPDATE users SET role='admin' WHERE id=2");
+ok(zmGovHasExecutionClearance($db,1),'active authorized distinct reviewer valid again');
 $db->exec("UPDATE documents SET body='Unauthorized post-approval change' WHERE id=1");
 ok(!zmGovHasExecutionClearance($db,1),'changed evidence automatically revokes execution clearance');
 $db->exec("UPDATE documents SET body='Source text unchanged' WHERE id=1");
