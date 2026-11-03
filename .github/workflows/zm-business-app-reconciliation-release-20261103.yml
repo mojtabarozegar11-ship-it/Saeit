@@ -4,6 +4,11 @@ on:
     branches: [feature/zm-bank-ledger-20261102]
     paths:
       - '.github/workflows/zm-business-app-reconciliation-release-20261103.yml'
+      - 'content/zomorod-business/app.php'
+      - 'content/zomorod-business/app.reconciled-candidate-20261103.php'
+      - 'content/zomorod-business/app.production-20261103.php'
+      - 'content/zomorod-business/project_governance.php'
+      - 'scripts/zm_production_app_guard.py'
   workflow_dispatch:
     inputs:
       mode:
@@ -109,6 +114,14 @@ jobs:
           test -f "$root/management.sqlite3" && test ! -L "$root/management.sqlite3"
           test "$(stat -c %a "$root/app.php")" = 600
           test "$(stat -c %a "$root/management.sqlite3")" = 600
+          phpbin=/opt/cpanel/ea-php82/root/usr/bin/php
+          test -x "$phpbin"
+          for module in workflow_desk.php project_control.php project_integrations.php project_governance.php project_ops.php project_portfolio.php industry_operations.php finance_audit.php payroll_control.php payroll_ui.php period_controls.php site_agents.php site_store.php command_center.php insights.php; do
+            file="$root/$module"
+            test -f "$file" && test ! -L "$file"
+            "$phpbin" -l "$file" >/dev/null
+          done
+          echo "PRODUCTION_REQUIRED_PHP_MODULES=15_present_and_lint_clean"
           python3 - <<'PY'
           import sqlite3
           p="file:/home/zomorod2/.private/zomorod-business/management.sqlite3?mode=ro"
