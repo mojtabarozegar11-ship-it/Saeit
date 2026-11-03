@@ -28,6 +28,8 @@ function zmPortfolioRender(PDO $db):void {
     $assignedOpen=(int)one($db,"SELECT COUNT(*) FROM zm_project_milestones m JOIN zm_project_milestone_assignments a ON a.milestone_id=m.id WHERE m.state NOT IN ('done','cancelled')");
     $unassignedOpen=max(0,$openMilestones-$assignedOpen);
     $updateCount=(int)one($db,'SELECT COUNT(*) FROM zm_project_updates');
+    $pendingApprovals=(int)one($db,"SELECT COUNT(*) FROM zm_project_approval_cases WHERE status='submitted'");
+    $recordedExecutionDecisions=(int)one($db,"SELECT COUNT(DISTINCT project_id) FROM zm_project_approval_cases WHERE kind='execution' AND status='approved'");
     $statusChanges=(int)one($db,'SELECT COUNT(*) FROM zm_project_events');
     $sourceCounts=q($db,'SELECT source,COUNT(*) AS total,COUNT(DISTINCT project_id) AS projects FROM zm_project_links GROUP BY source ORDER BY total DESC,source');
     $withLinksAndDue=q($db,"SELECT p.id,p.title,p.state,p.owner,
@@ -47,9 +49,9 @@ function zmPortfolioRender(PDO $db):void {
     echo '<section><h2>گزارش جامع سبد پروژه‌های زمرد ملل</h2>';
     echo '<p class="muted">آخرین بازخوانی: '.esc($today).'، ساعت ایران. گزارش از داده‌های واقعی دفتر پروژه استخراج می‌شود. بودجه صرفاً پیشنهادی است و هیچ هزینه یا اشتغالی از آن استنباط نمی‌شود.</p>';
     echo '<div class="grid">';
-    foreach(['کل پرونده‌ها'=>$total,'مصوب در متن مصوبه'=>$approved,'ردشده؛ فقط بایگانی'=>$rejected,'بدون برچسب قطعی مصوبه'=>$uncategorized,'دارای ارتباط مستند'=>$linkedProjects,'فاقد ارتباط ثبت‌شده'=>max(0,$total-$linkedProjects),'دارای زمان‌بندی'=>$withMilestones,'اقدامات باز'=>$openMilestones,'اقدامات معوق'=>$overdue,'اقدامات مسدود'=>$blocked,'اقدامات باز دارای مسئول'=>$assignedOpen,'اقدامات باز فاقد مسئول'=>$unassignedOpen,'گزارش‌های پیشرفت و موانع'=>$updateCount] as $label=>$count)
+    foreach(['کل پرونده‌ها'=>$total,'مصوب در متن مصوبه'=>$approved,'ردشده؛ فقط بایگانی'=>$rejected,'بدون برچسب قطعی مصوبه'=>$uncategorized,'دارای ارتباط مستند'=>$linkedProjects,'فاقد ارتباط ثبت‌شده'=>max(0,$total-$linkedProjects),'دارای زمان‌بندی'=>$withMilestones,'اقدامات باز'=>$openMilestones,'اقدامات معوق'=>$overdue,'اقدامات مسدود'=>$blocked,'اقدامات باز دارای مسئول'=>$assignedOpen,'اقدامات باز فاقد مسئول'=>$unassignedOpen,'درخواست تصویب در انتظار'=>$pendingApprovals,'پروژه دارای تصمیم اجرای ثبت‌شده'=>$recordedExecutionDecisions,'گزارش‌های پیشرفت و موانع'=>$updateCount] as $label=>$count)
         echo '<div class="card"><div class="metric">'.(int)$count.'</div><h3>'.esc($label).'</h3></div>';
-    echo '</div><p><a href="?page=projects">جست‌وجو و مدیریت پروژه‌ها</a> · <a href="?page=project_links">پرونده یکپارچه</a> · <a href="?page=project_calendar">تقویم پروژه‌ها</a> · <a href="?page=project_assignments">کارتابل مسئولان</a>';
+    echo '</div><p><a href="?page=projects">جست‌وجو و مدیریت پروژه‌ها</a> · <a href="?page=project_links">پرونده یکپارچه</a> · <a href="?page=project_calendar">تقویم پروژه‌ها</a> · <a href="?page=project_assignments">کارتابل مسئولان</a> · <a href="?page=project_governance">مصوبات و مستندات پروژه‌ها</a>';
     if(in_array(role(),['admin','accountant'],true))echo ' · <a href="?page=project_finance">گزارش مالی پروژه‌ها</a>';
     echo '</p></section>';
     echo '<p class="muted">مصوب و ردشده از برچسب صریح پرونده استخراج می‌شوند؛ وضعیت برنامه‌ریزی یا توقف به تنهایی ملاک مصوبه نیست.</p>';
