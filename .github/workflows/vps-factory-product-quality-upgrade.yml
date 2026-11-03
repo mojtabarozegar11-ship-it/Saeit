@@ -11,6 +11,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sync:
+    # F-01: disabled legacy deployment; it executes 3- and 5-product cycles.
+    # Only a globally gated single-product controller may be authorized.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
