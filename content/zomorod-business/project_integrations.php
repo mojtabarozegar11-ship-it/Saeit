@@ -176,6 +176,9 @@ function zmPiHandle(PDO $db,string $private,string $action):void {
         }elseif($action==='project_milestone_state'){
             zmPiRequireActor($db,['admin','manager']);
             if(!$approved)bail('پرونده فاقد مصوبه قطعی نمی‌تواند وارد مسیر اجرای اقدام شود.',409);
+            if(in_array(req('next_state'),['in_progress','done'],true) &&
+               (!function_exists('zmGovHasExecutionClearance')||!zmGovHasExecutionClearance($db,$projectId)))
+                bail('شروع یا اتمام اجرای اقدام، نیازمند مجوز داخلی اجرای مستند و مستقل است.',409);
             $midText=req('milestone_id');
             if(!preg_match('/^[1-9][0-9]{0,17}$/D',$midText))bail('شناسه اقدام معتبر نیست.');
             $mid=(int)$midText;
@@ -273,6 +276,7 @@ function zmPiRender(PDO $db,string $private):void {
     if(!$approved && !$archiveOnly)
         echo '<section><h2>پرونده فاقد مصوبه قطعی</h2><p>تا احراز مصوبه، فقط مکاتبات و بررسی اداری مجاز است؛ اجرای عملیات، گزارش پیشرفت فیزیکی یا انتساب مالی ممنوع است.</p></section>';
     if($archiveOnly)echo '<section><h2>پرونده ردشده — فقط بایگانی</h2><p>این پرونده برای سابقه تاریخی حفظ می‌شود و ایجاد اقدام، سند اجرایی یا ارتباط مالی جدید برای آن ممنوع است.</p></section>';
+    if(function_exists('zmGovDisplay'))zmGovDisplay($db,$pid);
     $sourceNames=zmPiSources();
     $links=q($db,'SELECT l.*,u.username FROM zm_project_links l JOIN users u ON u.id=l.created_by WHERE l.project_id=? ORDER BY l.id DESC LIMIT 150',[$pid]);
     echo '<section><h2>پیوندهای مستند به زیرسامانه‌های شرکت</h2><div class="scroll"><table><tr><th>بخش</th><th>مرجع</th><th>عنوان مرجع</th><th>دلیل اتصال</th><th>ایجادکننده</th></tr>';
