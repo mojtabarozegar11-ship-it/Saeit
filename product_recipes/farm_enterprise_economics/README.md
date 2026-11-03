@@ -175,6 +175,34 @@ uses 80 significant digits to support aggregate totals for high-unit currencies,
 including IRR, without failing during cents rounding. Monetary displays are
 rounded to two decimal places; this is not an exchange-rate conversion.
 
+## Reproducibility fingerprint and read-only report verification
+
+The JSON and offline HTML outputs contain `input_fingerprint_sha256`, a
+SHA-256 digest of the *accepted and normalized economic inputs*: currency,
+enterprise name, quantity, exact input price, exact variable unit cost,
+exact allocated fixed cost and fee percentage, in enterprise order. It is
+independent of whitespace, unrelated metadata and JSON object key order.
+No input file is uploaded, and the fingerprint is computed offline.
+
+To check a saved JSON report against the original assumptions and the
+currently installed calculator version:
+
+   python calculator.py example_inputs.json --verify-json results.json
+
+This read-only operation recomputes all results and compares the entire
+stored report with the newly calculated report, including the scenarios.
+It exits with an input error when anything differs; it neither rewrites
+the original inputs nor modifies the saved report. Do not combine
+`--verify-json` with report-generation output flags.
+
+**Limits:** This digest is NOT a digital signature, independent peer review,
+proof of intellectual-property ownership or evidence that user-provided
+prices/costs match real markets. A malicious actor can edit both the inputs
+and result file and then recompute a matching digest. Retain a separately
+controlled copy of the input and the installed software version for genuine
+external audit. Different calculator versions can legitimately generate
+different report fields even when input fingerprints match.
+
 ## Customer data and report file safety
 
 Keep your original input JSON. The CLI refuses to use the same resolved path for

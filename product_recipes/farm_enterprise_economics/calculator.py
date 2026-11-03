@@ -9,6 +9,7 @@ import argparse
 import csv
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, localcontext
 from functools import wraps
+import hashlib
 import html
 import json
 from pathlib import Path
@@ -122,6 +123,7 @@ def enterprise(entry):
         "variable_cost_per_unit": money(variable),
         "variable_cost_per_unit_exact": format(variable, "f"),
         "allocated_fixed_cost": money(fixed),
+        "allocated_fixed_cost_exact": format(fixed, "f"),
         "selling_fee_percent": str(fee_pct),
         "sales_revenue": money(revenue),
         "selling_fees": money(fees),
@@ -274,9 +276,29 @@ def evaluate(data):
                     "variable_cost_multiplier": str(variable_cost_factor),
                     "modeled_operating_profit": money(total_profit),
                 })
+    # Canonical hash of the accepted *economic* model inputs, independent
+    # of irrelevant JSON key ordering or extra non-model metadata. This is an
+    # unsigned reproducibility fingerprint, never third-party source validation.
+    canonical_inputs = {
+        "currency": currency,
+        "enterprises": [
+            {key: item[key] for key in (
+                "name", "units_sold", "unit_price_exact",
+                "variable_cost_per_unit_exact", "allocated_fixed_cost_exact",
+                "selling_fee_percent"
+            )}
+            for item in results
+        ],
+    }
+    canonical_bytes = json.dumps(
+        canonical_inputs, sort_keys=True, ensure_ascii=False,
+        separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    input_fingerprint = hashlib.sha256(canonical_bytes).hexdigest()
     return {
         "version": "1.3",
         "currency": currency,
+        "input_fingerprint_sha256": input_fingerprint,
         "accounting_scope": "contribution_profit_before_depreciation_financing_tax",
         "input_values_independently_validated": False,
         "assumptions": [
@@ -364,6 +386,7 @@ aside{border-left:4px solid #a05b22;padding:1rem;background:#fff7e9}
 @media print{body{max-width:none;padding:0}header{print-color-adjust:exact}section{break-inside:avoid}}
 </style></head><body>
 <header><h1>Farm Enterprise Economics</h1><p>Private offline management report · Currency: """ + e(report["currency"]) + """</p></header>
+<p><strong>Accepted input SHA-256 fingerprint:</strong> <code>""" + e(report["input_fingerprint_sha256"]) + """</code></p>
 <main><div class="kpis">""" + summary + """</div>
 <section><h2>Enterprise operating results</h2>""" + enterprise_table + """</section>
 <section><h2>Whole-portfolio sensitivity</h2><p>Correlated volume and selling-price changes are applied to all enterprises at once. These are scenarios, not probabilities or forecasts.</p>""" + stress_table + """</section>
@@ -380,16 +403,26 @@ def main(argv=None):
     ap.add_argument("--json-output", help="Write results to a local JSON file")
     ap.add_argument("--csv-output", help="Write all scenario results to local CSV file")
     ap.add_argument("--html-output", help="Write a self-contained offline management report")
+    ap.add_argument("--verify-json", help="Read-only: recompute and compare an existing JSON report")
     args = ap.parse_args(argv)
     source = Path(args.input_json)
     # Protect the customer's source data and prevent multiple formats from
     # silently replacing one another when a CLI argument repeats a path.
+    if args.verify_json and any((args.json_output, args.csv_output, args.html_output)):
+        raise ValueError("verification is read-only and cannot be combined with output destinations")
     output_paths = [Path(path) for path in (args.json_output, args.csv_output, args.html_output) if path]
     canonical_paths = [source.resolve()] + [path.resolve() for path in output_paths]
     if len(canonical_paths) != len(set(canonical_paths)):
         raise ValueError("input and output file paths must be distinct")
     data = json.loads(source.read_text(encoding="utf-8"))
     output = evaluate(data)
+    if args.verify_json:
+        previously_saved = json.loads(Path(args.verify_json).read_text(encoding="utf-8"))
+        if previously_saved != output:
+            raise ValueError("stored report does not match recomputed results from these inputs")
+        print("VERIFIED: recomputed report matches accepted inputs (SHA-256 "
+              + output["input_fingerprint_sha256"] + ")")
+        return 0
     body = json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.json_output:
         Path(args.json_output).write_text(body, encoding="utf-8")

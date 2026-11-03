@@ -271,6 +271,53 @@ class EconomicsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             evaluate(bad)
 
+    def test_accepted_input_fingerprint_is_stable_and_changes_with_economics(self):
+        import re
+        original = evaluate(self.example)
+        reordered = json.loads(json.dumps(self.example, sort_keys=True))
+        self.assertEqual(evaluate(reordered)["input_fingerprint_sha256"],
+                         original["input_fingerprint_sha256"])
+        fingerprint = original["input_fingerprint_sha256"]
+        self.assertRegex(fingerprint, r"^[0-9a-f]{64}$")
+        changed = {
+            "currency": "USD",
+            "enterprises": [dict(self.example["enterprises"][0], unit_price="10.01")]
+        }
+        self.assertNotEqual(evaluate(changed)["input_fingerprint_sha256"], fingerprint)
+        self.assertIn(fingerprint, render_html_report(original))
+        self.assertEqual(original["results"][0]["allocated_fixed_cost_exact"], "3000")
+
+    def test_cli_verification_recalculates_and_rejects_tampering_without_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            source = base / "assumptions.json"
+            report = base / "result.json"
+            source.write_text(json.dumps(self.example), encoding="utf-8")
+            command = [sys.executable, str(Path(__file__).with_name("calculator.py")), str(source)]
+            first = subprocess.run(command + ["--json-output", str(report)],
+                                   text=True, capture_output=True, timeout=15)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            original_report = report.read_text(encoding="utf-8")
+            ok = subprocess.run(command + ["--verify-json", str(report)],
+                                text=True, capture_output=True, timeout=15)
+            self.assertEqual(ok.returncode, 0, ok.stderr)
+            self.assertIn("VERIFIED:", ok.stdout)
+            self.assertEqual(report.read_text(encoding="utf-8"), original_report)
+            illegal = subprocess.run(command + ["--verify-json", str(report),
+                                               "--html-output", str(base / "other.html")],
+                                     text=True, capture_output=True, timeout=15)
+            self.assertEqual(illegal.returncode, 2)
+            self.assertFalse((base / "other.html").exists())
+            amended = json.loads(original_report)
+            amended["portfolio"]["operating_profit"] = "999999.00"
+            report.write_text(json.dumps(amended), encoding="utf-8")
+            bad = subprocess.run(command + ["--verify-json", str(report)],
+                                 text=True, capture_output=True, timeout=15)
+            self.assertEqual(bad.returncode, 2)
+            self.assertIn("does not match", bad.stderr)
+            self.assertEqual(json.loads(report.read_text(encoding="utf-8")),
+                             amended)  # No verifier side effects.
+
     def test_real_cli_json_and_csv(self):
         with tempfile.TemporaryDirectory() as root:
             src = Path(root) / "input.json"
