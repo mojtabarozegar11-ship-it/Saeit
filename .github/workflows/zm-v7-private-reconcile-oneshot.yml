@@ -1,0 +1,152 @@
+name: ZM V7 one-time private candidate reconciliation (read-only)
+on:
+  push:
+    branches:
+      - audit/zm-v7-reconcile-oneshot-20261103-w8m1
+    paths:
+      - '.github/workflows/zm-v7-private-reconcile-oneshot.yml'
+permissions:
+  contents: read
+concurrency:
+  group: zm-v7-oneshot-reconcile-20261103
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 6fa36646ea3a55db8ccaf5851ec81f6458c0e646
+          fetch-depth: 2
+      - name: Verify candidate syntax and build one-file delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$(git rev-parse HEAD)" = "6fa36646ea3a55db8ccaf5851ec81f6458c0e646"
+          php -l content/zomorod-business/app.php >/dev/null
+          install -d -m 700 "$RUNNER_TEMP/zm-reconcile"
+          git diff --no-ext-diff --unified=3 HEAD^ HEAD -- content/zomorod-business/app.php > "$RUNNER_TEMP/zm-reconcile/delta.patch"
+          test -s "$RUNNER_TEMP/zm-reconcile/delta.patch"
+          echo "CANDIDATE_PHP_LINT=pass"
+          echo "PATCH_SCOPE=app.php_only"
+      - name: Establish fingerprint-pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-business-source-readonly"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo "VPS_HOSTKEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # Resolve cPanel from the already pinned VPS, then compare its ED25519
+          # fingerprint before any connection to the production account.
+          scan="$(timeout 35s ssh -T -F "$d/config" saeit-vps 'timeout 10s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOSTKEY=verified"
+          patch_b64="$(base64 -w0 "$RUNNER_TEMP/zm-reconcile/delta.patch")"
+          test "${patch_b64:+yes}" = yes
+          test "${#patch_b64}" -lt 160000
+          timeout 140s ssh -F "$d/config" saeit-cpanel bash -se -- "$patch_b64" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = zomorod2
+          patch_b64="$1"
+          test "${#patch_b64}" -gt 100
+          test "${#patch_b64}" -lt 160000
+          private="$HOME/.private/zomorod-business"
+          live="$private/app.php"
+          test -d "$private" && test ! -L "$private"
+          test -s "$live" && test ! -L "$live"
+          test "$(stat -c %U "$live")" = zomorod2
+          hash="$(sha256sum "$live" | awk '{print $1}')"
+          echo "LIVE_APP_SHA256=$hash"
+          echo "AUDIT_MODE=private_temp_only_no_live_writes"
+          if test "$hash" != 2ed9274affa87f3e9c51f7dff0c72d7461118c7aca0ae0ab732b1c81cbfd6005; then
+            echo "LIVE_BASELINE=changed_skip"
+            exit 0
+          fi
+          echo "LIVE_BASELINE=matching"
+          if php -l "$live" >/dev/null 2>&1; then echo "LIVE_PHP_LINT=pass"; else echo "LIVE_PHP_LINT=fail"; exit 1; fi
+          if ! command -v patch >/dev/null 2>&1; then echo "RECONCILE_TOOL=unavailable"; exit 0; fi
+          tmp="$(mktemp -d "$private/.v7-reconcile-only.XXXXXXXX")"
+          test -n "$tmp" && test -d "$tmp" && test ! -L "$tmp"
+          trap 'test -n "$tmp" && rm -rf -- "$tmp"' EXIT
+          printf '%s' "$patch_b64" | base64 -d > "$tmp/delta.patch"
+          cp -p -- "$live" "$tmp/work.php"
+          if patch --batch --forward --fuzz=0 --no-backup-if-mismatch --reject-file="$tmp/rejects" -o "$tmp/reconciled.php" "$tmp/work.php" "$tmp/delta.patch" >"$tmp/patch.log" 2>&1; then
+            echo "RECONCILE_DELTA=applies_to_private_copy"
+            if php -l "$tmp/reconciled.php" >/dev/null 2>&1; then
+              echo "RECONCILED_PHP_LINT=pass"
+            else
+              echo "RECONCILED_PHP_LINT=fail"
+              exit 2
+            fi
+            PYTHONDONTWRITEBYTECODE=1 python3 -B - "$tmp/reconciled.php" <<'PY'
+          import pathlib,re,sys
+          src=pathlib.Path(sys.argv[1]).read_text('utf-8')
+          routes=['insights','command_center','workflow_desk','industry_ops','period_controls','finance_audit','payroll']
+          actions=['cc_create','cc_scan','cc_transition','cc_plan','cc_evidence','cc_review','flow_create','flow_transition','industry_create','industry_advance','period_freeze','period_close','payroll_create','payroll_decision']
+          pages=set(re.findall(r"\$page\s*===\s*['\"]([a-z_]+)['\"]",src))
+          acts=set(re.findall(r"\$action\s*===\s*['\"]([a-z_]+)['\"]",src))
+          for block in re.findall(r"in_array\s*\(\s*\$action\s*,\s*\[([^\]]+)\]",src):
+              acts.update(re.findall(r"['\"]([a-z_]+)['\"]",block))
+          ok_routes=all(x in pages for x in routes)
+          ok_actions=all(x in acts for x in actions)
+          fn=src.find('function record(')
+          nxt=src.find('\nfunction ',fn+1)
+          segment=src[fn:nxt if nxt>fn else len(src)] if fn>=0 else ''
+          ok_guard=bool(re.search(r'\bzmPeriodGuard\s*\(',segment))
+          ok_new=all(x in src for x in ['journal_reverse','user_update','approval_register','chatgpt_reports'])
+          print('V7_ROUTE_SET='+('preserved' if ok_routes else 'incomplete'))
+          print('V7_ACTION_SET='+('preserved' if ok_actions else 'incomplete'))
+          print('PERIOD_LOCK='+('present' if ok_guard else 'missing'))
+          print('NEW_FEATURE_SET='+('present' if ok_new else 'incomplete'))
+          if not (ok_routes and ok_actions and ok_guard and ok_new):raise SystemExit('RECONCILE_SEMANTIC_BLOCKED')
+          PY
+          else
+            echo "RECONCILE_DELTA=blocked_context_mismatch"
+            echo "RECONCILED_PHP_LINT=not_applicable"
+          fi
+          echo "LIVE_FILE_WRITTEN=no"
+          echo "PRIVATE_SOURCE_EXPORTED=no"
+          REMOTE
