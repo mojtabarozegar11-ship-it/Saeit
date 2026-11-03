@@ -130,6 +130,10 @@ def parse_block(body: str, report_code: str):
 def read_archive(source: Path):
     guard_private(source, ARCHIVE_NAME, must_exist=True)
     with sqlite3.connect(source.as_uri() + "?mode=ro", uri=True, timeout=5) as db:
+        # A readable SQLite header does not prove that every source page is sound.
+        # Refuse to replace the last good index from a damaged archive.
+        if db.execute("PRAGMA quick_check").fetchone() != ("ok",):
+            raise ValueError("SOURCE_ARCHIVE_INTEGRITY_FAILED")
         if (db.execute("PRAGMA user_version").fetchone()[0] != 1
                 or db.execute("SELECT value FROM metadata WHERE name='source'").fetchone() != (SOURCE,)):
             raise ValueError("SOURCE_IDENTITY_MISMATCH")
@@ -146,10 +150,17 @@ def compile_index(rows):
     for code, cid, when, body, report_url in rows:
         if (not isinstance(code, str) or REPORT.fullmatch(code) is None
                 or type(cid) is not int or cid < 1
+                or not isinstance(when, str)
                 or not isinstance(body, str) or not 20 <= len(body.encode("utf-8")) <= 32000
                 or report_url !=
                 f"https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-{cid}"):
             raise ValueError("INVALID_SOURCE_REPORT")
+        try:
+            occurred = datetime.fromisoformat(when.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("INVALID_SOURCE_TIMESTAMP") from exc
+        if occurred.tzinfo is None or occurred.utcoffset() is None or occurred.utcoffset().total_seconds() != 0:
+            raise ValueError("INVALID_SOURCE_TIMESTAMP")
         result, entries = parse_block(body, code)
         if result == "missing":
             continue
