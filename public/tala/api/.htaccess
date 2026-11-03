@@ -1,6 +1,0 @@
-# Keep the Tala capability endpoint isolated from the parent application.
-PassengerEnabled off
-Options -Indexes
-<FilesMatch "^\.">
-  Require all denied
-</FilesMatch>

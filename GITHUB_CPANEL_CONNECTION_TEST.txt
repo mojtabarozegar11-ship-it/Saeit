@@ -1,4 +1,0 @@
-GitHub → cPanel connection test
-Repository: Saeit
-Purpose: verify that the cPanel Git integration can see a new GitHub commit.
-This file is a harmless connectivity test only; it is not a deployment instruction.

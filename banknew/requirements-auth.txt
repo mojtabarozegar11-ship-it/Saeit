@@ -1,3 +1,0 @@
-# Install only in the controlled banknew backend environment when Google OAuth is configured.
-# Never ship an ID-token verifier into browser JavaScript.
-google-auth[requests]>=2.62.0,<3.0
