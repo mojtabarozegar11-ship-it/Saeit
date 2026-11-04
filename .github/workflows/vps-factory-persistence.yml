@@ -82,6 +82,30 @@ jobs:
             echo "FACTORY_AUTOSTART_BLOCKED_LOW_DISK"
             exit 1
           fi
+          # Fail closed if the Django factory has multiple active product identities.
+          # This is a local pre-start guard, NOT proof that other producer lanes are idle.
+          test -x "$base/.venv/bin/python" && test -f "$base/django-app/manage.py"
+          if ! (
+            cd "$base/django-app"
+            export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings
+            "$base/.venv/bin/python" -B - <<'PY'
+import django
+django.setup()
+from django.apps import apps
+Run = apps.get_model("core", "FactoryRun")
+Product = apps.get_model("core", "Product")
+active = Run.objects.filter(status="active")
+ids = active.exclude(product_id__isnull=True).values_list("product_id", flat=True).distinct()
+if (active.filter(product_id__isnull=True).exists()
+        or ids.count() != 1
+        or Product.objects.filter(pk__in=ids, factory_managed=True, active=False).count() != 1):
+    raise SystemExit("FACTORY_AUTOSTART_BLOCKED_MULTI_SKU_OR_UNLINKED_RUN")
+print("FACTORY_AUTOSTART_LOCAL_SINGLE_DRAFT_PREFLIGHT_OK")
+PY
+          ); then
+            echo "FACTORY_AUTOSTART_BLOCKED_SINGLE_SKU_PREFLIGHT"
+            exit 1
+          fi
           nohup "$script" 9>&- </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
           printf '%s\n' "$!" > "$pidfile"
           sleep 2
