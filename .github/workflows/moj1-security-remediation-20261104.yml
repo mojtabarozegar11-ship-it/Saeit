@@ -31,6 +31,7 @@ jobs:
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npm test
+          npm run compile
           npm run preflight
           node scripts/release-readiness-offline.mjs --assert-blocked
       - name: Start disposable localhost-only TRON TVM
