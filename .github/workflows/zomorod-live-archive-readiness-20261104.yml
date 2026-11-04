@@ -72,17 +72,23 @@ jobs:
           ssh -F "$d/config" saeit-vps 'timeout 420s bash -se' <<'REMOTE'
           set -euo pipefail
           archive=/home/githubops/.db-backups/zomorod2_sites_main-pre-page-compression-20261028.sql.gz
-          test -f "$archive"
-          size=$(stat -c %s "$archive")
-          test "$size" -eq 2981105692
-          sum=$(sha256sum "$archive" | cut -d " " -f1)
-          test "$sum" = "9f15e25b0b7ce21dfc4588fcf15712c43add276889f44343f3c46b257f6debf39"
-          gzip -t "$archive"
-          echo VPS_PREVIOUS_TABLE_ARCHIVE_VERIFIED=yes
-          echo VPS_PREVIOUS_TABLE_ARCHIVE_SIZE_BYTES="$size"
           df -Pk /home/githubops | awk 'NR==2 {print "VPS_FREE_KB="$4}'
+          if [ ! -f "$archive" ]; then echo VPS_ARCHIVE_MISSING=yes; exit 1; fi
+          size=$(stat -c %s "$archive")
+          echo VPS_PREVIOUS_TABLE_ARCHIVE_SIZE_BYTES="$size"
+          if [ "$size" -ne 2981105692 ]; then echo VPS_ARCHIVE_SIZE_MISMATCH=yes; exit 1; fi
+          echo VPS_ARCHIVE_SIZE_VERIFIED=yes
+          sum=$(sha256sum "$archive" | cut -d " " -f1)
+          if [ "$sum" != "9f15e25b0b7ce21dfc4588fcf15712c43add276889f44343f3c46b257f6debf39" ]; then
+            echo VPS_ARCHIVE_SHA_MISMATCH=yes
+            exit 1
+          fi
+          echo VPS_ARCHIVE_SHA_VERIFIED=yes
+          if ! gzip -t "$archive"; then echo VPS_ARCHIVE_GZIP_INVALID=yes; exit 1; fi
+          echo VPS_PREVIOUS_TABLE_ARCHIVE_VERIFIED=yes
           REMOTE
       - name: Read current hosting quota without editing the website or database
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
