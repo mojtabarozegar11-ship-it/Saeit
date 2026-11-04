@@ -537,6 +537,48 @@ jobs:
                       print("FACTORY_"+who+"_TIMERS=UNAVAILABLE")
               except (OSError,subprocess.TimeoutExpired):
                   print("FACTORY_"+who+"_TIMERS=UNAVAILABLE")
+          # Read-only freshness and process liveness; emit no command lines or document content.
+          import time
+          for label,p in (("AGRI200",root/"production-instructions/stage-06/strict-serial-active-v1.json"),
+                          ("LINE41",root/"quality-excellence/product-flow/active-slots/current.json"),
+                          ("GLOBAL_LANE",root/".f01-global-production-lane.json")):
+              try:
+                  if not p.is_symlink() and p.is_file():
+                      age=max(0,int((time.time()-p.stat().st_mtime)/60))
+                      print("FACTORY_"+label+"_RECORD_AGE_MINUTES="+str(age))
+                  else:
+                      print("FACTORY_"+label+"_RECORD_AGE_MINUTES=UNKNOWN")
+              except OSError:
+                  print("FACTORY_"+label+"_RECORD_AGE_MINUTES=UNKNOWN")
+          signatures={"AGRI200":(b"agri200",b"strict_serial",b"strict-serial"),
+                      "LINE41":(b"factory_vps_product_cycle.py",b"factory_first_product_pilot.py"),
+                      "GENERIC_FACTORY":(b"factory-runtime",)}
+          counts={k:0 for k in signatures}
+          proc_inspected=0
+          for entry in Path("/proc").iterdir():
+              if not entry.name.isdecimal():
+                  continue
+              try:
+                  raw=(entry/"cmdline").read_bytes()[:8192].lower()
+              except (OSError,PermissionError):
+                  continue
+              if not raw:
+                  continue
+              proc_inspected+=1
+              for label,patterns in signatures.items():
+                  if any(pattern in raw for pattern in patterns):
+                      counts[label]+=1
+          for label,count in counts.items():
+              print("FACTORY_"+label+"_MATCHING_PROCESS_COUNT="+str(count))
+          print("FACTORY_PROCESS_LIST_INSPECTED_COUNT="+str(proc_inspected))
+          try:
+              r=subprocess.run(["systemctl","list-units","--type=service","--state=running","--no-pager","--no-legend"],capture_output=True,text=True,timeout=6)
+              if r.returncode==0:
+                  print("FACTORY_SYSTEM_RUNNING_RELATED_SERVICES="+str(sum("factory" in s.lower() or "agri" in s.lower() for s in r.stdout.splitlines())))
+              else:
+                  print("FACTORY_SYSTEM_RUNNING_SERVICES=UNAVAILABLE")
+          except (OSError,subprocess.TimeoutExpired):
+              print("FACTORY_SYSTEM_RUNNING_SERVICES=UNAVAILABLE")
           print("FACTORY_AUDIT_MUTATIONS=ZERO")
           print("FACTORY_RUNTIME_ACTIVATION=NOT_ATTEMPTED")
           PYAUDIT
