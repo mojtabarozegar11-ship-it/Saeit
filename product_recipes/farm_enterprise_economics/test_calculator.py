@@ -1,4 +1,5 @@
 """Executable tests for the standalone agricultural unit-economics tool."""
+import csv
 import json
 import tempfile
 from pathlib import Path
@@ -446,6 +447,77 @@ class EconomicsTests(unittest.TestCase):
             text = report_file.read_text(encoding="utf8")
             self.assertTrue(text.startswith("<!doctype html>"))
             self.assertIn("Illustrative orchard", text)
+
+    def test_three_factor_csv_exports_cover_every_portfolio_and_enterprise_case(self):
+        """The new exports must preserve all 27 joint stress combinations."""
+        second = {
+            "name": "Illustrative Dairy", "units_sold": "150",
+            "unit_price": "7.2", "variable_cost_per_unit": "5.1",
+            "allocated_fixed_cost": "200", "selling_fee_percent": "2",
+        }
+        request = dict(self.example, enterprises=[
+            self.example["enterprises"][0], second,
+        ])
+        expected = evaluate(request)
+        with tempfile.TemporaryDirectory() as temp_root:
+            root = Path(temp_root)
+            input_path = root / "inputs.json"
+            portfolio_path = root / "portfolio-stress.csv"
+            enterprise_path = root / "enterprise-stress.csv"
+            input_path.write_text(json.dumps(request), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("calculator.py")),
+                 str(input_path),
+                 "--three-factor-portfolio-csv-output", str(portfolio_path),
+                 "--three-factor-enterprise-csv-output", str(enterprise_path)],
+                text=True, capture_output=True, timeout=15,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            with portfolio_path.open(encoding="utf-8", newline="") as handle:
+                portfolio = list(csv.DictReader(handle))
+            with enterprise_path.open(encoding="utf-8", newline="") as handle:
+                enterprises = list(csv.DictReader(handle))
+            self.assertEqual(len(portfolio), 27)
+            self.assertEqual(len(enterprises), 54)
+            fingerprint = expected["input_fingerprint_sha256"]
+            self.assertTrue(all(row["currency"] == "USD" and
+                                row["input_fingerprint_sha256"] == fingerprint
+                                for row in portfolio + enterprises))
+            fields = ("volume_multiplier", "price_multiplier",
+                      "variable_cost_multiplier", "modeled_operating_profit")
+            self.assertEqual([tuple(row[k] for k in fields) for row in portfolio],
+                             [tuple(row[k] for k in fields)
+                              for row in expected["three_factor_portfolio_results"]])
+            self.assertEqual([tuple(row[k] for k in ("enterprise",) + fields)
+                              for row in enterprises],
+                             [tuple(row[k] for k in ("enterprise",) + fields)
+                              for row in expected["three_factor_scenario_results"]])
+
+    def test_new_stress_csv_targets_cannot_overwrite_inputs_or_each_other(self):
+        with tempfile.TemporaryDirectory() as temp_root:
+            root = Path(temp_root)
+            input_path = root / "inputs.json"
+            output_path = root / "report.csv"
+            original = json.dumps(self.example)
+            input_path.write_text(original, encoding="utf-8")
+            invalid_options = (
+                ("--three-factor-portfolio-csv-output", str(input_path)),
+                ("--three-factor-enterprise-csv-output", str(input_path)),
+                ("--three-factor-portfolio-csv-output", str(output_path),
+                 "--three-factor-enterprise-csv-output", str(output_path)),
+                ("--verify-json", str(root / "nonexistent.json"),
+                 "--three-factor-portfolio-csv-output", str(output_path)),
+            )
+            for options in invalid_options:
+                with self.subTest(options=options):
+                    result = subprocess.run(
+                        [sys.executable, str(Path(__file__).with_name("calculator.py")),
+                         str(input_path), *options],
+                        text=True, capture_output=True, timeout=15,
+                    )
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertEqual(input_path.read_text(encoding="utf-8"), original)
+                    self.assertFalse(output_path.exists())
 
 
     def test_cli_protects_customer_input_and_distinct_report_destinations(self):
