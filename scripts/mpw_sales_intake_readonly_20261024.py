@@ -238,6 +238,7 @@ def visitor_logs():
     unique = set()
     errors_by_bucket = Counter()
     errors_by_day = Counter()
+    checkout_responses_by_day = Counter()
     login_errors_by_day = Counter()
     first = last = None
     for p in files:
@@ -268,6 +269,9 @@ def visitor_logs():
                         report["likely_bot_page_hits"] += 1
                         continue
                     report["likely_human_page_hits"] += 1
+                    current_bucket = route_bucket(page)
+                    if current_bucket in ("product_checkout", "trx_invoice", "trx_other"):
+                        checkout_responses_by_day[at.date().isoformat() + ":" + current_bucket + ":" + status] += 1
                     if status.startswith(("4", "5")):
                         errors_by_bucket[route_bucket(page) + ":" + status] += 1
                         errors_by_day[at.date().isoformat() + ":" + status[0] + "xx"] += 1
@@ -304,6 +308,9 @@ def visitor_logs():
                                 "no_url_or_ip_disclosed": True})
     output("MPW_ERROR_DAYS", {"day_and_status_class": dict(sorted(errors_by_day.items())),
                               "source": "same_archived_access_logs"})
+    output("MPW_CHECKOUT_STATUS_BY_DAY", {"day_route_http_status": dict(sorted(checkout_responses_by_day.items())),
+                                          "source": "same_archived_access_logs", "no_url_or_ip_disclosed": True,
+                                          "limitations": "Archive may lag; filtered user agents are not verified people."})
     output("MPW_ACCOUNT_403_DAYS", {"day_and_route": dict(sorted(login_errors_by_day.items())),
                                    "source": "same_archived_access_logs"})
 
