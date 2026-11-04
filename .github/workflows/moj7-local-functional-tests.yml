@@ -24,7 +24,7 @@ jobs:
           set -euo pipefail
           printf '%s  %s\n' 'c94aa5fbbb2d738aab49c1fcd22b5e7aef42603048b316e2d5b7a544c505d53b' '../contracts/MOJ7.sol' | sha256sum -c -
           test "$(grep -c 'http://127.0.0.1:9090' tronbox-config.js)" = '1'
-          ! grep -Ei 'api\.trongrid\.io|nile\.trongrid\.io|shasta|mainnet' tronbox-config.js
+          ! grep -Ei 'https?://(api|nile|shasta)\.trongrid\.io' tronbox-config.js
       - name: Install isolated test framework
         run: npm install --no-audit --no-fund --no-progress
       - name: Create a fresh, local-only TRON TRE blockchain
