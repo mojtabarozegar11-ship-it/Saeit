@@ -5,6 +5,9 @@ on:
       - moj7-compile-20261104-only
     paths:
       - .github/workflows/moj7-local-functional-tests.yml
+      - moj7-test/test/moj7-functional.js
+      - moj7-test/tronbox-config.js
+      - contracts/MOJ7.sol
 permissions:
   contents: read
 jobs:
