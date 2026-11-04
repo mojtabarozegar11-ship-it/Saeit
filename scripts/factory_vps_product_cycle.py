@@ -38,15 +38,12 @@ SCRIPTS = Path(__file__).resolve().parent
 PRODUCT_SLOT_CAPACITY = 1
 PRODUCT_LINE_ID = 41
 SLOT_SCHEMA = "saeit.factory.product-slots.v1"
-CLEARANCE_SCHEMA = "saeit.factory.signed-quality-clearance.v1"
 PRODUCT_SLUG = re.compile(r"^[a-z][a-z0-9_]{1,65}$")
 HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 HOURLY_HANDOFF_SCHEMA = "saeit.factory.hourly-cycle-handoff.v1"
 RECEIVER_CYCLES = frozenset({"R-01", "B-01", "S-01", "G-01"})
 # Operator-managed trust anchor: NEVER load keys from factory-writable output.
 RECEIVER_TRUST_ROOT = Path("/etc/saeit/hourly-cycle-receiver-public-keys")
-# Independent reviewer public keys are provisioned by an operator, not the factory.
-REVIEWER_TRUST_ROOT = Path("/etc/saeit/factory-quality-reviewer-public-keys")
 
 
 def _read_private_json(path):
@@ -82,78 +79,136 @@ def _write_private_json(path, value):
             os.unlink(temporary)
 
 
-def _verified_clearance_signatures(clearance_path, roles):
-    """Require three detached, independently verifiable quality sign-offs.
+AI_REVIEW_SCHEMA = "saeit.factory.ai-assisted-internal-review.v1"
+OWNER_CLEARANCE_SCHEMA = "saeit.factory.ai-assisted-owner-clearance.v2"
+OWNER_APPROVAL_TRUST_ROOT = Path("/etc/saeit/factory-owner-approval-public-keys")
+MANDATORY_AI_CHECKS = frozenset({
+    "scientific_accuracy", "technical_correctness", "rights_screening",
+    "usability", "security", "commercial_readiness"
+})
 
-    The factory must not be able to generate or modify review trust keys.
-    A claimed valid_signed_roles list is not cryptographic evidence.
+
+def _trusted_owner_public_key():
+    """Only a genuinely administrator-provisioned public key may authorize exit.
+
+    The production process cannot appoint itself an owner or write this trust
+    anchor. It must never generate a purported independent reviewer signature.
     """
-    trust = REVIEWER_TRUST_ROOT
+    root = OWNER_APPROVAL_TRUST_ROOT
+    key = root / "owner.pem"
     try:
-        if (trust.is_symlink() or trust.parent.is_symlink()
-                or not trust.is_dir() or trust.stat().st_mode & 0o022):
+        if (root.is_symlink() or root.parent.is_symlink()
+                or not root.is_dir() or key.is_symlink() or not key.is_file()):
+            return None
+        rst, kst = root.stat(), key.stat()
+        if (rst.st_uid != 0 or kst.st_uid != 0
+                or rst.st_mode & 0o022 or kst.st_mode & 0o022
+                or not 0 < kst.st_size <= 16_384):
+            return None
+        return key
+    except OSError:
+        return None
+
+
+def _owner_signature_verifies(clearance_path):
+    """Verify the real owner's detached signature over exact clearance bytes."""
+    key = _trusted_owner_public_key()
+    signature = clearance_path.parent / "owner.sig"
+    if key is None:
+        return False
+    try:
+        if (clearance_path.is_symlink() or signature.is_symlink()
+                or not signature.is_file()
+                or not 0 < signature.stat().st_size <= 4096):
             return False
         baseline = hashlib.sha256(clearance_path.read_bytes()).hexdigest()
-        if clearance_path.is_symlink():
-            return False
-        for role in sorted(roles):
-            public_key = trust / (role + ".pem")
-            signature = clearance_path.parent / (role + ".sig")
-            if (public_key.is_symlink() or signature.is_symlink()
-                    or not public_key.is_file() or not signature.is_file()
-                    or not 0 < signature.stat().st_size <= 4096
-                    or not 0 < public_key.stat().st_size <= 16384
-                    or public_key.stat().st_mode & 0o022):
-                return False
-            check = subprocess.run(
-                ["openssl", "dgst", "-sha256", "-verify", str(public_key),
-                 "-signature", str(signature), str(clearance_path)],
-                capture_output=True, timeout=5, check=False)
-            if check.returncode != 0:
-                return False
-        return hashlib.sha256(clearance_path.read_bytes()).hexdigest() == baseline
+        checked = subprocess.run(
+            ["openssl", "dgst", "-sha256", "-verify", str(key),
+             "-signature", str(signature), str(clearance_path)],
+            capture_output=True, timeout=5, check=False)
+        return (checked.returncode == 0 and
+                hashlib.sha256(clearance_path.read_bytes()).hexdigest() == baseline)
     except (OSError, ValueError, subprocess.TimeoutExpired):
         return False
 
 
+def _validated_ai_review(report, artifact_sha):
+    """Check an evidence-bound, honestly labeled AI assessment, not independence."""
+    if (not isinstance(report, dict)
+            or report.get("schema") != AI_REVIEW_SCHEMA
+            or report.get("reviewer_kind") != "chatgpt_ai_assisted_internal"
+            or report.get("independent_human_review") is not False
+            or report.get("artifact_sha256") != artifact_sha
+            or report.get("review_status") != "completed"
+            or report.get("verified_grade_total") != 1000):
+        return False
+    checks = report.get("evidence_checks")
+    if not isinstance(checks, list) or len(checks) != len(MANDATORY_AI_CHECKS):
+        return False
+    observed = set()
+    for check in checks:
+        if (not isinstance(check, dict) or check.get("status") != "passed"
+                or check.get("check_id") not in MANDATORY_AI_CHECKS
+                or not isinstance(check.get("evidence_sha256"), str)
+                or not HEX_SHA256.fullmatch(check["evidence_sha256"])):
+            return False
+        observed.add(check["check_id"])
+    return observed == MANDATORY_AI_CHECKS
+
+
 def _verified_quality_exit(root, recipe):
-    """Only a current, signed 1000/1000 clearance frees a production slot."""
+    """Release only after evidence-bound ChatGPT review AND real owner signature.
+
+    This is explicitly INTERNAL AI-assisted review, never represented as an
+    independent human or legally authoritative scientific certification.
+    """
     manifest_path = root / "digital-products" / recipe / "manufacturing_manifest.json"
     archive_path = root / "digital-products" / recipe / (recipe + "-internal-qa.zip")
+    report_path = root / "quality-excellence" / "ai-reviews" / recipe / "current.json"
     clearance_path = root / "quality-excellence" / "signed-clearances" / recipe / "current.json"
     manifest = _read_private_json(manifest_path)
+    report = _read_private_json(report_path)
     clearance = _read_private_json(clearance_path)
-    if (not manifest or not clearance or archive_path.is_symlink()
-            or not archive_path.is_file()):
+    if (not manifest or not report or not clearance
+            or archive_path.is_symlink() or not archive_path.is_file()):
         return None
     artifact_sha = manifest.get("artifact_sha256")
     if (manifest.get("recipe") != recipe or manifest.get("qa_status") != "passed"
-            or not isinstance(artifact_sha, str) or not HEX_SHA256.fullmatch(artifact_sha)):
+            or not isinstance(artifact_sha, str)
+            or not HEX_SHA256.fullmatch(artifact_sha)):
         return None
     digest = hashlib.sha256()
     try:
         with archive_path.open("rb") as stream:
             for block in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(block)
+        report_sha = hashlib.sha256(report_path.read_bytes()).hexdigest()
     except OSError:
         return None
-    roles = clearance.get("valid_signed_roles")
-    roles = set(roles) if isinstance(roles, list) and all(isinstance(x, str) for x in roles) else set()
-    independent_roles = {"domain_specialist", "independent_quality_auditor", "rights_reviewer"}
     if (digest.hexdigest() != artifact_sha
-            or clearance.get("schema") != CLEARANCE_SCHEMA
+            or not _validated_ai_review(report, artifact_sha)
+            or clearance.get("schema") != OWNER_CLEARANCE_SCHEMA
+            or clearance.get("reviewer_kind") != "chatgpt_ai_assisted_internal"
+            or clearance.get("independent_human_review") is not False
+            or clearance.get("ai_review_sha256") != report_sha
             or clearance.get("eligible") is not True
             or clearance.get("verified_grade_total") != 1000
             or clearance.get("artifact_sha256") != artifact_sha
-            or not independent_roles.issubset(roles)
-            or clearance.get("owner_authorization_kind") not in ("direct_owner", "verified_delegated_agent")
+            or clearance.get("owner_authorization_kind") != "direct_owner"
+            or clearance.get("owner_rights_attestation") is not True
             or clearance.get("publication_executed") is not False
             or clearance.get("payment_activated") is not False):
         return None
-    if not _verified_clearance_signatures(clearance_path, independent_roles):
+    if not _owner_signature_verifies(clearance_path):
         return None
-    return {"artifact_sha256": artifact_sha,
-            "clearance_sha256": hashlib.sha256(clearance_path.read_bytes()).hexdigest()}
+    try:
+        if hashlib.sha256(report_path.read_bytes()).hexdigest() != report_sha:
+            return None
+        return {"artifact_sha256": artifact_sha,
+                "clearance_sha256": hashlib.sha256(clearance_path.read_bytes()).hexdigest(),
+                "review_type": "internal_ai_assisted_owner_signed"}
+    except OSError:
+        return None
 
 
 def _accepted_hourly_handoff(root, recipe, clearance):
@@ -709,7 +764,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "depends_on_orders": False,
             "api_usage": "none",
             "token_usage": 0,
-            "build_policy": "line_41_single_product_signed-1000-gated",
+            "build_policy": "line_41_single_product_ai-review_owner-signed-1000_and_receiver-gated",
             "active_product_slot_capacity": PRODUCT_SLOT_CAPACITY,
             "active_production_line_id": PRODUCT_LINE_ID,
             "active_product_slot_recipes": active_recipe_names,
