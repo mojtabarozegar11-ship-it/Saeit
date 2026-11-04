@@ -8,6 +8,7 @@ operator to establish that no legitimate intervening writes will be lost.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -69,6 +70,8 @@ def _files_in_private(private: Path, cap_bytes: int) -> tuple[list[Path], int]:
             if size > cap_bytes:
                 raise ValueError("CHECKPOINT_SOURCE_LIMIT_EXCEEDED")
             files.append(path)
+            if len(files) > 100_000:
+                raise ValueError("CHECKPOINT_TOO_MANY_FILES")
     if not files:
         raise ValueError("CHECKPOINT_PRIVATE_SOURCE_EMPTY")
     return files, size
@@ -87,9 +90,10 @@ class _DigestingReader:
 
 def _sqlite_copy(source_path: Path, destination: Path) -> None:
     _regular_file(source_path)
-    with sqlite3.connect(source_path.resolve().as_uri() + "?mode=ro", uri=True) as source:
-        with sqlite3.connect(destination) as target:
+    with closing(sqlite3.connect(source_path.resolve().as_uri() + "?mode=ro", uri=True)) as source:
+        with closing(sqlite3.connect(destination)) as target:
             source.backup(target, pages=512, sleep=0.05)
+            target.commit()
             row = target.execute("PRAGMA integrity_check").fetchone()
             if row != ("ok",):
                 raise ValueError("CHECKPOINT_SQLITE_INTEGRITY_FAILURE")
@@ -192,7 +196,7 @@ def verify(checkpoint: Path) -> dict:
         raise ValueError("CHECKPOINT_DB_DIGEST_MISMATCH")
     if _hash_file(archive_path) != manifest.get("archive_sha256"):
         raise ValueError("CHECKPOINT_ARCHIVE_DIGEST_MISMATCH")
-    with sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True) as db:
+    with closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
         if db.execute("PRAGMA integrity_check").fetchone() != ("ok",):
             raise ValueError("CHECKPOINT_DB_CORRUPT")
     inventory = manifest.get("files")
