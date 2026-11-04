@@ -1,4 +1,5 @@
 import * as THREE from './three.module.js';
+import { selectRenderQuality } from './render-quality.mjs';
 import { GLTFLoader } from './three-addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from './three-addons/utils/SkeletonUtils.js';
 import { MeshoptDecoder } from './three-addons/libs/meshopt_decoder.module.js';
@@ -109,7 +110,15 @@ export function createEngine(canvas) {
 
   let weapon=makeWeapon();
 
-  function setSize(w,h,dpr){renderer.setPixelRatio(softwareRenderer?Math.min(dpr,.78):dpr);renderer.setSize(w,h,false);camera.aspect=w/Math.max(h,1);camera.updateProjectionMatrix();}
+  function setSize(w,h,dpr) {
+    const coarsePointer = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const quality = selectRenderQuality(w,h,dpr,coarsePointer,softwareRenderer);
+    renderer.shadowMap.enabled = quality.shadows;
+    renderer.setPixelRatio(quality.pixelRatio);
+    renderer.setSize(w,h,false);
+    camera.aspect=w/Math.max(h,1);
+    camera.updateProjectionMatrix();
+  }
 
   function build(w, tileFn) {
     world=w;pitch=0;
