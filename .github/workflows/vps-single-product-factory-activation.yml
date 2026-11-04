@@ -1,0 +1,139 @@
+name: VPS single product factory activation
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/vps-single-product-factory-activation.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-single-product-factory
+  cancel-in-progress: false
+jobs:
+  activate:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[activate-single-product-factory-v1]'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install one-product VPS factory and run first private cycle
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/single-product-factory"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
+          files=(
+            scripts/factory_vps_product_cycle.py
+            scripts/factory_master_agent_genetics_v1.py
+            scripts/factory_autonomous_portfolio.py
+            scripts/factory_product_maker.py
+            scripts/factory_product_rework.py
+            scripts/factory_verified_customer_cycle_20261021.py
+            scripts/factory_personal_owner_passport_policy_20261020.py
+            scripts/factory_recipe_designer.py
+            scripts/factory_design_intake.py
+            scripts/factory_continuous_invention.py
+            scripts/factory_specialist_pilots.py
+            scripts/factory_specialist_formats.py
+            scripts/factory_research_triage.py
+            scripts/factory_build50_workbook.py
+            scripts/factory_build_50.py
+            scripts/factory_customer_packager.py
+            factory_config/design_opportunities.json
+            factory_config/internal_design_supply.json
+          )
+          tar -cf - "${files[@]}" product_recipes/farm_enterprise_economics | ssh "${ssh_opts[@]}" githubops@178.239.147.150 'tar -xf - -C "$HOME/factory-runtime/operations"'
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          py="$base/.venv/bin/python"
+          runtime="$ops/single-product-runtime"
+          private="$base/private/autonomous-product-cycle"
+          db="$base/private/factory-fresh-isolated.sqlite3"
+          test -x "$py" && test -f "$db" && test ! -L "$base"
+          test -d "$private" && test ! -L "$private"
+          test -f "$private/quality-excellence/product-flow/active-slots/current.json"
+          "$py" -B - <<'PY'
+          import json, pathlib, sys
+          p=pathlib.Path.home()/"factory-runtime/private/autonomous-product-cycle/quality-excellence/product-flow/active-slots/current.json"
+          d=json.loads(p.read_text())
+          active=d.get("active")
+          if not isinstance(active,list) or len(active)!=1 or active[0].get("recipe")!="farm_enterprise_economics":
+              raise SystemExit("SINGLE_PRODUCT_SLOT_NOT_FARM_ENTERPRISE_ECONOMICS")
+          print("SINGLE_PRODUCT_SLOT=PASS")
+          PY
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+          backup="$ops/backups/single-product-runtime-$stamp"
+          install -d -m 700 "$backup"
+          crontab -l > "$backup/crontab.before" 2>/dev/null || : > "$backup/crontab.before"
+          if test -d "$runtime" && test ! -L "$runtime"; then
+            tar -czf "$backup/runtime-before.tar.gz" -C "$ops" single-product-runtime
+            chmod 600 "$backup/runtime-before.tar.gz"
+          fi
+          install -d -m 700 "$runtime/scripts" "$runtime/factory_config" "$runtime/product_recipes"
+          for f in "$ops/scripts/"*.py; do
+            test -f "$f" && install -m 600 "$f" "$runtime/scripts/$(basename "$f")"
+          done
+          install -m 600 "$ops/factory_config/design_opportunities.json" "$runtime/factory_config/design_opportunities.json"
+          install -m 600 "$ops/factory_config/internal_design_supply.json" "$runtime/factory_config/internal_design_supply.json"
+          rm -rf "$runtime/product_recipes/farm_enterprise_economics"
+          install -d -m 700 "$runtime/product_recipes/farm_enterprise_economics"
+          find "$ops/product_recipes/farm_enterprise_economics" -type f -exec install -m 600 {} "$runtime/product_recipes/farm_enterprise_economics/" \;
+          test -f "$runtime/scripts/factory_vps_product_cycle.py"
+          "$py" -B -c 'import ast,pathlib; ast.parse(pathlib.Path("'"$runtime"'/scripts/factory_vps_product_cycle.py").read_text())'
+          runner="$runtime/run-single-product-cycle.sh"
+          python3 - "$runner" "$py" "$db" "$runtime" "$private" <<'PY'
+          from pathlib import Path
+          import sys
+          path,py,db,runtime,private=sys.argv[1:]
+          text=f'''#!/usr/bin/env bash
+          set -euo pipefail
+          umask 077
+          exec 9>"{private}/.single-product-cycle.lock"
+          flock -n 9 || exit 0
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
+          exec "{py}" -B "{runtime}/scripts/factory_vps_product_cycle.py" --db "{db}" --out "{private}" --recipes "{runtime}/product_recipes" --max-products 1 --max-recipes 1 --no-enable-designer --no-enable-design-intake --no-enable-invention-supply
+          '''
+          path_obj=Path(path)
+          path_obj.write_text(text)
+          path_obj.chmod(0o700)
+          PY
+          "$runner"
+          cron_tmp="$ops/.single-product-cron.$$.tmp"
+          grep -vF 'SAEIT_SINGLE_PRODUCT_FACTORY_V1' "$backup/crontab.before" > "$cron_tmp" || true
+          printf '%s\n' "* * * * * /usr/bin/flock -n $private/.single-product-cycle.lock /usr/bin/timeout 55s $runner >> $ops/single-product-cycle.log 2>&1 # SAEIT_SINGLE_PRODUCT_FACTORY_V1" >> "$cron_tmp"
+          chmod 600 "$cron_tmp"
+          crontab "$cron_tmp"
+          rm -f "$cron_tmp"
+          test "$(crontab -l | grep -Fc 'SAEIT_SINGLE_PRODUCT_FACTORY_V1')" -eq 1
+          test -s "$private/production-state.json"
+          "$py" -B - <<'PY'
+          import json, pathlib
+          r=pathlib.Path.home()/"factory-runtime/private/autonomous-product-cycle"
+          s=json.loads((r/"production-state.json").read_text())
+          if s.get("active_product_slot_recipes") != ["farm_enterprise_economics"]:
+              raise SystemExit("ACTIVE_PRODUCT_RECIPE_CHANGED")
+          if s.get("commercial_quality_review_completed") is not False or s.get("publishable_product_count") != 0:
+              raise SystemExit("PUBLICATION_GATE_NOT_LOCKED")
+          print("SINGLE_PRODUCT_PRIVATE_CYCLE=PASS")
+          print("SINGLE_PRODUCT_PUBLICATION=LOCKED")
+          PY
+          echo SINGLE_PRODUCT_FACTORY_ACTIVATION=PASS
+          echo SINGLE_PRODUCT_FACTORY_PUBLICATION=LOCKED
+          REMOTE
