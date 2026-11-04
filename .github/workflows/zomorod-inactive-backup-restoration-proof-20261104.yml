@@ -1,0 +1,185 @@
+name: Prove restorable inactive Zomorod backups on VPS before any source pruning
+
+on:
+  push:
+    branches: [ops/zomorod-archive-audit-20261104]
+    paths:
+      - .github/workflows/zomorod-inactive-backup-restoration-proof-20261104.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-inactive-backup-restoration-proof-20261104
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Establish pinned VPS and cPanel SSH connections
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-restore-proof"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 2
+            ServerAliveInterval 30
+            ServerAliveCountMax 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.candidate" "$d/host.known"
+          echo RESTORE_PROOF_TRANSPORT_PINNED=yes
+      - name: Compute canonical source content digest using read-only traversal
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-restore-proof"
+          source_digest="$(ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import hashlib,os,stat,time
+          from pathlib import Path
+          base=Path('/home/zomorod2/.backups')
+          names=('zomorodmelal-complete','zomorodmelal-db-recovery-validation')
+          entries=[];total=0;files=0;links=0
+          for name in names:
+              root=base/name
+              assert root.is_dir() and not root.is_symlink(), 'SOURCE_ROOT_NOT_REGULAR'
+              for current,dirs,filenames in os.walk(root,followlinks=False):
+                  for dirname in dirs:
+                      path=Path(current)/dirname
+                      if path.is_symlink():entries.append(('L',path));links+=1
+                  dirs[:]=[dirname for dirname in dirs if not (Path(current)/dirname).is_symlink()]
+                  for filename in filenames:
+                      path=Path(current)/filename
+                      if path.is_symlink():entries.append(('L',path));links+=1
+                      elif path.is_file():entries.append(('F',path));files+=1
+                      else:raise SystemExit('UNEXPECTED_SOURCE_TYPE')
+          h=hashlib.sha256()
+          for kind,path in sorted(entries,key=lambda x:str(x[1].relative_to(base))):
+              rel=path.relative_to(base).as_posix()
+              if kind=='L':line='L\0'+rel+'\0'+os.readlink(path)+'\n'
+              else:
+                  statinfo=path.stat()
+                  assert statinfo.st_mtime<time.time()-3*86400, 'SOURCE_BECAME_ACTIVE'
+                  digest=hashlib.sha256()
+                  with path.open('rb') as f:
+                      for block in iter(lambda:f.read(1024*1024),b''):digest.update(block)
+                  total+=statinfo.st_size
+                  line='F\0'+rel+'\0'+str(statinfo.st_size)+'\0'+digest.hexdigest()+'\n'
+              h.update(line.encode('utf-8'))
+          assert files==27115 and links==14 and total==1200907063, 'SOURCE_INVENTORY_CHANGED'
+          print(h.hexdigest())
+          PY
+          )"
+          [[ "$source_digest" =~ ^[0-9a-f]{64}$ ]]
+          echo "SOURCE_TREE_SHA256=$source_digest"
+          echo "SOURCE_TREE_SHA256=$source_digest" >> "$GITHUB_ENV"
+      - name: Restore archived content into isolated VPS directory and compare all hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_TREE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          ssh -F "$RUNNER_TEMP/zomorod-restore-proof/config" saeit-vps "EXPECTED_TREE_DIGEST='$SOURCE_TREE_SHA256' python3 -" <<'PY'
+          import hashlib,json,os,shutil,stat,tarfile,tempfile
+          from pathlib import Path,PurePosixPath
+          folder=Path('/home/githubops/.db-backups')
+          backup=folder/'cpanel-inactive-backup-sets-20261104.tar.gz'
+          assert backup.is_file() and not backup.is_symlink(), 'VPS_ARCHIVE_NOT_FOUND'
+          digest=hashlib.sha256()
+          with backup.open('rb') as f:
+              for block in iter(lambda:f.read(1024*1024),b''):digest.update(block)
+          assert digest.hexdigest()=='403ddd65650091fb7c4958e279440ef80ee0ea6380079522d90b478df35dda37', 'VPS_ARCHIVE_CHECKSUM_MISMATCH'
+          free=os.statvfs(str(folder))
+          assert free.f_bavail*free.f_frsize>2500000000, 'INSUFFICIENT_VPS_RESTORE_SPACE'
+          allowed={'zomorodmelal-complete','zomorodmelal-db-recovery-validation'}
+          stage=Path(tempfile.mkdtemp(prefix='restore-proof-20261104-',dir=str(folder)))
+          try:
+              symlinks=[];regular=0;bytes_written=0
+              with tarfile.open(backup,mode='r:gz') as archive:
+                  for member in archive:
+                      rel=PurePosixPath(member.name)
+                      assert not rel.is_absolute() and '..' not in rel.parts and rel.parts[0] in allowed, 'UNSAFE_ARCHIVE_MEMBER'
+                      target=stage.joinpath(*rel.parts)
+                      if member.isdir():target.mkdir(parents=True,exist_ok=True)
+                      elif member.isfile():
+                          target.parent.mkdir(parents=True,exist_ok=True)
+                          with archive.extractfile(member) as source,target.open('xb') as output:
+                              shutil.copyfileobj(source,output,1024*1024)
+                          regular+=1;bytes_written+=member.size
+                      elif member.issym():symlinks.append((target,member.linkname))
+                      else:raise SystemExit('UNSUPPORTED_ARCHIVE_MEMBER_TYPE')
+              for target,linkname in symlinks:
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  os.symlink(linkname,target)
+              assert regular==27115 and len(symlinks)==14 and bytes_written==1200907063, 'RESTORED_STRUCTURE_MISMATCH'
+              entries=[]
+              for name in allowed:
+                  root=stage/name
+                  assert root.is_dir() and not root.is_symlink(), 'RESTORED_ROOT_MISSING'
+                  for current,dirs,filenames in os.walk(root,followlinks=False):
+                      for dirname in dirs:
+                          p=Path(current)/dirname
+                          if p.is_symlink():entries.append(('L',p))
+                      dirs[:]=[dirname for dirname in dirs if not (Path(current)/dirname).is_symlink()]
+                      for filename in filenames:
+                          p=Path(current)/filename
+                          entries.append(('L' if p.is_symlink() else 'F',p))
+              h=hashlib.sha256()
+              for kind,path in sorted(entries,key=lambda x:str(x[1].relative_to(stage))):
+                  rel=path.relative_to(stage).as_posix()
+                  if kind=='L':line='L\0'+rel+'\0'+os.readlink(path)+'\n'
+                  else:
+                      st=path.stat();sub=hashlib.sha256()
+                      with path.open('rb') as f:
+                          for block in iter(lambda:f.read(1024*1024),b''):sub.update(block)
+                      line='F\0'+rel+'\0'+str(st.st_size)+'\0'+sub.hexdigest()+'\n'
+                  h.update(line.encode('utf-8'))
+              assert h.hexdigest()==os.environ['EXPECTED_TREE_DIGEST'], 'RESTORED_CONTENT_DOES_NOT_MATCH_SOURCE'
+              print('LOSSLESS_VPS_RESTORE_PROVEN='+json.dumps({'regular_files':regular,'symlinks':len(symlinks),'restored_bytes':bytes_written,'tree_sha256':h.hexdigest(),'archive_sha256':digest.hexdigest()}),flush=True)
+          finally:
+              shutil.rmtree(stage)
+          PY
+      - name: Remove temporary runner SSH credentials
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-restore-proof"
+          test ! -d "$d" || rm -rf -- "$d"
