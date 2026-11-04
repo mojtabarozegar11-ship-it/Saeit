@@ -84,7 +84,8 @@ jobs:
               files=0; newest=0; allocated=0; unexpected=0
               for current,dirs,filenames in os.walk(root,followlinks=False):
                   for directory in dirs:
-                      assert not (Path(current)/directory).is_symlink(), 'BACKUP_SYMLINK_DIR:'+name
+                      if (Path(current)/directory).is_symlink():unexpected+=1
+                  dirs[:]=[directory for directory in dirs if not (Path(current)/directory).is_symlink()]
                   for filename in filenames:
                       path=Path(current)/filename
                       metadata=path.lstat()
