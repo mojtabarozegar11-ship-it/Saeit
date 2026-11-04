@@ -192,7 +192,7 @@ jobs:
           folders.sort(key=lambda item:item['allocated_bytes'],reverse=True)
           print('CPANEL_HOME_TOPLEVEL_DU='+json.dumps({'scan_complete':usage.returncode==0,'top_folders':folders[:18]}))
           backup_root=Path.home()/'.backups'
-          backup_files=[]; scanned=0; recent=0; latest_modified=0
+          backup_files=[]; scanned=0; recent=0; latest_modified=0; backup_groups={}
           if backup_root.is_dir() and not backup_root.is_symlink():
               for current, dirs, names in os.walk(backup_root,followlinks=False):
                   dirs[:]=[d for d in dirs if not (Path(current)/d).is_symlink()]
@@ -205,12 +205,22 @@ jobs:
                           if stat.S_ISREG(st.st_mode):
                               latest_modified=max(latest_modified,int(st.st_mtime))
                               if st.st_mtime>=time.time()-3*86400:recent+=1
+                              parts=path.relative_to(backup_root).parts
+                              for groupname in dict.fromkeys((parts[0],'/'.join(parts[:2]))):
+                                  record=backup_groups.setdefault(groupname,{'files':0,'allocated_bytes':0,'modified_within_72h':0,'latest_modified_unix':0})
+                                  record['files']+=1
+                                  record['allocated_bytes']+=st.st_blocks*512
+                                  record['latest_modified_unix']=max(record['latest_modified_unix'],int(st.st_mtime))
+                                  if st.st_mtime>=time.time()-3*86400:record['modified_within_72h']+=1
                               if st.st_size>=10000000:
                                   backup_files.append({'path':str(path.relative_to(backup_root))[:180],'bytes':st.st_size,'modified_unix':int(st.st_mtime)})
                       except OSError: pass
                   if scanned>200000:break
           backup_files.sort(key=lambda item:item['bytes'],reverse=True)
           print('CPANEL_BACKUP_CANDIDATES='+json.dumps({'files_scanned':scanned,'modified_within_72h':recent,'latest_modified_unix':latest_modified,'top_large_files':backup_files[:35]}))
+          groups=[dict(path=key,**value) for key,value in backup_groups.items()]
+          groups.sort(key=lambda item:item['allocated_bytes'],reverse=True)
+          print('CPANEL_BACKUP_GROUP_ACTIVITY='+json.dumps(groups[:25]))
           if backup_root.is_dir():
               sizes=subprocess.run(['du','-x','-B1','--max-depth=2',str(backup_root)],capture_output=True,text=True,timeout=90)
               subdirs=[]
