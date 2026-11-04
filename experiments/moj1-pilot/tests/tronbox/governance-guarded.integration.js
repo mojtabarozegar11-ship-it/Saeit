@@ -71,4 +71,19 @@ contract('MOJ1 delayed and rotatable 2-of-3 candidate', accounts => {
     await gov.execute(token.address, spend, 1, {from: accounts[3]});
     assert.equal((await token.balanceOf(accounts[8])).toString(), amount(1));
   });
+
+  it('lets two owners cancel a pending nonce without transferring funds', async () => {
+    const {gov, token} = await setup();
+    const spend = transferData(accounts[8], 1);
+    await gov.approve(token.address, spend, 0, {from: accounts[0]});
+    await gov.approve(token.address, spend, 0, {from: accounts[1]});
+    const cancel = '0x' + tronWeb.sha3('cancelCurrentNonce()').slice(2, 10);
+    await gov.approve(gov.address, cancel, 0, {from: accounts[0]});
+    await gov.approve(gov.address, cancel, 0, {from: accounts[2]});
+    await gov.setTestClock(start + rotationDelay);
+    await gov.execute(gov.address, cancel, 0, {from: accounts[0]});
+    assert.equal((await gov.nonce()).toString(), '1');
+    await expectRevert(gov.execute(token.address, spend, 0, {from: accounts[1]}));
+    assert.equal((await token.balanceOf(accounts[8])).toString(), '0');
+  });
 });
