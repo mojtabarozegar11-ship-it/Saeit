@@ -53,6 +53,7 @@ jobs:
           grep -E '[[:space:]]+[0-9]+ passing' ../moj7-private-tvm-tests.log
           echo 'MOJ7_TEST_NETWORK=local_TRE_only'
           echo 'MOJ7_MAINNET_BROADCAST=false'
+          echo 'MOJ7_FUNCTIONAL_COVERAGE=14_transaction_scenarios'
       - name: Stop and remove local test chain
         if: always()
         working-directory: .
