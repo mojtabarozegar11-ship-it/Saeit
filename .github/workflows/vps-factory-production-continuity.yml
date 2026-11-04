@@ -273,7 +273,7 @@ jobs:
           if not path.is_file() or path.is_symlink():
               raise SystemExit("FACTORY_FIX_SOURCE_UNSAFE")
           source = path.read_text(encoding="utf-8")
-          old = '                    factory=True,\\n                    run_id=run.run_id,\\n                    goal=run.goal,\\n'
+          old = "                    factory=True," + chr(10) + "                    run_id=run.run_id," + chr(10) + "                    goal=run.goal," + chr(10)
           if old in source:
               updated = source.replace(old, "", 1)
           elif "                    run_id=run.run_id," not in source and "                    goal=run.goal," not in source:
