@@ -92,3 +92,34 @@ two-phase off-host copy, signed receipt validation and explicit owner
 authorization; an unsigned or locally self-attested JSON flag is not enough.
 
 This proposal does not change existing factory status: **HOLD / NO GO**.
+
+## cPanel candidate assessment (cycle 15, source-only)
+
+The existing `factory-cpanel-incomplete-audit-20261025.yml` uses a pinned
+VPS-to-cPanel SSH relay. A historical successful cPanel quota report at
+2026-11-04 12:05 UTC recorded 27,407.96 MiB/MB reported used against a
+30,720 reported limit. The subtraction is 3,312.04 in the UAPI's reported
+units; it is **not a current available-space measurement**, and the shared
+filesystem may be even tighter than account quota.
+
+`scripts/factory_cpanel_offhost_readonly_probe_v1.py` is a no-write operator
+probe that can only report the proposed vault's local access controls and
+whether both live UAPI quota headroom and filesystem free space meet a
+conservative capacity estimate. It considers **only** the fixed account-home
+location `$HOME/.saeit-factory-offhost`, which must already exist, be owned by
+the SSH account, have mode 0700, have no symlink path component, and not be
+inside the document roots. The probe never creates this folder.
+
+The default estimate requires `3 * 512 MiB + 1024 MiB` of room. This is a
+screening threshold, not a guarantee that a particular backup can be
+restored: the actual archive, SQLite size, expanded private data and quota
+must be measured before any copy. Missing UAPI quota is a HOLD, not evidence
+of unlimited storage. The probe prints no database names or private files.
+
+Even if the probe reports `capacity_candidate_pass: true`, its top-level
+decision remains `HOLD_NO_TRANSFER_AUTHORIZED`. cPanel remains **unapproved**
+for an actual backup until the owner approves the remote destination,
+end-to-end encrypted-at-rest transfer with externally held decryption key,
+separate administrator signing key, and a real independent restore rehearsal.
+Plaintext private checkpoints must never be sent to cPanel, stored in
+`public_html`, or included in GitHub artifacts/logs.
