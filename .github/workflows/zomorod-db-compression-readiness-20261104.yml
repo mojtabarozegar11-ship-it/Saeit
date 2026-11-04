@@ -183,6 +183,14 @@ jobs:
                       print('CPANEL_DISK_BREAKDOWN=parse_unavailable')
               else: print('CPANEL_DISK_BREAKDOWN=api2_unavailable')
           else: print('CPANEL_DISK_BREAKDOWN=cpapi2_missing')
+          usage=subprocess.run(['du','-x','-B1','--max-depth=1',str(Path.home())],capture_output=True,text=True,timeout=90)
+          folders=[]
+          for row in usage.stdout.splitlines():
+              fields=row.split('\t',1)
+              if len(fields)==2 and fields[0].isdigit():
+                  folders.append({'name':Path(fields[1]).name,'allocated_bytes':int(fields[0])})
+          folders.sort(key=lambda item:item['allocated_bytes'],reverse=True)
+          print('CPANEL_HOME_TOPLEVEL_DU='+json.dumps({'scan_complete':usage.returncode==0,'top_folders':folders[:18]}))
           PY
       - name: Read-only live website HTTP status
         shell: bash
