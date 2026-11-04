@@ -87,16 +87,14 @@ jobs:
           assert cache.resolve()==root/".npm"/"_cacache","NPM_CACHE_PATH_MISMATCH"
           assert npm.stat().st_uid==os.geteuid() and cache.stat().st_uid==os.geteuid(),"NPM_CACHE_NOT_OWNED"
           assert (cache/"content-v2").is_dir(),"NOT_STANDARD_NPM_CACHE"
-          tool=shutil.which("npm")
-          assert tool is not None,"NPM_CLIENT_NOT_FOUND"
           active=subprocess.run(["pgrep","-u",str(os.geteuid()),"-f","npm (install|ci|rebuild|update)"],capture_output=True,text=True,timeout=6) if shutil.which("pgrep") else None
           assert active is not None and active.returncode==1,"CONCURRENT_NPM_OPERATION_OR_UNKNOWN"
           old=disk(cache)
           assert old>=200000,"CACHE_TOO_SMALL_FOR_OPERATION"
           print("NPM_CACHE_KIB_BEFORE="+str(old))
           print("QUOTA_MB_BEFORE="+str(quota()))
-          p=subprocess.run([tool,"cache","clean","--force","--cache",str(npm)],capture_output=True,text=True,timeout=220)
-          assert p.returncode==0,"NPM_CACHE_CLEAN_FAILED"
+          shutil.rmtree(cache)
+          assert not cache.exists(),"CACHE_PURGE_INCOMPLETE"
           after=disk(npm)
           print("NPM_DIRECTORY_KIB_AFTER="+str(after))
           print("QUOTA_MB_AFTER="+str(quota()))
