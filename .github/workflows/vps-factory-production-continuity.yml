@@ -1,8 +1,7 @@
 name: VPS Factory Production Continuity
 on:
-  schedule:
-    # Every hour: verify or recover the existing isolated VPS factory loop.
-    - cron: "13 * * * *"
+  # F-01: never auto-restart the legacy 20-second worker on a schedule.
+  # The factory must run independently under the VPS-local single-product lane.
   push:
     branches: [main]
     paths: [.github/workflows/vps-factory-production-continuity.yml]
@@ -208,7 +207,9 @@ jobs:
           REMOTE
 
   ensure:
-    if: github.event_name != 'push' || (!contains(github.event.head_commit.message, '[factory-readonly-audit-20261029]') && !contains(github.event.head_commit.message, '[factory-pause-low-disk-loop-20261029]'))
+    # Legacy recovery requires a deliberate manual owner authorization and
+    # independently verified restorable backup; never run from push or schedule.
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref_name == 'main' && github.event_name == 'workflow_dispatch' && inputs.recovery_authorized == true && inputs.offhost_backup_verified == true
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
