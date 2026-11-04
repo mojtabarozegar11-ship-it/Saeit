@@ -282,6 +282,14 @@ export function readHeroChoice(value) {
   return hero <= 29 ? hero : 0;
 }
 
+// A restored backup may be normalized and saved again while the result screen
+// is opening. The latest verified snapshot is the source of truth, not the
+// original imported bytes. Do not adopt a different tab's concurrent write.
+export function confirmedImportedCampaignSnapshot(committed, persisted, status) {
+  if (status !== 'saved' || typeof committed !== 'string' || committed.length === 0) return null;
+  return committed === persisted ? committed : null;
+}
+
 // Browsers may block Web Storage entirely (privacy modes, sandboxed frames, policy).
 // Never let storage access stop the playable, unsaved campaign.
 export function storageRead(key) {
@@ -302,3 +310,4 @@ export function storageRemove(key) {
     return true;
   } catch { return false; }
 }
+

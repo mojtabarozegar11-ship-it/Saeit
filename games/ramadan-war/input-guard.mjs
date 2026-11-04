@@ -25,12 +25,18 @@ export function keyboardAction(code, screen, target, repeat = false) {
 // Map screen-space touch directions to the same movement axes as WASD:
 // up = forward (W), right = strafe right (D). Clamp diagonal input so
 // dragging beyond the pad never increases player speed.
-export function joystickAxes(dx, dy, limit) {
-  if (![dx, dy, limit].every(Number.isFinite) || limit <= 0) return {forward: 0, side: 0};
+export function joystickAxes(dx, dy, limit, deadzone = 0) {
+  if (![dx, dy, limit, deadzone].every(Number.isFinite) || limit <= 0) return {forward: 0, side: 0};
   const distance = Math.hypot(dx, dy);
   if (distance === 0) return {forward: 0, side: 0};
-  const scale = Math.min(1, limit / distance) / limit;
-  return {forward: -dy * scale, side: dx * scale};
+  const zone = Math.max(0, Math.min(.5, deadzone));
+  const magnitude = Math.min(1, distance / limit);
+  if (magnitude <= zone) return {forward: 0, side: 0};
+  const adjusted = (magnitude - zone) / (1 - zone);
+  const scale = adjusted / distance;
+  const forward = -dy * scale, side = dx * scale;
+  // Canonicalize signed zero so movement snapshots stay stable across engines.
+  return {forward: forward === 0 ? 0 : forward, side: side === 0 ? 0 : side};
 }
 
 // Pointer geometry can temporarily be zero during orientation changes, and
@@ -123,10 +129,12 @@ export function recordPointerGestureMovement(gesture, event) {
     Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY));
 }
 
-// Only an actual primary desktop mouse click may fire from the 3D canvas.
-// Touch/pencil aiming on wide screens and mouse drags must not consume ammo.
+// Only a completed primary mouse click may fire from the 3D canvas, regardless
+// of viewport width (e.g. a resized desktop window or mouse on a tablet).
+// Touch/pen aiming and mouse drags must never consume ammo.
+// viewportWidth is retained for callers already using this four-argument API.
 export function shouldFireCanvasClick(event, screen, viewportWidth, gesture) {
-  return screen === 'game' && Number.isFinite(viewportWidth) && viewportWidth >= 700 &&
+  return screen === 'game' &&
     gesture?.pointerType === 'mouse' && gesture.finished === true &&
     gesture.cancelled !== true && Number.isFinite(gesture.moved) && gesture.moved <= 8 &&
     event?.button === 0 && event.detail > 0 &&

@@ -7,7 +7,7 @@ const echo=readFileSync(new URL('../echoform/signal-lattice-r43.html',import.met
 test('R58 Ramadan: background blocks new campaign, in-memory resume and next mission',()=>{
  assert.match(game,/if\(document\.hidden\)\{toast\('برای شروع نبرد/);
  assert.match(game,/function resumeInMemoryCampaign\(\)\{if\(!hasResumableCampaignInMemory\(\)\|\|!canEnterGameplay\(graphicsUnavailable,document\.hidden\)\)return false/);
- assert.match(game,/function nextMission\(\)\{if\(!world\|\|!canEnterGameplay\(graphicsUnavailable,document\.hidden\)\)return/);
+ assert.match(game,/function nextMission\(\)\{if\(!world\|\|world\.missionPassed!==true\|\|!canEnterGameplay\(graphicsUnavailable,document\.hidden\)\)return/);
 });
 test('R58 ECHOFORM: freeze cancels active playback before BFCache',()=>{
  assert.match(echo,/document\.addEventListener\('freeze',\(\)=>pause\(/);

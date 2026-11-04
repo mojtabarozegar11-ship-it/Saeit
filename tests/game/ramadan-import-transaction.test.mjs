@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import {confirmedImportedCampaignSnapshot} from '../../games/ramadan-war/save-validation.mjs';
 const source=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
 const start=source.indexOf('function applyImportedCampaign(imported){');
 const end=source.indexOf("\n}\n$('#survival').onclick",start);
@@ -10,6 +11,7 @@ const handler=source.slice(start,end+2);
 async function run({old='OLD_SAVE',activate=true,writeOk=true,removeOk=true,foreign=false,baseline=undefined}={}){
  const state=new Map(old===null?[]:[['rwNativeCampaign',old]]),messages=[];
  const ctx={saveKey:'rwNativeCampaign',saveStatus:'not-saved',hero:2,foreignSaveDetected:foreign,lastSavedSnapshot:baseline,
+  confirmedImportedCampaignSnapshot,
   MAX_CAMPAIGN_BACKUP_BYTES:512*1024,
   readCampaignBackup:()=> 'NEW_SAVE',
   storageRead:k=>state.has(k)?state.get(k):null,
@@ -20,6 +22,9 @@ async function run({old='OLD_SAVE',activate=true,writeOk=true,removeOk=true,fore
   toast:m=>messages.push(m),updateHome:()=>{},
   $:()=>({textContent:''})
  };
+ // A successful real restore confirms the serialized disk state before the
+ // import transaction commits it. Preserve that production contract in VM.
+ if(activate)ctx.restore=()=>{ctx.lastSavedSnapshot=state.get('rwNativeCampaign');ctx.saveStatus='saved';return true};
  vm.runInNewContext(handler+'\nglobalThis.importHandler=applyImportedCampaign;',ctx);
  const input={files:[{size:100,text:async()=>'{"backup":true}'}],value:'selected'};
  await ctx.importHandler('NEW_SAVE');

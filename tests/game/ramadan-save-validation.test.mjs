@@ -516,7 +516,7 @@ test('legacy recovery with missing pickups remains playable but never invents pr
 
 test('campaign interaction, timed defence and intel rewards save immediately', () => {
   const client=readFileSync(new URL('../../games/ramadan-war/game.js',import.meta.url),'utf8');
-  assert.match(client,/o\.done\+\+;world\.score\+=250;[^\n]*sync\(\);save\(\);return true;/);
+  assert.match(client,/o\.done\+\+;grantBattleReward\(world,250,1\);[^\n]*sync\(\);save\(\);return true;/);
   assert.match(client,/o\.done=1;toast\('دفاع موفق • موقعیت تثبیت شد'\);save\(\)/);
   assert.match(client,/o\.collectedSites\.push\(index\);/);
   assert.match(client,/toast\('اطلاعات حیاتی بازیابی شد'\);sync\(\);save\(\);continue/);
