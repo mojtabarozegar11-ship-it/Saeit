@@ -37,7 +37,8 @@ jobs:
           raw=value.to_bytes(25,"big")
           if raw[0]!=0x41 or hashlib.sha256(hashlib.sha256(raw[:21]).digest()).digest()[:4]!=raw[21:]:
               raise SystemExit("INVALID_TRON_ADDRESS_CHECKSUM")
-          constructor_word=raw[1:].hex().rjust(64,"0")
+          constructor_word=raw[1:21].hex().rjust(64,"0")
+          assert len(constructor_word)==64 and constructor_word.endswith(raw[1:21].hex())
           r=json.loads(pathlib.Path("build/report.json").read_text())
           if r["status"]!="COMPILE_SUCCESS" or r["source_sha256"]!="c94aa5fbbb2d738aab49c1fcd22b5e7aef42603048b316e2d5b7a544c505d53b":
               raise SystemExit("SOURCE_HASH_OR_COMPILE_NOT_VERIFIED")
