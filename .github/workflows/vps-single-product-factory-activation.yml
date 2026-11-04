@@ -29,6 +29,30 @@ jobs:
           set -euo pipefail
           umask 077
           test -n "$VPS_KEY"
+          # Fail before SSH or any transfer if the checked-out source still
+          # contains the legacy self-attested QC release implementation.
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+
+          singleton_path = Path("scripts/factory_global_singleton_v1.py")
+          runner_path = Path("scripts/factory_vps_product_cycle.py")
+          if not singleton_path.is_file() or not runner_path.is_file():
+              raise SystemExit("F01_RELEASE_GUARD_SOURCE_MISSING")
+          singleton = ast.parse(singleton_path.read_text(encoding="utf-8"))
+          runner = ast.parse(runner_path.read_text(encoding="utf-8"))
+          singleton_functions = {n.name for n in singleton.body if isinstance(n, ast.FunctionDef)}
+          runner_functions = {n.name for n in runner.body if isinstance(n, ast.FunctionDef)}
+          required_singleton = {"reserve_lane", "_require_foreign_lane_idle"}
+          required_runner = {"_owner_signature_verifies", "_accepted_hourly_handoff", "_validated_ai_review", "_verified_quality_exit"}
+          calls = {n.func.attr for n in ast.walk(runner)
+                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+          if (not required_singleton.issubset(singleton_functions)
+                  or not required_runner.issubset(runner_functions)
+                  or "reserve_lane" not in calls):
+              raise SystemExit("F01_LEGACY_RELEASE_RUNTIME_BLOCKED")
+          print("F01_REQUIRED_RELEASE_SOURCE_PRESENT=PASS")
+          PY
           d="$RUNNER_TEMP/single-product-factory"
           install -d -m 700 "$d"
           trap 'rm -rf -- "$d"' EXIT
@@ -109,6 +133,7 @@ jobs:
           PREFLIGHT
           files=(
             scripts/factory_vps_product_cycle.py
+            scripts/factory_global_singleton_v1.py
             scripts/factory_master_agent_genetics_v1.py
             scripts/factory_autonomous_portfolio.py
             scripts/factory_product_maker.py
