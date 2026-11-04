@@ -36,6 +36,7 @@ on:
       - "tests/test_factory_production_warehouse.py"
       - "tests/test_factory_quality_module_upgrade.py"
       - "tests/test_factory_vps_product_cycle.py"
+      - "tests/test_factory_ai_owner_clearance.py"
       - "tests/test_factory_vps_installer_syntax.py"
       - "tests/test_factory_private_passport_20261020.py"
       - ".github/workflows/vps-autonomous-product-install.yml"
@@ -83,12 +84,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        # A manual diagnostic uses one runner; normal CI retains full coverage.
+        python: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '["3.11"]' || '["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Bounded owner-approved AI quality gate diagnostic (no deployment)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          python -m pip install --disable-pip-version-check openpyxl==3.1.5
+          python -B -m unittest discover -s tests -p 'test_factory_ai_owner_clearance.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
       - run: |
           python -m pip install openpyxl==3.1.5
           python -B -m unittest discover -s tests -p 'test_factory_recipe_designer.py' -v
@@ -105,6 +113,8 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_factory_research_triage.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_build_50.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_build50_workbook.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_ai_owner_clearance.py' -v
+        if: github.event_name != 'workflow_dispatch'
   deploy:
     needs: measured-qa
     # F-01 owner directive: never deploy the obsolete 25-product installer.
