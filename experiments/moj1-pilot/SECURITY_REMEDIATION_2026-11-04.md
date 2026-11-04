@@ -9,6 +9,7 @@ Status: **unmerged candidate, Mainnet NO-GO**. No real-token operation or releas
 - External-contract operations wait at least 48 hours; self-operations (including signer replacement and nonce cancellation) wait seven days.
 - Signer rotation requires a self-call approved by two current signers and passing the seven-day delay. Nonzero and distinct signer sets are enforced.
 - Nonces are advanced before external calls to block replay and reentrant execution; failed calls roll back the nonce and side effects.
+- An additional stacked, **unmerged emergency-veto candidate** now lets two distinct current owners cancel a pending nonce immediately. This fixes the previously identified gap between a 48-hour external-operation timelock and the seven-day self-operation cancellation path. See `EMERGENCY_GOVERNANCE_VETO_2026-11-04.md` for the remaining audit gates.
 - A separate **unsafe local-only** clock harness and actual TRON TVM tests were added. The harness must never be authorized as production governance.
 
 ## Reward liability: do not turn a rightful obligation into a treasury sweep

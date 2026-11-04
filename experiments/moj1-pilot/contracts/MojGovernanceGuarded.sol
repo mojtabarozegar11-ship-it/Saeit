@@ -17,12 +17,17 @@ contract MojGovernanceGuarded {
     uint256 public nonce;
     mapping(bytes32 => Operation) public operations;
     mapping(bytes32 => mapping(address => bool)) public hasApproved;
+    // Emergency, non-spending cancellation. Two independent current signers can
+    // invalidate all pending approvals at the current nonce without waiting 7 days.
+    mapping(uint256 => uint8) public emergencyVetoCount;
+    mapping(uint256 => mapping(address => bool)) public hasEmergencyVetoed;
 
     event Approved(bytes32 indexed operation, address indexed owner, uint256 approvals);
     event Scheduled(bytes32 indexed operation, uint256 executableAt);
     event Executed(bytes32 indexed operation, address indexed target, uint256 nonce);
     event OwnerReplaced(uint256 indexed slot, address indexed previousOwner, address indexed newOwner);
     event NonceCancelled(uint256 indexed nonce);
+    event EmergencyVetoApproved(uint256 indexed nonce, address indexed owner, uint256 approvals);
 
     constructor(address[3] memory initialOwners) {
         for (uint256 i; i < initialOwners.length; ++i) {
@@ -111,6 +116,22 @@ contract MojGovernanceGuarded {
         require(replacement != previousOwner, "Owner unchanged");
         owners[slot] = replacement;
         emit OwnerReplaced(slot, previousOwner, replacement);
+    }
+
+    /// @notice A 2-of-3 safety veto cancels the current nonce and ALL its
+    ///         pending operations. This function cannot execute arbitrary calls
+    ///         or transfer any funds; requiring a seven-day delay would make a
+    ///         veto ineffective against a 48-hour scheduled operation.
+    function vetoCurrentNonce() external onlyOwner {
+        uint256 operationNonce = nonce;
+        require(!hasEmergencyVetoed[operationNonce][msg.sender], "Duplicate emergency veto");
+        hasEmergencyVetoed[operationNonce][msg.sender] = true;
+        uint256 approvals = ++emergencyVetoCount[operationNonce];
+        emit EmergencyVetoApproved(operationNonce, msg.sender, approvals);
+        if (approvals == 2) {
+            ++nonce;
+            emit NonceCancelled(operationNonce);
+        }
     }
 
     /// @notice Advance the nonce without calling an external target, via delayed 2-of-3 approval.
