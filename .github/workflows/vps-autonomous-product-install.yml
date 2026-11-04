@@ -394,3 +394,45 @@ jobs:
           print("FACTORY_REAL_CUSTOMER_PACKAGE_COMMERCIAL_SALE_READY=0")
           print("FACTORY_NEW_DESIGN_TO_REAL_PROTOTYPE=PASS")
           PYENGINEERING
+
+  stage-reviewed-ai-owner-policy:
+    # One-time transfer of reviewed public source ONLY. No runtime install,
+    # product admission, crontab, service, invoice, or private data changes.
+    needs: measured-qa
+    if: github.event_name == 'workflow_dispatch' && github.ref_name == 'feature/factory-ai-owner-release-20261104'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Integrity-verified isolated VPS staging; never activate
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$VPS_KEY"
+          scratch="$RUNNER_TEMP/ai-owner-stage"
+          mkdir -m 700 -p "$scratch"
+          trap 'rm -f "$scratch/key" "$scratch/known"; rmdir "$scratch" 2>/dev/null || :' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$scratch/key"
+          chmod 600 "$scratch/key"
+          ssh-keygen -y -P "" -f "$scratch/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$scratch/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$scratch/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_opts=(-i "$scratch/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$scratch/known" -o BatchMode=yes -o ConnectTimeout=15)
+          SSH=(ssh "${ssh_opts[@]}" githubops@178.239.147.150)
+          stage="/home/githubops/factory-runtime/operations/ai-owner-release-$GITHUB_SHA"
+          "${SSH[@]}" "test -d '/home/githubops/factory-runtime/operations' && test ! -L '/home/githubops/factory-runtime/operations' && test ! -e '$stage' && mkdir -m 700 '$stage'"
+          paths=(scripts/factory_vps_product_cycle.py scripts/factory_global_singleton_v1.py tests/test_factory_ai_owner_clearance.py docs/factory-ai-owner-release-v2.md)
+          expected="$(sha256sum "${paths[@]}" | sha256sum)"
+          tar --create --file - -- "${paths[@]}" | "${SSH[@]}" "tar --extract --file - --directory '$stage' --no-same-owner --no-same-permissions"
+          observed="$("${SSH[@]}" "cd '$stage' && sha256sum ${paths[*]} | sha256sum")"
+          test "$observed" = "$expected"
+          "${SSH[@]}" "test -f '$stage/scripts/factory_vps_product_cycle.py' && test ! -L '$stage/scripts/factory_vps_product_cycle.py'"
+          echo "FACTORY_AI_OWNER_POLICY_STAGED_SHA=$GITHUB_SHA"
+          echo "FACTORY_AI_OWNER_POLICY_INTEGRITY=PASS"
+          echo "FACTORY_AI_OWNER_RUNTIME_ACTIVATION=NOT_ATTEMPTED"
