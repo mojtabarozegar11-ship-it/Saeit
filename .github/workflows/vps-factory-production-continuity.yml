@@ -324,7 +324,7 @@ jobs:
             raw="$(cat "$pidfile" 2>/dev/null || true)"
             original="$raw"
             if [[ "$raw" == *'\n' ]]; then
-              raw="$(printf '%s' "$raw" | sed 's/\\\\n$//')"
+              raw="$(printf '%s' "$raw" | sed 's/\\n$//')"
             fi
             if pid_is_factory "$raw"; then
               if [[ "$raw" != "$original" ]]; then
