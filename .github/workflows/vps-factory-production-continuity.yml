@@ -290,7 +290,23 @@ jobs:
                           if re.search(r"(?i)(password|secret|token|api_key|private_key)", line):
                               continue
                           print(f"FACTORY_CODE_WINDOW {file.name}:{line_no}:{line[:150]}")
-          from django.apps import apps
+          import inspect
+          from django.core.management import call_command
+          try:
+              from core.management.commands.autonomous_master_loop import Command as MasterCommand
+              signature = inspect.signature(MasterCommand.handle)
+              accepted = sorted(name for name, param in signature.parameters.items()
+                                if name != "self" and param.kind not in
+                                (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD))
+              passed = {"factory", "run_id", "goal", "max_steps"}
+              print("FACTORY_MASTER_HANDLE_ACCEPTED_OPTIONS=" + ",".join(accepted))
+              print("FACTORY_MASTER_HANDLE_UNSUPPORTED_CALL_OPTIONS=" + ",".join(sorted(passed - set(accepted))))
+              print("FACTORY_MASTER_HANDLE_HAS_VAR_KW=" + str(any(
+                  param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())).lower())
+              print("FACTORY_DJANGO_CALL_COMMAND_SIGNATURE=" + str(inspect.signature(call_command)))
+          except Exception as exc:
+              print("FACTORY_MASTER_HANDLE_INSPECTION_ERROR=" + type(exc).__name__)
+                    from django.apps import apps
           pattern = re.compile(r"(factory|task|queue|probe|opportun|evidence|research|workflow|schedule|job|run)", re.I)
           for model in apps.get_app_config("core").get_models():
               if pattern.search(model.__name__) or pattern.search(model._meta.db_table):
