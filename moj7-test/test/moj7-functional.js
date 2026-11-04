@@ -24,7 +24,7 @@ async function mustRevert(promise) {
     const message = String(rejected.message || rejected);
     // Some TronBox constructor failures are reported as "contract not deployed"
     // with a transaction-ID link, even when the TVM receipt is an explicit REVERT.
-    const embedded = message.match(/[?&]value=([a-fA-F0-9]{64})(?:\\b|$)/);
+    const embedded = message.match(/[?&]value=([a-fA-F0-9]{64})/);
     if (embedded) {
       const info = await readExecutionReceipt(embedded[1]);
       assert.equal(info.receipt.result, 'REVERT',
