@@ -1,0 +1,217 @@
+name: Zomorod management desk functional map (read-only)
+on:
+  push:
+    branches:
+      - audit/zomorod-business-function-map-20261104
+    paths:
+      - ".github/workflows/zomorod-business-function-map.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-business-function-map-20261104
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up pinned GitHub to VPS to cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-marketing-ro"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -r /home/zomorod2/.private/zomorod-business/company_ingress.py' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Inspect private PHP and SQLite structure without any application writes
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 100s ssh -F "$RUNNER_TEMP/zm-marketing-ro/config" "$COMMAND_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          app=/home/zomorod2/.private/zomorod-business/app.php
+          db=/home/zomorod2/.private/zomorod-business/management.sqlite3
+          test -f "$app" && test ! -L "$app"
+          test -f "$db" && test ! -L "$db"
+          actual="$(sha256sum "$app" | awk '{print $1}')"
+          echo "LIVE_APP_HASH=$actual"
+          if test "$actual" != "2ed9274affa87f3e9c51f7dff0c72d7461118c7aca0ae0ab732b1c81cbfd6005"; then
+            echo "SOURCE_CHANGED_STOP=YES"
+            exit 2
+          fi
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin"; then phpbin=/opt/cpanel/ea-php82/root/usr/bin/php; fi
+          if test ! -x "$phpbin"; then echo "PHP_BINARY_UNAVAILABLE"; exit 2; fi
+          phpbad=0
+          for file in /home/zomorod2/.private/zomorod-business/*.php; do
+            if ! "$phpbin" -l "$file" >/dev/null 2>&1; then
+              phpbad=$((phpbad + 1))
+              echo "PHP_LINT_FAILED_FILE=$(basename "$file")"
+            fi
+          done
+          echo "PHP_LINT_FAILURE_COUNT=$phpbad"
+          python3 -B - <<'PY'
+          import sqlite3,re,urllib.parse
+          from pathlib import Path
+          base=Path('/home/zomorod2/.private/zomorod-business')
+          app=(base/'app.php').read_text('utf-8','replace')
+          safe=lambda s: re.sub(r'[^a-zA-Z0-9_./-]','',s)[:90]
+          print('PHP_MODULE_FILES='+','.join(safe(p.name) for p in sorted(base.glob('*.php')) if p.is_file() and not p.is_symlink()))
+          function_names=sorted(set(re.findall(r'\bfunction\s+([a-zA-Z_][a-zA-Z_0-9]*)\s*\(',app)))
+          print('PHP_APP_FUNCTION_COUNT='+str(len(function_names)))
+          print('PHP_APP_FUNCTIONS='+','.join(safe(s) for s in function_names[:150]))
+          for label,words in {
+              'PROJECTS':('project','پروژه'), 'ACCOUNTING':('journal','دفتر','حسابداری'),
+              'INVOICING':('invoice','فاکتور'), 'MESSAGING':('message','پیام'),
+              'WORKFLOW':('workflow','کارتابل'), 'ASSIGNMENTS':('assignment','ارجاع'),
+              'AUCTION':('auction','tender','مزایده'), 'BANKING':('bank','بانک'),
+              'REPORTS':('report','گزارش'), 'PAYROLL':('payroll','حقوق'),
+              'ACCESS':('csrf','password_hash','session_regenerate_id'),
+          }.items():
+              hits=sum(app.lower().count(word.lower()) for word in words)
+              print('APP_MARKER_'+label+'='+str(hits))
+          db=base/'management.sqlite3'
+          url='file:'+urllib.parse.quote(str(db))+'?mode=ro'
+          cx=sqlite3.connect(url,uri=True,timeout=10)
+          try:
+              cx.execute('PRAGMA query_only=ON')
+              result=cx.execute('PRAGMA quick_check(1)').fetchone()[0]
+              print('LIVE_DB_QUICK_CHECK='+('ok' if result=='ok' else 'error'))
+              tables=[row[0] for row in cx.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+              print('DB_TABLE_COUNT='+str(len(tables)))
+              for name in tables:
+                  if not re.fullmatch('[A-Za-z_][A-Za-z_0-9]*',name): continue
+                  rows=list(cx.execute('PRAGMA table_info("'+name+'")'))
+                  cols=','.join(safe(r[1]) for r in rows[:60])
+                  indexes=cx.execute('PRAGMA index_list("'+name+'")').fetchall()
+                  fks=cx.execute('PRAGMA foreign_key_list("'+name+'")').fetchall()
+                  print('DB_SCHEMA_'+safe(name)+'='+cols)
+                  print('DB_KEYS_'+safe(name)+'=indexes:'+str(len(indexes))+',foreign_keys:'+str(len(fks)))
+              print('REMOTE_REVIEW=READ_ONLY_COMPLETED')
+          finally:
+              cx.close()
+          PY
+          REMOTE
+      - name: Clean temporary relay on runner
+        if: always()
+        shell: bash
+        run: |
+          if test -d "$RUNNER_TEMP/zm-marketing-ro"; then
+            rm -rf -- "$RUNNER_TEMP/zm-marketing-ro"
+          fi
