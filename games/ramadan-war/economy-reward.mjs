@@ -16,3 +16,23 @@ export function grantBattleReward(state, scoreDelta = 0, pointsDelta = 0) {
   state.points += pointsDelta;
   return true;
 }
+
+// This marker is already part of R58 saves and is validated on restore.
+// Recording completion before the next frame makes the award idempotent even
+// when the completion callback is reached again. The caller must first verify
+// its mission objectives and that no enemies remain.
+export function completeMissionOnce(state) {
+  if (!state || typeof state !== 'object' || state.endless === true ||
+      state.victory === true || state.gameOver === true ||
+      (state.missionPassed !== false && state.missionPassed !== undefined) ||
+      !Number.isInteger(state.mission) || state.mission < 0 || state.mission > 5 ||
+      !Number.isSafeInteger(state.score) || !Number.isSafeInteger(state.points) ||
+      state.score < 0 || state.points < 0 ||
+      state.score > REWARD_LIMITS.score || state.points > REWARD_LIMITS.points) {
+    return {completed: false, rewardGranted: false};
+  }
+  // Reaching the points cap must not strand a successfully completed mission.
+  const rewardGranted = grantBattleReward(state, 0, 1);
+  state.missionPassed = true;
+  return {completed: true, rewardGranted};
+}
