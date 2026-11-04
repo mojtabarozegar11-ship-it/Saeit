@@ -19,6 +19,8 @@
    - `artifact_sha256` exactly matching the artifact
    - `review_status: completed`, `verified_grade_total: 1000` **only if actually supported by inspection**
    - exactly one passed, artifact-grounded evidence check for each of `scientific_accuracy`, `technical_correctness`, `rights_screening`, `usability`, `security`, `commercial_readiness`; each includes a 64-character SHA-256 evidence reference. Mere hashes without actual reviewed evidence are not substantive proof.
+   - The six referenced evidence files MUST exist at `private/autonomous-product-cycle/quality-excellence/ai-review-evidence/<recipe>/<check_id>.json`. Each uses `schema: saeit.factory.ai-review-evidence.v1`, the exact `check_id` and `artifact_sha256`, `status: passed`, `reviewer_kind: chatgpt_ai_assisted_internal`, `independent_human_review: false`, a nonempty review `method`, and nonempty, specific `observations`. The review's `evidence_sha256` must be the real SHA-256 of that particular evidence file's bytes; a syntactically correct invented digest no longer passes.
+   - These files make claims traceable and alteration-detectable; they **do not**, by themselves, prove scientific truth, independence, regulatory approval, rights ownership or legitimate professional-quality 1000. All substantive checks still require actual inspection and owner judgment.
 4. Owner clearance: `private/autonomous-product-cycle/quality-excellence/signed-clearances/<recipe>/current.json` with:
    - `schema: saeit.factory.ai-assisted-owner-clearance.v2`
    - `reviewer_kind: chatgpt_ai_assisted_internal`, `independent_human_review: false`
