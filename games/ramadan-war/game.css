@@ -48,3 +48,8 @@
 #backupCodePanel label{display:block;text-align:right;margin:10px 0;color:var(--mint);font-size:12px}
 #backupCodeText{display:block;width:100%;min-height:160px;max-height:38vh;resize:vertical;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:12px;background:#07191e;color:var(--ink);font:12px/1.5 ui-monospace,monospace;direction:ltr;text-align:left;touch-action:pan-y;user-select:text;-webkit-user-select:text}
 #backupCodeText:focus-visible{outline:2px solid var(--gold)}
+
+/* R58: earned upgrade access is discoverable without pausing first. */
+.arsenal #quickUpgrades{font:inherit;font-weight:700;border-radius:8px;padding:3px 7px;min-height:27px;border:1px solid #bfa86b77;background:#1b3335;color:var(--gold);white-space:nowrap;touch-action:manipulation}
+.arsenal #quickUpgrades:disabled{opacity:.7}
+.arsenal #quickUpgrades:not(:disabled){background:linear-gradient(135deg,#8a733e,#334336);border-color:#ffdf8a;box-shadow:0 0 12px #edcf873b}
