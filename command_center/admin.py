@@ -25,9 +25,9 @@ from .models import WorkItem, InternalMessage, PrivateAuction
 
 @admin.register(WorkItem)
 class WorkItemAdmin(admin.ModelAdmin):
-    list_display = ("title", "status", "priority", "assignee", "due_at", "created_at")
+    list_display = ("title", "project", "resolution_reference", "status", "priority", "assignee", "due_at", "created_at")
     list_filter = ("status", "priority")
-    search_fields = ("title", "description", "source_type", "source_id")
+    search_fields = ("title", "description", "source_type", "source_id", "resolution_reference", "project__title")
 
 
 @admin.register(InternalMessage)
