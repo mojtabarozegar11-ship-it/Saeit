@@ -24,6 +24,12 @@ contract MojRewardClaimsSumGuarded {
         bool published;
     }
 
+    struct Node {
+        bytes32 hash;
+        uint256 sum;
+        uint256 count;
+    }
+
     ITRC20 public immutable token;
     address public immutable governance;
     uint256 public outstandingCommitments;
@@ -70,17 +76,24 @@ contract MojRewardClaimsSumGuarded {
         bytes32 leftHash, uint256 leftSum, uint256 leftCount,
         bytes32 rightHash, uint256 rightSum, uint256 rightCount
     ) public pure returns (bytes32 parentHash, uint256 parentSum, uint256 parentCount) {
-        require(leftHash != bytes32(0) && rightHash != bytes32(0), "Zero node");
-        require(leftSum > 0 && rightSum > 0 && leftCount > 0 && rightCount > 0, "Empty node");
-        parentSum = leftSum + rightSum;
-        parentCount = leftCount + rightCount;
-        if (uint256(leftHash) <= uint256(rightHash)) {
-            parentHash = keccak256(abi.encode(
-                bytes1(0x01), leftHash, leftSum, leftCount, rightHash, rightSum, rightCount
+        Node memory result = _combine(
+            Node(leftHash, leftSum, leftCount), Node(rightHash, rightSum, rightCount)
+        );
+        return (result.hash, result.sum, result.count);
+    }
+
+    function _combine(Node memory a, Node memory b) internal pure returns (Node memory result) {
+        require(a.hash != bytes32(0) && b.hash != bytes32(0), "Zero node");
+        require(a.sum > 0 && b.sum > 0 && a.count > 0 && b.count > 0, "Empty node");
+        result.sum = a.sum + b.sum;
+        result.count = a.count + b.count;
+        if (uint256(a.hash) <= uint256(b.hash)) {
+            result.hash = keccak256(abi.encode(
+                bytes1(0x01), a.hash, a.sum, a.count, b.hash, b.sum, b.count
             ));
         } else {
-            parentHash = keccak256(abi.encode(
-                bytes1(0x01), rightHash, rightSum, rightCount, leftHash, leftSum, leftCount
+            result.hash = keccak256(abi.encode(
+                bytes1(0x01), b.hash, b.sum, b.count, a.hash, a.sum, a.count
             ));
         }
     }
@@ -114,15 +127,13 @@ contract MojRewardClaimsSumGuarded {
         uint256 length = siblingHashes.length;
         if (length > MAX_PROOF_DEPTH || length != siblingSums.length || length != siblingCounts.length) return false;
 
-        bytes32 hash = claimLeaf(epoch, index, account, amount);
-        uint256 sum = amount;
-        uint256 count = 1;
+        Node memory cursor = Node(claimLeaf(epoch, index, account, amount), amount, 1);
         for (uint256 i; i < length; ++i) {
-            (hash, sum, count) = combineNodes(
-                hash, sum, count, siblingHashes[i], siblingSums[i], siblingCounts[i]
+            cursor = _combine(
+                cursor, Node(siblingHashes[i], siblingSums[i], siblingCounts[i])
             );
         }
-        return hash == record.root && sum == record.budget && count == record.leafCount;
+        return cursor.hash == record.root && cursor.sum == record.budget && cursor.count == record.leafCount;
     }
 
     /// @notice Anyone may relay a valid claim. Payment always goes to the proven account.
