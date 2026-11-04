@@ -20,7 +20,7 @@ if os.path.exists(env_path):
             if key:
                 os.environ.setdefault(key, value)
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
 
 # Compiled Python wheels may live in CloudLinux's lib64. Never mix 3.10
 # site-packages with a 3.11 Passenger interpreter (or vice versa).
