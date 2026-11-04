@@ -1,10 +1,19 @@
 from decimal import Decimal
+from django.core.exceptions import ValidationError
 from django.db.models import Sum
 from .models import Account, JournalEntry
 
 
 def _money(value):
     return str((value or Decimal("0")).quantize(Decimal("0.01")))
+
+
+def _is_balanced(entry):
+    try:
+        entry.validate_balanced()
+    except ValidationError:
+        return False
+    return True
 
 
 def ledger_summary(limit=12):
@@ -27,13 +36,14 @@ def ledger_summary(limit=12):
             "reference": entry.reference, "date": entry.occurred_on.isoformat(),
             "memo": entry.memo, "total": _money(total),
         })
+    posted = JournalEntry.objects.filter(status=JournalEntry.Status.POSTED).prefetch_related("lines")
     return {
         "accounts": balances,
         "recent_entries": entries,
-        "posted_entries": JournalEntry.objects.filter(status=JournalEntry.Status.POSTED).count(),
+        "posted_entries": posted.count(),
         "draft_entries": JournalEntry.objects.filter(status=JournalEntry.Status.DRAFT).count(),
         "integrity": {
-            "balanced_posted_entries": all(entry.validate_balanced() >= 0 for entry in JournalEntry.objects.filter(status=JournalEntry.Status.POSTED).prefetch_related("lines")),
+            "balanced_posted_entries": all(_is_balanced(entry) for entry in posted),
             "source": "Django double-entry ledger",
         },
     }
