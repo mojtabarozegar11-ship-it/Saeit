@@ -34,7 +34,7 @@ INSTALLED_APPS = [
     "core",
     "farnaz.apps.FarnazConfig",
     "command_center",
-    "accounting.apps.AccountingConfig",
+    # Accounting ledger is part of the production management desk.\n    "accounting.apps.AccountingConfig",
 ]
 
 MIDDLEWARE = [
