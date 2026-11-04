@@ -178,14 +178,23 @@ def prepare(stage):
     assert all(('./'+name).encode() in new['game.js'] for name in ['upgrade-policy.mjs','moj1-commerce-policy.mjs','missile-targets.mjs','enemy-action-policy.mjs','save-validation.mjs'])
     assert b'./engine3d.js' in new['game.js'] and b'./three.module.js' in new['engine3d.js'] and b'./three.core.min.js' in new['three.module.js'] and len(new['three.module.js'])>300000 and len(new['three.core.min.js'])>300000
     assert b'The MIT License' in new['THREE-LICENSE.txt']
-    assert b'CC BY 4.0' in new['ASSET-CREDITS.md'] and b'BAMEN' in new['ASSET-CREDITS.md'] and b'Naudaff3D' in new['ASSET-CREDITS.md']
+    credits=new['ASSET-CREDITS.md']
+    assert b'CC BY 4.0' in credits and b'BAMEN' in credits
+    assert b'R58 procedural rifle rights hardening' in credits
     assert all(len(new[n])>50000 for n in ['weapon-overlay.webp','soldier-enemy.webp','stone-wall.webp','scene-desert.webp','scene-sniper-desert-v2.webp','scene-night.webp','scene-airbase.webp'])
-    assert len(new['soldier-rigged-ccby.glb'])>1000000 and len(new['m24-sniper-ccby.glb'])>500000
-    assert len(new['arms_basecolor.webp'])>50000 and len(new['arms_normal.webp'])>50000
+    soldier=new['soldier-rigged-ccby.glb']
+    assert len(soldier)==3094592 and soldier[:4]==b'glTF'
+    assert int.from_bytes(soldier[4:8],'little')==2
+    assert int.from_bytes(soldier[8:12],'little')==len(soldier)
+    # Require the complete, pinned CC-BY soldier; the repository's stub must never be deployed.
+    assert hashlib.sha1(b'blob '+str(len(soldier)).encode('ascii')+bytes([0])+soldier).hexdigest()=='b00ed33108f2579880c82cd27d10f9237ff3a219'
     assert all(len(new[n])>10000 for n in ['three-addons/loaders/GLTFLoader.js','three-addons/utils/SkeletonUtils.js','three-addons/utils/BufferGeometryUtils.js'])
     assert len(new['three-addons/libs/meshopt_decoder.module.js'])>20000
     assert b'weapon-overlay.webp' in new['index.html'] and b'soldier-enemy.webp' in new['engine3d.js'] and b'missionBackdrop' in new['index.html'] and b'scene-sniper-desert-v2.webp' in new['game.js'] and b'alpha:true' in new['engine3d.js']
-    assert b'GLTFLoader' in new['engine3d.js'] and b'soldier-rigged-ccby.glb' in new['engine3d.js'] and b'm24-sniper-ccby.glb' in new['engine3d.js'] and b'MeshoptDecoder' in new['engine3d.js']
+    assert b'GLTFLoader' in new['engine3d.js'] and b'soldier-rigged-ccby.glb' in new['engine3d.js'] and b'MeshoptDecoder' in new['engine3d.js']
+    assert b'self-authored procedural rifle' in new['engine3d.js'] and b'm24-sniper-ccby.glb' not in new['engine3d.js']
+    assert b'href="./low-graphics.html"' in new['index.html']
+    assert b"canvas.getContext('2d')" in new['low-graphics.html']
     assert safe_release_file(GAME,'.htaccess').read_bytes()==inputs['.htaccess'].read_bytes()
     old={name:safe_release_file(GAME,name).read_bytes() for name in ASSETS if (GAME/name).is_file()}
     assert all(name in old for name in ['index.html','game.js','game.css','engine3d.js','three.module.js','three.core.min.js','THREE-LICENSE.txt'])
