@@ -49,4 +49,4 @@ def localized(rows, lang):
     if lang not in ("fa", "en"):
         raise ValueError("Unsupported language")
     index = 1 if lang == "fa" else 2
-    return [{"id": row[0], "label": row[index], "url": MODULE_URLS.get(row[0], ""), "connected": row[0] in {"overview", "sites", "projects", "staff", "agents", "content", "approvals", "infrastructure", "finance"}} for row in rows]
+    return [{"id": row[0], "label": row[index], "url": MODULE_URLS.get(row[0], ""), "connected": row[0] in {"overview", "sites", "projects", "staff", "agents", "content", "approvals", "infrastructure", "finance", "analytics"}} for row in rows]
