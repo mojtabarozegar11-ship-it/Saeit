@@ -41,8 +41,13 @@ The owner may produce `owner.sig` on an independently controlled device using Op
 5. Only after BOTH owner-authorized clearance AND genuine receiver handoff can the same product be archived as exited and the next queued product admitted.
 6. No publication, sale, payment activation or destruction of user-owned backlog is implied by this internal factory handoff.
 
-## Current rollout state
+## Verified rollout state — 2026-11-04
 
-The policy has been prepared in a development branch, **not deployed to the VPS**. The 2026-11-04 read-only inventory showed that AGRI200 retained an unresolved active order, line41 retained one active SKU, global ownership was unverified, and the `githubops` account could not read root's crontab. The new owner public key is not yet proven to exist under admin control. Do not start a competing worker or claim a QC1000 commercial release until administrative preflight is clear.
+- **Run #214**: 7 new AI-owner signature tests and 28 existing factory tests passed. Integrity-verified source was staged only in `/home/githubops/factory-runtime/operations/ai-owner-release-79d469bb8ac0cd7df3f8ef8e21b167e610d3d013`. Production install, scheduler edits and activation were skipped: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41782703870
+- **Run #215**: separate pinned-SSH, **read-only** administrative/production inventory; the quality test and staging jobs were skipped to conserve quota: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41783627845
+- Actual VPS fields: `AGRI200_ACTIVE_ORDER_PRESENT=YES`, `AGRI200_ALL_COMPLETE=NO`, `LINE41_ACTIVE_COUNT=1`; a global singleton reservation state was not readable/present under the checked path. These records do not establish that both processes are running; neither record may be arbitrarily discarded.
+- Real owner public key under root-controlled trust path **not proven**; real receiver trust directory **not proven**, trusted public receiver key count `0`. Mere public key file existence would not prove human identity.
+- `githubops` may read its own cron (zero lines matching the keywords `factory` or `agri`) but **cannot read root's crontab**. The system and user systemd timer listings returned zero keyword matches; this does not prove there are no other launch mechanisms.
+- **Mandatory hold**: no switch of effective factory runtime, no global reservation claim, no second active product, no archive exit, no claim of ChatGPT as independent human, and no publication/payment. These depend on the real owner's privately held signing key with administrator-validated public-key enrollment, genuine receiver identity/acceptance, documented privileged scheduler inventory, and preservation/reconciliation of the live orders.
 
-The obsolete three-human-signature gate should remain on any already-deployed version until a reviewed deployment atomically changes the versioned contract. It must never be replaced by pretending ChatGPT has three real reviewer identities.
+The obsolete three-human-signature gate may still govern an existing deployed runtime. The new ChatGPT-assisted owner clearance contract exists in reviewed source and isolated VPS staging only; it has **not** been adopted as the production policy.
