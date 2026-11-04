@@ -54,6 +54,7 @@ jobs:
             scripts/factory_build_50.py
             scripts/factory_customer_packager.py
             scripts/factory_first_product_pilot.py
+            scripts/factory_evidence_quality.py
             factory_config/design_opportunities.json
             factory_config/internal_design_supply.json
           )
