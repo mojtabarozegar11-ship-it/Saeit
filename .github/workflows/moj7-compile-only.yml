@@ -1,0 +1,79 @@
+name: MOJ7 one-time TRON compiler verification (no spend)
+on:
+  push:
+    branches:
+      - moj7-compile-20261104-only
+    paths:
+      - .github/workflows/moj7-compile-only.yml
+permissions:
+  contents: read
+jobs:
+  compile:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source and fetch SHA-256-pinned official TRON solc 0.8.20
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' 'c94aa5fbbb2d738aab49c1fcd22b5e7aef42603048b316e2d5b7a544c505d53b' 'contracts/MOJ7.sol' | sha256sum -c -
+          curl -fSL --retry 2 --connect-timeout 15 --max-time 100 \
+            'https://raw.githubusercontent.com/tronprotocol/solc-bin/main/linux-amd64/solc-linux-amd64-v0.8.20%2Bcommit.5f1834b' -o /tmp/moj7-tron-solc
+          printf '%s  %s\n' 'fa95cdeb30aaf521df75b87f57c6ffc1ee6fef5de190981a69cdb878da3a4e14' '/tmp/moj7-tron-solc' | sha256sum -c -
+          chmod +x /tmp/moj7-tron-solc
+          /tmp/moj7-tron-solc --version
+      - name: Compile and validate real TRON bytecode
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          python3 - <<'PY'
+          import json,pathlib
+          src=pathlib.Path('contracts/MOJ7.sol').read_text()
+          data={'language':'Solidity','sources':{'contracts/MOJ7.sol':{'content':src}},
+                'settings':{'optimizer':{'enabled':True,'runs':200},
+                            'outputSelection':{'*':{'*':['abi','evm.bytecode.object','evm.deployedBytecode.object']}}}}
+          pathlib.Path('build/input.json').write_text(json.dumps(data))
+          PY
+          /tmp/moj7-tron-solc --standard-json < build/input.json > build/output.json
+          python3 - <<'PY'
+          import json,hashlib,pathlib,sys
+          raw=pathlib.Path('build/output.json').read_text()
+          data=json.loads(raw[raw.find('{'):])
+          errors=[e for e in data.get('errors',[]) if e.get('severity')=='error']
+          for e in errors: print('COMPILE_ERROR:',e.get('formattedMessage',e.get('message')))
+          if errors: sys.exit('MOJ7 compile FAILED')
+          token=data['contracts']['contracts/MOJ7.sol']['MOJ7']
+          abi=token['abi']
+          creation=token['evm']['bytecode']['object']
+          runtime=token['evm']['deployedBytecode']['object']
+          assert len(creation)>100 and len(runtime)>100
+          assert all(c in '0123456789abcdefABCDEF' for c in creation)
+          assert all(c in '0123456789abcdefABCDEF' for c in runtime)
+          funcs={x['name'] for x in abi if x['type']=='function'}
+          assert {'name','symbol','decimals','totalSupply','balanceOf','allowance','transfer','approve','transferFrom'} <= funcs
+          constructors=[x for x in abi if x['type']=='constructor']
+          assert len(constructors)==1 and len(constructors[0]['inputs'])==1 and constructors[0]['inputs'][0]['type']=='address'
+          pathlib.Path('build/MOJ7.abi.json').write_text(json.dumps(abi,indent=2))
+          pathlib.Path('build/MOJ7.bytecode.txt').write_text(creation+'\n')
+          pathlib.Path('build/MOJ7.runtime.txt').write_text(runtime+'\n')
+          summary={'status':'COMPILE_SUCCESS','version':'TRON solc 0.8.20','optimizer':{'enabled':True,'runs':200},
+                   'source_sha256':hashlib.sha256(pathlib.Path('contracts/MOJ7.sol').read_bytes()).hexdigest(),
+                   'creation_bytecode_bytes':len(creation)//2,'runtime_bytecode_bytes':len(runtime)//2,
+                   'creation_bytecode_sha256':hashlib.sha256(bytes.fromhex(creation)).hexdigest(),
+                   'ABI_function_count':len(funcs),'source_contract':'MOJ7','broadcast':False,'trx_spent':0}
+          pathlib.Path('build/report.json').write_text(json.dumps(summary,indent=2))
+          print('MOJ7_COMPILE_REPORT='+json.dumps(summary,separators=(',',':')))
+          PY
+      - name: Upload build artifacts only (no deployment)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moj7-tron-compile-only
+          path: build/
+          retention-days: 1
+          if-no-files-found: warn

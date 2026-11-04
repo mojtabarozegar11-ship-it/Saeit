@@ -1,7 +1,0 @@
-Saeit cPanel deployment trigger
-
-This file is intentionally non-destructive. Its purpose is to create a new commit on main so the existing GitHub -> cPanel deployment hook can pull the latest Saeit revision.
-
-Current release change: restore /company/office/login/ as a redirect to the existing authenticated Django admin login, with the staff command center as the post-login destination.
-
-No visual design, database records, secrets, production settings, or application data are changed by this route fix. The normal cPanel deployment hook may run the repository's existing checks, migrations, and static collection as part of its established deployment process.

@@ -1,2 +1,0 @@
-# Legacy spelling: scoped redirect only. No parent rewrite rules changed.
-RedirectMatch 301 ^/games/corwn-defender/?$ /games/crown-defender/
