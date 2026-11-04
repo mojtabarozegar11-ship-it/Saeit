@@ -1,0 +1,158 @@
+name: Read-only integrity audit of rescued Zomorod SQL archive
+
+on:
+  push:
+    branches: [ops/zomorod-archive-audit-20261104]
+    paths:
+      - .github/workflows/zomorod-archive-rescue-integrity-20261104.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-archive-integrity-audit-20261104
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Establish pinned and read-only VPS SSH connection
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          sshdir="$RUNNER_TEMP/zomorod-archive-audit"
+          install -d -m 700 "$sshdir"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$sshdir/vps.key"
+          chmod 600 "$sshdir/vps.key"
+          ssh-keygen -y -P "" -f "$sshdir/vps.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$sshdir/known_hosts" 2>/dev/null
+          actual="$(ssh-keygen -lf "$sshdir/known_hosts" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          echo 'PINNED_VPS_IDENTITY=verified'
+      - name: Validate every archived SQL segment without changing source data
+        shell: bash
+        run: |
+          set -euo pipefail
+          sshdir="$RUNNER_TEMP/zomorod-archive-audit"
+          timeout 2400s ssh \
+            -i "$sshdir/vps.key" \
+            -o UserKnownHostsFile="$sshdir/known_hosts" \
+            -o StrictHostKeyChecking=yes \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            githubops@178.239.147.150 'timeout 2300s python3 -' <<'PY'
+          import gzip
+          import hashlib
+          import json
+          import re
+          import stat
+          from pathlib import Path
+
+          root = Path('/home/githubops/.db-backups/zomorod2_sites_main-segments-20261104')
+          assert root.is_dir() and not root.is_symlink(), 'ARCHIVE_DIRECTORY_NOT_FOUND'
+          meta_pattern = re.compile(
+              r'PARTITION_META table=(\S+) part=(\d+)(?: subpart=(\d+))? '
+              r'rows=(\d+) min=(\d+) max=(\d+) low=(\d+) high=(\d+)'
+          )
+
+          def checked_regular(path):
+              st = path.lstat()
+              assert stat.S_ISREG(st.st_mode), 'UNEXPECTED_FILE_TYPE:' + path.name
+              return st.st_size
+
+          def validate_gzip(path, expected_sha=None):
+              compressed = checked_regular(path)
+              h = hashlib.sha256()
+              with path.open('rb') as stream:
+                  for piece in iter(lambda: stream.read(1 << 20), b''):
+                      h.update(piece)
+              digest = h.hexdigest()
+              if expected_sha:
+                  assert digest == expected_sha, 'SHA256_MISMATCH:' + path.name
+              decompressed = 0
+              with gzip.open(path, 'rb') as stream:
+                  for piece in iter(lambda: stream.read(1 << 20), b''):
+                      decompressed += len(piece)
+              assert decompressed > 1000, 'SUSPICIOUS_EMPTY_SQL:' + path.name
+              return compressed, decompressed, digest
+
+          schema = root / 'schema.sql.gz'
+          schema_size, schema_raw, schema_sha = validate_gzip(schema)
+          with gzip.open(schema, 'rb') as f:
+              assert b'CREATE TABLE' in f.read(50000), 'SCHEMA_DEFINITIONS_MISSING'
+          print('SCHEMA_VERIFIED=' + json.dumps({
+              'compressed_bytes': schema_size,
+              'uncompressed_bytes': schema_raw,
+              'sha256': schema_sha,
+          }), flush=True)
+
+          global_count = 0
+          global_bytes = schema_size
+          for table in ('core_agenttask', 'core_factoryevidence'):
+              parts = []
+              for part in range(8):
+                  suffixes = (
+                      [f'{part}.sub{sub}' for sub in range(4)]
+                      if table == 'core_agenttask' and part == 6
+                      else [str(part)]
+                  )
+                  for suffix in suffixes:
+                      base = f'{table}.{suffix}'
+                      text = (root / (base + '.meta')).read_text(encoding='utf-8')
+                      match = meta_pattern.search(text)
+                      assert match is not None, 'INVALID_METADATA:' + base
+                      name, part_num, sub_num, rows, min_id, max_id, lo, hi = match.groups()
+                      assert name == table and int(part_num) == part, 'WRONG_PARTITION:' + base
+                      if table == 'core_agenttask' and part == 6:
+                          assert sub_num is not None and int(sub_num) == int(suffix[-1]), 'WRONG_SUBPART:' + base
+                      else:
+                          assert sub_num is None, 'UNEXPECTED_SUBPART:' + base
+                      sha = re.search(r'(?m)^sha256=([a-f0-9]{64})$', text)
+                      size = re.search(r'(?m)^compressed_bytes=(\d+)$', text)
+                      assert sha and size, 'MISSING_CHECKSUM_METADATA:' + base
+                      compressed, raw, _ = validate_gzip(root / (base + '.sql.gz'), sha.group(1))
+                      assert compressed == int(size.group(1)), 'COMPRESSED_SIZE_MISMATCH:' + base
+                      lo, hi, rows = int(lo), int(hi), int(rows)
+                      assert hi > lo and 0 <= rows <= hi - lo, 'INVALID_ID_RANGE:' + base
+                      parts.append((lo, hi, rows, int(min_id), int(max_id), base))
+                      global_count += 1
+                      global_bytes += compressed
+                      print('SEGMENT_VERIFIED=' + json.dumps({
+                          'name': base, 'rows': rows,
+                          'compressed_bytes': compressed, 'sql_bytes': raw,
+                      }), flush=True)
+
+              ids = {(item[3], item[4]) for item in parts}
+              assert len(ids) == 1, 'SOURCE_ID_BOUNDS_CHANGED:' + table
+              minimum, maximum = ids.pop()
+              assert parts[0][0] == minimum, 'RANGE_FIRST_ID_MISMATCH:' + table
+              assert parts[-1][1] == maximum + 1, 'RANGE_LAST_ID_MISMATCH:' + table
+              for i in range(1, len(parts)):
+                  assert parts[i - 1][1] == parts[i][0], 'GAP_OR_OVERLAP:' + table
+              rows_total = sum(item[2] for item in parts)
+              print('TABLE_ARCHIVE_COVERAGE_VERIFIED=' + json.dumps({
+                  'table': table,
+                  'pieces': len(parts),
+                  'min_id': minimum,
+                  'max_id': maximum,
+                  'record_count_at_export': rows_total,
+              }), flush=True)
+
+          assert global_count == 19, 'EXPECTED_19_SEGMENTS'
+          print('ALL_ARCHIVED_SQL_FILES_VERIFIED=yes', flush=True)
+          print('TOTAL_ARCHIVED_COMPRESSED_BYTES=' + str(global_bytes), flush=True)
+          print('NOTE=These are independently timed exports, not a proven point-in-time database snapshot', flush=True)
+          PY
+      - name: Remove transient VPS SSH key from runner
+        if: always()
+        shell: bash
+        run: |
+          test ! -d "$RUNNER_TEMP/zomorod-archive-audit" || rm -rf -- "$RUNNER_TEMP/zomorod-archive-audit"
