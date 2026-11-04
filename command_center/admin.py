@@ -18,3 +18,28 @@ class MpwRecordAdmin(admin.ModelAdmin):
         return False
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+from .models import WorkItem, InternalMessage, PrivateAuction
+
+
+@admin.register(WorkItem)
+class WorkItemAdmin(admin.ModelAdmin):
+    list_display = ("title", "status", "priority", "assignee", "due_at", "created_at")
+    list_filter = ("status", "priority")
+    search_fields = ("title", "description", "source_type", "source_id")
+
+
+@admin.register(InternalMessage)
+class InternalMessageAdmin(admin.ModelAdmin):
+    list_display = ("subject", "sender", "recipient", "read_at", "created_at")
+    list_filter = ("read_at",)
+    search_fields = ("subject", "body")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(PrivateAuction)
+class PrivateAuctionAdmin(admin.ModelAdmin):
+    list_display = ("title", "status", "minimum_price", "starts_at", "ends_at", "created_by")
+    list_filter = ("status",)
+    search_fields = ("title", "description")
