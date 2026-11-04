@@ -1,0 +1,122 @@
+name: MOJ7 unsigned deployment bandwidth and full-cost estimate (read only)
+on:
+  push:
+    branches: [moj7-compile-20261104-only]
+    paths:
+      - .github/workflows/moj7-bandwidth-readonly.yml
+permissions:
+  contents: read
+  actions: read
+jobs:
+  estimate:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Recover independently verified compile evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: moj7-tron-compile-only
+          run-id: 41865233491
+          github-token: ${{ github.token }}
+          path: build
+      - name: Recover successful Mainnet read-only Energy simulation
+        uses: actions/download-artifact@v4
+        with:
+          name: moj7-readonly-energy-report
+          run-id: 41880139440
+          github-token: ${{ github.token }}
+          path: evidence
+      - name: Construct unsigned deployment and calculate serialized Bandwidth (no keys, no broadcast)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p estimate
+          python3 - <<'PY'
+          import hashlib,json,pathlib,time,urllib.request,urllib.error
+          from datetime import datetime,timezone
+          addr="THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73"
+          alphabet="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+          x=0
+          for ch in addr: x=x*58+alphabet.index(ch)
+          decoded=x.to_bytes(25,"big")
+          assert decoded[0]==0x41 and hashlib.sha256(hashlib.sha256(decoded[:21]).digest()).digest()[:4]==decoded[21:],"wallet checksum mismatch"
+          encoded_arg=decoded[1:21].hex().rjust(64,"0")
+          compiler=json.loads(pathlib.Path("build/report.json").read_text())
+          energy_report=json.loads(pathlib.Path("evidence/energy_readonly.json").read_text())
+          assert compiler["status"]=="COMPILE_SUCCESS"
+          assert compiler["source_sha256"]=="c94aa5fbbb2d738aab49c1fcd22b5e7aef42603048b316e2d5b7a544c505d53b"
+          assert compiler["creation_bytecode_sha256"]=="05f09a4b9f2d173d439d78767f8f043404049a81b31761f990f5c53acbd6d792"
+          assert energy_report.get("energy_used")==375954 and energy_report.get("compiled_source_sha256")==compiler["source_sha256"]
+          abi=json.loads(pathlib.Path("build/MOJ7.abi.json").read_text())
+          bytecode=pathlib.Path("build/MOJ7.bytecode.txt").read_text().strip()
+          assert hashlib.sha256(bytes.fromhex(bytecode)).hexdigest()==compiler["creation_bytecode_sha256"]
+          assert len(bytecode)//2==2085
+          base="https://api.trongrid.io"
+          def post(path,payload):
+              req=urllib.request.Request(base+path,data=json.dumps(payload,separators=(",",":")).encode(),headers={"Content-Type":"application/json","User-Agent":"MOJ7-no-sign-no-broadcast"},method="POST")
+              with urllib.request.urlopen(req,timeout=35) as response:
+                  assert response.status==200
+                  return json.loads(response.read().decode())
+          payload={"owner_address":addr,"abi":json.dumps(abi,separators=(",",":")),"bytecode":bytecode,
+                   "parameter":encoded_arg,"fee_limit":60_000_000,"origin_energy_limit":10_000_000,
+                   "name":"MOJ7","call_value":0,"consume_user_resource_percent":100,"visible":True}
+          unsigned=post("/wallet/deploycontract",payload)
+          tx=unsigned.get("transaction",unsigned)
+          if unsigned.get("Error") or not tx.get("raw_data_hex"):
+              raise SystemExit("UNSIGNED_CONSTRUCTION_FAILED: "+str(unsigned.get("Error",list(unsigned.keys()))))
+          assert not tx.get("signature"),"unexpected signed transaction"
+          rd=tx["raw_data"]
+          assert rd["contract"][0]["type"]=="CreateSmartContract"
+          nc=rd["contract"][0]["parameter"]["value"]["new_contract"]
+          assert nc["bytecode"].lower()==(bytecode+encoded_arg).lower(),"bytecode+constructor argument mismatch"
+          raw_hex=tx["raw_data_hex"]
+          assert len(raw_hex)%2==0
+          estimated_bandwidth=len(raw_hex)//2+3+64+67
+          assert 2500 <= estimated_bandwidth <= 16000, "bandwidth anomalous"
+          params=post("/wallet/getchainparameters",{})
+          rates={p["key"]:p["value"] for p in params.get("chainParameter",[]) if "key" in p and "value" in p}
+          fee_per_net=rates.get("getTransactionFee")
+          fee_per_energy=rates.get("getEnergyFee")
+          assert isinstance(fee_per_net,int) and fee_per_net>0
+          assert isinstance(fee_per_energy,int) and fee_per_energy>0
+          account=post("/wallet/getaccount",{"address":addr,"visible":True})
+          res=post("/wallet/getaccountresource",{"address":addr,"visible":True})
+          net_available=max(0,res.get("NetLimit",0)-res.get("NetUsed",0))
+          free_net_available=max(0,res.get("freeNetLimit",0)-res.get("freeNetUsed",0))
+          energy_available=max(0,res.get("EnergyLimit",0)-res.get("EnergyUsed",0))
+          bandwidth_burned=0 if net_available>=estimated_bandwidth or free_net_available>=estimated_bandwidth else estimated_bandwidth
+          energy_burned=max(0,energy_report["energy_used"]-energy_available)
+          bw_trx=round(bandwidth_burned*fee_per_net/1_000_000,6)
+          energy_trx=round(energy_burned*fee_per_energy/1_000_000,6)
+          report={
+             "checked_utc":datetime.now(timezone.utc).isoformat(),"mode":"read_only_unsigned_create_transaction_no_signature_no_broadcast",
+             "source_sha256":compiler["source_sha256"],"creation_bytecode_sha256":compiler["creation_bytecode_sha256"],
+             "wallet":addr,"contract":"MOJ7","supply":1000000000000,"decimals":6,
+             "unsigned_constructor_holder":addr,"unsigned_tx_raw_bytes":len(raw_hex)//2,
+             "estimated_signed_transaction_bandwidth_units":estimated_bandwidth,
+             "bandwidth_price_sun_per_unit":fee_per_net,
+             "energy_price_sun_per_unit":fee_per_energy,
+             "estimated_deployment_energy_units":energy_report["energy_used"],
+             "available_bandwidth_staked":net_available,"available_free_bandwidth":free_net_available,
+             "available_energy":energy_available,
+             "estimated_bandwidth_burn_trx":bw_trx,"estimated_energy_burn_trx":energy_trx,
+             "estimated_energy_and_bandwidth_burn_total_trx":round(bw_trx+energy_trx,6),
+             "account_balance_trx":account.get("balance",0)/1000000,
+             "fee_limit_cap_in_unsigned_tx_trx":60,
+             "not_a_final_fee_quote":True,
+             "limits":"Actual consumption depends on network parameters, account state, final serialized signature count, extra fees, and broadcast receipt.",
+             "private_key_requested":False,"transaction_signed":False,"transaction_broadcast":False,"trx_spent":0
+          }
+          pathlib.Path("estimate/MOJ7_bandwidth_energy_readonly.json").write_text(json.dumps(report,indent=2,ensure_ascii=False))
+          summary={k:report[k] for k in ("estimated_signed_transaction_bandwidth_units","estimated_bandwidth_burn_trx","estimated_deployment_energy_units","estimated_energy_burn_trx","estimated_energy_and_bandwidth_burn_total_trx","account_balance_trx","transaction_signed","transaction_broadcast","trx_spent")}
+          print("MOJ7_FULL_COST_READONLY_SUMMARY="+json.dumps(summary,separators=(",",":")))
+          PY
+      - name: Upload read-only costing evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moj7-bandwidth-and-energy-readonly
+          path: estimate/
+          retention-days: 2
+          if-no-files-found: warn
