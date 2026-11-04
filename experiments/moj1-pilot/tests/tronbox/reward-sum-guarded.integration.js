@@ -2,6 +2,7 @@
 const Reward = artifacts.require('MojRewardClaimsSumGuarded');
 const Token = artifacts.require('MojRewardTestToken');
 const Governance = artifacts.require('MojPilotGovernance');
+const DelayedGovernance = artifacts.require('MojGovernanceGuardedClockHarness');
 
 contract('MOJ1 domain-bound Merkle-sum reward liabilities', accounts => {
   const unit = 10n ** 18n;
@@ -137,6 +138,39 @@ contract('MOJ1 domain-bound Merkle-sum reward liabilities', accounts => {
     }
     assert.equal((await token.balanceOf(accounts[6])).toString(), amount(10));
     assert.equal((await token.balanceOf(accounts[7])).toString(), amount(5));
+    assert.equal((await escrow.outstandingCommitments()).toString(), '0');
+  });
+
+  it('only publishes an epoch after two distinct owners and the 48-hour governance delay', async () => {
+    const initialTime = 1_800_000_000;
+    const delay = 48 * 60 * 60;
+    const gov = await DelayedGovernance.new([accounts[0], accounts[1], accounts[2]], initialTime);
+    const token = await Token.new();
+    const escrow = await Reward.new(token.address, gov.address);
+    await token.transfer(escrow.address, amount(50), {from: accounts[0]});
+    const leaf = await escrow.claimLeaf(81, 0, accounts[7], amount(10));
+    const data = publishData(81, leaf, amount(10), 1);
+    const forged = publishData(81, leaf, amount(11), 1);
+
+    await expectRevert(escrow.publishEpoch(81, leaf, amount(10), 1, manifest, {from: accounts[0]}));
+    await expectRevert(gov.approve(escrow.address, data, 0, {from: accounts[8]}));
+    await gov.approve(escrow.address, data, 0, {from: accounts[0]});
+    await expectRevert(gov.approve(escrow.address, data, 0, {from: accounts[0]}));
+    await expectRevert(gov.execute(escrow.address, data, 0, {from: accounts[2]}));
+    await gov.approve(escrow.address, data, 0, {from: accounts[1]});
+    await expectRevert(gov.execute(escrow.address, forged, 0, {from: accounts[2]}));
+    await expectRevert(gov.execute(escrow.address, data, 0, {from: accounts[2]}));
+    await gov.setTestClock(initialTime + delay - 1);
+    await expectRevert(gov.execute(escrow.address, data, 0, {from: accounts[0]}));
+    assert.equal((await escrow.epochs(81)).published, false);
+    await gov.setTestClock(initialTime + delay);
+    await gov.execute(escrow.address, data, 0, {from: accounts[2]});
+    assert.equal((await escrow.epochs(81)).published, true);
+    assert.equal((await escrow.outstandingCommitments()).toString(), amount(10));
+    assert.equal((await gov.nonce()).toString(), '1');
+    await expectRevert(gov.execute(escrow.address, data, 0, {from: accounts[0]}));
+    await escrow.claim(proof(81, 0, accounts[7], amount(10)), {from: accounts[9]});
+    assert.equal((await token.balanceOf(accounts[7])).toString(), amount(10));
     assert.equal((await escrow.outstandingCommitments()).toString(), '0');
   });
 });

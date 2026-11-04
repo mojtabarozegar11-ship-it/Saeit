@@ -5,6 +5,7 @@
 ## What the contract actually verifies
 
 - A proof binds an eligible-looking `(epoch, leaf index, beneficiary, amount)` to the exact chain ID and escrow address.
+- Epoch publication is restricted to the immutable `governance` contract selected at deployment. The separate `MojGovernanceGuarded` design provides distinct 2-of-3 approvals and a 48-hour delay; this escrow does not by itself enforce those signer rules, so the production deployment must prove the governor is the exact independently audited contract.
 - Internal node hashes bind each child hash, sum and leaf count. A proven leaf can pay only if the full path reconstructs the governance-published root, epoch budget and leaf count.
 - Contract balance must fund all previously committed but unpaid epochs before another epoch may be published.
 - Each leaf index and beneficiary may be paid at most once per epoch. Relayers can submit proofs but cannot redirect a valid payment.
@@ -30,4 +31,4 @@
 
 ## Test evidence
 
-The separate workflow tests the contract only on a disposable localhost TRON TVM, including forgery, replay, cross-domain claim refusal, exact two-leaf sums, duplicate beneficiary and protection of unpaid liabilities. It also tests the synthetic builder deterministically offline and reconstructs the same leaf/root on the actual local TVM. CI success alone is not an independent audit or production authorization.
+The separate workflow tests the contract only on a disposable localhost TRON TVM, including forgery, replay, cross-domain claim refusal, exact two-leaf sums, duplicate beneficiary and protection of unpaid liabilities. It also tests the synthetic builder deterministically offline, reconstructs the same leaf/root on the actual local TVM, and tests that **2 distinct signers and the full 48-hour delay** of a *local-only* governed clock harness must precede a reward epoch publication. The clock harness is deliberately unsafe for real deployment and must never be funded. CI success alone is not an independent audit or production authorization.
