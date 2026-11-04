@@ -195,6 +195,66 @@ def cron_production_channels(active):
     return {k: sum(bool(re.search(regex, row, re.I)) for row in active)
             for k, regex in rules.items()}
 
+
+def activation_preflight_readonly():
+    """Aggregate-only admission evidence; never claim root-level completeness."""
+    private = PRIVATE
+    foreign = private / "production-instructions/stage-06/strict-serial-active-v1.json"
+    slot = private / "quality-excellence/product-flow/active-slots/current.json"
+    owner_path = private / ".f01-global-production-lane.json"
+    result = {
+        "agri200_state_readable": False,
+        "agri200_all_complete": None,
+        "agri200_active_order_present": None,
+        "line41_slot_readable": False,
+        "line41_active_count": None,
+        "global_lane_owner": "UNVERIFIED",
+        "root_crontab_readable": False,
+        "root_factory_cron_count": None,
+        "global_scheduler_proven": False,
+    }
+    try:
+        data = safe_json(foreign, 100_000)
+        result["agri200_state_readable"] = True
+        result["agri200_all_complete"] = data.get("all_complete") is True
+        result["agri200_active_order_present"] = data.get("active_order") is not None
+    except (OSError, ValueError, TypeError):
+        pass
+    try:
+        data = safe_json(slot, 100_000)
+        active = data.get("active")
+        if isinstance(active, list):
+            result["line41_slot_readable"] = True
+            result["line41_active_count"] = len(active)
+    except (OSError, ValueError, TypeError):
+        pass
+    try:
+        data = safe_json(owner_path, 4096)
+        if data.get("owner") in ("line41", "agri200"):
+            result["global_lane_owner"] = data["owner"]
+    except (OSError, ValueError, TypeError):
+        pass
+    # sudo -n is non-interactive: denied access stays denied. No sudo
+    # configuration, private crontab content or secret is printed.
+    try:
+        scan = subprocess.run(
+            ["sudo", "-n", "crontab", "-l", "-u", "root"],
+            capture_output=True, text=True, timeout=5, check=False)
+        if scan.returncode == 0:
+            lines = [x for x in scan.stdout.splitlines()
+                     if x.strip() and not x.lstrip().startswith("#")]
+            result["root_crontab_readable"] = True
+            result["root_factory_cron_count"] = sum(
+                bool(re.search(r"factory|agri200|qc1000|strict.serial|build50|leech",
+                               line, re.I)) for line in lines)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    # Reading one privileged user's crontab does not prove coverage of all
+    # cron users, systemd/supervisor jobs or remote schedulers. Keep the
+    # production-activation gate explicitly false.
+    return result
+
+
 def inventory():
     if os.geteuid() == 0 or any(p.is_symlink() or not p.is_dir()
                                 for p in (BASE, PRIVATE, OPS, ORDERS)):
@@ -318,6 +378,7 @@ def inventory():
         "production_heartbeat": production_heartbeat(PRIVATE),
         "cycle_error_buckets": cycle_error_buckets(PRIVATE),
         "cron_production_channels": cron_production_channels(active),
+        "activation_preflight_readonly": activation_preflight_readonly(),
     }
 
 
