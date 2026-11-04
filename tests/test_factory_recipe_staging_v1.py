@@ -119,6 +119,22 @@ class RecipeStagingTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_activation_is_fail_closed_before_network_or_transfer(self):
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        source_guard = textwrap.dedent(
+            workflow.split("python3 - <<'PY'\n", 1)[1].split("\n          PY", 1)[0]
+        )
+        parsed = ast.parse(source_guard)
+        self.assertIsInstance(parsed.body[-1], ast.Raise)
+        self.assertIn(
+            "F01_OFFHOST_SIGNED_RECOVERY_NOT_YET_INTEGRATED_HOLD",
+            source_guard,
+        )
+        self.assertLess(
+            workflow.index("F01_OFFHOST_SIGNED_RECOVERY_NOT_YET_INTEGRATED_HOLD"),
+            workflow.index("ssh_opts=("),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
