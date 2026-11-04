@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "core",
     "farnaz.apps.FarnazConfig",
     "command_center",
+    "accounting.apps.AccountingConfig",
 ]
 
 MIDDLEWARE = [
