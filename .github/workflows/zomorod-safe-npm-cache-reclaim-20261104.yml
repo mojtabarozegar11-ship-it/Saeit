@@ -72,7 +72,7 @@ jobs:
           from pathlib import Path
           root=Path("/home/zomorod2")
           npm=root/".npm"
-          cache=npm/"_cacache"
+          cache=npm/"_npx"
           def quota():
               try:
                   raw=subprocess.check_output(["uapi","--output=json","Quota","get_quota_info"],text=True,timeout=35)
@@ -84,21 +84,21 @@ jobs:
           assert Path.home()==root and root.is_dir(),"WRONG_ACCOUNT"
           assert npm.is_dir() and not npm.is_symlink(),"NPM_ROOT_INVALID"
           assert cache.is_dir() and not cache.is_symlink(),"NPM_CACHE_INVALID"
-          assert cache.resolve()==root/".npm"/"_cacache","NPM_CACHE_PATH_MISMATCH"
+          assert cache.resolve()==root/".npm"/"_npx","NPM_CACHE_PATH_MISMATCH"
           assert npm.stat().st_uid==os.geteuid() and cache.stat().st_uid==os.geteuid(),"NPM_CACHE_NOT_OWNED"
-          assert (cache/"content-v2").is_dir(),"NOT_STANDARD_NPM_CACHE"
-          active=subprocess.run(["pgrep","-u",str(os.geteuid()),"-f","npm (install|ci|rebuild|update)"],capture_output=True,text=True,timeout=6) if shutil.which("pgrep") else None
+          assert any((x/"node_modules").is_dir() for x in cache.iterdir() if x.is_dir() and not x.is_symlink()),"NOT_STANDARD_NPX_CACHE"
+          active=subprocess.run(["pgrep","-u",str(os.geteuid()),"-f","(npm|npx|/_npx/) (install|ci|rebuild|update|exec)"],capture_output=True,text=True,timeout=6) if shutil.which("pgrep") else None
           assert active is not None and active.returncode==1,"CONCURRENT_NPM_OPERATION_OR_UNKNOWN"
           old=disk(cache)
           assert old>=200000,"CACHE_TOO_SMALL_FOR_OPERATION"
-          print("NPM_CACHE_KIB_BEFORE="+str(old))
+          print("NPX_CACHE_KIB_BEFORE="+str(old))
           print("QUOTA_MB_BEFORE="+str(quota()))
           shutil.rmtree(cache)
           assert not cache.exists(),"CACHE_PURGE_INCOMPLETE"
           after=disk(npm)
           print("NPM_DIRECTORY_KIB_AFTER="+str(after))
           print("QUOTA_MB_AFTER="+str(quota()))
-          print("NPM_REPRODUCIBLE_CACHE_RECLAIM_COMPLETE=yes")
+          print("NPX_REGENERABLE_CACHE_RECLAIM_COMPLETE=yes")
           PY
       - name: Remove runner-only SSH files
         if: always()
