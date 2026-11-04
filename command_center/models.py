@@ -71,6 +71,8 @@ class WorkItem(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="open", db_index=True)
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default="normal", db_index=True)
     assignee = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.PROTECT, related_name="desk_work_items")
+    project = models.ForeignKey("core.ResearchProject", null=True, blank=True, on_delete=models.PROTECT, related_name="desk_work_items")
+    resolution_reference = models.CharField(max_length=120, blank=True)
     created_by = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="desk_created_work_items")
     due_at = models.DateTimeField(null=True, blank=True, db_index=True)
     completed_at = models.DateTimeField(null=True, blank=True)
