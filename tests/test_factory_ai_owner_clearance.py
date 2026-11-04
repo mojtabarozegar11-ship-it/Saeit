@@ -88,6 +88,45 @@ class AIOwnerQualityExitTests(unittest.TestCase):
                         str(self.clear_path)],
                        check=True, capture_output=True)
 
+    def prepare_receiver_handoff(self, status="accepted_by_receiver"):
+        self.sign()
+        approved = cycle._verified_quality_exit(self.root, self.recipe)
+        self.assertIsNotNone(approved)
+        trust_parent = self.home / "admin-trust"
+        trust_parent.mkdir(mode=0o700)
+        trust = trust_parent / "receivers"
+        trust.mkdir(mode=0o700)
+        receiver_private = self.home / "receiver.private.pem"
+        receiver_public = trust / "R-01.pem"
+        subprocess.run(["openssl", "ecparam", "-name", "prime256v1",
+                        "-genkey", "-noout", "-out", str(receiver_private)],
+                       check=True, capture_output=True)
+        subprocess.run(["openssl", "pkey", "-in", str(receiver_private),
+                        "-pubout", "-out", str(receiver_public)],
+                       check=True, capture_output=True)
+        inbox = (self.root / "product-lifecycle/hourly-cycle-handoffs"
+                 / "R-01" / self.recipe)
+        inbox.mkdir(parents=True)
+        (inbox / "product.zip").write_bytes(self.artifact)
+        receipt = inbox / "receipt.json"
+        self.write_receiver_receipt(receipt, approved, status=status)
+        subprocess.run(["openssl", "dgst", "-sha256",
+                        "-sign", str(receiver_private),
+                        "-out", str(inbox / "receipt.sig"), str(receipt)],
+                       check=True, capture_output=True)
+        return approved, trust, receipt
+
+    def write_receiver_receipt(self, path, approved, *, status):
+        path.write_text(json.dumps({
+            "schema": cycle.HOURLY_HANDOFF_SCHEMA,
+            "product_id": self.recipe,
+            "receiver_cycle": "R-01",
+            "status": status,
+            "artifact_sha256": approved["artifact_sha256"],
+            "clearance_sha256": approved["clearance_sha256"],
+            "acceptance_evidence": "Private receiver inspection confirmed"
+        }), encoding="utf8")
+
     def test_genuine_owner_signature_and_evidence_bound_ai_review(self):
         self.assertIsNone(cycle._verified_quality_exit(self.root, self.recipe))
         self.sign()
@@ -149,6 +188,40 @@ class AIOwnerQualityExitTests(unittest.TestCase):
         self.clear_path.write_text(json.dumps(self.clearance), encoding="utf8")
         self.sign()
         self.assertIsNone(cycle._verified_quality_exit(self.root, self.recipe))
+
+    def test_real_receiver_signature_accepts_exact_artifact(self):
+        approved, trust, _receipt = self.prepare_receiver_handoff()
+        with mock.patch.object(cycle, "RECEIVER_TRUST_ROOT", trust):
+            self.assertTrue(cycle._accepted_hourly_handoff(
+                self.root, self.recipe, approved))
+
+    def test_receiver_trust_directory_requires_admin_protection(self):
+        approved, trust, _receipt = self.prepare_receiver_handoff()
+        trust.parent.chmod(0o777)
+        with mock.patch.object(cycle, "RECEIVER_TRUST_ROOT", trust):
+            self.assertFalse(cycle._accepted_hourly_handoff(
+                self.root, self.recipe, approved))
+
+    def test_unsigned_swap_after_signature_check_cannot_fake_acceptance(self):
+        approved, trust, receipt = self.prepare_receiver_handoff(
+            status="rejected_by_receiver")
+        original_run = subprocess.run
+        changed = [False]
+
+        def swap_after_crypto_check(command, *args, **kwargs):
+            result = original_run(command, *args, **kwargs)
+            if "-verify" in command and "-signature" in command:
+                self.write_receiver_receipt(
+                    receipt, approved, status="accepted_by_receiver")
+                changed[0] = True
+            return result
+
+        with mock.patch.object(cycle, "RECEIVER_TRUST_ROOT", trust), \
+                mock.patch.object(cycle.subprocess, "run",
+                                  side_effect=swap_after_crypto_check):
+            self.assertFalse(cycle._accepted_hourly_handoff(
+                self.root, self.recipe, approved))
+        self.assertTrue(changed[0])
 
 
 if __name__ == "__main__":
