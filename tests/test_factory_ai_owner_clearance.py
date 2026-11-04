@@ -38,6 +38,27 @@ class AIOwnerQualityExitTests(unittest.TestCase):
         self.review_dir = self.root / "quality-excellence/ai-reviews" / self.recipe
         self.review_dir.mkdir(parents=True)
         self.review_path = self.review_dir / "current.json"
+        self.evidence_dir = (self.root / "quality-excellence/ai-review-evidence"
+                             / self.recipe)
+        self.evidence_dir.mkdir(parents=True)
+        evidence_checks = []
+        for check in sorted(cycle.MANDATORY_AI_CHECKS):
+            evidence_path = self.evidence_dir / (check + ".json")
+            evidence_path.write_text(json.dumps({
+                "schema": cycle.AI_EVIDENCE_SCHEMA,
+                "check_id": check,
+                "artifact_sha256": self.sha,
+                "status": "passed",
+                "reviewer_kind": "chatgpt_ai_assisted_internal",
+                "independent_human_review": False,
+                "method": "Internal review of signed fixture and observations",
+                "observations": ["Reviewed exact artifact bytes for " + check],
+            }), encoding="utf8")
+            evidence_checks.append({
+                "check_id": check, "status": "passed",
+                "evidence_sha256": hashlib.sha256(
+                    evidence_path.read_bytes()).hexdigest(),
+            })
         self.review = {
             "schema": cycle.AI_REVIEW_SCHEMA,
             "reviewer_kind": "chatgpt_ai_assisted_internal",
@@ -45,10 +66,7 @@ class AIOwnerQualityExitTests(unittest.TestCase):
             "artifact_sha256": self.sha,
             "review_status": "completed",
             "verified_grade_total": 1000,
-            "evidence_checks": [
-                {"check_id": check, "status": "passed",
-                 "evidence_sha256": hashlib.sha256(check.encode()).hexdigest()}
-                for check in sorted(cycle.MANDATORY_AI_CHECKS)],
+            "evidence_checks": evidence_checks,
         }
         self.review_path.write_text(json.dumps(self.review), encoding="utf8")
         self.clear_dir = (self.root / "quality-excellence/signed-clearances"
@@ -161,6 +179,55 @@ class AIOwnerQualityExitTests(unittest.TestCase):
     def test_missing_or_duplicate_evidence_is_rejected(self):
         self.review["evidence_checks"][1]["check_id"] = (
             self.review["evidence_checks"][0]["check_id"])
+        self.review_path.write_text(json.dumps(self.review), encoding="utf8")
+        self.clearance["ai_review_sha256"] = hashlib.sha256(
+            self.review_path.read_bytes()).hexdigest()
+        self.clear_path.write_text(json.dumps(self.clearance), encoding="utf8")
+        self.sign()
+        self.assertIsNone(cycle._verified_quality_exit(self.root, self.recipe))
+
+    def test_random_syntactically_valid_evidence_digest_cannot_clear_qc(self):
+        self.review["evidence_checks"][0]["evidence_sha256"] = "a" * 64
+        self.review_path.write_text(json.dumps(self.review), encoding="utf8")
+        self.clearance["ai_review_sha256"] = hashlib.sha256(
+            self.review_path.read_bytes()).hexdigest()
+        self.clear_path.write_text(json.dumps(self.clearance), encoding="utf8")
+        self.sign()
+        self.assertIsNone(cycle._verified_quality_exit(self.root, self.recipe))
+
+    def test_altered_evidence_file_invalidates_signed_review(self):
+        self.sign()
+        self.assertIsNotNone(cycle._verified_quality_exit(self.root, self.recipe))
+        check_id = self.review["evidence_checks"][0]["check_id"]
+        evidence_path = self.evidence_dir / (check_id + ".json")
+        content = json.loads(evidence_path.read_text(encoding="utf8"))
+        content["observations"] = ["Changed findings without review update"]
+        evidence_path.write_text(json.dumps(content), encoding="utf8")
+        self.assertIsNone(cycle._verified_quality_exit(self.root, self.recipe))
+
+    def test_missing_evidence_bytes_block_claimed_perfect_score(self):
+        self.sign()
+        self.assertIsNotNone(cycle._verified_quality_exit(self.root, self.recipe))
+        check_id = self.review["evidence_checks"][0]["check_id"]
+        (self.evidence_dir / (check_id + ".json")).unlink()
+        self.assertIsNone(cycle._verified_quality_exit(self.root, self.recipe))
+
+    def test_symlinked_evidence_directory_is_rejected(self):
+        self.sign()
+        self.assertIsNotNone(cycle._verified_quality_exit(self.root, self.recipe))
+        actual = self.evidence_dir.with_name(self.recipe + "_actual")
+        self.evidence_dir.rename(actual)
+        self.evidence_dir.symlink_to(actual, target_is_directory=True)
+        self.assertIsNone(cycle._verified_quality_exit(self.root, self.recipe))
+
+    def test_evidence_for_different_artifact_is_rejected_even_if_resigned(self):
+        check_id = self.review["evidence_checks"][0]["check_id"]
+        evidence_path = self.evidence_dir / (check_id + ".json")
+        content = json.loads(evidence_path.read_text(encoding="utf8"))
+        content["artifact_sha256"] = "b" * 64
+        evidence_path.write_text(json.dumps(content), encoding="utf8")
+        self.review["evidence_checks"][0]["evidence_sha256"] = hashlib.sha256(
+            evidence_path.read_bytes()).hexdigest()
         self.review_path.write_text(json.dumps(self.review), encoding="utf8")
         self.clearance["ai_review_sha256"] = hashlib.sha256(
             self.review_path.read_bytes()).hexdigest()
