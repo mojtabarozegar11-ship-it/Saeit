@@ -266,6 +266,7 @@ jobs:
           else:
               raise SystemExit("FACTORY_DIAGNOSTIC_SOURCE_MISMATCH")
           PATCH
+          # Trigger immediate post-patch factory progress snapshot.
           recovery_authorized='${{ inputs.recovery_authorized }}'
           offhost_backup_verified='${{ inputs.offhost_backup_verified }}'
           grep -q 'FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider' "$script"
