@@ -1,10 +1,12 @@
 name: VPS single product factory activation
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/vps-single-product-factory-activation.yml"
   workflow_dispatch:
+    inputs:
+      owner_authorized:
+        description: "Owner explicitly authorized a bounded one-product VPS activation"
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -12,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   activate:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[activate-single-product-factory-v1]'))
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'workflow_dispatch' && inputs.owner_authorized == true && github.ref_name == 'main'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -118,9 +120,11 @@ jobs:
           path_obj.chmod(0o700)
           PY
           "$runner"
+          # Only the runner holds the private flock. An outer flock on the same
+          # path would make every scheduled child exit successfully without work.
           cron_tmp="$ops/.single-product-cron.$$.tmp"
           grep -vF 'SAEIT_SINGLE_PRODUCT_FACTORY_V1' "$backup/crontab.before" > "$cron_tmp" || true
-          printf '%s\n' "* * * * * /usr/bin/flock -n $private/.single-product-cycle.lock /usr/bin/timeout 55s $runner >> $ops/single-product-cycle.log 2>&1 # SAEIT_SINGLE_PRODUCT_FACTORY_V1" >> "$cron_tmp"
+          printf '%s\n' "* * * * * /usr/bin/timeout 55s $runner >> $ops/single-product-cycle.log 2>&1 # SAEIT_SINGLE_PRODUCT_FACTORY_V1" >> "$cron_tmp"
           chmod 600 "$cron_tmp"
           crontab "$cron_tmp"
           rm -f "$cron_tmp"
