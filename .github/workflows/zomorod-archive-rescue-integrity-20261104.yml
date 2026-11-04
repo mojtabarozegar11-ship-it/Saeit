@@ -94,6 +94,24 @@ jobs:
               'sha256': schema_sha,
           }), flush=True)
 
+          split_parts = {'core_agenttask': set(), 'core_factoryevidence': set()}
+          expected = []
+          for table in ('core_agenttask', 'core_factoryevidence'):
+              for part in range(8):
+                  base = f'{table}.{part}'
+                  if (root / (base + '.meta')).is_file() and (root / (base + '.sql.gz')).is_file():
+                      names = [base]
+                  else:
+                      split_parts[table].add(part)
+                      names = [f'{base}.sub{sub}' for sub in range(4)]
+                  for name in names:
+                      expected.extend((name + '.meta', name + '.sql.gz'))
+          missing = [name for name in expected if not (root / name).is_file()]
+          print('ARCHIVE_SPLIT_PARTITIONS=' + json.dumps({k: sorted(v) for k,v in split_parts.items()}), flush=True)
+          print('ARCHIVE_REQUIRED_FILES=' + str(len(expected)), flush=True)
+          print('ARCHIVE_MISSING_FILES=' + json.dumps(missing), flush=True)
+          assert not missing, 'ARCHIVE_NOT_YET_COMPLETE'
+
           global_count = 0
           global_bytes = schema_size
           for table in ('core_agenttask', 'core_factoryevidence'):
@@ -101,7 +119,7 @@ jobs:
               for part in range(8):
                   suffixes = (
                       [f'{part}.sub{sub}' for sub in range(4)]
-                      if table == 'core_agenttask' and part == 6
+                      if part in split_parts[table]
                       else [str(part)]
                   )
                   for suffix in suffixes:
@@ -111,7 +129,7 @@ jobs:
                       assert match is not None, 'INVALID_METADATA:' + base
                       name, part_num, sub_num, rows, min_id, max_id, lo, hi = match.groups()
                       assert name == table and int(part_num) == part, 'WRONG_PARTITION:' + base
-                      if table == 'core_agenttask' and part == 6:
+                      if part in split_parts[table]:
                           assert sub_num is not None and int(sub_num) == int(suffix[-1]), 'WRONG_SUBPART:' + base
                       else:
                           assert sub_num is None, 'UNEXPECTED_SUBPART:' + base
@@ -146,7 +164,8 @@ jobs:
                   'record_count_at_export': rows_total,
               }), flush=True)
 
-          assert global_count == 19, 'EXPECTED_19_SEGMENTS'
+          expected_segments = 16 + 3 * sum(len(parts) for parts in split_parts.values())
+          assert global_count == expected_segments, 'SEGMENT_COUNT_MISMATCH'
           print('ALL_ARCHIVED_SQL_FILES_VERIFIED=yes', flush=True)
           print('TOTAL_ARCHIVED_COMPRESSED_BYTES=' + str(global_bytes), flush=True)
           print('NOTE=These are independently timed exports, not a proven point-in-time database snapshot', flush=True)
