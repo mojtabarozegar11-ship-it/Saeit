@@ -34,7 +34,9 @@ export function joystickAxes(dx, dy, limit, deadzone = 0) {
   if (magnitude <= zone) return {forward: 0, side: 0};
   const adjusted = (magnitude - zone) / (1 - zone);
   const scale = adjusted / distance;
-  return {forward: -dy * scale, side: dx * scale};
+  const forward = -dy * scale, side = dx * scale;
+  // Canonicalize signed zero so movement snapshots stay stable across engines.
+  return {forward: forward === 0 ? 0 : forward, side: side === 0 ? 0 : side};
 }
 
 // Pointer geometry can temporarily be zero during orientation changes, and
