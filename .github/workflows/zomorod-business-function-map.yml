@@ -208,6 +208,39 @@ jobs:
               cx.close()
           PY
           REMOTE
+      - name: Check exact integration hooks and module coverage without showing private source
+        shell: bash
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 60s ssh -F "$RUNNER_TEMP/zm-marketing-ro/config" "$COMMAND_HOST" python3 -B - <<'PY'
+          import hashlib,re
+          from pathlib import Path
+          base=Path('/home/zomorod2/.private/zomorod-business')
+          app=(base/'app.php').read_text('utf-8','replace')
+          assert hashlib.sha256(app.encode('utf-8')).hexdigest()=='2ed9274affa87f3e9c51f7dff0c72d7461118c7aca0ae0ab732b1c81cbfd6005'
+          hooks={
+            'NAV_ASSIGNMENT':"$nav=[",
+            'NAV_USERS':"'users'=>'کاربران'",
+            'POST_ACTION':"$action=req('action');",
+            'POST_ACTION_BRANCH':"if($action==='password_change'){",
+            'VIEW_DISPATCH':"} elseif($page==='accounts'){",
+            'VIEW_PROJECTS':"} elseif($page==='projects'){",
+            'PRIVATE_IMPORT':"if(is_file($private.'/site_agents.php'))",
+            'ROUTE_PAGE':"$page=(string)($_GET['page']??'dashboard');",
+          }
+          for label,value in hooks.items():
+            print('INTEGRATION_HOOK_'+label+'='+str(app.count(value)))
+          words=['auction','tender','مزایده','bid','مناقصه']
+          for p in sorted(base.glob('*.php')):
+            if p.is_symlink() or not p.is_file():continue
+            s=p.read_text('utf-8','replace').lower()
+            active=sum(s.count(w.lower()) for w in words)
+            if active: print('AUCTION_MARKER_IN_MODULE='+re.sub(r'[^a-zA-Z0-9_.-]','',p.name)+':'+str(active))
+          print('AUCTION_SOURCE_COVERAGE=ALL_PRIVATE_PHP_SCANNED')
+          PY
       - name: Clean temporary relay on runner
         if: always()
         shell: bash
