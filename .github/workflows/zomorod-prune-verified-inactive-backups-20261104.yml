@@ -1,0 +1,172 @@
+name: Reclaim cPanel space from two independently verified inactive backup sets
+
+on:
+  push:
+    branches: [ops/zomorod-archive-audit-20261104]
+    paths:
+      - .github/workflows/zomorod-prune-verified-inactive-backups-20261104.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-prune-verified-inactive-backups-20261104
+  cancel-in-progress: false
+
+jobs:
+  reclaim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Establish pinned VPS and cPanel SSH connections
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-reclaim"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 2
+            ServerAliveInterval 30
+            ServerAliveCountMax 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.candidate" "$d/host.known"
+          echo VERIFIED_SECURE_RECLAIM_RELAY=yes
+      - name: Confirm all live page health baselines
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /agents/ /admin/login/; do
+            code="$(curl --silent --show-error --location --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path")"
+            test "$code" = 200
+            echo "LIVE_SITE_BEFORE_RECLAIM=$path:$code"
+          done
+      - name: Independently reconfirm recoverable VPS archive integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zomorod-reclaim/config" saeit-vps 'python3 -' <<'PY'
+          import hashlib,os,tarfile
+          from pathlib import Path
+          root=Path('/home/githubops/.db-backups')
+          archive=root/'cpanel-inactive-backup-sets-20261104.tar.gz'
+          manifest=root/'cpanel-inactive-backup-sets-20261104.tar.gz.sha256'
+          assert archive.is_file() and not archive.is_symlink() and manifest.is_file(), 'VERIFIED_ARCHIVE_MISSING'
+          expected='403ddd65650091fb7c4958e279440ef80ee0ea6380079522d90b478df35dda37'
+          assert manifest.read_text(encoding='utf-8').split()[0]==expected, 'ARCHIVE_MANIFEST_MISMATCH'
+          h=hashlib.sha256()
+          with archive.open('rb') as f:
+              for b in iter(lambda:f.read(1024*1024),b''):h.update(b)
+          assert h.hexdigest()==expected, 'VPS_BACKUP_CHANGED'
+          regular=0;symlinks=0;bytes_total=0
+          with tarfile.open(archive,mode='r:gz') as f:
+              for member in f:
+                  if member.isfile():regular+=1;bytes_total+=member.size
+                  elif member.issym():symlinks+=1
+          assert regular==27115 and symlinks==14 and bytes_total==1200907063, 'VPS_ARCHIVE_INCOMPLETE'
+          print('VPS_ARCHIVE_RECOVERY_COPY_VERIFIED=yes',flush=True)
+          PY
+      - name: Remove only identical inactive source copies and measure released quota
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zomorod-reclaim/config" saeit-cpanel 'python3 -' <<'PY'
+          import hashlib,json,os,shutil,stat,subprocess,time
+          from pathlib import Path
+          base=Path('/home/zomorod2/.backups')
+          assert base.is_dir() and not base.is_symlink() and base.resolve()==Path('/home/zomorod2/.backups'), 'BACKUP_BASE_NOT_TRUSTED'
+          names=('zomorodmelal-complete','zomorodmelal-db-recovery-validation')
+          entries=[];count=0;links=0;total=0;allocated=0
+          for name in names:
+              root=base/name
+              assert root.is_dir() and not root.is_symlink() and root.resolve().parent==base, 'SOURCE_DIR_NOT_EXACT:'+name
+              for current,dirs,files in os.walk(root,followlinks=False):
+                  for dirname in dirs:
+                      p=Path(current)/dirname
+                      if p.is_symlink():entries.append(('L',p));links+=1
+                  dirs[:]=[dirname for dirname in dirs if not (Path(current)/dirname).is_symlink()]
+                  for filename in files:
+                      p=Path(current)/filename
+                      if p.is_symlink():entries.append(('L',p));links+=1
+                      elif p.is_file():entries.append(('F',p));count+=1
+                      else:raise SystemExit('SOURCE_TYPE_CHANGED')
+          h=hashlib.sha256()
+          for kind,path in sorted(entries,key=lambda x:x[1].relative_to(base).as_posix()):
+              rel=path.relative_to(base).as_posix()
+              if kind=='L':line='L\0'+rel+'\0'+os.readlink(path)+'\n'
+              else:
+                  st=path.stat()
+                  assert st.st_mtime<time.time()-3*86400, 'BACKUP_DIR_NOW_ACTIVE'
+                  sub=hashlib.sha256()
+                  with path.open('rb') as f:
+                      for b in iter(lambda:f.read(1024*1024),b''):sub.update(b)
+                  total+=st.st_size;allocated+=st.st_blocks*512
+                  line='F\0'+rel+'\0'+str(st.st_size)+'\0'+sub.hexdigest()+'\n'
+              h.update(line.encode('utf-8'))
+          assert count==27115 and links==14 and total==1200907063, 'SOURCE_INVENTORY_MISMATCH'
+          assert h.hexdigest()=='91358c8c7c5c6f893a0d60c6061e6a775858aa7b5212af5abfbf9046965f9119', 'SOURCE_VERSUS_RESTORED_DIGEST_MISMATCH'
+          assert shutil.rmtree.avoids_symlink_attacks, 'SYMLINK_SAFE_REMOVAL_NOT_AVAILABLE'
+          print('PRE_DELETE_FULL_SOURCE_REVALIDATION=success',flush=True)
+          for name in names:
+              root=base/name
+              assert root.is_dir() and not root.is_symlink() and root.resolve().parent==base
+              shutil.rmtree(root)
+              assert not root.exists() and not root.is_symlink(), 'SOURCE_PRUNE_INCOMPLETE:'+name
+              print('VERIFIED_SOURCE_COPY_REMOVED='+name,flush=True)
+          print('ALLOCATED_REGULAR_FILE_BYTES_RECLAIMED='+str(allocated),flush=True)
+          quota=subprocess.run(['uapi','--output=json','Quota','get_quota_info'],capture_output=True,text=True,timeout=25)
+          if quota.returncode==0:
+              q=json.loads(quota.stdout).get('result',{}).get('data',{})
+              print('CPANEL_QUOTA_AFTER_RECLAIM='+json.dumps({'used_mb':q.get('megabytes_used'),'limit_mb':q.get('megabyte_limit')}),flush=True)
+          PY
+      - name: Verify live website after reclaiming backups
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /agents/ /admin/login/; do
+            code="$(curl --silent --show-error --location --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path")"
+            echo "LIVE_SITE_AFTER_RECLAIM=$path:$code"
+            test "$code" = 200
+          done
+      - name: Remove temporary private runner credentials
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-reclaim"
+          test ! -d "$d" || rm -rf -- "$d"
