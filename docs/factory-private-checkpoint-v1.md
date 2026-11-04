@@ -58,4 +58,37 @@ Any later recovery needs a verified copy stored independently from the VPS,
 an offline restore rehearsal in a separate path, an authenticated owner
 decision and proof that post-checkpoint legitimate orders will not be lost.
 
+## Independent-host attestation protocol (prepared, not executed)
+
+The new `factory_offhost_restore_attestation_v1.py` has two strict modes:
+
+1. On a separately controlled recovery host, transfer the three checkpoint
+   files with a trusted private transfer mechanism. Run the local checkpoint
+   verifier and then `rehearse --checkpoint ... --host-id ... --receipt ...`.
+   It reconstructs every private file in an isolated temporary directory,
+   verifies the extracted hashes, copies and opens SQLite, and writes an
+   unsigned receipt. The receipt MUST NOT be considered authenticated yet.
+2. The independent host administrator signs those exact receipt bytes using a
+   private key that is NEVER installed on the factory VPS or stored in GitHub.
+   For RSA/ECDSA keys, the signing primitive is:
+
+   `openssl dgst -sha256 -sign RECOVERY_PRIVATE_KEY.pem -out receipt.sig receipt.json`
+
+3. On the factory VPS, `verify --checkpoint ... --receipt ... --signature ...
+   --public-key ... --expected-host-id ...` checks the exact signed bytes,
+   root-owned protected public key, host identity, freshness, restored counts,
+   and all local checkpoint hashes. It does not accept unsigned, stale,
+   self-asserted or wrong-checkpoint receipts.
+
+The first real signed receipt can only be obtained after the owner selects and
+authorizes an actually independent storage host and its administrator
+provisions the separate signing key. No such remote destination or trusted
+receipt has been demonstrated in this draft. The activation workflow remains
+**HOLD**; the independent-host protocol is not wired to automatic publication.
+The workflow's initial source guard now exits with
+`F01_OFFHOST_SIGNED_RECOVERY_NOT_YET_INTEGRATED_HOLD` **before SSH or any
+live mutations**. Removing that guard requires a separately reviewed
+two-phase off-host copy, signed receipt validation and explicit owner
+authorization; an unsigned or locally self-attested JSON flag is not enough.
+
 This proposal does not change existing factory status: **HOLD / NO GO**.
