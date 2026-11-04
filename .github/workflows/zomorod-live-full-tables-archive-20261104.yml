@@ -1,0 +1,135 @@
+name: Safeguard live SQL two-table history in verified VPS archive
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-live-full-tables-archive-20261104.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-live-sql-archive
+  cancel-in-progress: false
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 2
+            ServerAliveInterval 30
+            ServerAliveCountMax 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Create and verify a lossless backup of the two target tables
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          ssh -F "$d/config" saeit-vps 'set -eu; set -- $(df -Pk "$HOME" | tail -1); test "$4" -ge 6500000; echo VPS_BACKUP_FREE_KB="$4"'
+          backup_local="$d/zomorod2_sites_main-archive-live-20261104.sql.gz"
+          trap 'rm -f "$backup_local"' EXIT
+          timeout 7200s ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY' | gzip -1 > "$backup_local"
+          import os,re,shutil,subprocess,sys,urllib.parse
+          from pathlib import Path
+          app=Path.home()/"Saeit-staging"
+          matches=[]
+          for path in (app/".env",app/".env.production",app/".env.local"):
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size>65536: continue
+                  for line in path.read_text(encoding="utf-8",errors="replace").splitlines():
+                      m=re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$",line)
+                      if m: matches.append(urllib.parse.urlsplit(m.group(1).strip().strip('"').strip("'")))
+              except OSError: pass
+          if len(matches)!=1: raise SystemExit("STAGING_DATABASE_URL_NOT_UNIQUE")
+          u=matches[0]; db=urllib.parse.unquote(u.path.lstrip("/"))
+          if db!="zomorod2_sites_main": raise SystemExit("STAGING_DATABASE_SCOPE_MISMATCH")
+          client=shutil.which("mariadb-dump") or shutil.which("mysqldump")
+          if not client: raise SystemExit("MYSQL_DUMP_CLIENT_MISSING")
+          args=[client,"--no-defaults","--single-transaction","--quick","--skip-lock-tables","--triggers","--hex-blob","--default-character-set=utf8mb4","--host="+(u.hostname or "localhost"),"--user="+urllib.parse.unquote(u.username or "")]
+          if u.port: args.append("--port="+str(u.port))
+          args.extend([db,"core_agenttask","core_factoryevidence"])
+          env=dict(os.environ,MYSQL_PWD=urllib.parse.unquote(u.password or ""))
+          p=subprocess.run(args,env=env,stdout=sys.stdout.buffer,timeout=7100)
+          if p.returncode: raise SystemExit("MYSQL_BACKUP_DUMP_FAILED")
+          print("STAGING_DATABASE_DUMP_STREAM_COMPLETE",file=sys.stderr)
+          PY
+          gzip -t "$backup_local"
+          backup_bytes="$(stat -c %s "$backup_local")"
+          echo "TARGET_TABLE_BACKUP_BYTES=$backup_bytes"
+          test "$backup_bytes" -gt 100000000
+          test "$backup_bytes" -lt 4404019200
+          echo "TARGET_TABLE_BACKUP_SCOPE=core_agenttask,core_factoryevidence"
+          backup_sha="$(sha256sum "$backup_local" | cut -d ' ' -f1)"
+          echo "COMPLETE_BACKUP_BYTES=$backup_bytes"
+          echo "COMPLETE_BACKUP_SHA256=$backup_sha"
+          d_remote=/home/githubops/.db-backups
+          f_remote="$d_remote/zomorod2_sites_main-archive-live-20261104.sql.gz"
+          tmp_remote="$f_remote.upload"
+          if ! scp -F "$d/config" "$backup_local" "saeit-vps:$tmp_remote"; then
+            ssh -F "$d/config" saeit-vps "rm -f -- '$tmp_remote'" || true
+            exit 1
+          fi
+          ssh -F "$d/config" saeit-vps "EXPECTED_BYTES=$backup_bytes EXPECTED_SHA=$backup_sha F_REMOTE=$f_remote TMP_REMOTE=$tmp_remote bash -s" <<'REMOTE'
+          set -euo pipefail
+          test ! -e "$F_REMOTE"
+          test -f "$TMP_REMOTE"
+          test "$(stat -c %s "$TMP_REMOTE")" = "$EXPECTED_BYTES"
+          sum=$(sha256sum "$TMP_REMOTE")
+          test "${sum%% *}" = "$EXPECTED_SHA"
+          gzip -t "$TMP_REMOTE"
+          mv "$TMP_REMOTE" "$F_REMOTE"
+          echo "BACKUP_PATH=$F_REMOTE"
+          echo "BACKUP_VERIFIED=complete"
+          REMOTE
+      - name: Confirm archive retained, public websites reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          for domain in zomorodmelal.ir mojplaywin.com; do
+            status="$(curl --max-time 20 -sSL -o /dev/null -w '%{http_code}' "https://$domain/")"
+            case "$status" in 200|301|302) echo "ARCHIVE_SITE_OK=$domain:$status" ;; *) echo "ARCHIVE_SITE_FAILED=$domain:$status"; exit 1;; esac
+          done
