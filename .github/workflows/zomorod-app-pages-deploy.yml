@@ -504,6 +504,10 @@ jobs:
           try:
               import passenger_wsgi
               print("PASSENGER_WSGI_IMPORT=passed")
+              from django.conf import settings
+              print("DJANGO_SETTINGS_MODULE_EFFECTIVE="+str(os.environ.get("DJANGO_SETTINGS_MODULE")))
+              print("DJANGO_ACCOUNTING_APP_EFFECTIVE="+str("accounting.apps.AccountingConfig" in settings.INSTALLED_APPS))
+              print("DJANGO_INSTALLED_APPS_EFFECTIVE="+repr(settings.INSTALLED_APPS))
               from django.test import Client
               response = Client(HTTP_HOST="zomorodmelal.ir").get("/agriculture/", secure=True)
               print("DJANGO_CLIENT_AGRICULTURE_STATUS="+str(response.status_code))
