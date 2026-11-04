@@ -23,6 +23,9 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s  %s\n' 'c94aa5fbbb2d738aab49c1fcd22b5e7aef42603048b316e2d5b7a544c505d53b' '../contracts/MOJ7.sol' | sha256sum -c -
+          mkdir -p contracts
+          cp ../contracts/MOJ7.sol contracts/MOJ7.sol
+          cmp ../contracts/MOJ7.sol contracts/MOJ7.sol
           test "$(grep -c 'http://127.0.0.1:9090' tronbox-config.js)" = '1'
           ! grep -Ei 'https?://(api|nile|shasta)\.trongrid\.io' tronbox-config.js
       - name: Install isolated test framework
@@ -36,8 +39,10 @@ jobs:
             tronbox/tre:2.0.0 >/dev/null
           for attempt in $(seq 1 85); do
             if curl -fsS --connect-timeout 2 --max-time 4 http://127.0.0.1:9090/healthcheck >/dev/null 2>&1; then
-              echo "MOJ7_LOCAL_TRE_HEALTHY"
-              exit 0
+              if curl -fsS --max-time 4 http://127.0.0.1:9090/admin/accounts 2>/dev/null | grep -q 'Available Accounts'; then
+                echo "MOJ7_LOCAL_TRE_ACCOUNTS_READY"
+                exit 0
+              fi
             fi
             sleep 2
           done

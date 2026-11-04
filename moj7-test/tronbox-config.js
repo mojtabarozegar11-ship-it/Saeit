@@ -5,7 +5,7 @@ module.exports = {
   networks:{development:{
     privateKey:'0000000000000000000000000000000000000000000000000000000000000001',
     fullHost:HOST,
-    network_id:'9',
+    network_id:'*',
     feeLimit:200*1e6,
     userFeePercentage:100
   }},
