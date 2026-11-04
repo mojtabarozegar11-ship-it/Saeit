@@ -8,6 +8,8 @@ contract('MOJ1 domain-bound Merkle-sum reward liabilities', accounts => {
   const amount = n => (BigInt(n) * unit).toString();
   const uint = n => BigInt(n).toString(16).padStart(64, '0');
   const manifest = '0x' + 'ab'.repeat(32);
+  const proof = (epoch, index, account, value, hashes = [], sums = [], counts = []) =>
+    [epoch, index, account, value, hashes, sums, counts];
 
   function publishData(epoch, root, budget, count) {
     const selector = tronWeb.sha3('publishEpoch(uint256,bytes32,uint256,uint256,bytes32)').slice(2, 10);
@@ -44,14 +46,14 @@ contract('MOJ1 domain-bound Merkle-sum reward liabilities', accounts => {
     await expectRevert(escrow.publishEpoch(7, root, amount(10), 1, manifest, {from: accounts[0]}));
     await governed(gov, escrow, publishData(7, root, amount(10), 1), 0);
     assert.equal((await escrow.outstandingCommitments()).toString(), amount(10));
-    assert.equal(await escrow.verifyClaim(7, 0, recipient, amount(10), [], [], []), true);
-    assert.equal(await escrow.verifyClaim(7, 0, recipient, amount(9), [], [], []), false);
-    await expectRevert(escrow.claim(7, 0, accounts[8], amount(10), [], [], [], {from: accounts[9]}));
-    await escrow.claim(7, 0, recipient, amount(10), [], [], [], {from: accounts[9]});
+    assert.equal(await escrow.verifyClaim(proof(7, 0, recipient, amount(10))), true);
+    assert.equal(await escrow.verifyClaim(proof(7, 0, recipient, amount(9))), false);
+    await expectRevert(escrow.claim(proof(7, 0, accounts[8], amount(10)), {from: accounts[9]}));
+    await escrow.claim(proof(7, 0, recipient, amount(10)), {from: accounts[9]});
     assert.equal((await token.balanceOf(recipient)).toString(), amount(10));
     assert.equal((await escrow.outstandingCommitments()).toString(), '0');
     assert.equal((await escrow.availableToCommit()).toString(), amount(40));
-    await expectRevert(escrow.claim(7, 0, recipient, amount(10), [], [], [], {from: accounts[9]}));
+    await expectRevert(escrow.claim(proof(7, 0, recipient, amount(10)), {from: accounts[9]}));
   });
 
   it('cryptographically binds a two-leaf root to the exact total and keeps unpaid claims reserved', async () => {
@@ -64,16 +66,16 @@ contract('MOJ1 domain-bound Merkle-sum reward liabilities', accounts => {
     assert.equal(node[2].toString(), '2');
     await governed(gov, escrow, publishData(12, root, amount(15), 2), 0);
 
-    assert.equal(await escrow.verifyClaim(12, 0, accounts[6], amount(10), [b], [amount(5)], [1]), true);
-    assert.equal(await escrow.verifyClaim(12, 0, accounts[6], amount(10), [b], [amount(4)], [1]), false);
-    assert.equal(await escrow.verifyClaim(12, 0, accounts[6], amount(10), [b], [amount(5)], [2]), false);
-    await expectRevert(escrow.claim(12, 0, accounts[6], amount(10), [b], [amount(4)], [1], {from: accounts[8]}));
+    assert.equal(await escrow.verifyClaim(proof(12, 0, accounts[6], amount(10), [b], [amount(5)], [1])), true);
+    assert.equal(await escrow.verifyClaim(proof(12, 0, accounts[6], amount(10), [b], [amount(4)], [1])), false);
+    assert.equal(await escrow.verifyClaim(proof(12, 0, accounts[6], amount(10), [b], [amount(5)], [2])), false);
+    await expectRevert(escrow.claim(proof(12, 0, accounts[6], amount(10), [b], [amount(4)], [1]), {from: accounts[8]}));
 
-    await escrow.claim(12, 0, accounts[6], amount(10), [b], [amount(5)], [1], {from: accounts[8]});
+    await escrow.claim(proof(12, 0, accounts[6], amount(10), [b], [amount(5)], [1]), {from: accounts[8]});
     assert.equal((await escrow.outstandingCommitments()).toString(), amount(5));
     assert.equal((await escrow.availableToCommit()).toString(), amount(35));
     assert.equal((await token.balanceOf(escrow.address)).toString(), amount(40));
-    await escrow.claim(12, 1, accounts[7], amount(5), [a], [amount(10)], [1], {from: accounts[8]});
+    await escrow.claim(proof(12, 1, accounts[7], amount(5), [a], [amount(10)], [1]), {from: accounts[8]});
     assert.equal((await escrow.outstandingCommitments()).toString(), '0');
     assert.equal((await token.balanceOf(escrow.address)).toString(), amount(35));
     assert.equal((await escrow.epochs(12)).claimCount.toString(), '2');
@@ -85,8 +87,8 @@ contract('MOJ1 domain-bound Merkle-sum reward liabilities', accounts => {
     const b = await escrow.claimLeaf(21, 1, accounts[6], amount(5));
     const root = (await escrow.combineNodes(a, amount(10), 1, b, amount(5), 1))[0];
     await governed(gov, escrow, publishData(21, root, amount(15), 2), 0);
-    await escrow.claim(21, 0, accounts[6], amount(10), [b], [amount(5)], [1], {from: accounts[9]});
-    await expectRevert(escrow.claim(21, 1, accounts[6], amount(5), [a], [amount(10)], [1], {from: accounts[9]}));
+    await escrow.claim(proof(21, 0, accounts[6], amount(10), [b], [amount(5)], [1]), {from: accounts[9]});
+    await expectRevert(escrow.claim(proof(21, 1, accounts[6], amount(5), [a], [amount(10)], [1]), {from: accounts[9]}));
     assert.equal((await escrow.outstandingCommitments()).toString(), amount(5));
     assert.equal((await escrow.availableToCommit()).toString(), amount(35));
     assert.equal((await token.balanceOf(escrow.address)).toString(), amount(40));
@@ -100,10 +102,10 @@ contract('MOJ1 domain-bound Merkle-sum reward liabilities', accounts => {
     await governed(gov, escrow, publishData(33, root, amount(5), 1), 0);
     await governed(gov, other, publishData(33, root, amount(5), 1), 1);
     await governed(gov, escrow, publishData(34, root, amount(5), 1), 2);
-    assert.equal(await other.verifyClaim(33, 0, accounts[6], amount(5), [], [], []), false);
-    assert.equal(await escrow.verifyClaim(34, 0, accounts[6], amount(5), [], [], []), false);
+    assert.equal(await other.verifyClaim(proof(33, 0, accounts[6], amount(5))), false);
+    assert.equal(await escrow.verifyClaim(proof(34, 0, accounts[6], amount(5))), false);
     assert.equal((await escrow.outstandingCommitments()).toString(), amount(10));
-    await escrow.claim(33, 0, accounts[6], amount(5), [], [], [], {from: accounts[9]});
+    await escrow.claim(proof(33, 0, accounts[6], amount(5)), {from: accounts[9]});
     assert.equal((await token.balanceOf(accounts[6])).toString(), amount(5));
   });
 });

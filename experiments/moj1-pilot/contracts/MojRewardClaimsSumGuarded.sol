@@ -30,6 +30,17 @@ contract MojRewardClaimsSumGuarded {
         uint256 count;
     }
 
+    /// @dev Single calldata object avoids TRON Solidity's narrow stack limits.
+    struct ClaimProof {
+        uint256 epoch;
+        uint256 index;
+        address account;
+        uint256 amount;
+        bytes32[] siblingHashes;
+        uint256[] siblingSums;
+        uint256[] siblingCounts;
+    }
+
     ITRC20 public immutable token;
     address public immutable governance;
     uint256 public outstandingCommitments;
@@ -117,52 +128,44 @@ contract MojRewardClaimsSumGuarded {
         emit EpochPublished(epoch, root, manifestDigest, budget, leafCount);
     }
 
-    function verifyClaim(
-        uint256 epoch, uint256 index, address account, uint256 amount,
-        bytes32[] calldata siblingHashes, uint256[] calldata siblingSums,
-        uint256[] calldata siblingCounts
-    ) public view returns (bool) {
-        Epoch storage record = epochs[epoch];
-        if (!record.published || account == address(0) || amount == 0) return false;
-        uint256 length = siblingHashes.length;
-        if (length > MAX_PROOF_DEPTH || length != siblingSums.length || length != siblingCounts.length) return false;
+    function verifyClaim(ClaimProof calldata proof) public view returns (bool) {
+        Epoch storage record = epochs[proof.epoch];
+        if (!record.published || proof.account == address(0) || proof.amount == 0) return false;
+        uint256 length = proof.siblingHashes.length;
+        if (length > MAX_PROOF_DEPTH || length != proof.siblingSums.length || length != proof.siblingCounts.length) return false;
 
-        Node memory cursor = Node(claimLeaf(epoch, index, account, amount), amount, 1);
+        Node memory cursor = Node(claimLeaf(proof.epoch, proof.index, proof.account, proof.amount), proof.amount, 1);
         for (uint256 i; i < length; ++i) {
             cursor = _combine(
-                cursor, Node(siblingHashes[i], siblingSums[i], siblingCounts[i])
+                cursor, Node(proof.siblingHashes[i], proof.siblingSums[i], proof.siblingCounts[i])
             );
         }
         return cursor.hash == record.root && cursor.sum == record.budget && cursor.count == record.leafCount;
     }
 
     /// @notice Anyone may relay a valid claim. Payment always goes to the proven account.
-    function claim(
-        uint256 epoch, uint256 index, address account, uint256 amount,
-        bytes32[] calldata siblingHashes, uint256[] calldata siblingSums,
-        uint256[] calldata siblingCounts
-    ) external {
-        Epoch storage record = epochs[epoch];
-        require(record.published && account != address(0) && amount > 0, "Invalid claim");
-        require(!claimedIndex[epoch][index] && !claimedAccount[epoch][account], "Already claimed");
-        require(amount <= record.budget - record.claimed, "Budget exceeded");
-        require(verifyClaim(epoch, index, account, amount, siblingHashes, siblingSums, siblingCounts), "Invalid sum proof");
+    function claim(ClaimProof calldata proof) external {
+        Epoch storage record = epochs[proof.epoch];
+        require(record.published && proof.account != address(0) && proof.amount > 0, "Invalid claim");
+        require(!claimedIndex[proof.epoch][proof.index] && !claimedAccount[proof.epoch][proof.account], "Already claimed");
+        require(proof.amount <= record.budget - record.claimed, "Budget exceeded");
+        require(verifyClaim(proof), "Invalid sum proof");
 
         // Commit accounting and replay protection before the external token call.
-        claimedIndex[epoch][index] = true;
-        claimedAccount[epoch][account] = true;
-        record.claimed += amount;
+        claimedIndex[proof.epoch][proof.index] = true;
+        claimedAccount[proof.epoch][proof.account] = true;
+        record.claimed += proof.amount;
         ++record.claimCount;
         require(record.claimCount <= record.leafCount, "Claim count exceeded");
-        outstandingCommitments -= amount;
-        token.safeTransfer(account, amount);
-        emit RewardClaimed(epoch, index, account, amount);
+        outstandingCommitments -= proof.amount;
+        token.safeTransfer(proof.account, proof.amount);
+        emit RewardClaimed(proof.epoch, proof.index, proof.account, proof.amount);
         if (record.claimed == record.budget) {
             // Never deny a valid final payout because the publisher lied about count.
             if (record.claimCount == record.leafCount) {
-                emit EpochFullyClaimed(epoch, record.claimed);
+                emit EpochFullyClaimed(proof.epoch, record.claimed);
             } else {
-                emit EpochManifestMismatch(epoch, record.claimCount, record.leafCount);
+                emit EpochManifestMismatch(proof.epoch, record.claimCount, record.leafCount);
             }
         }
     }
