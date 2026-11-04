@@ -304,6 +304,43 @@ jobs:
           print("FACTORY_ARTIFACT_ROWS=" + str(Artifact.objects.count()))
           print("FACTORY_RELEASE_MANIFEST_ROWS=" + str(Manifest.objects.count()))
           print("FACTORY_QUEUED_AGENT_TASKS=" + str(Task.objects.filter(status="queued").count()))
+          # Read-only candidate triage: aggregate evidence, never auto-select a SKU.
+          from collections import Counter
+          from django.db.models import Count, Q
+          from django.utils import timezone
+          source_counts = Counter()
+          for constraints in active_runs.values_list("constraints", flat=True).iterator(chunk_size=200):
+              stage = constraints.get("source_stage") if isinstance(constraints, dict) else None
+              source_counts["discovery" if stage == "opportunity_discovery" else "other" if stage else "none"] += 1
+          print("FACTORY_ACTIVE_RUN_SOURCE_DISCOVERY=" + str(source_counts["discovery"]))
+          print("FACTORY_ACTIVE_RUN_SOURCE_OTHER=" + str(source_counts["other"]))
+          print("FACTORY_ACTIVE_RUN_SOURCE_NONE=" + str(source_counts["none"]))
+          recent = timezone.now() - __import__("datetime").timedelta(hours=1)
+          print("FACTORY_ACTIVE_RUN_UPDATED_LAST_HOUR=" + str(active_runs.filter(updated_at__gte=recent).count()))
+          drafts = Product.objects.filter(pk__in=linked_ids, factory_managed=True, active=False)
+          print("FACTORY_DRAFTS_WITH_OWNER=" + str(drafts.filter(owner_id__isnull=False).count()))
+          print("FACTORY_DRAFTS_WITH_APPROVED_KNOWLEDGE_LINK=" + str(drafts.filter(knowledge_article_id__isnull=False).count()))
+          print("FACTORY_DRAFTS_WITH_POSITIVE_PRICE=" + str(drafts.filter(price__gt=0).count()))
+          metadata_pass = 0
+          metadata_pass_with_owner_and_knowledge = 0
+          for row in drafts.values("owner_id", "knowledge_article_id", "metadata").iterator(chunk_size=200):
+              md = row.get("metadata")
+              validation = md.get("validation") if isinstance(md, dict) else None
+              outcome = validation.get("outcome") if isinstance(validation, dict) else None
+              if isinstance(outcome, str) and outcome.upper() in {"PASS", "APPROVED"}:
+                  metadata_pass += 1
+                  if row["owner_id"] and row["knowledge_article_id"]:
+                      metadata_pass_with_owner_and_knowledge += 1
+          print("FACTORY_DRAFTS_METADATA_VALIDATION_PASS=" + str(metadata_pass))
+          print("FACTORY_DRAFTS_METADATA_PASS_WITH_OWNER_KNOWLEDGE=" + str(metadata_pass_with_owner_and_knowledge))
+          workload = (Task.objects.filter(factory_run__status="active", factory_run__product_id__isnull=False)
+                      .values("factory_run__product_id")
+                      .annotate(completed=Count("pk", filter=Q(status="completed")),
+                                queued=Count("pk", filter=Q(status="queued")))
+                      .order_by("-completed", "factory_run__product_id")[:5])
+          print("FACTORY_TOP_WORKLOAD_PRODUCT_IDS_AND_TASK_COUNTS=" +
+                ",".join(str(x["factory_run__product_id"]) + ":" + str(x["completed"]) + ":" + str(x["queued"]) for x in workload))
+          print("FACTORY_TOP_WORKLOAD_IS_NOT_QUALITY_RANKING=true")
           one_sku = distinct == 1 and factory_drafts == 1 and missing_product == 0 and published_factory_products == 0
           print("FACTORY_GLOBAL_SINGLE_SKU_EVIDENCE=" + ("CANDIDATE_ONLY" if one_sku else "HOLD"))
           print("FACTORY_PRODUCTION_RELEASE_AUTHORIZED=NO")
