@@ -1,0 +1,144 @@
+name: Mirror two inactive cPanel backup sets to VPS without deleting sources
+
+on:
+  push:
+    branches: [ops/zomorod-archive-audit-20261104]
+    paths:
+      - .github/workflows/zomorod-cpanel-stale-backups-to-vps-20261104.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-cpanel-stale-backups-to-vps-20261104
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Prepare pinned VPS and cPanel transport
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-stale-backups"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 2
+            ServerAliveInterval 30
+            ServerAliveCountMax 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.candidate" "$d/host.known"
+          echo VERIFIED_PINNED_TRANSPORT=yes
+      - name: Refuse if either source contains recently modified data
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zomorod-stale-backups/config" saeit-cpanel 'python3 -' <<'PY'
+          import json,os,stat,time
+          from pathlib import Path
+          base=Path('/home/zomorod2/.backups')
+          names=('zomorodmelal-complete','zomorodmelal-db-recovery-validation')
+          result=[]
+          for name in names:
+              root=base/name
+              assert root.is_dir() and not root.is_symlink(), 'BACKUP_DIRECTORY_NOT_REGULAR:'+name
+              files=0; newest=0; allocated=0; unexpected=0
+              for current,dirs,filenames in os.walk(root,followlinks=False):
+                  for directory in dirs:
+                      assert not (Path(current)/directory).is_symlink(), 'BACKUP_SYMLINK_DIR:'+name
+                  for filename in filenames:
+                      path=Path(current)/filename
+                      metadata=path.lstat()
+                      if stat.S_ISREG(metadata.st_mode):
+                          files+=1;newest=max(newest,int(metadata.st_mtime));allocated+=metadata.st_blocks*512
+                      elif stat.S_ISLNK(metadata.st_mode):
+                          unexpected+=1
+                      else:raise SystemExit('UNEXPECTED_BACKUP_FILE_TYPE:'+name)
+              assert files>0 and newest<time.time()-3*86400, 'BACKUP_SET_CHANGED_RECENTLY:'+name
+              result.append({'name':name,'regular_files':files,'allocated_file_bytes':allocated,'latest_file_mtime':newest,'symlinks':unexpected})
+          assert sum(x['regular_files'] for x in result)>=27000, 'BACKUP_FILE_COUNT_UNEXPECTED'
+          print('STATIC_SOURCE_INVENTORY='+json.dumps(result),flush=True)
+          PY
+          ssh -F "$RUNNER_TEMP/zomorod-stale-backups/config" saeit-vps 'set -eu; d=/home/githubops/.db-backups; test -d "$d"; test ! -e "$d/cpanel-inactive-backup-sets-20261104.tar.gz"; test ! -e "$d/cpanel-inactive-backup-sets-20261104.tar.gz.upload"; set -- $(df -Pk "$d" | tail -1); test "$4" -gt 3000000; echo VPS_ARCHIVE_CAPACITY_VERIFIED=yes'
+      - name: Stream a single lossless archive directly to VPS and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-stale-backups"
+          remote_dir=/home/githubops/.db-backups
+          name=cpanel-inactive-backup-sets-20261104.tar.gz
+          timeout 3500s ssh -F "$d/config" saeit-cpanel 'set -euo pipefail; tar -C /home/zomorod2/.backups -czf - -- zomorodmelal-complete zomorodmelal-db-recovery-validation' \
+            | timeout 3520s ssh -F "$d/config" saeit-vps 'umask 077; set -euo pipefail; test ! -e /home/githubops/.db-backups/cpanel-inactive-backup-sets-20261104.tar.gz.upload; cat > /home/githubops/.db-backups/cpanel-inactive-backup-sets-20261104.tar.gz.upload'
+          ssh -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import gzip,hashlib,json,os,tarfile
+          from pathlib import Path
+          folder=Path('/home/githubops/.db-backups')
+          upload=folder/'cpanel-inactive-backup-sets-20261104.tar.gz.upload'
+          final=folder/'cpanel-inactive-backup-sets-20261104.tar.gz'
+          assert upload.is_file() and not upload.is_symlink() and not final.exists(), 'ARCHIVE_TARGET_NOT_SAFE'
+          sha=hashlib.sha256();length=0
+          with upload.open('rb') as stream:
+              for chunk in iter(lambda:stream.read(1024*1024),b''):
+                  sha.update(chunk);length+=len(chunk)
+          assert length>1000000, 'SUSPICIOUS_ARCHIVE_SIZE'
+          allowed={'zomorodmelal-complete','zomorodmelal-db-recovery-validation'}
+          count=0;regular=0;invalid=0;total_bytes=0
+          with tarfile.open(upload,mode='r:gz') as tar:
+              for member in tar:
+                  name=member.name
+                  parts=name.split('/')
+                  if not parts or parts[0] not in allowed or name.startswith('/') or '..' in parts:invalid+=1
+                  count+=1
+                  if member.isfile():regular+=1;total_bytes+=member.size
+          assert invalid==0 and regular>=27000, 'ARCHIVE_CONTENT_VERIFICATION_FAILED'
+          upload.replace(final)
+          manifest=final.with_suffix(final.suffix+'.sha256')
+          with manifest.open('x',encoding='utf-8') as f:f.write(sha.hexdigest()+'  '+final.name+'\n')
+          print('VPS_BACKUP_MIRROR_VERIFIED='+json.dumps({'sha256':sha.hexdigest(),'compressed_bytes':length,'archive_members':count,'regular_files':regular,'uncompressed_regular_bytes':total_bytes,'vps_path':str(final)}),flush=True)
+          print('SOURCE_BACKUP_FILES_NOT_DELETED=yes',flush=True)
+          PY
+      - name: Clean temporary private SSH material
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-stale-backups"
+          test ! -d "$d" || rm -rf -- "$d"
