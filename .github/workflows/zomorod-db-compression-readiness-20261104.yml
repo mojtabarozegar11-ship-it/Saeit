@@ -130,7 +130,20 @@ jobs:
               tables[table]={'engine':info[0],'row_format':info[1],'data_bytes':int(info[2]),'index_bytes':int(info[3]),'create_options':info[4] if len(info)>4 else '', 'rows_now':row_count,'id_min':min_id,'id_max':max_id,'archive_row_count_match':row_count==expected}
           print('LIVE_TABLE_READINESS='+json.dumps(tables))
           print('ARCHIVE_ROW_COUNTS_STILL_MATCH='+str(all(t['archive_row_count_match'] for t in tables.values())).lower())
-          print('DB_FILESYSTEM_SUPPORT=not_verified_by_client_side_read_only_queries')
+          datadir=query('SELECT @@datadir')[0]
+          client_node=os.uname().nodename.split('.')[0].lower()
+          database_node=identity[1].split('.')[0].lower()
+          filesystem={'database_server_matches_ssh_node':database_node==client_node}
+          if database_node==client_node:
+              disk=subprocess.run(['df','-PT',datadir],capture_output=True,text=True,timeout=12)
+              if disk.returncode==0 and len(disk.stdout.splitlines())>=2:
+                  columns=disk.stdout.splitlines()[-1].split()
+                  filesystem.update({'type':columns[1],'available_kb':int(columns[4])})
+              else:
+                  filesystem['type']='not_accessible'
+          else:
+              filesystem['type']='not_verified_on_database_server'
+          print('DATABASE_STORAGE_FILESYSTEM='+json.dumps(filesystem))
           print('POINT_IN_TIME_RESTORE=not_yet_proven')
           q=shutil.which('uapi')
           if q:
@@ -139,6 +152,21 @@ jobs:
                   data=json.loads(p.stdout).get('result',{}).get('data',{})
                   print('CPANEL_QUOTA='+json.dumps({'used_mb':data.get('megabytes_used'),'limit_mb':data.get('megabyte_limit')}))
               else: print('CPANEL_QUOTA=unavailable')
+          legacy=shutil.which('cpapi2') or '/usr/local/cpanel/bin/cpapi2'
+          if os.path.isfile(legacy) and os.access(legacy,os.X_OK):
+              p=subprocess.run([legacy,'--user=zomorod2','DiskUsage','fetchdiskusagewithextras'],capture_output=True,text=True,timeout=90)
+              if p.returncode==0:
+                  try:
+                      data=json.loads(p.stdout).get('cpanelresult',{}).get('data',[])[0]
+                      home=data.get('homedir',{})
+                      children=home.get('contents',[])
+                      folder_sizes=[{'name':str(f.get('name')),'bytes':f.get('user_contained_usage')} for f in children if isinstance(f,dict) and isinstance(f.get('user_contained_usage'),int)] if isinstance(children,list) else []
+                      folder_sizes.sort(key=lambda f:f['bytes'],reverse=True)
+                      print('CPANEL_DISK_BREAKDOWN='+json.dumps({'mysql_bytes':data.get('mysql'),'quotaused_bytes':data.get('quotaused'),'home_contained_bytes':home.get('user_contained_usage'),'top_home_folders':folder_sizes[:12]}))
+                  except (ValueError,IndexError,TypeError,AttributeError):
+                      print('CPANEL_DISK_BREAKDOWN=parse_unavailable')
+              else: print('CPANEL_DISK_BREAKDOWN=api2_unavailable')
+          else: print('CPANEL_DISK_BREAKDOWN=cpapi2_missing')
           PY
       - name: Read-only live website HTTP status
         shell: bash
