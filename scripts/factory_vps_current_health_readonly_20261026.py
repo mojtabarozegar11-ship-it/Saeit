@@ -196,6 +196,59 @@ def cron_production_channels(active):
             for k, regex in rules.items()}
 
 
+def trusted_public_keys_readonly():
+    """Report only trust-store posture, never names, key data or claimed identities.
+
+    Presence of a public key is NOT proof of a person's real identity, actual
+    independent review, or possession of its corresponding private key.
+    """
+    groups = {
+        "quality_reviewers": (
+            Path("/etc/saeit/factory-quality-reviewer-public-keys"),
+            ("domain_specialist", "independent_quality_auditor", "rights_reviewer")),
+        "receivers": (
+            Path("/etc/saeit/hourly-cycle-receiver-public-keys"),
+            ("R-01", "B-01", "S-01", "G-01")),
+    }
+    report = {}
+    for group, (root, roles) in groups.items():
+        row = {"directory_readable": False, "directory_root_owned": False,
+               "directory_not_group_world_writable": False,
+               "trusted_key_roles_present": [], "roles_unprovisioned_or_unsafe": [],
+               "identity_manifest_present": False,
+               "real_world_identity_independently_verified": False}
+        try:
+            if root.is_symlink() or not root.is_dir():
+                report[group] = row
+                continue
+            st = root.stat()
+            row["directory_readable"] = os.access(root, os.R_OK | os.X_OK)
+            row["directory_root_owned"] = st.st_uid == 0
+            row["directory_not_group_world_writable"] = not bool(st.st_mode & 0o022)
+            manifest = root / "identity-manifest.json"
+            if manifest.is_file() and not manifest.is_symlink():
+                mst = manifest.stat()
+                row["identity_manifest_present"] = (
+                    mst.st_uid == 0 and not mst.st_mode & 0o022
+                    and 0 < mst.st_size <= 100_000)
+            for role in roles:
+                key = root / (role + ".pem")
+                try:
+                    if key.is_symlink() or not key.is_file():
+                        raise ValueError("missing")
+                    kst = key.stat()
+                    if (kst.st_uid != 0 or kst.st_mode & 0o022
+                            or not 0 < kst.st_size <= 16384):
+                        raise ValueError("unsafe")
+                    row["trusted_key_roles_present"].append(role)
+                except (OSError, ValueError):
+                    row["roles_unprovisioned_or_unsafe"].append(role)
+        except OSError:
+            pass
+        report[group] = row
+    return report
+
+
 def activation_preflight_readonly():
     """Aggregate-only admission evidence; never claim root-level completeness."""
     private = PRIVATE
@@ -379,6 +432,7 @@ def inventory():
         "cycle_error_buckets": cycle_error_buckets(PRIVATE),
         "cron_production_channels": cron_production_channels(active),
         "activation_preflight_readonly": activation_preflight_readonly(),
+        "trusted_public_keys_readonly": trusted_public_keys_readonly(),
     }
 
 
