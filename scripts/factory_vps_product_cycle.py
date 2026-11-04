@@ -243,7 +243,9 @@ def _accepted_hourly_handoff(root, recipe, clearance):
     trusted = RECEIVER_TRUST_ROOT
     try:
         if (trusted.is_symlink() or trusted.parent.is_symlink() or not trusted.is_dir()
-                or trusted.stat().st_mode & 0o022):
+                or trusted.stat().st_uid != 0 or trusted.parent.stat().st_uid != 0
+                or trusted.stat().st_mode & 0o022
+                or trusted.parent.stat().st_mode & 0o022):
             return False
         warehouse = (Path(root) / "digital-products" / recipe
                      / (recipe + "-internal-qa.zip"))
@@ -269,19 +271,29 @@ def _accepted_hourly_handoff(root, recipe, clearance):
             continue
         try:
             if (not receipt.is_file() or not signature.is_file() or not delivered.is_file()
-                    or not public_key.is_file() or receipt.stat().st_size > 100_000
+                    or not public_key.is_file()
+                    or not 0 < receipt.stat().st_size <= 100_000
                     or signature.stat().st_size not in range(1, 4097)
                     or public_key.stat().st_size > 16384
+                    or public_key.stat().st_uid != 0
                     or public_key.stat().st_mode & 0o022):
+                continue
+            # Verify the exact immutable bytes parsed below. Verifying a
+            # pathname and opening it again creates an unsigned-receipt
+            # TOCTOU window in this factory-writable delivery directory.
+            receipt_bytes = receipt.read_bytes()
+            if not 0 < len(receipt_bytes) <= 100_000:
                 continue
             checked = subprocess.run(
                 ["openssl", "dgst", "-sha256", "-verify", str(public_key),
-                 "-signature", str(signature), str(receipt)],
+                 "-signature", str(signature)],
+                input=receipt_bytes,
                 capture_output=True, timeout=5, check=False)
             if checked.returncode != 0:
                 continue
-            acknowledgment = _read_private_json(receipt)
-            if (not acknowledgment or acknowledgment.get("schema") != HOURLY_HANDOFF_SCHEMA
+            acknowledgment = json.loads(receipt_bytes.decode("utf-8"))
+            if (not isinstance(acknowledgment, dict)
+                    or acknowledgment.get("schema") != HOURLY_HANDOFF_SCHEMA
                     or acknowledgment.get("product_id") != recipe
                     or acknowledgment.get("receiver_cycle") != cycle_id
                     or acknowledgment.get("status") != "accepted_by_receiver"
@@ -964,4 +976,3 @@ if __name__ == "__main__":
     except Exception as error:
         print("VPS_FACTORY_CYCLE_ERROR=" + type(error).__name__ + ":" + str(error)[:400], file=sys.stderr)
         sys.exit(1)
-
