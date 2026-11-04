@@ -280,7 +280,7 @@ jobs:
                             ",".join(str(i+1)+":"+rows[i].strip()[:120] for i in points[:20]))
           # Bounded private-runtime control-flow inspection; credentials and payloads excluded.
           for file_name, low, high in (
-              ("core/management/commands/factory_staging_tick.py", 15, 43),
+              ("core/management/commands/factory_staging_tick.py", 15, 180),
               ("core/management/commands/seed_factory_agents.py", 32, 68),
           ):
               file = Path(file_name)
@@ -298,6 +298,19 @@ jobs:
                       print(f"FACTORY_MODEL_COUNT {model._meta.label}={model.objects.count()}")
                   except Exception as exc:
                       print(f"FACTORY_MODEL_COUNT_ERROR {model._meta.label}={type(exc).__name__}")
+          for model_name in ("FactoryRun", "Product", "AgentTask"):
+              model = apps.get_model("core", model_name)
+              safe_fields = [field.name for field in model._meta.concrete_fields
+                             if field.name in {"status", "state", "stage", "phase", "recipe", "product_code", "run_type"}]
+              print("FACTORY_SAFE_STATE_FIELDS " + model_name + "=" + ",".join(safe_fields))
+              for field_name in safe_fields:
+                  try:
+                      from django.db.models import Count
+                      rows = list(model.objects.values(field_name).annotate(n=Count("pk")).order_by(field_name)[:20])
+                      print("FACTORY_SAFE_STATE_COUNTS " + model_name + "." + field_name + "=" +
+                            json.dumps(rows, sort_keys=True, default=str))
+                  except Exception as exc:
+                      print("FACTORY_SAFE_STATE_COUNT_ERROR " + model_name + "." + field_name + "=" + type(exc).__name__)
           path = os.path.join(os.path.dirname(os.path.dirname(__file__)) if "__file__" in globals() else ".", "var/factory/discovery/latest.json")
           try:
               with open(path, encoding="utf-8") as f:
