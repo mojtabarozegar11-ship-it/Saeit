@@ -486,6 +486,10 @@ jobs:
           touch "$app/tmp/restart.txt"
           sleep 2
           "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit >/dev/null
+          pkill -TERM -u "$USER" -f "$app/passenger_wsgi.py" 2>/dev/null || true
+          pkill -TERM -u "$USER" -f "lswsgi.*Saeit" 2>/dev/null || true
+          sleep 2
+          "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit >/dev/null
           touch "$app/tmp/restart.txt"
           echo "PASSENGER_PYTHON_FINAL=verified_selector_lswsgi"
           echo "PASSENGER_TOUCH_RESTART=done"
