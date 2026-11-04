@@ -26,10 +26,11 @@ MODULE_URLS = {
     "projects": "/research/projects/",
     "staff": "/staff/",
     "agents": "/staff/command-center/mpw-agents/",
-    "content": "/staff/command-center/mpw-operations/",
+    "content": "#staff-content",
     "finance": "/staff/command-center/accounting/",
     "approvals": "#staff-approvals",
     "infrastructure": "#staff-infrastructure",
+    "analytics": "#staff-summary",
 }
 
 AGENT_SETTINGS = (
