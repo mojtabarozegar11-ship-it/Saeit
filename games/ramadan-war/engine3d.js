@@ -39,6 +39,22 @@ export function createEngine(canvas) {
   const impactRingGeo=new THREE.TorusGeometry(.12,.018,5,16),impactDotGeo=new THREE.SphereGeometry(.045,7,6);
   const sharedGeometries=new Set([tracerGeo,tracerCoreGeo,impactRingGeo,impactDotGeo]);
   sharedMaterials.add(soldierMaterial);sharedMaterials.add(tracerMat);sharedMaterials.add(tracerCoreMat);
+  // Rights-safe procedural drone: shared GPU resources are released with the renderer, not per enemy.
+  const droneMat={
+    hull:new THREE.MeshStandardMaterial({color:0x435e64,metalness:.68,roughness:.34}),
+    arm:new THREE.MeshStandardMaterial({color:0x26393d,metalness:.72,roughness:.42}),
+    rotor:new THREE.MeshStandardMaterial({color:0x9aa9a7,metalness:.55,roughness:.4,side:THREE.DoubleSide}),
+    eye:new THREE.MeshBasicMaterial({color:0x6af1e5,toneMapped:false}),
+  };
+  const droneGeo={
+    hull:new THREE.IcosahedronGeometry(.34,1),
+    arm:new THREE.BoxGeometry(.68,.055,.085),
+    ring:new THREE.TorusGeometry(.17,.025,6,14),
+    blade:new THREE.BoxGeometry(.3,.015,.04),
+    eye:new THREE.SphereGeometry(.095,10,8),
+  };
+  Object.values(droneMat).forEach(m=>sharedMaterials.add(m));
+  Object.values(droneGeo).forEach(g=>sharedGeometries.add(g));
   function disposeBranch(root){root?.traverse(o=>{if(o.geometry&&!sharedGeometries.has(o.geometry)&&!assetGeometries.has(o.geometry))o.geometry.dispose();const list=Array.isArray(o.material)?o.material:o.material?[o.material]:[];for(const m of list)if(!sharedMaterials.has(m)&&!assetMaterials.has(m))m.dispose()})}
   const loader = new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);
   let soldierAsset = null, weaponAsset = null, assetReady = { soldier:false, weapon:false };
@@ -50,7 +66,7 @@ export function createEngine(canvas) {
   let world = null, pitch = 0, time = 0, baseFov = 68, scoped = false, missionMarker=null;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const hitColor=new THREE.Color(0xff4939);
-  function disposeEnemy(g){if(!g)return;for(const x of g.userData.materials||[])x.material.dispose();for(const child of g.children){if(child===g.userData.model)continue;child.geometry?.dispose();if(child.material&&child.material!==soldierMaterial)child.material.dispose()}}
+  function disposeEnemy(g){if(!g)return;for(const x of g.userData.materials||[])x.material.dispose();for(const child of g.children){if(child===g.userData.model)continue;if(child.geometry&&!sharedGeometries.has(child.geometry))child.geometry.dispose();if(child.material&&!sharedMaterials.has(child.material))child.material.dispose()}}
 
   function texture(kind) {
     const c = document.createElement('canvas'); c.width = c.height = 512;
@@ -165,9 +181,27 @@ export function createEngine(canvas) {
     document.querySelector('#game')?.classList.add('three-world-ready');
   }
 
+  function addDroneBody(g) {
+    const add=(geo,mat,x,y,z)=>{const mesh=new THREE.Mesh(geo,mat);mesh.position.set(x,y,z);g.add(mesh);return mesh;};
+    const hull=add(droneGeo.hull,droneMat.hull,0,1.5,0);
+    hull.scale.set(1.18,.48,.95);
+    add(droneGeo.eye,droneMat.eye,0,1.52,.33);
+    const blades=[];
+    for(const x of [-1,1])for(const z of [-1,1]){
+      const arm=add(droneGeo.arm,droneMat.arm,x*.29,1.53,z*.23);
+      arm.rotation.y=-Math.atan2(z*.23,x*.29);
+      const ring=add(droneGeo.ring,droneMat.rotor,x*.61,1.6,z*.49);
+      ring.rotation.x=Math.PI/2;
+      blades.push(add(droneGeo.blade,droneMat.rotor,x*.61,1.61,z*.49));
+    }
+    g.userData.rotors=blades;
+  }
+
   function enemy(e) {
     const g=new THREE.Group();
-    const soldier=new THREE.Sprite(soldierMaterial);soldier.scale.set(1.48,2.22,1);soldier.position.y=1.08;g.add(soldier);
+    let soldier=null;
+    if(e.type===2)addDroneBody(g);
+    else{soldier=new THREE.Sprite(soldierMaterial);soldier.scale.set(1.48,2.22,1);soldier.position.y=1.08;g.add(soldier);}
     const barMat=new THREE.MeshBasicMaterial({color:0x17211e,transparent:true,opacity:.88,depthTest:false});
     const fillMat=new THREE.MeshBasicMaterial({color:0xf0715c,depthTest:false});
     const bar=new THREE.Mesh(new THREE.PlaneGeometry(.62,.055),barMat);bar.position.set(0,2.24,0);bar.renderOrder=4;g.add(bar);
@@ -178,7 +212,7 @@ export function createEngine(canvas) {
   }
 
   function upgradeEnemy(e) {
-    const g=enemies.get(e); if(!g||!soldierAsset||g.userData.model)return;
+    const g=enemies.get(e); if(!g||e.type===2||!soldierAsset||g.userData.model)return;
     const model=SkeletonUtils.clone(soldierAsset.scene);
     model.scale.setScalar(e.type===3?1.16:1);
     const materials=[];
@@ -196,7 +230,7 @@ export function createEngine(canvas) {
   function render(w,ts){if(w)world=w;if(!world)return;w=world;time=ts/1000;if(softwareRenderer&&ts-lastDrawTime<32)return;lastDrawTime=ts;const dt=Math.min(.05,Math.max(0,time-lastRenderTime));lastRenderTime=time;camera.position.set(w.x,1.62+Math.sin(time*8)*.012,w.y);camera.rotation.order='YXZ';camera.rotation.y=w.angle-Math.PI/2;camera.rotation.x=pitch;weapon.g.visible=true;weapon.g.position.x=.12+Math.sin(time*7)*.008;weapon.g.position.y=-.52+Math.sin(time*14)*.008-(w.recoil>0?.035:0);weapon.g.position.z=-.7+(w.recoil>0?.12:0);weapon.g.rotation.z=Math.sin(time*7)*.008;weapon.flash.intensity=w.muzzle>0?16:0;if(scoped&&weapon.model)weapon.model.visible=false;else if(weapon.model)weapon.model.visible=true;
     if(missionMarker){missionMarker.visible=!!w.marker;if(w.marker){missionMarker.position.set(w.marker.x,0,w.marker.y);missionMarker.children[1].rotation.z=time*.6;missionMarker.children[2].position.y=3.12+Math.sin(time*3)*.22;}}
     for(const [e,g]of [...enemies])if(!w.enemies.includes(e)){scene.remove(g);disposeEnemy(g);enemies.delete(e);}
-    for(const e of w.enemies){const g=enemies.get(e)||enemy(e);g.position.set(e.x,0,e.y);g.rotation.y=Math.atan2(w.x-e.x,-(w.y-e.y));if(g.userData.mixer){const actions=g.userData.actions,desired=e.moving&&actions.walk?actions.walk:actions.idle;if(desired!==actions.current){desired.reset();desired.crossFadeFrom(actions.current,.24,false);desired.play();actions.current=desired}g.userData.mixer.update(dt)}const flash=Math.max(0,Math.min(1,(e.hit||0)/.18));for(const entry of g.userData.materials||[])if(entry.material.emissive)entry.material.emissive.copy(entry.base).lerp(hitColor,flash);for(const o of g.children)if(o.userData.hp)o.scale.x=.06+clamp(e.hp/e.max,0,1);}
+    for(const e of w.enemies){const g=enemies.get(e)||enemy(e);g.position.set(e.x,e.type===2?Math.sin(time*4+e.x)*.075:0,e.y);g.rotation.y=Math.atan2(w.x-e.x,-(w.y-e.y));if(g.userData.rotors)g.userData.rotors.forEach((blade,i)=>{blade.rotation.y=time*(i%2?-23:23)});if(g.userData.mixer){const actions=g.userData.actions,desired=e.moving&&actions.walk?actions.walk:actions.idle;if(desired!==actions.current){desired.reset();desired.crossFadeFrom(actions.current,.24,false);desired.play();actions.current=desired}g.userData.mixer.update(dt)}const flash=Math.max(0,Math.min(1,(e.hit||0)/.18));for(const entry of g.userData.materials||[])if(entry.material.emissive)entry.material.emissive.copy(entry.base).lerp(hitColor,flash);for(const o of g.children)if(o.userData.hp)o.scale.x=.06+clamp(e.hp/e.max,0,1);}
     for(const [m,o]of [...missiles])if(!w.missiles.includes(m)){scene.remove(o);disposeBranch(o);missiles.delete(m);}
     for(const m of w.missiles){let o=missiles.get(m);if(!o){o=new THREE.Group();const body=new THREE.Mesh(new THREE.CylinderGeometry(.045,.09,.48,10),new THREE.MeshStandardMaterial({color:0xd3cfbd,metalness:.5,roughness:.38,emissive:0x31190c}));body.rotation.x=Math.PI/2;o.add(body);o.add(new THREE.PointLight(0xff7136,2,3));scene.add(o);missiles.set(m,o);}o.position.set(m.x,1.1,m.y);o.rotation.y=Math.atan2(m.vx,m.vy);}
     const hostile=w.hostile||[];
