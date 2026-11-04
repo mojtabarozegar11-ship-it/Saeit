@@ -8,6 +8,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from datetime import datetime
 
 START = "ZM_ACTIONS_V1_START"
 END = "ZM_ACTIONS_V1_END"
@@ -24,9 +25,16 @@ def validate(document: str, historical_ids=None) -> list[str]:
     errors = []
     if document.count(START) != 1 or document.count(END) != 1:
         return ["expected exactly one receipt block"]
-    header = REPORT.search(document)
+    header = REPORT.match(document)
+    if header:
+        try:
+            datetime.strptime(header.group(2), "%Y-%m-%d %H:%M UTC")
+        except ValueError:
+            errors.append("invalid report UTC timestamp")
     if not header:
         errors.append("missing canonical Persian report header")
+    if document.index(START) >= document.index(END):
+        return errors + ["receipt markers are reversed"]
     try:
         payload = json.loads(document.split(START, 1)[1].split(END, 1)[0].strip())
     except (ValueError, IndexError):
