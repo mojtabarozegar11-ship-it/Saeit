@@ -243,6 +243,35 @@ jobs:
           else
             echo FACTORY_LOOP_LOG_STATUS=ABSENT_OR_UNSAFE
           fi
+          # Verify local boot/cron ownership without printing any crontab contents.
+          watchdog="$base/operations/ensure-vps-only-loop.sh"
+          watchdog_script=NOT_VERIFIED
+          if test -x "$watchdog" && test ! -L "$watchdog"; then
+            watchdog_script=VERIFIED
+          fi
+          daemon_active=NO
+          if systemctl is-active --quiet cron 2>/dev/null || systemctl is-active --quiet crond 2>/dev/null; then
+            daemon_active=YES
+          fi
+          daemon_enabled=NO
+          if systemctl is-enabled --quiet cron 2>/dev/null || systemctl is-enabled --quiet crond 2>/dev/null; then
+            daemon_enabled=YES
+          fi
+          cron_entries="$(crontab -l 2>/dev/null || true)"
+          expected_reboot='@reboot /bin/bash /home/githubops/factory-runtime/operations/ensure-vps-only-loop.sh >> /home/githubops/factory-runtime/operations/vps-only-watchdog.log 2>&1 # SAEIT_FACTORY_AUTOSTART'
+          expected_five='*/5 * * * * /bin/bash /home/githubops/factory-runtime/operations/ensure-vps-only-loop.sh >> /home/githubops/factory-runtime/operations/vps-only-watchdog.log 2>&1 # SAEIT_FACTORY_AUTOSTART'
+          reboot_count="$(printf '%s\n' "$cron_entries" | grep -Fxc -- "$expected_reboot" || true)"
+          five_count="$(printf '%s\n' "$cron_entries" | grep -Fxc -- "$expected_five" || true)"
+          echo "FACTORY_LOCAL_WATCHDOG_SCRIPT=$watchdog_script"
+          echo "FACTORY_LOCAL_CRON_DAEMON_ACTIVE=$daemon_active"
+          echo "FACTORY_LOCAL_CRON_DAEMON_ENABLED=$daemon_enabled"
+          echo "FACTORY_LOCAL_CRON_REBOOT_RULE_COUNT=$reboot_count"
+          echo "FACTORY_LOCAL_CRON_FIVE_MIN_RULE_COUNT=$five_count"
+          watchdog_configuration=HOLD
+          if [[ "$watchdog_script" == VERIFIED && "$daemon_active" == YES && "$daemon_enabled" == YES && "$reboot_count" == 1 && "$five_count" == 1 ]]; then
+            watchdog_configuration=CONFIGURATION_VERIFIED_ONLY
+          fi
+          echo "FACTORY_VPS_LOCAL_AUTONOMY=$watchdog_configuration"
           cd "$base/django-app"
           export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
           export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
@@ -258,16 +287,21 @@ jobs:
           Manifest = apps.get_model("core", "FactoryReleaseManifest")
           Task = apps.get_model("core", "AgentTask")
           active_runs = Run.objects.filter(status="active")
-          distinct = active_runs.values("product_id").distinct().count()
-          active_products = Product.objects.filter(factory_managed=True, active=True).count()
+          linked_ids = active_runs.exclude(product_id__isnull=True).values_list("product_id", flat=True).distinct()
+          distinct = linked_ids.count()
+          factory_drafts = Product.objects.filter(pk__in=linked_ids, factory_managed=True, active=False).count()
+          published_factory_products = Product.objects.filter(factory_managed=True, active=True).count()
+          missing_product = active_runs.filter(product_id__isnull=True).count()
           print("FACTORY_ACTIVE_RUN_RECORDS=" + str(active_runs.count()))
           print("FACTORY_ACTIVE_RUN_DISTINCT_PRODUCT_IDS=" + str(distinct))
-          print("FACTORY_ACTIVE_RUN_MISSING_PRODUCT=" + str(active_runs.filter(product_id__isnull=True).count()))
-          print("FACTORY_MANAGED_ACTIVE_PRODUCTS=" + str(active_products))
+          print("FACTORY_ACTIVE_RUN_MISSING_PRODUCT=" + str(missing_product))
+          print("FACTORY_ACTIVE_RUN_LINKED_FACTORY_DRAFTS=" + str(factory_drafts))
+          print("FACTORY_ACTIVE_RUN_LINKED_OTHER_PRODUCTS=" + str(distinct - factory_drafts))
+          print("FACTORY_MANAGED_PUBLISHED_PRODUCTS=" + str(published_factory_products))
           print("FACTORY_ARTIFACT_ROWS=" + str(Artifact.objects.count()))
           print("FACTORY_RELEASE_MANIFEST_ROWS=" + str(Manifest.objects.count()))
           print("FACTORY_QUEUED_AGENT_TASKS=" + str(Task.objects.filter(status="queued").count()))
-          one_sku = distinct == 1 and active_products == 1
+          one_sku = distinct == 1 and factory_drafts == 1 and missing_product == 0 and published_factory_products == 0
           print("FACTORY_GLOBAL_SINGLE_SKU_EVIDENCE=" + ("CANDIDATE_ONLY" if one_sku else "HOLD"))
           print("FACTORY_PRODUCTION_RELEASE_AUTHORIZED=NO")
           PY
