@@ -66,7 +66,7 @@ export function createEngine(canvas) {
   let world = null, pitch = 0, time = 0, baseFov = 68, scoped = false, missionMarker=null;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const hitColor=new THREE.Color(0xff4939);
-  function disposeEnemy(g){if(!g)return;for(const x of g.userData.materials||[])x.material.dispose();for(const child of g.children){if(child===g.userData.model)continue;if(child.geometry&&!sharedGeometries.has(child.geometry))child.geometry.dispose();if(child.material&&!sharedMaterials.has(child.material))child.material.dispose()}}
+  function disposeEnemy(g){if(!g)return;disposeBranch(g)}
 
   function texture(kind) {
     const c = document.createElement('canvas'); c.width = c.height = 512;
