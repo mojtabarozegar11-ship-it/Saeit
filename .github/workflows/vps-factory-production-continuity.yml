@@ -316,7 +316,28 @@ jobs:
           pid_is_factory() {
             [[ "$1" =~ ^[0-9]+$ ]] &&
               kill -0 "$1" 2>/dev/null &&
-              ps -p "$1" -o args= | grep -Fq -- "$script"
+              [[ "$(stat -c %u "/proc/$1" 2>/dev/null)" == "$(id -u)" ]] &&
+              tr '\0' ' ' < "/proc/$1/cmdline" | grep -Fq -- "$script"
+          }
+          normalize_existing_pidfile() {
+            local raw original tmp
+            raw="$(cat "$pidfile" 2>/dev/null || true)"
+            original="$raw"
+            if [[ "$raw" == *'\n' ]]; then
+              raw="$(printf '%s' "$raw" | sed 's/\\\\n$//')"
+            fi
+            if pid_is_factory "$raw"; then
+              if [[ "$raw" != "$original" ]]; then
+                tmp="$pidfile.tmp.$BASHPID"
+                (umask 077; printf '%s\n' "$raw" > "$tmp")
+                mv -f -- "$tmp" "$pidfile"
+                echo FACTORY_PIDFILE_LITERAL_BACKSLASH_N_REPAIRED
+              fi
+              current_pid="$raw"
+              return 0
+            fi
+            current_pid=""
+            return 1
           }
           report_factory() {
             local fpid="$1"
@@ -340,7 +361,7 @@ jobs:
           exec 9>"$ops/vps-only-launch-v2.lock"
           if ! flock -n 9; then
             echo FACTORY_LAUNCH_LOCK_BUSY
-            current_pid="$(cat "$pidfile" 2>/dev/null || true)"
+            normalize_existing_pidfile || true
             if pid_is_factory "$current_pid"; then
               report_factory "$current_pid"
               exit 0
@@ -354,7 +375,7 @@ jobs:
             ps -eo pid,ppid,args | grep -F 'vps-only-loop' | grep -v grep || true
             exit 1
           fi
-          current_pid="$(cat "$pidfile" 2>/dev/null || true)"
+          normalize_existing_pidfile || true
           if pid_is_factory "$current_pid"; then
             report_factory "$current_pid"
           elif [[ "$current_pid" =~ ^[0-9]+$ ]] && kill -0 "$current_pid" 2>/dev/null; then
@@ -382,7 +403,7 @@ jobs:
               exit 1
             fi
             nohup "$script" 9>&- </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
-            printf '%s\\n' "$!" > "$pidfile"
+            printf '%s\n' "$!" > "$pidfile"
             sleep 3
             current_pid="$(cat "$pidfile")"
             kill -0 "$current_pid"
