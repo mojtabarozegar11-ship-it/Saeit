@@ -13,8 +13,8 @@ on:
       - tests/test_mpw_support_qualified_lead_responder_20261026.py
       - .github/workflows/mpw-qualified-lead-replies-20261026.yml
   workflow_dispatch:
-  schedule:
-    - cron: '26 * * * *'
+  # Owner policy: do not send customer email without per-message approval.
+  # Scheduled mailbox inspection is handled by separate read-only workflows.
 permissions: {contents: read}
 concurrency:
   group: mpw-support-commercial-qualified-reply
@@ -42,7 +42,8 @@ jobs:
           PY
   live_qualified_replies:
     needs: contracts
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # Safe hold: never send until an explicit per-message approval mechanism is implemented.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
