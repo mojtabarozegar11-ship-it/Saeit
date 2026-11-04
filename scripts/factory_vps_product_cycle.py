@@ -442,7 +442,7 @@ def _maintain_product_slots(root, recipe_names):
     state = {"schema": SLOT_SCHEMA, "line_id": 41, "capacity": 1,
              "active": active, "waiting": queue, "exited": exited,
              "last_admitted_recipe": cursor,
-             "exit_rule": "exact signed 1000/1000 clearance plus authenticated hourly-cycle delivery",
+             "exit_rule": "AI-assisted documented 1000/1000 review plus real owner signature and authenticated receiver delivery",
              "cleanup_rule": "remove per-product intermediates only; retain certified artifact and proof"}
     _write_private_json(state_path, state)
     return [item["recipe"] for item in active]
