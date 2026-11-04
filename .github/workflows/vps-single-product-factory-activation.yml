@@ -37,18 +37,22 @@ jobs:
 
           singleton_path = Path("scripts/factory_global_singleton_v1.py")
           runner_path = Path("scripts/factory_vps_product_cycle.py")
-          if not singleton_path.is_file() or not runner_path.is_file():
+          checkpoint_path = Path("scripts/factory_private_checkpoint_v1.py")
+          if not all(p.is_file() for p in (singleton_path, runner_path, checkpoint_path)):
               raise SystemExit("F01_RELEASE_GUARD_SOURCE_MISSING")
           singleton = ast.parse(singleton_path.read_text(encoding="utf-8"))
           runner = ast.parse(runner_path.read_text(encoding="utf-8"))
+          checkpoint = ast.parse(checkpoint_path.read_text(encoding="utf-8"))
           singleton_functions = {n.name for n in singleton.body if isinstance(n, ast.FunctionDef)}
           runner_functions = {n.name for n in runner.body if isinstance(n, ast.FunctionDef)}
+          checkpoint_functions = {n.name for n in checkpoint.body if isinstance(n, ast.FunctionDef)}
           required_singleton = {"reserve_lane", "_require_foreign_lane_idle"}
           required_runner = {"_owner_signature_verifies", "_accepted_hourly_handoff", "_validated_ai_review", "_verified_quality_exit"}
           calls = {n.func.attr for n in ast.walk(runner)
                    if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
           if (not required_singleton.issubset(singleton_functions)
                   or not required_runner.issubset(runner_functions)
+                  or not {"snapshot", "verify", "_sqlite_copy"}.issubset(checkpoint_functions)
                   or "reserve_lane" not in calls):
               raise SystemExit("F01_LEGACY_RELEASE_RUNTIME_BLOCKED")
           print("F01_REQUIRED_RELEASE_SOURCE_PRESENT=PASS")
@@ -134,6 +138,7 @@ jobs:
           files=(
             scripts/factory_vps_product_cycle.py
             scripts/factory_global_singleton_v1.py
+            scripts/factory_private_checkpoint_v1.py
             scripts/factory_master_agent_genetics_v1.py
             scripts/factory_autonomous_portfolio.py
             scripts/factory_product_maker.py
@@ -165,6 +170,7 @@ jobs:
           install -d -m 700 "$stage"
           tar -xf - -C "$stage"
           test -f "$stage/scripts/factory_vps_product_cycle.py"
+          test -f "$stage/scripts/factory_private_checkpoint_v1.py"
           test -f "$stage/product_recipes/farm_enterprise_economics/calculator.py"
           if find "$stage" -type l | grep -q .; then
             echo F01_STAGED_SOURCE_SYMLINK >&2
@@ -282,11 +288,20 @@ jobs:
           cron_paused=0
           previous_moved=0
           swapped=0
+          data_cycle_started=0
           rollback_activation() {
             local status="$?"
             trap - EXIT
             if test "$completed" != 1; then
               echo F01_ACTIVATION_ROLLBACK_REQUESTED >&2
+              if test "$data_cycle_started" = 1; then
+                # The private DB/state may already contain committed writes.
+                # Keep the scheduler paused; never silently overwrite data or
+                # resume the older runtime against potentially newer state.
+                crontab "$cron_hold" || echo F01_QUARANTINE_CRON_PAUSE_FAILED >&2
+                echo F01_POST_CYCLE_QUARANTINE_MANUAL_RECONCILIATION_REQUIRED >&2
+                exit "$status"
+              fi
               exec 8>"$private/.single-product-cycle.lock"
               if flock -w 60 8; then
                 if test "$swapped" = 1 && test -d "$runtime" && test ! -L "$runtime"; then
@@ -316,6 +331,11 @@ jobs:
           cron_paused=1
           crontab "$cron_hold"
           test "$(crontab -l | grep -Fc 'SAEIT_SINGLE_PRODUCT_FACTORY_V1' || true)" -eq 0
+          test ! -L "$private/.production-cycle.lock"
+          exec 7>"$private/.production-cycle.lock"
+          flock -n 7 || { echo F01_DIRECT_FACTORY_CYCLE_BUSY >&2; exit 1; }
+          "$py" -B "$stage/scripts/factory_private_checkpoint_v1.py" snapshot --db "$db" --private "$private" --destination "$backup/data-checkpoint" --max-source-mib 512
+          "$py" -B "$stage/scripts/factory_private_checkpoint_v1.py" verify --checkpoint "$backup/data-checkpoint"
           if test -d "$runtime" && test ! -L "$runtime"; then
             # Same-filesystem rename retains the old runtime in full without
             # a duplicate compressed copy on a disk-constrained VPS.
@@ -329,18 +349,13 @@ jobs:
           swapped=1
           echo F01_ATOMIC_RUNTIME_SWAP_WITH_BACKUP=PASS
           runner="$runtime/run-single-product-cycle.sh"
+          data_cycle_started=1
           # Release the deployment lock before the new runner acquires it.
+          exec 7>&-
           exec 8>&-
           "$runner"
           # Only the runner holds the private flock. An outer flock on the same
           # path would make every scheduled child exit successfully without work.
-          cron_tmp="$ops/.single-product-cron.$$.tmp"
-          grep -vF 'SAEIT_SINGLE_PRODUCT_FACTORY_V1' "$backup/crontab.before" > "$cron_tmp" || true
-          printf '%s\n' "* * * * * /usr/bin/timeout 55s $runner >> $ops/single-product-cycle.log 2>&1 # SAEIT_SINGLE_PRODUCT_FACTORY_V1" >> "$cron_tmp"
-          chmod 600 "$cron_tmp"
-          crontab "$cron_tmp"
-          rm -f "$cron_tmp"
-          test "$(crontab -l | grep -Fc 'SAEIT_SINGLE_PRODUCT_FACTORY_V1')" -eq 1
           test -s "$private/production-state.json"
           "$py" -B - <<'PY'
           import json, pathlib
@@ -353,6 +368,15 @@ jobs:
           print("SINGLE_PRODUCT_PRIVATE_CYCLE=PASS")
           print("SINGLE_PRODUCT_PUBLICATION=LOCKED")
           PY
+          # Enable recurrence only after the first cycle and postconditions
+          # have passed. An unsuccessful first cycle cannot revive the cron.
+          cron_tmp="$ops/.single-product-cron.$$.tmp"
+          grep -vF 'SAEIT_SINGLE_PRODUCT_FACTORY_V1' "$backup/crontab.before" > "$cron_tmp" || true
+          printf '%s\n' "* * * * * /usr/bin/timeout 55s $runner >> $ops/single-product-cycle.log 2>&1 # SAEIT_SINGLE_PRODUCT_FACTORY_V1" >> "$cron_tmp"
+          chmod 600 "$cron_tmp"
+          crontab "$cron_tmp"
+          rm -f "$cron_tmp"
+          test "$(crontab -l | grep -Fc 'SAEIT_SINGLE_PRODUCT_FACTORY_V1')" -eq 1
           completed=1
           trap - EXIT
           echo SINGLE_PRODUCT_FACTORY_ACTIVATION=PASS
