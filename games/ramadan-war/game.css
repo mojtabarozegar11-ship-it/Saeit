@@ -53,3 +53,6 @@
 .arsenal #quickUpgrades{font:inherit;font-weight:700;border-radius:8px;padding:3px 7px;min-height:27px;border:1px solid #bfa86b77;background:#1b3335;color:var(--gold);white-space:nowrap;touch-action:manipulation}
 .arsenal #quickUpgrades:disabled{opacity:.7}
 .arsenal #quickUpgrades:not(:disabled){background:linear-gradient(135deg,#8a733e,#334336);border-color:#ffdf8a;box-shadow:0 0 12px #edcf873b}
+
+/* Accessible voluntary WebGL-free game route; independent save state. */
+.lowgraphics-entry{margin-top:8px}.lowgraphics-link{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:11px 16px;border:1px solid #6ac5b0;border-radius:12px;background:#153b39;color:#e6fff8;text-decoration:none;font-weight:700}.lowgraphics-link:hover{background:#21554f}.lowgraphics-link:focus-visible{outline:3px solid #ffd36b;outline-offset:3px}

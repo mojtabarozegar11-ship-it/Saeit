@@ -140,6 +140,7 @@ jobs:
           timeout 45s ssh -T -F "$d/config" host "install -d -m 700 '$stage/incoming/three-addons/loaders' '$stage/incoming/three-addons/utils' '$stage/incoming/three-addons/libs'"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/deploy.py "host:$stage/incoming/deploy.py"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/index.html "host:$stage/incoming/index.html"
+          timeout 50s scp -q -F "$d/config" games/ramadan-war/low-graphics.html "host:$stage/incoming/low-graphics.html"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/route.htaccess "host:$stage/incoming/.htaccess"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/game.js "host:$stage/incoming/game.js"
           timeout 50s scp -q -F "$d/config" games/ramadan-war/upgrade-policy.mjs "host:$stage/incoming/upgrade-policy.mjs"
