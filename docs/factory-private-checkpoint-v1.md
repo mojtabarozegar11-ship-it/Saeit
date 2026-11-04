@@ -167,3 +167,41 @@ private records, or live off-host restore receipt was created in this cycle.
 
 **Hard HOLD:** No external destination is approved, no independent signing
 credential has been provisioned, and no live factory release is authorized.
+
+## Sealed-copy receipt binding (cycle 17, source-only)
+
+The additive `factory_offhost_sealed_receipt_v1.py` closes the difference
+between a signed plaintext-only rehearsal and proof tied to the *specific*
+encrypted artifact:
+
+1. On the separately administered recovery host, after an actual encrypted
+   copy arrives, run `rehearse-sealed --bundle RECEIVED_CIPHERTEXT
+   --private-key OFFHOST_DECRYPTION_KEY --recipient-pin PIN
+   --backup-host-id PINNED_HOST_ID --work-parent PRIVATE_0700_DIRECTORY
+   --receipt PRIVATE_UNSIGNED_RECEIPT`. This authenticates AES-GCM, reconstructs
+   the verified checkpoint under a private temporary directory, independently
+   rehearses all private file extraction and SQLite integrity, and checks the
+   ciphertext has not changed during the operation. The unsigned receipt
+   includes ciphertext SHA-256 and byte size, checkpoint hashes and restored
+   counts, recipient fingerprint, off-host identity, UTC timestamp, and an
+   explicit prohibition on automatic restore.
+2. A separately controlled administrator must sign the exact new receipt
+   bytes with the **independent recovery-signing private key**. This signing
+   credential is distinct from the RSA decryption key and is never placed on
+   the factory VPS or in GitHub. This script deliberately cannot sign.
+3. On the VPS, run `verify-signed --checkpoint LOCAL_CHECKPOINT
+   --bundle LOCAL_CIPHERTEXT --receipt SIGNED_RECEIPT
+   --signature SIGNATURE --signer-public-key ROOT_PINNED_SIGNER_PUBLIC
+   --expected-host-id PINNED_HOST_ID --recipient-pin PIN`. The verifier checks
+   signature first, rejects unrecognized fields and stale times, then binds
+   exact ciphertext identity and plaintext manifest/database/archive hashes
+   to the signed off-host result. Production requires a root-owned protected
+   signer public key.
+
+Neither a local encryption round trip nor a self-entered `backup_host_id`
+alone proves independent control. The true signer's public key, actual remote
+host identity, separate encryption key custody, available disk quota, and
+physical off-VPS restoration must all be established independently. A
+successfully signed receipt is only one prerequisite; it is not owner release
+approval, permission to overwrite later database writes, or permission to
+start the factory. No remote key or production data was handled in cycle 17.
