@@ -491,6 +491,7 @@ jobs:
           echo "PASSENGER_TOUCH_RESTART=done"
           cd "$app"
           if ! "$passenger_python" - <<'PY'
+          import os
           import traceback
           from django.apps.registry import Apps
           original_populate = Apps.populate
