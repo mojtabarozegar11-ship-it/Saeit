@@ -450,3 +450,5 @@ jobs:
 # Owner-requested existing-loop activation check: VPS factory, 2026-10-16.
 # Owner-requested read-only VPS capacity remeasurement (2026-10-29).
 # [factory-readonly-audit-20261029]
+
+# [factory-run-existing-diagnostics]
