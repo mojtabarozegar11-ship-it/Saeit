@@ -304,6 +304,12 @@ jobs:
               print("FACTORY_MASTER_HANDLE_HAS_VAR_KW=" + str(any(
                   param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())).lower())
               print("FACTORY_DJANGO_CALL_COMMAND_SIGNATURE=" + str(inspect.signature(call_command)))
+              print("FACTORY_MASTER_HANDLE_SIGNATURE=" + str(signature))
+              method_lines, first_line = inspect.getsourcelines(MasterCommand.handle)
+              for offset, line in enumerate(method_lines[:180]):
+                  if re.search(r"(?i)(password|secret|token|api_key|private_key)", line):
+                      continue
+                  print(f"FACTORY_MASTER_HANDLE_CODE {first_line + offset}:{line.rstrip()[:180]}")
           except Exception as exc:
               print("FACTORY_MASTER_HANDLE_INSPECTION_ERROR=" + type(exc).__name__)
           from django.apps import apps
@@ -453,3 +459,4 @@ jobs:
 
 # [factory-run-existing-diagnostics]
 # [factory-run-existing-diagnostics2]
+# [factory-run-existing-diagnostics3]
