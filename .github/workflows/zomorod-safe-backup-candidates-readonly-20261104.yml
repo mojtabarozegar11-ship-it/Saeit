@@ -1,0 +1,111 @@
+name: Zomorod safe backup transfer candidates metadata only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-safe-backup-candidates-readonly-20261104.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-safe-backup-candidates-readonly-20261104
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: List backup group sizes and safe-to-transfer file metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import os,subprocess,time
+          from pathlib import Path
+          root=Path("/home/zomorod2")
+          assert Path.home()==root and root.is_dir()
+          for relative in (".backups",".npm","Saeit/backups"):
+              target=root/relative
+              if not target.is_dir() or target.is_symlink():
+                  print("TARGET_SKIPPED="+relative);continue
+              p=subprocess.run(["du","-x","-k","--max-depth=1",str(target)],capture_output=True,text=True,timeout=180)
+              if p.returncode:print("DU_INCOMPLETE="+relative)
+              entries=[]
+              for line in p.stdout.splitlines():
+                  cells=line.split(None,1)
+                  if len(cells)!=2:continue
+                  try:size=int(cells[0])
+                  except ValueError:continue
+                  path=Path(cells[1])
+                  if path==target:print("ROOT_KIB="+relative+":"+str(size))
+                  elif path.parent==target:entries.append((size,path.name))
+              for size,name in sorted(entries,reverse=True)[:25]:
+                  print("CHILD_KIB="+relative+":"+name+":"+str(size))
+              if relative!=".npm":
+                  find=subprocess.run(["timeout","55s","find",str(target),"-xdev","-type","f","-size","+100M","-printf","%s %T@ %p\\n"],capture_output=True,text=True,timeout=65)
+                  candidates=[]
+                  for line in find.stdout.splitlines():
+                      parts=line.split(" ",2)
+                      if len(parts)!=3:continue
+                      try:size=int(parts[0]);epoch=float(parts[1]);path=Path(parts[2])
+                      except ValueError:continue
+                      if path.is_relative_to(target):
+                          candidates.append((size,str(path.relative_to(root)),time.strftime("%Y-%m-%d",time.gmtime(epoch))))
+                  for size,path,modified in sorted(candidates,reverse=True)[:20]:
+                      print("BACKUP_FILE_BYTES="+str(size)+" modified="+modified+" path="+path)
+                  if find.returncode:print("FIND_INCOMPLETE="+relative)
+          print("BACKUP_TRANSFER_CANDIDATES_AUDITED=yes")
+          PY
+      - name: Remove runner-only SSH files
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          if test -d "$d"; then rm -rf -- "$d"; fi
