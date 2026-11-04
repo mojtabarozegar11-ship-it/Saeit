@@ -80,7 +80,7 @@ jobs:
           if p.returncode:print("HOME_DU_WARN="+str(p.returncode))
           entries=[]
           for line in p.stdout.splitlines():
-              cells=line.split("\\t",1)
+              cells=line.split(None,1)
               if len(cells)!=2:continue
               try:size=int(cells[0])
               except ValueError:continue
@@ -98,7 +98,7 @@ jobs:
               cmd=["timeout","35s","find",str(target),"-xdev","-type","f","-size","+150M","-printf","%s\\t%p\\n"]
               proc=subprocess.run(cmd,capture_output=True,text=True,timeout=42)
               for line in proc.stdout.splitlines():
-                  try: size_str,path=line.split("\\t",1);size=int(size_str)
+                  try: size_str,path=line.split(None,1);size=int(size_str)
                   except ValueError:continue
                   if Path(path).is_relative_to(target):files.append((size,str(Path(path).relative_to(root))))
               if proc.returncode:print("LARGE_FILE_SCAN_INCOMPLETE="+base)
