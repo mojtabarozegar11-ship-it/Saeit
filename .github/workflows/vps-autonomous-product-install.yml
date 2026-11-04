@@ -73,6 +73,13 @@ on:
       - "tests/test_factory_measured_qa.py"
       - ".github/workflows/vps-autonomous-product-install.yml"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Stage reviewed source or inspect server access and competing schedulers"
+        required: false
+        type: choice
+        default: stage
+        options: [stage, preflight]
 permissions:
   contents: read
 concurrency:
@@ -80,6 +87,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   measured-qa:
+    if: github.event_name != 'workflow_dispatch' || inputs.mode != 'preflight'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -399,7 +407,7 @@ jobs:
     # One-time transfer of reviewed public source ONLY. No runtime install,
     # product admission, crontab, service, invoice, or private data changes.
     needs: measured-qa
-    if: github.event_name == 'workflow_dispatch' && github.ref_name == 'feature/factory-ai-owner-release-20261104'
+    if: github.event_name == 'workflow_dispatch' && github.ref_name == 'feature/factory-ai-owner-release-20261104' && inputs.mode != 'preflight'
     runs-on: ubuntu-latest
     timeout-minutes: 7
     steps:
@@ -436,3 +444,99 @@ jobs:
           echo "FACTORY_AI_OWNER_POLICY_STAGED_SHA=$GITHUB_SHA"
           echo "FACTORY_AI_OWNER_POLICY_INTEGRITY=PASS"
           echo "FACTORY_AI_OWNER_RUNTIME_ACTIVATION=NOT_ATTEMPTED"
+
+  read-only-trust-and-scheduler-preflight:
+    # No product mutation, service toggles, root escalation, or key disclosure.
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'preflight' && github.ref_name == 'feature/factory-ai-owner-release-20261104'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Pinned SSH read-only inventory, metadata only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          scratch="$RUNNER_TEMP/factory-preflight"
+          mkdir -m 700 -p "$scratch"
+          trap 'rm -f "$scratch/key" "$scratch/known"; rmdir "$scratch" 2>/dev/null || :' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$scratch/key"
+          chmod 600 "$scratch/key"
+          ssh-keygen -y -P "" -f "$scratch/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$scratch/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$scratch/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh -i "$scratch/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$scratch/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -B -' <<'PYAUDIT'
+          import json,os,stat,subprocess
+          from pathlib import Path
+
+          def flag(label,yes):
+              print(label+"="+("YES" if yes else "NO"))
+
+          def admin_safe(p,dir=False):
+              try:
+                  m=p.lstat()
+                  return not p.is_symlink() and m.st_uid==0 and (m.st_mode&0o022)==0 and (stat.S_ISDIR(m.st_mode) if dir else stat.S_ISREG(m.st_mode))
+              except OSError:
+                  return False
+
+          def state(p):
+              if p.is_symlink():
+                  return "UNSAFE_SYMLINK",None
+              try:
+                  if not p.is_file() or p.stat().st_size>2000000:
+                      return "MISSING_OR_UNSAFE",None
+                  d=json.loads(p.read_text(encoding="utf-8"))
+                  return ("READABLE",d) if isinstance(d,dict) else ("INVALID",None)
+              except (OSError,UnicodeError,ValueError):
+                  return "UNREADABLE",None
+
+          print("FACTORY_AUDIT_MODE=READ_ONLY")
+          print("FACTORY_AUDIT_UID="+str(os.geteuid()))
+          owner=Path("/etc/saeit/factory-owner-approval-public-keys")
+          flag("FACTORY_OWNER_PUBLIC_KEY_ADMIN_PROTECTED",all(admin_safe(p,dir=True) for p in (Path("/etc"),Path("/etc/saeit"),owner)) and admin_safe(owner/"owner.pem"))
+          recv=Path("/etc/saeit/hourly-cycle-receiver-public-keys")
+          recv_ok=all(admin_safe(p,dir=True) for p in (Path("/etc"),Path("/etc/saeit"),recv))
+          flag("FACTORY_RECEIVER_KEY_DIR_ADMIN_PROTECTED",recv_ok)
+          print("FACTORY_RECEIVER_KEY_COUNT="+str(sum(admin_safe(p) for p in recv.glob("*.pem")) if recv_ok else 0))
+          print("FACTORY_OWNER_IDENTITY_ATTESTATION=UNVERIFIED_BY_METADATA")
+          root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
+          name,d=state(root/"production-instructions/stage-06/strict-serial-active-v1.json")
+          print("FACTORY_AGRI200_STATE="+name)
+          if d is not None:
+              flag("FACTORY_AGRI200_ACTIVE_ORDER_PRESENT",d.get("active_order") is not None)
+              flag("FACTORY_AGRI200_ALL_COMPLETE",d.get("all_complete") is True)
+          name,d=state(root/"quality-excellence/product-flow/active-slots/current.json")
+          print("FACTORY_LINE41_STATE="+name)
+          if d is not None:
+              v=d.get("active")
+              print("FACTORY_LINE41_ACTIVE_COUNT="+str(len(v)) if isinstance(v,list) else "FACTORY_LINE41_ACTIVE_COUNT=UNKNOWN")
+          name,d=state(root/".f01-global-production-lane.json")
+          print("FACTORY_GLOBAL_LANE_STATE="+name)
+          if d is not None:
+              v=d.get("owner")
+              print("FACTORY_GLOBAL_LANE_OWNER="+str(v) if v in ("agri200","line41",None) else "FACTORY_GLOBAL_LANE_OWNER=UNKNOWN")
+          for who,cmd in (("USER",["crontab","-l"]),("ROOT",["sudo","-n","crontab","-l","-u","root"])):
+              try:
+                  r=subprocess.run(cmd,capture_output=True,text=True,timeout=6)
+                  if r.returncode==0:
+                      lines=(s for s in r.stdout.splitlines() if s.strip() and not s.lstrip().startswith("#"))
+                      print("FACTORY_"+who+"_CRON_READABLE=YES")
+                      print("FACTORY_"+who+"_CRON_RELATED_COUNT="+str(sum("factory" in s.lower() or "agri" in s.lower() for s in lines)))
+                  else:
+                      print("FACTORY_"+who+"_CRON_READABLE=NO")
+              except (OSError,subprocess.TimeoutExpired):
+                  print("FACTORY_"+who+"_CRON_READABLE=NO")
+          for who,cmd in (("SYSTEM",["systemctl","list-timers","--all","--no-pager","--no-legend"]),("USER",["systemctl","--user","list-timers","--all","--no-pager","--no-legend"])):
+              try:
+                  r=subprocess.run(cmd,capture_output=True,text=True,timeout=6)
+                  if r.returncode==0:
+                      print("FACTORY_"+who+"_TIMER_RELATED_COUNT="+str(sum("factory" in s.lower() or "agri" in s.lower() for s in r.stdout.splitlines())))
+                  else:
+                      print("FACTORY_"+who+"_TIMERS=UNAVAILABLE")
+              except (OSError,subprocess.TimeoutExpired):
+                  print("FACTORY_"+who+"_TIMERS=UNAVAILABLE")
+          print("FACTORY_AUDIT_MUTATIONS=ZERO")
+          print("FACTORY_RUNTIME_ACTIVATION=NOT_ATTEMPTED")
+          PYAUDIT
