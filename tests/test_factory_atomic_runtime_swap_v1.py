@@ -5,7 +5,9 @@ never contact the VPS or modify the host's real scheduler.
 """
 
 from pathlib import Path
+import sqlite3
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -41,6 +43,11 @@ class AtomicRuntimeSwapTests(unittest.TestCase):
         self.backup = self.ops / "backups" / "single-product-runtime-test"
         self.private = self.root / "private"
         self.private.mkdir()
+        (self.private / "production-state.json").write_text('{"publishable_product_count":0}')
+        self.db = self.root / "factory.sqlite3"
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("CREATE TABLE factory_orders (id INTEGER PRIMARY KEY)")
+            conn.execute("INSERT INTO factory_orders (id) VALUES (1)")
         self.runtime.mkdir(parents=True)
         self.next.mkdir()
         self.backup.mkdir(parents=True)
@@ -62,6 +69,9 @@ runtime={str(self.runtime)!r}
 runtime_next={str(self.next)!r}
 backup={str(self.backup)!r}
 private={str(self.private)!r}
+py={sys.executable!r}
+db={str(self.db)!r}
+stage={str(WORKFLOW.parents[2])!r}
 stamp=test
 fake_cron={str(self.fake_cron)!r}
 crontab() {{
@@ -101,6 +111,7 @@ crontab() {{
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((self.runtime / "version").read_text(), "new")
         self.assertEqual((self.backup / "runtime-before" / "version").read_text(), "old")
+        self.assertTrue((self.backup / "data-checkpoint" / "manifest.json").is_file())
         self.assertNotIn(MARKER, self.fake_cron.read_text())
 
     def test_failure_after_pausing_cron_restores_old_scheduler(self):
@@ -134,6 +145,15 @@ crontab() {{
         self.assertFalse(self.runtime.exists())
         self.assertEqual((self.backup / "runtime-rejected" / "version").read_text(), "new")
         self.assertEqual(self.fake_cron.read_text(), self.initial_cron)
+
+    def test_post_cycle_failure_quarantines_without_reverting_mutable_state(self):
+        shell = self.transaction + "\ndata_cycle_started=1\nexit 42"
+        result = self.run_transaction(shell)
+        self.assertEqual(result.returncode, 42, result.stderr)
+        self.assertEqual((self.runtime / "version").read_text(), "new")
+        self.assertEqual((self.backup / "runtime-before" / "version").read_text(), "old")
+        self.assertNotIn(MARKER, self.fake_cron.read_text())
+        self.assertIn("F01_POST_CYCLE_QUARANTINE", result.stderr)
 
 
 if __name__ == "__main__":
