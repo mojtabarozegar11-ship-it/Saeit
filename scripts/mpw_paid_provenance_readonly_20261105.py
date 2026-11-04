@@ -37,12 +37,15 @@ def fulfillment_for_order(order_id):
             records = model.objects.filter(order_id=order_id)
         elif "order_item" in fields:
             records = model.objects.filter(order_item__order_id=order_id)
+        elif "item" in fields:
+            records = model.objects.filter(item__order_id=order_id)
         else:
             return {"linkage": "not_available", "ready": None, "total": None}
         total = records.count()
         if "status" in fields:
             ready = records.filter(status__iexact="ready").count()
-            return {"linkage": "order", "ready": ready, "total": total}
+            statuses = dict(Counter(str(value)[:48] for value in records.values_list("status", flat=True)[:50]))
+            return {"linkage": "order_or_item", "ready": ready, "total": total, "status_counts": statuses}
         return {"linkage": "order", "ready": None, "total": total}
     except (LookupError, AttributeError, TypeError, ValueError):
         return {"linkage": "not_available", "ready": None, "total": None}
