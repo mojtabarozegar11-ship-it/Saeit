@@ -219,7 +219,44 @@ jobs:
           staged_recipe="$runtime/product_recipes/.farm_enterprise_economics.next.$stamp"
           test ! -e "$staged_recipe"
           install -d -m 700 "$staged_recipe"
-          find "$stage/product_recipes/farm_enterprise_economics" -type f -exec install -m 600 {} "$staged_recipe/" \;
+          # Preserve the full recipe tree: flattening nested paths can overwrite
+          # equally named files and silently corrupt a commercial product.
+          python3 - "$stage/product_recipes/farm_enterprise_economics" "$staged_recipe" <<'COPY_RECIPE'
+          import os
+          import shutil
+          import stat
+          import sys
+          from pathlib import Path
+
+          source, target = (Path(arg) for arg in sys.argv[1:])
+          if (source.is_symlink() or not source.is_dir()
+                  or target.is_symlink() or not target.is_dir()
+                  or any(target.iterdir())):
+              raise SystemExit("F01_RECIPE_TREE_UNSAFE")
+          count = 0
+          for parent, dirs, files in os.walk(source, topdown=True, followlinks=False):
+              dirs.sort()
+              files.sort()
+              source_parent = Path(parent)
+              relative = source_parent.relative_to(source)
+              for name in dirs:
+                  source_dir = source_parent / name
+                  if source_dir.is_symlink() or not source_dir.is_dir():
+                      raise SystemExit("F01_RECIPE_SYMLINK_OR_SPECIAL_DIR")
+                  (target / relative / name).mkdir(mode=0o700)
+              for name in files:
+                  source_file = source_parent / name
+                  if not stat.S_ISREG(source_file.lstat().st_mode):
+                      raise SystemExit("F01_RECIPE_SYMLINK_OR_SPECIAL_FILE")
+                  destination = target / relative / name
+                  with source_file.open("rb") as reader, destination.open("xb") as writer:
+                      shutil.copyfileobj(reader, writer, length=1024 * 1024)
+                  destination.chmod(0o600)
+                  count += 1
+          if count < 2:
+              raise SystemExit("F01_RECIPE_TREE_INCOMPLETE")
+          print(f"F01_RECIPE_FILES_PRESERVED={count}")
+          COPY_RECIPE
           test -f "$staged_recipe/calculator.py" && test -f "$staged_recipe/test_calculator.py"
           if test -d "$recipe_target" && test ! -L "$recipe_target"; then
             mv "$recipe_target" "$backup/recipe-before"
