@@ -3,10 +3,35 @@ const Token = artifacts.require('MOJ7');
 const SUPPLY = '1000000000000000000';
 const MAX = ((2n ** 256n)-1n).toString();
 const ZERO = '410000000000000000000000000000000000000000';
-async function mustRevert(p) {
-  let failed = false;
-  try { await p; } catch (e) { failed = true; }
-  assert(failed, 'transaction must revert');
+async function mustRevert(promise) {
+  let result;
+  let rejected;
+  try {
+    result = await promise;
+  } catch (error) {
+    rejected = error;
+  }
+  if (rejected) {
+    assert(/revert|execution reverted|contract revert/i.test(String(rejected.message)),
+      'Unexpected transaction error (not an explicit REVERT): ' + String(rejected.message).slice(0,400));
+    return;
+  }
+  const isTxid = x => typeof x === 'string' && /^[a-fA-F0-9]{64}$/.test(x.replace(/^0x/, ''));
+  const txid = isTxid(result) ? result.replace(/^0x/, '') :
+    [result?.txID, result?.txid, result?.transactionHash,
+     result?.receipt?.txID, result?.receipt?.transactionHash]
+      .find(isTxid);
+  assert(txid, 'No transaction ID returned; refusing to assume revert, shape=' +
+    (result && typeof result === 'object' ? Object.keys(result).slice(0,20).join(',') : typeof result));
+  let receiptInfo;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    receiptInfo = await tronWrap.trx.getTransactionInfo(txid);
+    if (receiptInfo?.receipt?.result) break;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  assert(receiptInfo?.receipt?.result, 'Missing receipt for tx=' + txid);
+  assert.equal(receiptInfo.receipt.result, 'REVERT',
+    'Expected REVERT; received ' + receiptInfo.receipt.result + ' tx=' + txid);
 }
 contract('MOJ7 local TRE integration', accounts => {
   let token;
