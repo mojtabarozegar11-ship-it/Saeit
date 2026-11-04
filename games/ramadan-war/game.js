@@ -7,7 +7,7 @@ import {MOJ1_COMMERCE} from './moj1-commerce-policy.mjs';
 import {isInteractiveTarget, keyboardAction, isKeyboardOrAssistiveClick, isPrimaryGameplayPress, isModifiedOrComposingKey, shouldReleaseHeldKeysOnFocus, isFireHeld, joystickAxes, boundedJoystickPointer, normalizeMovementAxes, resolveMovementAxes, canCaptureGameplayPointer, isOwnedGameplayPointer, recordPointerGestureMovement, boundedAimMotion, playerSpaceClear, shouldFireCanvasClick, movePlayerWithCollision} from './input-guard.mjs';
 import {removeEnemyAndRetargetMissiles,missilePathBlocked,missileMotionValid,blastDamageFactor} from './missile-targets.mjs';
 import {canEnemyAct,restoreEnemyRuntime,advanceHostileProjectile,shouldCleanupEnemy,activateTimeStop,advanceTimeStop} from './enemy-action-policy.mjs';
-import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, restoreEnemyPositions, parseCampaignSave, resumeCampaignScreen, readHeroChoice, campaignSaveDisposition, storageRead, storageWrite, storageRemove} from './save-validation.mjs';
+import {validateCampaignSave, boundedCampaignPickups, restoreRecoveryPickups, reconcileBossEncounter, restorePlayerPosition, restoreEnemyPositions, parseCampaignSave, resumeCampaignScreen, readHeroChoice, campaignSaveDisposition, confirmedImportedCampaignSnapshot, storageRead, storageWrite, storageRemove} from './save-validation.mjs';
 import {makeCampaignBackup,readCampaignBackup,MAX_CAMPAIGN_BACKUP_BYTES} from './campaign-backup.mjs';
 import {readAimSensitivity,aimMultiplier,nextAimSensitivity,aimSensitivityLabel} from './aim-sensitivity.mjs';
 import {copyCampaignBackupToClipboard} from './backup-clipboard.mjs';
@@ -317,7 +317,16 @@ if(foreignSaveDetected||(lastSavedSnapshot!==undefined&&priorSave!==lastSavedSna
   toast(rolledBack?'بازیابی این فایل ممکن نشد؛ ذخیرهٔ قبلی محفوظ ماند':'بازیابی ناموفق بود و بازگردانی ذخیرهٔ قبلی نیز ناموفق شد؛ از صفحه خارج نشوید و پشتیبان بگیرید');
   return;
  }
- saveStatus='saved';lastSavedSnapshot=imported;foreignSaveDetected=false;storageWrite('rwHero',hero);updateHome();toast('پشتیبان بازیابی شد و نبرد آمادهٔ ادامه است');
+ // A cleared-stage restore can re-save a normalized snapshot in showResult().
+ // Keep that verified version instead of resetting the baseline to the older
+ // imported bytes, which would incorrectly trip the cross-tab conflict guard.
+ const confirmed=confirmedImportedCampaignSnapshot(lastSavedSnapshot,storageRead(saveKey),saveStatus);
+ if(confirmed===null){
+  saveStatus='failed';
+  toast('بازیابی در حافظه انجام شد ولی ذخیرهٔ مرورگر تأیید نشد؛ از پیشرفت پشتیبان بگیرید');
+  return;
+ }
+ lastSavedSnapshot=confirmed;foreignSaveDetected=false;storageWrite('rwHero',hero);updateHome();toast('پشتیبان بازیابی شد و نبرد آمادهٔ ادامه است');
 
 }
 $('#survival').onclick=()=>{if(!confirmCampaignReplacement('survival'))return;newWorld(true)};$('#pause').onclick=()=>{save();showScreen('pausePanel')};$('#resume').onclick=()=>{if(!canEnterGameplay(graphicsUnavailable,document.hidden)){updatePauseSaveStatus();return}showScreen('game');last=performance.now();scheduleFrame()};$('#reloadGraphics').onclick=()=>{if(!canReloadGraphics(graphicsUnavailable,saveStatus)){updatePauseSaveStatus();return}location.reload()};function openUpgradePanel(){if(!world)return;if(screen==='game')save();$('#upgradePoints').textContent=fa(world.points);$('#upgradePoints2').textContent=fa(world.points);showScreen('upgradePanel');updateUpgradeButtons();$('#moj1Status').textContent='خرید با '+MOJ1_COMMERCE.asset+' فعلاً غیرفعال است؛ امتیازهای ارتقا فقط در بازی به‌دست می‌آیند.'}$('#openUpgrades').onclick=openUpgradePanel;$('#quickUpgrades').onclick=openUpgradePanel;$('#upgradeBack').onclick=()=>{showScreen('game');last=performance.now();scheduleFrame()};document.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>upgrade(+b.dataset.up));$('#goHome').onclick=()=>{save();showScreen('home')};$('#continue').onclick=nextMission;$('#retry').onclick=()=>{if(!confirmCampaignReplacement('retry'))return;newWorld(false)};$('#resultHome').onclick=modalResultHome;$('#rocket').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;e.preventDefault();launchRocket()};$('#rocket').onclick=e=>{if(isKeyboardOrAssistiveClick(e))launchRocket()};$('#drone').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;e.preventDefault();droneStrike()};$('#drone').onclick=e=>{if(isKeyboardOrAssistiveClick(e))droneStrike()};$('#special').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;e.preventDefault();special()};$('#special').onclick=e=>{if(isKeyboardOrAssistiveClick(e))special()};$('#fire').onpointerdown=e=>{if(!isPrimaryGameplayPress(e)||!canCaptureGameplayPointer(fireId,e.pointerId,screen))return;e.preventDefault();fireId=e.pointerId;try{$('#fire').setPointerCapture(e.pointerId)}catch(_){fireId=null;return}updateHeldFire();fire()};function endFire(e){if(!isOwnedGameplayPointer(fireId,e.pointerId))return;fireId=null;updateHeldFire()}$('#fire').onpointerup=$('#fire').onpointercancel=$('#fire').onlostpointercapture=endFire;$('#fire').onclick=e=>{if(isKeyboardOrAssistiveClick(e))fire()};$('#interact').onpointerdown=e=>{if(!isPrimaryGameplayPress(e))return;e.preventDefault();interactObjective()};$('#interact').onclick=e=>{if(isKeyboardOrAssistiveClick(e))interactObjective()};
@@ -411,3 +420,4 @@ if(qaIsLocal)Object.assign(debugApi,{
 });
 window.RamadanWarDebug=Object.freeze(debugApi);if(hasResumableCampaignInMemory()||storageRead(saveKey))$('#start').textContent='ادامهٔ نبرد';showScreen('home');engine.build({hero:0,mission:0,x:2.5,y:7.5,angle:.08,muzzle:0,enemies:[],missiles:[]},tile);engine.render(null,0)
 })();
+
