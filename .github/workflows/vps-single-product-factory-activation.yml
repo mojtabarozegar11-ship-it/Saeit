@@ -201,23 +201,17 @@ jobs:
           backup="$ops/backups/single-product-runtime-$stamp"
           install -d -m 700 "$backup"
           crontab -l > "$backup/crontab.before" 2>/dev/null || : > "$backup/crontab.before"
-          if test -d "$runtime" && test ! -L "$runtime"; then
-            tar -czf "$backup/runtime-before.tar.gz" -C "$ops" single-product-runtime
-            chmod 600 "$backup/runtime-before.tar.gz"
-          fi
-          # Hold the VPS-local lock through runtime cutover; never race cron.
-          test ! -L "$private/.single-product-cycle.lock"
-          exec 8>"$private/.single-product-cycle.lock"
-          flock -n 8 || { echo F01_EXISTING_PRODUCTION_CYCLE_BUSY >&2; exit 1; }
-          install -d -m 700 "$runtime/scripts" "$runtime/factory_config" "$runtime/product_recipes"
+          # Assemble an entire new runtime while the live runtime is untouched.
+          # Every path is on the same operations filesystem for atomic rename.
+          runtime_next="$ops/.single-product-runtime.next.$stamp"
+          test ! -e "$runtime_next" && test ! -L "$runtime_next"
+          install -d -m 700 "$runtime_next/scripts" "$runtime_next/factory_config" "$runtime_next/product_recipes"
           for f in "$stage/scripts/"*.py; do
-            test -f "$f" && test ! -L "$f" && install -m 600 "$f" "$runtime/scripts/$(basename "$f")"
+            test -f "$f" && test ! -L "$f" && install -m 600 "$f" "$runtime_next/scripts/$(basename "$f")"
           done
-          install -m 600 "$stage/factory_config/design_opportunities.json" "$runtime/factory_config/design_opportunities.json"
-          install -m 600 "$stage/factory_config/internal_design_supply.json" "$runtime/factory_config/internal_design_supply.json"
-          recipe_target="$runtime/product_recipes/farm_enterprise_economics"
-          staged_recipe="$runtime/product_recipes/.farm_enterprise_economics.next.$stamp"
-          test ! -e "$staged_recipe"
+          install -m 600 "$stage/factory_config/design_opportunities.json" "$runtime_next/factory_config/design_opportunities.json"
+          install -m 600 "$stage/factory_config/internal_design_supply.json" "$runtime_next/factory_config/internal_design_supply.json"
+          staged_recipe="$runtime_next/product_recipes/farm_enterprise_economics"
           install -d -m 700 "$staged_recipe"
           # Preserve the full recipe tree: flattening nested paths can overwrite
           # equally named files and silently corrupt a commercial product.
@@ -258,23 +252,9 @@ jobs:
           print(f"F01_RECIPE_FILES_PRESERVED={count}")
           COPY_RECIPE
           test -f "$staged_recipe/calculator.py" && test -f "$staged_recipe/test_calculator.py"
-          if test -d "$recipe_target" && test ! -L "$recipe_target"; then
-            mv "$recipe_target" "$backup/recipe-before"
-          elif test -e "$recipe_target"; then
-            echo F01_EXISTING_RECIPE_UNSAFE >&2
-            exit 1
-          fi
-          if ! mv "$staged_recipe" "$recipe_target"; then
-            if test -d "$backup/recipe-before" && ! test -e "$recipe_target"; then
-              mv "$backup/recipe-before" "$recipe_target"
-            fi
-            echo F01_RECIPE_REPLACEMENT_ROLLED_BACK >&2
-            exit 1
-          fi
-          echo F01_RECIPE_REPLACEMENT_WITH_PRESERVED_BACKUP=PASS
-          test -f "$runtime/scripts/factory_vps_product_cycle.py"
-          "$py" -B -c 'import ast,pathlib; ast.parse(pathlib.Path("'"$runtime"'/scripts/factory_vps_product_cycle.py").read_text())'
-          runner="$runtime/run-single-product-cycle.sh"
+          test -f "$runtime_next/scripts/factory_vps_product_cycle.py"
+          "$py" -B -c 'import ast,pathlib; ast.parse(pathlib.Path("'"$runtime_next"'/scripts/factory_vps_product_cycle.py").read_text())'
+          runner="$runtime_next/run-single-product-cycle.sh"
           python3 - "$runner" "$py" "$db" "$runtime" "$private" <<'PY'
           from pathlib import Path
           import sys
@@ -283,7 +263,7 @@ jobs:
           set -euo pipefail
           umask 077
           exec 9>"{private}/.single-product-cycle.lock"
-          flock -n 9 || exit 0
+          flock -n 9 || exit 75
           export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
           "{py}" -B "{runtime}/scripts/factory_research_triage.py" --out "{private}"
           exec "{py}" -B "{runtime}/scripts/factory_vps_product_cycle.py" --db "{db}" --out "{private}" --recipes "{runtime}/product_recipes" --max-products 1 --max-recipes 1 --no-enable-designer --no-enable-design-intake --no-enable-invention-supply
@@ -292,7 +272,64 @@ jobs:
           path_obj.write_text(text)
           path_obj.chmod(0o700)
           PY
-          # Release the deployment lock before the runner acquires it on fd 9.
+          bash -n "$runner"
+          # Hold the lock, pause only our marked cron entry, then atomically
+          # cut over the complete runtime. On failure restore code and cron.
+          test ! -L "$private/.single-product-cycle.lock"
+          exec 8>"$private/.single-product-cycle.lock"
+          flock -n 8 || { echo F01_EXISTING_PRODUCTION_CYCLE_BUSY >&2; exit 1; }
+          completed=0
+          cron_paused=0
+          previous_moved=0
+          swapped=0
+          rollback_activation() {
+            local status="$?"
+            trap - EXIT
+            if test "$completed" != 1; then
+              echo F01_ACTIVATION_ROLLBACK_REQUESTED >&2
+              exec 8>"$private/.single-product-cycle.lock"
+              if flock -w 60 8; then
+                if test "$swapped" = 1 && test -d "$runtime" && test ! -L "$runtime"; then
+                  mv -T "$runtime" "$backup/runtime-rejected" || echo F01_REJECTED_RUNTIME_MOVE_FAILED >&2
+                fi
+                restored=0
+                if test "$previous_moved" = 1; then
+                  if test ! -e "$runtime" && mv -T "$backup/runtime-before" "$runtime"; then
+                    restored=1
+                  fi
+                elif test ! -e "$runtime" || { test -d "$runtime" && test ! -L "$runtime"; }; then
+                  restored=1
+                fi
+                if test "$cron_paused" = 1 && test "$restored" = 1; then
+                  crontab "$backup/crontab.before" || echo F01_CRON_RESTORE_FAILED >&2
+                fi
+              else
+                echo F01_ROLLBACK_LOCK_UNAVAILABLE_CRON_REMAINS_PAUSED >&2
+              fi
+            fi
+            exit "$status"
+          }
+          trap rollback_activation EXIT
+          cron_hold="$ops/.single-product-cron.hold.$stamp"
+          grep -vF 'SAEIT_SINGLE_PRODUCT_FACTORY_V1' "$backup/crontab.before" > "$cron_hold" || true
+          chmod 600 "$cron_hold"
+          cron_paused=1
+          crontab "$cron_hold"
+          test "$(crontab -l | grep -Fc 'SAEIT_SINGLE_PRODUCT_FACTORY_V1' || true)" -eq 0
+          if test -d "$runtime" && test ! -L "$runtime"; then
+            # Same-filesystem rename retains the old runtime in full without
+            # a duplicate compressed copy on a disk-constrained VPS.
+            mv -T "$runtime" "$backup/runtime-before"
+            previous_moved=1
+          elif test -e "$runtime" || test -L "$runtime"; then
+            echo F01_EXISTING_RUNTIME_UNSAFE >&2
+            exit 1
+          fi
+          mv -T "$runtime_next" "$runtime"
+          swapped=1
+          echo F01_ATOMIC_RUNTIME_SWAP_WITH_BACKUP=PASS
+          runner="$runtime/run-single-product-cycle.sh"
+          # Release the deployment lock before the new runner acquires it.
           exec 8>&-
           "$runner"
           # Only the runner holds the private flock. An outer flock on the same
@@ -316,6 +353,9 @@ jobs:
           print("SINGLE_PRODUCT_PRIVATE_CYCLE=PASS")
           print("SINGLE_PRODUCT_PUBLICATION=LOCKED")
           PY
+          completed=1
+          trap - EXIT
           echo SINGLE_PRODUCT_FACTORY_ACTIVATION=PASS
           echo SINGLE_PRODUCT_FACTORY_PUBLICATION=LOCKED
           REMOTE
+
