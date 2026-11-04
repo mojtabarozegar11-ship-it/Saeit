@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from .models import Account, JournalEntry, JournalLine
+from .services import ledger_summary
 
 
 class AccountingDashboardTests(TestCase):
@@ -23,3 +24,12 @@ class AccountingDashboardTests(TestCase):
         response = self.client.get("/staff/command-center/accounting/api/summary/")
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["integrity"]["balanced_posted_entries"])
+
+    def test_inactive_account_with_posted_activity_remains_visible(self):
+        self.cash.is_active = False
+        self.cash.save(update_fields=["is_active"])
+        self.assertIn("1100", {item["code"] for item in ledger_summary()["accounts"]})
+
+    def test_unbalanced_posted_entry_is_reported_not_crashed(self):
+        JournalEntry.objects.create(reference="JV-BAD", occurred_on=date(2026, 11, 4), memo="نامتوازن", status=JournalEntry.Status.POSTED)
+        self.assertFalse(ledger_summary()["integrity"]["balanced_posted_entries"])
