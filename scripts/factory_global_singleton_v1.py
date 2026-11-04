@@ -88,17 +88,26 @@ def _require_foreign_lane_idle(root, lane):
     if lane == "line41":
         other = _foreign_state(root / "production-instructions" /
                                "stage-06" / "strict-serial-active-v1.json")
-        if other is not None and (other.get("active_order") is not None
-                                  or other.get("all_complete") is not True):
-            raise RuntimeError("F01_AGRI200_ORDER_NOT_RELEASED")
+        if other is not None:
+            if (other.get("schema") != "saeit.factory.strict-serial-fullcycle.v1"
+                    or "active_order" not in other
+                    or type(other.get("all_complete")) is not bool):
+                raise RuntimeError("F01_AGRI200_STATE_UNTRUSTED")
+            # An unfinished but explicitly parked order is NOT completed or
+            # discarded; it remains on disk while line41 owns the next lane.
+            if other["active_order"] is not None:
+                raise RuntimeError("F01_AGRI200_ORDER_NOT_RELEASED")
     else:
         other = _foreign_state(root / "quality-excellence" / "product-flow" /
                                "active-slots" / "current.json")
         if other is not None:
             active = other.get("active")
-            if not isinstance(active, list):
+            waiting = other.get("waiting")
+            if (other.get("schema") != "saeit.factory.product-slots.v1"
+                    or not isinstance(active, list) or len(active) > 1
+                    or not isinstance(waiting, list)):
                 raise RuntimeError("F01_LINE41_SLOT_UNKNOWN")
-            if active:
+            if active or waiting:
                 raise RuntimeError("F01_LINE41_PRODUCT_NOT_RELEASED")
 
 
