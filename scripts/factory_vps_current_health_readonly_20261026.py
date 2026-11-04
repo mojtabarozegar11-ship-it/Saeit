@@ -214,7 +214,7 @@ def trusted_public_keys_readonly():
     for group, (root, roles) in groups.items():
         row = {"directory_readable": False, "directory_root_owned": False,
                "directory_not_group_world_writable": False,
-               "trusted_key_roles_present": [], "roles_unprovisioned_or_unsafe": [],
+               "trusted_key_roles_present": [], "roles_unprovisioned_or_unsafe": list(roles),
                "identity_manifest_present": False,
                "real_world_identity_independently_verified": False}
         try:
@@ -231,6 +231,7 @@ def trusted_public_keys_readonly():
                 row["identity_manifest_present"] = (
                     mst.st_uid == 0 and not mst.st_mode & 0o022
                     and 0 < mst.st_size <= 100_000)
+            row["roles_unprovisioned_or_unsafe"] = []
             for role in roles:
                 key = root / (role + ".pem")
                 try:
