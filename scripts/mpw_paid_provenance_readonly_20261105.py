@@ -69,6 +69,78 @@ def fulfillment_model_shape():
         return {"available": False, "records": None, "fields": []}
 
 
+
+def delivery_model_inventory():
+    """Schema and count only. These are NOT proof of authenticated downloads."""
+    names = ("CommerceReceipt", "CommerceEntitlement", "CommerceDownload")
+    result = {}
+    for name in names:
+        try:
+            model = apps.get_model("mpw_commerce", name)
+            fields = model._meta.fields
+            result[name] = {
+                "available": True,
+                "total_records": model.objects.count(),
+                "field_names": [str(f.name)[:60] for f in fields[:35]],
+                "related_model_labels": {
+                    str(f.name)[:60]: str(f.related_model._meta.label_lower)[:80]
+                    for f in fields if getattr(f, "related_model", None)
+                },
+            }
+        except LookupError:
+            result[name] = {"available": False, "total_records": None}
+        except Exception as exc:
+            result[name] = {"available": None, "error_type": type(exc).__name__}
+    return result
+
+
+def delivery_records_for_order(order_id):
+    """Inspect database-linked evidence without returning buyer or order identifiers."""
+    result = {}
+    for name in ("CommerceReceipt", "CommerceEntitlement", "CommerceDownload"):
+        try:
+            model = apps.get_model("mpw_commerce", name)
+            fields = {f.name: f for f in model._meta.fields}
+            relation = None
+            for candidate, lookup in (
+                ("order", "order_id"),
+                ("item", "item__order_id"),
+                ("order_item", "order_item__order_id"),
+            ):
+                f = fields.get(candidate)
+                related = getattr(f, "related_model", None)
+                if related and related._meta.label_lower in (
+                    "core.order" if candidate == "order" else "core.orderitem",
+                ):
+                    relation = lookup
+                    break
+            if relation is None and "invoice" in fields:
+                parent = getattr(fields["invoice"], "related_model", None)
+                if parent is not None and any(
+                    f.name == "order" and getattr(f, "related_model", None)
+                    and f.related_model._meta.label_lower == "core.order"
+                    for f in parent._meta.fields
+                ):
+                    relation = "invoice__order_id"
+            if relation is None:
+                result[name] = {"linkage": "not_established", "records": None}
+                continue
+            qs = model.objects.filter(**{relation: order_id})
+            evidence = {"linkage": relation, "records": qs.count()}
+            if "status" in fields:
+                evidence["status_counts"] = dict(Counter(
+                    str(v)[:48] for v in qs.values_list("status", flat=True)[:30]
+                ))
+            if "downloaded_at" in fields:
+                evidence["downloaded_at_nonnull"] = qs.filter(downloaded_at__isnull=False).count()
+            result[name] = evidence
+        except LookupError:
+            result[name] = {"linkage": "model_absent", "records": None}
+        except Exception as exc:
+            result[name] = {"linkage": "query_failed", "error_type": type(exc).__name__, "records": None}
+    return result
+
+
 def run():
     paid = PaymentIntent.objects.filter(status="paid").select_related("order")
     total = paid.count()
@@ -106,6 +178,7 @@ def run():
             "matching_credit_ledger_rows": credits,
             "persisted_walletless_credit_verified": verified,
             "fulfillment": fulfillment_for_order(order.pk),
+            "delivery_record_evidence": delivery_records_for_order(order.pk),
             "authenticated_buyer_download_proven": False,
         })
     print("MPW_PAID_PROVENANCE_READONLY=" + json.dumps({
@@ -115,6 +188,7 @@ def run():
         "provider_counts_examined": dict(sorted(provider_counts.items())),
         "walletless_persisted_credit_verified": valid_walletless_credits,
         "fulfillment_schema_metadata": fulfillment_model_shape(),
+        "delivery_model_inventory": delivery_model_inventory(),
         "independent_mainnet_recheck_performed": False,
         "customer_download_e2e_performed": False,
         "production_db_writes": False,
