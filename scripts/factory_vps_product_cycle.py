@@ -80,6 +80,7 @@ def _write_private_json(path, value):
 
 
 AI_REVIEW_SCHEMA = "saeit.factory.ai-assisted-internal-review.v1"
+AI_EVIDENCE_SCHEMA = "saeit.factory.ai-review-evidence.v1"
 OWNER_CLEARANCE_SCHEMA = "saeit.factory.ai-assisted-owner-clearance.v2"
 OWNER_APPROVAL_TRUST_ROOT = Path("/etc/saeit/factory-owner-approval-public-keys")
 MANDATORY_AI_CHECKS = frozenset({
@@ -149,8 +150,12 @@ def _owner_signature_verifies(clearance_path):
         return False
 
 
-def _validated_ai_review(report, artifact_sha):
-    """Check an evidence-bound, honestly labeled AI assessment, not independence."""
+def _validated_ai_review(report, artifact_sha, root, recipe):
+    """Bind every internal review claim to existing, exact hashed evidence.
+
+    This is traceability of an internal AI-assisted evaluation, not an
+    independent audit or a substitute for owner/receiver authorization.
+    """
     if (not isinstance(report, dict)
             or report.get("schema") != AI_REVIEW_SCHEMA
             or report.get("reviewer_kind") != "chatgpt_ai_assisted_internal"
@@ -162,6 +167,12 @@ def _validated_ai_review(report, artifact_sha):
     checks = report.get("evidence_checks")
     if not isinstance(checks, list) or len(checks) != len(MANDATORY_AI_CHECKS):
         return False
+    quality_root = Path(root) / "quality-excellence"
+    evidence_base = quality_root / "ai-review-evidence"
+    evidence_root = evidence_base / recipe
+    if (any(p.is_symlink() for p in (quality_root, evidence_base, evidence_root))
+            or not evidence_root.is_dir()):
+        return False
     observed = set()
     for check in checks:
         if (not isinstance(check, dict) or check.get("status") != "passed"
@@ -170,7 +181,28 @@ def _validated_ai_review(report, artifact_sha):
                 or not isinstance(check.get("evidence_sha256"), str)
                 or not HEX_SHA256.fullmatch(check["evidence_sha256"])):
             return False
-        observed.add(check["check_id"])
+        check_id = check["check_id"]
+        if check_id in observed:
+            return False
+        evidence, evidence_hash = _read_hashed_json(
+            evidence_root / (check_id + ".json"))
+        if evidence_hash != check["evidence_sha256"] or not evidence:
+            return False
+        method = evidence.get("method")
+        observations = evidence.get("observations")
+        if (evidence.get("schema") != AI_EVIDENCE_SCHEMA
+                or evidence.get("check_id") != check_id
+                or evidence.get("artifact_sha256") != artifact_sha
+                or evidence.get("status") != "passed"
+                or evidence.get("reviewer_kind") != "chatgpt_ai_assisted_internal"
+                or evidence.get("independent_human_review") is not False
+                or not isinstance(method, str) or len(method.strip()) < 10
+                or not isinstance(observations, list)
+                or not observations or len(observations) > 100
+                or any(not isinstance(item, str) or len(item.strip()) < 10
+                       for item in observations)):
+            return False
+        observed.add(check_id)
     return observed == MANDATORY_AI_CHECKS
 
 
@@ -203,7 +235,7 @@ def _verified_quality_exit(root, recipe):
     except OSError:
         return None
     if (digest.hexdigest() != artifact_sha
-            or not _validated_ai_review(report, artifact_sha)
+            or not _validated_ai_review(report, artifact_sha, root, recipe)
             or clearance.get("schema") != OWNER_CLEARANCE_SCHEMA
             or clearance.get("reviewer_kind") != "chatgpt_ai_assisted_internal"
             or clearance.get("independent_human_review") is not False
