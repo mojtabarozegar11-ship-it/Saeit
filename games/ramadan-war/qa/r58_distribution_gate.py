@@ -10,6 +10,8 @@ import argparse
 import hashlib
 import json
 import pathlib
+import posixpath
+import re
 import stat
 import zipfile
 
@@ -28,6 +30,29 @@ def digest(data):
 def git_blob(data):
     header = b"blob " + str(len(data)).encode("ascii") + b"\0"
     return hashlib.sha1(header + data).hexdigest()
+
+
+STATIC_LOCAL_IMPORT = re.compile(
+    r"(?m)^\s*(?:import|export)\s+(?:[^\n'\"]{0,300}?\bfrom\s+)?['\"](\.{1,2}/[^'\"]+)['\"]"
+)
+DYNAMIC_LOCAL_IMPORT = re.compile(r"\bimport\s*\(\s*['\"](\.{1,2}/[^'\"]+)['\"]\s*\)")
+
+
+def missing_local_modules(archive, names):
+    """Reject browser module imports that cannot resolve inside this ZIP."""
+    present = set(names)
+    unresolved = set()
+    for member in sorted(present):
+        if not member.startswith("ramadan-war/") or not member.endswith((".js", ".mjs")):
+            continue
+        source = archive.read(member).decode("utf-8", errors="replace")
+        imports = set(STATIC_LOCAL_IMPORT.findall(source)) | set(DYNAMIC_LOCAL_IMPORT.findall(source))
+        for relative in imports:
+            relative = relative.split("?", 1)[0].split("#", 1)[0]
+            target = posixpath.normpath(posixpath.join(posixpath.dirname(member), relative))
+            if not target.startswith("ramadan-war/") or target not in present:
+                unresolved.add(f"{member}->{relative}")
+    return sorted(unresolved)
 
 
 def inspect(candidate, source_index=None):
@@ -58,6 +83,9 @@ def inspect(candidate, source_index=None):
         if bad:
             errors.append("zip_crc:" + bad)
         present = set(names)
+        missing = missing_local_modules(archive, names)
+        checks["runtime_module_imports"] = not missing
+        errors.extend("missing_runtime_module:" + name for name in missing)
         if "PACKAGE-MANIFEST.json" in present:
             package = json.loads(archive.read("PACKAGE-MANIFEST.json"))
             outer = package.get("files", {})
