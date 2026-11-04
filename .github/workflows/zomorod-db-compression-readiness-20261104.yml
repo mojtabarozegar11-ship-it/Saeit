@@ -130,6 +130,16 @@ jobs:
               tables[table]={'engine':info[0],'row_format':info[1],'data_bytes':int(info[2]),'index_bytes':int(info[3]),'create_options':info[4] if len(info)>4 else '', 'rows_now':row_count,'id_min':min_id,'id_max':max_id,'archive_row_count_match':row_count==expected}
           print('LIVE_TABLE_READINESS='+json.dumps(tables))
           print('ARCHIVE_ROW_COUNTS_STILL_MATCH='+str(all(t['archive_row_count_match'] for t in tables.values())).lower())
+          innodb_sql="SELECT NAME,FILE_SIZE,ALLOCATED_SIZE FROM information_schema.INNODB_SYS_TABLESPACES WHERE NAME IN ('zomorod2_sites_main/core_agenttask','zomorod2_sites_main/core_factoryevidence')"
+          innodb=subprocess.run(args+['--execute='+innodb_sql],env=env,capture_output=True,text=True,timeout=40)
+          if innodb.returncode==0:
+              allocation=[]
+              for line in innodb.stdout.strip().splitlines():
+                  fields=line.split('\t')
+                  if len(fields)==3: allocation.append({'table':fields[0].split('/')[-1],'logical_file_bytes':int(fields[1]),'allocated_file_bytes':int(fields[2])})
+              print('INNODB_PHYSICAL_ALLOCATION='+json.dumps(allocation))
+          else:
+              print('INNODB_PHYSICAL_ALLOCATION=not_accessible_for_database_user')
           datadir=query('SELECT @@datadir')[0]
           client_node=os.uname().nodename.split('.')[0].lower()
           database_node=identity[1].split('.')[0].lower()
@@ -147,6 +157,12 @@ jobs:
           print('POINT_IN_TIME_RESTORE=not_yet_proven')
           q=shutil.which('uapi')
           if q:
+              p=subprocess.run([q,'--output=json','Mysql','list_databases'],capture_output=True,text=True,timeout=30)
+              if p.returncode==0:
+                  dbdata=json.loads(p.stdout).get('result',{}).get('data',[])
+                  disk_sizes=[{'database':item.get('database'),'bytes':item.get('disk_usage')} for item in dbdata if isinstance(item,dict)]
+                  print('CPANEL_DATABASE_DISK_USAGE='+json.dumps(disk_sizes))
+              else: print('CPANEL_DATABASE_DISK_USAGE=unavailable')
               p=subprocess.run([q,'--output=json','Quota','get_quota_info'],capture_output=True,text=True,timeout=25)
               if p.returncode==0:
                   data=json.loads(p.stdout).get('result',{}).get('data',{})
