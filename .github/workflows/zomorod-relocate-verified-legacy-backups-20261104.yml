@@ -70,7 +70,7 @@ jobs:
           d="$RUNNER_TEMP/zomorod-baseline-inventory"
           dest=/home/githubops/.db-backups/relocated-cpanel-legacy-20261104
           ssh -F "$d/config" saeit-vps "mkdir -p '$dest'"
-          free_kib="$(ssh -F "$d/config" saeit-vps "df -Pk '$dest' | awk 'END {print \\$4}'")"
+          free_kib="$(ssh -F "$d/config" saeit-vps "df -Pk '$dest' | tail -n 1" | awk '{print $4}')"
           test "$free_kib" -gt 1500000
           sources=(
             "/home/zomorod2/.backups/mojplaywin-staging-sqlite-20261018.gz"
