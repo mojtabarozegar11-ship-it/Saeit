@@ -127,10 +127,12 @@ export function recordPointerGestureMovement(gesture, event) {
     Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY));
 }
 
-// Only an actual primary desktop mouse click may fire from the 3D canvas.
-// Touch/pencil aiming on wide screens and mouse drags must not consume ammo.
+// Only a completed primary mouse click may fire from the 3D canvas, regardless
+// of viewport width (e.g. a resized desktop window or mouse on a tablet).
+// Touch/pen aiming and mouse drags must never consume ammo.
+// viewportWidth is retained for callers already using this four-argument API.
 export function shouldFireCanvasClick(event, screen, viewportWidth, gesture) {
-  return screen === 'game' && Number.isFinite(viewportWidth) && viewportWidth >= 700 &&
+  return screen === 'game' &&
     gesture?.pointerType === 'mouse' && gesture.finished === true &&
     gesture.cancelled !== true && Number.isFinite(gesture.moved) && gesture.moved <= 8 &&
     event?.button === 0 && event.detail > 0 &&
