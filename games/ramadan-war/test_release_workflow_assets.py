@@ -42,14 +42,15 @@ class ReleaseTransferContract(unittest.TestCase):
                          'release would omit, rename or unexpectedly stage a game file')
 
     def test_all_imported_runtime_modules_are_manifested(self):
-        source = (GAME / 'game.js').read_text(encoding='utf-8')
-        imports = re.findall(r"from\s+['\"]\./([^'\"]+\.mjs)['\"]", source)
-        self.assertGreaterEqual(len(imports), 6)
         assets = set(manifest_assets())
-        self.assertTrue(set(imports).issubset(assets),
-                        'game imports an MJS module absent from release manifest')
-        for module in imports:
-            self.assertTrue((GAME / module).is_file(), 'missing runtime module: ' + module)
+        for entry in ('game.js', 'engine3d.js'):
+            source = (GAME / entry).read_text(encoding='utf-8')
+            imports = re.findall(r"from\s+['\"]\./([^'\"]+\.(?:mjs|js))['\"]", source)
+            self.assertGreaterEqual(len(imports), 3, 'missing import checks for ' + entry)
+            self.assertTrue(set(imports).issubset(assets),
+                            'runtime imports an asset absent from release manifest: ' + entry)
+            for module in imports:
+                self.assertTrue((GAME / module).is_file(), 'missing runtime module: ' + module)
 
     def test_no_unapproved_push_can_trigger_live_deploy(self):
         workflow = WORKFLOW.read_text(encoding='utf-8')
