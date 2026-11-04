@@ -23,7 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s  %s\n' 'c94aa5fbbb2d738aab49c1fcd22b5e7aef42603048b316e2d5b7a544c505d53b' '../contracts/MOJ7.sol' | sha256sum -c -
-          mkdir -p contracts
+          mkdir -p contracts migrations
           cp ../contracts/MOJ7.sol contracts/MOJ7.sol
           cmp ../contracts/MOJ7.sol contracts/MOJ7.sol
           test "$(grep -c 'http://127.0.0.1:9090' tronbox-config.js)" = '1'
