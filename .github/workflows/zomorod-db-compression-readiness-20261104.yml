@@ -1,0 +1,157 @@
+name: Read-only Zomorod live database compression readiness
+
+on:
+  push:
+    branches: [ops/zomorod-archive-audit-20261104]
+    paths:
+      - .github/workflows/zomorod-db-compression-readiness-20261104.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-db-compression-readiness-20261104
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Establish pinned VPS and cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-readiness"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 2
+            ServerAliveInterval 30
+            ServerAliveCountMax 5
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.candidate" "$d/host.known"
+          echo PINNED_RELAY=verified
+      - name: Inspect VPS archive storage without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zomorod-readiness/config" saeit-vps 'python3 -' <<'PY'
+          import json, os, stat
+          from pathlib import Path
+          archive = Path('/home/githubops/.db-backups/zomorod2_sites_main-segments-20261104')
+          assert archive.is_dir() and not archive.is_symlink(), 'ARCHIVE_NOT_FOUND'
+          assert (archive/'schema.sql.gz').is_file(), 'ARCHIVE_SCHEMA_MISSING'
+          fs = os.statvfs(str(archive))
+          print('VPS_ARCHIVE_STORAGE='+json.dumps({
+              'sql_segments':len(list(archive.glob('*.sql.gz')))-1,
+              'metadata_files':len(list(archive.glob('*.meta'))),
+              'free_bytes':fs.f_bavail*fs.f_frsize,
+              'archive_directory_present':True
+          }), flush=True)
+          PY
+      - name: Inspect live MariaDB tables and cPanel quota without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/zomorod-readiness/config" saeit-cpanel 'python3 -' <<'PY'
+          import json,os,re,shutil,subprocess,urllib.parse
+          from pathlib import Path
+          app=Path.home()/'Saeit-staging'; urls=[]
+          for path in (app/'.env',app/'.env.production',app/'.env.local'):
+              if path.is_symlink() or not path.is_file() or path.stat().st_size>65536: continue
+              for line in path.read_text(encoding='utf-8',errors='replace').splitlines():
+                  m=re.match(r'^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$',line)
+                  if m: urls.append(urllib.parse.urlsplit(m.group(1).strip().strip('"').strip("'")))
+          assert len(urls)==1, 'DATABASE_URL_NOT_UNIQUE'
+          u=urls[0];db=urllib.parse.unquote(u.path.lstrip('/'))
+          assert db=='zomorod2_sites_main', 'DATABASE_IDENTITY_MISMATCH'
+          cli=shutil.which('mariadb') or shutil.which('mysql')
+          assert cli, 'MYSQL_CLIENT_NOT_FOUND'
+          args=[cli,'--no-defaults','--batch','--skip-column-names','--connect-timeout=10','--host='+(u.hostname or 'localhost'),'--user='+urllib.parse.unquote(u.username or ''),'--database='+db]
+          if u.port: args.append('--port='+str(u.port))
+          env=dict(os.environ,MYSQL_PWD=urllib.parse.unquote(u.password or ''))
+          def query(sql):
+              p=subprocess.run(args+['--execute='+sql],env=env,capture_output=True,text=True,timeout=80)
+              if p.returncode: raise SystemExit('READ_ONLY_MYSQL_QUERY_FAILED')
+              return p.stdout.strip().splitlines()
+          identity=query('SELECT @@version,@@hostname,DATABASE()')[0].split('\t')
+          assert len(identity)==3 and identity[2]==db and 'MariaDB' in identity[0], 'MARIADB_IDENTITY_MISMATCH'
+          print('DATABASE_SERVER='+json.dumps({'version':identity[0],'server_name':identity[1],'database':identity[2]}))
+          config={}
+          for var in ('innodb_file_per_table','innodb_compression_algorithm'):
+              rows=query("SHOW VARIABLES LIKE '"+var+"'")
+              config[var]=rows[0].split('\t',1)[1] if rows else 'unavailable'
+          print('DATABASE_COMPRESSION_VARIABLES='+json.dumps(config))
+          tables={}
+          for table,expected in [('core_agenttask',28172),('core_factoryevidence',28141)]:
+              meta=query("SELECT ENGINE,ROW_FORMAT,DATA_LENGTH,INDEX_LENGTH,COALESCE(CREATE_OPTIONS,'') FROM information_schema.TABLES WHERE TABLE_SCHEMA='"+db+"' AND TABLE_NAME='"+table+"'")
+              assert len(meta)==1, 'TABLE_MISSING:'+table
+              info=meta[0].split('\t')
+              stats=query('SELECT COUNT(*),MIN(id),MAX(id) FROM '+table)[0].split('\t')
+              row_count,min_id,max_id=map(int,stats)
+              tables[table]={'engine':info[0],'row_format':info[1],'data_bytes':int(info[2]),'index_bytes':int(info[3]),'create_options':info[4] if len(info)>4 else '', 'rows_now':row_count,'id_min':min_id,'id_max':max_id,'archive_row_count_match':row_count==expected}
+          print('LIVE_TABLE_READINESS='+json.dumps(tables))
+          print('ARCHIVE_ROW_COUNTS_STILL_MATCH='+str(all(t['archive_row_count_match'] for t in tables.values())).lower())
+          print('DB_FILESYSTEM_SUPPORT=not_verified_by_client_side_read_only_queries')
+          print('POINT_IN_TIME_RESTORE=not_yet_proven')
+          q=shutil.which('uapi')
+          if q:
+              p=subprocess.run([q,'--output=json','Quota','get_quota_info'],capture_output=True,text=True,timeout=25)
+              if p.returncode==0:
+                  data=json.loads(p.stdout).get('result',{}).get('data',{})
+                  print('CPANEL_QUOTA='+json.dumps({'used_mb':data.get('megabytes_used'),'limit_mb':data.get('megabyte_limit')}))
+              else: print('CPANEL_QUOTA=unavailable')
+          PY
+      - name: Read-only live website HTTP status
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /agents/ /admin/login/; do
+            code="$(curl --silent --show-error --location --max-time 15 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "LIVE_HTTP_STATUS=$path:$code"
+          done
+          echo PRECHECK_ONLY_NO_DATABASE_MUTATIONS=yes
+      - name: Remove temporary runner SSH material
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-readiness"
+          test ! -d "$d" || rm -rf -- "$d"
