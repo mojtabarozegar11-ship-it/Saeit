@@ -1,11 +1,39 @@
+from django import forms
 from django.contrib import admin
+from django.forms.models import BaseInlineFormSet
 from django.core.exceptions import ValidationError
 from .models import Account, JournalEntry, JournalLine
+
+
+class JournalLineInlineFormSet(BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        if any(form.errors for form in self.forms):
+            return
+        if self.instance.status != JournalEntry.Status.POSTED:
+            return
+        debit = sum((form.cleaned_data.get("debit") or 0 for form in self.forms if not form.cleaned_data.get("DELETE")), 0)
+        credit = sum((form.cleaned_data.get("credit") or 0 for form in self.forms if not form.cleaned_data.get("DELETE")), 0)
+        if debit <= 0 or debit != credit:
+            raise forms.ValidationError("سند قطعی باید تراز باشد؛ جمع بدهکار و بستانکار برابر نیست.")
 
 
 class JournalLineInline(admin.TabularInline):
     model = JournalLine
     extra = 2
+    formset = JournalLineInlineFormSet
+
+
+class JournalLineAdminForm(forms.ModelForm):
+    class Meta:
+        model = JournalLine
+        fields = "__all__"
+
+    def clean_entry(self):
+        entry = self.cleaned_data["entry"]
+        if entry.status == JournalEntry.Status.POSTED:
+            raise forms.ValidationError("افزودن یا ویرایش ردیف سند قطعی مجاز نیست.")
+        return entry
 
 
 @admin.register(Account)
@@ -30,6 +58,8 @@ class JournalEntryAdmin(admin.ModelAdmin):
 
 @admin.register(JournalLine)
 class JournalLineAdmin(admin.ModelAdmin):
+    form = JournalLineAdminForm
+    actions = None
     list_display = ("entry", "account", "debit", "credit")
     list_filter = ("account",)
 
@@ -43,3 +73,8 @@ class JournalLineAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return super().has_delete_permission(request, obj) and not (obj and obj.entry.status == JournalEntry.Status.POSTED)
+
+    def delete_queryset(self, request, queryset):
+        if queryset.filter(entry__status=JournalEntry.Status.POSTED).exists():
+            raise ValidationError("حذف گروهی ردیف‌های اسناد قطعی مجاز نیست.")
+        super().delete_queryset(request, queryset)
