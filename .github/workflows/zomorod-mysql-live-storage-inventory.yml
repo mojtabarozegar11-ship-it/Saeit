@@ -101,7 +101,7 @@ jobs:
           if uapi.returncode or len(uapi.stdout)>300000: raise SystemExit("CPANEL_DATABASE_ALLOWLIST_UNAVAILABLE")
           payload=json.loads(uapi.stdout).get("result",{})
           databases=payload.get("data",[])
-          if payload.get("status")!=1 or len(databases)!=1 or databases[0].get("database")!=db:
+          if payload.get("status")!=1 or len([item for item in databases if item.get("database")==db])!=1:
               raise SystemExit("CPANEL_DATABASE_ALLOWLIST_MISMATCH")
           args=[client,"--no-defaults","--batch","--skip-column-names","--host="+host,"--user="+user,
                 "--database="+db,"--connect-timeout=8"]
