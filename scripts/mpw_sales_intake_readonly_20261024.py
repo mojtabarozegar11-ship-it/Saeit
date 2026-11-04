@@ -32,6 +32,85 @@ def safe_directory(path):
     return path.is_dir() and not path.is_symlink()
 
 
+from email import policy
+from email.parser import BytesHeaderParser
+from email.utils import parseaddr
+
+def support_header_triage_readonly():
+    """Classify unread mail by headers; never read bodies, send, mark read or print identifiers."""
+    root = HOME / "mail" / DOMAIN / "support"
+    result = {"source": "cpanel_maildir_unread_headers",
+              "available": safe_directory(root), "header_only": True,
+              "bodies_read": False, "emails_sent": 0, "emails_deleted": 0,
+              "headers_inspected": 0, "older_than_24h": 0, "older_than_72h": 0,
+              "categories": {}, "skipped": 0, "truncated": False,
+              "category_is_heuristic_not_verified_lead": True}
+    if not result["available"]:
+        output("MPW_SUPPORT_HEADER_TRIAGE", result)
+        return
+    categories = Counter()
+    for folder in ("new", "cur"):
+        subdir = root / folder
+        if not safe_directory(subdir):
+            continue
+        for path in subdir.iterdir():
+            if result["headers_inspected"] + result["skipped"] >= 500:
+                result["truncated"] = True
+                break
+            if not path.is_file() or path.is_symlink():
+                result["skipped"] += 1
+                continue
+            if folder == "cur" and ":2," in path.name and "S" in path.name.rsplit(":2,", 1)[-1]:
+                continue
+            try:
+                stat = path.stat()
+                if not 0 < stat.st_size <= 512000:
+                    result["skipped"] += 1
+                    continue
+                if datetime.fromtimestamp(stat.st_mtime, timezone.utc) < CUTOFF:
+                    continue
+                with path.open("rb") as fh:
+                    prefix = fh.read(12288)
+                header = re.split(rb"\r?\n\r?\n", prefix, maxsplit=1)[0]
+                if len(header) >= 12288:
+                    result["skipped"] += 1
+                    continue
+                msg = BytesHeaderParser(policy=policy.default).parsebytes(header + b"\r\n\r\n")
+                subject = " ".join(str(msg.get("Subject", "")).casefold().split())
+                auto = str(msg.get("Auto-Submitted", "")).casefold().strip()
+                precedence = str(msg.get("Precedence", "")).casefold().strip()
+                sender = parseaddr(str(msg.get("From", "")))[1].lower()
+                automation = (auto not in ("", "no") or precedence in ("bulk", "list", "junk")
+                              or msg.get("List-Id") is not None or
+                              msg.get("X-Auto-Response-Suppress") is not None or
+                              str(msg.get("Return-Path", "")).strip() == "<>")
+                if automation or not sender or sender.endswith("@" + DOMAIN):
+                    category = "automated_or_internal"
+                elif (subject == "mojplaywin business quote"
+                      or re.fullmatch(r"mojplaywin [a-z0-9-]+ service enquiry", subject)):
+                    category = "explicit_service_enquiry"
+                elif any(term in subject for term in ("download", "delivery", "receipt", "recover",
+                                                       "access file", "فایل", "دانلود", "دریافت")):
+                    category = "possible_delivery_issue"
+                elif any(term in subject for term in ("payment", "paid", "trx", "wallet", "transaction",
+                                                       "checkout", "پرداخت", "تراکنش", "کیف پول")):
+                    category = "possible_payment_issue"
+                elif any(term in subject for term in ("order", "buy", "purchase", "price", "invoice",
+                                                       "quote", "book", "خرید", "سفارش", "قیمت", "فاکتور")):
+                    category = "possible_sales_enquiry"
+                else:
+                    category = "other_unclassified"
+                categories[category] += 1
+                result["headers_inspected"] += 1
+                age = (NOW - datetime.fromtimestamp(stat.st_mtime, timezone.utc)).total_seconds()
+                result["older_than_24h"] += int(age > 86400)
+                result["older_than_72h"] += int(age > 259200)
+            except (OSError, ValueError, TypeError, UnicodeError):
+                result["skipped"] += 1
+    result["categories"] = dict(sorted(categories.items()))
+    output("MPW_SUPPORT_HEADER_TRIAGE", result)
+
+
 def support_maildir():
     root = HOME / "mail" / DOMAIN / "support"
     report = {"source": "cpanel_maildir_metadata", "exists": safe_directory(root),
@@ -405,6 +484,7 @@ def email_dns_authentication():
 
 if __name__ == "__main__":
     support_maildir()
+    support_header_triage_readonly()
     configured_support_mailbox()
     configured_support_forwarder()
     domain_catchall()
