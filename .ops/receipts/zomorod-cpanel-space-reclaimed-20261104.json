@@ -1,0 +1,45 @@
+{
+  "receipt_version": 1,
+  "recorded_date_utc": "2026-11-04",
+  "status": "completed_verified",
+  "operation": "archive_offsite_verify_restore_and_remove_two_inactive_source_copies",
+  "source_cpanel_account": "zomorod2",
+  "source_removed_paths": [
+    "/home/zomorod2/.backups/zomorodmelal-complete",
+    "/home/zomorod2/.backups/zomorodmelal-db-recovery-validation"
+  ],
+  "source_account_database_records_removed": 0,
+  "offsite_archive": {
+    "vps_path": "/home/githubops/.db-backups/cpanel-inactive-backup-sets-20261104.tar.gz",
+    "compressed_bytes": 725388963,
+    "sha256": "403ddd65650091fb7c4958e279440ef80ee0ea6380079522d90b478df35dda37",
+    "verified_restored_regular_files": 27115,
+    "verified_restored_symlinks": 14,
+    "verified_restored_content_bytes": 1200907063,
+    "verified_tree_sha256": "91358c8c7c5c6f893a0d60c6061e6a775858aa7b5212af5abfbf9046965f9119"
+  },
+  "storage": {
+    "quota_limit_mb": 30720,
+    "quota_used_before_mb": 28618.45,
+    "quota_used_after_mb": 27407.96,
+    "quota_free_before_mb": 2101.55,
+    "quota_free_after_mb": 3312.04,
+    "quota_reclaimed_mb": 1210.49,
+    "source_regular_allocated_bytes_removed": 1269547008
+  },
+  "website_after": {
+    "/": 200,
+    "/agents/": 200,
+    "/admin/login/": 200
+  },
+  "evidence_runs": {
+    "mirror": 41823648197,
+    "isolated_restore": 41825455602,
+    "prune_and_live_health": 41826166592
+  },
+  "notes": [
+    "The two source backup directories were removed only after complete offsite archive, isolated restoration, and matching full content hashes.",
+    "Other cPanel backups and live MariaDB tables remain unchanged.",
+    "MariaDB live-table compression is already configured; this receipt does not authorize live database restructuring."
+  ]
+}
