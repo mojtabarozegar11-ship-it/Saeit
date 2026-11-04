@@ -11,10 +11,10 @@ contract('MOJ1 domain-bound Merkle-sum reward liabilities', accounts => {
   const proof = (epoch, index, account, value, hashes = [], sums = [], counts = []) =>
     [epoch, index, account, value, hashes, sums, counts];
 
-  function publishData(epoch, root, budget, count) {
+  function publishData(epoch, root, budget, count, digest = manifest) {
     const selector = tronWeb.sha3('publishEpoch(uint256,bytes32,uint256,uint256,bytes32)').slice(2, 10);
     return '0x' + selector + uint(epoch) + root.replace(/^0x/, '').padStart(64, '0') +
-      uint(budget) + uint(count) + manifest.slice(2);
+      uint(budget) + uint(count) + digest.slice(2);
   }
 
   async function expectRevert(promise) {
@@ -107,5 +107,36 @@ contract('MOJ1 domain-bound Merkle-sum reward liabilities', accounts => {
     assert.equal((await escrow.outstandingCommitments()).toString(), amount(10));
     await escrow.claim(proof(33, 0, accounts[6], amount(5)), {from: accounts[9]});
     assert.equal((await token.balanceOf(accounts[6])).toString(), amount(5));
+  });
+
+  it('accepts the canonical offline sum-tree builder output byte-for-byte on a real local TVM', async () => {
+    const {gov, token, escrow} = await setup();
+    const {buildSyntheticSumGuardProposal} = await import('../../scripts/reward-sum-guard-offline.mjs');
+    const chainId = (await escrow.chainId()).toString();
+    const output = buildSyntheticSumGuardProposal({
+      mode: 'SYNTHETIC_LOCAL_TEST_ONLY', reviewStatus: 'UNREVIEWED',
+      domain: {chainId, contractAddress: escrow.address, epoch: '53'},
+      budgetUnits: amount(15), fundedAvailableUnits: amount(50),
+      rows: [
+        {index: '1', account: accounts[7], amountUnits: amount(5), evidenceRef: 'TEST-TVMMATCH-002'},
+        {index: '0', account: accounts[6], amountUnits: amount(10), evidenceRef: 'TEST-TVMMATCH-001'}
+      ]
+    });
+    assert.equal(output.publicationAuthorized, false);
+    assert.equal(output.sourceLedgerVerified, false);
+    assert.equal(output.leafCount, '2');
+    for (const c of output.claims) {
+      assert.equal(await escrow.claimLeaf(53, c.index, c.account, c.amountUnits), c.leaf);
+    }
+    await governed(gov, escrow, publishData(53, output.root, output.budgetUnits, output.leafCount, output.manifestDigest), 0);
+    assert.equal((await escrow.epochs(53)).manifestDigest.toLowerCase(), output.manifestDigest);
+    for (const c of output.claims) {
+      const request = proof(53, c.index, c.account, c.amountUnits, c.proof.hashes, c.proof.sums, c.proof.counts);
+      assert.equal(await escrow.verifyClaim(request), true);
+      await escrow.claim(request, {from: accounts[9]});
+    }
+    assert.equal((await token.balanceOf(accounts[6])).toString(), amount(10));
+    assert.equal((await token.balanceOf(accounts[7])).toString(), amount(5));
+    assert.equal((await escrow.outstandingCommitments()).toString(), '0');
   });
 });

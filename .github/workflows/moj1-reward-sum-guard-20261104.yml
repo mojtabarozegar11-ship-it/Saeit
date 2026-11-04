@@ -6,6 +6,8 @@ on:
       - '.github/workflows/moj1-reward-sum-guard-20261104.yml'
       - 'experiments/moj1-pilot/contracts/MojRewardClaimsSumGuarded.sol'
       - 'experiments/moj1-pilot/tests/tronbox/reward-sum-guarded.integration.js'
+      - 'experiments/moj1-pilot/scripts/reward-sum-guard-offline.mjs'
+      - 'experiments/moj1-pilot/tests/reward-sum-guard-offline.test.mjs'
       - 'experiments/moj1-pilot/package.json'
   workflow_dispatch:
 permissions:

@@ -73,6 +73,11 @@ contract MojRewardClaimsSumGuarded {
         return balance > outstandingCommitments ? balance - outstandingCommitments : 0;
     }
 
+    /// @notice Read the effective TVM chain ID used in the leaf's domain separator.
+    function chainId() external view returns (uint256) {
+        return block.chainid;
+    }
+
     /// @notice Leaf binds the exact beneficiary and amount to this chain, contract and epoch.
     /// @dev Different prefix bytes distinguish leaves from internal tree nodes.
     function claimLeaf(uint256 epoch, uint256 index, address account, uint256 amount)
