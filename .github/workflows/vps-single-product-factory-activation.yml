@@ -110,6 +110,7 @@ jobs:
           exec 9>"{private}/.single-product-cycle.lock"
           flock -n 9 || exit 0
           export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
+          "{py}" -B "{runtime}/scripts/factory_research_triage.py" --out "{private}"
           exec "{py}" -B "{runtime}/scripts/factory_vps_product_cycle.py" --db "{db}" --out "{private}" --recipes "{runtime}/product_recipes" --max-products 1 --max-recipes 1 --no-enable-designer --no-enable-design-intake --no-enable-invention-supply
           '''
           path_obj=Path(path)
