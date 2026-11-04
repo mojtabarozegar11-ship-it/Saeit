@@ -306,7 +306,7 @@ jobs:
               print("FACTORY_DJANGO_CALL_COMMAND_SIGNATURE=" + str(inspect.signature(call_command)))
           except Exception as exc:
               print("FACTORY_MASTER_HANDLE_INSPECTION_ERROR=" + type(exc).__name__)
-                    from django.apps import apps
+          from django.apps import apps
           pattern = re.compile(r"(factory|task|queue|probe|opportun|evidence|research|workflow|schedule|job|run)", re.I)
           for model in apps.get_app_config("core").get_models():
               if pattern.search(model.__name__) or pattern.search(model._meta.db_table):
@@ -452,3 +452,4 @@ jobs:
 # [factory-readonly-audit-20261029]
 
 # [factory-run-existing-diagnostics]
+# [factory-run-existing-diagnostics2]
