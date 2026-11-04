@@ -142,13 +142,13 @@ test('combined keyboard directions cannot exceed single-axis movement speed', ()
 });
 
 
-test('tablet aiming and mouse drag cannot fire, while primary desktop click still works', () => {
+test('touch and drag cannot fire, while real mouse clicks work at all viewport widths', () => {
   const mouse = {pointerType:'mouse',finished:true,cancelled:false,moved:0};
   const click = {button:0,detail:1,pointerType:'mouse'};
   const cases = [
     [click,'game',1365,mouse,true,'desktop click'],
     [click,'game',1024,mouse,true,'landscape desktop click'],
-    [click,'game',699,mouse,false,'phone-width click'],
+    [click,'game',699,mouse,true,'physical mouse click at phone-width viewport'],
     [click,'home',1365,mouse,false,'menu click'],
     [{...click,pointerType:'touch'},'game',1024,mouse,false,'touch-synthesized click'],
     [click,'game',1024,{...mouse,pointerType:'touch'},false,'tablet touch'],

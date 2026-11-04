@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {dirname, resolve} from 'node:path';
 import vm from 'node:vm';
 import {campaignSaveDisposition} from '../../games/ramadan-war/save-validation.mjs';
+import {grantBattleReward} from '../../games/ramadan-war/economy-reward.mjs';
 
 const root=dirname(fileURLToPath(import.meta.url));
 const game=readFileSync(resolve(root,'../../games/ramadan-war/game.js'),'utf8');
@@ -28,6 +29,7 @@ test('accepted gunshots persist earned points and consumed ammo without waiting 
   combo:0,comboTimer:0,score:0,points:0,power:0,missionPassed:false,impacts:[],x:2.5,y:7.5};
  const target={x:3.5,y:7.5,hp:100};
  const ctx={screen:'game',world,visibleAttack:()=>target,engine:{pitch:()=>0},
+  grantBattleReward,
   document:{querySelector:()=>({classList:{remove(){},add(){}}})},
   clearTimeout(){},setTimeout(){return 1},hitTimer:0,
   toast(){},playTone(){},sync(){},reload(){},save(){saved++}};
