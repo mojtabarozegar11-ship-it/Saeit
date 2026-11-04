@@ -13,6 +13,13 @@ import pathlib
 import stat
 import zipfile
 
+# The repository intentionally contains a truncated development copy. A
+# release may replace it only with the exact complete CC-BY model pinned by
+# fetch_verified_models.sh; arbitrary binary drift is never accepted.
+PINNED_FULL_MODEL_BLOBS = {
+    "soldier-rigged-ccby.glb": "b00ed33108f2579880c82cd27d10f9237ff3a219"
+}
+
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
@@ -27,6 +34,7 @@ def inspect(candidate, source_index=None):
     errors = []
     checks = {}
     diffs = []
+    rehydrated = []
     with zipfile.ZipFile(candidate) as archive:
         members = archive.infolist()
         names = [entry.filename for entry in members]
@@ -86,6 +94,9 @@ def inspect(candidate, source_index=None):
             checks["preview_sha256"] = False
         else:
             preview = json.loads(archive.read(preview_path))
+            checks["payments_disabled"] = preview.get("payment_status") == "disabled"
+            if not checks["payments_disabled"]:
+                errors.append("payments_not_confirmed_disabled")
             bad_entries = []
             for name, record in preview.get("files", {}).items():
                 member = "ramadan-war/" + name
@@ -106,10 +117,15 @@ def inspect(candidate, source_index=None):
                 if name not in present:
                     continue  # The repo also contains tests and unreleased tools.
                 compared += 1
-                if git_blob(archive.read(name)) != entry.get("sha"):
-                    diffs.append(entry["name"])
+                blob = git_blob(archive.read(name))
+                if blob != entry.get("sha"):
+                    if blob == PINNED_FULL_MODEL_BLOBS.get(entry["name"]):
+                        rehydrated.append(entry["name"])
+                    else:
+                        diffs.append(entry["name"])
             checks["source_branch_parity"] = not diffs and compared > 0
             checks["source_files_compared"] = compared
+            checks["pinned_model_rehydrations"] = rehydrated
             errors.extend("source_mismatch:" + name for name in diffs)
         else:
             checks["source_branch_parity"] = None
