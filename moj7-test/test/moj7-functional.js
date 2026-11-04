@@ -3,6 +3,15 @@ const Token = artifacts.require('MOJ7');
 const SUPPLY = '1000000000000000000';
 const MAX = ((2n ** 256n)-1n).toString();
 const ZERO = '410000000000000000000000000000000000000000';
+async function readExecutionReceipt(txid) {
+  let info;
+  for (let attempt = 0; attempt < 24; attempt++) {
+    info = await tronWrap.trx.getTransactionInfo(txid);
+    if (info?.receipt?.result) return info;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  assert.fail('Missing TVM execution receipt for local transaction ' + txid);
+}
 async function mustRevert(promise) {
   let result;
   let rejected;
@@ -12,8 +21,18 @@ async function mustRevert(promise) {
     rejected = error;
   }
   if (rejected) {
-    assert(/revert|execution reverted|contract revert/i.test(String(rejected.message)),
-      'Unexpected transaction error (not an explicit REVERT): ' + String(rejected.message).slice(0,400));
+    const message = String(rejected.message || rejected);
+    // Some TronBox constructor failures are reported as "contract not deployed"
+    // with a transaction-ID link, even when the TVM receipt is an explicit REVERT.
+    const embedded = message.match(/[?&]value=([a-fA-F0-9]{64})(?:\\b|$)/);
+    if (embedded) {
+      const info = await readExecutionReceipt(embedded[1]);
+      assert.equal(info.receipt.result, 'REVERT',
+        'Constructor failure must be REVERT, not ' + info.receipt.result);
+      return;
+    }
+    assert(/revert|execution reverted|contract revert/i.test(message),
+      'Unexpected transaction error (not a proven REVERT): ' + message.slice(0,400));
     return;
   }
   const isTxid = x => typeof x === 'string' && /^[a-fA-F0-9]{64}$/.test(x.replace(/^0x/, ''));
