@@ -1,0 +1,67 @@
+name: MOJ7 isolated TRE contract tests (no Mainnet, no spend)
+on:
+  push:
+    branches:
+      - moj7-compile-20261104-only
+    paths:
+      - .github/workflows/moj7-local-functional-tests.yml
+permissions:
+  contents: read
+jobs:
+  test-private-tvm:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: moj7-test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Lock source identity before testing
+        run: |
+          set -euo pipefail
+          printf '%s  %s\n' 'c94aa5fbbb2d738aab49c1fcd22b5e7aef42603048b316e2d5b7a544c505d53b' '../contracts/MOJ7.sol' | sha256sum -c -
+          test "$(grep -c 'http://127.0.0.1:9090' tronbox-config.js)" = '1'
+          ! grep -Ei 'api\.trongrid\.io|nile\.trongrid\.io|shasta|mainnet' tronbox-config.js
+      - name: Install isolated test framework
+        run: npm install --no-audit --no-fund --no-progress
+      - name: Create a fresh, local-only TRON TRE blockchain
+        run: |
+          set -euo pipefail
+          docker pull tronbox/tre:2.0.0
+          docker run -d --rm --name moj7-ci-tre \
+            -p 127.0.0.1:9090:9090 -e useDefaultPrivateKey=true \
+            tronbox/tre:2.0.0 >/dev/null
+          for attempt in $(seq 1 85); do
+            if curl -fsS --connect-timeout 2 --max-time 4 http://127.0.0.1:9090/healthcheck >/dev/null 2>&1; then
+              echo "MOJ7_LOCAL_TRE_HEALTHY"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "LOCAL_TRE_NOT_READY" >&2
+          exit 1
+      - name: Execute MOJ7 actual transactions on the private TVM
+        env:
+          CI_MOJ7_LOCAL_ONLY: '1'
+        run: |
+          set -euo pipefail
+          test "$(curl -fsS --max-time 8 -o /dev/null -w '%{http_code}' http://127.0.0.1:9090/healthcheck)" = '200'
+          npx tronbox test --network development ./test/moj7-functional.js 2>&1 | tee ../moj7-private-tvm-tests.log
+          grep -E '[[:space:]]+[0-9]+ passing' ../moj7-private-tvm-tests.log
+          echo 'MOJ7_TEST_NETWORK=local_TRE_only'
+          echo 'MOJ7_MAINNET_BROADCAST=false'
+      - name: Stop and remove local test chain
+        if: always()
+        working-directory: .
+        run: docker rm -f moj7-ci-tre >/dev/null 2>&1 || true
+      - name: Save test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moj7-private-tvm-test-results
+          path: moj7-private-tvm-tests.log
+          retention-days: 2
+          if-no-files-found: warn
