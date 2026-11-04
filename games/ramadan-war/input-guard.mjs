@@ -25,11 +25,15 @@ export function keyboardAction(code, screen, target, repeat = false) {
 // Map screen-space touch directions to the same movement axes as WASD:
 // up = forward (W), right = strafe right (D). Clamp diagonal input so
 // dragging beyond the pad never increases player speed.
-export function joystickAxes(dx, dy, limit) {
-  if (![dx, dy, limit].every(Number.isFinite) || limit <= 0) return {forward: 0, side: 0};
+export function joystickAxes(dx, dy, limit, deadzone = 0) {
+  if (![dx, dy, limit, deadzone].every(Number.isFinite) || limit <= 0) return {forward: 0, side: 0};
   const distance = Math.hypot(dx, dy);
   if (distance === 0) return {forward: 0, side: 0};
-  const scale = Math.min(1, limit / distance) / limit;
+  const zone = Math.max(0, Math.min(.5, deadzone));
+  const magnitude = Math.min(1, distance / limit);
+  if (magnitude <= zone) return {forward: 0, side: 0};
+  const adjusted = (magnitude - zone) / (1 - zone);
+  const scale = adjusted / distance;
   return {forward: -dy * scale, side: dx * scale};
 }
 
