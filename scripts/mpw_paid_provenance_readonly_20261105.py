@@ -48,6 +48,24 @@ def fulfillment_for_order(order_id):
         return {"linkage": "not_available", "ready": None, "total": None}
 
 
+
+def fulfillment_model_shape():
+    """Field names and related model labels only; no stored values or buyer details."""
+    try:
+        model = apps.get_model("mpw_commerce", "CommerceFulfillment")
+        fields = []
+        for field in model._meta.fields:
+            related = getattr(field, "related_model", None)
+            fields.append({
+                "field": str(field.name)[:64],
+                "type": str(field.get_internal_type())[:40],
+                "related_model": str(related._meta.label_lower)[:90] if related else None,
+            })
+        return {"available": True, "records": model.objects.count(), "fields": fields[:35]}
+    except (LookupError, AttributeError, TypeError, ValueError):
+        return {"available": False, "records": None, "fields": []}
+
+
 def run():
     paid = PaymentIntent.objects.filter(status="paid").select_related("order")
     total = paid.count()
@@ -93,6 +111,7 @@ def run():
         "truncated": total > len(rows),
         "provider_counts_examined": dict(sorted(provider_counts.items())),
         "walletless_persisted_credit_verified": valid_walletless_credits,
+        "fulfillment_schema_metadata": fulfillment_model_shape(),
         "independent_mainnet_recheck_performed": False,
         "customer_download_e2e_performed": False,
         "production_db_writes": False,
