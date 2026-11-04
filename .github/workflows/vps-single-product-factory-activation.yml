@@ -129,14 +129,35 @@ jobs:
             factory_config/design_opportunities.json
             factory_config/internal_design_supply.json
           )
-          tar -cf - "${files[@]}" product_recipes/farm_enterprise_economics | ssh "${ssh_opts[@]}" githubops@178.239.147.150 'tar -xf - -C "$HOME/factory-runtime/operations"'
+          # Stage exact reviewed source in an isolated, SHA-named directory.
+          # Never overwrite shared operations/scripts during transfer.
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          tar -cf - "${files[@]}" product_recipes/farm_enterprise_economics | ssh "${ssh_opts[@]}" githubops@178.239.147.150 'set -eu
+          umask 077
+          stage="$HOME/factory-runtime/operations/source-staging/f01-${{ github.sha }}"
+          test ! -L "$HOME/factory-runtime/operations/source-staging"
+          test ! -e "$stage" && test ! -L "$stage"
+          install -d -m 700 "$stage"
+          tar -xf - -C "$stage"
+          test -f "$stage/scripts/factory_vps_product_cycle.py"
+          test -f "$stage/product_recipes/farm_enterprise_economics/calculator.py"
+          if find "$stage" -type l | grep -q .; then
+            echo F01_STAGED_SOURCE_SYMLINK >&2
+            exit 1
+          fi
+          echo F01_SOURCE_STAGED_ONLY=PASS'
           ssh "${ssh_opts[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
           set -euo pipefail
           test "$(id -un)" = githubops
           base="$HOME/factory-runtime"
           ops="$base/operations"
+          stage="$ops/source-staging/f01-${{ github.sha }}"
+          test -d "$stage" && test ! -L "$stage"
           py="$base/.venv/bin/python"
           runtime="$ops/single-product-runtime"
+          test ! -L "$ops/backups" && test ! -L "$runtime"
+          test ! -L "$runtime/scripts" && test ! -L "$runtime/factory_config"
+          test ! -L "$runtime/product_recipes"
           private="$base/private/autonomous-product-cycle"
           db="$base/private/factory-fresh-isolated.sqlite3"
           test -x "$py" && test -f "$db" && test ! -L "$base"
@@ -159,15 +180,36 @@ jobs:
             tar -czf "$backup/runtime-before.tar.gz" -C "$ops" single-product-runtime
             chmod 600 "$backup/runtime-before.tar.gz"
           fi
+          # Hold the VPS-local lock through runtime cutover; never race cron.
+          test ! -L "$private/.single-product-cycle.lock"
+          exec 8>"$private/.single-product-cycle.lock"
+          flock -n 8 || { echo F01_EXISTING_PRODUCTION_CYCLE_BUSY >&2; exit 1; }
           install -d -m 700 "$runtime/scripts" "$runtime/factory_config" "$runtime/product_recipes"
-          for f in "$ops/scripts/"*.py; do
-            test -f "$f" && install -m 600 "$f" "$runtime/scripts/$(basename "$f")"
+          for f in "$stage/scripts/"*.py; do
+            test -f "$f" && test ! -L "$f" && install -m 600 "$f" "$runtime/scripts/$(basename "$f")"
           done
-          install -m 600 "$ops/factory_config/design_opportunities.json" "$runtime/factory_config/design_opportunities.json"
-          install -m 600 "$ops/factory_config/internal_design_supply.json" "$runtime/factory_config/internal_design_supply.json"
-          rm -rf "$runtime/product_recipes/farm_enterprise_economics"
-          install -d -m 700 "$runtime/product_recipes/farm_enterprise_economics"
-          find "$ops/product_recipes/farm_enterprise_economics" -type f -exec install -m 600 {} "$runtime/product_recipes/farm_enterprise_economics/" \;
+          install -m 600 "$stage/factory_config/design_opportunities.json" "$runtime/factory_config/design_opportunities.json"
+          install -m 600 "$stage/factory_config/internal_design_supply.json" "$runtime/factory_config/internal_design_supply.json"
+          recipe_target="$runtime/product_recipes/farm_enterprise_economics"
+          staged_recipe="$runtime/product_recipes/.farm_enterprise_economics.next.$stamp"
+          test ! -e "$staged_recipe"
+          install -d -m 700 "$staged_recipe"
+          find "$stage/product_recipes/farm_enterprise_economics" -type f -exec install -m 600 {} "$staged_recipe/" \;
+          test -f "$staged_recipe/calculator.py" && test -f "$staged_recipe/test_calculator.py"
+          if test -d "$recipe_target" && test ! -L "$recipe_target"; then
+            mv "$recipe_target" "$backup/recipe-before"
+          elif test -e "$recipe_target"; then
+            echo F01_EXISTING_RECIPE_UNSAFE >&2
+            exit 1
+          fi
+          if ! mv "$staged_recipe" "$recipe_target"; then
+            if test -d "$backup/recipe-before" && ! test -e "$recipe_target"; then
+              mv "$backup/recipe-before" "$recipe_target"
+            fi
+            echo F01_RECIPE_REPLACEMENT_ROLLED_BACK >&2
+            exit 1
+          fi
+          echo F01_RECIPE_REPLACEMENT_WITH_PRESERVED_BACKUP=PASS
           test -f "$runtime/scripts/factory_vps_product_cycle.py"
           "$py" -B -c 'import ast,pathlib; ast.parse(pathlib.Path("'"$runtime"'/scripts/factory_vps_product_cycle.py").read_text())'
           runner="$runtime/run-single-product-cycle.sh"
@@ -188,6 +230,8 @@ jobs:
           path_obj.write_text(text)
           path_obj.chmod(0o700)
           PY
+          # Release the deployment lock before the runner acquires it on fd 9.
+          exec 8>&-
           "$runner"
           # Only the runner holds the private flock. An outer flock on the same
           # path would make every scheduled child exit successfully without work.
