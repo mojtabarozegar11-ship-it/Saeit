@@ -23,6 +23,7 @@ on:
       - "scripts/factory_verified_customer_cycle_20261021.py"
       - "scripts/factory_personal_owner_passport_policy_20261020.py"
       - "scripts/factory_vps_product_cycle.py"
+      - "scripts/factory_global_singleton_v1.py"
       - "scripts/factory_specialist_pilots.py"
       - "scripts/factory_specialist_formats.py"
       - "scripts/factory_research_triage.py"
@@ -35,6 +36,7 @@ on:
       - "tests/test_factory_production_warehouse.py"
       - "tests/test_factory_quality_module_upgrade.py"
       - "tests/test_factory_vps_product_cycle.py"
+      - "tests/test_factory_ai_owner_clearance.py"
       - "tests/test_factory_vps_installer_syntax.py"
       - "tests/test_factory_private_passport_20261020.py"
       - ".github/workflows/vps-autonomous-product-install.yml"
@@ -60,6 +62,7 @@ on:
       - "tests/test_factory_vps_installer_syntax.py"
       - "tests/test_factory_private_passport_20261020.py"
       - "scripts/factory_vps_product_cycle.py"
+      - "scripts/factory_global_singleton_v1.py"
       - "scripts/factory_specialist_pilots.py"
       - "scripts/factory_specialist_formats.py"
       - "scripts/factory_research_triage.py"
@@ -70,6 +73,13 @@ on:
       - "tests/test_factory_measured_qa.py"
       - ".github/workflows/vps-autonomous-product-install.yml"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Stage reviewed source or inspect server access and competing schedulers"
+        required: false
+        type: choice
+        default: stage
+        options: [stage, preflight]
 permissions:
   contents: read
 concurrency:
@@ -77,16 +87,24 @@ concurrency:
   cancel-in-progress: false
 jobs:
   measured-qa:
+    if: github.event_name != 'workflow_dispatch' || inputs.mode != 'preflight'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        # A manual diagnostic uses one runner; normal CI retains full coverage.
+        python: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '["3.11"]' || '["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Bounded owner-approved AI quality gate diagnostic (no deployment)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          python -m pip install --disable-pip-version-check openpyxl==3.1.5
+          python -B -m unittest discover -s tests -p 'test_factory_ai_owner_clearance.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
       - run: |
           python -m pip install openpyxl==3.1.5
           python -B -m unittest discover -s tests -p 'test_factory_recipe_designer.py' -v
@@ -103,6 +121,8 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_factory_research_triage.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_build_50.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_build50_workbook.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_ai_owner_clearance.py' -v
+        if: github.event_name != 'workflow_dispatch'
   deploy:
     needs: measured-qa
     # F-01 owner directive: never deploy the obsolete 25-product installer.
@@ -150,7 +170,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           SSH=(ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150)
-          tar -cf - scripts/factory_customer_packager.py tests/test_factory_customer_packager.py scripts/factory_continuous_invention.py tests/test_factory_continuous_invention.py scripts/factory_design_intake.py tests/test_factory_design_intake.py factory_config/internal_design_supply.json scripts/factory_build50_workbook.py tests/test_factory_build50_workbook.py scripts/factory_build_50.py tests/test_factory_build_50.py tests/test_factory_vps_product_cycle.py tests/test_factory_source_evolution.py tests/test_factory_specialist_pilots.py tests/test_factory_research_triage.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_research_triage.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_verified_customer_cycle_20261021.py scripts/factory_personal_owner_passport_policy_20261020.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_master_agent_genetics_v1.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
+          tar -cf - scripts/factory_customer_packager.py tests/test_factory_customer_packager.py scripts/factory_continuous_invention.py tests/test_factory_continuous_invention.py scripts/factory_design_intake.py tests/test_factory_design_intake.py factory_config/internal_design_supply.json scripts/factory_build50_workbook.py tests/test_factory_build50_workbook.py scripts/factory_build_50.py tests/test_factory_build_50.py tests/test_factory_vps_product_cycle.py tests/test_factory_source_evolution.py tests/test_factory_specialist_pilots.py tests/test_factory_research_triage.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_research_triage.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_verified_customer_cycle_20261021.py scripts/factory_personal_owner_passport_policy_20261020.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_global_singleton_v1.py scripts/factory_master_agent_genetics_v1.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
           "${SSH[@]}" 'test -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/scripts/factory_verified_customer_cycle_20261021.py" && echo VPS_FACTORY_REQUIRED_CUSTOMER_MODULE_STAGED=PASS'
           "${SSH[@]}" 'test -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/scripts/factory_master_agent_genetics_v1.py" && echo VPS_FACTORY_MASTER_GENETICS_MODULE_STAGED=PASS'
           "${SSH[@]}" 'test -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/tests/test_factory_source_evolution.py" && echo VPS_FACTORY_LEGACY_SOURCE_EVOLUTION_FIXTURE_STAGED=PASS'
@@ -382,3 +402,183 @@ jobs:
           print("FACTORY_REAL_CUSTOMER_PACKAGE_COMMERCIAL_SALE_READY=0")
           print("FACTORY_NEW_DESIGN_TO_REAL_PROTOTYPE=PASS")
           PYENGINEERING
+
+  stage-reviewed-ai-owner-policy:
+    # One-time transfer of reviewed public source ONLY. No runtime install,
+    # product admission, crontab, service, invoice, or private data changes.
+    needs: measured-qa
+    if: github.event_name == 'workflow_dispatch' && github.ref_name == 'feature/factory-ai-owner-release-20261104' && inputs.mode != 'preflight'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Integrity-verified isolated VPS staging; never activate
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$VPS_KEY"
+          scratch="$RUNNER_TEMP/ai-owner-stage"
+          mkdir -m 700 -p "$scratch"
+          trap 'rm -f "$scratch/key" "$scratch/known"; rmdir "$scratch" 2>/dev/null || :' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$scratch/key"
+          chmod 600 "$scratch/key"
+          ssh-keygen -y -P "" -f "$scratch/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$scratch/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$scratch/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_opts=(-i "$scratch/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$scratch/known" -o BatchMode=yes -o ConnectTimeout=15)
+          SSH=(ssh "${ssh_opts[@]}" githubops@178.239.147.150)
+          stage="/home/githubops/factory-runtime/operations/ai-owner-release-$GITHUB_SHA"
+          "${SSH[@]}" "test -d '/home/githubops/factory-runtime/operations' && test ! -L '/home/githubops/factory-runtime/operations' && test ! -e '$stage' && mkdir -m 700 '$stage'"
+          paths=(scripts/factory_vps_product_cycle.py scripts/factory_global_singleton_v1.py tests/test_factory_ai_owner_clearance.py docs/factory-ai-owner-release-v2.md)
+          expected="$(sha256sum "${paths[@]}" | sha256sum)"
+          tar --create --file - -- "${paths[@]}" | "${SSH[@]}" "tar --extract --file - --directory '$stage' --no-same-owner --no-same-permissions"
+          observed="$("${SSH[@]}" "cd '$stage' && sha256sum ${paths[*]} | sha256sum")"
+          test "$observed" = "$expected"
+          "${SSH[@]}" "test -f '$stage/scripts/factory_vps_product_cycle.py' && test ! -L '$stage/scripts/factory_vps_product_cycle.py'"
+          echo "FACTORY_AI_OWNER_POLICY_STAGED_SHA=$GITHUB_SHA"
+          echo "FACTORY_AI_OWNER_POLICY_INTEGRITY=PASS"
+          echo "FACTORY_AI_OWNER_RUNTIME_ACTIVATION=NOT_ATTEMPTED"
+
+  read-only-trust-and-scheduler-preflight:
+    # No product mutation, service toggles, root escalation, or key disclosure.
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'preflight' && github.ref_name == 'feature/factory-ai-owner-release-20261104'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Pinned SSH read-only inventory, metadata only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          scratch="$RUNNER_TEMP/factory-preflight"
+          mkdir -m 700 -p "$scratch"
+          trap 'rm -f "$scratch/key" "$scratch/known"; rmdir "$scratch" 2>/dev/null || :' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$scratch/key"
+          chmod 600 "$scratch/key"
+          ssh-keygen -y -P "" -f "$scratch/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$scratch/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$scratch/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh -i "$scratch/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$scratch/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -B -' <<'PYAUDIT'
+          import json,os,stat,subprocess
+          from pathlib import Path
+
+          def flag(label,yes):
+              print(label+"="+("YES" if yes else "NO"))
+
+          def admin_safe(p,dir=False):
+              try:
+                  m=p.lstat()
+                  return not p.is_symlink() and m.st_uid==0 and (m.st_mode&0o022)==0 and (stat.S_ISDIR(m.st_mode) if dir else stat.S_ISREG(m.st_mode))
+              except OSError:
+                  return False
+
+          def state(p):
+              if p.is_symlink():
+                  return "UNSAFE_SYMLINK",None
+              try:
+                  if not p.is_file() or p.stat().st_size>2000000:
+                      return "MISSING_OR_UNSAFE",None
+                  d=json.loads(p.read_text(encoding="utf-8"))
+                  return ("READABLE",d) if isinstance(d,dict) else ("INVALID",None)
+              except (OSError,UnicodeError,ValueError):
+                  return "UNREADABLE",None
+
+          print("FACTORY_AUDIT_MODE=READ_ONLY")
+          print("FACTORY_AUDIT_UID="+str(os.geteuid()))
+          owner=Path("/etc/saeit/factory-owner-approval-public-keys")
+          flag("FACTORY_OWNER_PUBLIC_KEY_ADMIN_PROTECTED",all(admin_safe(p,dir=True) for p in (Path("/etc"),Path("/etc/saeit"),owner)) and admin_safe(owner/"owner.pem"))
+          recv=Path("/etc/saeit/hourly-cycle-receiver-public-keys")
+          recv_ok=all(admin_safe(p,dir=True) for p in (Path("/etc"),Path("/etc/saeit"),recv))
+          flag("FACTORY_RECEIVER_KEY_DIR_ADMIN_PROTECTED",recv_ok)
+          print("FACTORY_RECEIVER_KEY_COUNT="+str(sum(admin_safe(p) for p in recv.glob("*.pem")) if recv_ok else 0))
+          print("FACTORY_OWNER_IDENTITY_ATTESTATION=UNVERIFIED_BY_METADATA")
+          root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
+          name,d=state(root/"production-instructions/stage-06/strict-serial-active-v1.json")
+          print("FACTORY_AGRI200_STATE="+name)
+          if d is not None:
+              flag("FACTORY_AGRI200_ACTIVE_ORDER_PRESENT",d.get("active_order") is not None)
+              flag("FACTORY_AGRI200_ALL_COMPLETE",d.get("all_complete") is True)
+          name,d=state(root/"quality-excellence/product-flow/active-slots/current.json")
+          print("FACTORY_LINE41_STATE="+name)
+          if d is not None:
+              v=d.get("active")
+              print("FACTORY_LINE41_ACTIVE_COUNT="+str(len(v)) if isinstance(v,list) else "FACTORY_LINE41_ACTIVE_COUNT=UNKNOWN")
+          name,d=state(root/".f01-global-production-lane.json")
+          print("FACTORY_GLOBAL_LANE_STATE="+name)
+          if d is not None:
+              v=d.get("owner")
+              print("FACTORY_GLOBAL_LANE_OWNER="+str(v) if v in ("agri200","line41",None) else "FACTORY_GLOBAL_LANE_OWNER=UNKNOWN")
+          for who,cmd in (("USER",["crontab","-l"]),("ROOT",["sudo","-n","crontab","-l","-u","root"])):
+              try:
+                  r=subprocess.run(cmd,capture_output=True,text=True,timeout=6)
+                  if r.returncode==0:
+                      lines=(s for s in r.stdout.splitlines() if s.strip() and not s.lstrip().startswith("#"))
+                      print("FACTORY_"+who+"_CRON_READABLE=YES")
+                      print("FACTORY_"+who+"_CRON_RELATED_COUNT="+str(sum("factory" in s.lower() or "agri" in s.lower() for s in lines)))
+                  else:
+                      print("FACTORY_"+who+"_CRON_READABLE=NO")
+              except (OSError,subprocess.TimeoutExpired):
+                  print("FACTORY_"+who+"_CRON_READABLE=NO")
+          for who,cmd in (("SYSTEM",["systemctl","list-timers","--all","--no-pager","--no-legend"]),("USER",["systemctl","--user","list-timers","--all","--no-pager","--no-legend"])):
+              try:
+                  r=subprocess.run(cmd,capture_output=True,text=True,timeout=6)
+                  if r.returncode==0:
+                      print("FACTORY_"+who+"_TIMER_RELATED_COUNT="+str(sum("factory" in s.lower() or "agri" in s.lower() for s in r.stdout.splitlines())))
+                  else:
+                      print("FACTORY_"+who+"_TIMERS=UNAVAILABLE")
+              except (OSError,subprocess.TimeoutExpired):
+                  print("FACTORY_"+who+"_TIMERS=UNAVAILABLE")
+          # Read-only freshness and process liveness; emit no command lines or document content.
+          import time
+          for label,p in (("AGRI200",root/"production-instructions/stage-06/strict-serial-active-v1.json"),
+                          ("LINE41",root/"quality-excellence/product-flow/active-slots/current.json"),
+                          ("GLOBAL_LANE",root/".f01-global-production-lane.json")):
+              try:
+                  if not p.is_symlink() and p.is_file():
+                      age=max(0,int((time.time()-p.stat().st_mtime)/60))
+                      print("FACTORY_"+label+"_RECORD_AGE_MINUTES="+str(age))
+                  else:
+                      print("FACTORY_"+label+"_RECORD_AGE_MINUTES=UNKNOWN")
+              except OSError:
+                  print("FACTORY_"+label+"_RECORD_AGE_MINUTES=UNKNOWN")
+          signatures={"AGRI200":(b"agri200",b"strict_serial",b"strict-serial"),
+                      "LINE41":(b"factory_vps_product_cycle.py",b"factory_first_product_pilot.py"),
+                      "GENERIC_FACTORY":(b"factory-runtime",)}
+          counts={k:0 for k in signatures}
+          proc_inspected=0
+          for entry in Path("/proc").iterdir():
+              if not entry.name.isdecimal():
+                  continue
+              try:
+                  raw=(entry/"cmdline").read_bytes()[:8192].lower()
+              except (OSError,PermissionError):
+                  continue
+              if not raw:
+                  continue
+              proc_inspected+=1
+              for label,patterns in signatures.items():
+                  if any(pattern in raw for pattern in patterns):
+                      counts[label]+=1
+          for label,count in counts.items():
+              print("FACTORY_"+label+"_MATCHING_PROCESS_COUNT="+str(count))
+          print("FACTORY_PROCESS_LIST_INSPECTED_COUNT="+str(proc_inspected))
+          try:
+              r=subprocess.run(["systemctl","list-units","--type=service","--state=running","--no-pager","--no-legend"],capture_output=True,text=True,timeout=6)
+              if r.returncode==0:
+                  print("FACTORY_SYSTEM_RUNNING_RELATED_SERVICES="+str(sum("factory" in s.lower() or "agri" in s.lower() for s in r.stdout.splitlines())))
+              else:
+                  print("FACTORY_SYSTEM_RUNNING_SERVICES=UNAVAILABLE")
+          except (OSError,subprocess.TimeoutExpired):
+              print("FACTORY_SYSTEM_RUNNING_SERVICES=UNAVAILABLE")
+          print("FACTORY_AUDIT_MUTATIONS=ZERO")
+          print("FACTORY_RUNTIME_ACTIVATION=NOT_ATTEMPTED")
+          PYAUDIT

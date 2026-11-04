@@ -1,9 +1,11 @@
 """Integration QA: order-independent autonomous VPS product manufacturing."""
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -15,6 +17,95 @@ spec = importlib.util.spec_from_file_location(
 )
 cycle = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cycle)
+
+
+class Line41SignedHourlyHandoffTests(unittest.TestCase):
+    """No second Line 41 SKU after QC1000 until receiver-signed delivery."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name) / "private"
+        self.trust = Path(self.temp.name) / "receiver-public-keys"
+        self.trust.mkdir(mode=0o700)
+        self.trust_patch = mock.patch.object(cycle, "RECEIVER_TRUST_ROOT", self.trust)
+        self.trust_patch.start()
+        self.addCleanup(self.trust_patch.stop)
+        self.first = "farm_enterprise_economics"
+        self.second = "greenhouse_crop_margin"
+        self.payload = b"synthetic-line41-approved-archive"
+        self.clearance = {"artifact_sha256": hashlib.sha256(self.payload).hexdigest(),
+                          "clearance_sha256": "b" * 64}
+
+    def receiver_receipt(self):
+        warehouse = self.root / "digital-products" / self.first
+        warehouse.mkdir(parents=True, exist_ok=True)
+        (warehouse / (self.first + "-internal-qa.zip")).write_bytes(self.payload)
+        receiver = (self.root / "product-lifecycle/hourly-cycle-handoffs/B-01"
+                    / self.first)
+        receiver.mkdir(parents=True)
+        (receiver / "product.zip").write_bytes(self.payload)
+        receipt = receiver / "receipt.json"
+        receipt.write_text(json.dumps({
+            "schema": cycle.HOURLY_HANDOFF_SCHEMA, "product_id": self.first,
+            "receiver_cycle": "B-01", "status": "accepted_by_receiver",
+            "artifact_sha256": self.clearance["artifact_sha256"],
+            "clearance_sha256": self.clearance["clearance_sha256"],
+            "acceptance_evidence": "receiver private durable acceptance"
+        }), encoding="utf8")
+        secret = self.trust / "receiver.test-private.pem"
+        subprocess.run(["openssl", "ecparam", "-name", "prime256v1", "-genkey",
+                        "-noout", "-out", str(secret)], check=True, capture_output=True)
+        subprocess.run(["openssl", "pkey", "-in", str(secret), "-pubout",
+                        "-out", str(self.trust / "B-01.pem")], check=True, capture_output=True)
+        return receiver, secret
+
+    @staticmethod
+    def sign(receiver, secret):
+        subprocess.run(["openssl", "dgst", "-sha256", "-sign", str(secret),
+                        "-out", str(receiver / "receipt.sig"),
+                        str(receiver / "receipt.json")], check=True, capture_output=True)
+
+    def test_slot_holds_after_qc_until_signed_receipt_and_copy(self):
+        self.assertEqual(cycle._maintain_product_slots(self.root,
+                         [self.first, self.second]), [self.first])
+        with mock.patch.object(cycle, "_verified_quality_exit",
+                               side_effect=lambda _, name: self.clearance if name == self.first else None):
+            self.assertEqual(cycle._maintain_product_slots(self.root,
+                             [self.first, self.second]), [self.first])
+            receiver, secret = self.receiver_receipt()
+            # Neither a copied archive nor unsigned JSON constitutes delivery.
+            self.assertEqual(cycle._maintain_product_slots(self.root,
+                             [self.first, self.second]), [self.first])
+            self.sign(receiver, secret)
+            self.assertTrue(cycle._accepted_hourly_handoff(self.root, self.first,
+                                                             self.clearance))
+            self.assertEqual(cycle._maintain_product_slots(self.root,
+                             [self.first, self.second]), [self.second])
+        slots = json.loads((self.root /
+            "quality-excellence/product-flow/active-slots/current.json").read_text())
+        self.assertIn(self.first, slots["exited"])
+        self.assertEqual([x["recipe"] for x in slots["active"]], [self.second])
+
+    def test_tampering_or_wrong_version_never_releases_slot(self):
+        receiver, secret = self.receiver_receipt()
+        self.sign(receiver, secret)
+        self.assertTrue(cycle._accepted_hourly_handoff(self.root, self.first,
+                                                         self.clearance))
+        receipt = receiver / "receipt.json"
+        data = json.loads(receipt.read_text())
+        data["acceptance_evidence"] = "tampered"
+        receipt.write_text(json.dumps(data))
+        self.assertFalse(cycle._accepted_hourly_handoff(self.root, self.first,
+                                                          self.clearance))
+        self.sign(receiver, secret)
+        self.assertTrue(cycle._accepted_hourly_handoff(self.root, self.first,
+                                                         self.clearance))
+        self.assertFalse(cycle._accepted_hourly_handoff(self.root, self.first,
+                       dict(self.clearance, clearance_sha256="a" * 64)))
+        (receiver / "product.zip").write_bytes(b"different-product")
+        self.assertFalse(cycle._accepted_hourly_handoff(self.root, self.first,
+                                                          self.clearance))
 
 
 class FactoryVPSCycleTests(unittest.TestCase):
@@ -220,7 +311,10 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         for file in generated.glob('test_*.py'): file.unlink()
         result=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
         self.assertEqual(result['status'],'ok')
-        self.assertEqual(result['registered_recipes'],5)
+        # The exclusive Line 41 slot keeps one generated SKU until signed
+        # QC1000 handoff; repair must work without admitting a second SKU.
+        self.assertEqual(result['registered_recipes'],4)
+        self.assertEqual(result['new_recipe_count'],0)
         self.assertTrue(list(generated.glob('test_*.py')))
         state=json.loads((self.output/'production-state.json').read_text())
         self.assertEqual(len(state['source_recoveries']),1)
@@ -266,10 +360,13 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         self.assertEqual(first["registered_recipes"],4)
         self.assertEqual(first["new_recipe_count"],1)
         second = cycle.run_cycle(self.db, self.output, self.recipes, enable_designer=True)
-        self.assertEqual(second["registered_recipes"],5)
-        self.assertEqual(second["new_recipe_count"],1)
+        # A second tick must maintain the existing SKU, not synthesize another
+        # while a product still holds the unapproved singleton slot.
+        self.assertEqual(second["registered_recipes"],4)
+        self.assertEqual(second["new_recipe_count"],0)
         self.assertEqual(sorted(x.name for x in self.recipes.iterdir()),static_before)
         generated_root=self.output/"generated-product-recipes"
+        self.assertEqual(len([p for p in generated_root.iterdir() if p.is_dir()]),1)
         active_recipe=next(path.name for path in generated_root.iterdir() if path.is_dir())
         slot_path=self.output/"quality-excellence/product-flow/active-slots/current.json"
         slots=json.loads(slot_path.read_text())

@@ -6,6 +6,23 @@ import unittest
 
 
 class VPSProductInstallerTests(unittest.TestCase):
+    def test_legacy_multiproduct_install_is_unconditionally_fail_closed(self):
+        """Neither a dispatch nor the historical approval token may start SKU 2."""
+        source = Path(__file__).resolve().parents[1]
+        installer = source / "deploy/install_autonomous_factory_products.sh"
+        content = installer.read_text(encoding="utf8")
+        gate = "F01_LEGACY_MULTIPRODUCT_INSTALL_DISABLED_UNTIL_GLOBAL_SINGLETON_PROVEN"
+        self.assertIn(gate, content)
+        self.assertLess(content.index(gate), content.index('repo="$(cd'))
+        self.assertLess(content.index("exit 3"), content.index('--max-products 25'))
+        result = subprocess.run(["bash", str(installer)], capture_output=True,
+                                text=True, timeout=5)
+        self.assertEqual(result.returncode, 3)
+        self.assertIn(gate, result.stderr)
+        wf = (source / ".github/workflows/vps-autonomous-product-install.yml").read_text()
+        deploy = wf.split("\n  deploy:\n", 1)[1]
+        self.assertIn("if: false", deploy)
+
     def test_installer_is_valid_bash(self):
         bash = shutil.which("bash")
         if bash is None:
@@ -84,6 +101,7 @@ class VPSProductInstallerTests(unittest.TestCase):
                 self.assertIn(module, install_inventory)
                 self.assertIn("scripts/" + module, transport)
         self.assertIn("VPS_FACTORY_MASTER_GENETICS_MODULE_STAGED=PASS", wf)
+        self.assertIn('test ! -L "$repo/scripts/factory_global_singleton_v1.py"', installer)
 
     def test_manual_or_owner_requested_gated_deployment_is_packaged(self):
         source = Path(__file__).resolve().parents[1]
@@ -91,8 +109,11 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn("scripts/factory_evidence_quality.py", wf)
         self.assertIn("workflow_dispatch:", wf)
         self.assertIn("branches: [main]", wf)
-        # The former mass-production installer must stay locked until an
-        # independently reviewed global one-product controller replaces it.
+        # The historic mass-build approval token must not unlock deployment.
+        self.assertNotIn("[approved-factory-unlimited-builds-20261019]", wf)
+        deploy_job = wf.split("\n  deploy:\n", 1)[1]
+        self.assertIn("if: false", deploy_job.split("runs-on:", 1)[0])
+        # Retain the mainline controls as well as this branch’s dispatch assertion.
         deploy_gate = wf.split("\n  deploy:\n", 1)[1].split("\n    steps:\n", 1)[0]
         self.assertIn("    if: false", deploy_gate)
         installer = (source / "deploy/install_autonomous_factory_products.sh").read_text(

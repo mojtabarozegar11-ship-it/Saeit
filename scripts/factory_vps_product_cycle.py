@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
 import tempfile
 from pathlib import Path
 import sys
@@ -37,9 +38,12 @@ SCRIPTS = Path(__file__).resolve().parent
 PRODUCT_SLOT_CAPACITY = 1
 PRODUCT_LINE_ID = 41
 SLOT_SCHEMA = "saeit.factory.product-slots.v1"
-CLEARANCE_SCHEMA = "saeit.factory.signed-quality-clearance.v1"
 PRODUCT_SLUG = re.compile(r"^[a-z][a-z0-9_]{1,65}$")
 HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+HOURLY_HANDOFF_SCHEMA = "saeit.factory.hourly-cycle-handoff.v1"
+RECEIVER_CYCLES = frozenset({"R-01", "B-01", "S-01", "G-01"})
+# Operator-managed trust anchor: NEVER load keys from factory-writable output.
+RECEIVER_TRUST_ROOT = Path("/etc/saeit/hourly-cycle-receiver-public-keys")
 
 
 def _read_private_json(path):
@@ -75,19 +79,153 @@ def _write_private_json(path, value):
             os.unlink(temporary)
 
 
+AI_REVIEW_SCHEMA = "saeit.factory.ai-assisted-internal-review.v1"
+AI_EVIDENCE_SCHEMA = "saeit.factory.ai-review-evidence.v1"
+OWNER_CLEARANCE_SCHEMA = "saeit.factory.ai-assisted-owner-clearance.v2"
+OWNER_APPROVAL_TRUST_ROOT = Path("/etc/saeit/factory-owner-approval-public-keys")
+MANDATORY_AI_CHECKS = frozenset({
+    "scientific_accuracy", "technical_correctness", "rights_screening",
+    "usability", "security", "commercial_readiness"
+})
+
+
+def _read_hashed_json(path):
+    """Parse once and retain the digest of exactly the bytes inspected."""
+    path = Path(path)
+    try:
+        if (path.is_symlink() or not path.is_file()
+                or not 0 < path.stat().st_size <= 2_000_000):
+            return None, None
+        raw = path.read_bytes()
+        item = json.loads(raw)
+        if not isinstance(item, dict):
+            return None, None
+        return item, hashlib.sha256(raw).hexdigest()
+    except (OSError, ValueError, UnicodeError):
+        return None, None
+
+
+def _trusted_owner_public_key():
+    """Only a genuinely administrator-provisioned public key may authorize exit.
+
+    The production process cannot appoint itself an owner or write this trust
+    anchor. It must never generate a purported independent reviewer signature.
+    """
+    root = OWNER_APPROVAL_TRUST_ROOT
+    key = root / "owner.pem"
+    try:
+        if (root.is_symlink() or root.parent.is_symlink()
+                or not root.is_dir() or key.is_symlink() or not key.is_file()):
+            return None
+        pst, rst, kst = root.parent.stat(), root.stat(), key.stat()
+        if (pst.st_uid != 0 or pst.st_mode & 0o022
+                or rst.st_uid != 0 or kst.st_uid != 0
+                or rst.st_mode & 0o022 or kst.st_mode & 0o022
+                or not 0 < kst.st_size <= 16_384):
+            return None
+        return key
+    except OSError:
+        return None
+
+
+def _owner_signature_verifies(clearance_path):
+    """Verify the real owner's detached signature over exact clearance bytes."""
+    key = _trusted_owner_public_key()
+    signature = clearance_path.parent / "owner.sig"
+    if key is None:
+        return False
+    try:
+        if (clearance_path.is_symlink() or signature.is_symlink()
+                or not signature.is_file()
+                or not 0 < signature.stat().st_size <= 4096):
+            return False
+        baseline = hashlib.sha256(clearance_path.read_bytes()).hexdigest()
+        checked = subprocess.run(
+            ["openssl", "dgst", "-sha256", "-verify", str(key),
+             "-signature", str(signature), str(clearance_path)],
+            capture_output=True, timeout=5, check=False)
+        return (checked.returncode == 0 and
+                hashlib.sha256(clearance_path.read_bytes()).hexdigest() == baseline)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
+
+
+def _validated_ai_review(report, artifact_sha, root, recipe):
+    """Bind every internal review claim to existing, exact hashed evidence.
+
+    This is traceability of an internal AI-assisted evaluation, not an
+    independent audit or a substitute for owner/receiver authorization.
+    """
+    if (not isinstance(report, dict)
+            or report.get("schema") != AI_REVIEW_SCHEMA
+            or report.get("reviewer_kind") != "chatgpt_ai_assisted_internal"
+            or report.get("independent_human_review") is not False
+            or report.get("artifact_sha256") != artifact_sha
+            or report.get("review_status") != "completed"
+            or report.get("verified_grade_total") != 1000):
+        return False
+    checks = report.get("evidence_checks")
+    if not isinstance(checks, list) or len(checks) != len(MANDATORY_AI_CHECKS):
+        return False
+    quality_root = Path(root) / "quality-excellence"
+    evidence_base = quality_root / "ai-review-evidence"
+    evidence_root = evidence_base / recipe
+    if (any(p.is_symlink() for p in (quality_root, evidence_base, evidence_root))
+            or not evidence_root.is_dir()):
+        return False
+    observed = set()
+    for check in checks:
+        if (not isinstance(check, dict) or check.get("status") != "passed"
+                or not isinstance(check.get("check_id"), str)
+                or check["check_id"] not in MANDATORY_AI_CHECKS
+                or not isinstance(check.get("evidence_sha256"), str)
+                or not HEX_SHA256.fullmatch(check["evidence_sha256"])):
+            return False
+        check_id = check["check_id"]
+        if check_id in observed:
+            return False
+        evidence, evidence_hash = _read_hashed_json(
+            evidence_root / (check_id + ".json"))
+        if evidence_hash != check["evidence_sha256"] or not evidence:
+            return False
+        method = evidence.get("method")
+        observations = evidence.get("observations")
+        if (evidence.get("schema") != AI_EVIDENCE_SCHEMA
+                or evidence.get("check_id") != check_id
+                or evidence.get("artifact_sha256") != artifact_sha
+                or evidence.get("status") != "passed"
+                or evidence.get("reviewer_kind") != "chatgpt_ai_assisted_internal"
+                or evidence.get("independent_human_review") is not False
+                or not isinstance(method, str) or len(method.strip()) < 10
+                or not isinstance(observations, list)
+                or not observations or len(observations) > 100
+                or any(not isinstance(item, str) or len(item.strip()) < 10
+                       for item in observations)):
+            return False
+        observed.add(check_id)
+    return observed == MANDATORY_AI_CHECKS
+
+
 def _verified_quality_exit(root, recipe):
-    """Only a current, signed 1000/1000 clearance frees a production slot."""
+    """Release only after evidence-bound ChatGPT review AND real owner signature.
+
+    This is explicitly INTERNAL AI-assisted review, never represented as an
+    independent human or legally authoritative scientific certification.
+    """
     manifest_path = root / "digital-products" / recipe / "manufacturing_manifest.json"
     archive_path = root / "digital-products" / recipe / (recipe + "-internal-qa.zip")
+    report_path = root / "quality-excellence" / "ai-reviews" / recipe / "current.json"
     clearance_path = root / "quality-excellence" / "signed-clearances" / recipe / "current.json"
-    manifest = _read_private_json(manifest_path)
-    clearance = _read_private_json(clearance_path)
-    if (not manifest or not clearance or archive_path.is_symlink()
-            or not archive_path.is_file()):
+    manifest, manifest_sha = _read_hashed_json(manifest_path)
+    report, report_sha = _read_hashed_json(report_path)
+    clearance, clearance_sha = _read_hashed_json(clearance_path)
+    if (not manifest or not report or not clearance
+            or archive_path.is_symlink() or not archive_path.is_file()):
         return None
     artifact_sha = manifest.get("artifact_sha256")
     if (manifest.get("recipe") != recipe or manifest.get("qa_status") != "passed"
-            or not isinstance(artifact_sha, str) or not HEX_SHA256.fullmatch(artifact_sha)):
+            or not isinstance(artifact_sha, str)
+            or not HEX_SHA256.fullmatch(artifact_sha)):
         return None
     digest = hashlib.sha256()
     try:
@@ -96,21 +234,115 @@ def _verified_quality_exit(root, recipe):
                 digest.update(block)
     except OSError:
         return None
-    roles = clearance.get("valid_signed_roles")
-    roles = set(roles) if isinstance(roles, list) and all(isinstance(x, str) for x in roles) else set()
-    independent_roles = {"domain_specialist", "independent_quality_auditor", "rights_reviewer"}
     if (digest.hexdigest() != artifact_sha
-            or clearance.get("schema") != CLEARANCE_SCHEMA
+            or not _validated_ai_review(report, artifact_sha, root, recipe)
+            or clearance.get("schema") != OWNER_CLEARANCE_SCHEMA
+            or clearance.get("reviewer_kind") != "chatgpt_ai_assisted_internal"
+            or clearance.get("independent_human_review") is not False
+            or clearance.get("ai_review_sha256") != report_sha
             or clearance.get("eligible") is not True
             or clearance.get("verified_grade_total") != 1000
             or clearance.get("artifact_sha256") != artifact_sha
-            or not independent_roles.issubset(roles)
-            or clearance.get("owner_authorization_kind") not in ("direct_owner", "verified_delegated_agent")
+            or clearance.get("owner_authorization_kind") != "direct_owner"
+            or clearance.get("owner_rights_attestation") is not True
             or clearance.get("publication_executed") is not False
             or clearance.get("payment_activated") is not False):
         return None
-    return {"artifact_sha256": artifact_sha,
-            "clearance_sha256": hashlib.sha256(clearance_path.read_bytes()).hexdigest()}
+    if not _owner_signature_verifies(clearance_path):
+        return None
+    try:
+        if (hashlib.sha256(manifest_path.read_bytes()).hexdigest() != manifest_sha
+                or hashlib.sha256(report_path.read_bytes()).hexdigest() != report_sha
+                or hashlib.sha256(clearance_path.read_bytes()).hexdigest() != clearance_sha):
+            return None
+        return {"artifact_sha256": artifact_sha,
+                "clearance_sha256": clearance_sha,
+                "review_type": "internal_ai_assisted_owner_signed"}
+    except OSError:
+        return None
+
+
+def _accepted_hourly_handoff(root, recipe, clearance):
+    """Require receiver-authenticated delivery of the exact QC1000 build.
+
+    A signed quality clearance is necessary but not sufficient to free the
+    singleton slot; the receiver's private key must be controlled independently.
+    """
+    if (not isinstance(clearance, dict) or not PRODUCT_SLUG.fullmatch(recipe)
+            or not HEX_SHA256.fullmatch(str(clearance.get("artifact_sha256", "")))
+            or not HEX_SHA256.fullmatch(str(clearance.get("clearance_sha256", "")))):
+        return False
+    trusted = RECEIVER_TRUST_ROOT
+    try:
+        if (trusted.is_symlink() or trusted.parent.is_symlink() or not trusted.is_dir()
+                or trusted.stat().st_uid != 0 or trusted.parent.stat().st_uid != 0
+                or trusted.stat().st_mode & 0o022
+                or trusted.parent.stat().st_mode & 0o022):
+            return False
+        warehouse = (Path(root) / "digital-products" / recipe
+                     / (recipe + "-internal-qa.zip"))
+        if warehouse.is_symlink() or not warehouse.is_file():
+            return False
+        artifact_hash = hashlib.sha256()
+        with warehouse.open("rb") as stream:
+            for part in iter(lambda: stream.read(1024 * 1024), b""):
+                artifact_hash.update(part)
+        if artifact_hash.hexdigest() != clearance["artifact_sha256"]:
+            return False
+    except (OSError, ValueError, TypeError):
+        return False
+    inbox = Path(root) / "product-lifecycle/hourly-cycle-handoffs"
+    for cycle_id in sorted(RECEIVER_CYCLES):
+        location = inbox / cycle_id / recipe
+        receipt = location / "receipt.json"
+        signature = location / "receipt.sig"
+        delivered = location / "product.zip"
+        public_key = trusted / (cycle_id + ".pem")
+        if any(p.is_symlink() for p in (inbox, inbox / cycle_id, location,
+                                        receipt, signature, delivered, public_key)):
+            continue
+        try:
+            if (not receipt.is_file() or not signature.is_file() or not delivered.is_file()
+                    or not public_key.is_file()
+                    or not 0 < receipt.stat().st_size <= 100_000
+                    or signature.stat().st_size not in range(1, 4097)
+                    or public_key.stat().st_size > 16384
+                    or public_key.stat().st_uid != 0
+                    or public_key.stat().st_mode & 0o022):
+                continue
+            # Verify the exact immutable bytes parsed below. Verifying a
+            # pathname and opening it again creates an unsigned-receipt
+            # TOCTOU window in this factory-writable delivery directory.
+            receipt_bytes = receipt.read_bytes()
+            if not 0 < len(receipt_bytes) <= 100_000:
+                continue
+            checked = subprocess.run(
+                ["openssl", "dgst", "-sha256", "-verify", str(public_key),
+                 "-signature", str(signature)],
+                input=receipt_bytes,
+                capture_output=True, timeout=5, check=False)
+            if checked.returncode != 0:
+                continue
+            acknowledgment = json.loads(receipt_bytes.decode("utf-8"))
+            if (not isinstance(acknowledgment, dict)
+                    or acknowledgment.get("schema") != HOURLY_HANDOFF_SCHEMA
+                    or acknowledgment.get("product_id") != recipe
+                    or acknowledgment.get("receiver_cycle") != cycle_id
+                    or acknowledgment.get("status") != "accepted_by_receiver"
+                    or acknowledgment.get("artifact_sha256") != clearance["artifact_sha256"]
+                    or acknowledgment.get("clearance_sha256") != clearance["clearance_sha256"]
+                    or not isinstance(acknowledgment.get("acceptance_evidence"), str)
+                    or not acknowledgment["acceptance_evidence"].strip()):
+                continue
+            delivered_hash = hashlib.sha256()
+            with delivered.open("rb") as stream:
+                for part in iter(lambda: stream.read(1024 * 1024), b""):
+                    delivered_hash.update(part)
+            if delivered_hash.hexdigest() == clearance["artifact_sha256"]:
+                return True
+        except (OSError, TypeError, ValueError, subprocess.TimeoutExpired):
+            continue
+    return False
 
 
 def _cleanup_completed_product_extras(root, recipe):
@@ -146,8 +378,26 @@ def _cleanup_completed_product_extras(root, recipe):
             raise RuntimeError("PRODUCT_CLEANUP_NON_DIRECTORY_BLOCKED")
 
 
+def _has_unreleased_line41_slot(root):
+    """Do not design another SKU while an existing SKU or queue owns Line 41."""
+    path = (Path(root) / "quality-excellence" / "product-flow"
+            / "active-slots" / "current.json")
+    state = _read_private_json(path)
+    if state is None:
+        if path.exists() or path.is_symlink():
+            raise RuntimeError("F01_PRODUCT_SLOT_UNREADABLE")
+        return False
+    active = state.get("active")
+    waiting = state.get("waiting")
+    if (state.get("schema") != SLOT_SCHEMA
+            or not isinstance(active, list) or len(active) > 1
+            or not isinstance(waiting, list)):
+        raise RuntimeError("F01_PRODUCT_SLOT_UNTRUSTED")
+    return bool(active or waiting)
+
+
 def _maintain_product_slots(root, recipe_names):
-    """Line 41 runs one product at a time; exact signed 1000 exits the line."""
+    """Line 41 releases a product only after QC1000 AND signed cycle delivery."""
     state_path = (Path(root) / "quality-excellence" / "product-flow"
                   / "active-slots" / "current.json")
     if state_path.is_symlink():
@@ -169,8 +419,11 @@ def _maintain_product_slots(root, recipe_names):
         if item["recipe"] not in seen:
             active.append(item)
             seen.add(item["recipe"])
-    if len(active) > 100:
-        raise RuntimeError("PRODUCT_SLOT_MIGRATION_LIMIT_EXCEEDED")
+    # Do not silently demote another active product into a waiting slot.
+    # A previously multi-active state can still have live workers elsewhere.
+    # Stop and require an independently verified global singleton before work.
+    if len(state["active"]) != len(active) or len(active) > PRODUCT_SLOT_CAPACITY:
+        raise RuntimeError("PRODUCT_SLOT_SINGLETON_STATE_VIOLATION")
     exited = state.get("exited", {})
     waiting = state.get("waiting", [])
     if not isinstance(exited, dict) or not isinstance(waiting, list):
@@ -183,17 +436,11 @@ def _maintain_product_slots(root, recipe_names):
         if recipe not in seen and recipe not in queued:
             queue.append(recipe)
             queued.add(recipe)
-    # Migrate the former multi-slot roster into one active item plus a FIFO queue.
-    for item in active[1:]:
-        recipe = item["recipe"]
-        if recipe not in queued:
-            queue.append(recipe)
-            queued.add(recipe)
     retained = []
     for item in active[:1]:
         recipe = item["recipe"]
         clearance = _verified_quality_exit(root, recipe)
-        if clearance:
+        if clearance and _accepted_hourly_handoff(root, recipe, clearance):
             exited[recipe] = dict(clearance)
             _cleanup_completed_product_extras(root, recipe)
         else:
@@ -210,7 +457,7 @@ def _maintain_product_slots(root, recipe_names):
         if recipe in seen or recipe in queued or any(x["recipe"] == recipe for x in active):
             continue
         clearance = _verified_quality_exit(root, recipe)
-        if clearance:
+        if clearance and _accepted_hourly_handoff(root, recipe, clearance):
             exited[recipe] = dict(clearance)
             continue
         manifest = _read_private_json(Path(root) / "digital-products" / recipe
@@ -224,7 +471,7 @@ def _maintain_product_slots(root, recipe_names):
     while not active and queue:
         next_recipe = queue.pop(0)
         clearance = _verified_quality_exit(root, next_recipe)
-        if clearance:
+        if clearance and _accepted_hourly_handoff(root, next_recipe, clearance):
             exited[next_recipe] = dict(clearance)
             _cleanup_completed_product_extras(root, next_recipe)
             continue
@@ -239,7 +486,7 @@ def _maintain_product_slots(root, recipe_names):
     state = {"schema": SLOT_SCHEMA, "line_id": 41, "capacity": 1,
              "active": active, "waiting": queue, "exited": exited,
              "last_admitted_recipe": cursor,
-             "exit_rule": "exact passed artifact with valid signed 1000/1000 clearance",
+             "exit_rule": "AI-assisted documented 1000/1000 review plus real owner signature and authenticated receiver delivery",
              "cleanup_rule": "remove per-product intermediates only; retain certified artifact and proof"}
     _write_private_json(state_path, state)
     return [item["recipe"] for item in active]
@@ -280,10 +527,15 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         raise ValueError('DESIGN_CAPACITY_INVALID')
     # Line 41 accepts only one product input per manufacturing cycle.
     design_capacity = min(design_capacity, PRODUCT_SLOT_CAPACITY)
+    # Research candidate preparation shares the same one-SKU tick budget.
+    max_products = min(max_products, PRODUCT_SLOT_CAPACITY)
     started=time.time()
     root = Path(output).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(str(root), 0o700)
+    # Acquire this line's process mutex BEFORE persisting a global claim.
+    # Otherwise a duplicate, non-running invocation could strand the shared
+    # lane if it recorded ownership before noticing another active tick.
     lock = root / ".production-cycle.lock"
     with lock.open("a+b") as file:
         os.chmod(str(lock), 0o600)
@@ -291,6 +543,11 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return {"status": "already_running", "processed": 0, "manufactured": 0}
+        # Durable cross-controller admission must still precede every science,
+        # design, or manufacturing write. A different active lane fails closed.
+        singleton = load("saeit_factory_global_singleton_v1",
+                         SCRIPTS / "factory_global_singleton_v1.py")
+        singleton.reserve_lane(root, "line41")
         genetics = load("saeit_factory_master_agent_genetics", SCRIPTS / "factory_master_agent_genetics_v1.py")
         master_genome = genetics.begin_cycle(root)
         portfolio = load("saeit_factory_portfolio_cycle",
@@ -322,15 +579,17 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         evolution_attempted_count = 0
         invention_state={"enabled":False,"new_technical_briefs_this_tick":0}
         if enable_designer:
+            # Existing active or waiting products take exclusive design priority.
+            design_deferred = _has_unreleased_line41_slot(root)
             designer = load("saeit_factory_recipe_designer", SCRIPTS / "factory_recipe_designer.py")
-            if enable_design_intake and enable_invention_supply:
+            if not design_deferred and enable_design_intake and enable_invention_supply:
                 try:
                     inventor=load('saeit_factory_continuous_invention',SCRIPTS/'factory_continuous_invention.py')
                     invention_state=inventor.propose(root,max_new=1,max_pending=5)
                     invention_state['enabled']=True
                 except (ValueError,RuntimeError,OSError,ArithmeticError) as error:
                     designer_failures.append({'type':'invention_supply','reason':str(error)[:400]})
-            if enable_design_intake:
+            if not design_deferred and enable_design_intake:
                 try:
                     intake=load('saeit_factory_design_intake',SCRIPTS/'factory_design_intake.py')
                     engineering_state=intake.cycle(root,supply=SCRIPTS.parent/'factory_config/internal_design_supply.json')
@@ -339,12 +598,15 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     if blocked:designer_failures.append({'type':'engineering_rework','source_revisions':blocked})
                 except (ValueError,OSError,RuntimeError) as error:
                     designer_failures.append({'type':'engineering_intake','reason':str(error)[:400]})
-            try:
-                design_state = designer.cycle(root, seed_file=SCRIPTS.parent / "factory_config" / "design_opportunities.json",
-                                              database=database, max_designs=design_capacity)
-            except (ValueError, OSError, ArithmeticError, sqlite3.Error) as error:
-                designer_failures.append({"type": type(error).__name__, "reason": str(error)[:400]})
-                design_state["status"] = "needs_rework"
+            if not design_deferred:
+                try:
+                    design_state = designer.cycle(root, seed_file=SCRIPTS.parent / "factory_config" / "design_opportunities.json",
+                                                  database=database, max_designs=design_capacity)
+                except (ValueError, OSError, ArithmeticError, sqlite3.Error) as error:
+                    designer_failures.append({"type": type(error).__name__, "reason": str(error)[:400]})
+                    design_state["status"] = "needs_rework"
+            else:
+                design_state["deferred_due_to_exclusive_product_slot"] = True
             designer_failures.extend(design_state.get("intake_failures",[]))
             designer_failures.extend(design_state.get("rework",[]))
             if design_state.get("deferred_rework_requests",0):
@@ -565,7 +827,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "depends_on_orders": False,
             "api_usage": "none",
             "token_usage": 0,
-            "build_policy": "line_41_single_product_signed-1000-gated",
+            "build_policy": "line_41_single_product_ai-review_owner-signed-1000_and_receiver-gated",
             "active_product_slot_capacity": PRODUCT_SLOT_CAPACITY,
             "active_production_line_id": PRODUCT_LINE_ID,
             "active_product_slot_recipes": active_recipe_names,
@@ -746,4 +1008,3 @@ if __name__ == "__main__":
     except Exception as error:
         print("VPS_FACTORY_CYCLE_ERROR=" + type(error).__name__ + ":" + str(error)[:400], file=sys.stderr)
         sys.exit(1)
-
