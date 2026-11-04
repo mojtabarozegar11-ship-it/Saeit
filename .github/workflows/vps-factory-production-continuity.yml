@@ -407,6 +407,8 @@ jobs:
             echo FACTORY_LOOP_ALIVE
             echo "FACTORY_PID=$fpid"
             ps -p "$fpid" -o etime=,args= | sed 's/^/FACTORY_PROCESS=/'
+            if command -v pstree >/dev/null 2>&1; then pstree -ap "$fpid" | head -n 30 | sed 's/^/FACTORY_PROCESS_TREE=/'; else ps -o pid,ppid,stat,etime,args --ppid "$fpid" | sed 's/^/FACTORY_PROCESS_CHILD=/'; fi
+            grep -nE 'trap|while|manage.py|factory_staging_tick|sleep|flock|wait|kill|exec' "$script" | head -n 60 | sed 's/^/FACTORY_LOOP_CONTROL_SOURCE=/'
             if test -f "$log"; then
               printf 'FACTORY_LOG_MTIME=%s\\n' "$(stat -c %y "$log")"
               echo FACTORY_RECENT_ACTIVITY
