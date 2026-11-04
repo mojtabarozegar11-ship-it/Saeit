@@ -14,7 +14,7 @@ API keys, payment accounts or network connections are required.
 2. Copy example_inputs.json and replace ALL illustrative values with your own.
 3. Run:
 
-   python calculator.py example_inputs.json --json-output results.json --csv-output scenarios.csv --html-output management-report.html
+   python calculator.py example_inputs.json --json-output results.json --csv-output scenarios.csv --html-output management-report.html --three-factor-portfolio-csv-output portfolio-stress-27.csv --three-factor-enterprise-csv-output enterprise-stress-27.csv
 
 4. Open management-report.html in any browser, including without an internet
    connection. Review the outputs; never treat scenarios as forecasts.
@@ -142,6 +142,24 @@ supports browser printing and has horizontally scrollable tables on narrow
 screens. Keep the generated report private when it contains sensitive business
 assumptions or financial information.
 
+## Spreadsheet-ready, three-factor stress exports
+
+The original `--csv-output` remains unchanged for existing spreadsheet
+consumers: nine volume/price scenarios per enterprise. To export the complete
+three-factor analysis, specify either or both of these independent options:
+
+- `--three-factor-portfolio-csv-output portfolio-stress-27.csv` creates
+  exactly 27 whole-farm rows, deducting each enterprise's fixed costs once.
+- `--three-factor-enterprise-csv-output enterprise-stress-27.csv` creates
+  27 rows **per enterprise**, allowing farm managers to identify the crops or
+  activities driving the whole-farm exposure.
+
+Both new CSV formats include the declared currency and the same canonical
+SHA-256 input fingerprint as the JSON and offline HTML reports, so files can
+be traced back to one accepted input set. All CSV fields are quoted. These
+exports contain scenario arithmetic, not probabilities or guaranteed outcomes.
+Open them locally in a spreadsheet; no online account is necessary.
+
 ## How to interpret a scenario
 
 - The best-case sensitivity row is **not** a projected outcome.
@@ -152,7 +170,8 @@ assumptions or financial information.
 - Sales volume is not harvest volume; account separately for unsold, damaged,
   wasted, lost or inventory-held output before preparing the input data.
 - Unit variable costs can change with yield, volume and input prices. The
-  sensitivity engine holds them constant as an explicit simplifying assumption.
+  legacy nine-case analysis holds them constant; the 27-case extension varies
+  input costs by -10%, 0%, +10% but does not model more complex correlations.
 - Verify that data quality, permits, market access, liquidity and seasonality
   are satisfactory before making investments.
 
