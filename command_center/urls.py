@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 from .views import dashboard, overview_api
 from .agent_views import metrics
 from .agent_directory import directory
@@ -16,6 +16,7 @@ from .mpw_two_books_panel import dashboard as mpw_two_books_dashboard
 
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
+    path("accounting/", include("accounting.urls")),
     path("mpw-agents/", mpw_monitor, name="mpw_agent_monitor"),
     path("mpw-operations/", mpw_operations, name="mpw_operations"),
     path("mpw-two-books/", mpw_two_books_dashboard, name="mpw_two_books_dashboard"),

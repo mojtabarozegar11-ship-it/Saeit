@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>دفتر مالی | زمرد ملل</title>
+<style>body{font-family:Tahoma,Arial;background:#0b1220;color:#e8eef8;max-width:1200px;margin:auto;padding:24px}a{color:#8bc7ff}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.card{background:#142138;border:1px solid #2b4261;border-radius:14px;padding:16px;margin:12px 0}table{width:100%;border-collapse:collapse}td,th{padding:9px;border-bottom:1px solid #2b4261;text-align:right}small{color:#aabbd3}.ok{color:#59d39b}.bad{color:#ff8d8d}</style></head><body>
+<p><a href="/staff/command-center/">← بازگشت به میز مدیریت</a></p><h1>دفتر مالی و حسابداری زمرد ملل</h1><p>منبع: دفتر دوطرفهٔ Django؛ فقط اسناد قطعی در مانده‌ها محاسبه می‌شوند.</p>
+<div id="cards" class="grid"><article class="card">در حال دریافت…</article></div><section class="card"><h2>مانده حساب‌ها</h2><div id="accounts">در حال دریافت…</div></section><section class="card"><h2>آخرین اسناد قطعی</h2><div id="entries">در حال دریافت…</div></section>
+<script>
+const money=x=>new Intl.NumberFormat('fa-IR').format(Number(x||0));
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function load(){const r=await fetch('/staff/command-center/accounting/api/summary/',{credentials:'same-origin',cache:'no-store'});if(!r.ok)throw Error(r.status);const x=await r.json();
+document.querySelector('#cards').innerHTML='<article class="card"><b>'+x.posted_entries+'</b><br><small>سند قطعی</small></article><article class="card"><b>'+x.draft_entries+'</b><br><small>پیش‌نویس</small></article><article class="card"><b class="'+(x.integrity.balanced_posted_entries?'ok':'bad')+'">'+(x.integrity.balanced_posted_entries?'تراز است':'خطای تراز')+'</b><br><small>کنترل یکپارچگی</small></article>';
+document.querySelector('#accounts').innerHTML=x.accounts.length?'<table><tr><th>کد</th><th>حساب</th><th>نوع</th><th>بدهکار</th><th>بستانکار</th><th>مانده</th></tr>'+x.accounts.map(a=>'<tr><td>'+esc(a.code)+'</td><td>'+esc(a.name)+'</td><td>'+esc(a.kind)+'</td><td>'+money(a.debit)+'</td><td>'+money(a.credit)+'</td><td>'+money(a.balance)+'</td></tr>').join('')+'</table>':'<small>هنوز حسابی تعریف نشده است.</small>';
+document.querySelector('#entries').innerHTML=x.recent_entries.length?'<table><tr><th>مرجع</th><th>تاریخ</th><th>شرح</th><th>مبلغ</th></tr>'+x.recent_entries.map(e=>'<tr><td>'+esc(e.reference)+'</td><td>'+esc(e.date)+'</td><td>'+esc(e.memo)+'</td><td>'+money(e.total)+'</td></tr>').join('')+'</table>':'<small>هنوز سند قطعی ثبت نشده است.</small>';
+}
+load().catch(()=>{document.querySelector('#cards').innerHTML='<article class="card bad">داده‌های دفتر مالی در دسترس نیست.</article>';});
+</script></body></html>
