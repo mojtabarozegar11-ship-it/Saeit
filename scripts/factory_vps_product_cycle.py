@@ -88,6 +88,22 @@ MANDATORY_AI_CHECKS = frozenset({
 })
 
 
+def _read_hashed_json(path):
+    """Parse once and retain the digest of exactly the bytes inspected."""
+    path = Path(path)
+    try:
+        if (path.is_symlink() or not path.is_file()
+                or not 0 < path.stat().st_size <= 2_000_000):
+            return None, None
+        raw = path.read_bytes()
+        item = json.loads(raw)
+        if not isinstance(item, dict):
+            return None, None
+        return item, hashlib.sha256(raw).hexdigest()
+    except (OSError, ValueError, UnicodeError):
+        return None, None
+
+
 def _trusted_owner_public_key():
     """Only a genuinely administrator-provisioned public key may authorize exit.
 
@@ -100,8 +116,9 @@ def _trusted_owner_public_key():
         if (root.is_symlink() or root.parent.is_symlink()
                 or not root.is_dir() or key.is_symlink() or not key.is_file()):
             return None
-        rst, kst = root.stat(), key.stat()
-        if (rst.st_uid != 0 or kst.st_uid != 0
+        pst, rst, kst = root.parent.stat(), root.stat(), key.stat()
+        if (pst.st_uid != 0 or pst.st_mode & 0o022
+                or rst.st_uid != 0 or kst.st_uid != 0
                 or rst.st_mode & 0o022 or kst.st_mode & 0o022
                 or not 0 < kst.st_size <= 16_384):
             return None
@@ -148,7 +165,8 @@ def _validated_ai_review(report, artifact_sha):
     observed = set()
     for check in checks:
         if (not isinstance(check, dict) or check.get("status") != "passed"
-                or check.get("check_id") not in MANDATORY_AI_CHECKS
+                or not isinstance(check.get("check_id"), str)
+                or check["check_id"] not in MANDATORY_AI_CHECKS
                 or not isinstance(check.get("evidence_sha256"), str)
                 or not HEX_SHA256.fullmatch(check["evidence_sha256"])):
             return False
@@ -166,9 +184,9 @@ def _verified_quality_exit(root, recipe):
     archive_path = root / "digital-products" / recipe / (recipe + "-internal-qa.zip")
     report_path = root / "quality-excellence" / "ai-reviews" / recipe / "current.json"
     clearance_path = root / "quality-excellence" / "signed-clearances" / recipe / "current.json"
-    manifest = _read_private_json(manifest_path)
-    report = _read_private_json(report_path)
-    clearance = _read_private_json(clearance_path)
+    manifest, manifest_sha = _read_hashed_json(manifest_path)
+    report, report_sha = _read_hashed_json(report_path)
+    clearance, clearance_sha = _read_hashed_json(clearance_path)
     if (not manifest or not report or not clearance
             or archive_path.is_symlink() or not archive_path.is_file()):
         return None
@@ -182,7 +200,6 @@ def _verified_quality_exit(root, recipe):
         with archive_path.open("rb") as stream:
             for block in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(block)
-        report_sha = hashlib.sha256(report_path.read_bytes()).hexdigest()
     except OSError:
         return None
     if (digest.hexdigest() != artifact_sha
@@ -202,10 +219,12 @@ def _verified_quality_exit(root, recipe):
     if not _owner_signature_verifies(clearance_path):
         return None
     try:
-        if hashlib.sha256(report_path.read_bytes()).hexdigest() != report_sha:
+        if (hashlib.sha256(manifest_path.read_bytes()).hexdigest() != manifest_sha
+                or hashlib.sha256(report_path.read_bytes()).hexdigest() != report_sha
+                or hashlib.sha256(clearance_path.read_bytes()).hexdigest() != clearance_sha):
             return None
         return {"artifact_sha256": artifact_sha,
-                "clearance_sha256": hashlib.sha256(clearance_path.read_bytes()).hexdigest(),
+                "clearance_sha256": clearance_sha,
                 "review_type": "internal_ai_assisted_owner_signed"}
     except OSError:
         return None
