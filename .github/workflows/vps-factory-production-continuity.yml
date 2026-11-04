@@ -273,15 +273,17 @@ jobs:
           if not path.is_file() or path.is_symlink():
               raise SystemExit("FACTORY_FIX_SOURCE_UNSAFE")
           source = path.read_text(encoding="utf-8")
-          old = "                    factory=True," + chr(10) + "                    run_id=run.run_id," + chr(10) + "                    goal=run.goal," + chr(10)
-          if old in source:
-              updated = source.replace(old, "", 1)
-          elif "                    run_id=run.run_id," not in source and "                    goal=run.goal," not in source:
+          lines = source.splitlines(keepends=True)
+          remove = {"factory=True,", "run_id=run.run_id,", "goal=run.goal,"}
+          counts = {target: sum(line.strip() == target for line in lines) for target in remove}
+          if all(counts[target] == 1 for target in remove):
+              updated = "".join(line for line in lines if line.strip() not in remove)
+          elif all(counts[target] == 0 for target in remove):
               updated = source
               print("FACTORY_UNSUPPORTED_CALL_OPTIONS_ALREADY_REMOVED")
           else:
               raise SystemExit("FACTORY_FIX_CALLSITE_MISMATCH")
-          updated = updated.replace("Path(frame.filename).name", 'frame.filename.rsplit("/", 1)[-1]')
+          updated = updated.replace("Path(frame.filename).name", "frame.filename.rsplit('/', 1)[-1]")
           ast.parse(updated, filename=str(path))
           backup = path.with_name(path.name + ".pre-vps-options-fix")
           if not backup.exists():
@@ -293,6 +295,7 @@ jobs:
           os.replace(temp, path)
           print("FACTORY_UNSUPPORTED_CALL_OPTIONS_FIXED")
           print("FACTORY_FRAME_LOGGER_FIXED")
+
           FIX
           # Trigger immediate post-patch factory progress snapshot.
           recovery_authorized='${{ inputs.recovery_authorized }}'
