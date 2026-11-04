@@ -58,6 +58,11 @@ jobs:
             echo F01_ROOT_CRON_MAY_COMPETE >&2
             exit 1
           fi
+          user_cron="$(crontab -l 2>/dev/null || true)"
+          if printf '%s\n' "$user_cron" | grep -Ev '^[[:space:]]*(#|$)' | grep -Ei 'factory|agri200|strict.?serial|qc1000' | grep -qvF 'SAEIT_SINGLE_PRODUCT_FACTORY_V1'; then
+            echo F01_COMPETING_USER_CRON_MAY_EXIST >&2
+            exit 1
+          fi
           timers="$(systemctl list-timers --all --no-legend --no-pager)" || exit 1
           services="$(systemctl list-units --all --type=service --no-legend --no-pager)" || exit 1
           if printf '%s\n%s\n' "$timers" "$services" | grep -Eiq 'factory|agri200|strict.?serial|qc1000'; then
@@ -81,8 +86,9 @@ jobs:
           if lane.get("schema") != "saeit.factory.global-single-production-lane.v1" or lane.get("owner") != "line41":
               raise SystemExit("F01_PREFLIGHT_GLOBAL_LANE_NOT_RESERVED")
           agri = read(base / "production-instructions/stage-06/strict-serial-active-v1.json")
-          if agri.get("active_order") is not None or agri.get("all_complete") is not True:
-              raise SystemExit("F01_PREFLIGHT_AGRI200_NOT_RECONCILED")
+          # A safely parked unfinished order remains unfinished; never forge completion.
+          if agri.get("active_order") is not None:
+              raise SystemExit("F01_PREFLIGHT_AGRI200_ACTIVE_ORDER_STILL_RESERVED")
           slots = read(base / "quality-excellence/product-flow/active-slots/current.json")
           active = slots.get("active")
           if not isinstance(active, list) or len(active) != 1 or active[0].get("recipe") != "farm_enterprise_economics":
