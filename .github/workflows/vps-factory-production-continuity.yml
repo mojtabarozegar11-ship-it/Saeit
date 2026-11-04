@@ -266,6 +266,34 @@ jobs:
           else:
               raise SystemExit("FACTORY_DIAGNOSTIC_SOURCE_MISMATCH")
           PATCH
+          "$base/.venv/bin/python" - <<'FIX'
+          from pathlib import Path
+          import ast, os
+          path = Path("core/management/commands/factory_staging_tick.py")
+          if not path.is_file() or path.is_symlink():
+              raise SystemExit("FACTORY_FIX_SOURCE_UNSAFE")
+          source = path.read_text(encoding="utf-8")
+          old = '                    factory=True,\\n                    run_id=run.run_id,\\n                    goal=run.goal,\\n'
+          if old in source:
+              updated = source.replace(old, "", 1)
+          elif "                    run_id=run.run_id," not in source and "                    goal=run.goal," not in source:
+              updated = source
+              print("FACTORY_UNSUPPORTED_CALL_OPTIONS_ALREADY_REMOVED")
+          else:
+              raise SystemExit("FACTORY_FIX_CALLSITE_MISMATCH")
+          updated = updated.replace("Path(frame.filename).name", 'frame.filename.rsplit("/", 1)[-1]')
+          ast.parse(updated, filename=str(path))
+          backup = path.with_name(path.name + ".pre-vps-options-fix")
+          if not backup.exists():
+              backup.write_text(source, encoding="utf-8")
+              os.chmod(backup, path.stat().st_mode & 0o777)
+          temp = path.with_name(path.name + ".fix-tmp")
+          temp.write_text(updated, encoding="utf-8")
+          os.chmod(temp, path.stat().st_mode & 0o777)
+          os.replace(temp, path)
+          print("FACTORY_UNSUPPORTED_CALL_OPTIONS_FIXED")
+          print("FACTORY_FRAME_LOGGER_FIXED")
+          FIX
           # Trigger immediate post-patch factory progress snapshot.
           recovery_authorized='${{ inputs.recovery_authorized }}'
           offhost_backup_verified='${{ inputs.offhost_backup_verified }}'
