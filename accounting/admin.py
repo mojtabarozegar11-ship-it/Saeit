@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from .models import Account, JournalEntry, JournalLine
 
 
@@ -21,8 +22,24 @@ class JournalEntryAdmin(admin.ModelAdmin):
     search_fields = ("reference", "memo")
     inlines = (JournalLineInline,)
 
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        if form.instance.status == JournalEntry.Status.POSTED:
+            form.instance.validate_balanced()
+
 
 @admin.register(JournalLine)
 class JournalLineAdmin(admin.ModelAdmin):
     list_display = ("entry", "account", "debit", "credit")
     list_filter = ("account",)
+
+    def save_model(self, request, obj, form, change):
+        if obj.entry.status == JournalEntry.Status.POSTED:
+            raise ValidationError("سند قطعی قابل تغییر نیست.")
+        super().save_model(request, obj, form, change)
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and not (obj and obj.entry.status == JournalEntry.Status.POSTED)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and not (obj and obj.entry.status == JournalEntry.Status.POSTED)
