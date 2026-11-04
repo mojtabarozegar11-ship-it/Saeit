@@ -38,6 +38,69 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           ssh_opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
+          # Read-only preflight BEFORE transferring or replacing any production file.
+          # No attempt to override a missing administrator-level safety inventory.
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 'bash -se' <<'PREFLIGHT'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          command -v sudo >/dev/null
+          command -v systemctl >/dev/null
+          command -v pgrep >/dev/null
+          if pgrep -u githubops -f '(/vps-only-loop[.]sh|/agri200-[a-z0-9_-]+[.]py|/strict-serial-fullcycle-v1[.]py)' >/dev/null; then
+            echo F01_COMPETING_LEGACY_WORKER_ACTIVE >&2
+            exit 1
+          fi
+          root_cron="$(sudo -n crontab -u root -l 2>/dev/null)" || {
+            echo F01_ROOT_CRON_INVENTORY_UNAVAILABLE >&2
+            exit 1
+          }
+          if printf '%s\n' "$root_cron" | grep -Eiq 'factory|agri200|strict.?serial|qc1000'; then
+            echo F01_ROOT_CRON_MAY_COMPETE >&2
+            exit 1
+          fi
+          timers="$(systemctl list-timers --all --no-legend --no-pager)" || exit 1
+          services="$(systemctl list-units --all --type=service --no-legend --no-pager)" || exit 1
+          if printf '%s\n%s\n' "$timers" "$services" | grep -Eiq 'factory|agri200|strict.?serial|qc1000'; then
+            echo F01_COMPETING_SYSTEMD_UNITS_POSSIBLE >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, os, pathlib, stat
+          base = pathlib.Path.home() / "factory-runtime/private/autonomous-product-cycle"
+          def read(path):
+              if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000:
+                  raise SystemExit("F01_PREFLIGHT_PRIVATE_STATE_UNSAFE")
+              return json.loads(path.read_text(encoding="utf-8"))
+          def trusted(path, directory=False):
+              if path.is_symlink() or (not path.is_dir() if directory else not path.is_file()):
+                  raise SystemExit("F01_PREFLIGHT_TRUST_PATH_MISSING")
+              mode = path.stat()
+              if mode.st_uid != 0 or mode.st_mode & 0o022:
+                  raise SystemExit("F01_PREFLIGHT_TRUST_PATH_NOT_ADMIN_PROTECTED")
+          lane = read(base / ".f01-global-production-lane.json")
+          if lane.get("schema") != "saeit.factory.global-single-production-lane.v1" or lane.get("owner") != "line41":
+              raise SystemExit("F01_PREFLIGHT_GLOBAL_LANE_NOT_RESERVED")
+          agri = read(base / "production-instructions/stage-06/strict-serial-active-v1.json")
+          if agri.get("active_order") is not None or agri.get("all_complete") is not True:
+              raise SystemExit("F01_PREFLIGHT_AGRI200_NOT_RECONCILED")
+          slots = read(base / "quality-excellence/product-flow/active-slots/current.json")
+          active = slots.get("active")
+          if not isinstance(active, list) or len(active) != 1 or active[0].get("recipe") != "farm_enterprise_economics":
+              raise SystemExit("F01_PREFLIGHT_ACTIVE_SLOT_MISMATCH")
+          trusted(pathlib.Path("/etc/saeit"), directory=True)
+          owner_dir = pathlib.Path("/etc/saeit/factory-owner-approval-public-keys")
+          receiver_dir = pathlib.Path("/etc/saeit/hourly-cycle-receiver-public-keys")
+          trusted(owner_dir, directory=True)
+          trusted(owner_dir / "owner.pem")
+          trusted(receiver_dir, directory=True)
+          receiver_keys = sorted(receiver_dir.glob("*.pem"))
+          if not receiver_keys:
+              raise SystemExit("F01_PREFLIGHT_RECEIVER_KEYS_UNPROVISIONED")
+          for key in receiver_keys:
+              trusted(key)
+          print("F01_READ_ONLY_PRE_ACTIVATION_PREFLIGHT=PASS")
+          PY
+          PREFLIGHT
           files=(
             scripts/factory_vps_product_cycle.py
             scripts/factory_master_agent_genetics_v1.py
