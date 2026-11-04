@@ -1,6 +1,6 @@
 from decimal import Decimal
 from django.core.exceptions import ValidationError
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from .models import Account, JournalEntry
 
 
@@ -18,7 +18,10 @@ def _is_balanced(entry):
 
 def ledger_summary(limit=12):
     balances = []
-    for account in Account.objects.filter(is_active=True).order_by("code"):
+    accounts = Account.objects.filter(
+        Q(is_active=True) | Q(journal_lines__entry__status=JournalEntry.Status.POSTED)
+    ).distinct().order_by("code")
+    for account in accounts:
         totals = account.journal_lines.filter(entry__status=JournalEntry.Status.POSTED).aggregate(
             debit=Sum("debit"), credit=Sum("credit")
         )
