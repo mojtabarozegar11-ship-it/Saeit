@@ -72,6 +72,16 @@ jobs:
             echo "FACTORY_PID_NOT_VERIFIED" >> "$ops/vps-only-launch.log"
             exit 1
           fi
+          # Never undo an emergency low-disk pause on the next five-minute cron tick.
+          free_bytes="$(df -B1 --output=avail "$base" | awk 'NR==2 {print $1}')"
+          if ! [[ "$free_bytes" =~ ^[0-9]+$ ]]; then
+            echo "FACTORY_AUTOSTART_BLOCKED_DISK_UNVERIFIED"
+            exit 1
+          fi
+          if (( free_bytes < 536870912 )); then
+            echo "FACTORY_AUTOSTART_BLOCKED_LOW_DISK"
+            exit 1
+          fi
           nohup "$script" 9>&- </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
           printf '%s\n' "$!" > "$pidfile"
           sleep 2
