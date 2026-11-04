@@ -1,0 +1,146 @@
+name: Recover timed-out live FactoryEvidence partition 7 in four bounded VPS segments
+on:
+  push:
+    branches: [ops/zomorod-archive-audit-20261104]
+    paths: [".github/workflows/zomorod-factoryevidence-part7-recovery-20261104.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-factoryevidence-part7-sql-recovery
+  cancel-in-progress: false
+jobs:
+  chunks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        table: [core_factoryevidence]
+        part: [7]
+        subpart: [0, 1, 2, 3]
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 2
+            ServerAliveInterval 30
+            ServerAliveCountMax 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Export one indexed ID range as lossless SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-page-compression"
+          table="${{ matrix.table }}"
+          part="${{ matrix.part }}"
+          subpart="${{ matrix.subpart }}"
+          local_archive="$d/$table.$part.sub$subpart.sql.gz"
+          meta="$d/$table.$part.sub$subpart.meta"
+          trap 'rm -f "$local_archive" "$meta"' EXIT
+          timeout 1400s ssh -F "$d/config" saeit-cpanel "TABLE=$table PART=$part SUBPART=$subpart python3 -" <<'PY' 2>"$meta" | gzip -1 > "$local_archive"
+          import os,re,shutil,subprocess,sys,urllib.parse
+          from pathlib import Path
+          table=os.environ["TABLE"]; part=int(os.environ["PART"]);subpart=int(os.environ["SUBPART"])
+          if table not in ("core_agenttask","core_factoryevidence") or part!=7 or subpart not in range(4):raise SystemExit("PARTITION_SCOPE_MISMATCH")
+          app=Path.home()/"Saeit-staging"; matches=[]
+          for path in (app/".env",app/".env.production",app/".env.local"):
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size>65536: continue
+                  for line in path.read_text(encoding="utf-8",errors="replace").splitlines():
+                      m=re.match(r"^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$",line)
+                      if m:matches.append(urllib.parse.urlsplit(m.group(1).strip().strip('"').strip("'")))
+              except OSError:pass
+          if len(matches)!=1:raise SystemExit("DATABASE_URL_NOT_UNIQUE")
+          u=matches[0];db=urllib.parse.unquote(u.path.lstrip("/"))
+          if db!="zomorod2_sites_main":raise SystemExit("DATABASE_SCOPE_MISMATCH")
+          env=dict(os.environ,MYSQL_PWD=urllib.parse.unquote(u.password or ""))
+          args=["--no-defaults","--batch","--skip-column-names","--host="+(u.hostname or "localhost"),"--user="+urllib.parse.unquote(u.username or ""),"--database="+db]
+          if u.port:args.append("--port="+str(u.port))
+          cli=shutil.which("mariadb") or shutil.which("mysql")
+          def query(sql):
+              p=subprocess.run([cli]+args+["--execute="+sql],env=env,capture_output=True,text=True,timeout=180)
+              if p.returncode:raise SystemExit("SQL_READ_FAILED")
+              return p.stdout.strip()
+          mm=query("SELECT MIN(id),MAX(id) FROM "+table).split("\t")
+          if len(mm)!=2 or mm[0]=="NULL" or mm[1]=="NULL":raise SystemExit("UNEXPECTED_EMPTY_TABLE")
+          low_id,high_id=map(int,mm);span=high_id-low_id+1
+          base_lo=low_id+span*part//8;base_hi=low_id+span*(part+1)//8
+          width=base_hi-base_lo
+          lo=base_lo+width*subpart//4;hi=base_lo+width*(subpart+1)//4
+          where=f"id >= {lo} AND id < {hi}"
+          before=int(query("SELECT COUNT(*) FROM "+table+" WHERE "+where))
+          dump=shutil.which("mariadb-dump") or shutil.which("mysqldump")
+          if not dump:raise SystemExit("DUMP_CLIENT_MISSING")
+          options=[dump,"--no-defaults","--single-transaction","--quick","--skip-lock-tables","--no-create-info","--skip-triggers","--hex-blob","--default-character-set=utf8mb4","--where="+where,"--host="+(u.hostname or "localhost"),"--user="+urllib.parse.unquote(u.username or "")]
+          if u.port:options.append("--port="+str(u.port))
+          p=subprocess.run(options+[db,table],env=env,stdout=sys.stdout.buffer,timeout=1350)
+          if p.returncode:raise SystemExit("SQL_PARTITION_DUMP_FAILED")
+          after=int(query("SELECT COUNT(*) FROM "+table+" WHERE "+where))
+          if after!=before:raise SystemExit("PARTITION_MUTATED_DURING_EXPORT")
+          print(f"PARTITION_META table={table} part={part} subpart={subpart} rows={before} min={low_id} max={high_id} low={lo} high={hi}",file=sys.stderr)
+          PY
+          grep -q "^PARTITION_META " "$meta"
+          gzip -t "$local_archive"
+          size="$(stat -c %s "$local_archive")"
+          test "$size" -gt 1000
+          test "$size" -lt 1073741824
+          digest="$(sha256sum "$local_archive" | cut -d ' ' -f1)"
+          printf 'sha256=%s\ncompressed_bytes=%s\n' "$digest" "$size" >> "$meta"
+          d_remote=/home/githubops/.db-backups/zomorod2_sites_main-segments-20261104
+          scp -F "$d/config" "$local_archive" "saeit-vps:$d_remote/$table.$part.sub$subpart.sql.gz.upload"
+          scp -F "$d/config" "$meta" "saeit-vps:$d_remote/$table.$part.sub$subpart.meta.upload"
+          ssh -F "$d/config" saeit-vps "EXPECTED='$digest' TARGET='$d_remote/$table.$part.sub$subpart' bash -s" <<'REMOTE'
+          set -euo pipefail
+          test ! -e "$TARGET.sql.gz"
+          test ! -e "$TARGET.meta"
+          test "$(sha256sum "$TARGET.sql.gz.upload" | cut -d ' ' -f1)" = "$EXPECTED"
+          gzip -t "$TARGET.sql.gz.upload"
+          mv "$TARGET.sql.gz.upload" "$TARGET.sql.gz"
+          mv "$TARGET.meta.upload" "$TARGET.meta"
+          echo VERIFIED_VPS_SQL_SEGMENT=yes
+          REMOTE
