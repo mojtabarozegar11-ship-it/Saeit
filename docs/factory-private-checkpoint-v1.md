@@ -123,3 +123,47 @@ end-to-end encrypted-at-rest transfer with externally held decryption key,
 separate administrator signing key, and a real independent restore rehearsal.
 Plaintext private checkpoints must never be sent to cPanel, stored in
 `public_html`, or included in GitHub artifacts/logs.
+
+## Encrypted off-host transport (cycle 16, source-only)
+
+`factory_checkpoint_sealed_transport_v1.py` supplies two **separate**
+operator-only commands. It requires a provisioned Python `cryptography`
+package (missing dependency = hard failure). This is not wired to cron,
+GitHub Actions deployment, cPanel publishing, or the activation gate.
+
+1. A separately administered recovery host provisions an RSA key pair of at
+   least 3072 bits, protects its private key in a 0600 file under a 0700
+   private directory, and independently records the SHA-256 fingerprint of
+   the DER SubjectPublicKeyInfo public key. No private key travels to the VPS,
+   GitHub, cPanel, backups or diagnostic logs.
+2. A root administrator installs **only** the receiver public key at a
+   protected root-owned path on the factory VPS and pins the independently
+   verified fingerprint in a protected deployment configuration. Production
+   sealing rejects a non-root-owned or group/world-writable key or its parent.
+3. On the factory VPS, after the factory lock-protected checkpoint has already
+   been created, `seal --checkpoint CHECKPOINT --public-key ADMIN_PUBLIC_PEM
+   --recipient-pin PIN --output PRIVATE_CIPHERTEXT_PATH` verifies the source
+   and writes a ciphertext-only envelope. The destination's existing parent
+   must be owned by the executing account and have private 0700 permissions.
+   Existing destination files are never replaced.
+4. **Only after separate authorization**, an operator may copy the ciphertext
+   to an eligible independent host. On that host, `unseal --bundle CIPHERTEXT
+   --private-key OFFHOST_PRIVATE_PEM --recipient-pin PIN --destination
+   PRIVATE_RECONSTRUCTED_CHECKPOINT` validates the AES-GCM tag **before**
+   parsing or extracting the plaintext tar, verifies the complete checkpoint,
+   and stores recovered data in a new private directory.
+5. The off-host operator must still run the separate full restore rehearsal,
+   sign the recovery receipt with an independent protected signing key, and
+   return that signed receipt for root-admin verification and owner decision.
+   Authenticated decryption alone is **not** a signed independent recovery
+   proof and does not clear the deployment gate.
+
+Encryption uses a freshly random AES-256-GCM data key and nonce for each
+bundle; the data key is wrapped with RSA-OAEP-SHA256 to the pinned recipient.
+The exact envelope header is authenticated as associated data. The three
+plaintext checkpoint files (manifest, SQLite and private-state tarball) are
+inside the authenticated ciphertext. No key pair, live ciphertext, factory
+private records, or live off-host restore receipt was created in this cycle.
+
+**Hard HOLD:** No external destination is approved, no independent signing
+credential has been provisioned, and no live factory release is authorized.
