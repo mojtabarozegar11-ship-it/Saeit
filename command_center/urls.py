@@ -14,6 +14,7 @@ from .mpw_monitor_views import dashboard as mpw_monitor, telemetry_api as mpw_mo
 from .mpw_operations import desk as mpw_operations
 from .mpw_two_books_panel import dashboard as mpw_two_books_dashboard
 from .operations import operations_summary
+from .controls import controls_summary
 
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
@@ -24,6 +25,7 @@ urlpatterns = [
     path("api/mpw-agents/", mpw_monitor_api, name="mpw_agent_monitor_api"),
     path("api/overview/", overview_api, name="command_center_overview_api"),
     path("api/operations/summary/", operations_summary, name="command_center_operations_summary_api"),
+    path("api/controls/summary/", controls_summary, name="command_center_controls_summary_api"),
     path("api/agents/", metrics, name="command_center_agent_metrics_api"),
     path("api/agents/directory/", directory, name="command_center_agent_directory_api"),
     path("api/agents/proposals/", propose, name="command_center_agent_proposals_api"),
