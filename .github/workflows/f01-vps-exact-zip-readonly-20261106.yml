@@ -1,0 +1,59 @@
+name: F01 inspect exact manufactured ZIP without VPS writes
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/f01-vps-exact-zip-readonly-20261106.yml"
+      - "scripts/f01_vps_exact_zip_readonly.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f01-exact-zip-readonly-inspection
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.ref == 'fix/f01-single-product-handoff-lock-20261031'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Compare ZIP in place to reviewed 447c49f0 recipe hashes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          # Only inspect the source from the reviewed exact commit. A changed
+          # recipe requires a new assessment, never silent evidence rebinding.
+          git diff --quiet 447c49f0f18dc3e8a21ab3edca205213b6d99ae2 HEAD -- product_recipes/farm_enterprise_economics || {
+            echo F01_REVIEWED_RECIPE_CHANGED >&2; exit 3;
+          }
+          source_names=(calculator.py guided_start.py test_calculator.py test_guided_start.py README.md CUSTOMER_GUIDE.md example_inputs.json)
+          hashes=()
+          for name in "${source_names[@]}"; do
+            file="product_recipes/farm_enterprise_economics/$name"
+            test -f "$file" && test ! -L "$file"
+            hashes+=("$(sha256sum "$file" | cut -d ' ' -f 1)")
+          done
+          python3 -m py_compile scripts/f01_vps_exact_zip_readonly.py
+          d="$RUNNER_TEMP/f01-readonly-zip"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o ForwardAgent=no -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 "python3 - ${hashes[*]}" < scripts/f01_vps_exact_zip_readonly.py
