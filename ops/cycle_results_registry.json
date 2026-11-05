@@ -47,7 +47,7 @@
     },
     "05": {
       "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
-      "sequence": 2,
+      "sequence": 3,
       "legacy_report_last_verified": 57,
       "primary_output": "accepted operational business gate",
       "legacy_source_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725",
@@ -88,6 +88,16 @@
       "acceptance_result": "12/12 unit tests passed on exact PR #1837 head using independent Python 3.12.14; importer integration and live acceptance not verified",
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/1837#issuecomment-6649575610",
       "impact": "Removed unverified-local-test blocker only; no deployment, sales or product acceptance"
+    },
+    {
+      "registry_id": "R05-0003",
+      "cycle_id": "05",
+      "run_id": "manual-20261105-pr1880-ci-41967804873",
+      "deliverable_key": "guarded-import-action-receipt-integration",
+      "stage": "code",
+      "acceptance_result": "PR #1880 draft source with new receipt pre-import gate; 16 new tests included in successful exact-head Django CI run 41967804873; no live deployment",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41967804873",
+      "impact": "A source/CI blocker in management report integrity was closed; operational acceptance and revenue remain unverified"
     }
   ],
   "report_reservations": [],
