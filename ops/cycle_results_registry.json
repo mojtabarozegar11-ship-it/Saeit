@@ -47,10 +47,21 @@
     },
     "05": {
       "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
-      "sequence": 0,
+      "sequence": 1,
       "legacy_report_last_verified": null,
       "primary_output": "accepted operational business gate"
     }
   },
-  "receipts": []
+  "receipts": [
+    {
+      "registry_id": "R05-0001",
+      "cycle_id": "05",
+      "run_id": "implementation-20261105-branch-e19d43c0",
+      "deliverable_key": "central-outcome-registry",
+      "stage": "code",
+      "acceptance_result": "GitHub ledger file created on dedicated branch and exact content read back",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/e19d43c0c6c2bfe211837ff5cbd801345f9084c4",
+      "impact": "Collision-aware non-sensitive result index initialized; no product or revenue claim"
+    }
+  ]
 }
