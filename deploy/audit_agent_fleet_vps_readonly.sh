@@ -107,6 +107,85 @@ print("AGENT_FLEET_DATABASE_PREVIEW=" +
       json.dumps({"summary": summary, "agents": rows}, sort_keys=True, separators=(",", ":")))
 PY
 
+# Inspect only the two previously observed factory backlog owners. Do not
+# read task payloads or change their states; this identifies missing dispatch
+# routes without pretending that a DB row is an operating agent.
+"$python_bin" - <<'PY'
+import hashlib
+import json
+import re
+
+import django
+django.setup()
+
+from django.db import connection
+from django.db.models import Count
+from core.models import Agent, AgentTask, AgentCapability
+from core.agent_registry import AgentRegistry
+from core.economic_tool_pack import build_economic_gateway
+from core.services import normalize_action
+
+owners = ("factory-market-research-agent", "factory-opportunity-validation-agent")
+tables = set(connection.introspection.table_names())
+required = {
+    Agent._meta.db_table, AgentTask._meta.db_table,
+    AgentCapability._meta.db_table,
+    AgentCapability.agents.through._meta.db_table,
+}
+if not required.issubset(tables):
+    print("AGENT_FLEET_FACTORY_QUEUE_ROUTES=" + json.dumps({
+        "status": "schema_unavailable", "missing_table_count": len(required - tables),
+        "writes": 0, "execution_verified": False,
+    }, sort_keys=True))
+else:
+    gateway_codes = set(build_economic_gateway().describe())
+    registry = AgentRegistry()
+    agents = {a.code: a for a in Agent.objects.filter(code__in=owners)}
+    groups = list(
+        AgentTask.objects.filter(agent__code__in=owners)
+        .values("agent__code", "status", "action_type", "capability_code")
+        .annotate(count=Count("pk"))
+        .order_by("agent__code", "status", "action_type", "capability_code")
+    )
+    def safe_code(value):
+        val = str(value or "")
+        if re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_-]{0,79}", val):
+            return val
+        return "sha256:" + hashlib.sha256(val.encode()).hexdigest()[:12]
+
+    rows = []
+    for group in groups:
+        owner = agents.get(group["agent__code"])
+        action = normalize_action(group["action_type"])
+        cap = registry.capability_for(owner, group["action_type"]) if owner else None
+        grant_matches_snapshot = bool(
+            cap and (not group["capability_code"] or cap.code == group["capability_code"])
+        )
+        registered_tool = action in gateway_codes
+        rows.append({
+            "agent": safe_code(group["agent__code"]),
+            "status": safe_code(group["status"]),
+            "action": safe_code(group["action_type"]),
+            "capability": safe_code(group["capability_code"]),
+            "count": group["count"],
+            "agent_active": bool(owner and owner.active),
+            "active_grant_matches_snapshot": grant_matches_snapshot,
+            "economic_gateway_tool_present": registered_tool,
+            "candidate_for_economic_gateway": bool(
+                owner and owner.active and grant_matches_snapshot and registered_tool
+                and group["status"] == "queued"
+            ),
+        })
+    print("AGENT_FLEET_FACTORY_QUEUE_ROUTES=" + json.dumps({
+        "status": "read_only", "owners": list(owners),
+        "total_tasks": sum(row["count"] for row in rows),
+        "queued_tasks": sum(row["count"] for row in rows if row["status"] == "queued"),
+        "grouped_routes": rows, "writes": 0,
+        "execution_verified": False,
+        "scope": "economic_gateway_only; other workers not assessed",
+    }, sort_keys=True, separators=(",", ":")))
+PY
+
 # Never print crontab commands, inline environment values, or process arguments.
 "$python_bin" - <<'PY'
 import hashlib
