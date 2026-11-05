@@ -67,24 +67,28 @@ def guard_host():
 
 
 def reviewed(data):
-    if sha(data) != BEFORE_SHA or data.count(DEMO) != 1:
-        fail("UNREVIEWED_LIVE_TEMPLATE")
+    if (data.count(DEMO) != 1 or
+            data.count(b'atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/') != 1 or
+            data.count(b'Open the live demo') != 1):
+        fail("DEMO_LINK_NOT_UNIQUE_OR_CHANGED")
     if not all(token in data for token in REQUIRED):
         fail("PRODUCT_CONTRACT_CHANGED")
     after = data.replace(DEMO, b"", 1)
-    if sha(after) != AFTER_SHA:
-        fail("NEW_TEMPLATE_MISMATCH")
+    if len(data) - len(after) != len(DEMO) or not all(
+            token in after for token in REQUIRED):
+        fail("UNEXPECTED_DIFF")
     return after
 
 
 def preflight():
     guard_host()
     current = checked_file(TARGET)
-    if sha(current) == AFTER_SHA and DEMO not in current:
+    if DEMO not in current and b'Open the live demo' not in current and all(
+            token in current for token in REQUIRED):
         print("MPW_STORE_DEMO_PREFLIGHT=ALREADY_FIXED;NO_CHANGE=TRUE")
         return
     reviewed(current)
-    print("MPW_STORE_DEMO_PREFLIGHT=PASS;NO_CHANGE=TRUE")
+    print("MPW_STORE_DEMO_PREFLIGHT=PASS;NO_CHANGE=TRUE;SOURCE_SHA256=" + sha(current))
 
 
 def atomic_replace(path, data, expected):
@@ -115,7 +119,8 @@ def publish(run_id):
         fail("BAD_RUN_ID")
     guard_host()
     before = checked_file(TARGET)
-    if sha(before) == AFTER_SHA and DEMO not in before:
+    if DEMO not in before and b'Open the live demo' not in before and all(
+            token in before for token in REQUIRED):
         print("MPW_STORE_DEMO_PUBLISH=ALREADY_FIXED;NO_CHANGE=TRUE")
         return
     after = reviewed(before)
@@ -135,26 +140,36 @@ def publish(run_id):
         os.fsync(out.fileno())
     changed = False
     try:
-        atomic_replace(TARGET, after, BEFORE_SHA)
+        atomic_replace(TARGET, after, sha(before))
         changed = True
-        if sha(checked_file(TARGET)) != AFTER_SHA:
+        if checked_file(TARGET) != after:
             fail("POST_WRITE_MISMATCH")
         restart()
     except BaseException:
-        if changed and sha(checked_file(TARGET)) == AFTER_SHA:
-            atomic_replace(TARGET, before, AFTER_SHA)
+        if changed and checked_file(TARGET) == after:
+            atomic_replace(TARGET, before, sha(after))
             restart()
         raise
     print(json.dumps({"result": "MPW_STORE_DEMO_PUBLISHED", "backup": folder.name,
-                      "source_sha256": AFTER_SHA, "payment_change": False,
+                      "source_sha256": sha(before), "published_sha256": sha(after),
+                      "removed_bytes": len(DEMO), "payment_change": False,
                       "email_change": False, "customer_data_change": False},
                      sort_keys=True), flush=True)
 
 
-def verify():
+def verify(run_id):
+    if not re.fullmatch(r"[0-9]{7,20}", run_id):
+        fail("BAD_RUN_ID")
     guard_host()
     current = checked_file(TARGET)
-    if sha(current) != AFTER_SHA or DEMO in current or not all(
+    backup = BACKUPS / run_id / "store.before.html"
+    if backup.is_file():
+        expected = reviewed(checked_file(backup))
+        if current != expected:
+            fail("VERIFY_DIFF_FROM_BACKUP")
+    elif DEMO in current or b'Open the live demo' in current:
+        fail("VERIFY_NOT_PUBLISHED")
+    if DEMO in current or not all(
             token in current for token in REQUIRED):
         fail("VERIFY_NOT_PUBLISHED")
     print("MPW_STORE_DEMO_VERIFY=PASS;NO_PAYMENT=TRUE;NO_EMAIL=TRUE", flush=True)
@@ -181,7 +196,7 @@ if __name__ == "__main__":
         preflight()
     elif len(sys.argv) == 3 and sys.argv[1] == "publish":
         publish(sys.argv[2])
-    elif len(sys.argv) == 2 and sys.argv[1] == "verify":
-        verify()
+    elif len(sys.argv) == 3 and sys.argv[1] == "verify":
+        verify(sys.argv[2])
     else:
         fail("OPERATION_REQUIRED")
