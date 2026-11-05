@@ -167,32 +167,50 @@ def staging_canonical_restart_marker() -> Path:
 
 
 def trigger_staging_only_restart() -> None:
-    """Surgically recycle only exact-root, same-owner LiteSpeed WSGI processes."""
+    """Force-recycle only the identified active staging pool; never the main or canonical pool."""
     import signal
     workers = staging_owned_lswsgi_workers()
+    active = str(staging_restart_marker().parent.parent)
+    selected: list[int] = []
+    for pid in workers:
+        try:
+            if os.readlink(f'/proc/{pid}/cwd') == active:
+                selected.append(pid)
+        except FileNotFoundError:
+            continue
+    if not 1 <= len(selected) <= 10:
+        raise RuntimeError('ACTIVE_STAGING_LSWGI_WORKER_COUNT_UNSAFE')
     handles: list[int] = []
     try:
-        for pid in workers:
+        for pid in selected:
             try:
                 handles.append(os.pidfd_open(pid, 0))
             except ProcessLookupError:
                 continue
         if not handles:
-            raise RuntimeError('STAGING_LSWGI_WORKERS_CHANGED_DURING_RESTART')
-        # LiteSpeed checks restart.txt per app root; both stage pools must be invalidated.
+            raise RuntimeError('ACTIVE_STAGING_LSWGI_WORKERS_CHANGED_DURING_RESTART')
         markers = [staging_restart_marker(), staging_canonical_restart_marker()]
         for marker in markers:
             marker.touch(exist_ok=True)
         delivered = 0
+        # Detached LiteSpeed Python workers kept distinct Django template caches
+        # after SIGTERM. SIGKILL is restricted to pidfds of user-owned lswsgi
+        # workers with the exact cPanel-configured active staging CWD.
         for fd in handles:
             try:
-                signal.pidfd_send_signal(fd, signal.SIGTERM, None, 0)
+                signal.pidfd_send_signal(fd, signal.SIGKILL, None, 0)
                 delivered += 1
             except ProcessLookupError:
                 continue
+        if delivered == 0:
+            raise RuntimeError('NO_ACTIVE_STAGING_WORKER_RECYCLED')
         print('TARGETED_STAGING_LSWGI_RESTART=' + json.dumps(
-            {'workers_seen': len(workers), 'termination_signals_delivered': delivered,
-             'global_killall_used': False, 'site_scope': 'staging_only',
+            {'all_stage_workers_seen': len(workers),
+             'active_staging_workers_seen': len(selected),
+             'active_worker_signals_delivered': delivered,
+             'signal': 'SIGKILL', 'global_killall_used': False,
+             'canonical_staging_workers_signaled': False,
+             'production_workers_signaled': False,
              'application_restart_markers_touched': len(markers)}), flush=True)
     finally:
         for fd in handles:
