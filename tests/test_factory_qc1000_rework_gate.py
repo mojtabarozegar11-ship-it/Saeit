@@ -16,6 +16,9 @@ class QC1000ReworkGateTests(unittest.TestCase):
             result = GATE.evaluate(Path(directory))
         self.assertEqual(result["status"], "HOLD")
         self.assertIn("SIGNED_CLEARANCE_MISSING", result["reasons"])
+        self.assertEqual(result["schema"], "saeit.factory.qc1000-readiness.v2")
+        self.assertEqual(len(result["rework_queue"]), 8)
+        self.assertEqual(result["rework_queue"][0]["gate_id"], "G01")
 
     def test_incomplete_clearance_is_hold(self):
         with tempfile.TemporaryDirectory() as directory:
