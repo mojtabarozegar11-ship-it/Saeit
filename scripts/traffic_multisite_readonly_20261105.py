@@ -136,10 +136,15 @@ def raw_logs(hosts):
         'successful_page_requests': 0, 'likely_human_page_requests': 0,
         'likely_bot_page_requests': 0, 'store_page_requests': 0,
         'product_page_requests': 0, 'checkout_page_requests': 0,
+        'personal_site_human_page_requests': 0,
+        'personal_site_bot_page_requests': 0,
+        'personal_site_4xx_page_requests': 0,
+        'personal_site_5xx_page_requests': 0,
         'http_4xx_page_requests': 0, 'http_5xx_page_requests': 0,
         'first_utc': None, 'last_utc': None,
     })
     unique = defaultdict(set)
+    personal_unique = defaultdict(set)
     truncated = False
     scanned = 0
     for host, path in selected:
@@ -171,17 +176,30 @@ def raw_logs(hosts):
                     target = target.split('?', 1)[0]
                     if not is_page(target) or method != 'GET':
                         continue
+                    personal = host == 'mojplaywin.com' and (
+                        target == '/mojtaba.roozegar' or target.startswith('/mojtaba.roozegar/')
+                    )
                     if status.startswith('4'):
                         row['http_4xx_page_requests'] += 1
+                        if personal:
+                            row['personal_site_4xx_page_requests'] += 1
                     elif status.startswith('5'):
                         row['http_5xx_page_requests'] += 1
+                        if personal:
+                            row['personal_site_5xx_page_requests'] += 1
                     if not status.startswith(('2', '3')):
                         continue
                     row['successful_page_requests'] += 1
                     if BOT.search(agent):
                         row['likely_bot_page_requests'] += 1
+                        if personal:
+                            row['personal_site_bot_page_requests'] += 1
                         continue
                     row['likely_human_page_requests'] += 1
+                    if personal:
+                        row['personal_site_human_page_requests'] += 1
+                        if len(personal_unique[host]) < 100000:
+                            personal_unique[host].add(ip)
                     if len(unique[host]) < 100000:
                         unique[host].add(ip)
                     if target.startswith('/store/'):
@@ -196,6 +214,7 @@ def raw_logs(hosts):
             break
     for host, row in totals.items():
         row['approx_distinct_ips'] = len(unique[host])
+        row['personal_site_approx_distinct_ips'] = len(personal_unique[host])
     report('MULTISITE_RAW_LOGS', {
         'source': 'cpanel_raw_access_30d', 'generated_utc': NOW.isoformat(),
         'cutoff_utc': CUTOFF.isoformat(), 'available': folder.is_dir(),
