@@ -116,14 +116,75 @@ def atomic_write(target: Path, data: bytes, mode: int) -> None:
         Path(tmp).unlink(missing_ok=True)
 
 
+def staging_owned_lswsgi_workers() -> list[int]:
+    """Require that every process mentioning the active staging root is a worker owned by this cPanel user."""
+    import signal
+    if not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
+        raise RuntimeError('SAFE_PIDFD_RESTART_UNSUPPORTED')
+    root = staging_restart_marker().parent.parent
+    found: list[int] = []
+    matched = 0
+    for folder in Path('/proc').iterdir():
+        if not folder.name.isdecimal():
+            continue
+        try:
+            raw = (folder / 'cmdline').read_bytes()
+            command = raw.replace(b'\x00', b' ').decode('utf-8', 'replace')
+            if str(root) not in command:
+                continue
+            matched += 1
+            status_text = (folder / 'status').read_text('utf-8', 'replace')
+            uid = re.search(r'(?m)^Uid:\s+(\d+)', status_text)
+            owned = bool(uid and int(uid.group(1)) == os.geteuid())
+            cwd = os.readlink(str(folder / 'cwd'))
+            executable = (folder / 'exe').resolve().name
+            if not (owned and cwd == str(root) and executable == 'lswsgi'
+                    and 'passenger' in command.lower()):
+                raise RuntimeError('NON_STAGING_OR_UNOWNED_PROCESS_PREVENTS_RESTART')
+            found.append(int(folder.name))
+        except FileNotFoundError:
+            continue
+        except (OSError, PermissionError, ValueError) as exc:
+            raise RuntimeError('STAGING_PROCESS_PRECHECK_UNAVAILABLE') from exc
+    if not (1 <= matched <= 10 and matched == len(found)):
+        raise RuntimeError('STAGING_LSWGI_PROCESS_SET_UNSAFE')
+    return found
+
+
 def trigger_staging_only_restart() -> None:
-    marker = staging_restart_marker()
-    marker.touch(exist_ok=True)
+    """Surgically recycle only exact-root, same-owner LiteSpeed WSGI processes."""
+    import signal
+    workers = staging_owned_lswsgi_workers()
+    handles: list[int] = []
+    try:
+        for pid in workers:
+            try:
+                handles.append(os.pidfd_open(pid, 0))
+            except ProcessLookupError:
+                continue
+        if not handles:
+            raise RuntimeError('STAGING_LSWGI_WORKERS_CHANGED_DURING_RESTART')
+        staging_restart_marker().touch(exist_ok=True)
+        delivered = 0
+        for fd in handles:
+            try:
+                signal.pidfd_send_signal(fd, signal.SIGTERM, None, 0)
+                delivered += 1
+            except ProcessLookupError:
+                continue
+        print('TARGETED_STAGING_LSWGI_RESTART=' + json.dumps(
+            {'workers_seen': len(workers), 'termination_signals_delivered': delivered,
+             'global_killall_used': False, 'site_scope': 'staging_only'}), flush=True)
+    finally:
+        for fd in handles:
+            os.close(fd)
 
 
 def preview() -> None:
     old, revised = guard()
+    workers = staging_owned_lswsgi_workers()
     print('STAGING_SERVICES_PREVIEW=' + json.dumps({
+        'eligible_staging_only_lswsgi_worker_count': len(workers),
         'old_sha': digest(old), 'new_sha': digest(revised),
         'staging_template_copies_guarded': len(template_targets()),
         'duplicate_cards_repurposed': len(CHANGES), 'total_cards_deleted': 0,
