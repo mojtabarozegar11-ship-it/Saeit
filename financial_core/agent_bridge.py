@@ -38,10 +38,15 @@ class AgentFinancialDecision:
 
 
 class FinancialAgentBridge:
-    def __init__(self, readiness, risk_authorizer, audit_sink):
+    def __init__(self, readiness, risk_authorizer, audit_sink, owner_approval_verifier=None):
         self.readiness = readiness
         self.risk_authorizer = risk_authorizer
         self.audit_sink = audit_sink
+        # A request's boolean owner_approved flag is an assertion, not proof.
+        # This trusted, separately configured verifier must validate a scoped,
+        # one-time owner approval against persistent records before real funds
+        # can move. The default is deliberately fail-closed.
+        self.owner_approval_verifier = owner_approval_verifier
 
     def authorize(self, request: AgentFinancialRequest):
         action = str(request.action or '').strip().lower()
@@ -70,6 +75,18 @@ class FinancialAgentBridge:
         # never substitutes for the owner's explicit per-transaction approval.
         if not request.owner_approved:
             decision = AgentFinancialDecision(request.request_id, False, 'owner-approval-required')
+            self.audit_sink(request, decision)
+            return decision
+        if self.owner_approval_verifier is None:
+            decision = AgentFinancialDecision(request.request_id, False, 'owner-approval-verifier-unavailable')
+            self.audit_sink(request, decision)
+            return decision
+        try:
+            independently_verified = self.owner_approval_verifier(request) is True
+        except Exception:
+            independently_verified = False
+        if not independently_verified:
+            decision = AgentFinancialDecision(request.request_id, False, 'owner-approval-unverified')
             self.audit_sink(request, decision)
             return decision
         decision = AgentFinancialDecision(request.request_id, True, 'authorized', 'guarded-real')
