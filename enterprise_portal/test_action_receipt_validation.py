@@ -1,6 +1,7 @@
 """Regression tests for the private ZM receipt validator; no network or database."""
 import unittest
 from enterprise_portal.action_receipt_validation import validate, validate_for_import
+from enterprise_portal.github_chatgpt_reports import extract_receipt
 
 HEADER = "## گزارش ۰۵-۰۰۵۷ | 2026-11-03 13:05 UTC | ZM-CTRL-20261103-0057"
 URL = "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/1837"
@@ -16,6 +17,25 @@ def action(identifier="ZM05-0057-A01", status="completed", url=URL):
             "evidence_url": url, "impact_fa": "کاهش خطای ورود"}
 
 class ReceiptTests(unittest.TestCase):
+    def test_latin_header_matches_existing_importer(self):
+        latin = "## گزارش 05-0058 | 2026-11-03 13:05 UTC | ZM-CTRL-20261103-0058"
+        doc = receipt([action(identifier="ZM05-0058-A01")], code="05-0058", header=latin)
+        extracted = extract_receipt({"id": 12345, "user": {"login": "mojtabarozegar11-ship-it"}, "body": doc})
+        self.assertEqual(extracted["report_code"], "05-0058")
+        self.assertEqual(validate_for_import(extracted["report_code"], doc), [])
+
+    def test_parser_whitespace_matches_validator(self):
+        header = "##  گزارش  ۰۵-۰۰۵۸   |  2026-11-03 13:05 UTC   |  ZM-CTRL-20261103-0058"
+        doc = receipt([action(identifier="ZM05-0058-A01")], code="05-0058", header=header)
+        extracted = extract_receipt({"id": 12346, "user": {"login": "mojtabarozegar11-ship-it"}, "body": doc})
+        self.assertIsNotNone(extracted)
+        self.assertEqual(validate_for_import(extracted["report_code"], doc), [])
+
+    def test_importer_code_must_equal_structured_code(self):
+        new = HEADER.replace("۰۰۵۷", "۰۰۵۸")
+        doc = receipt([action(identifier="ZM05-0058-A01")], code="05-0058", header=new)
+        self.assertIn("report code does not match extracted receipt", validate_for_import("05-0059", doc))
+
     def test_legacy_report_remains_eligible(self):
         self.assertEqual(validate_for_import("05-0057", HEADER + "\nlegacy report"), [])
 
