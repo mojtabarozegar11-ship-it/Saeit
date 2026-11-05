@@ -154,6 +154,18 @@ def staging_owned_lswsgi_workers() -> list[int]:
     return found
 
 
+def staging_canonical_restart_marker() -> Path:
+    """Second independent LiteSpeed staging application, never the primary Saeit app."""
+    root = HOME / 'Saeit-staging'
+    directory = root / 'tmp'
+    marker = directory / 'restart.txt'
+    if (root.is_symlink() or not root.is_dir() or directory.is_symlink()
+            or not directory.is_dir() or not os.access(directory, os.W_OK)
+            or marker.is_symlink() or not marker.is_file()):
+        raise RuntimeError('CANONICAL_STAGING_RESTART_MARKER_UNSAFE')
+    return marker
+
+
 def trigger_staging_only_restart() -> None:
     """Surgically recycle only exact-root, same-owner LiteSpeed WSGI processes."""
     import signal
@@ -167,7 +179,10 @@ def trigger_staging_only_restart() -> None:
                 continue
         if not handles:
             raise RuntimeError('STAGING_LSWGI_WORKERS_CHANGED_DURING_RESTART')
-        staging_restart_marker().touch(exist_ok=True)
+        # LiteSpeed checks restart.txt per app root; both stage pools must be invalidated.
+        markers = [staging_restart_marker(), staging_canonical_restart_marker()]
+        for marker in markers:
+            marker.touch(exist_ok=True)
         delivered = 0
         for fd in handles:
             try:
@@ -177,7 +192,8 @@ def trigger_staging_only_restart() -> None:
                 continue
         print('TARGETED_STAGING_LSWGI_RESTART=' + json.dumps(
             {'workers_seen': len(workers), 'termination_signals_delivered': delivered,
-             'global_killall_used': False, 'site_scope': 'staging_only'}), flush=True)
+             'global_killall_used': False, 'site_scope': 'staging_only',
+             'application_restart_markers_touched': len(markers)}), flush=True)
     finally:
         for fd in handles:
             os.close(fd)
@@ -186,6 +202,7 @@ def trigger_staging_only_restart() -> None:
 def preview() -> None:
     old, revised = guard()
     workers = staging_owned_lswsgi_workers()
+    staging_canonical_restart_marker()
     print('STAGING_SERVICES_PREVIEW=' + json.dumps({
         'eligible_staging_only_lswsgi_worker_count': len(workers),
         'recycled_app_roots_required': 2,
