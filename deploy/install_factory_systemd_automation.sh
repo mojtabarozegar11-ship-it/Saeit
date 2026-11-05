@@ -17,6 +17,33 @@ test -f deploy/systemd/saeit-factory-cycle.timer
 test -f deploy/systemd/saeit-factory-watchdog.service
 test -f deploy/systemd/saeit-factory-watchdog.timer
 
+# A legacy minute cron is currently present on the live VPS. Installing
+# a second scheduler without first proving a controlled migration is forbidden.
+if ! command -v crontab >/dev/null; then
+  echo F01_PREFLIGHT_CRONTAB_INVENTORY_UNAVAILABLE >&2
+  exit 3
+fi
+if cron_snapshot="$(crontab -u githubops -l 2>&1)"; then
+  :
+elif [[ "$cron_snapshot" == *"no crontab for githubops"* ]]; then
+  cron_snapshot=""
+else
+  echo F01_PREFLIGHT_CRONTAB_INVENTORY_UNREADABLE >&2
+  exit 3
+fi
+if printf '%s\n' "$cron_snapshot" | grep -Eiq 'SAEIT_SINGLE_PRODUCT_FACTORY_V1|SAEIT_FACTORY_EVERY_MINUTE_V1|SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000|SAEIT_AGRI200|factory[-_/]|agri200|build50'; then
+  echo F01_PREFLIGHT_COMPETING_FACTORY_CRON_PRESENT >&2
+  exit 3
+fi
+timer_snapshot="$(systemctl list-timers --all --no-legend --no-pager)" || {
+  echo F01_PREFLIGHT_TIMER_INVENTORY_UNREADABLE >&2
+  exit 3
+}
+if printf '%s\n' "$timer_snapshot" | grep -Eiq '(factory|agri200|strict[-_]?serial|build50).*\.timer'; then
+  echo F01_PREFLIGHT_COMPETING_SYSTEMD_TIMER_PRESENT >&2
+  exit 3
+fi
+
 # Read-only admission: a timer is not evidence of a safe single-product runtime.
 # Refuse installation unless the existing VPS source and private state identify
 # exactly the one permitted product. This runs before touching systemd files.
