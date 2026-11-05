@@ -8,7 +8,6 @@ import json
 import os
 import pwd
 import re
-import signal
 import stat
 import sys
 import tempfile
@@ -98,64 +97,11 @@ def restart_markers() -> tuple[Path, ...]:
     return markers
 
 
-def staging_workers() -> list[int]:
-    if not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
-        raise RuntimeError('SAFE_PIDFD_RESTART_UNSUPPORTED')
-    canonical = app_root()
-    allowed = {str(canonical): 0}
-    found: list[int] = []
-    for item in Path('/proc').iterdir():
-        if not item.name.isdecimal():
-            continue
-        try:
-            cwd = os.readlink(item / 'cwd')
-            if cwd not in allowed:
-                continue
-            status = (item / 'status').read_text('utf-8', 'replace')
-            uid = re.search(r'(?m)^Uid:\s+(\d+)', status)
-            command = (item / 'cmdline').read_bytes().replace(b'\0', b' ').lower()
-            exe = (item / 'exe').resolve().name
-            if not (uid and int(uid.group(1)) == os.geteuid()
-                    and exe == 'lswsgi' and b'passenger' in command):
-                raise RuntimeError('UNOWNED_OR_UNEXPECTED_STAGING_WORKER')
-            found.append(int(item.name))
-            allowed[cwd] += 1
-        except FileNotFoundError:
-            continue
-        except (OSError, PermissionError, ValueError) as exc:
-            raise RuntimeError('CANNOT_GUARD_STAGING_WORKER') from exc
-    if not (1 <= len(found) <= 12 and 1 <= allowed[str(canonical)] <= 12):
-        raise RuntimeError('STAGING_WORKER_SET_CHANGED')
-    return found
-
-
 def recycle_staging_only() -> None:
-    workers = staging_workers()
     markers = restart_markers()
-    handles = []
-    try:
-        for pid in workers:
-            try:
-                handles.append(os.pidfd_open(pid, 0))
-            except ProcessLookupError:
-                continue
-        if not handles:
-            raise RuntimeError('STAGING_WORKERS_ALREADY_DISAPPEARED')
-        for marker in markers:
-            marker.touch(exist_ok=True)
-        sent = 0
-        for fd in handles:
-            try:
-                signal.pidfd_send_signal(fd, signal.SIGKILL, None, 0)
-                sent += 1
-            except ProcessLookupError:
-                continue
-        if sent < 1:
-            raise RuntimeError('NO_STAGING_PROCESS_RECYCLED')
-        print('STAGING_ONLY_WORKERS_RECYCLED=' + str(sent), flush=True)
-    finally:
-        for fd in handles:
-            os.close(fd)
+    for marker in markers:
+        marker.touch(exist_ok=True)
+    print('STAGING_ONLY_PASSENGER_RESTART_MARKERS_TOUCHED=' + str(len(markers)), flush=True)
 
 
 def atomic_write(path: Path, data: bytes, mode: int) -> None:
@@ -182,17 +128,16 @@ def folder(run_id: str) -> Path:
 def preview() -> None:
     old, new = prepared()
     restart_markers()
-    count = len(staging_workers())
     print('STAGING_CONTRAST_PREVIEW=' + json.dumps({
         'old_sha': sha(old), 'new_sha': sha(new), 'template_copies': 1,
-        'eligible_staging_workers': count, 'outside_staging_changes': False}), flush=True)
+        'restart_method': 'staging_passenger_marker_only',
+        'process_signals': 0, 'outside_staging_changes': False}), flush=True)
 
 
 def publish(run_id: str) -> None:
     old, new = prepared()
     files = targets()
     restart_markers()
-    staging_workers()
     if BACKUPS.parent.is_symlink() or not BACKUPS.parent.is_dir():
         raise RuntimeError('PRIVATE_BACKUP_PARENT_UNSAFE')
     dest = folder(run_id)
