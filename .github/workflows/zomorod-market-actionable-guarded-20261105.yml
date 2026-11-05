@@ -28,7 +28,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path("scripts/zomorod_market_actionable_guarded_20261105.py").read_text()
-          assert s.count('OLD = ') == 1 and s.count('NEW = ') == 1
+          assert s.count('REPLACEMENTS = ') == 1 and s.count('MARKER = ') == 1
           assert 'market-landing-backups' in s and 'rollback' in s
           assert 'api/orders/' in s
           print('MARKET_GUARD_SYNTAX=1')
