@@ -7,6 +7,7 @@ replacement of a customer's older budget.
 """
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -23,6 +24,11 @@ INPUTS = (
     ("allocated_fixed_cost", "Allocated fixed costs for the period", "0"),
     ("selling_fee_percent", "Sales fee percentage (5 means 5%)", "0", "100"),
 )
+REPORT_FILES = (
+    "my_farm.json", "results.json", "scenarios.csv",
+    "joint-stress.csv", "management-report.html",
+)
+RECEIPT_FILE = "integrity-manifest.json"
 
 
 class Cancelled(Exception):
@@ -109,7 +115,7 @@ def collect_budget(*, read=input, write=print):
 
 
 def create_private_reports(data, output_parent, *, report_runner=calculate_reports):
-    """Create all exports in a new directory; never overwrite a prior run."""
+    """Create all exports in a new directory and write the completion receipt last."""
     candidate = Path(output_parent).expanduser()
     if candidate.is_symlink():
         raise ValueError("output parent must not be a symlink")
@@ -138,7 +144,59 @@ def create_private_reports(data, output_parent, *, report_runner=calculate_repor
     ])
     if code != 0 or not all(path.is_file() and path.stat().st_size for path in paths.values()):
         raise RuntimeError("not all report files were created in " + str(result_dir))
+    if any((result_dir / filename).is_symlink() for filename in REPORT_FILES):
+        raise RuntimeError("report file is a symlink in " + str(result_dir))
+    # An exit code and non-empty files alone do not prove the saved calculation
+    # is the one obtained from the accepted customer input.
+    actual = json.loads(paths["json"].read_text(encoding="utf-8"))
+    if actual != evaluate(data):
+        raise RuntimeError("saved results do not match the customer input in " + str(result_dir))
+    receipt = {
+        "schema": "saeit.f01.customer-offline-integrity.v1",
+        "product_id": "farm_enterprise_economics",
+        "files_sha256": {
+            filename: hashlib.sha256((result_dir / filename).read_bytes()).hexdigest()
+            for filename in REPORT_FILES
+        },
+        "independently_certified_quality_score": None,
+        "commercial_release_allowed": False,
+    }
+    (result_dir / RECEIPT_FILE).write_text(
+        json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return result_dir
+
+
+def verify_private_reports(folder):
+    """Read-only corruption/completeness check; not a signature or quality grade."""
+    candidate = Path(folder).expanduser()
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise ValueError("report folder is missing or a symlink")
+    receipt_path = candidate / RECEIPT_FILE
+    if receipt_path.is_symlink() or not receipt_path.is_file():
+        raise ValueError("integrity manifest missing: report folder may be incomplete")
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    if (not isinstance(receipt, dict)
+            or receipt.get("schema") != "saeit.f01.customer-offline-integrity.v1"
+            or receipt.get("product_id") != "farm_enterprise_economics"
+            or receipt.get("independently_certified_quality_score", "invalid") is not None
+            or receipt.get("commercial_release_allowed") is not False
+            or not isinstance(receipt.get("files_sha256"), dict)
+            or set(receipt["files_sha256"]) != set(REPORT_FILES)):
+        raise ValueError("integrity manifest is invalid")
+    for filename in REPORT_FILES:
+        path = candidate / filename
+        if path.is_symlink() or not path.is_file() or not path.stat().st_size:
+            raise ValueError("report file is missing or unsafe: " + filename)
+        expected = receipt["files_sha256"][filename]
+        if (not isinstance(expected, str) or not re.fullmatch(r"[a-f0-9]{64}", expected)
+                or hashlib.sha256(path.read_bytes()).hexdigest() != expected):
+            raise ValueError("report file checksum mismatch: " + filename)
+    data = json.loads((candidate / "my_farm.json").read_text(encoding="utf-8"))
+    saved = json.loads((candidate / "results.json").read_text(encoding="utf-8"))
+    if saved != evaluate(data):
+        raise ValueError("saved financial results do not match the original input")
+    return len(REPORT_FILES)
 
 
 def main(argv=None, *, read=input, write=print):
@@ -149,8 +207,16 @@ def main(argv=None, *, read=input, write=print):
         "--output-parent", default=".",
         help="Existing writable folder for a fresh report directory (default: current folder)",
     )
+    parser.add_argument(
+        "--verify-folder", help="Read-only completeness and checksum check of a previously saved report folder",
+    )
     args = parser.parse_args(argv)
     try:
+        if args.verify_folder:
+            count = verify_private_reports(args.verify_folder)
+            write("VERIFIED: {} saved files match the integrity manifest and accepted inputs.".format(count))
+            write("This detects accidental changes; it is not independent certification or a signature.")
+            return 0
         data = collect_budget(read=read, write=write)
         preview = evaluate(data)["portfolio"]
         write("\nReview: {} enterprises in {}.".format(len(data["enterprises"]), data["currency"]))
@@ -163,6 +229,7 @@ def main(argv=None, *, read=input, write=print):
         folder = create_private_reports(data, args.output_parent)
         write("Reports saved: " + str(folder))
         write("Open management-report.html locally. Keep your original inputs and a backup.")
+        write("To verify later: python guided_start.py --verify-folder \"{}\"".format(folder))
         write("These are scenarios, not forecasts, certified quality scores or a released product.")
         return 0
     except Cancelled:
