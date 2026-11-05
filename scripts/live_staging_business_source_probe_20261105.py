@@ -351,6 +351,42 @@ def staging_passenger_restart_tool_capability() -> dict[str, object]:
             report['selector_readonly_get_exit'] = 'UNAVAILABLE'
     return report
 
+
+def staging_django_bootstrap_safety() -> dict[str, object]:
+    """Static checks before any isolated Django template-origin introspection."""
+    conf = HOME / 'Saeit-staging-web/.htaccess'
+    if conf.is_symlink() or not conf.is_file():
+        return {'status': 'CONF_UNAVAILABLE'}
+    match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)', conf.read_text('utf-8', 'replace'))
+    if not match:
+        return {'status': 'ROOT_MISSING'}
+    root = Path(match.group(1).strip('"'))
+    if root.is_symlink() or not root.is_dir() or (HOME / 'Saeit-staging/admin-smoke') not in root.parents:
+        return {'status': 'ROOT_OUT_OF_SCOPE'}
+    candidates = {
+        'core_apps': root / 'core/apps.py',
+        'command_center_apps': root / 'command_center/apps.py',
+        'sitecore_apps': root / 'sitecore/apps.py',
+        'core_services_view': root / 'core/services_views.py',
+    }
+    report = {}
+    for label, path in candidates.items():
+        info = file_info(path)
+        if not info.get('present_regular_bounded'):
+            report[label] = {'present': False}
+            continue
+        source = path.read_text('utf-8', 'replace')
+        safe_lines = [line.strip()[:140] for line in source.splitlines()
+                      if re.search(r'(?i)(?:class\s+\w+Config|def\s+ready\(|get_template\(|render\(|cache_page|lru_cache|template_name)', line)
+                      and not re.search(r'(?i)(?:secret|password|credential|api.?key|private.?key|token)', line)]
+        report[label] = {'present': True,
+                         'sha256': info.get('sha256'),
+                         'custom_ready_method_present': bool(re.search(r'\bdef\s+ready\s*\(', source)),
+                         'scheduling_or_network_import_mentions': bool(re.search(
+                            r'(?i)(?:scheduler|schedule\.|celery|threading\.Thread|requests\.(?:post|get)|httpx\.)', source)),
+                         'safe_focus_lines': safe_lines[:28]}
+    return {'status': 'READ_ONLY', 'components': report}
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -365,5 +401,6 @@ if __name__ == '__main__':
         'route_and_template_context': staging_route_and_template_context(),
         'staging_delivery_context': staging_delivery_context(),
         'staging_process_origins': staging_passenger_process_origins(),
-        'passenger_restart_tool': staging_passenger_restart_tool_capability()},
+        'passenger_restart_tool': staging_passenger_restart_tool_capability(),
+        'django_bootstrap_preflight': staging_django_bootstrap_safety()},
         ensure_ascii=False, sort_keys=True))
