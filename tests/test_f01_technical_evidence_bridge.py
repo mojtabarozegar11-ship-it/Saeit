@@ -35,7 +35,7 @@ class F01TechnicalBridgeTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.proofs.cleanup()
 
-    def make_manufactured(self, base, *, stale=False, omitted=None):
+    def make_manufactured(self, base, *, stale=False, omitted=None, stale_builder=False):
         product = base / "farm_enterprise_economics"
         product.mkdir()
         archive = product / "farm_enterprise_economics-internal-qa.zip"
@@ -46,6 +46,8 @@ class F01TechnicalBridgeTests(unittest.TestCase):
                 data = (RECIPE / name).read_bytes()
                 if stale and name == "calculator.py":
                     data += b"\n# Changed source version\n"
+                if stale_builder and name == "build_technical_evidence.py":
+                    data += b"\n# Obsolete criterion binding\n"
                 package.writestr("farm_enterprise_economics/" + name, data)
         manifest = {"recipe": "farm_enterprise_economics", "qa_status": "passed",
                     "commercial_status": "private_internal_qa_pass_not_published",
@@ -82,6 +84,17 @@ class F01TechnicalBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             product = self.make_manufactured(Path(name), omitted="guided_start.py")
             with self.assertRaisesRegex(ValueError, "SOURCE_NOT_IN_EXACT_MANUFACTURED_ZIP:guided_start.py"):
+                bridge.install(product, bridge.verify(RECIPE, self.evidence))
+            self.assertFalse((product / "global_quality_candidate.json").exists())
+            self.assertFalse((product / "evidence-f01").exists())
+
+    def test_stale_evidence_builder_in_zip_cannot_get_new_receipts(self):
+        """Criterion bindings are only credible for the exact packaged builder."""
+        with tempfile.TemporaryDirectory() as name:
+            product = self.make_manufactured(Path(name), stale_builder=True)
+            with self.assertRaisesRegex(
+                ValueError, "SOURCE_NOT_IN_EXACT_MANUFACTURED_ZIP:build_technical_evidence.py"
+            ):
                 bridge.install(product, bridge.verify(RECIPE, self.evidence))
             self.assertFalse((product / "global_quality_candidate.json").exists())
             self.assertFalse((product / "evidence-f01").exists())

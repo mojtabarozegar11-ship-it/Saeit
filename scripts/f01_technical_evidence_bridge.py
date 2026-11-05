@@ -23,9 +23,10 @@ SOURCES = (
     "README.md", "CUSTOMER_GUIDE.md", "example_inputs.json",
     "build_technical_evidence.py",
 )
-# A legacy ZIP without the new customer entry point is not the same product
-# as a proof captured from source that includes that entry point.
-PACKAGE_SOURCES = tuple(name for name in SOURCES if name != "build_technical_evidence.py")
+# Every source required to produce the technical receipts is packaged by the
+# manufacturer. The receipt builder must be the very same version inside the
+# ZIP; otherwise a newer criterion map could be attached to an older package.
+PACKAGE_SOURCES = SOURCES
 TEST_MODULES = ("test_calculator.py", "test_guided_start.py")
 EXPORTS = ("baseline.json", "scenarios.csv", "joint-stress.csv",
            "management-report.html")
