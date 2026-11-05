@@ -218,6 +218,61 @@ def staging_route_and_template_context() -> dict[str, object]:
         result[label] = item
     return {'status': 'READ_ONLY', 'files': result}
 
+
+def staging_delivery_context() -> dict[str, object]:
+    """Read-only Passenger restart age, settings debug and web-cache directives."""
+    conf = HOME / 'Saeit-staging-web/.htaccess'
+    if conf.is_symlink() or not conf.is_file():
+        return {'status': 'HTACCESS_UNAVAILABLE'}
+    info: dict[str, object] = {'status': 'READ_ONLY'}
+    safe_lines = []
+    for line in conf.read_text('utf-8', 'replace').splitlines():
+        stripped = line.strip()
+        if re.search(r'(?i)(?:Passenger|LiteSpeed|Cache|Expires)', stripped) and not re.search(
+            r'(?i)(?:secret|key|password|token|authorization|credential|private)', stripped
+        ):
+            safe_lines.append(stripped[:160])
+    info['nonsecret_webserver_directives'] = safe_lines[:28]
+    match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)', conf.read_text('utf-8', 'replace'))
+    if not match:
+        return info
+    root = Path(match.group(1).strip('"'))
+    if root.is_symlink() or not root.is_dir() or (HOME / 'Saeit-staging/admin-smoke') not in root.parents:
+        return info
+    settings = root / 'config/settings.py'
+    if settings.is_file() and not settings.is_symlink() and settings.stat().st_size < 20000:
+        info['django_debug_declaration'] = [line.strip()[:160] for line in
+            settings.read_text('utf-8', 'replace').splitlines()
+            if re.match(r'^\s*DEBUG\s*=', line) and not re.search(
+                r'(?i)(?:password|secret|token|key)', line)][:2]
+    marker = root / 'tmp/restart.txt'
+    info['restart_marker_present'] = marker.is_file() and not marker.is_symlink()
+    if info['restart_marker_present']:
+        info['restart_marker_epoch'] = int(marker.stat().st_mtime)
+    uptime = None
+    try:
+        uptime = float(Path('/proc/uptime').read_text().split()[0])
+    except (OSError, ValueError, IndexError):
+        pass
+    process_ages = []
+    for candidate in Path('/proc').iterdir():
+        if not candidate.name.isdecimal():
+            continue
+        try:
+            cmdline = (candidate / 'cmdline').read_bytes().replace(b'\x00', b' ').decode('utf-8', 'replace')
+            if str(root) not in cmdline:
+                continue
+            stat_data = (candidate / 'stat').read_text().split(') ', 1)[1].split()
+            start_ticks = int(stat_data[19])
+            if uptime is not None:
+                age = max(0, int(uptime - start_ticks / os.sysconf('SC_CLK_TCK')))
+                process_ages.append(age)
+        except (OSError, IndexError, ValueError, PermissionError):
+            continue
+    info['matching_staging_passenger_process_count'] = len(process_ages)
+    info['matching_staging_passenger_process_ages_sec'] = sorted(process_ages)[:10]
+    return info
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -229,5 +284,6 @@ if __name__ == '__main__':
             'business': probe_public('https://zomorodmelal.ir/business/'),
         }, 'source': source_inventory(), 'staging_card_source': staging_public_card_source(),
         'active_staging_routing': staging_active_wsgi_mapping(),
-        'route_and_template_context': staging_route_and_template_context()},
+        'route_and_template_context': staging_route_and_template_context(),
+        'staging_delivery_context': staging_delivery_context()},
         ensure_ascii=False, sort_keys=True))
