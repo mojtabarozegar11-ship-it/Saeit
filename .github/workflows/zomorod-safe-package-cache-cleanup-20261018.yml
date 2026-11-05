@@ -8,13 +8,18 @@ on:
   workflow_dispatch:
     inputs:
       cleanup_action:
-        description: "Preview only or apply deletion of four disposable package cache directories"
+        description: "Preview, clear safe package caches, or relocate two checksum-pinned old backups"
         type: choice
         required: true
         default: preview
         options:
           - preview
           - apply
+          - migrate_backup
+      confirm_backup_relocation:
+        description: "I confirm relocation only after verified VPS copies and process safety checks"
+        type: boolean
+        default: false
       confirm_disposable_only:
         description: "I confirm: delete only package download caches, never apps/databases/backups"
         type: boolean
@@ -27,7 +32,7 @@ concurrency:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 25
     steps:
       - name: Prepare pinned cPanel relay
         shell: bash
@@ -783,6 +788,23 @@ jobs:
             uapi --output=json Quota get_quota_info 2>/dev/null | python3 -c 'import json,sys; j=json.load(sys.stdin).get("result",{}).get("data",{});print("POST_CACHE_MB_USED="+str(j.get("megabytes_used")));print("POST_CACHE_MB_LIMIT="+str(j.get("megabyte_limit")))' || true
           fi
           REMOTE
+      - name: Checkout verified relocation program
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.cleanup_action == 'migrate_backup' }}
+        uses: actions/checkout@v4
+      - name: Relocate two pinned root backups after VPS SHA256 verification
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.cleanup_action == 'migrate_backup' }}
+        shell: bash
+        env:
+          CONFIRM_BACKUP_RELOCATION: ${{ inputs.confirm_backup_relocation }}
+        run: |
+          set -euo pipefail
+          if [[ "$CONFIRM_BACKUP_RELOCATION" != "true" ]]; then
+            echo "ARCHIVE_RELOCATION_BLOCKED_EXPLICIT_CONFIRMATION_REQUIRED"
+            exit 8
+          fi
+          python3 tools/cpanel_backup_archive_relocate.py
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'uapi --output=json Quota get_quota_info' | python3 -c 'import json,sys;j=json.load(sys.stdin).get("result",{}).get("data",{});print("AFTER_ARCHIVE_MB_USED="+str(j.get("megabytes_used")));print("AFTER_ARCHIVE_MB_LIMIT="+str(j.get("megabyte_limit")))'
       - name: Public smoke after cache cleanup
         shell: bash
         run: |
