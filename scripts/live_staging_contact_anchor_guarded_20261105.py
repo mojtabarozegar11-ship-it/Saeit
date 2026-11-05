@@ -24,8 +24,8 @@ BACKUPS = HOME / ".private/staging-contact-anchor-backups"
 URLS = APP / "config/urls.py"
 BASE = APP / "core/templates/base.html"
 RESTART = APP / "tmp/restart.txt"
-OLD_ROUTE = 'path("contact/", RedirectView.as_view(pattern_name="company", permanent=True), name="contact"),'
-NEW_ROUTE = 'path("contact/", RedirectView.as_view(url="/company/#company-collaboration", permanent=False), name="contact"),'
+OLD_ROUTE = 'path("contact/", lambda request: branded_page(request, "contact") if brand_for_request(request) else RedirectView.as_view(pattern_name="company", permanent=True)(request), name="contact"),'
+NEW_ROUTE = 'path("contact/", lambda request: branded_page(request, "contact") if brand_for_request(request) else RedirectView.as_view(url="/company/#company-collaboration", permanent=False)(request), name="contact"),'
 OLD_LINK = '<a href="/contact/">تماس و همکاری</a>'
 NEW_LINK = '<a href="/company/#company-collaboration">تماس و همکاری</a>'
 FILES = ((URLS, OLD_ROUTE, NEW_ROUTE), (BASE, OLD_LINK, NEW_LINK))
