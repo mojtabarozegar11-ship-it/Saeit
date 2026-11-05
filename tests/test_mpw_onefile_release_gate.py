@@ -14,7 +14,7 @@ assert SPEC is not None and SPEC.loader is not None
 release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
 
-KNOWN_OLD = "7693254e4ed72141b6de7fc283c5a3214159ea49d838318337e47e86953f5f2f"
+KNOWN_OLD = "37bdfd64924ac96ec0deea203f2b377b49399950a4c4ae10080bbd8df79456ee"
 
 
 class OneFileReleaseGateTests(unittest.TestCase):
