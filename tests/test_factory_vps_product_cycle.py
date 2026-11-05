@@ -10,6 +10,8 @@ import tempfile
 import unittest
 from unittest import mock
 import fcntl
+import stat
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location(
@@ -31,6 +33,12 @@ class Line41SignedHourlyHandoffTests(unittest.TestCase):
         self.trust_patch = mock.patch.object(cycle, "RECEIVER_TRUST_ROOT", self.trust)
         self.trust_patch.start()
         self.addCleanup(self.trust_patch.stop)
+        # Existing integration tests use /tmp, which intentionally cannot be
+        # root-trusted. Simulate independently provisioned public keys here;
+        # the real filesystem trust verifier is exercised separately below.
+        admin_patch = mock.patch.object(cycle, "_trusted_admin_path", return_value=True)
+        admin_patch.start()
+        self.addCleanup(admin_patch.stop)
         self.first = "farm_enterprise_economics"
         self.second = "greenhouse_crop_margin"
         self.payload = b"synthetic-line41-approved-archive"
@@ -106,6 +114,86 @@ class Line41SignedHourlyHandoffTests(unittest.TestCase):
         (receiver / "product.zip").write_bytes(b"different-product")
         self.assertFalse(cycle._accepted_hourly_handoff(self.root, self.first,
                                                           self.clearance))
+
+    def test_signed_receipt_with_untrusted_receiver_key_cannot_release_slot(self):
+        receiver, secret = self.receiver_receipt()
+        self.sign(receiver, secret)
+        self.assertTrue(cycle._accepted_hourly_handoff(self.root, self.first,
+                                                        self.clearance))
+        with mock.patch.object(cycle, "_trusted_admin_path", return_value=False):
+            self.assertFalse(cycle._accepted_hourly_handoff(self.root, self.first,
+                                                             self.clearance))
+
+
+class ProtectedFactoryVerificationKeyTests(unittest.TestCase):
+    @staticmethod
+    def protected_stats(path, *, bad_part=None, mode_override=None, owner_override=None):
+        is_key = path.name == "reviewer.pem"
+        mode = stat.S_IFREG | 0o644 if is_key else stat.S_IFDIR | 0o755
+        if bad_part is not None and path == bad_part:
+            mode = mode_override if mode_override is not None else mode
+        uid = owner_override if bad_part is not None and path == bad_part and owner_override is not None else 0
+        return SimpleNamespace(st_mode=mode, st_uid=uid,
+                               st_size=128 if is_key else 0, st_nlink=1)
+
+    def test_all_ancestors_protected_allows_admin_provisioned_public_key(self):
+        key = Path("/etc/saeit/keys/reviewer.pem")
+        with mock.patch.object(Path, "lstat", autospec=True,
+                               side_effect=lambda path: self.protected_stats(path)):
+            self.assertTrue(cycle._trusted_admin_path(key))
+            self.assertTrue(cycle._trusted_admin_path(key.parent, directory=True))
+
+    def test_writable_ancestor_rejects_otherwise_protected_public_key(self):
+        key = Path("/etc/saeit/keys/reviewer.pem")
+        ancestor = Path("/etc/saeit")
+        with mock.patch.object(Path, "lstat", autospec=True,
+                               side_effect=lambda path: self.protected_stats(
+                                   path, bad_part=ancestor,
+                                   mode_override=stat.S_IFDIR | 0o775)):
+            self.assertFalse(cycle._trusted_admin_path(key))
+
+    def test_untrusted_owner_in_ancestor_rejects_key(self):
+        key = Path("/etc/saeit/keys/reviewer.pem")
+        with mock.patch.object(Path, "lstat", autospec=True,
+                               side_effect=lambda path: self.protected_stats(
+                                   path, bad_part=Path("/etc"), owner_override=1001)):
+            self.assertFalse(cycle._trusted_admin_path(key))
+
+    def test_symlink_key_or_parent_rejected(self):
+        key = Path("/etc/saeit/keys/reviewer.pem")
+        for location in (key, key.parent):
+            with self.subTest(location=str(location)), mock.patch.object(
+                Path, "lstat", autospec=True,
+                side_effect=lambda path: self.protected_stats(
+                    path, bad_part=location, mode_override=stat.S_IFLNK | 0o777)):
+                self.assertFalse(cycle._trusted_admin_path(key))
+
+    def test_relative_and_missing_trust_paths_fail_closed(self):
+        self.assertFalse(cycle._trusted_admin_path(Path("relative/key.pem")))
+        self.assertFalse(cycle._trusted_admin_path(Path("/no-such-trust-root/reviewer.pem")))
+
+    def test_valid_clearance_signature_rejected_when_key_not_admin_protected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            trust = folder / "reviewers"
+            trust.mkdir()
+            clearance = folder / "current.json"
+            clearance.write_text('{"verified_grade_total": 1000}', encoding="utf8")
+            secret = folder / "private.pem"
+            subprocess.run(["openssl", "ecparam", "-name", "prime256v1", "-genkey",
+                            "-noout", "-out", str(secret)], check=True, capture_output=True)
+            public_key = trust / "rights_reviewer.pem"
+            subprocess.run(["openssl", "pkey", "-in", str(secret), "-pubout",
+                            "-out", str(public_key)], check=True, capture_output=True)
+            subprocess.run(["openssl", "dgst", "-sha256", "-sign", str(secret),
+                            "-out", str(folder / "rights_reviewer.sig"), str(clearance)],
+                           check=True, capture_output=True)
+            with mock.patch.object(cycle, "REVIEWER_TRUST_ROOT", trust):
+                self.assertFalse(cycle._verified_clearance_signatures(
+                    clearance, {"rights_reviewer"}))
+                with mock.patch.object(cycle, "_trusted_admin_path", return_value=True):
+                    self.assertTrue(cycle._verified_clearance_signatures(
+                        clearance, {"rights_reviewer"}))
 
 
 class FactoryVPSCycleTests(unittest.TestCase):

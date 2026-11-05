@@ -13,6 +13,7 @@ import importlib.util
 import json
 import os
 import re
+import stat
 import subprocess
 import tempfile
 from pathlib import Path
@@ -47,6 +48,31 @@ RECEIVER_CYCLES = frozenset({"R-01", "B-01", "S-01", "G-01"})
 RECEIVER_TRUST_ROOT = Path("/etc/saeit/hourly-cycle-receiver-public-keys")
 # Independent reviewer public keys are provisioned by an operator, not the factory.
 REVIEWER_TRUST_ROOT = Path("/etc/saeit/factory-quality-reviewer-public-keys")
+
+
+def _trusted_admin_path(path, *, directory=False):
+    """Accept only root-owned paths with no replaceable ancestor, through '/'.
+
+    Factory-writable key directories would let a worker replace a verifier's
+    public key and approve its own quality certificate or handoff receipt.
+    """
+    path = Path(path)
+    if not path.is_absolute():
+        return False
+    try:
+        for part in (path, *path.parents):
+            info = part.lstat()
+            if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
+                return False
+            if part == path and not directory:
+                if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                        or not 0 < info.st_size <= 16384):
+                    return False
+            elif not stat.S_ISDIR(info.st_mode):
+                return False
+        return True
+    except OSError:
+        return False
 
 
 def _read_private_json(path):
@@ -90,8 +116,7 @@ def _verified_clearance_signatures(clearance_path, roles):
     """
     trust = REVIEWER_TRUST_ROOT
     try:
-        if (trust.is_symlink() or trust.parent.is_symlink()
-                or not trust.is_dir() or trust.stat().st_mode & 0o022):
+        if not _trusted_admin_path(trust, directory=True):
             return False
         baseline = hashlib.sha256(clearance_path.read_bytes()).hexdigest()
         if clearance_path.is_symlink():
@@ -99,11 +124,9 @@ def _verified_clearance_signatures(clearance_path, roles):
         for role in sorted(roles):
             public_key = trust / (role + ".pem")
             signature = clearance_path.parent / (role + ".sig")
-            if (public_key.is_symlink() or signature.is_symlink()
-                    or not public_key.is_file() or not signature.is_file()
-                    or not 0 < signature.stat().st_size <= 4096
-                    or not 0 < public_key.stat().st_size <= 16384
-                    or public_key.stat().st_mode & 0o022):
+            if (signature.is_symlink()
+                    or not _trusted_admin_path(public_key) or not signature.is_file()
+                    or not 0 < signature.stat().st_size <= 4096):
                 return False
             check = subprocess.run(
                 ["openssl", "dgst", "-sha256", "-verify", str(public_key),
@@ -168,8 +191,7 @@ def _accepted_hourly_handoff(root, recipe, clearance):
         return False
     trusted = RECEIVER_TRUST_ROOT
     try:
-        if (trusted.is_symlink() or trusted.parent.is_symlink() or not trusted.is_dir()
-                or trusted.stat().st_mode & 0o022):
+        if not _trusted_admin_path(trusted, directory=True):
             return False
         warehouse = (Path(root) / "digital-products" / recipe
                      / (recipe + "-internal-qa.zip"))
@@ -195,10 +217,9 @@ def _accepted_hourly_handoff(root, recipe, clearance):
             continue
         try:
             if (not receipt.is_file() or not signature.is_file() or not delivered.is_file()
-                    or not public_key.is_file() or receipt.stat().st_size > 100_000
-                    or signature.stat().st_size not in range(1, 4097)
-                    or public_key.stat().st_size > 16384
-                    or public_key.stat().st_mode & 0o022):
+                    or not _trusted_admin_path(public_key)
+                    or receipt.stat().st_size > 100_000
+                    or signature.stat().st_size not in range(1, 4097)):
                 continue
             checked = subprocess.run(
                 ["openssl", "dgst", "-sha256", "-verify", str(public_key),
