@@ -1,4 +1,4 @@
-name: Repair real active staging Passenger template and preserve unique service cards
+name: Repair staging duplicate services with targeted LiteSpeed WSGI refresh
 on:
   push:
     branches: [audit/live-sites-subsites-20261105]
