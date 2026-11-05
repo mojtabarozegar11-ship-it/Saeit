@@ -1,11 +1,31 @@
 #!/usr/bin/env python3
 """Fail-closed QC1000 readiness evaluator and actionable rework queue."""
 import argparse
+import importlib.util
 import json
 from pathlib import Path
 import sys
 
 PLAN = Path(__file__).resolve().parents[1] / "factory_config" / "rework" / "farm_enterprise_economics_qc1000_v1.json"
+FACTORY_CYCLE = Path(__file__).resolve().with_name("factory_vps_product_cycle.py")
+
+
+def _authenticated_independent_signatures(clearance, roles):
+    """Verify detached signatures against the factory's root-owned trust store.
+
+    A JSON ``valid_signed_roles`` claim is not an independent approval. Share
+    the production exit verifier's cryptographic trust path; if unavailable,
+    keep the rework queue on HOLD instead of publishing a false PASS.
+    """
+    try:
+        spec = importlib.util.spec_from_file_location("saeit_factory_signature_verifier", FACTORY_CYCLE)
+        if spec is None or spec.loader is None:
+            return False
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module._verified_clearance_signatures(clearance, set(roles))
+    except (OSError, ValueError, ImportError, AttributeError, RuntimeError):
+        return False
 
 
 def _rework_queue(plan):
@@ -41,13 +61,23 @@ def evaluate(root, recipe="farm_enterprise_economics"):
     except (OSError, ValueError, UnicodeError):
         reasons.append("SIGNED_CLEARANCE_UNREADABLE")
         data = {}
+    if not isinstance(data, dict):
+        reasons.append("SIGNED_CLEARANCE_SCHEMA_INVALID")
+        data = {}
+    if data.get("schema") != "saeit.factory.signed-quality-clearance.v1":
+        reasons.append("SIGNED_CLEARANCE_SCHEMA_INVALID")
     if data.get("verified_grade_total") != plan["required_score"]:
         reasons.append("QC1000_SCORE_NOT_VERIFIED")
     roles = data.get("valid_signed_roles")
-    if not isinstance(roles, list) or not set(plan["independent_signatures"]).issubset(roles):
+    required_roles = set(plan["independent_signatures"])
+    if not isinstance(roles, list) or not all(isinstance(role, str) for role in roles) or not required_roles.issubset(roles):
         reasons.append("INDEPENDENT_SIGNATURES_INCOMPLETE")
+    if not _authenticated_independent_signatures(clearance, required_roles):
+        reasons.append("INDEPENDENT_SIGNATURES_NOT_AUTHENTICATED")
     if data.get("eligible") is not True:
         reasons.append("PRODUCT_NOT_ELIGIBLE")
+    if data.get("owner_authorization_kind") not in ("direct_owner", "verified_delegated_agent"):
+        reasons.append("OWNER_AUTHORIZATION_NOT_VERIFIED")
     if data.get("publication_executed") is not False:
         reasons.append("PUBLICATION_NOT_LOCKED")
     if data.get("payment_activated") is not False:
