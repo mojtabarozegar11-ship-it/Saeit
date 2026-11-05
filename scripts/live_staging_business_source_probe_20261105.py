@@ -109,6 +109,47 @@ def staging_public_card_source() -> dict[str, object]:
     return {'status': 'READ', 'total_explicit_articles': len(articles), 'cards': cards}
 
 
+def staging_active_wsgi_mapping() -> dict[str, object]:
+    conf = HOME / 'Saeit-staging-web/.htaccess'
+    text = conf.read_text('utf-8', 'replace')
+    match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)', text)
+    if not match:
+        return {'status': 'NO_PASSENGER_ROOT'}
+    app_root = Path(match.group(1).strip('"'))
+    if (not str(app_root).startswith(str(HOME / 'Saeit-staging/admin-smoke/')) or
+            app_root.is_symlink() or not app_root.is_dir()):
+        return {'status': 'PASSENGER_ROOT_NOT_IN_EXPECTED_STAGING_TREE'}
+    wsgi = app_root / 'passenger_wsgi.py'
+    details: dict[str, object] = {'status': 'READ', 'root_relative': str(app_root.relative_to(HOME)),
+                                  'wsgi_entry': file_info(wsgi)}
+    if wsgi.is_file() and not wsgi.is_symlink() and wsgi.stat().st_size < 20000:
+        code = wsgi.read_text('utf-8', 'replace')
+        details['wsgi_path_literal_mentions'] = re.findall(r'/home/zomorod2/[-\w/]+', code)[:15]
+        details['wsgi_import_mentions'] = re.findall(r'(?m)^\s*(?:from\s+[\w.]+\s+import|import\s+[\w.]+)', code)[:20]
+    root = HOME / 'Saeit-staging'
+    found: list[dict[str, object]] = []
+    scanned = 0
+    for directory, directories, filenames in os.walk(root, followlinks=False):
+        directories[:] = [d for d in directories if d not in ('.git', 'node_modules', '.venv',
+                          '__pycache__', 'staticfiles', 'media', 'logs') and not (Path(directory) / d).is_symlink()]
+        scanned += len(filenames)
+        if scanned > 25000:
+            break
+        if 'services.html' in filenames:
+            candidate = Path(directory) / 'services.html'
+            if not candidate.is_symlink() and candidate.is_file() and candidate.stat().st_size < 16000:
+                record = file_info(candidate)
+                found.append({'relative': str(candidate.relative_to(HOME)),
+                              'sha256': record.get('sha256'), 'bytes': record.get('bytes'),
+                              'contains_staging_title': record.get('contains_staging_title')})
+        if len(found) >= 35:
+            break
+    details['all_staging_services_templates'] = found
+    details['scanned_file_count_bounded'] = scanned
+    details['staging_settings'] = file_info(root / 'config/settings.py')
+    return details
+
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -117,5 +158,6 @@ if __name__ == '__main__':
         'public': {
             'staging': probe_public('https://staging.zomorodmelal.ir/'),
             'business': probe_public('https://zomorodmelal.ir/business/'),
-        }, 'source': source_inventory(), 'staging_card_source': staging_public_card_source()},
+        }, 'source': source_inventory(), 'staging_card_source': staging_public_card_source(),
+        'active_staging_routing': staging_active_wsgi_mapping()},
         ensure_ascii=False, sort_keys=True))
