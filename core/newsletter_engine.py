@@ -2,6 +2,7 @@ import hashlib
 import re
 from datetime import date
 
+from django.db import transaction
 from django.utils.text import slugify
 
 from .models import Agent, NewsletterSchedule, NewsletterSource, NewsletterStory
@@ -87,11 +88,16 @@ def create_draft(*, agent_code, story_type, title, summary, body, source=None, e
     return story, "created" if can_schedule or not publish_at else "quality_hold"
 
 
+@transaction.atomic
 def process_submission(submission):
-    """Turn an owner/admin submission into an agent-owned draft; publishing remains approval-gated."""
+    """Claim exactly one queued submission and draft it under a database lock."""
     from django.utils import timezone
-    if submission.status not in ("queued", "processing"):
-        return submission.generated_story
+
+    # Reload under the transaction: a caller may hold an obsolete in-memory
+    # status. A second worker must not take over an in-flight submission.
+    submission = type(submission).objects.select_for_update().get(pk=submission.pk)
+    if submission.status != "queued":
+        return submission.generated_story if submission.status == "drafted" else None
     submission.status = "processing"
     submission.save(update_fields=["status"])
 
