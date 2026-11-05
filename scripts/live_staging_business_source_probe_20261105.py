@@ -1028,6 +1028,48 @@ def staging_selector_registration_and_release_chain_readonly() -> dict[str, obje
     return result
 
 
+
+def staging_domain_dispatch_source_readonly() -> dict[str, object]:
+    """Read host-specific routing decisions in both already-known Django trees."""
+    conf = HOME / 'Saeit-staging-web/.htaccess'
+    m = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)', conf.read_text('utf-8', 'replace')) if conf.is_file() and not conf.is_symlink() else None
+    if not m:
+        return {'status': 'ACTIVE_ROOT_UNAVAILABLE', 'changed_files': 0}
+    active = Path(m.group(1).strip('"'))
+    canonical = HOME / 'Saeit-staging'
+    if active.is_symlink() or canonical / 'admin-smoke' not in active.parents:
+        return {'status': 'ROOT_OUTSIDE_EXPECTED_STAGING', 'changed_files': 0}
+    focus = re.compile(r'(?i)(?:staging\.zomorodmelal|mojplaywin\.com|def services\(|def branded_home_dispatch\(|def home\(|get_host\(|http_host|urlconf|return\s+services\(|return\s+home\(|return\s+render\(|path\("",|branded_home_dispatch)')
+    secret = re.compile(r'(?i)(?:secret|password|token|private.?key|credential|api.?key|authorization|bearer|database)')
+    files = ('core/services_views.py', 'core/mojplaywin_views.py', 'config/urls.py')
+    results = {}
+    for name, root in (('active_snapshot', active), ('registered_canonical', canonical)):
+        items = {}
+        for relative in files:
+            path = root / relative
+            if path.is_symlink() or not path.is_file() or path.stat().st_size > 250000:
+                items[relative] = {'present': False}
+                continue
+            raw = path.read_bytes()
+            lines = raw.decode('utf-8', 'replace').splitlines()
+            matches: set[int] = set()
+            for n, line in enumerate(lines):
+                if focus.search(line):
+                    matches.update(range(max(0, n - 2), min(len(lines), n + 5)))
+            safe_lines = []
+            for n in sorted(matches):
+                line = lines[n]
+                if secret.search(line) or len(safe_lines) >= 105:
+                    continue
+                if len(line.strip()) > 260:
+                    continue
+                safe_lines.append({'line': n + 1, 'statement': line.strip().replace(str(HOME), '$ACCOUNT_HOME')[:200]})
+            items[relative] = {'present': True, 'sha256': hashlib.sha256(raw).hexdigest(),
+                               'safe_routing_lines': safe_lines}
+        results[name] = items
+    return {'status': 'READ_ONLY', 'changed_files': 0, 'route_sources': results}
+
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -1055,5 +1097,6 @@ if __name__ == '__main__':
         'two_restart_markers': staging_two_restart_markers_readonly(),
         'active_template_settings_block': staging_template_settings_block(),
         'wsgi_entry_and_worker_parentage': staging_wsgi_entry_and_parentage_readonly(),
-        'selector_registration_and_release_chain': staging_selector_registration_and_release_chain_readonly()},
+        'selector_registration_and_release_chain': staging_selector_registration_and_release_chain_readonly(),
+        'domain_dispatch_source': staging_domain_dispatch_source_readonly()},
         ensure_ascii=False, sort_keys=True))
