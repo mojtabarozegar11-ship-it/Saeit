@@ -229,3 +229,28 @@ jobs:
            paths=re.findall(r'(?<![A-Za-z0-9_])(?:/[A-Za-z0-9_.-]+)+\.(?:py|sh|php)|(?<![A-Za-z0-9_])[A-Za-z0-9_.-]+\.(?:py|sh|php)',line)
            print('MPW_CRON_PATH='+json.dumps({'line':i,'schedule':line.split()[:5],'scripts':[Path(x).name for x in paths][:8],'contains_reconcile':('reconcil' in low),'contains_settle':('settl' in low),'contains_trx':('trx' in low)}))
           PY
+
+      - name: Read recent Passenger errors after live checkout probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import re
+          roots=[Path("/home/zomorod2/logs"),Path("/home/zomorod2/mojplaywin.com"),Path("/home/zomorod2/Saeit-staging"),Path("/home/zomorod2/.private_mojplaywin_main_agents")]
+          names={"error_log","passenger.log","stderr.log","application.log"}
+          seen=0
+          for root in roots:
+              if not root.is_dir(): continue
+              for path in root.rglob("*"):
+                  if seen>=20: break
+                  if path.is_file() and not path.is_symlink() and path.name in names:
+                      try: lines=path.read_text(encoding="utf-8",errors="replace").splitlines()[-300:]
+                      except OSError: continue
+                      hits=[line[:1000] for line in lines if re.search(r"Traceback|Exception|Error|Internal Server|record_invoice|guest|commerce|PaymentIntent|IntegrityError|OperationalError|DoesNotExist",line,re.I)]
+                      print("MPW_SERVER_LOG path=%s matching=%d"%(path,len(hits)))
+                      for line in hits[-120:]: print(line)
+                      seen+=1
+          if not seen: print("MPW_SERVER_LOG no_known_files")
+          PY
