@@ -3,11 +3,17 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 from openai import OpenAI
 from core.knowledge_agent_models import KnowledgeAgentRun
-from core.models import AgentTask
+from core.models import AgentTask, ApprovalRequest
 
 
 class Command(BaseCommand):
     help = "Execute one queued Knowledge Content Director generation cycle."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--approved-paid-execution", action="store_true",
+            help="Permit a single paid call only with an approved grant for this exact run and a configured budget.",
+        )
 
     def handle(self, *args, **options):
         run = KnowledgeAgentRun.objects.filter(status="queued").select_related("book", "plan").first()
@@ -20,6 +26,36 @@ class Command(BaseCommand):
             input_data__run_id=run.pk,
             status__in=("queued", "running"),
         ).order_by("-id").first()
+
+        # A configured API key is not an authorization to spend. In particular,
+        # the scheduled site-agent cycle must never initiate a billable call.
+        # Approval is tied to this exact KnowledgeAgentRun and cannot be reused
+        # for another queued book section. The positive budgets are additional
+        # preconditions, not a claim that provider charges are metered here.
+        approved = ApprovalRequest.objects.filter(
+            action_type="knowledge_paid_model_generation",
+            target_type="KnowledgeAgentRun",
+            target_id=str(run.pk),
+            status="approved",
+        ).exists()
+        if not (
+            options["approved_paid_execution"]
+            and approved
+            and os.getenv("MOJ_PAID_LLM_ENABLED") == "1"
+            and os.getenv("MOJ_LLM_DAILY_CALL_BUDGET", "0").isdigit()
+            and int(os.getenv("MOJ_LLM_DAILY_CALL_BUDGET", "0")) > 0
+            and os.getenv("MOJ_LLM_MAX_COST_MINOR", "0").isdigit()
+            and int(os.getenv("MOJ_LLM_MAX_COST_MINOR", "0")) > 0
+        ):
+            summary = "Paid generation held: explicit per-run approval and an enforceable budget are required."
+            run.status = "blocked"
+            run.output_summary = summary
+            run.finished_at = timezone.now()
+            run.save(update_fields=["status", "output_summary", "finished_at"])
+            self._finish_task(task, "blocked", run, summary)
+            self.stdout.write("KNOWLEDGE_AGENT: blocked; paid execution not authorized")
+            return
+
         key = os.getenv("OPENAI_API_KEY")
         if not key:
             summary = "OPENAI_API_KEY is not configured; no content was fabricated."
@@ -31,8 +67,13 @@ class Command(BaseCommand):
             self.stdout.write("KNOWLEDGE_AGENT: blocked; API key unavailable")
             return
 
+        # Compare-and-swap before the external call. Two scheduled/manual
+        # processes must never submit the same paid request concurrently.
+        claimed = KnowledgeAgentRun.objects.filter(pk=run.pk, status="queued").update(status="running")
+        if not claimed:
+            self.stdout.write("KNOWLEDGE_AGENT: already claimed; no API call")
+            return
         run.status = "running"
-        run.save(update_fields=["status"])
         if task:
             task.status = "running"
             task.attempt_count += 1
