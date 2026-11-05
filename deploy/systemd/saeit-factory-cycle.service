@@ -1,0 +1,14 @@
+[Unit]
+Description=Saeit one-product factory cycle
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/home/githubops/factory-runtime/operations/autonomous-product-runtime/run-local-cycle.sh
+
+[Service]
+Type=oneshot
+User=githubops
+Group=githubops
+UMask=0077
+WorkingDirectory=/home/githubops/factory-runtime/operations/autonomous-product-runtime
+Environment=SAEIT_FACTORY_AUTORUN_ENABLED=1
+ExecStart=/home/githubops/factory-runtime/operations/autonomous-product-runtime/run-local-cycle.sh
