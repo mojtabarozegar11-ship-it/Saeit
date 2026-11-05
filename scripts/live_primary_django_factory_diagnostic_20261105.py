@@ -90,10 +90,41 @@ def probe_django() -> dict[str, object]:
         result['db_vendor'] = connection.vendor
         try:
             tables = set(connection.introspection.table_names())
+            result['total_tables'] = len(tables)
             result['newsletter_db_tables'] = {
                 table: table in tables for table in
                 ('core_newsletterstory', 'core_newslettersource',
                  'core_newsletterpublication', 'core_newsletterschedule')}
+            if connection.vendor == 'sqlite':
+                raw_name = str(connection.settings_dict.get('NAME', ''))
+                path = Path(raw_name)
+                if path.is_file() and not path.is_symlink() and path.is_relative_to(BASE):
+                    with path.open('rb') as db_file:
+                        header_hash = hashlib.sha256(db_file.read(8192)).hexdigest()[:16]
+                    result['sqlite_file'] = {
+                        'relative_path': str(path.relative_to(BASE)),
+                        'size_bytes': path.stat().st_size,
+                        'header_sha256prefix': header_hash}
+                    with connection.cursor() as cursor:
+                        cursor.execute('PRAGMA integrity_check')
+                        result['sqlite_integrity_check'] = str(cursor.fetchone()[0]) == 'ok'
+                else:
+                    result['sqlite_file'] = {'status': 'NOT_A_REGULAR_HOME_FILE'}
+            from django.db.migrations.loader import MigrationLoader
+            loader = MigrationLoader(connection)
+            pending = sorted(set(loader.disk_migrations).difference(loader.applied_migrations))
+            core_pending = [name for app, name in pending if app == 'core']
+            core_applied = [name for app, name in loader.applied_migrations if app == 'core']
+            result['migration_state'] = {
+                'migration_table_present': 'django_migrations' in tables,
+                'all_pending_count': len(pending),
+                'core_applied_count': len(core_applied),
+                'core_pending_count': len(core_pending),
+                'core_pending_first_30': core_pending[:30],
+                'newsletter_named_migrations': sorted([
+                    name for app, name in loader.disk_migrations
+                    if app == 'core' and 'newsletter' in name.lower()])[:30],
+            }
         except BaseException as exc:
             result['database_probe_error'] = failure(exc)
         for route in ('/', '/newsletter/', '/apps/', '/economy/'):
