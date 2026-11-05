@@ -1,4 +1,4 @@
-name: Audit live public internal links and assets without site mutations
+name: Audit public links with referral provenance, without site mutations
 on:
   push:
     branches: [audit/live-sites-subsites-20261105]
