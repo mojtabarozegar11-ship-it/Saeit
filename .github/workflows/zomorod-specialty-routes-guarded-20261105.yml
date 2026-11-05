@@ -1,4 +1,4 @@
-name: Read-only trace of Zomorod routing and rewrites
+name: Guarded Zomorod scoped rewrite and specialty publication
 on:
   push:
     branches: [audit/live-sites-subsites-20261105]
@@ -20,11 +20,57 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Check read-only route diagnostics
+      - name: Render four pages and package a guarded static rewrite release
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/zomorod_route_layer_readonly_20261105.py
+          python3 -m py_compile core/specialty_pages.py scripts/zomorod_specialty_rewrite_release_guarded_20261105.py
+          python3 - <<'PY'
+          import base64
+          import importlib.util
+          import os
+          import sys
+          import types
+          from pathlib import Path
+          class MockResponse:
+              def __init__(self, body, content_type):
+                  self.content = body.encode('utf-8')
+                  self.headers = {}
+              def __setitem__(self, key, value):
+                  self.headers[key] = value
+          http = types.ModuleType('django.http')
+          http.Http404 = type('Http404', (Exception,), {})
+          http.HttpResponse = MockResponse
+          decorators = types.ModuleType('django.views.decorators.http')
+          decorators.require_safe = lambda fn: fn
+          for name, module in [
+              ('django', types.ModuleType('django')),
+              ('django.http', http),
+              ('django.views', types.ModuleType('django.views')),
+              ('django.views.decorators', types.ModuleType('django.views.decorators')),
+              ('django.views.decorators.http', decorators),
+          ]:
+              sys.modules[name] = module
+          spec = importlib.util.spec_from_file_location('zm_specialty_export', 'core/specialty_pages.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          request = type('SiteRequest', (), {'get_host': lambda self: 'zomorodmelal.ir'})()
+          payload = {}
+          for slug in ('carpets', 'real-estate', 'restaurant', 'signals'):
+              result = module.specialty_page(request, slug).content
+              if not result.startswith(b'<!doctype html>') or slug.encode() not in result:
+                  raise SystemExit('INVALID_STATIC_RENDER:' + slug)
+              payload[slug] = base64.b64encode(result)
+          installer = Path('scripts/zomorod_specialty_rewrite_release_guarded_20261105.py').read_text()
+          marker = 'STATIC_PAGES_BASE64 = None  # Packed from core/specialty_pages.py by CI.'
+          if installer.count(marker) != 1:
+              raise SystemExit('STATIC_PACKAGING_MARKER_MISSING')
+          packaged = installer.replace(marker, 'STATIC_PAGES_BASE64 = ' + repr(payload))
+          target = Path(os.environ['RUNNER_TEMP']) / 'zm-specialties-rewrite-installer.py'
+          target.write_text(packaged)
+          import ast
+          ast.parse(packaged, filename=str(target))
+          PY
       - name: Authenticate pinned VPS and cPanel SSH host
         id: link
         shell: bash
@@ -113,11 +159,11 @@ jobs:
             fi
           fi
           echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
-      - name: Diagnose origin and routing without changing remote files
+      - name: Backup and add one scoped rewrite; verify and rollback on any failure
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         shell: bash
         run: |
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
-          timeout 70s ssh -T -F "$RUNNER_TEMP/zm-specialty-ssh/config" "$COMMAND_HOST" 'python3 -' < scripts/zomorod_route_layer_readonly_20261105.py
+          timeout 275s ssh -T -F "$RUNNER_TEMP/zm-specialty-ssh/config" "$COMMAND_HOST" 'python3 - guarded' < "$RUNNER_TEMP/zm-specialties-rewrite-installer.py"
