@@ -112,6 +112,7 @@ jobs:
             fi
           fi
           echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
+      # Retry only after fixing cached verification; maintain fail-closed rollback.
       - name: Guarded personnel link correction; automatically roll back on failure
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
