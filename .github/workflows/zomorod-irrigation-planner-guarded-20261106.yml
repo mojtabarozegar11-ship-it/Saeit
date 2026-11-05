@@ -1,0 +1,174 @@
+name: Publish FAO irrigation planner for nine Zomorod topic pages with rollback
+on:
+  push:
+    branches: [audit/live-sites-subsites-20261105]
+    paths:
+      - .github/workflows/zomorod-irrigation-planner-guarded-20261106.yml
+      - scripts/zomorod_irrigation_planner_guarded_20261106.py
+permissions:
+  contents: read
+concurrency:
+  group: zm-fao-irrigation-20261106
+  cancel-in-progress: false
+jobs:
+  release:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and inspect scoped FAO irrigation planner
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_irrigation_planner_guarded_20261106.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("scripts/zomorod_irrigation_planner_guarded_20261106.py").read_text()
+          assert "PASSENGER_STATIC_ROUTE_CHANGED" in s and "newPages" in s
+          assert "zm-fao-irrigation-planner-20261106" in s and "irrigation-planner-backups" in s
+          assert "rollback" in s and "public_html" in s
+          print("IRRIGATION_GUARD_SOURCE_OK=1")
+          PY
+      - name: Authenticate through pinned VPS to cPanel
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zm-irrigation-ssh"
+          install -d -m 700 "$d"
+          export SSH_DIR="$d"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          source = Path('.github/workflows/mpw-guest-checkout-live-release.yml').read_text()
+          dest = Path(os.environ['SSH_DIR'])
+          for label, filename in [('vps.known', 'vps.known'), ('host.candidate', 'host.known')]:
+              suffix = f'> "$d/{label}"'
+              matches = [line.strip() for line in source.splitlines()
+                         if line.strip().startswith("printf '%s\\n' '") and line.strip().endswith(suffix)]
+              if len(matches) != 1:
+                  raise SystemExit('PINNED_HOST_KEY_NOT_AVAILABLE:' + label)
+              value = matches[0].split("printf '%s\\n' '", 1)[1].rsplit("' >", 1)[0]
+              (dest / filename).write_text(value + '\n')
+          for env_key, filename in [('VPS_KEY', 'vps.key'), ('HOST_KEY', 'host.key')]:
+              value = os.environ.get(env_key, '')
+              if not value:
+                  raise SystemExit('SSH_IDENTITY_NOT_CONFIGURED:' + env_key)
+              value = value.replace('\r\n', '\n').replace('\r', '').replace('\\n', '\n')
+              key_file = dest / filename
+              key_file.write_text(value.rstrip() + '\n')
+              key_file.chmod(0o600)
+          PY
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}')" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 20
+            ConnectionAttempts 1
+            ServerAliveInterval 15
+            ServerAliveCountMax 2
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          ssh_host=''
+          for attempt in 1 2 3; do
+            if timeout 45s ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/.htaccess' >/dev/null 2>&1; then
+              ssh_host=saeit-cpanel
+              echo 'AUTHENTICATED_VPS_CPANEL_RELAY'
+              break
+            fi
+          done
+          if test -z "$ssh_host"; then
+            if timeout 45s ssh -T -F "$d/config" saeit-cpanel-direct 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/.htaccess' >/dev/null 2>&1; then
+              ssh_host=saeit-cpanel-direct
+              echo 'AUTHENTICATED_CPANEL_DIRECT'
+            else
+              exit 1
+            fi
+          fi
+          echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
+      - name: Preview nine target topic articles and topic hub; reject drift
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 65s ssh -T -F "$RUNNER_TEMP/zm-irrigation-ssh/config" "$COMMAND_HOST" 'python3 - preview' < scripts/zomorod_irrigation_planner_guarded_20261106.py
+      - name: Publish FAO irrigation calculator and scoped article navigation
+        id: publish
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
+          timeout 75s ssh -T -F "$RUNNER_TEMP/zm-irrigation-ssh/config" "$COMMAND_HOST" "python3 - publish '$GITHUB_RUN_ID'" < scripts/zomorod_irrigation_planner_guarded_20261106.py
+      - name: Verify 11 origin pages and live irrigation calculator
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 165s ssh -T -F "$RUNNER_TEMP/zm-irrigation-ssh/config" "$COMMAND_HOST" "python3 - verify-origin '$GITHUB_RUN_ID'" < scripts/zomorod_irrigation_planner_guarded_20261106.py
+      - name: Independently verify public irrigation tool and entry points
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen,Request
+          checks={
+            '/topics/':['zm-fao-irrigation-planner-20261106:hub','/topics/tools/irrigation-planner/','id="zm-topic-query"'],
+            '/topics/zm-r09/drip-irrigation/':['zm-fao-irrigation-planner-20261106:article','/topics/tools/irrigation-planner/'],
+            '/topics/zm-r03/greenhouse-irrigation/':['zm-fao-irrigation-planner-20261106:article','/topics/tools/irrigation-planner/'],
+            '/topics/tools/irrigation-planner/':['zm-fao-irrigation-planner-20261106:engine','id="water-form"','id="gross-volume"']
+          }
+          for path,tokens in checks.items():
+              req=Request('https://zomorodmelal.ir'+path,headers={'User-Agent':'Zomorod-Irrigation-Runner/1.0','Cache-Control':'no-cache'})
+              with urlopen(req,timeout=30) as r:
+                  body=r.read(1200000).decode('utf-8','replace')
+                  assert r.status==200
+                  for token in tokens:
+                      assert token in body, 'missing live irrigation utility:'+path+':'+token
+          print('PUBLIC_IRRIGATION_PATHS_OK=4')
+          PY
+      - name: Restore scoped irrigation files if public verification fails
+        if: failure() && steps.publish.outcome == 'success'
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 80s ssh -T -F "$RUNNER_TEMP/zm-irrigation-ssh/config" "$COMMAND_HOST" "python3 - rollback '$GITHUB_RUN_ID'" < scripts/zomorod_irrigation_planner_guarded_20261106.py
