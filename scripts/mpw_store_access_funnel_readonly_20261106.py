@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
+import gzip
+from io import BytesIO
 import json
 import os
 from pathlib import Path
@@ -20,6 +22,7 @@ import sys
 ACCOUNT = Path("/home/zomorod2")
 DOMAIN = "mojplaywin.com"
 MAX_LOG_BYTES = 64 * 1024 * 1024
+MAX_ARCHIVE_COMPRESSED_BYTES = 16 * 1024 * 1024
 MAX_LINES = 600_000
 LOOKBACK_DAYS = 7
 MONTHS = {v: i for i, v in enumerate(
@@ -113,6 +116,48 @@ def _logs():
     return list(dedup.values())
 
 
+def _archives():
+    """Read archived cPanel Raw Access logs as a fallback, without extracting.
+
+    cPanel can place monthly .gz archives in /home/USERNAME/logs. Never copy or
+    print their contents. Only account-owned regular files under that folder
+    are eligible, and decompression is bounded separately in _audit().
+    """
+    folder = ACCOUNT / 'logs'
+    if folder.is_symlink() or not folder.is_dir():
+        return []
+    try:
+        children = sorted(folder.iterdir(), key=lambda p: p.stat().st_mtime,
+                          reverse=True)[:300]
+    except OSError:
+        return []
+    result = []
+    for entry in children:
+        name = entry.name.lower()
+        if (not name.endswith('.gz') or
+                not (name.startswith(DOMAIN + '-') or
+                     name.startswith(DOMAIN + '.') or
+                     name.startswith('www.' + DOMAIN + '-') or
+                     name.startswith('www.' + DOMAIN + '.'))):
+            continue
+        try:
+            if entry.is_symlink():
+                continue
+            actual = entry.resolve(strict=True)
+            if not actual.is_relative_to(folder.resolve()) or not actual.is_file():
+                continue
+            info = actual.stat()
+            if (info.st_uid != os.geteuid() or info.st_nlink != 1 or
+                    not 0 < info.st_size <= MAX_ARCHIVE_COMPRESSED_BYTES):
+                continue
+        except (OSError, RuntimeError):
+            continue
+        result.append((actual, info.st_size))
+        if len(result) >= 4:
+            break
+    return result
+
+
 def _awstats_monthly():
     """Read only AWStats' aggregate GENERAL block, never visit/IP sections."""
     folder = ACCOUNT / 'tmp/awstats'
@@ -168,19 +213,25 @@ def _audit():
     cutoff = now - timedelta(days=LOOKBACK_DAYS)
     totals = Counter()
     day_counts = defaultdict(Counter)
-    source_files = _logs()
+    raw_files = _logs()
+    archived_files = _archives() if not raw_files else []
+    source_files = raw_files or archived_files
+    archived = bool(archived_files)
     truncated = False
     scanned_lines = 0
+    scanned_bytes = 0
     for path, size in source_files:
         try:
-            with path.open('rb') as stream:
-                if size > MAX_LOG_BYTES:
+            opener = gzip.open if archived else Path.open
+            with opener(path, 'rb') as stream:
+                if not archived and size > MAX_LOG_BYTES:
                     stream.seek(-MAX_LOG_BYTES, os.SEEK_END)
                     stream.readline()  # discard incomplete first line
                     truncated = True
                 for raw in stream:
                     scanned_lines += 1
-                    if scanned_lines > MAX_LINES:
+                    scanned_bytes += len(raw)
+                    if scanned_lines > MAX_LINES or scanned_bytes > MAX_LOG_BYTES:
                         truncated = True
                         break
                     parsed = _parse(raw.decode('utf-8', 'replace'))
@@ -199,15 +250,19 @@ def _audit():
                     day_counts[stamp.date().isoformat()][key] += 1
                 if scanned_lines > MAX_LINES:
                     break
-        except (OSError, PermissionError):
+        except (OSError, PermissionError, EOFError):
             totals['unreadable_log_files'] += 1
     return {
         'status': 'aggregated' if source_files else 'logs_unavailable',
         'utc_window_end': now.date().isoformat(),
         'days': LOOKBACK_DAYS,
         'files_accessible': len(source_files),
+        'archive_files_accessible': len(archived_files),
+        'source_kind': 'cPanel_raw_access_archives' if archived else
+                       ('current_access_logs' if raw_files else 'none'),
         'tail_limited': truncated,
         'scanned_lines': min(scanned_lines, MAX_LINES),
+        'scanned_bytes': min(scanned_bytes, MAX_LOG_BYTES),
         'totals': dict(sorted(totals.items())),
         'daily': {day: dict(sorted(values.items()))
                   for day, values in sorted(day_counts.items())},
@@ -231,6 +286,9 @@ def _selftest():
     assert parsed[0].hour == 5 and parsed[0].minute == 43
     assert parsed[2] == '/store/' and parsed[3] == 200 and not parsed[4]
     assert _category('GET', parsed[2]) == 'store_get'
+    with gzip.open(BytesIO(gzip.compress((fixture + '\n').encode('utf-8'))), 'rb') as stream:
+        restored = stream.readline().decode('utf-8').strip()
+    assert _parse(restored) == parsed
     assert _category('POST', '/commerce/trx-easy/start/72/') == 'order_post'
     assert _category('GET', '/commerce/trx-easy/invoice/12/') == 'invoice_get'
     assert _category('GET', '/admin/') is None
