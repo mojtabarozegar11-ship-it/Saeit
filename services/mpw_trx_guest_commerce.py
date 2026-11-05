@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 import time
 
@@ -89,8 +90,6 @@ def _guest_username(request):
 def _new_user(request):
     """Resolve both simultaneous first orders to one unique password-disabled user."""
     from django.contrib.auth import get_user_model
-    from django.core.exceptions import ValidationError
-    from django.core.validators import validate_email
     from django.db import IntegrityError, transaction
 
     # The guest principal is the durable owner of the order.  Persist the
@@ -104,10 +103,8 @@ def _new_user(request):
             break
     if not submitted_email:
         raise Http404("Email address required")
-    try:
-        validate_email(submitted_email)
-    except ValidationError as exc:
-        raise Http404("Valid email address required") from exc
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", submitted_email):
+        raise Http404("Valid email address required")
 
     _rate_limit(request)
     Model = get_user_model()
