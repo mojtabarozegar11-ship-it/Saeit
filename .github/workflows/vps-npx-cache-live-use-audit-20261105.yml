@@ -1,8 +1,21 @@
-name: VPS read-only npx cache use and process audit
+name: VPS bounded disposable npx cache cleanup
 on:
   pull_request:
     paths: [".github/workflows/vps-npx-cache-live-use-audit-20261105.yml"]
   workflow_dispatch:
+    inputs:
+      cleanup_action:
+        description: "Inspect only (default), or apply deletion of the unused 254MB VPS npx download cache"
+        type: choice
+        required: true
+        default: preview
+        options:
+          - preview
+          - apply
+      confirm_cache_only:
+        description: "I confirm: ONLY the VPS githubops .npm/_npx disposable cache, never apps, databases or backups"
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -26,13 +39,22 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           echo VPS_PINNED_SSH=verified
-      - name: Check npx cache against active processes and factory references (read-only)
+      - name: Inspect or explicitly reclaim one disposable npx cache with fail-closed guards
         shell: bash
+        env:
+          REQUESTED_ACTION: ${{ inputs.cleanup_action }}
+          CONFIRM_CACHE_ONLY: ${{ inputs.confirm_cache_only }}
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/vps-backup-meta-20261105"
-          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 githubops@178.239.147.150 'python3 -' <<'REMOTE'
-          import collections,os,stat,subprocess
+          mode=preview
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "${REQUESTED_ACTION:-preview}" == apply ]]; then
+            test "${CONFIRM_CACHE_ONLY:-false}" = true || { echo "NPX_VPS_APPLY_REFUSED_CONFIRMATION"; exit 8; }
+            mode=apply
+          fi
+          echo "NPX_VPS_MODE=$mode"
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 githubops@178.239.147.150 "CACHE_CLEANUP_MODE=$mode python3 -" <<'REMOTE'
+          import collections,os,shutil,stat,subprocess
           from pathlib import Path
           home=Path.home()
           cache=home/".npm"/"_npx"
@@ -85,7 +107,33 @@ jobs:
                       content=p.read_text(errors="replace")
                       if ".npm/_npx" in content or "npx " in content.lower():references+=1
           print("NPX_VPS_USER_SERVICE_REFERENCES="+str(references),flush=True)
-          print("NPX_VPS_DELETION_ATTEMPTED=false",flush=True)
+          apply=os.environ.get("CACHE_CLEANUP_MODE")=="apply"
+          print("NPX_VPS_APPLY_REQUESTED="+str(apply),flush=True)
+          if apply:
+              if sum(counts.values()) or cache_cwd or open_cache_fds:
+                  raise SystemExit("NPX_VPS_ACTIVE_USE_ABORT")
+              if cron.returncode not in (0,1) or ".npm/_npx" in cron.stdout or "npx " in cron.stdout.lower() or references:
+                  raise SystemExit("NPX_VPS_SCHEDULED_REFERENCE_ABORT")
+              if home!=Path("/home/githubops") or (home/".npm").is_symlink() or cache.is_symlink():
+                  raise SystemExit("NPX_VPS_PATH_IDENTITY_ABORT")
+              if cache.owner()!="githubops" or (home/".npm").owner()!="githubops":
+                  raise SystemExit("NPX_VPS_OWNERSHIP_ABORT")
+              if cache.resolve()!=home/".npm"/"_npx" or not cache.is_dir():
+                  raise SystemExit("NPX_VPS_PATH_CHANGED_ABORT")
+              before=int(size.stdout.split()[0])*1024
+              if before<100*1024*1024 or before>1024*1024*1024:
+                  raise SystemExit("NPX_VPS_SIZE_SCOPE_ABORT")
+              # Cache, not application code; no service or backup paths may be targeted.
+              free_before=os.statvfs(home).f_bavail*os.statvfs(home).f_frsize
+              shutil.rmtree(cache)
+              if cache.exists():
+                  raise SystemExit("NPX_VPS_DELETE_INCOMPLETE")
+              fs=os.statvfs(home)
+              free_after=fs.f_bavail*fs.f_frsize
+              print("NPX_VPS_DISPOSABLE_CACHE_REMOVED=true",flush=True)
+              print("NPX_VPS_FREE_GAIN_BYTES="+str(free_after-free_before),flush=True)
+          else:
+              print("NPX_VPS_DELETION_ATTEMPTED=false",flush=True)
           REMOTE
       - name: Remove temporary runner identity
         if: always()
