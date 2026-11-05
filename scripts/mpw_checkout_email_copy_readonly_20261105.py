@@ -2,6 +2,7 @@
 """Read-only, privacy-safe inventory of MojPlayWin's email delivery promises."""
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -13,6 +14,73 @@ import sys
 
 APP = Path("/home/zomorod2/Saeit-staging")
 WATCH = ("email", "invoice", "receipt", "download")
+
+
+def _call_name(expr):
+    if isinstance(expr, ast.Name):
+        return expr.id
+    if isinstance(expr, ast.Attribute):
+        return expr.attr
+    return ""
+
+
+def _commercial_flow_inventory():
+    """Report only static function/call names; never source literals or credentials."""
+    files = (
+        "services/mpw_trx_guest_delivery.py",
+        "services/mpw_trx_commercial_web.py",
+        "services/mpw_walletless_commercial_intent.py",
+    )
+    selected_calls = {
+        "EmailMessage", "get_connection", "send", "send_messages", "send_mail",
+        "record_invoice", "require_active_merchant_wallet", "on_commit",
+        "deliver", "deliver_paid", "_download_paid", "mark_paid",
+        "create", "get_or_create", "update_or_create", "save", "filter",
+    }
+    result = []
+    for relative in files:
+        path = APP / relative
+        if (path.is_symlink() or not path.is_file() or
+                not path.resolve().is_relative_to(APP.resolve()) or
+                path.stat().st_size > 140000):
+            result.append({"path": relative, "status": "unavailable"})
+            continue
+        raw = path.read_bytes()
+        tree = ast.parse(raw.decode("utf-8"), filename=relative)
+        functions = []
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                calls = sorted({name for call in ast.walk(node)
+                                if isinstance(call, ast.Call)
+                                if (name := _call_name(call.func)) in selected_calls})
+                functions.append({"name": node.name, "line": node.lineno,
+                                  "calls": calls})
+        result.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest(),
+                       "functions": functions[:65]})
+    return result
+
+
+def _commercial_delivery_aggregate():
+    """Read aggregate counts only; no addresses, order IDs, or message bodies."""
+    from django.apps import apps
+    try:
+        model = apps.get_model("mpw_commerce", "GuestTrxDelivery")
+    except LookupError:
+        return {"model_available": False}
+    fields = model._meta.concrete_fields
+    safe = {field.name: field for field in fields
+            if field.name in ("sent_at", "delivered_at", "email_sent_at",
+                              "fulfilled_at", "created_at", "last_attempt_at")}
+    try:
+        aggregate = {"total_rows": model.objects.count()}
+        for name in sorted(safe):
+            aggregate[name + "_nonnull"] = model.objects.filter(
+                **{name + "__isnull": False}).count()
+        return {"model_available": True, "aggregate": aggregate,
+                "time_fields_checked": sorted(safe)}
+    except Exception as exc:
+        return {"model_available": True,
+                "query_status": type(exc).__name__}
 
 
 def main():
@@ -79,13 +147,20 @@ def main():
             value = getattr(settings, name)
             if type(value) is bool:
                 flags[name] = value
+    backend = getattr(settings, "EMAIL_BACKEND", None)
+    backend_type = backend if isinstance(backend, str) and (
+        backend.startswith("django.core.mail.backends.") or
+        backend.startswith("anymail.backends.")) else "custom_or_unavailable"
     print("MPW_CHECKOUT_EMAIL_COPY_READONLY=" + json.dumps({
         "checkout_template": str(checkout.relative_to(APP)),
         "found": findings[:12],
         "delivery_source_controls": delivery_checks[:55],
         "delivery_module_references": triggers[:20],
         "boolean_mail_delivery_flags": flags,
-        "db_rows_read": 0, "emails_sent": 0, "emails_deleted": 0,
+        "commercial_email_backend_type": backend_type,
+        "commercial_flow_static": _commercial_flow_inventory(),
+        "commercial_delivery_aggregate": _commercial_delivery_aggregate(),
+        "emails_sent_by_audit": 0, "emails_deleted": 0,
         "files_modified": 0,
     }, sort_keys=True))
 
