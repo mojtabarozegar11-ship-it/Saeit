@@ -37,7 +37,16 @@ def _safe_root(value):
             info = part.lstat()
             if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
                 raise RuntimeError("F01_GLOBAL_ROOT_MISSING_OR_UNSAFE")
-            if info.st_mode & 0o022:
+            # A sticky world-writable directory such as /tmp prevents
+            # replacing another owner's child entry; ordinary group/other
+            # writable ancestors remain a hard failure.
+            replaceable = bool(info.st_mode & 0o022)
+            sticky_safe = bool(
+                info.st_mode & stat.S_ISVTX
+                and info.st_mode & 0o002
+                and not info.st_mode & 0o020
+            )
+            if replaceable and not sticky_safe:
                 raise RuntimeError("F01_GLOBAL_ROOT_ANCESTRY_WRITABLE")
         return path.resolve(strict=True)
     except OSError as exc:
