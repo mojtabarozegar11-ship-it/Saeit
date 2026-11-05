@@ -25,6 +25,8 @@ on:
       - "scripts/mojplaywin_backup_vps_failure_readonly.py"
       - "tests/test_mojplaywin_backup_vps_failure_readonly.py"
       - "scripts/mojplaywin_isolated_restore_capabilities_readonly.py"
+      - "scripts/mpw_vps_mount_capacity_readonly_20261105.py"
+      - "tests/test_mpw_vps_mount_capacity_readonly_20261105.py"
   workflow_dispatch:
     inputs:
       restore_pair_id:
@@ -188,6 +190,15 @@ jobs:
           python3 -m py_compile scripts/mojplaywin_isolated_restore_capabilities_readonly.py
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 35s ssh -T -F "$d/config" saeit-vps python3 - < scripts/mojplaywin_isolated_restore_capabilities_readonly.py
+
+      - name: Count distinct local VPS mounts without printing paths or changing files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_mpw_vps_mount_capacity_readonly_20261105.py'
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-vps \
+            'PYTHONDONTWRITEBYTECODE=1 python3 -B -' < scripts/mpw_vps_mount_capacity_readonly_20261105.py
 
       - name: Screen specific encrypted pair against current VPS free space (read-only)
         if: ${{ inputs.restore_pair_id != '' }}
