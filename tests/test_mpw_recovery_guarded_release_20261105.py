@@ -1,7 +1,10 @@
 """File-only release/rollback tests in temporary directories; no cPanel/DB."""
 from __future__ import annotations
 
+import gzip
+import hashlib
 import importlib.util
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -18,6 +21,22 @@ SPEC.loader.exec_module(release)
 
 
 class GuardedRecoveryReleaseTests(unittest.TestCase):
+    def _snapshot(self, run):
+        self.backups.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.backups.chmod(0o700)
+        destination = self.backups / "db"
+        destination.mkdir(parents=True, exist_ok=True, mode=0o700)
+        payload = (
+            "CREATE TABLE `core_order` (id int);\n"
+            "CREATE TABLE `core_paymentintent` (id int);\n" +
+            "".join(f"INSERT INTO `core_order` VALUES ({i}); -- {i:08x}\n"
+                    for i in range(4000))
+        ).encode()
+        source = destination / (run + ".sql.gz")
+        source.write_bytes(gzip.compress(payload))
+        source.chmod(0o600)
+        return hashlib.sha256(source.read_bytes()).hexdigest()
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="mpw-recovery-release-isolated-")
         root = Path(self.tmp.name)
@@ -86,11 +105,12 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
                                "core_guestrecoveryrate"],
                     "enabled": False, "mail": False}
         run = "202611050042"
+        snapshot_sha = self._snapshot(run)
         with patch.object(release, "require_before_schema", return_value=True), \
              patch.object(release, "migrate_new_tables"), \
              patch.object(release, "db_state", return_value=verified), \
              patch.object(release, "restart") as restarted:
-            release.publish(self.stage, run)
+            release.publish(self.stage, run, snapshot_sha)
             self.assertEqual(restarted.call_count, 1)
             self.assertTrue((self.app / release.FILES["migration"]).is_file())
             self.assertIn(b"MPW_GUEST_RECOVERY_EMAIL_APPROVED = False",
@@ -107,11 +127,12 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
         verified = {"vendor": "mysql", "m39": True, "m40": True,
                     "tables": ["a", "b", "c"], "enabled": False, "mail": False}
         run = "202611050043"
+        snapshot_sha = self._snapshot(run)
         with patch.object(release, "require_before_schema", return_value=True), \
              patch.object(release, "migrate_new_tables"), \
              patch.object(release, "db_state", return_value=verified), \
              patch.object(release, "restart"):
-            release.publish(self.stage, run)
+            release.publish(self.stage, run, snapshot_sha)
             path = self.app / release.FILES["settings"]
             path.write_bytes(path.read_bytes() + b"\n# newer live edit\n")
             with self.assertRaisesRegex(RuntimeError, "ROLLBACK_SOURCE_DRIFT"):
@@ -128,17 +149,62 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
 
     def test_migration_failure_restores_original_code_without_dropping_tables(self):
         run = "202611050044"
+        snapshot_sha = self._snapshot(run)
         with patch.object(release, "require_before_schema", return_value=True), \
              patch.object(release, "migrate_new_tables", side_effect=RuntimeError("synthetic migration failure")), \
              patch.object(release, "restart") as restarted:
             with self.assertRaisesRegex(RuntimeError, "synthetic migration failure"):
-                release.publish(self.stage, run)
+                release.publish(self.stage, run, snapshot_sha)
             self.assertEqual(restarted.call_count, 1)
         for name in self.fake:
             self.assertEqual((self.app / release.FILES[name]).read_bytes(), self.fake[name])
         for name in release.NEW_FILES:
             self.assertFalse((self.app / release.FILES[name]).exists())
         self.assertTrue((self.backups / run / "manifest.json").is_file())
+
+    def test_publish_refuses_missing_db_snapshot_without_source_mutation(self):
+        with patch.object(release, "require_before_schema", return_value=True):
+            with self.assertRaisesRegex(RuntimeError, "DB_BACKUP_MISSING"):
+                release.publish(self.stage, "202611050045", "a" * 64)
+        self.assertFalse((self.app / release.FILES["migration"]).exists())
+
+    def test_publish_refuses_wrong_snapshot_digest(self):
+        run = "202611050046"
+        self._snapshot(run)
+        with patch.object(release, "require_before_schema", return_value=True):
+            with self.assertRaisesRegex(RuntimeError, "DB_BACKUP_DIGEST_MISMATCH"):
+                release.publish(self.stage, run, "a" * 64)
+        self.assertFalse((self.app / release.FILES["migration"]).exists())
+
+    def test_publish_refuses_corrupt_gzip_snapshot(self):
+        run = "202611050047"
+        self._snapshot(run)
+        path = self.backups / "db" / (run + ".sql.gz")
+        path.write_bytes(path.read_bytes()[:-20])
+        with patch.object(release, "require_before_schema", return_value=True):
+            with self.assertRaisesRegex(RuntimeError, "DB_BACKUP_UNREADABLE"):
+                release.publish(self.stage, run, hashlib.sha256(path.read_bytes()).hexdigest())
+        self.assertFalse((self.app / release.FILES["migration"]).exists())
+
+    def test_publish_refuses_world_readable_snapshot(self):
+        run = "202611050048"
+        snapshot_sha = self._snapshot(run)
+        path = self.backups / "db" / (run + ".sql.gz")
+        path.chmod(0o644)
+        with patch.object(release, "require_before_schema", return_value=True):
+            with self.assertRaisesRegex(RuntimeError, "DB_BACKUP_UNSAFE"):
+                release.publish(self.stage, run, snapshot_sha)
+        self.assertFalse((self.app / release.FILES["migration"]).exists())
+
+    def test_publish_refuses_stale_snapshot(self):
+        run = "202611050049"
+        snapshot_sha = self._snapshot(run)
+        path = self.backups / "db" / (run + ".sql.gz")
+        os.utime(path, (path.stat().st_atime - 90000, path.stat().st_mtime - 90000))
+        with patch.object(release, "require_before_schema", return_value=True):
+            with self.assertRaisesRegex(RuntimeError, "DB_BACKUP_STALE"):
+                release.publish(self.stage, run, snapshot_sha)
+        self.assertFalse((self.app / release.FILES["migration"]).exists())
 
 
 if __name__ == "__main__":

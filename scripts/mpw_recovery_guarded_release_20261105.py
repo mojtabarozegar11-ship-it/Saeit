@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Guarded cPanel source stage for MPW-RECOVERY-01; email stays disabled.
 
-Commands: preflight STAGE, publish STAGE RUN_ID, verify, rollback RUN_ID.
+Commands: preflight STAGE, publish STAGE RUN_ID DB_BACKUP_SHA256, verify,
+rollback RUN_ID.
 Requires the existing cPanel Python 3.11 venv and trusted SSH relay. A dry-run
 is read-only. The publish command writes ONLY reviewed code plus three new
 tables after confirming migration 0039 is applied. Rollback restores code;
@@ -11,7 +12,9 @@ This script is inert in GitHub: it never runs on push, PR or schedule.
 """
 from __future__ import annotations
 
+import gzip
 import hashlib
+import hmac
 import json
 import os
 import pwd
@@ -195,6 +198,59 @@ def require_before_schema():
     return report
 
 
+def require_db_snapshot_evidence(run, expected_sha):
+    """Demand a recent, private, integrity-checked SQL dump before any DDL.
+
+    The snapshot must already exist: this release never exports customer data,
+    invokes a backup command or declares an untested restore successful.
+    """
+    if (not re.fullmatch(r"[0-9]{8,20}", run) or
+            not re.fullmatch(r"[0-9a-f]{64}", expected_sha)):
+        fail("INVALID_DB_BACKUP_ATTESTATION")
+    folder = BACKUPS / "db"
+    snapshot = folder / (run + ".sql.gz")
+    for ancestor in (folder, *folder.parents):
+        if ancestor.is_symlink():
+            fail("DB_BACKUP_SYMLINK")
+        if ancestor == Path("/home") / ACCOUNT:
+            break
+    if folder.is_symlink() or not folder.is_dir():
+        fail("DB_BACKUP_MISSING")
+    if stat.S_IMODE(folder.stat().st_mode) & 0o077:
+        fail("DB_BACKUP_DIR_NOT_PRIVATE")
+    _safe_file(snapshot)
+    st = snapshot.stat()
+    if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid() or
+            st.st_nlink != 1 or stat.S_IMODE(st.st_mode) & 0o077 or
+            st.st_size < 4096 or st.st_size > 5 * 1024**3):
+        fail("DB_BACKUP_UNSAFE")
+    import time
+    if not 0 <= time.time() - st.st_mtime <= 24 * 3600:
+        fail("DB_BACKUP_STALE")
+    checksum = hashlib.sha256()
+    try:
+        with snapshot.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                checksum.update(chunk)
+        if not hmac.compare_digest(checksum.hexdigest(), expected_sha):
+            fail("DB_BACKUP_DIGEST_MISMATCH")
+        # Read through the gzip CRC; reject a truncated or non-SQL artifact.
+        signatures = (b"CREATE TABLE", b"core_order", b"core_paymentintent")
+        seen = [False] * len(signatures)
+        tail = b""
+        with gzip.open(snapshot, "rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                sample = tail + chunk
+                for idx, signature in enumerate(signatures):
+                    seen[idx] |= signature in sample
+                tail = sample[-64:]
+        if not all(seen):
+            fail("DB_BACKUP_SQL_INCOMPLETE")
+    except (OSError, EOFError, ValueError) as exc:
+        fail("DB_BACKUP_UNREADABLE:" + type(exc).__name__)
+    return True
+
+
 def _atomic(path, content, *, expected=None):
     _safe_file(path, existing=expected is not None)
     if expected is not None and digest(path.read_bytes()) != expected:
@@ -301,10 +357,11 @@ def migrate_new_tables():
         fail("MIGRATION_EXECUTION_FAILED")
 
 
-def publish(stage, run):
+def publish(stage, run, backup_sha):
     guard_host()
     old, new = build_plan(stage)
     require_before_schema()
+    require_db_snapshot_evidence(run, backup_sha)
     folder, manifest = private_backup(run, old, new)
     changed = []
     order = ("recovery", "recovery_models", "migration", "cleanup",
@@ -370,14 +427,14 @@ def main(argv):
             "outbound_email": False,
             "payments_or_orders_changed": False,
         }, sort_keys=True))
-    elif len(argv) == 4 and argv[1] == "publish":
-        publish(Path(argv[2]), argv[3])
+    elif len(argv) == 5 and argv[1] == "publish":
+        publish(Path(argv[2]), argv[3], argv[4])
     elif len(argv) == 2 and argv[1] == "verify":
         verify()
     elif len(argv) == 3 and argv[1] == "rollback":
         rollback(argv[2])
     else:
-        raise SystemExit("Usage: release.py preflight STAGE | publish STAGE RUN_ID | verify | rollback RUN_ID")
+        raise SystemExit("Usage: release.py preflight STAGE | publish STAGE RUN_ID DB_BACKUP_SHA256 | verify | rollback RUN_ID")
 
 
 if __name__ == "__main__":

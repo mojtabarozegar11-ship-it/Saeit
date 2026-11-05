@@ -32,8 +32,11 @@ the runtime is the existing Passenger/Django application on cPanel.
    guest adapter match the audited contracts and inspect the exact live URL
    assembly. Do not use an unreviewed full-file overwrite.
 2. Verify cPanel backups and exact SHA-256 snapshots of the *live* files.
-   Preserve source backups outside the public web root and take a database
-   backup before a migration. Confirm free space and recoverability.
+   Preserve source backups outside the public web root. Before any schema
+   migration, obtain a **fresh, consistent MariaDB SQL backup** through the
+   approved private backup path and independently document a restore rehearsal.
+   This release does **not** create a backup or prove its restore works.
+   Confirm free space on both the primary host and backup destination.
 3. Stage only the reviewed new module, models import, migration 0040, settings
    flags and guest adapter changes. Keep both new flags **false**.
    The source-controlled guard is
@@ -43,16 +46,27 @@ the runtime is the existing Passenger/Django application on cPanel.
 
    ```
    python -B release.py preflight /path/to/private/stage
-   python -B release.py publish /path/to/private/stage RUN_ID
+   python -B release.py publish /path/to/private/stage RUN_ID DB_BACKUP_SHA256
    python -B release.py verify
    ```
 
-   `RUN_ID` must be 8–20 decimal digits; a single run's exact-source snapshot
-   is retained privately. These commands are documented for the authorized
+   `RUN_ID` must be 8–20 decimal digits. `publish` is blocked unless a
+   consistent full SQL gzip dump has *already* been placed at
+   `/home/zomorod2/.local/share/mpw-recovery-01-release/db/RUN_ID.sql.gz`,
+   with root/private folder permissions `0700`, file permissions `0600`,
+   owned by the cPanel user, no symlinks or hardlinks, modified within
+   the previous 24 hours, and SHA-256 exactly matching the separately
+   established `DB_BACKUP_SHA256`. The controller reads the whole gzip
+   stream to validate its CRC and checks for basic SQL/table markers; these
+   checks are **not** a substitute for a successful database restore drill.
+   A single run's exact-source snapshot is retained privately. These commands
+   are documented for the authorized
    GitHub Actions → fingerprint-pinned SSH relay → cPanel path, not for a public
    URL or an untrusted shell.
-4. Run `python manage.py migrate core 0040 --plan`, then migrate on cPanel with
-   a maintenance window and known backup. Confirm three new tables exist and
+4. Run `python manage.py migrate core 0040 --plan` for inspection **before**
+   `publish`; the guarded `publish` command performs that migration once after
+   passing the backup and source preflight. Do not manually repeat it. Use a
+   maintenance window and known restorable backup. Confirm three new tables exist and
    that other core migrations remain unchanged. Never backfill old orders.
    The three recovery models intentionally define no Django admin permissions;
    the isolated migration verified that zero permissions are generated for them.
