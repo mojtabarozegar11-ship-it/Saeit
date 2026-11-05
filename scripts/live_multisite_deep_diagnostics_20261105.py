@@ -51,12 +51,27 @@ def domain_roots() -> list[dict[str, object]]:
                 continue
             doc = json.loads(proc.stdout)
             data = (doc.get('result') or {}).get('data') or {}
+            nested_roots: list[str] = []
+
+            def collect_roots(node: object) -> None:
+                if isinstance(node, dict):
+                    for key, value in node.items():
+                        if key.lower().replace('_', '') in ('documentroot', 'homedir') and isinstance(value, str):
+                            if value.startswith(str(HOME)):
+                                nested_roots.append(value)
+                        elif isinstance(value, (dict, list)):
+                            collect_roots(value)
+                elif isinstance(node, list):
+                    for child in node[:200]:
+                        collect_roots(child)
+
+            collect_roots(data)
             if isinstance(data, list):
                 data = data[0] if data else {}
             # cPanel installations disagree about the response envelope.
             if isinstance(data, dict) and domain in data and isinstance(data[domain], dict):
                 data = data[domain]
-            root = data.get('documentroot') or data.get('document_root') or ''
+            root = data.get('documentroot') or data.get('document_root') or (nested_roots[0] if nested_roots else '')
             if isinstance(root, str) and root.startswith(str(HOME)):
                 path = Path(root)
                 results.append({'domain': domain, 'status': 'OK',
@@ -83,7 +98,7 @@ def newsletter_readonly_probe() -> dict[str, object]:
         import django
         django.setup()
         from django.db import connection
-        from django.test import RequestFactory
+        from django.test import Client, RequestFactory
         from core.newsletter_views import newsletter_home
         from core.models import NewsletterStory, NewsletterSource, NewsletterPublication, NewsletterSchedule
 
@@ -110,6 +125,17 @@ def newsletter_readonly_probe() -> dict[str, object]:
                                      'rendered_bytes': len(response.content)}
         except BaseException as exc:
             result['view_result'] = {'status': 'ERROR', **safe_problem(exc)}
+        result['full_request_results'] = []
+        for hostname in ('zomorodmelal.ir', 'mojplaywin.com'):
+            try:
+                response = Client(raise_request_exception=True).get(
+                    '/newsletter/', secure=True, HTTP_HOST=hostname)
+                result['full_request_results'].append(
+                    {'host': hostname, 'status': response.status_code,
+                     'bytes': len(response.content)})
+            except BaseException as exc:
+                result['full_request_results'].append(
+                    {'host': hostname, 'status': 'ERROR', **safe_problem(exc)})
     except BaseException as exc:
         result['django_ready'] = False
         result['problem'] = safe_problem(exc)
@@ -130,11 +156,38 @@ def known_route_inventory() -> dict[str, object]:
     return state
 
 
+def public_routing_indicators() -> dict[str, object]:
+    ht = HOME / 'public_html/.htaccess'
+    if ht.is_symlink() or not ht.is_file():
+        return {'status': 'UNAVAILABLE'}
+    text = ht.read_text('utf-8', 'replace')
+    routing = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not re.match(r'^(?:RewriteRule|RewriteCond|Passenger|AddHandler|SetHandler|ErrorDocument)\b',
+                        stripped, re.I):
+            continue
+        if re.search(r'(?:token|secret|password|credential|cookie|authorization|api[_-]?key)',
+                     stripped, re.I):
+            continue
+        routing.append(stripped[:260])
+    candidates = {}
+    for short in ('factory.zomorodmelal.ir', 'staging.zomorodmelal.ir',
+                  'public_html/factory', 'public_html/staging'):
+        path = HOME / short
+        candidates[short] = {'directory': path.is_dir(),
+                             'passenger_wsgi': (path / 'passenger_wsgi.py').is_file(),
+                             'htaccess': (path / '.htaccess').is_file()}
+    return {'status': 'READ', 'routing_lines_without_sensitive_patterns': routing[:70],
+            'subdomain_root_candidates': candidates}
+
+
 def main() -> None:
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_USER_MISMATCH')
     print('LIVE_SUBSITE_DOMAIN_ROOTS=' + json.dumps(domain_roots(), ensure_ascii=False))
     print('LIVE_SECTION_PATHS=' + json.dumps(known_route_inventory(), ensure_ascii=False))
+    print('LIVE_ROOT_ROUTING=' + json.dumps(public_routing_indicators(), ensure_ascii=False))
     print('LIVE_NEWSLETTER_DIAGNOSTIC=' + json.dumps(newsletter_readonly_probe(),
                                                       ensure_ascii=False, sort_keys=True))
     print('READ_ONLY_DIAGNOSTIC_COMPLETE=1')
