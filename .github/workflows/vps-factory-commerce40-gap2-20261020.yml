@@ -34,7 +34,9 @@ jobs:
           echo FACTORY_COMMERCE40_TWO_NATIVE_BUILDER_TESTS=PASS
   release:
     needs: test
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    # F-01: HOLD VPS mutations for non-primary products pending global singleton audit.
+    # The test/regression jobs remain available without deploying another producer.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 16
     steps:
