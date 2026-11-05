@@ -200,9 +200,21 @@ def snapshot(root=BASE, now=None, with_history=True):
                     history_available = history_available or bool(item["history"])
     counts = {name: sum(x["state"] == name for x in items)
               for name in ("healthy", "loaded_only", "stale", "unknown", "failed", "degraded")}
+    # These are catalogue slots, NOT 103 independently executing agents.
+    # A fresh status report is useful, but is not process-identity evidence.
+    composition = {
+        "library_module_slots": sum(x["kind"] == "module" for x in items),
+        "site_health_role_slots": sum(x["id"].startswith("role_") for x in items),
+        "robot_capability_slots": sum(x["kind"] == "robot" for x in items),
+        "management_generation_slots": sum(x["id"] in ("master_gen64", "agent_gen65") for x in items),
+        "other_worker_slots": sum(x["id"].startswith("worker_") for x in items),
+        "fresh_nonmodule_reports": sum(x["state"] == "healthy" and x["kind"] != "module" for x in items),
+        "module_functional_executions_verified": 0,
+        "independent_worker_process_count": None,
+    }
     return {"tenant": TENANT, "captured_at": now.isoformat(),
             "source": "private_cpanel_reports", "items": items,
-            "summary": {"total": len(items), **counts},
+            "summary": {"total": len(items), **counts, "composition": composition},
             "history_available": history_available}
 
 
