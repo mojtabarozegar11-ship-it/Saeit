@@ -34,17 +34,21 @@ CRITERION_TESTS = {
              "test_negative_contribution_has_no_break_even",
              "test_extreme_negative_decimal_exponents_are_bounded"),
     "Q061": ("test_break_even_and_totals", "test_real_cli_json_and_csv",
-             "test_success_creates_four_consistent_reports_and_original_inputs"),
+             "test_success_creates_four_consistent_reports_and_original_inputs",
+             "test_verification_is_read_only_and_requires_no_interactive_answers"),
     "Q063": ("test_invalid_extremes_fail_with_input_error",
              "test_three_factor_input_cost_stress_matches_explicit_farm_economics",
              "test_three_factor_cost_stress_does_not_double_count_shared_fixed_costs",
              "test_invalid_numbers_and_duplicate_names_are_reprompted",
-             "test_confirmation_is_fail_closed_and_creates_no_files"),
+             "test_confirmation_is_fail_closed_and_creates_no_files",
+             "test_missing_manifest_or_symlink_report_is_not_accepted",
+             "test_failed_export_has_no_completion_receipt"),
     "Q064": ("test_cli_verification_recalculates_and_rejects_tampering_without_writes",
              "test_cli_stages_all_formats_before_replacing_any_existing_report",
              "test_each_export_goes_to_new_folder_without_overwrite",
              "test_output_parent_symlink_is_rejected_before_any_writes",
-             "test_end_of_input_is_safe_cancellation"),
+             "test_end_of_input_is_safe_cancellation",
+             "test_modified_customer_report_is_detected_without_rewriting_it"),
 }
 EXPORTS = {"baseline.json": "--json-output", "scenarios.csv": "--csv-output",
            "joint-stress.csv": "--three-factor-csv-output", "management-report.html": "--html-output"}
@@ -85,7 +89,7 @@ def build(recipe_dir, evidence_dir):
                           if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
                           and node.name.startswith("test_"))
     test_names.sort()
-    if len(test_names) < 39 or len(set(test_names)) != len(test_names):
+    if len(test_names) < 43 or len(set(test_names)) != len(test_names):
         raise ValueError("PRODUCT_TEST_COVERAGE_INCOMPLETE")
     if any(name not in test_names for names in CRITERION_TESTS.values() for name in names):
         raise ValueError("PRODUCT_CRITERION_TEST_MISSING")
