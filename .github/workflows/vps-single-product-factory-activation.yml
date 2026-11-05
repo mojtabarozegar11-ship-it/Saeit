@@ -1,10 +1,12 @@
 name: VPS single product factory activation
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/vps-single-product-factory-activation.yml"
   workflow_dispatch:
+    inputs:
+      owner_authorized:
+        description: "Owner explicitly authorized a bounded one-product VPS activation"
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -12,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   activate:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[activate-single-product-factory-v1]'))
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'workflow_dispatch' && inputs.owner_authorized == true && github.ref_name == 'main'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -27,6 +29,39 @@ jobs:
           set -euo pipefail
           umask 077
           test -n "$VPS_KEY"
+          # Fail before SSH or any transfer if the checked-out source still
+          # contains the legacy self-attested QC release implementation.
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+
+          singleton_path = Path("scripts/factory_global_singleton_v1.py")
+          runner_path = Path("scripts/factory_vps_product_cycle.py")
+          checkpoint_path = Path("scripts/factory_private_checkpoint_v1.py")
+          offhost_path = Path("scripts/factory_offhost_restore_attestation_v1.py")
+          if not all(p.is_file() for p in (singleton_path, runner_path, checkpoint_path, offhost_path)):
+              raise SystemExit("F01_RELEASE_GUARD_SOURCE_MISSING")
+          singleton = ast.parse(singleton_path.read_text(encoding="utf-8"))
+          runner = ast.parse(runner_path.read_text(encoding="utf-8"))
+          checkpoint = ast.parse(checkpoint_path.read_text(encoding="utf-8"))
+          singleton_functions = {n.name for n in singleton.body if isinstance(n, ast.FunctionDef)}
+          runner_functions = {n.name for n in runner.body if isinstance(n, ast.FunctionDef)}
+          checkpoint_functions = {n.name for n in checkpoint.body if isinstance(n, ast.FunctionDef)}
+          required_singleton = {"reserve_lane", "_require_foreign_lane_idle"}
+          required_runner = {"_owner_signature_verifies", "_accepted_hourly_handoff", "_validated_ai_review", "_verified_quality_exit"}
+          calls = {n.func.attr for n in ast.walk(runner)
+                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+          if (not required_singleton.issubset(singleton_functions)
+                  or not required_runner.issubset(runner_functions)
+                  or not {"snapshot", "verify", "_sqlite_copy"}.issubset(checkpoint_functions)
+                  or "reserve_lane" not in calls):
+              raise SystemExit("F01_LEGACY_RELEASE_RUNTIME_BLOCKED")
+          print("F01_REQUIRED_RELEASE_SOURCE_PRESENT=PASS")
+          # A local checkpoint is not an independent recovery. The signed
+          # off-host receipt must be integrated into a reviewed, two-phase
+          # activation before this workflow can ever reach SSH or cron writes.
+          raise SystemExit("F01_OFFHOST_SIGNED_RECOVERY_NOT_YET_INTEGRATED_HOLD")
+          PY
           d="$RUNNER_TEMP/single-product-factory"
           install -d -m 700 "$d"
           trap 'rm -rf -- "$d"' EXIT
@@ -36,8 +71,79 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           ssh_opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
+          # Read-only preflight BEFORE transferring or replacing any production file.
+          # No attempt to override a missing administrator-level safety inventory.
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 'bash -se' <<'PREFLIGHT'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          command -v sudo >/dev/null
+          command -v systemctl >/dev/null
+          command -v pgrep >/dev/null
+          if pgrep -u githubops -f '(/vps-only-loop[.]sh|/agri200-[a-z0-9_-]+[.]py|/strict-serial-fullcycle-v1[.]py)' >/dev/null; then
+            echo F01_COMPETING_LEGACY_WORKER_ACTIVE >&2
+            exit 1
+          fi
+          root_cron="$(sudo -n crontab -u root -l 2>/dev/null)" || {
+            echo F01_ROOT_CRON_INVENTORY_UNAVAILABLE >&2
+            exit 1
+          }
+          if printf '%s\n' "$root_cron" | grep -Eiq 'factory|agri200|strict.?serial|qc1000'; then
+            echo F01_ROOT_CRON_MAY_COMPETE >&2
+            exit 1
+          fi
+          user_cron="$(crontab -l 2>/dev/null || true)"
+          if printf '%s\n' "$user_cron" | grep -Ev '^[[:space:]]*(#|$)' | grep -Ei 'factory|agri200|strict.?serial|qc1000' | grep -qvF 'SAEIT_SINGLE_PRODUCT_FACTORY_V1'; then
+            echo F01_COMPETING_USER_CRON_MAY_EXIST >&2
+            exit 1
+          fi
+          timers="$(systemctl list-timers --all --no-legend --no-pager)" || exit 1
+          services="$(systemctl list-units --all --type=service --no-legend --no-pager)" || exit 1
+          if printf '%s\n%s\n' "$timers" "$services" | grep -Eiq 'factory|agri200|strict.?serial|qc1000'; then
+            echo F01_COMPETING_SYSTEMD_UNITS_POSSIBLE >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, os, pathlib, stat
+          base = pathlib.Path.home() / "factory-runtime/private/autonomous-product-cycle"
+          def read(path):
+              if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000:
+                  raise SystemExit("F01_PREFLIGHT_PRIVATE_STATE_UNSAFE")
+              return json.loads(path.read_text(encoding="utf-8"))
+          def trusted(path, directory=False):
+              if path.is_symlink() or (not path.is_dir() if directory else not path.is_file()):
+                  raise SystemExit("F01_PREFLIGHT_TRUST_PATH_MISSING")
+              mode = path.stat()
+              if mode.st_uid != 0 or mode.st_mode & 0o022:
+                  raise SystemExit("F01_PREFLIGHT_TRUST_PATH_NOT_ADMIN_PROTECTED")
+          lane = read(base / ".f01-global-production-lane.json")
+          if lane.get("schema") != "saeit.factory.global-single-production-lane.v1" or lane.get("owner") != "line41":
+              raise SystemExit("F01_PREFLIGHT_GLOBAL_LANE_NOT_RESERVED")
+          agri = read(base / "production-instructions/stage-06/strict-serial-active-v1.json")
+          # A safely parked unfinished order remains unfinished; never forge completion.
+          if agri.get("active_order") is not None:
+              raise SystemExit("F01_PREFLIGHT_AGRI200_ACTIVE_ORDER_STILL_RESERVED")
+          slots = read(base / "quality-excellence/product-flow/active-slots/current.json")
+          active = slots.get("active")
+          if not isinstance(active, list) or len(active) != 1 or active[0].get("recipe") != "farm_enterprise_economics":
+              raise SystemExit("F01_PREFLIGHT_ACTIVE_SLOT_MISMATCH")
+          trusted(pathlib.Path("/etc/saeit"), directory=True)
+          owner_dir = pathlib.Path("/etc/saeit/factory-owner-approval-public-keys")
+          receiver_dir = pathlib.Path("/etc/saeit/hourly-cycle-receiver-public-keys")
+          trusted(owner_dir, directory=True)
+          trusted(owner_dir / "owner.pem")
+          trusted(receiver_dir, directory=True)
+          receiver_keys = sorted(receiver_dir.glob("*.pem"))
+          if not receiver_keys:
+              raise SystemExit("F01_PREFLIGHT_RECEIVER_KEYS_UNPROVISIONED")
+          for key in receiver_keys:
+              trusted(key)
+          print("F01_READ_ONLY_PRE_ACTIVATION_PREFLIGHT=PASS")
+          PY
+          PREFLIGHT
           files=(
             scripts/factory_vps_product_cycle.py
+            scripts/factory_global_singleton_v1.py
+            scripts/factory_private_checkpoint_v1.py
             scripts/factory_master_agent_genetics_v1.py
             scripts/factory_autonomous_portfolio.py
             scripts/factory_product_maker.py
@@ -58,14 +164,36 @@ jobs:
             factory_config/design_opportunities.json
             factory_config/internal_design_supply.json
           )
-          tar -cf - "${files[@]}" product_recipes/farm_enterprise_economics | ssh "${ssh_opts[@]}" githubops@178.239.147.150 'tar -xf - -C "$HOME/factory-runtime/operations"'
+          # Stage exact reviewed source in an isolated, SHA-named directory.
+          # Never overwrite shared operations/scripts during transfer.
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          tar -cf - "${files[@]}" product_recipes/farm_enterprise_economics | ssh "${ssh_opts[@]}" githubops@178.239.147.150 'set -eu
+          umask 077
+          stage="$HOME/factory-runtime/operations/source-staging/f01-${{ github.sha }}"
+          test ! -L "$HOME/factory-runtime/operations/source-staging"
+          test ! -e "$stage" && test ! -L "$stage"
+          install -d -m 700 "$stage"
+          tar -xf - -C "$stage"
+          test -f "$stage/scripts/factory_vps_product_cycle.py"
+          test -f "$stage/scripts/factory_private_checkpoint_v1.py"
+          test -f "$stage/product_recipes/farm_enterprise_economics/calculator.py"
+          if find "$stage" -type l | grep -q .; then
+            echo F01_STAGED_SOURCE_SYMLINK >&2
+            exit 1
+          fi
+          echo F01_SOURCE_STAGED_ONLY=PASS'
           ssh "${ssh_opts[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
           set -euo pipefail
           test "$(id -un)" = githubops
           base="$HOME/factory-runtime"
           ops="$base/operations"
+          stage="$ops/source-staging/f01-${{ github.sha }}"
+          test -d "$stage" && test ! -L "$stage"
           py="$base/.venv/bin/python"
           runtime="$ops/single-product-runtime"
+          test ! -L "$ops/backups" && test ! -L "$runtime"
+          test ! -L "$runtime/scripts" && test ! -L "$runtime/factory_config"
+          test ! -L "$runtime/product_recipes"
           private="$base/private/autonomous-product-cycle"
           db="$base/private/factory-fresh-isolated.sqlite3"
           test -x "$py" && test -f "$db" && test ! -L "$base"
@@ -84,22 +212,60 @@ jobs:
           backup="$ops/backups/single-product-runtime-$stamp"
           install -d -m 700 "$backup"
           crontab -l > "$backup/crontab.before" 2>/dev/null || : > "$backup/crontab.before"
-          if test -d "$runtime" && test ! -L "$runtime"; then
-            tar -czf "$backup/runtime-before.tar.gz" -C "$ops" single-product-runtime
-            chmod 600 "$backup/runtime-before.tar.gz"
-          fi
-          install -d -m 700 "$runtime/scripts" "$runtime/factory_config" "$runtime/product_recipes"
-          for f in "$ops/scripts/"*.py; do
-            test -f "$f" && install -m 600 "$f" "$runtime/scripts/$(basename "$f")"
+          # Assemble an entire new runtime while the live runtime is untouched.
+          # Every path is on the same operations filesystem for atomic rename.
+          runtime_next="$ops/.single-product-runtime.next.$stamp"
+          test ! -e "$runtime_next" && test ! -L "$runtime_next"
+          install -d -m 700 "$runtime_next/scripts" "$runtime_next/factory_config" "$runtime_next/product_recipes"
+          for f in "$stage/scripts/"*.py; do
+            test -f "$f" && test ! -L "$f" && install -m 600 "$f" "$runtime_next/scripts/$(basename "$f")"
           done
-          install -m 600 "$ops/factory_config/design_opportunities.json" "$runtime/factory_config/design_opportunities.json"
-          install -m 600 "$ops/factory_config/internal_design_supply.json" "$runtime/factory_config/internal_design_supply.json"
-          rm -rf "$runtime/product_recipes/farm_enterprise_economics"
-          install -d -m 700 "$runtime/product_recipes/farm_enterprise_economics"
-          find "$ops/product_recipes/farm_enterprise_economics" -type f -exec install -m 600 {} "$runtime/product_recipes/farm_enterprise_economics/" \;
-          test -f "$runtime/scripts/factory_vps_product_cycle.py"
-          "$py" -B -c 'import ast,pathlib; ast.parse(pathlib.Path("'"$runtime"'/scripts/factory_vps_product_cycle.py").read_text())'
-          runner="$runtime/run-single-product-cycle.sh"
+          install -m 600 "$stage/factory_config/design_opportunities.json" "$runtime_next/factory_config/design_opportunities.json"
+          install -m 600 "$stage/factory_config/internal_design_supply.json" "$runtime_next/factory_config/internal_design_supply.json"
+          staged_recipe="$runtime_next/product_recipes/farm_enterprise_economics"
+          install -d -m 700 "$staged_recipe"
+          # Preserve the full recipe tree: flattening nested paths can overwrite
+          # equally named files and silently corrupt a commercial product.
+          python3 - "$stage/product_recipes/farm_enterprise_economics" "$staged_recipe" <<'COPY_RECIPE'
+          import os
+          import shutil
+          import stat
+          import sys
+          from pathlib import Path
+
+          source, target = (Path(arg) for arg in sys.argv[1:])
+          if (source.is_symlink() or not source.is_dir()
+                  or target.is_symlink() or not target.is_dir()
+                  or any(target.iterdir())):
+              raise SystemExit("F01_RECIPE_TREE_UNSAFE")
+          count = 0
+          for parent, dirs, files in os.walk(source, topdown=True, followlinks=False):
+              dirs.sort()
+              files.sort()
+              source_parent = Path(parent)
+              relative = source_parent.relative_to(source)
+              for name in dirs:
+                  source_dir = source_parent / name
+                  if source_dir.is_symlink() or not source_dir.is_dir():
+                      raise SystemExit("F01_RECIPE_SYMLINK_OR_SPECIAL_DIR")
+                  (target / relative / name).mkdir(mode=0o700)
+              for name in files:
+                  source_file = source_parent / name
+                  if not stat.S_ISREG(source_file.lstat().st_mode):
+                      raise SystemExit("F01_RECIPE_SYMLINK_OR_SPECIAL_FILE")
+                  destination = target / relative / name
+                  with source_file.open("rb") as reader, destination.open("xb") as writer:
+                      shutil.copyfileobj(reader, writer, length=1024 * 1024)
+                  destination.chmod(0o600)
+                  count += 1
+          if count < 2:
+              raise SystemExit("F01_RECIPE_TREE_INCOMPLETE")
+          print(f"F01_RECIPE_FILES_PRESERVED={count}")
+          COPY_RECIPE
+          test -f "$staged_recipe/calculator.py" && test -f "$staged_recipe/test_calculator.py"
+          test -f "$runtime_next/scripts/factory_vps_product_cycle.py"
+          "$py" -B -c 'import ast,pathlib; ast.parse(pathlib.Path("'"$runtime_next"'/scripts/factory_vps_product_cycle.py").read_text())'
+          runner="$runtime_next/run-single-product-cycle.sh"
           python3 - "$runner" "$py" "$db" "$runtime" "$private" <<'PY'
           from pathlib import Path
           import sys
@@ -108,7 +274,7 @@ jobs:
           set -euo pipefail
           umask 077
           exec 9>"{private}/.single-product-cycle.lock"
-          flock -n 9 || exit 0
+          flock -n 9 || exit 75
           export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
           "{py}" -B "{runtime}/scripts/factory_research_triage.py" --out "{private}"
           exec "{py}" -B "{runtime}/scripts/factory_vps_product_cycle.py" --db "{db}" --out "{private}" --recipes "{runtime}/product_recipes" --max-products 1 --max-recipes 1 --no-enable-designer --no-enable-design-intake --no-enable-invention-supply
@@ -117,14 +283,84 @@ jobs:
           path_obj.write_text(text)
           path_obj.chmod(0o700)
           PY
+          bash -n "$runner"
+          # Hold the lock, pause only our marked cron entry, then atomically
+          # cut over the complete runtime. On failure restore code and cron.
+          test ! -L "$private/.single-product-cycle.lock"
+          exec 8>"$private/.single-product-cycle.lock"
+          flock -n 8 || { echo F01_EXISTING_PRODUCTION_CYCLE_BUSY >&2; exit 1; }
+          completed=0
+          cron_paused=0
+          previous_moved=0
+          swapped=0
+          data_cycle_started=0
+          rollback_activation() {
+            local status="$?"
+            trap - EXIT
+            if test "$completed" != 1; then
+              echo F01_ACTIVATION_ROLLBACK_REQUESTED >&2
+              if test "$data_cycle_started" = 1; then
+                # The private DB/state may already contain committed writes.
+                # Keep the scheduler paused; never silently overwrite data or
+                # resume the older runtime against potentially newer state.
+                crontab "$cron_hold" || echo F01_QUARANTINE_CRON_PAUSE_FAILED >&2
+                echo F01_POST_CYCLE_QUARANTINE_MANUAL_RECONCILIATION_REQUIRED >&2
+                exit "$status"
+              fi
+              exec 8>"$private/.single-product-cycle.lock"
+              if flock -w 60 8; then
+                if test "$swapped" = 1 && test -d "$runtime" && test ! -L "$runtime"; then
+                  mv -T "$runtime" "$backup/runtime-rejected" || echo F01_REJECTED_RUNTIME_MOVE_FAILED >&2
+                fi
+                restored=0
+                if test "$previous_moved" = 1; then
+                  if test ! -e "$runtime" && mv -T "$backup/runtime-before" "$runtime"; then
+                    restored=1
+                  fi
+                elif test ! -e "$runtime" || { test -d "$runtime" && test ! -L "$runtime"; }; then
+                  restored=1
+                fi
+                if test "$cron_paused" = 1 && test "$restored" = 1; then
+                  crontab "$backup/crontab.before" || echo F01_CRON_RESTORE_FAILED >&2
+                fi
+              else
+                echo F01_ROLLBACK_LOCK_UNAVAILABLE_CRON_REMAINS_PAUSED >&2
+              fi
+            fi
+            exit "$status"
+          }
+          trap rollback_activation EXIT
+          cron_hold="$ops/.single-product-cron.hold.$stamp"
+          grep -vF 'SAEIT_SINGLE_PRODUCT_FACTORY_V1' "$backup/crontab.before" > "$cron_hold" || true
+          chmod 600 "$cron_hold"
+          cron_paused=1
+          crontab "$cron_hold"
+          test "$(crontab -l | grep -Fc 'SAEIT_SINGLE_PRODUCT_FACTORY_V1' || true)" -eq 0
+          test ! -L "$private/.production-cycle.lock"
+          exec 7>"$private/.production-cycle.lock"
+          flock -n 7 || { echo F01_DIRECT_FACTORY_CYCLE_BUSY >&2; exit 1; }
+          "$py" -B "$stage/scripts/factory_private_checkpoint_v1.py" snapshot --db "$db" --private "$private" --destination "$backup/data-checkpoint" --max-source-mib 512
+          "$py" -B "$stage/scripts/factory_private_checkpoint_v1.py" verify --checkpoint "$backup/data-checkpoint"
+          if test -d "$runtime" && test ! -L "$runtime"; then
+            # Same-filesystem rename retains the old runtime in full without
+            # a duplicate compressed copy on a disk-constrained VPS.
+            mv -T "$runtime" "$backup/runtime-before"
+            previous_moved=1
+          elif test -e "$runtime" || test -L "$runtime"; then
+            echo F01_EXISTING_RUNTIME_UNSAFE >&2
+            exit 1
+          fi
+          mv -T "$runtime_next" "$runtime"
+          swapped=1
+          echo F01_ATOMIC_RUNTIME_SWAP_WITH_BACKUP=PASS
+          runner="$runtime/run-single-product-cycle.sh"
+          data_cycle_started=1
+          # Release the deployment lock before the new runner acquires it.
+          exec 7>&-
+          exec 8>&-
           "$runner"
-          cron_tmp="$ops/.single-product-cron.$$.tmp"
-          grep -vF 'SAEIT_SINGLE_PRODUCT_FACTORY_V1' "$backup/crontab.before" > "$cron_tmp" || true
-          printf '%s\n' "* * * * * /usr/bin/flock -n $private/.single-product-cycle.lock /usr/bin/timeout 55s $runner >> $ops/single-product-cycle.log 2>&1 # SAEIT_SINGLE_PRODUCT_FACTORY_V1" >> "$cron_tmp"
-          chmod 600 "$cron_tmp"
-          crontab "$cron_tmp"
-          rm -f "$cron_tmp"
-          test "$(crontab -l | grep -Fc 'SAEIT_SINGLE_PRODUCT_FACTORY_V1')" -eq 1
+          # Only the runner holds the private flock. An outer flock on the same
+          # path would make every scheduled child exit successfully without work.
           test -s "$private/production-state.json"
           "$py" -B - <<'PY'
           import json, pathlib
@@ -137,6 +373,18 @@ jobs:
           print("SINGLE_PRODUCT_PRIVATE_CYCLE=PASS")
           print("SINGLE_PRODUCT_PUBLICATION=LOCKED")
           PY
+          # Enable recurrence only after the first cycle and postconditions
+          # have passed. An unsuccessful first cycle cannot revive the cron.
+          cron_tmp="$ops/.single-product-cron.$$.tmp"
+          grep -vF 'SAEIT_SINGLE_PRODUCT_FACTORY_V1' "$backup/crontab.before" > "$cron_tmp" || true
+          printf '%s\n' "* * * * * /usr/bin/timeout 55s $runner >> $ops/single-product-cycle.log 2>&1 # SAEIT_SINGLE_PRODUCT_FACTORY_V1" >> "$cron_tmp"
+          chmod 600 "$cron_tmp"
+          crontab "$cron_tmp"
+          rm -f "$cron_tmp"
+          test "$(crontab -l | grep -Fc 'SAEIT_SINGLE_PRODUCT_FACTORY_V1')" -eq 1
+          completed=1
+          trap - EXIT
           echo SINGLE_PRODUCT_FACTORY_ACTIVATION=PASS
           echo SINGLE_PRODUCT_FACTORY_PUBLICATION=LOCKED
           REMOTE
+
