@@ -454,6 +454,59 @@ print('DJANGO_TEMPLATE_ORIGIN_READONLY=' + json.dumps({
     return {'status': 'IMPORT_OR_RESOLUTION_UNAVAILABLE', 'exit_code': proc.returncode,
             'stderr_disclosed': False}
 
+def staging_origin_bypass_readonly() -> dict[str, object]:
+    """Compare public DNS route against explicitly-pinned hosting origin with TLS validation."""
+    import shutil
+    import socket
+    import subprocess
+    cli = shutil.which('curl')
+    if not cli:
+        return {'status': 'CURL_UNAVAILABLE', 'changed_files': 0}
+    host = 'staging.zomorodmelal.ir'
+    addresses = []
+    try:
+        addresses = sorted(set(addr[4][0] for addr in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+                               if addr[0] == socket.AF_INET))[:6]
+    except OSError:
+        pass
+    routes = {
+        'domain_dns': None,
+        'pinned_cpanel_host': '178.239.147.125',
+        'localhost_https': '127.0.0.1',
+    }
+    results = {}
+    for route_name, route_ip in routes.items():
+        argv = [cli, '--silent', '--show-error', '--max-time', '12', '--connect-timeout', '5',
+                '--compressed', '--header', 'Cache-Control: no-cache, no-store',
+                '--header', 'Pragma: no-cache', '--header', 'User-Agent: ZM-Staging-ReadOnly-Origin-Compare',
+                '--write-out', '\n__ZM_HTTP_STATUS__%{http_code}']
+        if route_ip is not None:
+            argv += ['--resolve', host + ':443:' + route_ip]
+        argv += ['https://' + host + '/?zm_origin_compare=20261105-' + route_name]
+        try:
+            p = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               timeout=15, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            results[route_name] = {'status': 'COMMAND_UNAVAILABLE'}
+            continue
+        output = p.stdout[:230000]
+        marker = b'\n__ZM_HTTP_STATUS__'
+        position = output.rfind(marker)
+        if p.returncode != 0 or position < 0:
+            results[route_name] = {'status': 'HTTP_ROUTE_UNAVAILABLE', 'exit_code': p.returncode}
+            continue
+        body = output[:position]
+        http_code = output[position + len(marker):].decode('ascii', 'replace')[:3]
+        raw = body.decode('utf-8', 'replace')
+        headings = [re.sub('<[^>]+>', '', x).strip()[:90] for x in
+                    re.findall(r'<h2[^>]*>(.*?)</h2>', raw, re.I | re.S)]
+        results[route_name] = {'status': 'READ_ONLY', 'http': http_code,
+                               'body_sha256': hashlib.sha256(body).hexdigest(),
+                               'heading_count': len(headings), 'headings': headings[:22]}
+    return {'status': 'READ_ONLY', 'changed_files': 0,
+            'public_dns_ipv4': addresses, 'routes': results}
+
+
 def staging_owned_worker_restart_safety() -> dict[str, object]:
     """Read only: identify exact app-specific Passenger workers eligible for a targeted restart."""
     conf = HOME / 'Saeit-staging-web/.htaccess'
@@ -593,6 +646,7 @@ if __name__ == '__main__':
         'passenger_restart_tool': staging_passenger_restart_tool_capability(),
         'registered_passenger_apps': staging_registered_passenger_apps(),
         'owned_worker_restart_safety': staging_owned_worker_restart_safety(),
+        'origin_bypass_comparison': staging_origin_bypass_readonly(),
         'django_bootstrap_preflight': staging_django_bootstrap_safety(),
         'isolated_django_template_origin': staging_isolated_django_template_resolution(),
         'active_template_settings_block': staging_template_settings_block()},
