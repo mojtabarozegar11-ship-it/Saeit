@@ -461,13 +461,15 @@ def staging_registered_passenger_apps() -> dict[str, object]:
     if not cli.is_file() or not os.access(cli, os.X_OK):
         return {'status': 'CPANEL_UAPI_UNAVAILABLE', 'changed_files': 0}
     try:
+        # The SSH identity is already zomorod2; --user is privileged on some cPanel builds.
         p = subprocess.run(
-            [str(cli), '--user=zomorod2', '--output=json', 'PassengerApps', 'list_applications'],
+            [str(cli), '--output=json', 'PassengerApps', 'list_applications'],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=23, check=False)
     except (OSError, subprocess.TimeoutExpired):
         return {'status': 'CPANEL_UAPI_COMMAND_UNAVAILABLE', 'changed_files': 0}
     result: dict[str, object] = {'status': 'READ_ONLY', 'changed_files': 0,
-                                 'command_exit': p.returncode}
+                                 'command_exit': p.returncode,
+                                 'stderr_is_empty': not bool(p.stderr.strip())}
     if p.returncode != 0 or len(p.stdout) > 1500000:
         result['status'] = 'CPANEL_UAPI_FAILED'
         return result
