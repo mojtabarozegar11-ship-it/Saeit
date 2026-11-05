@@ -155,6 +155,7 @@ jobs:
           proc=subprocess.run(["ps","-u","zomorod2","-o","pid=,etimes=,args="],capture_output=True,text=True,timeout=12,check=True)
           active_counts={}
           active_profiles={}
+          active_pids=[]
           for row in proc.stdout.splitlines():
               fields=row.strip().split(None,2)
               if len(fields)!=3 or not fields[0].isdigit() or not fields[1].isdigit():
@@ -201,6 +202,57 @@ jobs:
               fd_kind=("writer" if writable_cache_fds else "reader" if cache_fds else "none")
               profile=(kind,age,cwd_kind,fd_kind)
               active_profiles[profile]=active_profiles.get(profile,0)+1
+              active_pids.append((pid,kind,age,cwd_kind))
+          # Two bounded, read-only snapshots describe whether long-lived
+          # package processes are actually consuming CPU or writing data.
+          # Emit aggregate categories only; no PIDs, command lines or paths.
+          import time
+          def counters(target_pid):
+              base=Path("/proc")/str(target_pid)
+              out={"cpu":None,"io":None,"state":"unknown","parent":"unknown"}
+              try:
+                  raw=(base/"stat").read_text()
+                  vals=raw[raw.rfind(")")+2:].split()
+                  out["cpu"]=int(vals[11])+int(vals[12])
+                  out["state"]=vals[0]
+              except (OSError,ValueError,IndexError):
+                  pass
+              try:
+                  io={}
+                  for line in (base/"io").read_text().splitlines():
+                      key,_,value=line.partition(":")
+                      if key in ("read_bytes","write_bytes"):
+                          io[key]=int(value.strip())
+                  if len(io)==2:
+                      out["io"]=sum(io.values())
+              except (OSError,ValueError):
+                  pass
+              try:
+                  statinfo=(base/"status").read_text().splitlines()
+                  ppid=int(next(line.split()[1] for line in statinfo if line.startswith("PPid:")))
+                  if ppid==1:
+                      out["parent"]="init"
+                  else:
+                      parent=Path("/proc")/str(ppid)
+                      if parent.stat().st_uid==os.geteuid():
+                          out["parent"]="same-user"
+                      else:
+                          out["parent"]="system"
+              except (OSError,ValueError,StopIteration):
+                  pass
+              return out
+          first={pid:counters(pid) for pid,_,_,_ in active_pids}
+          time.sleep(2)
+          for pid,kind,age,cwd_kind in active_pids:
+              prior=first[pid]
+              last=counters(pid)
+              activity=("active" if prior["cpu"] is not None and last["cpu"] is not None and last["cpu"]>prior["cpu"] else
+                        "idle" if prior["cpu"] is not None and last["cpu"] is not None else "unknown")
+              disk_io=("active" if prior["io"] is not None and last["io"] is not None and last["io"]>prior["io"] else
+                       "idle" if prior["io"] is not None and last["io"] is not None else "unknown")
+              print("PACKAGE_PROCESS_LIFECYCLE="+kind+"/"+age+"/"+cwd_kind+
+                    "/state="+last["state"]+"/parent="+last["parent"]+
+                    "/cpu="+activity+"/disk_io="+disk_io,flush=True)
           # Report profiles but do not let npm/npx block unrelated pip/Gradle caches.
           if active_counts:
               for (kind,age,cwd_kind,fd_kind),count in sorted(active_profiles.items()):
