@@ -267,6 +267,69 @@ def _commerce_model_file_schema_readonly():
         return {"status": "unavailable", "error_type": type(exc).__name__}
 
 
+
+def _existing_paid_download_readiness_readonly():
+    """Call only the deployed DB/file-existence status gate; do not open paid file."""
+    try:
+        import inspect
+        from core.models import PaymentIntent
+        from core.crown_tron_receipts import PROVIDER, verified_walletless_credit
+        from services import mpw_walletless_commercial_intent as commercial
+
+        root = APP / "services/mpw_walletless_commercial_intent.py"
+        if (root.is_symlink() or not root.is_file() or
+                root.stat().st_size > 140000 or
+                not root.resolve().is_relative_to(APP.resolve())):
+            return {"status": "source_guard_failed"}
+        tree = ast.parse(root.read_text("utf-8"), filename=root.name)
+        func = next((n for n in tree.body if isinstance(n, ast.FunctionDef)
+                     and n.name == "commercial_buyer_status"), None)
+        if func is None:
+            return {"status": "status_gate_not_found"}
+        calls = {_call_name(n.func) for n in ast.walk(func) if isinstance(n, ast.Call)}
+        disallowed = {"save", "delete", "update", "create", "bulk_create", "send",
+                      "send_mail", "send_messages", "post", "put", "patch",
+                      "commit", "open", "write", "touch", "mkdir",
+                      "reconcile_commercial_intent_from_candidates"}
+        if calls.intersection(disallowed):
+            return {"status": "status_gate_not_readonly"}
+        arguments = list(inspect.signature(commercial.commercial_buyer_status).parameters)
+        if arguments != ["intent_id", "buyer_id"]:
+            return {"status": "unknown_status_gate_signature",
+                    "arguments_count": len(arguments)}
+        intents = list(PaymentIntent.objects.filter(provider=PROVIDER, status="paid")
+                       .select_related("order").order_by("pk")[:11])
+        if len(intents) > 10:
+            return {"status": "scope_exceeded"}
+        totals = {"verified_paid_checked": 0, "ready_true": 0, "ready_false": 0,
+                  "unavailable_status": 0, "invalid_buyer_relation": 0,
+                  "state_exceptions": 0}
+        for intent in intents:
+            if not verified_walletless_credit(intent.order, intent):
+                continue
+            buyer_id = getattr(intent.order, "customer_id", None)
+            if type(buyer_id) is not int:
+                totals["invalid_buyer_relation"] += 1
+                continue
+            totals["verified_paid_checked"] += 1
+            try:
+                state = commercial.commercial_buyer_status(intent.pk, buyer_id)
+                if not isinstance(state, dict) or type(state.get("ready")) is not bool:
+                    totals["unavailable_status"] += 1
+                elif state["ready"]:
+                    totals["ready_true"] += 1
+                else:
+                    totals["ready_false"] += 1
+            except Exception:
+                totals["state_exceptions"] += 1
+        return {"status": "ok", "counts": totals, "paid_file_opened": False,
+                "email_sent": False, "blockchain_transaction": False,
+                "scope": "existing_local_paid_intents_only"}
+    except Exception as exc:
+        return {"status": "unavailable", "error_type": type(exc).__name__}
+
+
+
 def main():
     if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2" or APP.is_symlink() or not APP.is_dir():
         raise RuntimeError("MPW_COPY_AUDIT_WRONG_HOST")
@@ -349,6 +412,7 @@ def main():
         "paid_download_path_static": _paid_download_path_static_readonly(),
         "paid_order_delivery_linkage": _paid_order_delivery_linkage_readonly(),
         "commerce_file_schema": _commerce_model_file_schema_readonly(),
+        "existing_paid_download_readiness": _existing_paid_download_readiness_readonly(),
         "emails_sent_by_audit": 0, "emails_deleted": 0,
         "files_modified": 0,
     }, sort_keys=True))
