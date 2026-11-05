@@ -66,6 +66,55 @@ jobs:
               for status in ('queued','running','failed','completed'):
                   print('MASTER_SELF_IMPROVEMENT_'+status.upper()+'='+str(AgentTask.objects.filter(
                       agent=agent,capability_code='master_self_improvement',status=status).count()))
+          # Read-only diagnosis: do not print raw task errors or customer data.
+          from core.autonomous_brain import AutonomousBrain
+          latest_self_failure = AgentTask.objects.filter(
+              agent__code='economic-master-agent',
+              capability_code='master_self_improvement',status='failed'
+          ).order_by('-updated_at','-pk').first()
+          raw_error = str((latest_self_failure.output_data or {}).get('error','')) if latest_self_failure else ''
+          known_errors = (
+              'MASTER_SELF_IMPROVEMENT_ENGINE_MISSING',
+              'CODE_UPGRADE_FACTORY_SOURCE_MISSING',
+              'CODE_UPGRADE_EXPECTED_MODULE_MISSING',
+              'CODE_UPGRADE_OUTPUT_MUST_BE_PRIVATE_OUTSIDE_CHECKOUT',
+              'CODE_UPGRADE_PROBE_FAIL',
+              'CODE_UPGRADE_UNREPAIRED_UNSUPPORTED_SOURCE',
+          )
+          failure_class = next((code for code in known_errors if code in raw_error),
+                               'OTHER' if raw_error else 'NO_RECORDED_ERROR')
+          if raw_error == 'Execution became stale and retry budget was exhausted':
+              failure_class = 'STALE_RETRY_EXHAUSTED'
+          print('MASTER_SELF_IMPROVEMENT_FAILURE_CLASS='+failure_class)
+          if latest_self_failure:
+              print('MASTER_SELF_IMPROVEMENT_FAILURE_ATTEMPTS='+str(latest_self_failure.attempt_count)+'/'+str(latest_self_failure.max_attempts))
+          django_root=Path.cwd()
+          engine=django_root/'scripts/factory_code_self_upgrade.py'
+          source=Path.home()/'factory-runtime/operations/factory-code-self-upgrade/source/scripts/factory_code_self_upgrade.py'
+          dossier=Path.home()/'factory-runtime/private/autonomous-product-cycle/code-self-upgrade/evolution-proof.json'
+          print('MASTER_DJANGO_UPGRADE_ENGINE_PRESENT='+str(engine.is_file() and not engine.is_symlink()))
+          print('MASTER_ISOLATED_UPGRADE_ENGINE_PRESENT='+str(source.is_file() and not source.is_symlink()))
+          print('MASTER_ISOLATED_UPGRADE_DOSSIER_PRESENT='+str(dossier.is_file() and not dossier.is_symlink()))
+          if dossier.is_file() and not dossier.is_symlink():
+              import json,time
+              try:
+                  proof=json.loads(dossier.read_text(encoding='utf-8'))
+                  keys=('schema','candidate_count','candidates_with_measured_improvement','preexisting_verified_repairs','validated_repair_rule_coverage','unresolved_known_security_regressions','production_code_promotions','whole_code_autonomous_evolution_complete')
+                  print('MASTER_ISOLATED_PROOF_SCHEMA='+str(proof.get('schema'))[:80])
+                  for key in keys[1:]:
+                      print('MASTER_ISOLATED_PROOF_'+key.upper()+'='+str(proof.get(key))[:80])
+                  print('MASTER_ISOLATED_PROOF_AGE_HOURS='+str(int((time.time()-dossier.stat().st_mtime)/3600)))
+              except (ValueError,OSError,TypeError) as exc:
+                  print('MASTER_ISOLATED_PROOF_READ_ERROR='+type(exc).__name__)
+          print('MASTER_SELF_IMPROVEMENT_FAILURE_ERROR_BYTES='+str(len(raw_error.encode('utf-8'))))
+          print('MASTER_SELF_IMPROVEMENT_FAILURE_RECORD_FIELDS='+','.join(sorted(
+              key for key in (latest_self_failure.output_data or {}) if key in ('error','action_performed','verified_effect','evidence','exception','message','status')
+          )) if latest_self_failure else '')
+          try:
+              decision=AutonomousBrain().decide()['chosen']
+              print('MASTER_NEXT_ACTION='+str(decision['action']))
+          except Exception as exc:
+              print('MASTER_DECISION_ERROR_CLASS='+type(exc).__name__)
           from django.utils import timezone
           from core.models import Product
           running=AgentTask.objects.filter(agent__code='economic-master-agent',status='running').order_by('updated_at')
@@ -93,6 +142,9 @@ jobs:
           current="$(crontab -l 2>/dev/null || true)"
           count="$(printf '%s\n' "$current" | grep -c 'SAEIT_MASTER_AGENT_V1' || true)"
           echo "MASTER_SCHEDULE_ENTRIES=$count"
+          self_edit_count="$(printf '%s\n' "$current" | grep -c 'SAEIT_FACTORY_CODE_SELF_EDIT_HOURLY_V1' || true)"
+          echo "FACTORY_SELF_EDIT_CRON_ENTRIES=$self_edit_count"
+          if test -x "$base/operations/factory-code-self-upgrade/run-scan-and-edit.sh"; then echo FACTORY_SELF_EDIT_RUNNER_PRESENT=True; else echo FACTORY_SELF_EDIT_RUNNER_PRESENT=False; fi
           backup_count="$(find "$base/operations/backups" -maxdepth 1 -type d -name 'master-source-before-*' 2>/dev/null | wc -l | tr -d ' ')"
           echo "MASTER_SOURCE_BACKUP_SETS=$backup_count"
           echo MASTER_DB_BACKUP_FILES
