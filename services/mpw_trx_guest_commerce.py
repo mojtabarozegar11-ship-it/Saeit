@@ -198,7 +198,10 @@ def _install_cookie(response, token):
 def _dispatch(request, view, args, kwargs, *, create=False):
     if create:
         from django.conf import settings
-        if getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True:
+        # Capturing immutable checkout ownership is independent of opening
+        # public recovery routes or approving outbound recovery mail.
+        if (getattr(settings, "MPW_GUEST_EMAIL_CLAIM_CAPTURE_ENABLED", False) is True
+                or getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True):
             from services.mpw_trx_email_recovery import bound_checkout
             return bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
     user, token = _identity(request, create=create)
