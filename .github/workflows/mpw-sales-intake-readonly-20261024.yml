@@ -11,13 +11,22 @@ on:
   schedule:
     - cron: '21 * * * *'
   workflow_dispatch:
+    inputs:
+      audit_scope:
+        description: "Read-only audit scope"
+        required: true
+        default: recovery
+        type: choice
+        options:
+          - recovery
+          - baseline
 permissions: {contents: read}
 concurrency:
   group: mpw-intake-read-only-audit
   cancel-in-progress: false
 jobs:
   audit-live:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/mpw-recovery-01-20261105' && inputs.audit_scope == 'recovery'))
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -135,7 +144,7 @@ jobs:
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
           timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_support_body_triage_onetime_readonly_20261105.py
       - name: One-time live recovery metadata inventory, no customer data
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, 'mpw-recovery-capability-readonly')
+        if: (github.event_name == 'workflow_dispatch' && inputs.audit_scope == 'recovery') || (github.event_name == 'push' && contains(github.event.head_commit.message, 'mpw-recovery-capability-readonly'))
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -148,7 +157,7 @@ jobs:
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
           timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_live_email_recovery_capability_readonly_20261105.py
       - name: One-time live guest email capture and aggregate linkage audit
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, 'mpw-guest-email-linkage')
+        if: (github.event_name == 'workflow_dispatch' && inputs.audit_scope == 'recovery') || (github.event_name == 'push' && contains(github.event.head_commit.message, 'mpw-guest-email-linkage'))
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
