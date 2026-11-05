@@ -76,6 +76,27 @@ def inspect_flow(form_source, status_source):
     print('FLOW_NOTIFICATION_CODE_CANDIDATES=' + str(notification))
 
 
+def inspect_storage_contract(form_source, status_source):
+    """Report SQL identifiers and file *basenames*; never read database rows."""
+    table_re = re.compile(r'\b(?:CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?|INSERT\s+INTO\s+)([A-Za-z_][A-Za-z_0-9]*)', re.I)
+    select_re = re.compile(r'\bFROM\s+([A-Za-z_][A-Za-z_0-9]*)', re.I)
+    db_name_re = re.compile(r'([A-Za-z_][A-Za-z_0-9.-]*\.(?:sqlite3?|db))\b', re.I)
+    print('CONTRACT_FORM_TABLES=' + ','.join(sorted(set(table_re.findall(form_source))))[:250])
+    print('CONTRACT_STATUS_FROM_TABLES=' + ','.join(sorted(set(select_re.findall(status_source))))[:250])
+    print('CONTRACT_DB_FILE_BASENAMES=' + ','.join(sorted(set(db_name_re.findall(form_source + status_source))))[:250])
+    bool_result('CONTRACT_USES_PDO_SQLITE', 'sqlite:' in form_source or 'sqlite:' in status_source)
+    bool_result('CONTRACT_USES_PRIVATE_DIRECTORY', '.private' in form_source)
+    bool_result('CONTRACT_STATUS_HAS_TENANT_FILTER', bool(re.search(r'\btenant\b', status_source)))
+    bool_result('CONTRACT_STATUS_HAS_EMAIL_FILTER', bool(re.search(r'\bemail\b', status_source)))
+    bool_result('CONTRACT_HAS_STATUS_UPDATE', bool(re.search(r'\bUPDATE\s+[A-Za-z_][A-Za-z_0-9]*\s+SET\b', form_source + status_source, re.I)))
+
+    app = Path('/home/zomorod2/.private/zomorod-business/app.php')
+    if app.is_file() and not app.is_symlink() and app.stat().st_size < 300000:
+        print('CONTRACT_PRIVATE_BUSINESS_APP_SHA256=' + hashlib.sha256(app.read_bytes()).hexdigest())
+    else:
+        print('CONTRACT_PRIVATE_BUSINESS_APP_UNAVAILABLE=1')
+
+
 def safe_lines(source):
     seen = 0
     forbidden = re.compile(r'(?i)(password|secret|token|api[_-]?key|smtp|dsn|credential|authorization|private[_-]?key|\$db|\$pdo|\$mysqli)')
@@ -135,6 +156,7 @@ def audit():
             print('TRACK_HAS_TICKET_FIELD=' + str('name="ticket"' in source))
             print('TRACK_HAS_EMAIL_FIELD=' + str('name="email"' in source))
     inspect_flow(sources[FORM], sources[TRACK])
+    inspect_storage_contract(sources[FORM], sources[TRACK])
 
 
 if __name__ == '__main__':
