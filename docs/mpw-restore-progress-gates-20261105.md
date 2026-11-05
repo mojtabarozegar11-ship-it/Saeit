@@ -46,3 +46,31 @@ asserted; MariaDB table/index/temp growth could exceed this reservation.
 This gate reads validated private manifests only; it performs no GPG decrypt,
 SQL import, remote mutation, customer data disclosure or owner-triggered run.
 Passing it neither proves source integrity nor permits a site release.
+
+## VPS feasibility must be measured separately (cycle 49)
+
+Official GitHub `ubuntu-latest` standard runners provide only 14 GB SSD,
+irrespective of whether the repository is public or private. This is below
+the 40 GiB admission floor for the observed logical SQL dump. Repeated
+attempts to import this pair on that standard runner are not justified.
+
+A previous read-only inventory (2026-10-29, workflow 40802377602) reported
+zero free VPS bytes, no Docker/MariaDB executable, and about 3.2 GiB available
+memory **at that time**. Later, the 2026-11-02 encrypted backup preflight
+(workflow 41417395178) proved only a 10 GiB free-space admission threshold;
+this is not proof of the much larger restore requirement. Today's actual VPS
+capacity and isolation toolchain remain unverified.
+
+The read-only `inspect-vps-pair` mode checks the *specific pair* metadata,
+free space at the intended account's home filesystem, a 4 GiB available
+memory reserve and local Docker/native MariaDB executable presence. It never
+launches Docker, initializes a DB, imports SQL, exposes records or modifies
+any VPS/cPanel state. Executable presence is **not** operability proof.
+
+The existing **MojPlayWin cPanel Passenger inventory (read only)** manual
+workflow now accepts optional `restore_pair_id`. When supplied, it performs
+this private read-only VPS preflight through the already pinned SSH transport.
+No workflow is dispatched by these source-only changes. Even a positive
+preflight would require an independently isolated runtime, resource safety
+assessment against the single-product factory, and owner approval before any
+costly restore. Never restore into the production cPanel database.

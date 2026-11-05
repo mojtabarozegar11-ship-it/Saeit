@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -159,6 +160,48 @@ def estimate_restore_budget(stem, home=None):
     }
 
 
+def inspect_vps_restore_capacity(stem, home=None):
+    """Read-only and content-free VPS admission audit for a specific pair.
+
+    Never assumes tools are executable or Docker daemon is accessible merely
+    because their executables are present. No services, files or SQL are run.
+    Readiness is NOT an isolated-restore success certificate.
+    """
+    home = Path.home() if home is None else home
+    budget = estimate_restore_budget(stem, home=home)
+    fs = os.statvfs(home)
+    free_bytes = fs.f_bavail * fs.f_frsize
+    gib = 1024 ** 3
+    free_gib_floor = free_bytes // gib
+    minimum_free_gib = budget["required_free_gib"]
+    memory_mib = None
+    try:
+        with open("/proc/meminfo", encoding="ascii") as handle:
+            for line in handle:
+                if line.startswith("MemAvailable:"):
+                    memory_mib = int(line.split()[1]) // 1024
+                    break
+    except (OSError, ValueError, IndexError):
+        pass
+    docker_bin = shutil.which("docker") is not None
+    native_bin = (bool(shutil.which("mariadbd") or shutil.which("mysqld")) and
+                  bool(shutil.which("mariadb-install-db") or
+                       shutil.which("mysql_install_db")))
+    return {
+        "classification": "VPS_ISOLATED_RESTORE_READONLY_CAPACITY_AUDIT",
+        "required_free_gib": minimum_free_gib,
+        "vps_free_gib_floor": free_gib_floor,
+        "capacity_admission_passed": free_bytes >= minimum_free_gib * gib,
+        "memory_available_mib_floor": memory_mib,
+        "memory_4gib_reserve_passed": memory_mib is not None and memory_mib >= 4096,
+        "docker_executable_present": docker_bin,
+        "native_mariadb_executables_present": native_bin,
+        "runtime_operability_proven": False,
+        "isolated_restore_performed": False,
+        "release_permitted": False,
+    }
+
+
 def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
     path, meta, ghome, key = load(kind, home=home, stem=stem)
     passphrase = hashlib.sha256(key + b":MJWP:GPG-AES256:20261017:v2").hexdigest().encode()+b"\n"
@@ -197,6 +240,8 @@ def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
                 tail!=MARKER):
             raise RuntimeError("source archive footer or checksum mismatch")
     finally:
+        if proc.stdout is not None:
+            proc.stdout.close()
         if proc.poll() is None:
             proc.kill()
             proc.wait()
@@ -272,6 +317,14 @@ if __name__=="__main__":
             report = estimate_restore_budget(sys.argv[2])
         except Exception:
             print("RESTORE_BUDGET_UNAVAILABLE_NO_RELEASE", file=sys.stderr)
+            raise SystemExit(1)
+        print(json.dumps(report, sort_keys=True))
+        raise SystemExit(0)
+    if mode == "inspect-vps-pair" and len(sys.argv) == 3:
+        try:
+            report = inspect_vps_restore_capacity(sys.argv[2])
+        except Exception:
+            print("VPS_RESTORE_CAPACITY_UNAVAILABLE_NO_RELEASE", file=sys.stderr)
             raise SystemExit(1)
         print(json.dumps(report, sort_keys=True))
         raise SystemExit(0)

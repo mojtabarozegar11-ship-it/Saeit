@@ -26,6 +26,12 @@ on:
       - "tests/test_mojplaywin_backup_vps_failure_readonly.py"
       - "scripts/mojplaywin_isolated_restore_capabilities_readonly.py"
   workflow_dispatch:
+    inputs:
+      restore_pair_id:
+        description: "Optional: metadata-only VPS restore capacity for exact encrypted backup set"
+        required: false
+        default: ""
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -182,5 +188,23 @@ jobs:
           python3 -m py_compile scripts/mojplaywin_isolated_restore_capabilities_readonly.py
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 35s ssh -T -F "$d/config" saeit-vps python3 - < scripts/mojplaywin_isolated_restore_capabilities_readonly.py
+
+      - name: Screen specific encrypted pair against current VPS free space (read-only)
+        if: ${{ inputs.restore_pair_id != '' }}
+        shell: bash
+        env:
+          MPW_RESTORE_PAIR_ID: ${{ inputs.restore_pair_id }}
+        run: |
+          set -euo pipefail
+          [[ "$MPW_RESTORE_PAIR_ID" =~ ^mojplaywin_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{16}$ ]] || {
+            echo 'NO-GO: invalid explicit backup set identity'
+            exit 1
+          }
+          python3 -m unittest discover -s tests -p 'test_mpw_restore_budget_20261105.py'
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          script64="$(base64 -w0 scripts/mojplaywin_recovery_stream_vps.py)"
+          call='import base64,sys;payload=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(payload))'
+          timeout 55s ssh -T -F "$d/config" saeit-vps \
+            "PYTHONDONTWRITEBYTECODE=1 python3 -B -c '$call' '$script64' inspect-vps-pair '$MPW_RESTORE_PAIR_ID'"
 
 # Read-only storage and preservation recheck authorized 2026-10-28.

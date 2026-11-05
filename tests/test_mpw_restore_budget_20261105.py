@@ -7,9 +7,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from scripts.mojplaywin_recovery_stream_vps import estimate_restore_budget
+from scripts.mojplaywin_recovery_stream_vps import (
+    estimate_restore_budget, inspect_vps_restore_capacity,
+)
 
 
 STEM = "mojplaywin_20261102T090223Z_3c23e70544115e95"
@@ -87,6 +90,59 @@ class RestoreBudgetTests(unittest.TestCase):
             manifest.write_text(json.dumps(metadata), encoding="ascii")
             with self.assertRaises(RuntimeError):
                 estimate_restore_budget(STEM, home)
+
+    def test_readonly_vps_probe_rejects_small_filesystem_and_unproven_runtime(self):
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            synthetic_pair(home)
+            low_space = SimpleNamespace(f_bavail=20 * 1024 ** 3, f_frsize=1)
+            with patch("scripts.mojplaywin_recovery_stream_vps.os.statvfs",
+                       return_value=low_space), patch(
+                       "scripts.mojplaywin_recovery_stream_vps.subprocess.Popen") as run:
+                result = inspect_vps_restore_capacity(STEM, home)
+                run.assert_not_called()
+            self.assertEqual(result["vps_free_gib_floor"], 20)
+            self.assertEqual(result["required_free_gib"], 40)
+            self.assertFalse(result["capacity_admission_passed"])
+            self.assertFalse(result["runtime_operability_proven"])
+            self.assertFalse(result["isolated_restore_performed"])
+            self.assertFalse(result["release_permitted"])
+
+    def test_readonly_vps_probe_reports_headroom_without_certifying_restore(self):
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            synthetic_pair(home)
+            headroom = SimpleNamespace(f_bavail=60 * 1024 ** 3, f_frsize=1)
+            with patch("scripts.mojplaywin_recovery_stream_vps.os.statvfs",
+                       return_value=headroom):
+                result = inspect_vps_restore_capacity(STEM, home)
+            self.assertTrue(result["capacity_admission_passed"])
+            self.assertEqual(result["vps_free_gib_floor"], 60)
+            self.assertFalse(result["runtime_operability_proven"])
+            self.assertFalse(result["isolated_restore_performed"])
+
+    def test_unavailable_vps_probe_is_fixed_fail_closed_no_private_paths(self):
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td)
+            synthetic_pair(home)
+            env = dict(os.environ, HOME=td, PYTHONDONTWRITEBYTECODE="1")
+            ok = subprocess.run(
+                [sys.executable, "-B", str(SCRIPT), "inspect-vps-pair", STEM],
+                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=10, check=False)
+            self.assertEqual(ok.returncode, 0, ok.stderr.decode())
+            self.assertFalse(json.loads(ok.stdout)["release_permitted"])
+            # Reject corrupt pair metadata before reporting capacity.
+            manifest = home / ".private-mojplaywin-offhost-backups" / (
+                STEM + "_mysql_gpgv2.manifest.json")
+            manifest.write_text("INVALID_PRIVATE_METADATA", encoding="ascii")
+            bad = subprocess.run(
+                [sys.executable, "-B", str(SCRIPT), "inspect-vps-pair", STEM],
+                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=10, check=False)
+            self.assertEqual(bad.returncode, 1)
+            self.assertEqual(bad.stdout, b"")
+            self.assertEqual(bad.stderr.strip(), b"VPS_RESTORE_CAPACITY_UNAVAILABLE_NO_RELEASE")
             manifest.unlink()
             with self.assertRaises(RuntimeError):
                 estimate_restore_budget(STEM, home)
