@@ -161,6 +161,58 @@ def staging_active_wsgi_mapping() -> dict[str, object]:
     return details
 
 
+
+def staging_route_and_template_context() -> dict[str, object]:
+    """Report only selected nonsecret lines, not settings values or credentials."""
+    htaccess = HOME / 'Saeit-staging-web/.htaccess'
+    if not htaccess.is_file() or htaccess.is_symlink():
+        return {'status': 'HTACCESS_UNAVAILABLE'}
+    match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)', htaccess.read_text('utf-8', 'replace'))
+    if not match:
+        return {'status': 'PASSENGER_ROOT_MISSING'}
+    root = Path(match.group(1).strip('"'))
+    expected = HOME / 'Saeit-staging/admin-smoke'
+    if root.is_symlink() or not root.is_dir() or expected not in root.parents:
+        return {'status': 'ROOT_NOT_EXPECTED'}
+    files = {
+        'active_settings': root / 'config/settings.py',
+        'active_root_urls': root / 'config/urls.py',
+        'active_core_urls': root / 'core/urls.py',
+        'active_core_views': root / 'core/views.py',
+        'active_home_template': root / 'core/templates/core/home.html',
+        'active_services_template': root / 'core/templates/core/services.html',
+        'canonical_root_urls': HOME / 'Saeit-staging/config/urls.py',
+        'canonical_core_urls': HOME / 'Saeit-staging/core/urls.py',
+        'canonical_core_views': HOME / 'Saeit-staging/core/views.py',
+        'canonical_home_template': HOME / 'Saeit-staging/core/templates/core/home.html',
+    }
+    focus = re.compile(r'(?i)(?:TEMPLATES|APP_DIRS|DIRS|loaders|BASE_DIR|ROOT_URLCONF|INSTALLED_APPS|services|homepage|home|index|urlpatterns|path\(|re_path\(|include\(|render\(|template_name|cached\.Loader)')
+    sensitive = re.compile(r'(?i)(?:password|secret|credential|private.?key|api.?key|database|smtp|authorization|bearer|ssh|token|session)')
+    result = {}
+    for label, path in files.items():
+        metadata = file_info(path)
+        item = {'sha256': metadata.get('sha256'), 'bytes': metadata.get('bytes'),
+                'present': metadata.get('present_regular_bounded')}
+        if not metadata.get('present_regular_bounded'):
+            result[label] = item
+            continue
+        data = path.read_text('utf-8', 'replace')
+        if path.suffix == '.html':
+            item['h2_static'] = [re.sub(r'<[^>]+>', '', x).strip()[:90] for x in
+                                 re.findall(r'<h2\b[^>]*>(.*?)</h2>', data, re.I | re.S)][:24]
+            item['template_markers'] = sorted(set(re.findall(r'{%\s*(?:include|extends|block|for)\s+[^%]{0,80}%}', data)))[:18]
+        else:
+            lines = data.splitlines()
+            filtered = []
+            for index, line in enumerate(lines):
+                if focus.search(line) and not sensitive.search(line):
+                    filtered.append({'line': index + 1, 'content': line.strip()[:180]})
+                if len(filtered) >= 85:
+                    break
+            item['relevant_nonsecret_lines'] = filtered
+        result[label] = item
+    return {'status': 'READ_ONLY', 'files': result}
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -171,5 +223,6 @@ if __name__ == '__main__':
             'staging_query_uncached_candidate': probe_public('https://staging.zomorodmelal.ir/?zm_template_route_diag=20261105'),
             'business': probe_public('https://zomorodmelal.ir/business/'),
         }, 'source': source_inventory(), 'staging_card_source': staging_public_card_source(),
-        'active_staging_routing': staging_active_wsgi_mapping()},
+        'active_staging_routing': staging_active_wsgi_mapping(),
+        'route_and_template_context': staging_route_and_template_context()},
         ensure_ascii=False, sort_keys=True))
