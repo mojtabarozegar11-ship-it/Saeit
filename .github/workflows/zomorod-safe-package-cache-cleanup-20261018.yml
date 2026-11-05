@@ -313,6 +313,68 @@ jobs:
               except subprocess.TimeoutExpired:
                   print("SECONDARY_STORAGE="+directory.name+":TIMEOUT_NO_CHANGES",flush=True)
           PY
+      - name: Inspect remaining ZIP central directories without extraction
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import collections,hashlib,os,stat,time,zipfile
+          from pathlib import Path
+          home=Path("/home/zomorod2")
+          uid=os.geteuid()
+          now=time.time()
+          print("ZIP_INSPECTION=READ_ONLY_NO_EXTRACTION",flush=True)
+          seen=0
+          for path in home.iterdir():
+              try:
+                  if path.is_symlink() or not path.is_file() or path.suffix.lower()!=".zip":
+                      continue
+                  item=path.lstat()
+                  if not stat.S_ISREG(item.st_mode) or item.st_uid!=uid:
+                      continue
+                  if item.st_size<50000000 or now-item.st_mtime<20*86400:
+                      continue
+                  seen+=1
+                  key=hashlib.sha256(path.name.encode()).hexdigest()[:12]
+                  with zipfile.ZipFile(path,"r") as archive:
+                      infos=archive.infolist()
+                      kinds=collections.Counter()
+                      signals=collections.Counter()
+                      encrypted=0
+                      total_uncompressed=0
+                      top_levels=set()
+                      for info in infos:
+                          name=info.filename.replace("\\","/").lower()
+                          top_levels.add(name.split("/",1)[0])
+                          if not info.is_dir():
+                              kinds[(Path(name).suffix.lower() or "(none)")]+=1
+                          encrypted+=bool(info.flag_bits&1)
+                          total_uncompressed+=info.file_size
+                          for signal,tokens in {
+                              "app_or_site":("public_html/","saeit/","site/","app/","django","passenger"),
+                              "database":(".sql",".sqlite",".db","database/","dump"),
+                              "security_or_secrets":(".env",".ssh/","ssl/","certificate","private_key"),
+                              "backup":("backup","snapshot","restore"),
+                              "dependency_or_source":("node_modules/","vendor/","site-packages/",".git/","requirements.txt"),
+                              "static_assets":(".js",".css",".png",".jpg",".webp",".svg"),
+                          }.items():
+                              if any(token in name for token in tokens):
+                                  signals[signal]+=1
+                      protected=any(signals[x] for x in ("app_or_site","database","security_or_secrets","backup","dependency_or_source"))
+                      print("ZIP_CANDIDATE="+key+":BYTES="+str(item.st_size)+
+                            ":AGE_DAYS="+str(int((now-item.st_mtime)/86400))+
+                            ":MEMBERS="+str(len(infos))+
+                            ":TOP_LEVEL_COUNT="+str(len(top_levels))+
+                            ":UNCOMPRESSED_BYTES="+str(total_uncompressed)+
+                            ":ENCRYPTED_MEMBERS="+str(encrypted)+
+                            ":CLASS="+("PROTECT_APP_OR_BACKUP" if protected else "UNKNOWN_PROTECT"),flush=True)
+                      print("ZIP_TYPES="+key+":"+",".join(k+":"+str(v) for k,v in kinds.most_common(8)),flush=True)
+                      print("ZIP_SIGNALS="+key+":"+",".join(k+":"+str(v) for k,v in sorted(signals.items())),flush=True)
+              except (OSError,zipfile.BadZipFile,zipfile.LargeZipFile,RuntimeError,ValueError) as exc:
+                  print("ZIP_CANDIDATE=UNREADABLE_PROTECT:ERROR="+type(exc).__name__,flush=True)
+          print("ZIP_INSPECTED_COUNT="+str(seen),flush=True)
+          PY
       - name: Classify cPanel generic cache and temp contents without reading files
         shell: bash
         run: |
