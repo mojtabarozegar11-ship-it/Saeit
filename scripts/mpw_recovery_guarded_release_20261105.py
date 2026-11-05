@@ -38,7 +38,7 @@ FILES = {
     "settings": "config/settings.py",
     "recovery": "services/mpw_trx_email_recovery.py",
     "recovery_models": "core/guest_recovery_models.py",
-    "migration": "core/migrations/0040_mpw_guest_email_recovery.py",
+    "migration": "core/migrations/0049_mpw_guest_email_recovery.py",
     "cleanup": "core/management/commands/mpw_purge_recovery_ephemeral.py",
 }
 NEW_FILES = ("recovery", "recovery_models", "migration", "cleanup")
@@ -46,10 +46,11 @@ SOURCE_DIGESTS = {
     "guest": "37bdfd64924ac96ec0deea203f2b377b49399950a4c4ae10080bbd8df79456ee",
     "recovery": "8f5f4716ff4f2bb7b357a1dc634a01b3ac58349683d733d4ee3dca42fabd868a",
     "recovery_models": "6c76a40a78ad1a91c28c4bcdbc4206034f1c45d45df76242858dc7840845fe76",
-    "migration": "71115b38083773ec61c1c6446e7a1477e6441c140f2300be577b80d566b91577",
+    "migration": "c1d209a97a4f3ab6e5f4fde9a9fa1904d7f8856ef38ba8e3afddabf89bb55240",
     "cleanup": "0aa396229e2dec9212d0e358f6a21ff813d369405d1d253e64f17f8caf73f2d6",
 }
 EXPECTED_GUEST_BASE = "22d9320349f43ec1d6f45871ab583b18247457b8952dff2b3a371133d8ca1a60"
+EXPECTED_LIVE_CORE_MIGRATIONS = ["0040_agenttask_bridge_idempotency","0041_factorymarketeligibility","0042_factory_p0_governance","0043_factory_execution_evidence","0044_factory_p0_release_integrity","0045_factory_evidence_freshness","0046_brandsite","0047_crypto_payments","0048_business_market_architecture"]
 MODEL_MARKER = "# MPW_RECOVERY01_MODELS_20261105"
 SETTING_MARKER = "# MPW_RECOVERY01_FLAGS_20261105"
 MODEL_APPEND = (
@@ -178,10 +179,10 @@ applied=set(MigrationRecorder(connection).applied_migrations())
 names=set(connection.introspection.table_names())
 forward=sorted(name for app,name in applied if app=="core"
                and len(name)>=4 and name[:4].isdigit() and int(name[:4])>=40
-               and name!="0040_mpw_guest_email_recovery")
+               and name!="0049_mpw_guest_email_recovery")
 print(json.dumps({"vendor":connection.vendor,
  "m39":("core","0039_educationassessment_educationattempt_and_more") in applied,
- "m40":("core","0040_mpw_guest_email_recovery") in applied,
+ "m49":("core","0049_mpw_guest_email_recovery") in applied,
  "unreviewed_core_migrations":forward,
  "tables":[t for t in ("core_guestorderemail","core_guestrecoverytoken","core_guestrecoveryrate") if t in names],
  "enabled":getattr(settings,"MPW_GUEST_RECOVERY_ENABLED",False) is True,
@@ -205,8 +206,8 @@ def db_state():
 
 def require_before_schema():
     report = db_state()
-    if (report != {"vendor": "mysql", "m39": True, "m40": False,
-                   "unreviewed_core_migrations": [], "tables": [],
+    if (report != {"vendor": "mysql", "m39": True, "m49": False,
+                   "unreviewed_core_migrations": EXPECTED_LIVE_CORE_MIGRATIONS, "tables": [],
                    "enabled": False, "mail": False}):
         fail("MIGRATION_BASELINE_DRIFT:" + json.dumps(report, sort_keys=True, separators=(",", ":")))
     return report
@@ -358,7 +359,7 @@ import os
 os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
 import django;django.setup()
 from django.core.management import call_command
-call_command("migrate","core","0040_mpw_guest_email_recovery",interactive=False,verbosity=0)
+call_command("migrate","core","0049_mpw_guest_email_recovery",interactive=False,verbosity=0)
 '''
 
 
@@ -395,8 +396,8 @@ def publish_additive(stage, run):
             changed.append(key)
         migrate_new_tables()
         report = db_state()
-        if not (report["vendor"] == "mysql" and report["m40"] is True and
-                report["unreviewed_core_migrations"] == [] and
+        if not (report["vendor"] == "mysql" and report["m49"] is True and
+                report["unreviewed_core_migrations"] == EXPECTED_LIVE_CORE_MIGRATIONS and
                 len(report["tables"]) == 3 and
                 report["enabled"] is False and report["mail"] is False):
             fail("POST_ADDITIVE_MIGRATION_STATE_DRIFT")
@@ -425,8 +426,8 @@ def publish(stage, run, backup_sha):
             changed.append(key)
         migrate_new_tables()
         report = db_state()
-        if not (report["vendor"] == "mysql" and report["m40"] is True and
-                report["unreviewed_core_migrations"] == [] and len(report["tables"]) == 3 and
+        if not (report["vendor"] == "mysql" and report["m49"] is True and
+                report["unreviewed_core_migrations"] == EXPECTED_LIVE_CORE_MIGRATIONS and len(report["tables"]) == 3 and
                 report["enabled"] is False and report["mail"] is False):
             fail("POST_MIGRATION_STATE_DRIFT")
         restart()
@@ -457,8 +458,8 @@ def rollback(run):
 def verify():
     guard_host()
     report = db_state()
-    if (report["vendor"] != "mysql" or not report["m40"] or
-            report["unreviewed_core_migrations"] or
+    if (report["vendor"] != "mysql" or not report["m49"] or
+            report["unreviewed_core_migrations"] != EXPECTED_LIVE_CORE_MIGRATIONS or
             len(report["tables"]) != 3 or report["enabled"] or report["mail"]):
         fail("RELEASE_NOT_SAFELY_STAGED")
     for key in SOURCE_DIGESTS:
