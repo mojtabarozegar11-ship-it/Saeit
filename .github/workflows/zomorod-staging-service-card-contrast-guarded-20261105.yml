@@ -4,6 +4,7 @@ on:
     branches: [audit/live-sites-subsites-20261105]
     paths:
       - .github/workflows/zomorod-staging-service-card-contrast-guarded-20261105.yml
+      - scripts/live_staging_card_contrast_guarded_20261105.py
 permissions:
   contents: read
 concurrency:
@@ -117,7 +118,7 @@ jobs:
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-contrast-ssh/config" "$COMMAND_HOST" 'python3 - preview' < scripts/live_staging_card_contrast_guarded_20261105.py
-      - name: Patch only two staging templates with private backup
+      - name: Patch the active staging template with private backup
         id: publish
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
