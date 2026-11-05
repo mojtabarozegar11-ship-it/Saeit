@@ -6,6 +6,19 @@ on:
   pull_request:
     paths: [".github/workflows/zomorod-safe-package-cache-cleanup-20261018.yml"]
   workflow_dispatch:
+    inputs:
+      cleanup_action:
+        description: "Preview only or apply deletion of four disposable package cache directories"
+        type: choice
+        required: true
+        default: preview
+        options:
+          - preview
+          - apply
+      confirm_disposable_only:
+        description: "I confirm: delete only package download caches, never apps/databases/backups"
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -73,13 +86,22 @@ jobs:
             echo "CACHE_BEFORE_HEALTH=$path:$status"
             test "$status" = 200
           done
-      - name: Delete disposable npm/pip/Gradle download caches only
+      - name: Inspect or clear only disposable npm/pip/Gradle download caches
         shell: bash
+        env:
+          REQUESTED_ACTION: ${{ inputs.cleanup_action }}
+          CONFIRM_DISPOSABLE_ONLY: ${{ inputs.confirm_disposable_only }}
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-baseline-inventory"
           mode=preview
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then mode=apply; fi
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "${REQUESTED_ACTION:-preview}" == "apply" ]]; then
+            if [[ "${CONFIRM_DISPOSABLE_ONLY:-false}" != "true" ]]; then
+              echo "CLEANUP_BLOCKED_EXPLICIT_CONFIRMATION_REQUIRED"
+              exit 8
+            fi
+            mode=apply
+          fi
           echo "CACHE_CLEANUP_MODE=$mode"
           ssh -F "$d/config" saeit-cpanel "CACHE_CLEANUP_MODE=$mode bash -se" <<'REMOTE'
           set -euo pipefail
@@ -93,7 +115,7 @@ jobs:
           print("CLEANUP_KIND=disposable_download_caches_only")
           proc=subprocess.run(["ps","-u","zomorod2","-o","args="],capture_output=True,text=True,timeout=12,check=True)
           active=[row[:180] for row in proc.stdout.splitlines()
-                  if any(token in row.lower() for token in ("npm install","npm ci","npm pack","pip install","pip download","gradle build","gradle test"))]
+                  if any(token in row.lower() for token in ("npm ","npx ","pnpm ","yarn ",".npm/_npx","pip install","pip download","gradle "))]
           if active:
               raise RuntimeError("PACKAGE_MANAGER_ACTIVITY_IN_PROGRESS")
           total=0
@@ -136,4 +158,4 @@ jobs:
         if: always()
         shell: bash
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
-# Owner-authorized disposable package cache cleanup; package-manager process guard added 2026-10-28.
+# Preview by default; apply only with explicit confirmation, bounded cache paths and live process guard.
