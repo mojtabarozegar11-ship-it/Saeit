@@ -1274,6 +1274,73 @@ def staging_and_mojplaywin_vhost_affinity_readonly() -> dict[str, object]:
             'vhosts': records, 'public_titles': public}
 
 
+
+def mojplaywin_account_root_and_dns_readonly() -> dict[str, object]:
+    """Check whether the public MojPlayWin host shares cPanel app root, without changes."""
+    import socket
+    paths = (HOME / 'mojplaywin.com', HOME / 'mojplaywin-web',
+             HOME / 'MojPlayWin', HOME / 'Saeit-staging-web')
+    roots = {}
+    for root in paths:
+        label = root.name
+        record: dict[str, object] = {'exists_dir': root.is_dir(),
+                                     'is_symlink': root.is_symlink()}
+        if root.is_symlink() or not root.is_dir():
+            roots[label] = record
+            continue
+        conf = root / '.htaccess'
+        if conf.is_file() and not conf.is_symlink() and conf.stat().st_size < 80000:
+            lines = []
+            for row in conf.read_text('utf-8', 'replace').splitlines():
+                item = row.strip()
+                if re.match(r'(?i)^Passenger(?:AppRoot|BaseURI|AppType|StartupFile|Python)\b', item):
+                    if not re.search(r'(?i)(?:secret|password|token|key|credential)', item):
+                        lines.append(item.replace(str(HOME), '$ACCOUNT_HOME')[:180])
+            record['htaccess_sha256'] = hashlib.sha256(conf.read_bytes()).hexdigest()
+            record['passenger_directives'] = lines[:12]
+        record['has_wsgi'] = (root / 'passenger_wsgi.py').is_file()
+        record['has_index_php'] = (root / 'index.php').is_file()
+        record['has_index_html'] = (root / 'index.html').is_file()
+        roots[label] = record
+    uapi = {'status': 'UNAVAILABLE'}
+    cmd = Path('/usr/local/cpanel/bin/uapi')
+    if cmd.is_file() and os.access(cmd, os.X_OK):
+        import subprocess
+        try:
+            p = subprocess.run([str(cmd), '--output=json', 'DomainInfo', 'list_domains'],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               timeout=20, check=False)
+            if p.returncode == 0 and len(p.stdout) < 1000000:
+                data = json.loads(p.stdout.decode('utf-8', 'replace')).get('result', {}).get('data', {})
+                if isinstance(data, dict):
+                    def domains(key: str) -> list[str]:
+                        value = data.get(key, [])
+                        if isinstance(value, str):
+                            value = [value]
+                        if not isinstance(value, list):
+                            return []
+                        return [v[:110] for v in value if isinstance(v, str)
+                                and re.fullmatch(r'[A-Za-z0-9.-]{1,140}', v)
+                                and ('mojplaywin.com' in v or 'zomorodmelal.ir' in v)][:30]
+                    uapi = {'status': 'READ_ONLY', 'main_domain': domains('main_domain'),
+                            'addon_domains': domains('addon_domains'),
+                            'sub_domains': domains('sub_domains'),
+                            'parked_domains': domains('parked_domains'),
+                            'alias_domains': domains('alias_domains')}
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            uapi = {'status': 'UAPI_UNAVAILABLE'}
+    dns = {}
+    for host in ('mojplaywin.com', 'staging.zomorodmelal.ir', 'zomorodmelal.ir'):
+        try:
+            dns[host] = sorted(set(addr[4][0] for addr in
+                socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+                if addr[0] == socket.AF_INET))[:8]
+        except OSError:
+            dns[host] = []
+    return {'status': 'READ_ONLY', 'changed_files': 0,
+            'account_roots': roots, 'domain_registration': uapi, 'dns_ipv4': dns}
+
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -1305,5 +1372,6 @@ if __name__ == '__main__':
         'domain_dispatch_source': staging_domain_dispatch_source_readonly(),
         'registered_brand_home_source': staging_registered_brand_home_source_readonly(),
         'brandsite_db_mapping': staging_brandsite_db_mapping_readonly(),
-        'vhost_affinity': staging_and_mojplaywin_vhost_affinity_readonly()},
+        'vhost_affinity': staging_and_mojplaywin_vhost_affinity_readonly(),
+        'mojplaywin_account_affinity': mojplaywin_account_root_and_dns_readonly()},
         ensure_ascii=False, sort_keys=True))
