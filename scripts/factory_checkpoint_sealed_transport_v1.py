@@ -74,7 +74,9 @@ def _trusted_public_key(
     path: Path, expected_fingerprint: str, *, require_admin_key: bool = True,
 ) -> rsa.RSAPublicKey:
     if require_admin_key:
-        for part in (path, path.parent):
+        # Any writable ancestor can permit path replacement even when the
+        # key itself and its direct parent appear administrator-controlled.
+        for part in (path, *path.parents):
             st = part.stat()
             if st.st_uid != 0 or st.st_mode & 0o022:
                 raise ValueError("SEALED_PUBLIC_KEY_NOT_ADMIN_PROTECTED")
@@ -342,3 +344,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

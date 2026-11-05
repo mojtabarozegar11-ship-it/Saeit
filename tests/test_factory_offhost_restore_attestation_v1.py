@@ -8,6 +8,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -15,6 +17,7 @@ from factory_private_checkpoint_v1 import snapshot  # noqa: E402
 from factory_offhost_restore_attestation_v1 import (  # noqa: E402
     rehearse,
     verify_signed_receipt,
+    _trusted_admin_key,
 )
 
 
@@ -117,6 +120,20 @@ class OffHostRestoreAttestationTests(unittest.TestCase):
                 self.public_key, self.host_id,
             )
 
+    def test_signing_key_rejects_untrusted_higher_ancestor(self):
+        # A protected key and two immediate parents are insufficient if their
+        # ancestor is writable by someone other than the administrator.
+        fake_key = Path("/tmp/outsider/protected/subdir/signing.pem")
+        def fake_stat(path):
+            return SimpleNamespace(
+                st_uid=1000 if path == Path("/tmp/outsider") else 0,
+                st_mode=0o755,
+            )
+        with patch("factory_offhost_restore_attestation_v1._read_bounded", return_value=b"key"):
+            with patch.object(Path, "stat", autospec=True, side_effect=fake_stat):
+                with self.assertRaisesRegex(ValueError, "OFFHOST_KEY_NOT_ADMIN_PROTECTED"):
+                    _trusted_admin_key(fake_key)
+
     def test_replay_against_different_checkpoint_is_blocked(self):
         self.prepare_signed()
         (self.private / "production-state.json").write_text('{"quality":1}')
@@ -157,3 +174,4 @@ class OffHostRestoreAttestationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

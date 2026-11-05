@@ -54,7 +54,10 @@ def _read_bounded(path: Path, limit: int) -> bytes:
 
 def _trusted_admin_key(path: Path) -> None:
     _read_bounded(path, MAX_KEY)
-    for entry in (path, path.parent, path.parent.parent):
+    # A protected key and its immediate directory are insufficient when a
+    # higher ancestor can be renamed by an unprivileged account. Verify the
+    # entire path to the filesystem root before trusting the signing anchor.
+    for entry in (path, *path.parents):
         info = entry.stat()
         if info.st_uid != 0 or info.st_mode & 0o022:
             raise ValueError("OFFHOST_KEY_NOT_ADMIN_PROTECTED")
@@ -216,3 +219,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

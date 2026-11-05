@@ -7,6 +7,8 @@ import struct
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -15,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from factory_private_checkpoint_v1 import snapshot, verify  # noqa: E402
 from factory_checkpoint_sealed_transport_v1 import (  # noqa: E402
-    MAGIC, _fingerprint, seal, unseal,
+    MAGIC, _fingerprint, _trusted_public_key, seal, unseal,
 )
 
 
@@ -173,6 +175,19 @@ class FactorySealedTransportTests(unittest.TestCase):
             seal(self.checkpoint, self.public, self.fingerprint, self.bundle)
         self.assertFalse(self.bundle.exists())
 
+    def test_receiver_public_key_rejects_untrusted_higher_ancestor(self):
+        fake_key = Path("/tmp/outsider/protected/subdir/recipient.pem")
+        pem = self.public.read_bytes()
+        def fake_stat(path):
+            return SimpleNamespace(
+                st_uid=1000 if path == Path("/tmp/outsider") else 0,
+                st_mode=0o755,
+            )
+        with patch("factory_checkpoint_sealed_transport_v1._read_pem", return_value=pem):
+            with patch.object(Path, "stat", autospec=True, side_effect=fake_stat):
+                with self.assertRaisesRegex(ValueError, "SEALED_PUBLIC_KEY_NOT_ADMIN_PROTECTED"):
+                    _trusted_public_key(fake_key, self.fingerprint)
+
     def test_modified_checkpoint_is_rejected_before_encryption(self):
         with (self.checkpoint / "private-state.tar.gz").open("ab") as output:
             output.write(b"unauthorized-change")
@@ -190,3 +205,4 @@ class FactorySealedTransportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
