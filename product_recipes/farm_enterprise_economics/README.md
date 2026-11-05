@@ -14,7 +14,7 @@ API keys, payment accounts or network connections are required.
 2. Copy example_inputs.json and replace ALL illustrative values with your own.
 3. Run:
 
-   python calculator.py example_inputs.json --json-output results.json --csv-output scenarios.csv --html-output management-report.html
+   python calculator.py example_inputs.json --json-output results.json --csv-output scenarios.csv --three-factor-csv-output joint-stress.csv --html-output management-report.html
 
 4. Open management-report.html in any browser, including without an internet
    connection. Review the outputs; never treat scenarios as forecasts.
@@ -77,7 +77,12 @@ For example, an adverse combination of less sold product, a lower farm-gate
 price and more expensive inputs can be evaluated jointly. The whole-farm figure
 applies each common shock across all enterprises and deducts each allocated
 fixed cost once. Fixed costs and selling-fee rates stay constant in all
-scenarios. The HTML report includes the 27 whole-farm outcomes.
+scenarios. The HTML report includes the 27 whole-farm outcomes. The optional
+`--three-factor-csv-output joint-stress.csv` export contains all 27 scenarios
+for **each enterprise** plus all 27 **whole-farm** scenarios, with an explicit
+`scope` column distinguishing enterprise and portfolio rows. This supplements
+rather than changes the backward-compatible `--csv-output` (nine two-factor
+enterprise scenarios). All CSV fields are quoted for spreadsheet safety.
 
 These figures are scenario arithmetic, not estimated probabilities, yield
 forecasts or predictive confidence intervals. Price, output and input-cost

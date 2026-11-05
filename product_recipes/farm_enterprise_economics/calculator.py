@@ -433,16 +433,17 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Farm enterprise economics and sensitivity analysis")
     ap.add_argument("input_json", help="Local input JSON with user-supplied assumptions")
     ap.add_argument("--json-output", help="Write results to a local JSON file")
-    ap.add_argument("--csv-output", help="Write all scenario results to local CSV file")
+    ap.add_argument("--csv-output", help="Write legacy two-factor enterprise scenarios to CSV")
+    ap.add_argument("--three-factor-csv-output", help="Write 27 three-factor scenarios for each enterprise and the whole farm to CSV")
     ap.add_argument("--html-output", help="Write a self-contained offline management report")
     ap.add_argument("--verify-json", help="Read-only: recompute and compare an existing JSON report")
     args = ap.parse_args(argv)
     source = Path(args.input_json)
     # Protect the customer's source data and prevent multiple formats from
     # silently replacing one another when a CLI argument repeats a path.
-    if args.verify_json and any((args.json_output, args.csv_output, args.html_output)):
+    if args.verify_json and any((args.json_output, args.csv_output, args.html_output, args.three_factor_csv_output)):
         raise ValueError("verification is read-only and cannot be combined with output destinations")
-    output_paths = [Path(path) for path in (args.json_output, args.csv_output, args.html_output) if path]
+    output_paths = [Path(path) for path in (args.json_output, args.csv_output, args.html_output, args.three_factor_csv_output) if path]
     canonical_paths = [source.resolve()] + [path.resolve() for path in output_paths]
     if len(canonical_paths) != len(set(canonical_paths)):
         raise ValueError("input and output file paths must be distinct")
@@ -469,6 +470,16 @@ def main(argv=None):
         writer.writeheader()
         writer.writerows(output["scenario_results"])
         exports.append((Path(args.csv_output), buffer.getvalue()))
+    if args.three_factor_csv_output:
+        buffer = io.StringIO(newline="")
+        fields = ("scope", "enterprise", "volume_multiplier", "price_multiplier",
+                  "variable_cost_multiplier", "modeled_operating_profit")
+        writer = csv.DictWriter(buffer, fieldnames=fields, quoting=csv.QUOTE_ALL)
+        writer.writeheader()
+        writer.writerows(dict(row, scope="enterprise") for row in output["three_factor_scenario_results"])
+        writer.writerows(dict(row, scope="portfolio", enterprise="WHOLE_FARM")
+                         for row in output["three_factor_portfolio_results"])
+        exports.append((Path(args.three_factor_csv_output), buffer.getvalue()))
     stage_and_replace_reports(exports)
     if not args.json_output:
         print(body, end="")

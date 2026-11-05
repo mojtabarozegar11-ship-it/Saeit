@@ -403,6 +403,42 @@ class EconomicsTests(unittest.TestCase):
 
 
 
+    def test_three_factor_csv_export_includes_enterprise_and_portfolio(self):
+        import csv
+        second = {"name": "Field crop", "units_sold": 100,
+                  "unit_price": 20, "variable_cost_per_unit": 15,
+                  "allocated_fixed_cost": 100, "selling_fee_percent": 0}
+        data = dict(self.example, enterprises=[self.example["enterprises"][0], second])
+        result = evaluate(data)
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            source = base / "input.json"
+            csv_path = base / "joint-stress.csv"
+            source.write_text(json.dumps(data), encoding="utf-8")
+            completed = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("calculator.py")),
+                 str(source), "--three-factor-csv-output", str(csv_path)],
+                capture_output=True, text=True, timeout=15)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            import csv
+            with csv_path.open(encoding="utf-8", newline="") as stream:
+                reader = csv.DictReader(stream)
+                rows = list(reader)
+                self.assertEqual(reader.fieldnames, [
+                    "scope", "enterprise", "volume_multiplier", "price_multiplier",
+                    "variable_cost_multiplier", "modeled_operating_profit"])
+            self.assertEqual(len(rows), 27 * (len(data["enterprises"]) + 1))
+            self.assertEqual(sum(x["scope"] == "enterprise" for x in rows), 54)
+            self.assertEqual(sum(x["scope"] == "portfolio" for x in rows), 27)
+            baseline = next(x for x in rows
+                            if x["scope"] == "portfolio"
+                            and x["volume_multiplier"] == "1.00"
+                            and x["price_multiplier"] == "1.00"
+                            and x["variable_cost_multiplier"] == "1.00")
+            self.assertEqual(baseline["modeled_operating_profit"], result["portfolio"]["operating_profit"])
+            self.assertEqual(baseline["enterprise"], "WHOLE_FARM")
+            self.assertTrue(all(x["scope"] in ("enterprise", "portfolio") for x in rows))
+
     def test_portfolio_correlated_stress_is_not_single_enterprise_stress(self):
         second = {
             "name": "Field crop", "units_sold": 100,
@@ -459,9 +495,11 @@ class EconomicsTests(unittest.TestCase):
                 ("--json-output", str(input_file)),
                 ("--csv-output", str(input_file)),
                 ("--html-output", str(input_file)),
+                ("--three-factor-csv-output", str(input_file)),
                 ("--json-output", str(output_file), "--csv-output", str(output_file)),
                 ("--json-output", str(output_file), "--html-output", str(output_file)),
                 ("--csv-output", str(output_file), "--html-output", str(output_file)),
+                ("--csv-output", str(output_file), "--three-factor-csv-output", str(output_file)),
             )
             for options in unsafe_options:
                 with self.subTest(options=options):
