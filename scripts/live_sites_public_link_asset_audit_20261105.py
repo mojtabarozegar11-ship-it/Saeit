@@ -33,11 +33,16 @@ class PublicReferences(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.links: list[tuple[str, str]] = []
         self.forms: list[tuple[str, str]] = []
+        self.anchor_labels: dict[str, list[str]] = defaultdict(list)
+        self._anchor_href: str | None = None
+        self._anchor_text: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         a = dict(attrs)
         if tag == 'a' and a.get('href'):
             self.links.append(('link', a['href'] or ''))
+            self._anchor_href = a['href']
+            self._anchor_text = []
         elif tag == 'script' and a.get('src'):
             self.links.append(('script', a['src'] or ''))
         elif tag == 'link' and a.get('href') and 'stylesheet' in (a.get('rel') or '').lower():
@@ -46,6 +51,18 @@ class PublicReferences(HTMLParser):
             self.links.append(('image', a['src'] or ''))
         elif tag == 'form':
             self.forms.append(((a.get('method') or 'GET').upper(), a.get('action') or ''))
+
+    def handle_data(self, data: str) -> None:
+        if self._anchor_href is not None:
+            self._anchor_text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == 'a' and self._anchor_href is not None:
+            label = ' '.join(' '.join(self._anchor_text).split())[:140]
+            if label:
+                self.anchor_labels[self._anchor_href].append(label)
+            self._anchor_href = None
+            self._anchor_text = []
 
 
 def get(url: str) -> tuple[int, str, str, str]:
@@ -79,6 +96,7 @@ def acceptable_url(seed: str, value: str) -> str | None:
 
 def scan() -> dict[str, object]:
     candidates: dict[str, tuple[str, str]] = {}
+    sources: dict[str, list[dict[str, str]]] = defaultdict(list)
     seed_results = []
     forms = []
     count_by_kind = Counter()
@@ -105,6 +123,10 @@ def scan() -> dict[str, object]:
                     if not candidate:
                         continue
                     count_by_kind[kind] += 1
+                    if kind == 'link' and len(sources[candidate]) < 12:
+                        labels = page.anchor_labels.get(href, [])
+                        sources[candidate].append({'source': host + path,
+                                                    'label': labels[0] if labels else ''})
                     if candidate not in candidates:
                         candidates[candidate] = (host, kind)
             except (OSError, URLError, TimeoutError) as exc:
@@ -144,6 +166,9 @@ def scan() -> dict[str, object]:
     broken = [x for x in results if x.get('status') not in (200,)
               or x.get('redirected_external') or x.get('html_instead_of_asset')
               or x.get('possible_soft_404')]
+    for item in broken:
+        full_url = 'https://' + str(item['host']) + str(item['path'])
+        item['sources'] = sources.get(full_url, [])[:12]
     return {'seed_pages': seed_results, 'discovered_distinct_candidates': len(candidates),
             'checked_links_and_assets': len(selected), 'by_kind': dict(count_by_kind),
             'broken_or_suspicious_count': len(broken), 'broken_or_suspicious': broken[:45],
