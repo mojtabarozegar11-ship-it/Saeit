@@ -170,6 +170,23 @@ jobs:
                   legacy_log_age = max(0, round(time.time() - legacy_log.stat().st_mtime))
           except OSError:
               pass
+          # The existing always-on VPS loop is another possible producer.
+          # Only disclose a fixed allowlist of script references, not its contents.
+          vps_loop = root / "operations/vps-only-loop.sh"
+          vps_loop_text = ""
+          try:
+              if (not vps_loop.is_symlink() and vps_loop.is_file()
+                      and vps_loop.stat().st_size <= 150000):
+                  vps_loop_text = vps_loop.read_text(encoding="utf-8")
+          except (OSError, UnicodeError):
+              pass
+          loop_markers = sorted(token for token in (
+              "factory_vps_product_cycle.py", "factory_build_50.py",
+              "factory_product_maker.py", "factory_agri200",
+              "manage.py", "autonomous_master_loop", "while true",
+              "sleep", "flock", "systemd", "cron",
+          ) if token in vps_loop_text)
+
           owner_cron = cron_count(["crontab", "-l"])
           root_cron = cron_count(["sudo", "-n", "crontab", "-u", "root", "-l"])
           age = None
@@ -185,6 +202,8 @@ jobs:
               "factory_related_running_processes": worker_count,
               "cron_service_state": cron_service_state,
               "cron_daemon_running": cron_daemon_present,
+              "vps_only_loop_readable": bool(vps_loop_text),
+              "vps_only_loop_source_markers": loop_markers,
               "factory_related_process_script_labels": process_labels,
               "factory_related_githubops_cron_markers": cron_markers,
               "legacy_cron_outer_flock_present": legacy_outer_lock,
