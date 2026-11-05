@@ -20,8 +20,12 @@ import tempfile
 
 
 PRODUCT = "farm_enterprise_economics"
-REQUIRED = ("calculator.py", "test_calculator.py", "README.md", "example_inputs.json",
-            "build_technical_evidence.py")
+REQUIRED = (
+    "calculator.py", "guided_start.py", "test_calculator.py", "test_guided_start.py",
+    "README.md", "CUSTOMER_GUIDE.md", "example_inputs.json",
+    "build_technical_evidence.py",
+)
+TEST_MODULES = ("test_calculator.py", "test_guided_start.py")
 CRITERION_TESTS = {
     "Q035": ("test_mississippi_state_extension_2020_greenhouse_enterprise_budget",
              "test_portfolio_aggregation_without_double_fixed_costs"),
@@ -68,17 +72,21 @@ def build(recipe_dir, evidence_dir):
     if not recipe.is_dir() or not all((recipe / name).is_file() and not (recipe / name).is_symlink()
                                        for name in REQUIRED):
         raise ValueError("PRODUCT_RECIPE_FILES_MISSING")
-    tests = ast.parse((recipe / "test_calculator.py").read_text(encoding="utf-8"))
-    test_names = sorted(node.name for node in ast.walk(tests)
-                        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                        and node.name.startswith("test_"))
-    if len(test_names) < 30 or len(set(test_names)) != len(test_names):
+    test_names = []
+    for module in TEST_MODULES:
+        tests = ast.parse((recipe / module).read_text(encoding="utf-8"))
+        test_names.extend(node.name for node in ast.walk(tests)
+                          if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                          and node.name.startswith("test_"))
+    test_names.sort()
+    if len(test_names) < 39 or len(set(test_names)) != len(test_names):
         raise ValueError("PRODUCT_TEST_COVERAGE_INCOMPLETE")
     if any(name not in test_names for names in CRITERION_TESTS.values() for name in names):
         raise ValueError("PRODUCT_CRITERION_TEST_MISSING")
 
     readme = (recipe / "README.md").read_text(encoding="utf-8").lower()
-    if not all(note in readme for note in ("not estimated probabilities", "before depreciation", "illustrative")):
+    if not all(note in readme for note in ("not estimated probabilities", "before depreciation",
+                                              "illustrative", "guided_start.py", "customer_guide.md")):
         raise ValueError("PRODUCT_LIMITATIONS_UNDOCUMENTED")
     source_hashes = {name: sha256(recipe / name) for name in REQUIRED}
     if target.is_symlink():
@@ -90,7 +98,7 @@ def build(recipe_dir, evidence_dir):
         raise ValueError("PRODUCT_EVIDENCE_DESTINATION_NOT_EMPTY") from None
     with tempfile.TemporaryDirectory(prefix=".f01-evidence-", dir=str(target)) as ephemeral:
         stage = Path(ephemeral)
-        test_log = execute([sys.executable, "-B", "-m", "unittest", "-q", "test_calculator.py"], recipe)
+        test_log = execute([sys.executable, "-B", "-m", "unittest", "-q", *TEST_MODULES], recipe)
         ran = re.search(r"Ran (\d+) tests? in", test_log)
         if (not ran or int(ran.group(1)) != len(test_names)
                 or not re.search(r"(?m)^OK\s*$", test_log)
