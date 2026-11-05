@@ -141,6 +141,15 @@ def _verified_clearance_signatures(clearance_path, roles):
 
 def _verified_quality_exit(root, recipe):
     """Only a current, signed 1000/1000 clearance frees a production slot."""
+    # Persist the machine-readable rework queue on every inspection. This is
+    # operational state, not a quality pass: missing evidence remains HOLD.
+    qc_gate = load("saeit_factory_qc1000_rework_gate",
+                   SCRIPTS / "factory_qc1000_rework_gate.py")
+    qc_result = qc_gate.evaluate(root, recipe)
+    _write_private_json(
+        root / "quality-excellence" / "rework-queue" / recipe / "current.json",
+        qc_result,
+    )
     manifest_path = root / "digital-products" / recipe / "manufacturing_manifest.json"
     archive_path = root / "digital-products" / recipe / (recipe + "-internal-qa.zip")
     clearance_path = root / "quality-excellence" / "signed-clearances" / recipe / "current.json"
@@ -177,9 +186,7 @@ def _verified_quality_exit(root, recipe):
         return None
     # The machine-readable product rework plan is an additional release gate;
     # it must independently confirm the exact QC1000 signature contract.
-    qc_gate = load("saeit_factory_qc1000_rework_gate",
-                   SCRIPTS / "factory_qc1000_rework_gate.py")
-    if qc_gate.evaluate(root, recipe).get("status") != "PASS":
+    if qc_result.get("status") != "PASS":
         return None
     return {"artifact_sha256": artifact_sha,
             "clearance_sha256": hashlib.sha256(clearance_path.read_bytes()).hexdigest()}
