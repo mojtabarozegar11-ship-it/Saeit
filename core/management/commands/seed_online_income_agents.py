@@ -56,8 +56,9 @@ class Command(BaseCommand):
         # Never grant payment, trading, deployment, or other financial tools.
         factory.capabilities.set([capabilities["factory_native_review"], capabilities["factory_f41_private_build"]])
 
-        # The runtime has one operational economic agent. Legacy split income agents
-        # are retained only as historical records and must never receive new work.
-        Agent.objects.filter(code__startswith="income-").exclude(code=code).update(active=False)
+        # Never mass-deactivate existing specialist agents based only on their
+        # names. They can have pending tasks or integrations outside this DB.
+        # Use consolidate_legacy_agents for preview-first, evidenced retirement.
+        # This seeder only owns the master and the dedicated factory identity.
 
         self.stdout.write(self.style.SUCCESS("Economic Master Agent and dedicated moj_1ro_1 factory agent seeded, with financial capabilities isolated."))
