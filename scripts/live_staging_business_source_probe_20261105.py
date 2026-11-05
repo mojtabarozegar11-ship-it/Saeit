@@ -454,6 +454,53 @@ print('DJANGO_TEMPLATE_ORIGIN_READONLY=' + json.dumps({
     return {'status': 'IMPORT_OR_RESOLUTION_UNAVAILABLE', 'exit_code': proc.returncode,
             'stderr_disclosed': False}
 
+
+def staging_template_settings_block() -> dict[str, object]:
+    """Bounded, nonsecret TEMPLATES configuration block from active staging only."""
+    conf = HOME / 'Saeit-staging-web/.htaccess'
+    match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)', conf.read_text('utf-8', 'replace')) if conf.is_file() and not conf.is_symlink() else None
+    if not match:
+        return {'status': 'ROOT_UNAVAILABLE'}
+    root = Path(match.group(1).strip('"'))
+    if root.is_symlink() or not root.is_dir() or (HOME / 'Saeit-staging/admin-smoke') not in root.parents:
+        return {'status': 'ROOT_OUT_OF_SCOPE'}
+    settings_file = root / 'config/settings.py'
+    info = file_info(settings_file)
+    if not info.get('present_regular_bounded'):
+        return {'status': 'SETTINGS_UNAVAILABLE'}
+    code = settings_file.read_text('utf-8', 'replace')
+    beginning = re.search(r'(?m)^TEMPLATES\s*=\s*\[', code)
+    if not beginning:
+        return {'status': 'TEMPLATES_NOT_FOUND'}
+    rest = code[beginning.start():]
+    end = re.search(r'(?m)^\]\s*
+    if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
+        raise SystemExit('CPANEL_IDENTITY_MISMATCH')
+    print('STAGING_BUSINESS_SOURCE_READONLY=' + json.dumps({
+        'changed_files': 0,
+        'public': {
+            'staging': probe_public('https://staging.zomorodmelal.ir/'),
+            'staging_query_uncached_candidate': probe_public('https://staging.zomorodmelal.ir/?zm_template_route_diag=20261105'),
+            'business': probe_public('https://zomorodmelal.ir/business/'),
+        }, 'source': source_inventory(), 'staging_card_source': staging_public_card_source(),
+        'active_staging_routing': staging_active_wsgi_mapping(),
+        'route_and_template_context': staging_route_and_template_context(),
+        'staging_delivery_context': staging_delivery_context(),
+        'staging_process_origins': staging_passenger_process_origins(),
+        'passenger_restart_tool': staging_passenger_restart_tool_capability(),
+        'django_bootstrap_preflight': staging_django_bootstrap_safety(),
+        'isolated_django_template_origin': staging_isolated_django_template_resolution(),
+        'active_template_settings_block': staging_template_settings_block()},
+        ensure_ascii=False, sort_keys=True))
+, rest)
+    if not end or end.end() > 2800:
+        return {'status': 'TEMPLATE_BLOCK_NOT_BOUNDED'}
+    block = rest[:end.end()]
+    if re.search(r'(?i)(?:secret|password|private.?key|api.?key|token|credential)', block):
+        return {'status': 'PRIVATE_VALUE_GUARD'}
+    return {'status': 'READ_ONLY', 'active_settings_sha': info.get('sha256'),
+            'templates_settings_block': block}
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
