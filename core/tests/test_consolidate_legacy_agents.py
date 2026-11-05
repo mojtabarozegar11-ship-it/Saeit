@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 
 from core.economic_tool_pack import revenue_verify
-from core.models import Agent, AgentTask, AuditLog, LedgerEntry, Order
+from core.models import Agent, AgentTask, AuditLog, LedgerEntry, NewsletterStory, Order
 
 
 class ConsolidateLegacyAgentsTests(TestCase):
@@ -69,6 +69,19 @@ class ConsolidateLegacyAgentsTests(TestCase):
         second = self.run_command("--apply")
         assert second["summary"]["retired_now"] == 0
         assert AuditLog.objects.filter(action="legacy_agent_retired").count() == previous_events
+
+    def test_approved_content_prevents_retirement(self):
+        NewsletterStory.objects.create(
+            agent=self.legacy, story_type="world", title="Important approved item",
+            slug="agent-retirement-pending-approval", summary="Pending editorial item",
+            body="Content needs publication workflow", fingerprint="audit-pending-approval",
+            status="approved",
+        )
+        result = self.run_command("--apply")
+        self.legacy.refresh_from_db()
+        assert self.legacy.active
+        row = next(r for r in result["agents"] if r["code"] == self.legacy.code)
+        assert row["decision"] == "hold_for_dependency"
 
 
 class RevenueEvidenceTests(TestCase):
