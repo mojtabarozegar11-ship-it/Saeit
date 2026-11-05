@@ -454,6 +454,42 @@ print('DJANGO_TEMPLATE_ORIGIN_READONLY=' + json.dumps({
     return {'status': 'IMPORT_OR_RESOLUTION_UNAVAILABLE', 'exit_code': proc.returncode,
             'stderr_disclosed': False}
 
+def staging_cpanel_vhost_documentroot_readonly() -> dict[str, object]:
+    """Read only documented staging vhost documentroot fields, not server config bodies."""
+    candidates = [
+        Path('/var/cpanel/userdata/zomorod2/staging.zomorodmelal.ir'),
+        Path('/var/cpanel/userdata/zomorod2/staging.zomorodmelal.ir_SSL'),
+        HOME / '.cpanel/userdata/staging.zomorodmelal.ir',
+    ]
+    inspected = []
+    for candidate in candidates:
+        record: dict[str, object] = {
+            'source': 'system_userdata' if str(candidate).startswith('/var/cpanel/') else 'account_userdata',
+            'present_readable': False,
+        }
+        try:
+            if candidate.is_symlink() or not candidate.is_file() or candidate.stat().st_size > 130000:
+                inspected.append(record)
+                continue
+            raw = candidate.read_text('utf-8', 'replace')
+            match = re.search(r'(?m)^\s*documentroot:\s*["\x27]?([^"\x27\n]+)', raw)
+            if not match:
+                record['status'] = 'DOCUMENTROOT_FIELD_NOT_FOUND'
+            else:
+                doc = match.group(1).strip()
+                if doc.startswith(str(HOME) + '/'):
+                    record['documentroot_relative'] = doc[len(str(HOME)) + 1:][:180]
+                    record['matches_assumed_staging_web'] = doc.rstrip('/') == str(HOME / 'Saeit-staging-web')
+                else:
+                    record['documentroot_relative'] = 'OUTSIDE_USER_HOME'
+                    record['matches_assumed_staging_web'] = False
+            record['present_readable'] = True
+        except (OSError, PermissionError, ValueError):
+            record['status'] = 'NOT_READABLE'
+        inspected.append(record)
+    return {'status': 'READ_ONLY', 'changed_files': 0, 'vhost_sources': inspected}
+
+
 def owned_lswsgi_app_root_inventory() -> dict[str, object]:
     """Read-only summary of same-user LiteSpeed app workdirs, never commands or envvars."""
     roots: dict[str, int] = {}
@@ -712,6 +748,7 @@ if __name__ == '__main__':
         'origin_bypass_comparison': staging_origin_bypass_readonly(),
         'live_worker_nonsecret_runtime': staging_live_worker_nonsecret_runtime(),
         'owned_lswsgi_app_root_inventory': owned_lswsgi_app_root_inventory(),
+        'cpanel_vhost_documentroot': staging_cpanel_vhost_documentroot_readonly(),
         'django_bootstrap_preflight': staging_django_bootstrap_safety(),
         'isolated_django_template_origin': staging_isolated_django_template_resolution(),
         'active_template_settings_block': staging_template_settings_block()},
