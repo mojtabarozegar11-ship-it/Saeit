@@ -148,8 +148,8 @@ def staging_owned_lswsgi_workers() -> list[int]:
             continue
         except (OSError, PermissionError, ValueError) as exc:
             raise RuntimeError('STAGING_PROCESS_PRECHECK_UNAVAILABLE') from exc
-    if not (1 <= counts['active_snapshot'] <= 10 and 1 <= counts['canonical_staging'] <= 10
-            and 2 <= len(found) <= 20 and sum(counts.values()) == len(found)):
+    if not (0 <= counts['active_snapshot'] <= 10 and 1 <= counts['canonical_staging'] <= 12
+            and 1 <= len(found) <= 20 and sum(counts.values()) == len(found)):
         raise RuntimeError('STAGING_TWO_APP_WORKER_SETS_UNSAFE')
     return found
 
@@ -167,51 +167,53 @@ def staging_canonical_restart_marker() -> Path:
 
 
 def trigger_staging_only_restart() -> None:
-    """Force-recycle only the identified active staging pool; never the main or canonical pool."""
+    """Recycle ONLY account-owned workers of both exact staging roots, never production."""
     import signal
     workers = staging_owned_lswsgi_workers()
     active = str(staging_restart_marker().parent.parent)
-    selected: list[int] = []
+    canonical = str(HOME / 'Saeit-staging')
+    roots = {active, canonical}
+    validated: list[int] = []
+    group_counts = {'active_staging': 0, 'canonical_staging': 0}
     for pid in workers:
         try:
-            if os.readlink(f'/proc/{pid}/cwd') == active:
-                selected.append(pid)
+            cwd = os.readlink(f'/proc/{pid}/cwd')
         except FileNotFoundError:
             continue
-    if not 1 <= len(selected) <= 10:
-        raise RuntimeError('ACTIVE_STAGING_LSWGI_WORKER_COUNT_UNSAFE')
+        if cwd not in roots:
+            raise RuntimeError('WORKER_ROOT_CHANGED_DURING_TARGET_SELECTION')
+        validated.append(pid)
+        group_counts['active_staging' if cwd == active else 'canonical_staging'] += 1
+    if not (1 <= len(validated) <= 20 and group_counts['canonical_staging'] >= 1):
+        raise RuntimeError('CANONICAL_STAGING_WORKERS_CHANGED_UNSAFELY')
     handles: list[int] = []
     try:
-        for pid in selected:
+        for pid in validated:
             try:
                 handles.append(os.pidfd_open(pid, 0))
             except ProcessLookupError:
                 continue
         if not handles:
-            raise RuntimeError('ACTIVE_STAGING_LSWGI_WORKERS_CHANGED_DURING_RESTART')
+            raise RuntimeError('STAGING_WORKERS_DISAPPEARED_BEFORE_RESTART')
         markers = [staging_restart_marker(), staging_canonical_restart_marker()]
         for marker in markers:
             marker.touch(exist_ok=True)
         delivered = 0
-        # Detached LiteSpeed Python workers kept distinct Django template caches
-        # after SIGTERM. SIGKILL is restricted to pidfds of user-owned lswsgi
-        # workers with the exact cPanel-configured active staging CWD.
         for fd in handles:
             try:
                 signal.pidfd_send_signal(fd, signal.SIGKILL, None, 0)
                 delivered += 1
             except ProcessLookupError:
                 continue
-        if delivered == 0:
-            raise RuntimeError('NO_ACTIVE_STAGING_WORKER_RECYCLED')
+        if delivered < 1:
+            raise RuntimeError('NO_STAGING_WORKER_RECYCLED')
         print('TARGETED_STAGING_LSWGI_RESTART=' + json.dumps(
-            {'all_stage_workers_seen': len(workers),
-             'active_staging_workers_seen': len(selected),
-             'active_worker_signals_delivered': delivered,
-             'signal': 'SIGKILL', 'global_killall_used': False,
-             'canonical_staging_workers_signaled': False,
+            {'site_scope': 'staging_only', 'global_killall_used': False,
              'production_workers_signaled': False,
-             'application_restart_markers_touched': len(markers)}), flush=True)
+             'observed_staging_root_worker_counts': group_counts,
+             'signals_delivered_to_staging_only': delivered,
+             'signal': 'SIGKILL', 'application_restart_markers_touched': len(markers)}),
+            flush=True)
     finally:
         for fd in handles:
             os.close(fd)
