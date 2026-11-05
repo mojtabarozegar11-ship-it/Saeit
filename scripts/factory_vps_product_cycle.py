@@ -175,6 +175,12 @@ def _verified_quality_exit(root, recipe):
         return None
     if not _verified_clearance_signatures(clearance_path, independent_roles):
         return None
+    # The machine-readable product rework plan is an additional release gate;
+    # it must independently confirm the exact QC1000 signature contract.
+    qc_gate = load("saeit_factory_qc1000_rework_gate",
+                   SCRIPTS / "factory_qc1000_rework_gate.py")
+    if qc_gate.evaluate(root, recipe).get("status") != "PASS":
+        return None
     return {"artifact_sha256": artifact_sha,
             "clearance_sha256": hashlib.sha256(clearance_path.read_bytes()).hexdigest()}
 
