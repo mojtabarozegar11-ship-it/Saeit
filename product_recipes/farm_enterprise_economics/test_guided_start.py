@@ -37,6 +37,11 @@ class GuidedStartTests(unittest.TestCase):
                 rows = list(csv.DictReader(stream))
             self.assertEqual(len(rows), 54)
             self.assertEqual({row["scope"] for row in rows}, {"enterprise", "portfolio"})
+            receipt = json.loads((folder / "integrity-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(set(receipt["files_sha256"]), set(guided_start.REPORT_FILES))
+            self.assertFalse(receipt["commercial_release_allowed"])
+            self.assertIsNone(receipt["independently_certified_quality_score"])
+            self.assertEqual(guided_start.verify_private_reports(folder), 5)
             self.assertTrue(any("Reports saved" in line for line in messages))
 
     def test_invalid_numbers_and_duplicate_names_are_reprompted(self):
@@ -101,6 +106,74 @@ class GuidedStartTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "symlink"):
                 guided_start.create_private_reports(budget, alias)
             self.assertEqual(list(target.iterdir()), [])
+
+    def test_verification_is_read_only_and_requires_no_interactive_answers(self):
+        budget = {"currency": "USD", "enterprises": [{
+            "name": "Orchard", "units_sold": "1", "unit_price": "3",
+            "variable_cost_per_unit": "1", "allocated_fixed_cost": "1",
+            "selling_fee_percent": "0",
+        }]}
+        with tempfile.TemporaryDirectory() as d:
+            folder = guided_start.create_private_reports(budget, d)
+            before = {p.name: p.read_bytes() for p in folder.iterdir()}
+            output = []
+            code = guided_start.main(
+                ["--verify-folder", str(folder)],
+                read=lambda _: self.fail("verification must not ask for inputs"),
+                write=output.append,
+            )
+            self.assertEqual(code, 0)
+            self.assertTrue(any(line.startswith("VERIFIED") for line in output))
+            self.assertEqual(before, {p.name: p.read_bytes() for p in folder.iterdir()})
+
+    def test_modified_customer_report_is_detected_without_rewriting_it(self):
+        budget = {"currency": "USD", "enterprises": [{
+            "name": "Orchard", "units_sold": "1", "unit_price": "3",
+            "variable_cost_per_unit": "1", "allocated_fixed_cost": "1",
+            "selling_fee_percent": "0",
+        }]}
+        with tempfile.TemporaryDirectory() as d:
+            folder = guided_start.create_private_reports(budget, d)
+            path = folder / "results.json"
+            path.write_text(path.read_text(encoding="utf-8") + " ", encoding="utf-8")
+            before = path.read_bytes()
+            with self.assertRaisesRegex(ValueError, "checksum mismatch"):
+                guided_start.verify_private_reports(folder)
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_missing_manifest_or_symlink_report_is_not_accepted(self):
+        budget = {"currency": "USD", "enterprises": [{
+            "name": "Orchard", "units_sold": "1", "unit_price": "3",
+            "variable_cost_per_unit": "1", "allocated_fixed_cost": "1",
+            "selling_fee_percent": "0",
+        }]}
+        with tempfile.TemporaryDirectory() as d:
+            folder = guided_start.create_private_reports(budget, d)
+            receipt = folder / "integrity-manifest.json"
+            original_receipt = receipt.read_bytes()
+            receipt.unlink()
+            with self.assertRaisesRegex(ValueError, "manifest missing"):
+                guided_start.verify_private_reports(folder)
+            receipt.write_bytes(original_receipt)
+            original = folder / "scenarios.csv"
+            original.rename(folder / "preserved.csv")
+            original.symlink_to(folder / "preserved.csv")
+            with self.assertRaisesRegex(ValueError, "missing or unsafe"):
+                guided_start.verify_private_reports(folder)
+
+    def test_failed_export_has_no_completion_receipt(self):
+        budget = {"currency": "USD", "enterprises": [{
+            "name": "Orchard", "units_sold": "1", "unit_price": "3",
+            "variable_cost_per_unit": "1", "allocated_fixed_cost": "1",
+            "selling_fee_percent": "0",
+        }]}
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaisesRegex(RuntimeError, "not all report files"):
+                guided_start.create_private_reports(budget, d, report_runner=lambda _: 1)
+            folder, = list(Path(d).glob("farm-budget-*"))
+            self.assertFalse((folder / "integrity-manifest.json").exists())
+            with self.assertRaisesRegex(ValueError, "manifest missing"):
+                guided_start.verify_private_reports(folder)
 
 
 if __name__ == "__main__":
