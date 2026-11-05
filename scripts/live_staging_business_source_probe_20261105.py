@@ -763,6 +763,34 @@ print('STAGING_ISOLATED_RENDER=' + json.dumps({
             'stderr_disclosed': False}
 
 
+def staging_two_restart_markers_readonly() -> dict[str, object]:
+    """Check LiteSpeed's documented per-application restart marker in both staging roots."""
+    active = staging_active_wsgi_mapping()
+    rel = active.get('root_relative') if isinstance(active, dict) else None
+    if not isinstance(rel, str) or not rel.startswith('Saeit-staging/admin-smoke/'):
+        return {'status': 'ACTIVE_ROOT_NOT_VERIFIED'}
+    roots = {'canonical_staging': HOME / 'Saeit-staging', 'active_snapshot': HOME / rel}
+    report = {}
+    for label, root in roots.items():
+        directory = root / 'tmp'
+        marker = directory / 'restart.txt'
+        try:
+            valid_root = root.is_dir() and not root.is_symlink()
+            valid_directory = directory.is_dir() and not directory.is_symlink()
+            valid_marker = (not marker.exists()) or (marker.is_file() and not marker.is_symlink())
+            report[label] = {
+                'root_valid': valid_root, 'tmp_dir_valid': valid_directory,
+                'marker_safe': valid_marker,
+                'marker_exists': marker.exists() and marker.is_file(),
+                'marker_age_sec': round(max(0, __import__('time').time() - marker.stat().st_mtime))
+                if marker.is_file() and not marker.is_symlink() else None,
+                'writable_as_account': os.access(directory, os.W_OK) if valid_directory else False,
+            }
+        except OSError:
+            report[label] = {'status': 'READ_UNAVAILABLE'}
+    return {'status': 'READ_ONLY', 'changed_files': 0, 'applications': report}
+
+
 def staging_template_settings_block() -> dict[str, object]:
     """Bounded, nonsecret TEMPLATES configuration block from active staging only."""
     conf = HOME / 'Saeit-staging-web/.htaccess'
@@ -814,5 +842,6 @@ if __name__ == '__main__':
         'django_bootstrap_preflight': staging_django_bootstrap_safety(),
         'isolated_django_template_origin': staging_isolated_django_template_resolution(),
         'isolated_request_render': staging_isolated_request_render_readonly(),
+        'two_restart_markers': staging_two_restart_markers_readonly(),
         'active_template_settings_block': staging_template_settings_block()},
         ensure_ascii=False, sort_keys=True))
