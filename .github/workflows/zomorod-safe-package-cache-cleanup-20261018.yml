@@ -86,6 +86,65 @@ jobs:
             echo "CACHE_BEFORE_HEALTH=$path:$status"
             test "$status" = 200
           done
+      - name: Identify other safely reviewable storage on both hosts (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import os,subprocess
+          from pathlib import Path
+          base=Path("/home/zomorod2")
+          candidates={
+              "cpanel-user-cache":base/".cache",
+              "cpanel-node-gyp-cache":base/".cache/node-gyp",
+              "cpanel-uv-cache":base/".cache/uv",
+              "cpanel-composer-cache":base/".cache/composer",
+              "cpanel-yarn-cache":base/".cache/yarn",
+              "cpanel-pnpm-store":base/".local/share/pnpm/store",
+              "cpanel-npm-logs":base/".npm/_logs",
+              "cpanel-trash":base/".local/share/Trash/files",
+              "cpanel-temp":base/"tmp",
+              "cpanel-cpanel-temp":base/".cpanel/tmp",
+              "cpanel-repo-node-cache":base/"Saeit/node_modules/.cache",
+              "cpanel-repo-python-cache":base/"Saeit/.mypy_cache",
+              "cpanel-repo-pytest-cache":base/"Saeit/.pytest_cache",
+          }
+          for label,p in candidates.items():
+              if not p.exists():
+                  print("SPACE_CANDIDATE="+label+":ABSENT",flush=True);continue
+              if p.is_symlink() or not p.is_dir() or p.stat().st_uid!=os.geteuid():
+                  print("SPACE_CANDIDATE="+label+":UNSAFE_SKIP",flush=True);continue
+              try:
+                  res=subprocess.run(["du","-sk",str(p)],capture_output=True,text=True,timeout=18,check=True)
+                  print("SPACE_CANDIDATE="+label+":BYTES="+str(int(res.stdout.split()[0])*1024),flush=True)
+              except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+                  print("SPACE_CANDIDATE="+label+":UNAVAILABLE",flush=True)
+          PY
+          ssh -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import os,subprocess
+          from pathlib import Path
+          base=Path.home()
+          candidates={
+              "vps-user-cache":base/".cache",
+              "vps-npm-logs":base/".npm/_logs",
+              "vps-trash":base/".local/share/Trash/files",
+              "vps-temp":base/"tmp",
+              "vps-factory-temp":base/"factory-runtime/operations/tmp",
+              "vps-factory-logs":base/"factory-runtime/logs",
+              "vps-operations-logs":base/"factory-runtime/operations/logs",
+          }
+          for label,p in candidates.items():
+              if not p.exists():
+                  print("SPACE_CANDIDATE="+label+":ABSENT",flush=True);continue
+              if p.is_symlink() or not p.is_dir() or p.stat().st_uid!=os.geteuid():
+                  print("SPACE_CANDIDATE="+label+":UNSAFE_SKIP",flush=True);continue
+              try:
+                  res=subprocess.run(["du","-sk",str(p)],capture_output=True,text=True,timeout=18,check=True)
+                  print("SPACE_CANDIDATE="+label+":BYTES="+str(int(res.stdout.split()[0])*1024),flush=True)
+              except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+                  print("SPACE_CANDIDATE="+label+":UNAVAILABLE",flush=True)
+          PY
       - name: Inventory VPS filesystem and bounded cache candidates (read-only)
         shell: bash
         run: |
