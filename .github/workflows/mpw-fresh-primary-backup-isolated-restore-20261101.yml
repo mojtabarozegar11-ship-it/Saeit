@@ -45,6 +45,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_link_guard_20261101.py'
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_pair_identity_20261101.py'
           python3 -m unittest discover -s tests -p 'test_mpw_isolated_sql_progress_20261105.py'
+          python3 -m unittest discover -s tests -p 'test_mpw_restore_budget_20261105.py'
           python3 -m py_compile scripts/mojplaywin_backup_stream_cpanel.py scripts/mojplaywin_backup_encrypt_vps_gpg.py scripts/mojplaywin_recovery_stream_vps.py scripts/mojplaywin_restore_files_isolated_runner.py scripts/mpw_isolated_sql_progress_20261105.py
       - name: Establish fingerprint-pinned VPS relay with direct same-host cPanel fallback
         id: link
@@ -285,8 +286,37 @@ jobs:
           }
           trap cleanup EXIT
           command -v docker >/dev/null
-          free=$(df -PB1 "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')
-          test "$free" -ge 9000000000 || { echo "NO-GO: isolated runner free disk below 9GB"; exit 1; }
+          # Before pulling Docker or decrypting SQL, check both strict pair
+          # manifests and screen for room to import the *plaintext* SQL.
+          # This is an admission floor, not a guarantee of MariaDB capacity.
+          budget_json="$(timeout 50s ssh -T -F "$d/config" saeit-vps \
+            "python3 -B -c '$call' '$stream64' estimate-pair '$MPW_BACKUP_SET_STEM'")" || {
+            echo "NO-GO: private restore disk budget unavailable" >&2
+            exit 1
+          }
+          required_free_gib="$(printf '%s' "$budget_json" | python3 -c '
+          import json, sys
+          p = json.load(sys.stdin)
+          n = p.get("required_free_gib")
+          if (p.get("classification") != "ISOLATED_RESTORE_DISK_ADMISSION_FLOOR"
+                  or type(n) is not int or not 9 <= n <= 110
+                  or p.get("release_permitted") is not False
+                  or p.get("isolated_restore_performed") is not False
+                  or p.get("budget_is_sufficiency_proof") is not False):
+              raise SystemExit(1)
+          print(n)
+          ')" || {
+            echo "NO-GO: invalid restore disk admission plan" >&2
+            exit 1
+          }
+          free="$(df -PB1 "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')"
+          [[ "$free" =~ ^[0-9]+$ ]] || { echo "NO-GO: runner disk metric unavailable"; exit 1; }
+          required_bytes="$((required_free_gib * 1073741824))"
+          if [ "$free" -lt "$required_bytes" ]; then
+            echo "NO-GO: isolated runner capacity below ${required_free_gib}GiB manifest-based admission floor"
+            exit 1
+          fi
+          echo "RESTORE_DISK_PREFLIGHT=PASSED threshold_gib=$required_free_gib; sufficiency_proven=NO"
           docker pull mariadb:11.8.9 >/dev/null
           docker run -d --rm --name "$label" --network none \
             --memory 2g --cpus 2 --pids-limit 200 \

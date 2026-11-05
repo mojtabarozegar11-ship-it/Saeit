@@ -130,6 +130,35 @@ def explicit_pair_readiness(stem, home=None):
             "release_permitted": False}
 
 
+def estimate_restore_budget(stem, home=None):
+    """Manifest-only, fail-closed runner disk admission floor; no decryption.
+
+    SQL is a logical dump, not the size of a restored MariaDB datadir. Twice
+    the plaintext SQL plus 6 GiB is a conservative screening threshold, not
+    a guarantee of successful restore. It can reject undersized runners
+    before an expensive isolated import without ever exposing private data.
+    """
+    discover_explicit_pair(stem, home=home)
+    _, mysql_meta, _, _ = load("mysql", home=home, stem=stem)
+    _, files_meta, _, _ = load("files", home=home, stem=stem)
+    gib = 1024 ** 3
+    mysql_bytes = mysql_meta["plaintext_bytes"]
+    files_bytes = files_meta["plaintext_bytes"]
+    required_bytes = max(9 * gib, 2 * mysql_bytes + 6 * gib,
+                         2 * files_bytes + 6 * gib)
+    ceil_gib = lambda value: (value + gib - 1) // gib
+    return {
+        "classification": "ISOLATED_RESTORE_DISK_ADMISSION_FLOOR",
+        "mysql_plaintext_gib_ceiling": ceil_gib(mysql_bytes),
+        "files_plaintext_gib_ceiling": ceil_gib(files_bytes),
+        "required_free_gib": ceil_gib(required_bytes),
+        "budget_is_sufficiency_proof": False,
+        "gpg_stream_reverified": False,
+        "isolated_restore_performed": False,
+        "release_permitted": False,
+    }
+
+
 def decrypt_to_stdout(kind, *, home=None, out=None, stem=None):
     path, meta, ghome, key = load(kind, home=home, stem=stem)
     passphrase = hashlib.sha256(key + b":MJWP:GPG-AES256:20261017:v2").hexdigest().encode()+b"\n"
@@ -238,6 +267,14 @@ if __name__=="__main__":
         report = explicit_pair_readiness(sys.argv[2])
         print(json.dumps(report, sort_keys=True))
         raise SystemExit(0 if report["both_manifests_selectable"] else 1)
+    if mode == "estimate-pair" and len(sys.argv) == 3:
+        try:
+            report = estimate_restore_budget(sys.argv[2])
+        except Exception:
+            print("RESTORE_BUDGET_UNAVAILABLE_NO_RELEASE", file=sys.stderr)
+            raise SystemExit(1)
+        print(json.dumps(report, sort_keys=True))
+        raise SystemExit(0)
     if mode == "verify-resume-sql" and len(sys.argv) == 3:
         try:
             report = verify_resumable_sql(sys.argv[2])
