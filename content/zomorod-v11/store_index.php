@@ -58,7 +58,7 @@ footer{background:#11271a;padding:25px 5%;border-top:1px solid #bfaa67;text-alig
 <header class="site-header">
   <a class="site-identity" href="/"><img src="/static/site/zomorod-v7/company-logo.webp" alt="نشان شرکت"><span>شرکت کشت و صنعت زمرد ملل<small>پژوهش، کشاورزی و خدمات تخصصی</small></span></a>
   <nav class="site-nav" aria-label="ناوبری اصلی زمرد ملل">
-    <a href="/">خانه</a><a href="/agriculture/">کشاورزی</a><a href="/research/">پژوهش‌ها</a><a href="/services/">خدمات</a><a href="/store/" aria-current="page">فروشگاه</a><a href="/contact/">ارتباط</a>
+    <a href="/">خانه</a><a href="/agriculture/">کشاورزی</a><a href="/research/">پژوهش‌ها</a><a href="/industry/">صنعت</a><a href="/store/" aria-current="page">فروشگاه</a><a href="/contact/">ارتباط</a>
   </nav>
 </header>
 <main id="main-content">
