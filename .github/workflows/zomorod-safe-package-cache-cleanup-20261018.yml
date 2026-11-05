@@ -204,6 +204,110 @@ jobs:
           except OSError:
               print("HOME_ROOT_FILE_SCAN=INCOMPLETE",flush=True)
           PY
+      - name: Fingerprint stale root archives and secondary storage (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import hashlib,os,re,subprocess,time
+          from pathlib import Path
+          root=Path("/home/zomorod2")
+          uid=os.geteuid()
+          candidates=[]
+          now=time.time()
+          for p in root.iterdir():
+              try:
+                  if p.is_symlink() or not p.is_file():
+                      continue
+                  s=p.stat()
+                  age=int((now-s.st_mtime)/86400)
+                  if s.st_uid!=uid or s.st_size<50000000 or age<20:
+                      continue
+                  if not p.name.lower().endswith((".zip",".tar",".tar.gz",".tgz",".gz",".7z",".xz",".bz2")):
+                      continue
+                  candidates.append((s.st_size,p,age))
+              except OSError:
+                  continue
+          candidates.sort(reverse=True,key=lambda x:x[0])
+          candidates=candidates[:8]
+          print("ARCHIVE_AUDIT_MODE=READ_ONLY",flush=True)
+          print("ARCHIVE_CANDIDATE_COUNT="+str(len(candidates)),flush=True)
+          tracked={str(p):[0,0] for _,p,_ in candidates}
+          unknown=0
+          for proc in Path("/proc").iterdir():
+              if not proc.name.isdigit():
+                  continue
+              try:
+                  if proc.stat().st_uid!=uid:
+                      continue
+                  refs=[os.readlink(proc/"cwd"),os.readlink(proc/"exe")]
+                  for fd in (proc/"fd").iterdir():
+                      try:
+                          refs.append(os.readlink(fd))
+                      except FileNotFoundError:
+                          pass
+                      except OSError:
+                          unknown+=1
+                  for candidate in tracked:
+                      if any(r==candidate or r.startswith(candidate+" (deleted)") for r in refs):
+                          tracked[candidate][0]+=1
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  unknown+=1
+          print("ARCHIVE_PROC_VISIBILITY_ERRORS="+str(unknown),flush=True)
+          print("ARCHIVE_GROUPED_MAX_BYTES="+str(sum(v[0] for v in candidates)),flush=True)
+          digest_groups={}
+          for size,p,age in candidates:
+              label=hashlib.sha256(p.name.encode()).hexdigest()[:12]
+              tokens=p.name.lower()
+              purpose=("backup" if any(x in tokens for x in ("backup","bkp","snapshot","dump")) else
+                       "release" if any(x in tokens for x in ("release","deploy","build")) else
+                       "staging" if any(x in tokens for x in ("stage","preflight","staging")) else
+                       "unknown")
+              try:
+                  with p.open("rb") as f:
+                      signature=f.read(8)
+                      h=hashlib.sha256()
+                      f.seek(0)
+                      for chunk in iter(lambda:f.read(1024*1024),b""):
+                          h.update(chunk)
+                      digest=h.hexdigest()[:20]
+                  kind=("zip" if signature.startswith(b"PK") else
+                        "gzip" if signature.startswith(bytes.fromhex("1f8b")) else
+                        "7z" if signature.startswith(bytes.fromhex("377abcaf271c")) else
+                        "xz" if signature.startswith(bytes.fromhex("fd377a585a00")) else
+                        "unknown")
+                  digest_groups.setdefault(digest,[]).append(label)
+              except OSError:
+                  digest="UNAVAILABLE";kind="UNAVAILABLE"
+              print("ROOT_ARCHIVE="+label+":BYTES="+str(size)+":AGE_DAYS="+str(age)+
+                    ":CONTENT_KIND="+kind+":PURPOSE_HINT="+purpose+":SHA256_PREFIX="+digest+
+                    ":OPEN_PROCESS_REFS="+str(tracked[str(p)][0])+":PROTECTED",flush=True)
+          for digest,labels in digest_groups.items():
+              if len(labels)>1:
+                  print("ARCHIVE_DUPLICATES=SHA256_PREFIX:"+digest+
+                        ":COUNT:"+str(len(labels)),flush=True)
+          for directory in (root/".local",root/".backups"):
+              if not directory.is_dir() or directory.is_symlink() or directory.stat().st_uid!=uid:
+                  continue
+              try:
+                  r=subprocess.run(["nice","-n","15","du","-k","--max-depth=1",
+                                    "--one-file-system",str(directory)],capture_output=True,text=True,timeout=30)
+                  entries=[]
+                  for line in r.stdout.splitlines():
+                      size,sep,path=line.partition("\t")
+                      q=Path(path)
+                      if sep and size.isdigit() and q.parent==directory:
+                          entries.append((int(size)*1024,q.name))
+                  entries.sort(reverse=True)
+                  for size,name in entries[:10]:
+                      safe=name if re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name) else "private-"+hashlib.sha256(name.encode()).hexdigest()[:10]
+                      print("SECONDARY_STORAGE="+directory.name+"/"+safe+":BYTES="+str(size)+":PROTECTED_REVIEW",flush=True)
+              except subprocess.TimeoutExpired:
+                  print("SECONDARY_STORAGE="+directory.name+":TIMEOUT_NO_CHANGES",flush=True)
+          PY
       - name: Classify cPanel generic cache and temp contents without reading files
         shell: bash
         run: |
