@@ -114,9 +114,23 @@ jobs:
           paths=(".npm/_cacache",".npm/_npx",".cache/pip",".gradle/caches")
           print("CLEANUP_KIND=disposable_download_caches_only")
           proc=subprocess.run(["ps","-u","zomorod2","-o","args="],capture_output=True,text=True,timeout=12,check=True)
-          active=[row[:180] for row in proc.stdout.splitlines()
-                  if any(token in row.lower() for token in ("npm ","npx ","pnpm ","yarn ",".npm/_npx","pip install","pip download","gradle "))]
-          if active:
+          active_counts={}
+          for row in proc.stdout.splitlines():
+              lower=row.lower()
+              if not any(token in lower for token in ("npm ","npx ","pnpm ","yarn ",".npm/_npx","pip install","pip download","gradle ")):
+                  continue
+              # Never print process commands, paths, IDs or environment data.
+              kind=("npm-install" if any(t in lower for t in ("npm install","npm ci","npm pack")) else
+                    "npm-run" if "npm run" in lower else
+                    "npx" if "npx " in lower or ".npm/_npx" in lower else
+                    "pnpm" if "pnpm " in lower else
+                    "yarn" if "yarn " in lower else
+                    "pip" if "pip install" in lower or "pip download" in lower else
+                    "gradle" if "gradle " in lower else "npm-other")
+              active_counts[kind]=active_counts.get(kind,0)+1
+          if active_counts:
+              print("PACKAGE_MANAGER_BLOCKER_CLASSES="+",".join(
+                  str(k)+":"+str(v) for k,v in sorted(active_counts.items())),flush=True)
               raise RuntimeError("PACKAGE_MANAGER_ACTIVITY_IN_PROGRESS")
           total=0
           apply=os.environ.get("CACHE_CLEANUP_MODE")=="apply"
