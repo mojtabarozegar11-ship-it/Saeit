@@ -19,6 +19,14 @@ from a writable folder. Answer the questions and type `YES` after reviewing
 the summary. The program creates a **new private folder** containing your
 input and all four report formats, without editing JSON by hand or overwriting
 older budgets. See the [Customer Guide](CUSTOMER_GUIDE.md) for details.
+Every successful run also writes `integrity-manifest.json` **last**, after all
+five saved input/report files have passed consistency checks. To check a saved
+folder later without changing files or answering the questions again, run:
+
+   python guided_start.py --verify-folder /path/to/farm-budget-folder
+
+This detects accidental file changes or incomplete outputs; it is not a
+cryptographic signature, independent quality certificate or source of market data.
 
 **Advanced/manual mode:**
 
@@ -288,7 +296,7 @@ GitHub Actions, APIs, external accounts, or production deployment:
 
     python -B build_technical_evidence.py --evidence-dir /path/to/new-private-evidence-folder
 
-The capture re-runs all 39 calculator and guided-entry tests, generates and hashes
+The capture re-runs all 43 calculator and guided-entry tests, generates and hashes
 the four illustrative customer-facing report formats, and records exact recipe,
 guided-entry, customer-guide and test source hashes. A previous ZIP that omits
 the guided entry point cannot receive these receipts. Six candidate technical
