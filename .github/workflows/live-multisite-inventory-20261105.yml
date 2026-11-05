@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/live-multisite-inventory-20261105.yml
       - scripts/live_multisite_deep_diagnostics_20261105.py
+      - scripts/live_primary_django_factory_diagnostic_20261105.py
 permissions:
   contents: read
 concurrency:
@@ -22,7 +23,7 @@ jobs:
       - name: Check audit scripts locally
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/live_multisite_inventory_20261105.py scripts/live_multisite_http_audit_20261105.py
+          python3 -m py_compile scripts/live_multisite_inventory_20261105.py scripts/live_multisite_http_audit_20261105.py scripts/live_primary_django_factory_diagnostic_20261105.py
       - name: Pinned read-only private relay to cPanel
         id: link
         shell: bash
@@ -127,6 +128,13 @@ jobs:
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           timeout 100s ssh -T -F "$RUNNER_TEMP/live-multisite-ssh/config" "$COMMAND_HOST" '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/live_multisite_deep_diagnostics_20261105.py
+      - name: Probe actual primary Zomorod Django runtime without changes
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 90s ssh -T -F "$RUNNER_TEMP/live-multisite-ssh/config" "$COMMAND_HOST" 'if test -x /home/zomorod2/virtualenv/Saeit/3.11/bin/python; then exec /home/zomorod2/virtualenv/Saeit/3.11/bin/python -; else exec python3 -; fi' < scripts/live_primary_django_factory_diagnostic_20261105.py
       - name: Audit public sites, subsites, and critical routes by HTTPS GET
         run: |
           set -euo pipefail
