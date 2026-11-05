@@ -9,8 +9,10 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import sqlite3
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 WEB = Path('/home/zomorod2/public_html')
 FORM = WEB / 'ask-master/index.php'
@@ -97,6 +99,51 @@ def inspect_storage_contract(form_source, status_source):
         print('CONTRACT_PRIVATE_BUSINESS_APP_UNAVAILABLE=1')
 
 
+def inspect_request_aggregate():
+    """Read count-only aggregates, using an immutable SQLite snapshot.
+
+    Never query a customer row or emit names, emails, tickets, messages, or
+    database paths. Avoid reporting possibly stale counts when WAL is active.
+    """
+    private = Path('/home/zomorod2/.private')
+    if not private.is_dir() or private.is_symlink():
+        print('AGGREGATE_PRIVATE_DIR_UNAVAILABLE=1')
+        return
+    candidates = [p for p in private.rglob('master_customer_inbox.sqlite3')
+                  if p.is_file() and not p.is_symlink()]
+    print('AGGREGATE_DB_CANDIDATE_COUNT=' + str(len(candidates)))
+    if len(candidates) != 1:
+        return
+    path = candidates[0]
+    if not path.resolve().is_relative_to(private.resolve()):
+        raise RuntimeError('REQUEST_DB_OUTSIDE_PRIVATE_DIRECTORY')
+    wal = Path(str(path) + '-wal')
+    wal_live = wal.is_file() and wal.stat().st_size > 0
+    bool_result('AGGREGATE_WAL_PRESENT', wal_live)
+    # immutable=1 prevents both write operations and SQLite shared-memory
+    # creation. With a live WAL it may omit recent commits, so do not assert
+    # exact counts from such a snapshot.
+    uri = 'file:' + quote(str(path), safe='/') + '?mode=ro&immutable=1'
+    with sqlite3.connect(uri, uri=True, timeout=2) as db:
+        db.execute('PRAGMA query_only=ON')
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        for name in ('customer_questions', 'customer_operator_replies', 'customer_order_events'):
+            bool_result('AGGREGATE_TABLE_' + name.upper(), name in tables)
+        if wal_live or 'customer_questions' not in tables:
+            print('AGGREGATE_COUNTS_DEFERRED=1')
+            return
+        columns = {row[1] for row in db.execute('PRAGMA table_info(customer_questions)')}
+        if not {'tenant', 'kind', 'message'} <= columns:
+            print('AGGREGATE_UNEXPECTED_SCHEMA=1')
+            return
+        count = db.execute('SELECT COUNT(*) FROM customer_questions WHERE tenant=?', ('zomorod',)).fetchone()[0]
+        prefix = SERVICE_TAG + ' '
+        service = db.execute('SELECT COUNT(*) FROM customer_questions WHERE tenant=? AND kind=? AND substr(message,1,length(?))=?',
+                             ('zomorod', 'question', prefix, prefix)).fetchone()[0]
+        print('AGGREGATE_ZOMOROD_REQUESTS=' + str(count))
+        print('AGGREGATE_ZOMOROD_SERVICE_REQUESTS=' + str(service))
+
+
 def safe_lines(source):
     seen = 0
     forbidden = re.compile(r'(?i)(password|secret|token|api[_-]?key|smtp|dsn|credential|authorization|private[_-]?key|\$db|\$pdo|\$mysqli)')
@@ -157,6 +204,7 @@ def audit():
             print('TRACK_HAS_EMAIL_FIELD=' + str('name="email"' in source))
     inspect_flow(sources[FORM], sources[TRACK])
     inspect_storage_contract(sources[FORM], sources[TRACK])
+    inspect_request_aggregate()
 
 
 if __name__ == '__main__':
