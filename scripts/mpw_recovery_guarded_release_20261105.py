@@ -142,9 +142,18 @@ def build_plan(stage):
     for key in FILES:
         path = APP / FILES[key]
         if key in NEW_FILES:
-            _safe_file(path, existing=False)
-            old[key] = None
-            new[key] = _source(stage, key)
+            staged = _source(stage, key)
+            if path.exists():
+                # A previous interrupted run may have left an exact reviewed
+                # additive file behind. Reuse it only when its bytes match the
+                # pinned source; any drift remains a hard collision.
+                existing = _safe_file(path).read_bytes()
+                if digest(existing) != digest(staged):
+                    fail("TARGET_COLLISION:" + path.name)
+                old[key] = existing
+            else:
+                old[key] = None
+            new[key] = staged
         else:
             old[key] = _safe_file(path).read_bytes()
 
