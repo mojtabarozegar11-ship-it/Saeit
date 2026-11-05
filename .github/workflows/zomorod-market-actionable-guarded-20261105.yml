@@ -121,14 +121,14 @@ jobs:
             fi
           fi
           echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
-      - name: Check original primary market section
+      - name: Check original static public market source
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           timeout 60s ssh -T -F "$RUNNER_TEMP/zm-market-actionable-ssh/config" "$COMMAND_HOST" 'python3 - preview' < scripts/zomorod_market_actionable_guarded_20261105.py
-      - name: Patch only market section and restart verified Passenger app
+      - name: Patch only public market HTML with private backup
         id: publish
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
@@ -137,7 +137,7 @@ jobs:
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
           timeout 75s ssh -T -F "$RUNNER_TEMP/zm-market-actionable-ssh/config" "$COMMAND_HOST" "python3 - publish '$GITHUB_RUN_ID'" < scripts/zomorod_market_actionable_guarded_20261105.py
-      - name: Confirm live market links and homepage with rollback guard
+      - name: Confirm live static market links with rollback guard
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
