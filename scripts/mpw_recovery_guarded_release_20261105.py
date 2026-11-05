@@ -208,7 +208,7 @@ def require_before_schema():
     if (report != {"vendor": "mysql", "m39": True, "m40": False,
                    "unreviewed_core_migrations": [], "tables": [],
                    "enabled": False, "mail": False}):
-        fail("MIGRATION_BASELINE_DRIFT")
+        fail("MIGRATION_BASELINE_DRIFT:" + json.dumps(report, sort_keys=True, separators=(",", ":")))
     return report
 
 
