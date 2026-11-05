@@ -66,7 +66,7 @@ def plan(src):
   if installed==src: return old,old,False
   # Restrict this upgrade to the exact live version installed by successful run 41120996466.
   if digest(installed)!='7693254e4ed72141b6de7fc283c5a3214159ea49d838318337e47e86953f5f2f':
-   fail('UNRECOGNIZED_GUEST_UPGRADE_BASE')
+   fail('UNRECOGNIZED_GUEST_UPGRADE_BASE:'+digest(installed))
   return old,old,True
  # A module without both verified caller hooks is never safe to overwrite.
  if TARGETS['guest'].exists() or TARGETS['guest'].is_symlink():
