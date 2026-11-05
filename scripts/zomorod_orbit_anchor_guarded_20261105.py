@@ -56,7 +56,7 @@ def patch_homepage(original: bytes) -> bytes:
     if original.lower().count(b'</head>') != 1:
         raise RuntimeError('HOMEPAGE_HEAD_STRUCTURE_CHANGED_ABORT')
     if original.count(b'orbit-shelf') < 29 or not all(
-        (b'id="orbit-' + str(number).encode() + b'"') in original
+        (b'id="orbit-' + f'{number:02d}'.encode() + b'"') in original
         for number in (1, 12, 17, 29)
     ):
         raise RuntimeError('ORBIT_ANCHOR_STRUCTURE_CHANGED_ABORT')
@@ -124,7 +124,7 @@ def verify_live(patched: bytes) -> bool:
         return False
     # The browser receives the same verified file's unique style, and all
     # prior section ids remain available for fragment-based navigation.
-    if not all((b'id="orbit-' + str(n).encode() + b'"') in body
+    if not all((b'id="orbit-' + f'{n:02d}'.encode() + b'"') in body
                for n in (1, 12, 17, 29)):
         return False
     return True
@@ -188,7 +188,7 @@ def run(mode: str) -> dict:
 def selftest() -> None:
     sample = (b'<html><head><style>' + OLD_DESKTOP + OLD_MOBILE + b'</style></head>'
               b'<body>' + b''.join(b'<section class="orbit-shelf" id="orbit-' +
-                                 str(n).encode() + b'"></section>'
+                                 f'{n:02d}'.encode() + b'"></section>'
                                  for n in range(1, 30)) + b'</body></html>')
     result = patch_homepage(sample)
     assert result.count(MARKER) == 1
