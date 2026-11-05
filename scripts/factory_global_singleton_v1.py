@@ -44,7 +44,6 @@ def _safe_root(value):
             sticky_safe = bool(
                 info.st_mode & stat.S_ISVTX
                 and info.st_mode & 0o002
-                and not info.st_mode & 0o020
             )
             if replaceable and not sticky_safe:
                 raise RuntimeError("F01_GLOBAL_ROOT_ANCESTRY_WRITABLE")
