@@ -86,6 +86,45 @@ jobs:
             echo "CACHE_BEFORE_HEALTH=$path:$status"
             test "$status" = 200
           done
+      - name: Inventory VPS filesystem and bounded cache candidates (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import os,subprocess
+          from pathlib import Path
+          home=Path.home()
+          base=home/"factory-runtime"
+          st=os.statvfs("/")
+          print("VPS_DISK_FREE_BYTES="+str(st.f_bavail*st.f_frsize),flush=True)
+          print("VPS_DISK_TOTAL_BYTES="+str(st.f_blocks*st.f_frsize),flush=True)
+          candidates={
+              "apt-archive-cache":Path("/var/cache/apt/archives"),
+              "systemd-journal":Path("/var/log/journal"),
+              "system-temp":Path("/tmp"),
+              "var-temp":Path("/var/tmp"),
+              "user-pip-cache":home/".cache/pip",
+              "user-npm-cache":home/".npm/_cacache",
+              "user-npx-cache":home/".npm/_npx",
+              "user-huggingface-cache":home/".cache/huggingface",
+              "factory-runtime":base,
+              "factory-backups":base/"operations/backups"
+          }
+          for label,p in candidates.items():
+              if p.is_symlink():
+                  print("VPS_SIZE_"+label+"=SYMLINK_SKIP",flush=True);continue
+              if not p.exists():
+                  print("VPS_SIZE_"+label+"=ABSENT",flush=True);continue
+              try:
+                  result=subprocess.run(["du","-sk",str(p)],capture_output=True,text=True,timeout=22)
+                  if result.returncode:
+                      print("VPS_SIZE_"+label+"=UNAVAILABLE",flush=True)
+                  else:
+                      print("VPS_SIZE_"+label+"_BYTES="+str(int(result.stdout.split()[0])*1024),flush=True)
+              except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+                  print("VPS_SIZE_"+label+"=UNAVAILABLE",flush=True)
+          PY
       - name: Inspect or clear only disposable npm/pip/Gradle download caches
         shell: bash
         env:
