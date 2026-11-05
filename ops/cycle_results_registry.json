@@ -79,5 +79,15 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/e19d43c0c6c2bfe211837ff5cbd801345f9084c4",
       "impact": "Collision-aware non-sensitive result index initialized; no product or revenue claim"
     }
+  ],
+  "report_reservations": [],
+  "legacy_reporting_protocol": [
+    "Applicable only to cycles with a non-null verified historical last number and an audited canonical issue source.",
+    "Do not reserve a historical report number unless a new substantive result with independent evidence is ready to publish.",
+    "First fetch canonical issue comments and this registry; if the maximum valid issue report number exceeds the stored verified counter or conflicts exist, halt numbering and reconcile, not guess.",
+    "Check the run_id is not already reserved. If reserved, resume exactly that number; never reserve twice for the same run_id.",
+    "Atomically increment legacy_report_last_verified and append {cycle_id,run_id,number,state:'reserved'} via GitHub update_file with observed blob SHA; on stale version re-fetch/recheck/retry at most three times.",
+    "Only after successfully reading back the reservation, publish the numbered report to the canonical issue, including run_id; if issue write fails leave reservation pending and repair it later. Never reuse reserved number.",
+    "Upon success, update reservation to state:'published' with the comment link using another SHA-checked update. A published report is not independently accepted revenue or product."
   ]
 }
