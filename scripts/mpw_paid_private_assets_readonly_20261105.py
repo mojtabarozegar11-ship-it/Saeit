@@ -6,6 +6,7 @@ This does not impersonate a buyer, serve files, or prove completed download.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -53,6 +54,73 @@ def file_verified(item):
         for block in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest() == expected.lower()
+
+
+
+def _runtime_function_shape(path, function_name):
+    """Read only local Python syntax; no import, call, request or customer values."""
+    shape = {
+        "file_present": False, "syntax_valid": False,
+        "function_present": False, "invoice_argument": False,
+        "private_file_reference": False, "payment_proof_reference": False,
+        "owner_reference": False, "file_response_reference": False,
+    }
+    if path.is_symlink() or not path.is_file():
+        return shape
+    shape["file_present"] = True
+    if path.stat().st_size > 512_000:
+        return shape
+    try:
+        tree = ast.parse(path.read_text("utf-8"))
+    except (OSError, UnicodeError, SyntaxError, ValueError):
+        return shape
+    shape["syntax_valid"] = True
+    matches = [
+        node for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == function_name
+    ]
+    if len(matches) != 1:
+        return shape
+    node = matches[0]
+    shape["function_present"] = True
+    shape["invoice_argument"] = "invoice_id" in {
+        a.arg for a in node.args.posonlyargs + node.args.args + node.args.kwonlyargs
+    }
+    refs = {x.id for x in ast.walk(node) if isinstance(x, ast.Name)}
+    refs.update(x.attr for x in ast.walk(node) if isinstance(x, ast.Attribute))
+    shape["private_file_reference"] = any(
+        key in refs for key in ("_private_file", "private_download", "FileResponse")
+    )
+    shape["payment_proof_reference"] = any(
+        key in refs for key in ("verified_walletless_credit", "can_download_paid_native_order",
+                               "qualified_order", "can_download", "_eligible")
+    )
+    shape["owner_reference"] = any(
+        key in refs for key in ("customer_id", "request", "user", "owner_id", "customer")
+    )
+    shape["file_response_reference"] = any(
+        key in refs for key in ("FileResponse", "StreamingHttpResponse", "XAccelRedirect")
+    )
+    return shape
+
+
+def private_delivery_runtime_shape():
+    """Live cPanel source topology only; this never invokes a download handler."""
+    return {
+        "invoice_handler": _runtime_function_shape(
+            ROOT / "services/mpw_trx_commercial_web.py", "_download_paid"
+        ),
+        "private_file_resolver": _runtime_function_shape(
+            ROOT / "mpw_commerce/downloads.py", "_private_file"
+        ),
+        "email_recovery_adapter": _runtime_function_shape(
+            ROOT / "services/mpw_trx_email_recovery.py", "recovery_download"
+        ),
+        "handler_invoked": False,
+        "buyer_download_proven": False,
+        "private_delivery_runtime": private_delivery_runtime_shape(),
+    }
 
 
 def run():
