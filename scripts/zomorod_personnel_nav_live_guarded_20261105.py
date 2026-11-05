@@ -116,4 +116,8 @@ def apply() -> dict[str, object]:
 if __name__ == '__main__':
     if sys.argv[1:] != ['guarded']:
         raise SystemExit('USAGE: guarded')
-    print('PERSONNEL_NAV_GUARDED_RESULT=' + json.dumps(apply(), sort_keys=True), flush=True)
+    result = apply()
+    print('PERSONNEL_NAV_GUARDED_RESULT=' + json.dumps(result, sort_keys=True), flush=True)
+    # A successful SSH/Actions step must never conceal a rolled-back release.
+    if result['status'] != 'LIVE_VERIFIED':
+        raise SystemExit(1)
