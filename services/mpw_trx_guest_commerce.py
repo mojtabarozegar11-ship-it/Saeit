@@ -89,7 +89,26 @@ def _guest_username(request):
 def _new_user(request):
     """Resolve both simultaneous first orders to one unique password-disabled user."""
     from django.contrib.auth import get_user_model
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
     from django.db import IntegrityError, transaction
+
+    # The guest principal is the durable owner of the order.  Persist the
+    # address submitted by the checkout form before invoice binding; otherwise
+    # record_invoice() correctly refuses to create an unowned delivery record.
+    submitted_email = ""
+    for key in ("email", "buyer_email", "customer_email", "purchaser_email"):
+        raw = request.POST.get(key) if hasattr(request, "POST") else None
+        if raw is not None:
+            submitted_email = str(raw).strip().lower()
+            break
+    if not submitted_email:
+        raise Http404("Email address required")
+    try:
+        validate_email(submitted_email)
+    except ValidationError as exc:
+        raise Http404("Valid email address required") from exc
+
     _rate_limit(request)
     Model = get_user_model()
     field = Model.USERNAME_FIELD
@@ -116,6 +135,13 @@ def _new_user(request):
                 raise
     if not getattr(user, "is_active", True) or user.has_usable_password():
         raise Http404("Guest identity conflict")
+    if hasattr(user, "email"):
+        existing_email = str(getattr(user, "email", "") or "").strip().lower()
+        if existing_email and existing_email != submitted_email:
+            raise Http404("Guest email identity mismatch")
+        if not existing_email:
+            user.email = submitted_email
+            user.save(update_fields=["email"])
     token = signing.dumps({"u": int(user.pk), "n": secrets.token_urlsafe(24)}, salt=SALT)
     if len(token) > MAX_COOKIE:
         raise Http404("Guest receipt could not be issued")
