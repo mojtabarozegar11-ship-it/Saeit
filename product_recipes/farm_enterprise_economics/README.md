@@ -13,6 +13,15 @@ pre-decision checklist, see the [Customer Guide](CUSTOMER_GUIDE.md).
 
 ## Getting started
 
+**Recommended for nontechnical customers:** place `guided_start.py` beside
+`calculator.py`, then run `python guided_start.py` (or `python3 guided_start.py`)
+from a writable folder. Answer the questions and type `YES` after reviewing
+the summary. The program creates a **new private folder** containing your
+input and all four report formats, without editing JSON by hand or overwriting
+older budgets. See the [Customer Guide](CUSTOMER_GUIDE.md) for details.
+
+**Advanced/manual mode:**
+
 1. Install Python 3.8 or later (no third-party packages).
 2. Copy example_inputs.json and replace ALL illustrative values with your own.
 3. Run:
