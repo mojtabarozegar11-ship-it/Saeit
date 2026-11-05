@@ -221,35 +221,6 @@ def _paid_order_delivery_linkage_readonly():
         from core.models import PaymentIntent
         from core.crown_tron_receipts import PROVIDER, verified_walletless_credit
         from mpw_commerce.models import GuestTrxDelivery
-        # Derive the exact acceptance key from the deployed file-open guard.
-        # This avoids assuming a return schema or exposing its payload values.
-        opener = next((n for n in tree.body if isinstance(n, ast.FunctionDef)
-                       and n.name == "open_commercial_paid_file"), None)
-        if opener is None:
-            return {"status": "file_open_guard_missing"}
-        acceptance_keys = set()
-        for node in ast.walk(opener):
-            if not isinstance(node, ast.Compare) or len(node.ops) != 1:
-                continue
-            if not isinstance(node.ops[0], ast.IsNot) or len(node.comparators) != 1:
-                continue
-            comparator = node.comparators[0]
-            if not (isinstance(comparator, ast.Constant) and comparator.value is True):
-                continue
-            call = node.left
-            if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
-                    and call.func.attr == "get" and
-                    isinstance(call.func.value, ast.Name) and
-                    call.func.value.id == "state" and len(call.args) == 1 and
-                    isinstance(call.args[0], ast.Constant) and
-                    isinstance(call.args[0].value, str)):
-                key = call.args[0].value
-                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,39}", key):
-                    acceptance_keys.add(key)
-        if len(acceptance_keys) != 1:
-            return {"status": "ambiguous_file_open_guard",
-                    "safe_key_count": len(acceptance_keys)}
-        acceptance_key = next(iter(acceptance_keys))
         intents = list(PaymentIntent.objects.filter(provider=PROVIDER, status="paid")
                        .select_related("order").order_by("pk")[:11])
         if len(intents) > 10:
@@ -332,6 +303,35 @@ def _existing_paid_download_readiness_readonly():
         except TypeError:
             return {"status": "status_gate_requires_additional_arguments",
                     "argument_names": arguments[:8]}
+        # Derive the exact acceptance key from the deployed file-open guard.
+        # This avoids assuming a return schema or exposing its payload values.
+        opener = next((n for n in tree.body if isinstance(n, ast.FunctionDef)
+                       and n.name == "open_commercial_paid_file"), None)
+        if opener is None:
+            return {"status": "file_open_guard_missing"}
+        acceptance_keys = set()
+        for node in ast.walk(opener):
+            if not isinstance(node, ast.Compare) or len(node.ops) != 1:
+                continue
+            if not isinstance(node.ops[0], ast.IsNot) or len(node.comparators) != 1:
+                continue
+            comparator = node.comparators[0]
+            if not (isinstance(comparator, ast.Constant) and comparator.value is True):
+                continue
+            call = node.left
+            if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                    and call.func.attr == "get" and
+                    isinstance(call.func.value, ast.Name) and
+                    call.func.value.id == "state" and len(call.args) == 1 and
+                    isinstance(call.args[0], ast.Constant) and
+                    isinstance(call.args[0].value, str)):
+                key = call.args[0].value
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,39}", key):
+                    acceptance_keys.add(key)
+        if len(acceptance_keys) != 1:
+            return {"status": "ambiguous_file_open_guard",
+                    "safe_key_count": len(acceptance_keys)}
+        acceptance_key = next(iter(acceptance_keys))
         intents = list(PaymentIntent.objects.filter(provider=PROVIDER, status="paid")
                        .select_related("order").order_by("pk")[:11])
         if len(intents) > 10:
