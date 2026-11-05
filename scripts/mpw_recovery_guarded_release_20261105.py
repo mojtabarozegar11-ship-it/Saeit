@@ -148,7 +148,7 @@ def build_plan(stage):
             old[key] = _safe_file(path).read_bytes()
 
     if digest(old["guest"]) != EXPECTED_GUEST_BASE:
-        fail("UNRECOGNIZED_GUEST_BASE")
+        fail("UNRECOGNIZED_GUEST_BASE:" + digest(old["guest"]))
     new["guest"] = _source(stage, "guest")
     models = old["models"].decode("utf-8")
     settings = old["settings"].decode("utf-8")
