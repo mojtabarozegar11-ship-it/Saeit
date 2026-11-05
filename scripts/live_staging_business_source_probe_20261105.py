@@ -701,6 +701,68 @@ def staging_registered_passenger_apps() -> dict[str, object]:
     return result
 
 
+def staging_isolated_request_render_readonly() -> dict[str, object]:
+    """Render staging home through Django directly in a separate interpreter, never touching the server."""
+    import subprocess
+    conf = HOME / 'Saeit-staging-web/.htaccess'
+    if conf.is_symlink() or not conf.is_file():
+        return {'status': 'HTACCESS_UNAVAILABLE'}
+    match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)', conf.read_text('utf-8', 'replace'))
+    if not match:
+        return {'status': 'APP_ROOT_NOT_FOUND'}
+    root = Path(match.group(1).strip('"'))
+    if root.is_symlink() or not root.is_dir() or (HOME / 'Saeit-staging/admin-smoke') not in root.parents:
+        return {'status': 'ROOT_OUTSIDE_STAGING'}
+    if staging_django_bootstrap_safety().get('status') != 'READ_ONLY':
+        return {'status': 'BOOTSTRAP_NOT_SAFE'}
+    python = HOME / 'virtualenv/Saeit-staging/3.11/bin/python'
+    if not python.is_file() or not os.access(python, os.X_OK):
+        return {'status': 'PYTHON_UNAVAILABLE'}
+    code = r'''
+import hashlib, json, os, re, sys
+from pathlib import Path
+root = Path(os.environ['ZM_STAGING_APP_ROOT'])
+sys.path.insert(0, str(root))
+os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings'
+import django
+django.setup()
+from django.test import RequestFactory
+from core.services_views import services
+request = RequestFactory().get('/', secure=True, HTTP_HOST='staging.zomorodmelal.ir')
+result = services(request)
+data = bytes(result.content[:220000])
+html = data.decode('utf-8', 'replace')
+headings = [re.sub('<[^>]+>', '', x).strip()[:90] for x in re.findall(r'<h2[^>]*>(.*?)</h2>', html, re.I | re.S)]
+print('STAGING_ISOLATED_RENDER=' + json.dumps({
+    'http': result.status_code,
+    'body_sha256': hashlib.sha256(data).hexdigest(),
+    'h2_headings': headings[:22],
+    'heading_count': len(headings),
+    'duplicate_headings': sorted(set(x for x in headings if headings.count(x) > 1))[:12]
+}, ensure_ascii=False))
+'''
+    env = os.environ.copy()
+    env['ZM_STAGING_APP_ROOT'] = str(root)
+    env['PYTHONDONTWRITEBYTECODE'] = '1'
+    env['PYTHONNOUSERSITE'] = '1'
+    try:
+        p = subprocess.run([str(python), '-I', '-B', '-c', code],
+                           cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           timeout=20, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return {'status': 'SUBPROCESS_UNAVAILABLE'}
+    prefix = 'STAGING_ISOLATED_RENDER='
+    lines = [row[len(prefix):] for row in p.stdout.decode('utf-8', 'replace').splitlines()
+             if row.startswith(prefix)]
+    if p.returncode == 0 and len(lines) == 1:
+        try:
+            return {'status': 'READ_ONLY', 'changed_files': 0, 'render': json.loads(lines[0])}
+        except ValueError:
+            pass
+    return {'status': 'ISOLATED_RENDER_UNAVAILABLE', 'exit_code': p.returncode,
+            'stderr_disclosed': False}
+
+
 def staging_template_settings_block() -> dict[str, object]:
     """Bounded, nonsecret TEMPLATES configuration block from active staging only."""
     conf = HOME / 'Saeit-staging-web/.htaccess'
@@ -751,5 +813,6 @@ if __name__ == '__main__':
         'cpanel_vhost_documentroot': staging_cpanel_vhost_documentroot_readonly(),
         'django_bootstrap_preflight': staging_django_bootstrap_safety(),
         'isolated_django_template_origin': staging_isolated_django_template_resolution(),
+        'isolated_request_render': staging_isolated_request_render_readonly(),
         'active_template_settings_block': staging_template_settings_block()},
         ensure_ascii=False, sort_keys=True))
