@@ -91,6 +91,21 @@ jobs:
           print('MASTER_DJANGO_UPGRADE_ENGINE_PRESENT='+str(engine.is_file() and not engine.is_symlink()))
           print('MASTER_ISOLATED_UPGRADE_ENGINE_PRESENT='+str(source.is_file() and not source.is_symlink()))
           print('MASTER_ISOLATED_UPGRADE_DOSSIER_PRESENT='+str(dossier.is_file() and not dossier.is_symlink()))
+          if dossier.is_file() and not dossier.is_symlink():
+              import json,time
+              try:
+                  proof=json.loads(dossier.read_text(encoding='utf-8'))
+                  keys=('schema','candidate_count','candidates_with_measured_improvement','preexisting_verified_repairs','validated_repair_rule_coverage','unresolved_known_security_regressions','production_code_promotions','whole_code_autonomous_evolution_complete')
+                  print('MASTER_ISOLATED_PROOF_SCHEMA='+str(proof.get('schema'))[:80])
+                  for key in keys[1:]:
+                      print('MASTER_ISOLATED_PROOF_'+key.upper()+'='+str(proof.get(key))[:80])
+                  print('MASTER_ISOLATED_PROOF_AGE_HOURS='+str(int((time.time()-dossier.stat().st_mtime)/3600)))
+              except (ValueError,OSError,TypeError) as exc:
+                  print('MASTER_ISOLATED_PROOF_READ_ERROR='+type(exc).__name__)
+          print('MASTER_SELF_IMPROVEMENT_FAILURE_ERROR_BYTES='+str(len(raw_error.encode('utf-8'))))
+          print('MASTER_SELF_IMPROVEMENT_FAILURE_RECORD_FIELDS='+','.join(sorted(
+              key for key in (latest_self_failure.output_data or {}) if key in ('error','action_performed','verified_effect','evidence','exception','message','status')
+          )) if latest_self_failure else '')
           try:
               decision=AutonomousBrain().decide()['chosen']
               print('MASTER_NEXT_ACTION='+str(decision['action']))
