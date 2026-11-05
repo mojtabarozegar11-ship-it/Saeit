@@ -38,7 +38,7 @@ jobs:
           if root.is_symlink() or not root.is_dir():
               raise SystemExit("VPS_BACKUP_ROOT_UNSAFE_OR_MISSING")
           root_dev=root.lstat().st_dev
-          snapshot=re.compile(r"master-before-[0-9]{8}T[0-9]{6}Z\\.sqlite3")
+          snapshot=re.compile(r"master-before-[0-9]{8}T[0-9]{6}Z\.sqlite3")
           records=[]
           symlinks=0
           for directory,subdirs,filenames in os.walk(root,topdown=True,followlinks=False):
