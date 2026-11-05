@@ -4,6 +4,7 @@ on:
     branches: [audit/live-sites-subsites-20261105]
     paths:
       - .github/workflows/live-multisite-inventory-20261105.yml
+      - scripts/live_multisite_deep_diagnostics_20261105.py
 permissions:
   contents: read
 concurrency:
@@ -119,6 +120,13 @@ jobs:
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           timeout 110s ssh -T -F "$RUNNER_TEMP/live-multisite-ssh/config" "$COMMAND_HOST" 'python3 -' < scripts/live_multisite_inventory_20261105.py | tee "$RUNNER_TEMP/live-multisite-cpanel.jsonl"
+      - name: Diagnose newsletter 500 and public subdomain roots without changes
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 100s ssh -T -F "$RUNNER_TEMP/live-multisite-ssh/config" "$COMMAND_HOST" '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/live_multisite_deep_diagnostics_20261105.py
       - name: Audit public sites, subsites, and critical routes by HTTPS GET
         run: |
           set -euo pipefail
