@@ -9,6 +9,9 @@ umask 077
 # and unscoped mass builders. It cannot prove global one-product control.
 # Fail before touching VPS files, packages, crontab, or production records.
 echo 'F01_LEGACY_MULTIPRODUCT_INSTALL_DISABLED_UNTIL_GLOBAL_SINGLETON_PROVEN' >&2
+# Keep the disabled legacy path inventory-complete so a future audited successor
+# cannot omit the mandatory QC1000 rework gate during runtime staging.
+# Future audited successor requirement: test -f "$repo/scripts/factory_qc1000_rework_gate.py"
 exit 3
 
 repo="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
@@ -62,6 +65,12 @@ test -f "$repo/scripts/factory_autonomous_portfolio.py"
 test -f "$repo/scripts/factory_evidence_quality.py"
 test -f "$repo/scripts/factory_first_product_pilot.py"
 test -f "$repo/scripts/factory_vps_product_cycle.py"
+# The cycle must not start without the persistent cross-controller singleton.
+test -f "$repo/scripts/factory_global_singleton_v1.py"
+test ! -L "$repo/scripts/factory_global_singleton_v1.py"
+# The Line 41 exit gate is part of the live cycle and must travel with it.
+test -f "$repo/scripts/factory_qc1000_rework_gate.py"
+test ! -L "$repo/scripts/factory_qc1000_rework_gate.py"
 # The live cycle imports genetics unconditionally; stage the exact reviewed module.
 test -f "$repo/scripts/factory_master_agent_genetics_v1.py"
 test ! -L "$repo/scripts/factory_master_agent_genetics_v1.py"
@@ -110,9 +119,9 @@ chmod 700 "$stage" "$scripts" "$recipes" "$private"
 
 
 for f in factory_product_maker.py factory_personal_owner_passport_policy_20261020.py factory_autonomous_portfolio.py \
-         factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py factory_master_agent_genetics_v1.py \
+         factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py factory_global_singleton_v1.py factory_master_agent_genetics_v1.py \
          factory_verified_customer_cycle_20261021.py \
-         factory_product_rework.py factory_recipe_designer.py factory_specialist_pilots.py factory_specialist_formats.py factory_research_triage.py factory_build_50.py factory_build50_workbook.py factory_design_intake.py factory_continuous_invention.py factory_customer_packager.py; do
+         factory_product_rework.py factory_qc1000_rework_gate.py factory_recipe_designer.py factory_specialist_pilots.py factory_specialist_formats.py factory_research_triage.py factory_build_50.py factory_build50_workbook.py factory_design_intake.py factory_continuous_invention.py factory_customer_packager.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
 done
 install -d -m 700 "$stage/factory_config"

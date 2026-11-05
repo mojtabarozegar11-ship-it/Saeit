@@ -44,7 +44,9 @@ jobs:
           echo FACTORY_TEN_GENERATIONS_PUBLICATION=false
   private-vps-builds:
     needs: offline-technical-qa
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # F-01: temporarily HOLD competing VPS writes until global singleton is proven.
+    # Keep the offline QA job; never manufacture or copy other SKUs via this job.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:

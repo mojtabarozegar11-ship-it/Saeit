@@ -13,6 +13,8 @@ import importlib.util
 import json
 import os
 import re
+import stat
+import subprocess
 import tempfile
 from pathlib import Path
 import sys
@@ -40,6 +42,37 @@ SLOT_SCHEMA = "saeit.factory.product-slots.v1"
 CLEARANCE_SCHEMA = "saeit.factory.signed-quality-clearance.v1"
 PRODUCT_SLUG = re.compile(r"^[a-z][a-z0-9_]{1,65}$")
 HEX_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+HOURLY_HANDOFF_SCHEMA = "saeit.factory.hourly-cycle-handoff.v1"
+RECEIVER_CYCLES = frozenset({"R-01", "B-01", "S-01", "G-01"})
+# Operator-managed trust anchor: NEVER load keys from factory-writable output.
+RECEIVER_TRUST_ROOT = Path("/etc/saeit/hourly-cycle-receiver-public-keys")
+# Independent reviewer public keys are provisioned by an operator, not the factory.
+REVIEWER_TRUST_ROOT = Path("/etc/saeit/factory-quality-reviewer-public-keys")
+
+
+def _trusted_admin_path(path, *, directory=False):
+    """Accept only root-owned paths with no replaceable ancestor, through '/'.
+
+    Factory-writable key directories would let a worker replace a verifier's
+    public key and approve its own quality certificate or handoff receipt.
+    """
+    path = Path(path)
+    if not path.is_absolute():
+        return False
+    try:
+        for part in (path, *path.parents):
+            info = part.lstat()
+            if info.st_uid != 0 or info.st_mode & 0o022 or stat.S_ISLNK(info.st_mode):
+                return False
+            if part == path and not directory:
+                if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                        or not 0 < info.st_size <= 16384):
+                    return False
+            elif not stat.S_ISDIR(info.st_mode):
+                return False
+        return True
+    except OSError:
+        return False
 
 
 def _read_private_json(path):
@@ -75,8 +108,48 @@ def _write_private_json(path, value):
             os.unlink(temporary)
 
 
+def _verified_clearance_signatures(clearance_path, roles):
+    """Require three detached, independently verifiable quality sign-offs.
+
+    The factory must not be able to generate or modify review trust keys.
+    A claimed valid_signed_roles list is not cryptographic evidence.
+    """
+    trust = REVIEWER_TRUST_ROOT
+    try:
+        if not _trusted_admin_path(trust, directory=True):
+            return False
+        baseline = hashlib.sha256(clearance_path.read_bytes()).hexdigest()
+        if clearance_path.is_symlink():
+            return False
+        for role in sorted(roles):
+            public_key = trust / (role + ".pem")
+            signature = clearance_path.parent / (role + ".sig")
+            if (signature.is_symlink()
+                    or not _trusted_admin_path(public_key) or not signature.is_file()
+                    or not 0 < signature.stat().st_size <= 4096):
+                return False
+            check = subprocess.run(
+                ["openssl", "dgst", "-sha256", "-verify", str(public_key),
+                 "-signature", str(signature), str(clearance_path)],
+                capture_output=True, timeout=5, check=False)
+            if check.returncode != 0:
+                return False
+        return hashlib.sha256(clearance_path.read_bytes()).hexdigest() == baseline
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
+
+
 def _verified_quality_exit(root, recipe):
     """Only a current, signed 1000/1000 clearance frees a production slot."""
+    # Persist the machine-readable rework queue on every inspection. This is
+    # operational state, not a quality pass: missing evidence remains HOLD.
+    qc_gate = load("saeit_factory_qc1000_rework_gate",
+                   SCRIPTS / "factory_qc1000_rework_gate.py")
+    qc_result = qc_gate.evaluate(root, recipe)
+    _write_private_json(
+        root / "quality-excellence" / "rework-queue" / recipe / "current.json",
+        qc_result,
+    )
     manifest_path = root / "digital-products" / recipe / "manufacturing_manifest.json"
     archive_path = root / "digital-products" / recipe / (recipe + "-internal-qa.zip")
     clearance_path = root / "quality-excellence" / "signed-clearances" / recipe / "current.json"
@@ -109,8 +182,83 @@ def _verified_quality_exit(root, recipe):
             or clearance.get("publication_executed") is not False
             or clearance.get("payment_activated") is not False):
         return None
+    if not _verified_clearance_signatures(clearance_path, independent_roles):
+        return None
+    # The machine-readable product rework plan is an additional release gate;
+    # it must independently confirm the exact QC1000 signature contract.
+    if qc_result.get("status") != "PASS":
+        return None
     return {"artifact_sha256": artifact_sha,
             "clearance_sha256": hashlib.sha256(clearance_path.read_bytes()).hexdigest()}
+
+
+def _accepted_hourly_handoff(root, recipe, clearance):
+    """Require receiver-authenticated delivery of the exact QC1000 build.
+
+    A signed quality clearance is necessary but not sufficient to free the
+    singleton slot; the receiver's private key must be controlled independently.
+    """
+    if (not isinstance(clearance, dict) or not PRODUCT_SLUG.fullmatch(recipe)
+            or not HEX_SHA256.fullmatch(str(clearance.get("artifact_sha256", "")))
+            or not HEX_SHA256.fullmatch(str(clearance.get("clearance_sha256", "")))):
+        return False
+    trusted = RECEIVER_TRUST_ROOT
+    try:
+        if not _trusted_admin_path(trusted, directory=True):
+            return False
+        warehouse = (Path(root) / "digital-products" / recipe
+                     / (recipe + "-internal-qa.zip"))
+        if warehouse.is_symlink() or not warehouse.is_file():
+            return False
+        artifact_hash = hashlib.sha256()
+        with warehouse.open("rb") as stream:
+            for part in iter(lambda: stream.read(1024 * 1024), b""):
+                artifact_hash.update(part)
+        if artifact_hash.hexdigest() != clearance["artifact_sha256"]:
+            return False
+    except (OSError, ValueError, TypeError):
+        return False
+    inbox = Path(root) / "product-lifecycle/hourly-cycle-handoffs"
+    for cycle_id in sorted(RECEIVER_CYCLES):
+        location = inbox / cycle_id / recipe
+        receipt = location / "receipt.json"
+        signature = location / "receipt.sig"
+        delivered = location / "product.zip"
+        public_key = trusted / (cycle_id + ".pem")
+        if any(p.is_symlink() for p in (inbox, inbox / cycle_id, location,
+                                        receipt, signature, delivered, public_key)):
+            continue
+        try:
+            if (not receipt.is_file() or not signature.is_file() or not delivered.is_file()
+                    or not _trusted_admin_path(public_key)
+                    or receipt.stat().st_size > 100_000
+                    or signature.stat().st_size not in range(1, 4097)):
+                continue
+            checked = subprocess.run(
+                ["openssl", "dgst", "-sha256", "-verify", str(public_key),
+                 "-signature", str(signature), str(receipt)],
+                capture_output=True, timeout=5, check=False)
+            if checked.returncode != 0:
+                continue
+            acknowledgment = _read_private_json(receipt)
+            if (not acknowledgment or acknowledgment.get("schema") != HOURLY_HANDOFF_SCHEMA
+                    or acknowledgment.get("product_id") != recipe
+                    or acknowledgment.get("receiver_cycle") != cycle_id
+                    or acknowledgment.get("status") != "accepted_by_receiver"
+                    or acknowledgment.get("artifact_sha256") != clearance["artifact_sha256"]
+                    or acknowledgment.get("clearance_sha256") != clearance["clearance_sha256"]
+                    or not isinstance(acknowledgment.get("acceptance_evidence"), str)
+                    or not acknowledgment["acceptance_evidence"].strip()):
+                continue
+            delivered_hash = hashlib.sha256()
+            with delivered.open("rb") as stream:
+                for part in iter(lambda: stream.read(1024 * 1024), b""):
+                    delivered_hash.update(part)
+            if delivered_hash.hexdigest() == clearance["artifact_sha256"]:
+                return True
+        except (OSError, TypeError, ValueError, subprocess.TimeoutExpired):
+            continue
+    return False
 
 
 def _cleanup_completed_product_extras(root, recipe):
@@ -146,8 +294,26 @@ def _cleanup_completed_product_extras(root, recipe):
             raise RuntimeError("PRODUCT_CLEANUP_NON_DIRECTORY_BLOCKED")
 
 
+def _has_unreleased_line41_slot(root):
+    """Do not design another SKU while an existing SKU or queue owns Line 41."""
+    path = (Path(root) / "quality-excellence" / "product-flow"
+            / "active-slots" / "current.json")
+    state = _read_private_json(path)
+    if state is None:
+        if path.exists() or path.is_symlink():
+            raise RuntimeError("F01_PRODUCT_SLOT_UNREADABLE")
+        return False
+    active = state.get("active")
+    waiting = state.get("waiting")
+    if (state.get("schema") != SLOT_SCHEMA
+            or not isinstance(active, list) or len(active) > 1
+            or not isinstance(waiting, list)):
+        raise RuntimeError("F01_PRODUCT_SLOT_UNTRUSTED")
+    return bool(active or waiting)
+
+
 def _maintain_product_slots(root, recipe_names):
-    """Line 41 runs one product at a time; exact signed 1000 exits the line."""
+    """Line 41 releases a product only after QC1000 AND signed cycle delivery."""
     state_path = (Path(root) / "quality-excellence" / "product-flow"
                   / "active-slots" / "current.json")
     if state_path.is_symlink():
@@ -169,8 +335,11 @@ def _maintain_product_slots(root, recipe_names):
         if item["recipe"] not in seen:
             active.append(item)
             seen.add(item["recipe"])
-    if len(active) > 100:
-        raise RuntimeError("PRODUCT_SLOT_MIGRATION_LIMIT_EXCEEDED")
+    # Do not silently demote another active product into a waiting slot.
+    # A previously multi-active state can still have live workers elsewhere.
+    # Stop and require an independently verified global singleton before work.
+    if len(state["active"]) != len(active) or len(active) > PRODUCT_SLOT_CAPACITY:
+        raise RuntimeError("PRODUCT_SLOT_SINGLETON_STATE_VIOLATION")
     exited = state.get("exited", {})
     waiting = state.get("waiting", [])
     if not isinstance(exited, dict) or not isinstance(waiting, list):
@@ -183,17 +352,11 @@ def _maintain_product_slots(root, recipe_names):
         if recipe not in seen and recipe not in queued:
             queue.append(recipe)
             queued.add(recipe)
-    # Migrate the former multi-slot roster into one active item plus a FIFO queue.
-    for item in active[1:]:
-        recipe = item["recipe"]
-        if recipe not in queued:
-            queue.append(recipe)
-            queued.add(recipe)
     retained = []
     for item in active[:1]:
         recipe = item["recipe"]
         clearance = _verified_quality_exit(root, recipe)
-        if clearance:
+        if clearance and _accepted_hourly_handoff(root, recipe, clearance):
             exited[recipe] = dict(clearance)
             _cleanup_completed_product_extras(root, recipe)
         else:
@@ -210,7 +373,7 @@ def _maintain_product_slots(root, recipe_names):
         if recipe in seen or recipe in queued or any(x["recipe"] == recipe for x in active):
             continue
         clearance = _verified_quality_exit(root, recipe)
-        if clearance:
+        if clearance and _accepted_hourly_handoff(root, recipe, clearance):
             exited[recipe] = dict(clearance)
             continue
         manifest = _read_private_json(Path(root) / "digital-products" / recipe
@@ -224,7 +387,7 @@ def _maintain_product_slots(root, recipe_names):
     while not active and queue:
         next_recipe = queue.pop(0)
         clearance = _verified_quality_exit(root, next_recipe)
-        if clearance:
+        if clearance and _accepted_hourly_handoff(root, next_recipe, clearance):
             exited[next_recipe] = dict(clearance)
             _cleanup_completed_product_extras(root, next_recipe)
             continue
@@ -239,7 +402,7 @@ def _maintain_product_slots(root, recipe_names):
     state = {"schema": SLOT_SCHEMA, "line_id": 41, "capacity": 1,
              "active": active, "waiting": queue, "exited": exited,
              "last_admitted_recipe": cursor,
-             "exit_rule": "exact passed artifact with valid signed 1000/1000 clearance",
+             "exit_rule": "exact signed 1000/1000 clearance plus authenticated hourly-cycle delivery",
              "cleanup_rule": "remove per-product intermediates only; retain certified artifact and proof"}
     _write_private_json(state_path, state)
     return [item["recipe"] for item in active]
@@ -280,10 +443,15 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         raise ValueError('DESIGN_CAPACITY_INVALID')
     # Line 41 accepts only one product input per manufacturing cycle.
     design_capacity = min(design_capacity, PRODUCT_SLOT_CAPACITY)
+    # Research candidate preparation shares the same one-SKU tick budget.
+    max_products = min(max_products, PRODUCT_SLOT_CAPACITY)
     started=time.time()
     root = Path(output).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(str(root), 0o700)
+    # Acquire this line's process mutex BEFORE persisting a global claim.
+    # Otherwise a duplicate, non-running invocation could strand the shared
+    # lane if it recorded ownership before noticing another active tick.
     lock = root / ".production-cycle.lock"
     with lock.open("a+b") as file:
         os.chmod(str(lock), 0o600)
@@ -291,6 +459,11 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return {"status": "already_running", "processed": 0, "manufactured": 0}
+        # Durable cross-controller admission must still precede every science,
+        # design, or manufacturing write. A different active lane fails closed.
+        singleton = load("saeit_factory_global_singleton_v1",
+                         SCRIPTS / "factory_global_singleton_v1.py")
+        singleton.reserve_lane(root, "line41")
         genetics = load("saeit_factory_master_agent_genetics", SCRIPTS / "factory_master_agent_genetics_v1.py")
         master_genome = genetics.begin_cycle(root)
         portfolio = load("saeit_factory_portfolio_cycle",
@@ -322,15 +495,17 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         evolution_attempted_count = 0
         invention_state={"enabled":False,"new_technical_briefs_this_tick":0}
         if enable_designer:
+            # Existing active or waiting products take exclusive design priority.
+            design_deferred = _has_unreleased_line41_slot(root)
             designer = load("saeit_factory_recipe_designer", SCRIPTS / "factory_recipe_designer.py")
-            if enable_design_intake and enable_invention_supply:
+            if not design_deferred and enable_design_intake and enable_invention_supply:
                 try:
                     inventor=load('saeit_factory_continuous_invention',SCRIPTS/'factory_continuous_invention.py')
                     invention_state=inventor.propose(root,max_new=1,max_pending=5)
                     invention_state['enabled']=True
                 except (ValueError,RuntimeError,OSError,ArithmeticError) as error:
                     designer_failures.append({'type':'invention_supply','reason':str(error)[:400]})
-            if enable_design_intake:
+            if not design_deferred and enable_design_intake:
                 try:
                     intake=load('saeit_factory_design_intake',SCRIPTS/'factory_design_intake.py')
                     engineering_state=intake.cycle(root,supply=SCRIPTS.parent/'factory_config/internal_design_supply.json')
@@ -339,12 +514,15 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     if blocked:designer_failures.append({'type':'engineering_rework','source_revisions':blocked})
                 except (ValueError,OSError,RuntimeError) as error:
                     designer_failures.append({'type':'engineering_intake','reason':str(error)[:400]})
-            try:
-                design_state = designer.cycle(root, seed_file=SCRIPTS.parent / "factory_config" / "design_opportunities.json",
-                                              database=database, max_designs=design_capacity)
-            except (ValueError, OSError, ArithmeticError, sqlite3.Error) as error:
-                designer_failures.append({"type": type(error).__name__, "reason": str(error)[:400]})
-                design_state["status"] = "needs_rework"
+            if not design_deferred:
+                try:
+                    design_state = designer.cycle(root, seed_file=SCRIPTS.parent / "factory_config" / "design_opportunities.json",
+                                                  database=database, max_designs=design_capacity)
+                except (ValueError, OSError, ArithmeticError, sqlite3.Error) as error:
+                    designer_failures.append({"type": type(error).__name__, "reason": str(error)[:400]})
+                    design_state["status"] = "needs_rework"
+            else:
+                design_state["deferred_due_to_exclusive_product_slot"] = True
             designer_failures.extend(design_state.get("intake_failures",[]))
             designer_failures.extend(design_state.get("rework",[]))
             if design_state.get("deferred_rework_requests",0):

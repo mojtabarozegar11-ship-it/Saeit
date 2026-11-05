@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Saeit factory health every five minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=saeit-factory-watchdog.service
+
+[Install]
+WantedBy=timers.target

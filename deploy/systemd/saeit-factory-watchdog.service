@@ -1,0 +1,10 @@
+[Unit]
+Description=Saeit factory health watchdog
+After=saeit-factory-cycle.service
+
+[Service]
+Type=oneshot
+User=githubops
+Group=githubops
+UMask=0077
+ExecStart=/home/githubops/factory-runtime/operations/autonomous-product-runtime/factory-runtime-watchdog.sh

@@ -1,4 +1,4 @@
-"""Regression for safe legacy cron migration without collateral factory stops."""
+"""Regression for exclusive singleton cron migration without collateral stops."""
 from pathlib import Path
 import sys
 import tempfile
@@ -36,19 +36,26 @@ class CronMigrationTests(unittest.TestCase):
                 exec(compile(TRANSFORM, "cron-migration", "exec"), {"__name__": "__main__"})
             return after.read_text().splitlines()
 
-    def test_shared_workers_preserved_with_exclusion_and_other_lines_untouched(self):
+    def test_every_factory_worker_paused_and_unrelated_line_untouched(self):
         existing = (
             f"* * * * * python -B {OPS}stage2-research.py --factory-private /home/githubops/factory-runtime/private/autonomous-product-cycle --batch 250"
             f" >> {OPS}stage2-research.log 2>&1 # {SHARED[0]}")
         old_agri = f"*/2 * * * * python -B {OPS}stage2-literature-scout.py >> {OPS}scout.log # {LEGACY[3]}"
         unrelated = "* * * * * /opt/other-family/worker # OTHER_FAMILY_KEEP"
         output = self.transform([existing, old_agri, unrelated])
-        self.assertIn(f"{OPS}stage2-research-serial.py", output[0])
-        self.assertIn("--exclude-owner-agri200 >>", output[0])
+        self.assertIn("# PAUSED_BY_STRICT_SERIAL_20261025 "+existing, output)
         self.assertIn("# PAUSED_BY_STRICT_SERIAL_20261025 "+old_agri, output)
         self.assertIn(unrelated, output)
         self.assertTrue(any(NEW in row and row.startswith("* * * * *") for row in output))
         self.assertEqual(self.transform(output), output)
+
+    def test_already_scoped_shared_worker_is_paused_not_left_active(self):
+        scoped = (f"* * * * * python -B {OPS}stage2-research-serial.py"
+                  f" --exclude-owner-agri200 >> {OPS}stage2-research.log 2>&1"
+                  f" # {SHARED[0]}")
+        output = self.transform([scoped])
+        self.assertIn("# PAUSED_BY_STRICT_SERIAL_20261025 "+scoped, output)
+        self.assertFalse(any(scoped in row and not row.startswith("#") for row in output))
 
     def test_unknown_shared_worker_aborts_without_touching_cron(self):
         unknown = f"* * * * * /opt/stranger.py >> /tmp/out.log # {SHARED[0]}"

@@ -1,0 +1,336 @@
+name: F01 VPS read-only singleton inventory
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/f01-vps-readonly-singleton-inventory.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f01-singleton-readonly-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect live product, timers and exact source bytes without mutation
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/f01-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          expected_core="$(sha256sum scripts/factory_vps_product_cycle.py | awk '{print $1}')"
+          expected_lock="$(sha256sum scripts/factory_global_singleton_v1.py | awk '{print $1}')"
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o ForwardAgent=no -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 "python3 - '$expected_core' '$expected_lock'" <<'PY'
+          import ast
+          import hashlib
+          import json
+          import re
+          import subprocess
+          import sys
+          import time
+          from pathlib import Path
+
+          expected_core, expected_lock = sys.argv[1:]
+          root = Path.home() / "factory-runtime"
+          private = root / "private/autonomous-product-cycle"
+          runtime = root / "operations/autonomous-product-runtime"
+          pattern = re.compile(r"factory|agri200|build50|strict[-_]?serial|leech|product[-_]?cycle", re.I)
+
+          def run(argv):
+              try:
+                  return subprocess.run(argv, capture_output=True, text=True,
+                                        timeout=15, check=False)
+              except (OSError, subprocess.TimeoutExpired):
+                  return None
+
+          def count_matching(output):
+              if output is None or output.returncode:
+                  return None
+              return sum(bool(pattern.search(line)) for line in output.stdout.splitlines()
+                         if line.strip() and not line.lstrip().startswith("#"))
+
+          def read_json(path):
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size > 200000:
+                      return None
+                  value = json.loads(path.read_text(encoding="utf-8"))
+                  return value if isinstance(value, dict) else None
+              except (OSError, ValueError, UnicodeError):
+                  return None
+
+          def same_sha(path, expected):
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size > 1000000:
+                      return False
+                  return hashlib.sha256(path.read_bytes()).hexdigest() == expected
+              except OSError:
+                  return False
+
+          def cron_count(args):
+              result = run(args)
+              if result is None:
+                  return None
+              if result.returncode == 0:
+                  return count_matching(result)
+              if "no crontab for " in result.stderr.lower():
+                  return 0
+              return None
+
+          slot = read_json(private / "quality-excellence/product-flow/active-slots/current.json")
+          state = read_json(private / "production-state.json")
+          reservation = read_json(private / ".f01-global-production-lane.json")
+          health_path = private / "production-health.json"
+          active = slot.get("active") if slot else None
+          first_only = bool(
+              slot and slot.get("capacity") == 1
+              and isinstance(active, list) and len(active) == 1
+              and isinstance(active[0], dict)
+              and active[0].get("recipe") == "farm_enterprise_economics"
+              and state and state.get("active_product_slot_recipes") == ["farm_enterprise_economics"])
+          lock_owner = reservation.get("owner") if reservation else None
+          timer_count = count_matching(run(["systemctl", "list-timers", "--all", "--no-legend", "--no-pager"]))
+          service_count = count_matching(run(["systemctl", "list-units", "--type=service", "--state=running", "--no-legend", "--no-pager"]))
+          proc = run(["ps", "-eo", "pid=,comm=,args="])
+          worker_count = count_matching(proc)
+          cron_state_call = run(["systemctl", "is-active", "cron.service"])
+          cron_service_state = (cron_state_call.stdout.strip()
+                                if cron_state_call and cron_state_call.stdout.strip()
+                                in ("active", "inactive", "failed", "activating", "deactivating")
+                                else "unknown")
+          cron_daemon_present = (
+              any(len(parts) >= 2 and parts[1] in ("cron", "crond")
+                  for line in proc.stdout.splitlines()
+                  if (parts := line.split(maxsplit=2)))
+              if proc and proc.returncode == 0 else None
+          )
+          # Report only safe script basenames and SAEIT marker tokens; never full argv.
+          process_labels = sorted(set(
+              match.group(0)
+              for line in (proc.stdout.splitlines() if proc and proc.returncode == 0 else [])
+              if pattern.search(line)
+              for match in re.finditer(r"[a-zA-Z0-9_.-]+[.](?:py|sh)", line)
+          ))[:24]
+          cron_raw = run(["crontab", "-l"])
+          cron_markers = sorted(set(
+              match.group(0)
+              for line in (cron_raw.stdout.splitlines()
+                           if cron_raw and cron_raw.returncode == 0 else [])
+              if line.strip() and not line.lstrip().startswith("#") and pattern.search(line)
+              for match in re.finditer(r"SAEIT_[A-Z0-9_]+", line)
+          ))[:24]
+          # Detect the legacy scheduler's nested flock deadlock without
+          # exposing cron arguments or reading any private production data.
+          legacy_cron_lines = [
+              line for line in (cron_raw.stdout.splitlines()
+                                if cron_raw and cron_raw.returncode == 0 else [])
+              if "SAEIT_SINGLE_PRODUCT_FACTORY_V1" in line
+              and not line.lstrip().startswith("#")
+          ]
+          legacy_outer_lock = any(
+              "flock -n" in line and ".single-product-cycle.lock" in line
+              and "run-single-product-cycle.sh" in line
+              for line in legacy_cron_lines
+          )
+          legacy_runner = root / "operations/single-product-runtime/run-single-product-cycle.sh"
+          legacy_runner_text = ""
+          try:
+              if (not legacy_runner.is_symlink() and legacy_runner.is_file()
+                      and legacy_runner.stat().st_size <= 50000):
+                  legacy_runner_text = legacy_runner.read_text(encoding="utf-8")
+          except (OSError, UnicodeError):
+              pass
+          legacy_inner_lock = (
+              'exec 9>' in legacy_runner_text
+              and 'flock -n 9' in legacy_runner_text
+              and '.single-product-cycle.lock' in legacy_runner_text
+          )
+          legacy_log = root / "operations/single-product-cycle.log"
+          legacy_log_age = None
+          try:
+              if legacy_log.is_file() and not legacy_log.is_symlink():
+                  legacy_log_age = max(0, round(time.time() - legacy_log.stat().st_mtime))
+          except OSError:
+              pass
+          # The existing always-on VPS loop is another possible producer.
+          # Only disclose a fixed allowlist of script references, not its contents.
+          vps_loop = root / "operations/vps-only-loop.sh"
+          vps_loop_text = ""
+          try:
+              if (not vps_loop.is_symlink() and vps_loop.is_file()
+                      and vps_loop.stat().st_size <= 150000):
+                  vps_loop_text = vps_loop.read_text(encoding="utf-8")
+          except (OSError, UnicodeError):
+              pass
+          loop_markers = sorted(token for token in (
+              "factory_vps_product_cycle.py", "factory_build_50.py",
+              "factory_product_maker.py", "factory_agri200",
+              "manage.py", "autonomous_master_loop", "while true",
+              "sleep", "flock", "systemd", "cron",
+          ) if token in vps_loop_text)
+
+          loop_manage_commands = sorted(set(re.findall(
+              r"manage[.]py\s+([a-z][a-z0-9_]{0,79})\b", vps_loop_text
+          )))[:20]
+          loop_factories_direct = any(term in vps_loop_text for term in (
+              "factory_vps_product_cycle", "factory_build_50",
+              "factory_product_maker", "farm_enterprise_economics",
+              "factory_agri200",
+          ))
+          loop_sha256 = (hashlib.sha256(vps_loop_text.encode("utf-8")).hexdigest()
+                         if vps_loop_text else None)
+
+          tick_path = root / "django-app/core/management/commands/factory_staging_tick.py"
+          tick_text = ""
+          tick_command_names = set()
+          tick_parsed = False
+          try:
+              if (not tick_path.is_symlink() and tick_path.is_file()
+                      and tick_path.stat().st_size <= 500000):
+                  tick_text = tick_path.read_text(encoding="utf-8")
+                  tree = ast.parse(tick_text)
+                  tick_parsed = True
+                  for call in ast.walk(tree):
+                      if (isinstance(call, ast.Call)
+                              and isinstance(call.func, ast.Name)
+                              and call.func.id == "call_command"
+                              and call.args and isinstance(call.args[0], ast.Constant)
+                              and isinstance(call.args[0].value, str)
+                              and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", call.args[0].value)):
+                          tick_command_names.add(call.args[0].value)
+          except (OSError, UnicodeError, ValueError, SyntaxError):
+              pass
+          tick_log_age = None
+          tick_log_counts = {}
+          tick_log = root / "operations/vps-only-factory.log"
+          try:
+              if tick_log.is_file() and not tick_log.is_symlink():
+                  with tick_log.open("rb") as handle:
+                      handle.seek(max(0, tick_log.stat().st_size - 100000))
+                      tail = handle.read(100000).decode("utf-8", errors="replace")
+                  tick_log_age = max(0, round(time.time() - tick_log.stat().st_mtime))
+                  tick_log_counts = {
+                      "tick_ok": tail.count("FACTORY_TICK_OK"),
+                      "tick_fail": tail.count("TICK_EXIT_FAILURE"),
+                      "sqlite_locked": tail.count("database is locked"),
+                      "stage4_wait": tail.count("Stage 4 retry window has not elapsed"),
+                  }
+          except OSError:
+              pass
+
+          # Check the existing factory rollback snapshot and SHA-pinned
+          # inactive source staging, without copying or modifying either.
+          backup_root = root / "operations/backups"
+          backup_candidates = []
+          try:
+              if backup_root.is_dir() and not backup_root.is_symlink():
+                  backup_candidates = [p for p in backup_root.iterdir()
+                                       if p.name.startswith("single-product-runtime-")
+                                       and p.is_dir() and not p.is_symlink()]
+          except OSError:
+              pass
+          latest_backup = None
+          try:
+              if backup_candidates:
+                  latest_backup = max(backup_candidates, key=lambda p: p.stat().st_mtime)
+          except OSError:
+              pass
+          backup_archive_present = False
+          backup_archive_gzip_valid = None
+          backup_cron_copy_present = False
+          if latest_backup:
+              backup_archive = latest_backup / "runtime-before.tar.gz"
+              cron_copy = latest_backup / "crontab.before"
+              try:
+                  backup_cron_copy_present = cron_copy.is_file() and not cron_copy.is_symlink()
+                  if (backup_archive.is_file() and not backup_archive.is_symlink()
+                          and backup_archive.stat().st_size > 0):
+                      backup_archive_present = True
+                      if backup_archive.stat().st_size <= 50000000:
+                          probe = run(["gzip", "-t", str(backup_archive)])
+                          backup_archive_gzip_valid = (probe is not None and probe.returncode == 0)
+              except OSError:
+                  pass
+          stage = root / ".f01-reviewed-source/7d924d26d47051e34df4540678297b94599adcea"
+          staged_source_verified = False
+          if stage.is_dir() and not stage.is_symlink():
+              try:
+                  checked = subprocess.run(["sha256sum", "-c", "--status", "SHA256SUMS"],
+                                           cwd=stage, capture_output=True, text=True,
+                                           timeout=20, check=False)
+                  staged_source_verified = checked.returncode == 0
+              except (OSError, subprocess.TimeoutExpired):
+                  pass
+
+          owner_cron = cron_count(["crontab", "-l"])
+          root_cron = cron_count(["sudo", "-n", "crontab", "-u", "root", "-l"])
+          age = None
+          if health_path.is_file() and not health_path.is_symlink():
+              age = max(0, round(time.time() - health_path.stat().st_mtime))
+          result = {
+              "schema": "saeit.factory.f01-readonly-live-inventory.v1",
+              "read_only": True,
+              "exactly_first_product_in_live_slot": first_only,
+              "global_lane_owner": lock_owner if lock_owner in ("line41", "agri200") else "unknown",
+              "installed_core_matches_reviewed_sha": same_sha(runtime / "scripts/factory_vps_product_cycle.py", expected_core),
+              "installed_singleton_matches_reviewed_sha": same_sha(runtime / "scripts/factory_global_singleton_v1.py", expected_lock),
+              "factory_related_running_processes": worker_count,
+              "cron_service_state": cron_service_state,
+              "cron_daemon_running": cron_daemon_present,
+              "vps_only_loop_readable": bool(vps_loop_text),
+              "vps_only_loop_source_markers": loop_markers,
+              "vps_only_loop_manage_commands": loop_manage_commands,
+              "vps_only_loop_direct_factory_reference": loop_factories_direct,
+              "vps_only_loop_source_sha256": loop_sha256,
+              "staging_tick_source_parsed": tick_parsed,
+              "staging_tick_command_names": sorted(tick_command_names)[:20],
+              "staging_tick_sha256": (hashlib.sha256(tick_text.encode("utf-8")).hexdigest() if tick_text else None),
+              "staging_tick_log_age_seconds": tick_log_age,
+              "staging_tick_log_last100k_counts": tick_log_counts,
+              "factory_related_process_script_labels": process_labels,
+              "factory_related_githubops_cron_markers": cron_markers,
+              "legacy_cron_outer_flock_present": legacy_outer_lock,
+              "legacy_runner_inner_flock_present": legacy_inner_lock,
+              "legacy_cron_double_lock_detected": legacy_outer_lock and legacy_inner_lock,
+              "legacy_runner_readable": bool(legacy_runner_text),
+              "legacy_cron_log_age_seconds": legacy_log_age,
+              "runtime_runner_present": (runtime / "run-local-cycle.sh").is_file(),
+              "runtime_core_source_present": (runtime / "scripts/factory_vps_product_cycle.py").is_file(),
+              "runtime_singleton_source_present": (runtime / "scripts/factory_global_singleton_v1.py").is_file(),
+              "factory_related_running_services": service_count,
+              "factory_related_systemd_timers": timer_count,
+              "factory_related_githubops_cron": owner_cron,
+              "factory_related_root_cron": root_cron,
+              "health_age_seconds": age,
+              "local_factory_backup_snapshots": len(backup_candidates),
+              "local_latest_backup_archive_present": backup_archive_present,
+              "local_latest_backup_gzip_valid": backup_archive_gzip_valid,
+              "local_latest_backup_crontab_present": backup_cron_copy_present,
+              "staged_source_sha_verified_again": staged_source_verified,
+              "offhost_restore_proof": "not_assessed",
+              "global_singleton_proven": False,
+              "commercial_release_approved": False,
+          }
+          print("F01_LIVE_INVENTORY=" + json.dumps(result, sort_keys=True))
+          print("F01_ACTIVATION=HOLD_UNTIL_GLOBAL_INVENTORY_AND_RESTORE_PROOF")
+          PY
+

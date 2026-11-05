@@ -1,0 +1,72 @@
+{
+  "schema": "saeit.factory.library-evidence-import.v1",
+  "product": "farm_enterprise_economics",
+  "purpose": "Register historically linked archives without importing evidence from unrelated book projects into the farm-enterprise calculator's QC1000 dossier.",
+  "source_records": [
+    {
+      "name": "B01_C92_C113_FIXED_PRIVATE_REVIEW_20261101_BATCH.zip",
+      "source_product_id": "B-01_mushroom_books",
+      "library_file_id": "libfile_424cf3aa46a08191b7908086af7c9b1c",
+      "sha256": "c34b08c772fc85a7e20114273f834eaa60e6c68846b367cea2b471bd7b327e41",
+      "scope": "two-volume private review package; hashes, CRC and page QA; publication blocked"
+    },
+    {
+      "name": "Cycle36_Working_Evidence.zip",
+      "source_product_id": "professional_farm_management_books",
+      "library_file_id": "libfile_e8e8055c17648191aab406cc40abc16f",
+      "sha256": "a29b7f5f1a37e34309366d2d38c83467562e9db9e3416031b829d72543752547",
+      "scope": "cycle evidence archive; arithmetic, source and document integrity; internal only"
+    },
+    {
+      "name": "Cycle37_Reader_and_31_Action_Evidence.zip",
+      "source_product_id": "professional_farm_management_books",
+      "library_file_id": "libfile_ffabf7b4922881919e40844e3c75097b",
+      "sha256": "2234f5d105ad4b628a1f37f6a9b60b18b17a118744f52d4e755cee4f69fccb33",
+      "scope": "cycle evidence archive; reader and action QA; external review absent"
+    },
+    {
+      "name": "B01_EN_I_II_BATCH_PRIVATE_RELEASE_GATE_MANIFEST.json",
+      "source_product_id": "B-01_mushroom_books",
+      "library_file_id": "libfile_4a404f8e034c8191a5cc9a53fd31c79f",
+      "sha256": "2d62810038733b252546e4aee4bb72f6a6ced83a9190dd72408b41b17b4ee8df",
+      "scope": "exact edition hashes and unresolved publication gates"
+    }
+  ],
+  "criteria_evidence": {},
+  "excluded_cross_product_criteria_evidence": {
+    "Q023": {
+      "source": "B01_EN_I_II_BATCH_PRIVATE_RELEASE_GATE_MANIFEST.json",
+      "reason": "exact reproducible edition hashes and byte-level QA are recorded; this is documentary evidence only"
+    },
+    "Q032": {
+      "source": "B01_C92_C113_FIXED_PRIVATE_REVIEW_20261101_BATCH.zip",
+      "reason": "source-to-claim and provenance corrections are recorded; independent scientific review remains open"
+    },
+    "Q035": {
+      "source": "Cycle36_Working_Evidence.zip",
+      "reason": "reproducible arithmetic and manifest checks are present; scope is internal"
+    },
+    "Q036": {
+      "source": "B01_EN_I_II_BATCH_PRIVATE_RELEASE_GATE_MANIFEST.json",
+      "reason": "limitations and unresolved gates are explicitly recorded"
+    },
+    "Q068": {
+      "source": "B01_C92_C113_FIXED_PRIVATE_REVIEW_20261101_BATCH.zip",
+      "reason": "archive hash and SHA256SUMS/CRC evidence are available"
+    },
+    "Q077": {
+      "source": "B01_C92_C113_FIXED_PRIVATE_REVIEW_20261101_BATCH.zip",
+      "reason": "rights/provenance corrections and unresolved media rights are recorded"
+    },
+    "Q092": {
+      "source": "B01_EN_I_II_BATCH_PRIVATE_RELEASE_GATE_MANIFEST.json",
+      "reason": "evidence is bound to exact edition SHA256 values"
+    }
+  },
+  "prohibited_inference": [
+    "Evidence for B-01 mushroom books or professional farm management books does not prove the unrelated farm_enterprise_economics calculator's quality criteria.",
+    "No Q091/Q094/Q100 independent reviewer or final signoff is inferred.",
+    "No private/internal QA is converted into a human independent certification.",
+    "No commercial release, publication, payment, or VPS deployment is authorized by this import."
+  ]
+}

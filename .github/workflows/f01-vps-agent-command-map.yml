@@ -1,0 +1,175 @@
+name: F01 VPS read-only agent command dependency map
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/f01-vps-agent-command-map.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f01-vps-agent-command-dependency-map
+  cancel-in-progress: false
+
+jobs:
+  map:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.ref == 'fix/f01-single-product-handoff-lock-20261031'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Inspect callable factory agents without executing their commands
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/f01-private-command-map"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o ForwardAgent=no -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'cd "$HOME/factory-runtime/django-app" && SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings "$HOME/factory-runtime/.venv/bin/python" -' <<'PY'
+          import ast
+          import hashlib
+          import json
+          from pathlib import Path
+          import re
+          import sqlite3
+          from django.conf import settings
+
+          root = Path.home() / "factory-runtime"
+          commands = root / "django-app/core/management/commands"
+          loop = root / "operations/vps-only-loop.sh"
+          names = (
+              "factory_staging_tick", "autonomous_master_loop",
+              "intake_discovered_opportunities", "opportunity_discovery_tick",
+              "seed_factory_agents",
+          )
+          def safe_text(path):
+              if (path.is_symlink() or not path.is_file()
+                      or path.stat().st_size > 500000):
+                  return None
+              return path.read_text(encoding="utf-8")
+
+          if root.is_symlink() or commands.is_symlink() or not commands.is_dir():
+              raise SystemExit("F01_COMMAND_MAP_ROOT_UNSAFE")
+          report = {}
+          for name in names:
+              data = safe_text(commands / (name + ".py"))
+              if data is None:
+                  report[name] = {"source_present": False}
+                  continue
+              tree = ast.parse(data)
+              invoked = set()
+              mutation_calls = 0
+              dynamic_dispatch = False
+              for node in ast.walk(tree):
+                  if not isinstance(node, ast.Call):
+                      continue
+                  fn = node.func
+                  method = fn.attr if isinstance(fn, ast.Attribute) else (fn.id if isinstance(fn, ast.Name) else "")
+                  if method == "call_command":
+                      if (node.args and isinstance(node.args[0], ast.Constant)
+                              and isinstance(node.args[0].value, str)
+                              and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", node.args[0].value)):
+                          invoked.add(node.args[0].value)
+                      else:
+                          dynamic_dispatch = True
+                  if method in {"create", "update", "update_or_create", "bulk_create",
+                                "bulk_update", "delete", "save", "save_model", "execute"}:
+                      mutation_calls += 1
+              report[name] = {
+                  "source_present": True,
+                  "sha256": hashlib.sha256(data.encode("utf-8")).hexdigest(),
+                  "direct_call_commands": sorted(invoked),
+                  "dynamic_call_command": dynamic_dispatch,
+                  "direct_mutation_method_count": mutation_calls,
+                  "mentions_line41_cycle": "factory_vps_product_cycle" in data,
+                  "mentions_f01_reservation": "factory_global_singleton_v1" in data,
+                  "mentions_autonomous_master": "autonomous_master_loop" in data,
+              }
+          script = safe_text(loop)
+          if script is None:
+              raise SystemExit("F01_LOOP_SCRIPT_UNREADABLE")
+          # Read the existing VPS factory DB using SQLite's explicit read-only
+          # connection, never Django management commands or a seeding routine.
+          # A missing schema or busy database means UNKNOWN, not authorization.
+          capability_inventory = {"state": "unknown"}
+          product_db = root / "private/factory-fresh-isolated.sqlite3"
+          engine = settings.DATABASES.get("default", {}).get("ENGINE", "")
+          selected = settings.DATABASES.get("default", {}).get("NAME", "")
+          db = Path(selected).resolve() if isinstance(selected, (str, Path)) and selected else None
+          if (engine.endswith("sqlite3") and db is not None and
+                  db.is_relative_to(root) and db.is_file() and
+                  not db.is_symlink()):
+              connection = None
+              try:
+                  connection = sqlite3.connect(db.as_uri() + "?mode=ro", uri=True,
+                                               timeout=3)
+                  connection.execute("PRAGMA query_only=ON")
+                  tables = {r[0] for r in connection.execute(
+                      "SELECT name FROM sqlite_master WHERE type='table'")}
+                  needed = {"core_agent", "core_agentcapability",
+                            "core_agentcapability_agents", "core_agenttask"}
+                  if needed.issubset(tables):
+                      agent_caps = {}
+                      for agent_name in ("economic-master-agent", "moj_1ro_1"):
+                          row = connection.execute(
+                              "SELECT id, active FROM core_agent WHERE code=?",
+                              (agent_name,)).fetchone()
+                          if row is None:
+                              agent_caps[agent_name] = {"present": False}
+                              continue
+                          granted = connection.execute(
+                              "SELECT COUNT(*) FROM core_agentcapability_agents j "
+                              "JOIN core_agentcapability c ON c.id=j.agentcapability_id "
+                              "WHERE j.agent_id=? AND c.code=? AND c.active=1",
+                              (row[0], "factory_f41_private_build")
+                          ).fetchone()[0]
+                          agent_caps[agent_name] = {
+                              "present": True, "active": bool(row[1]),
+                              "f41_capability_active": bool(granted),
+                          }
+                      tasks = connection.execute(
+                          "SELECT status, COUNT(*) FROM core_agenttask "
+                          "WHERE action_type=? GROUP BY status",
+                          ("factory_f41_private_build",)
+                      ).fetchall()
+                      task_counts = {
+                          status if status in {"queued", "running", "blocked",
+                                               "completed", "cancelled", "failed"}
+                          else "other": count for status, count in tasks
+                      }
+                      capability_inventory = {
+                          "state": "read_only_verified", "agents": agent_caps,
+                          "f41_task_counts": task_counts,
+                          "same_as_product_line_db": db == product_db,
+                      }
+              except (sqlite3.Error, OSError, ValueError):
+                  capability_inventory = {"state": "unknown"}
+              finally:
+                  if connection is not None:
+                      connection.close()
+          result = {
+              "schema": "saeit.factory.f01-agent-command-dependency-map.v1",
+              "read_only": True,
+              "loop_sha256": hashlib.sha256(script.encode("utf-8")).hexdigest(),
+              "loop_manage_commands": sorted(set(re.findall(r"manage[.]py\s+([a-z][a-z0-9_]{0,63})", script))),
+              "loop_has_singleton_flock": ".f01-global-production-lane.lock" in script,
+              "loop_has_trap": bool(re.search(r"\btrap\b", script)),
+              "capability_inventory": capability_inventory,
+              "commands": report,
+          }
+          print("F01_AGENT_COMMAND_MAP=" + json.dumps(result, sort_keys=True))
+          print("F01_AGENT_RETIREMENT_AUTHORIZATION=NOT_INFERRED_FROM_STATIC_SOURCE")
+          print("F01_PRODUCTION_MUTATION=false")
+          PY

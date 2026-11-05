@@ -67,7 +67,15 @@ def file_matches(base,value):
     path=Path(p)
     if path.is_absolute() or ".." in path.parts:return False
     try:
-        root=Path(base).resolve(strict=True)
+        base_path=Path(base)
+        if base_path.is_symlink():return False
+        root=base_path.resolve(strict=True)
+        # Resolve only after rejecting every symlink component. Otherwise a
+        # reviewer could replace a hash-pinned source by redirecting a path.
+        component=root
+        for part in path.parts:
+            component=component/part
+            if component.is_symlink():return False
         actual=(root/path).resolve(strict=True)
         return (root in actual.parents and actual.is_file() and
                 64<=actual.stat().st_size<=5_000_000 and
@@ -82,16 +90,23 @@ def grade(result,*,exact_build_sha256=None,reviewer_verified=False,
     codes={x["code"] for x in result["blockers"]}
     evidence=criteria_evidence if isinstance(criteria_evidence,dict) else {}
     items={}
+    seen_evidence_hashes=set()
     for key,c in CRITERIA.items():
-        has=file_matches(evidence_root,evidence.get(key))
+        ref=evidence.get(key)
+        has=file_matches(evidence_root,ref)
+        sha=ref.get("sha256") if has else None
+        reused=has and sha in seen_evidence_hashes
+        if has:seen_evidence_hashes.add(sha)
         conflict=(any("P0_PROOF_MISSING:"+p in codes for p in DOMAIN_VETO
                       if DOMAIN_VETO[p]==key)
                   or SPECIAL.get(key) in codes
                   or "P0_CRITERION_FAILED:"+key in codes)
-        pts=10 if has and not conflict else 0
+        pts=10 if has and not reused and not conflict else 0
         items[key]={"criterion":c["name"],"group":key,"group_id":key,"maximum_points":10,
                     "documentary_points":pts,"independent_quality_points":None,
-                    "evidence_status":"HASH_CHECK_ONLY" if pts else "MISSING_OR_BLOCKED"}
+                    "evidence_sha256":sha,
+                    "evidence_status":("DUPLICATE_EVIDENCE_REUSED" if reused else
+                                       "HASH_CHECK_ONLY" if pts else "MISSING_OR_BLOCKED")}
     earned=sum(x["documentary_points"] for x in items.values())
     outstanding=sorted(codes-PENDING)
     valid_hash=bool(isinstance(exact_build_sha256,str) and re.fullmatch("[a-f0-9]{64}",exact_build_sha256))
@@ -123,11 +138,17 @@ def require_no_false_certification(c):
         c.get("independent_reviewer_authentication") is not False):
         raise RuntimeError("INVALID_1000_QUALITY_SCORE")
     pts=0
+    credited_sha=set()
     for id,item in c["criteria"].items():
         if (item.get("maximum_points")!=10 or item.get("documentary_points") not in (0,10)
             or item.get("independent_quality_points") is not None
             or item.get("criterion")!=CRITERIA[id]["name"] or item.get("group_id")!=id):
             raise RuntimeError("INVALID_10_POINT_CRITERION")
+        if item["documentary_points"]:
+            sha=item.get("evidence_sha256")
+            if not isinstance(sha,str) or not re.fullmatch("[a-f0-9]{64}",sha) or sha in credited_sha:
+                raise RuntimeError("DUPLICATE_OR_UNBOUND_QUALITY_EVIDENCE")
+            credited_sha.add(sha)
         pts+=item["documentary_points"]
     if pts!=c.get("documentary_evidence_points") or c.get("documentary_evidence_gap")!=1000-pts:
         raise RuntimeError("SCORE_ADDITION_MISMATCH")

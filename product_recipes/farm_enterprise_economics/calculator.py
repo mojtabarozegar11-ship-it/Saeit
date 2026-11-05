@@ -9,10 +9,14 @@ import argparse
 import csv
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, localcontext
 from functools import wraps
+import hashlib
+import html
+import io
 import json
-import math
+import os
 from pathlib import Path
 import sys
+import tempfile
 
 
 def bounded_model_precision(function):
@@ -43,6 +47,14 @@ def decimal_number(value, field, *, min_value=None, max_value=None):
         raise ValueError(field + ": below minimum")
     if max_value is not None and x > Decimal(str(max_value)):
         raise ValueError(field + ": above maximum")
+    # Exponent-only strings such as 1e-1000000000 are short inputs but
+    # formatting them as fixed-point text can allocate gigabytes. Reject
+    # nonzero magnitudes finer than the documented 24 decimal places.
+    # Normalize signed or exponent-scaled zero before downstream formatting.
+    if x.is_zero():
+        return Decimal(0)
+    if abs(x) < Decimal("1e-24"):
+        raise ValueError(field + ": nonzero magnitude finer than supported 1e-24")
     return x
 
 
@@ -77,26 +89,50 @@ def enterprise(entry):
     operating_profit = contribution - fixed
     total_cost = fees + total_variable + fixed
     break_even = None
+    break_even_quantity_continuous = None
     if contribution_unit > 0:
-        break_even = int((fixed / contribution_unit).to_integral_value(rounding=ROUND_CEILING))
+        # Farm produce is often traded in fractional tonnes, litres or hectares.
+        # Preserve the mathematically exact quantity alongside the conservative
+        # legacy whole-unit ceiling used by integer-piece enterprises.
+        break_even_quantity_continuous = fixed / contribution_unit
+        break_even = int(break_even_quantity_continuous.to_integral_value(rounding=ROUND_CEILING))
+    elif contribution_unit == 0 and fixed == 0:
+        # Profit is identically zero at every output level. Zero is the
+        # smallest break-even quantity, but no positive contribution exists:
+        # a conventional margin of safety is therefore not meaningful.
+        break_even_quantity_continuous = Decimal(0)
+        break_even = 0
     # These are planning thresholds, not predictions. A fee of 100% makes a
     # positive break-even unit price impossible at the selected sales volume.
     price_denominator = Decimal(1) - fee_rate
     break_even_unit_price = None
+    break_even_unit_price_unrounded = None
     if quantity > 0 and price_denominator > 0:
         required = (variable + fixed / quantity) / price_denominator
         break_even_unit_price = str(required.quantize(Decimal("0.01"), rounding=ROUND_CEILING))
-    safety_units = quantity - Decimal(break_even) if break_even is not None else None
+        break_even_unit_price_unrounded = format(required, "f")
+    safety_units = quantity - Decimal(break_even) if contribution_unit > 0 else None
     safety_percent = (
         (safety_units * 100 / quantity).quantize(Decimal("0.01"))
         if safety_units is not None and quantity > 0 else None
+    )
+    continuous_safety = (
+        quantity - break_even_quantity_continuous
+        if contribution_unit > 0 else None
+    )
+    continuous_safety_percent = (
+        (continuous_safety * 100 / quantity).quantize(Decimal("0.01"))
+        if continuous_safety is not None and quantity > 0 else None
     )
     return {
         "name": name,
         "units_sold": str(quantity),
         "unit_price": money(unit_price),
+        "unit_price_exact": format(unit_price, "f"),
         "variable_cost_per_unit": money(variable),
+        "variable_cost_per_unit_exact": format(variable, "f"),
         "allocated_fixed_cost": money(fixed),
+        "allocated_fixed_cost_exact": format(fixed, "f"),
         "selling_fee_percent": str(fee_pct),
         "sales_revenue": money(revenue),
         "selling_fees": money(fees),
@@ -104,12 +140,25 @@ def enterprise(entry):
         "total_cost": money(total_cost),
         "contribution_margin_total": money(contribution),
         "contribution_per_unit": money(contribution_unit),
+        "contribution_per_unit_exact": format(contribution_unit, "f"),
         "operating_profit": money(operating_profit),
         "break_even_units": break_even,
-        "break_even_reachable": contribution_unit > 0,
+        "break_even_quantity_continuous": (
+            format(break_even_quantity_continuous, "f")
+            if break_even_quantity_continuous is not None else None
+        ),
+        "break_even_reachable": contribution_unit > 0 or (contribution_unit == 0 and fixed == 0),
         "break_even_unit_price_at_planned_volume": break_even_unit_price,
+        "break_even_unit_price_unrounded": break_even_unit_price_unrounded,
         "margin_of_safety_units": str(safety_units) if safety_units is not None else None,
         "margin_of_safety_percent": str(safety_percent) if safety_percent is not None else None,
+        "margin_of_safety_quantity_continuous": (
+            format(continuous_safety, "f") if continuous_safety is not None else None
+        ),
+        "margin_of_safety_percent_continuous": (
+            str(continuous_safety_percent)
+            if continuous_safety_percent is not None else None
+        ),
     }
 
 
@@ -125,14 +174,37 @@ def evaluate(data):
         raise ValueError("enterprises must be a list of 1 to 100 items")
     names = set()
     results = []
+    # Aggregate the raw Decimal metrics and round once for each portfolio KPI.
+    # Adding the already-rounded per-enterprise display fields can lose
+    # significant money when many commodity transactions are sub-cent.
+    raw_totals = {
+        "sales_revenue": Decimal(0),
+        "total_cost": Decimal(0),
+        "operating_profit": Decimal(0),
+        "contribution_margin_total": Decimal(0),
+    }
     for obj in rows:
         item = enterprise(obj)
         if item["name"].casefold() in names:
             raise ValueError("enterprise names must be unique")
         names.add(item["name"].casefold())
         results.append(item)
+        quantity = Decimal(item["units_sold"])
+        unit_price = Decimal(item["unit_price_exact"])
+        variable_unit = Decimal(item["variable_cost_per_unit_exact"])
+        fixed = decimal_number(obj["allocated_fixed_cost"],
+                               item["name"] + ".allocated_fixed_cost", min_value=0)
+        fee_rate = Decimal(item["selling_fee_percent"]) / Decimal(100)
+        revenue = quantity * unit_price
+        selling_fees = revenue * fee_rate
+        variable_total = quantity * variable_unit
+        contribution = revenue - selling_fees - variable_total
+        raw_totals["sales_revenue"] += revenue
+        raw_totals["total_cost"] += selling_fees + variable_total + fixed
+        raw_totals["contribution_margin_total"] += contribution
+        raw_totals["operating_profit"] += contribution - fixed
     def total(key):
-        return money(sum((Decimal(r[key]) for r in results), Decimal(0)))
+        return money(raw_totals[key])
     scenarios = []
     for r in rows:
         name = str(r["name"]).strip()
@@ -152,16 +224,98 @@ def evaluate(data):
                     "price_multiplier": str(price_factor),
                     "modeled_operating_profit": money(profit),
                 })
-    return {
-        "version": "1.1",
+    # Apply each correlated shock to the entire farm portfolio, rather than
+    # evaluating enterprises in isolation and double counting their fixed costs.
+    portfolio_scenarios = []
+    for quantity_factor in (Decimal("0.80"), Decimal("1.00"), Decimal("1.20")):
+        for price_factor in (Decimal("0.90"), Decimal("1.00"), Decimal("1.10")):
+            total_profit = Decimal(0)
+            for row in rows:
+                units = decimal_number(row["units_sold"], "units_sold", min_value=0)
+                unit_price = decimal_number(row["unit_price"], "unit_price", min_value=0)
+                unit_cost = decimal_number(row["variable_cost_per_unit"], "variable_cost_per_unit", min_value=0)
+                fixed_cost = decimal_number(row["allocated_fixed_cost"], "allocated_fixed_cost", min_value=0)
+                fee_rate = decimal_number(row.get("selling_fee_percent", 0),
+                                          "selling_fee_percent", min_value=0, max_value=100) / 100
+                total_profit += (units * quantity_factor *
+                                 (unit_price * price_factor * (1 - fee_rate) - unit_cost)
+                                 - fixed_cost)
+            portfolio_scenarios.append({
+                "volume_multiplier": str(quantity_factor),
+                "price_multiplier": str(price_factor),
+                "modeled_operating_profit": money(total_profit),
+            })
+    # Extended joint-stress matrix: input-cost inflation can coincide with
+    # a lower realized sales price and reduced volume. Preserve the original
+    # two-factor outputs for existing integrations; do not assign probabilities.
+    three_factor_scenarios = []
+    three_factor_portfolio = []
+    for quantity_factor in (Decimal("0.80"), Decimal("1.00"), Decimal("1.20")):
+        for price_factor in (Decimal("0.90"), Decimal("1.00"), Decimal("1.10")):
+            for variable_cost_factor in (Decimal("0.90"), Decimal("1.00"), Decimal("1.10")):
+                total_profit = Decimal(0)
+                for row in rows:
+                    name = str(row["name"]).strip()
+                    units = decimal_number(row["units_sold"], name + ".units_sold", min_value=0)
+                    price = decimal_number(row["unit_price"], name + ".unit_price", min_value=0)
+                    variable_unit = decimal_number(
+                        row["variable_cost_per_unit"], name + ".variable_cost_per_unit", min_value=0
+                    )
+                    fixed_cost = decimal_number(
+                        row["allocated_fixed_cost"], name + ".allocated_fixed_cost", min_value=0
+                    )
+                    fee_rate = decimal_number(
+                        row.get("selling_fee_percent", 0), name + ".selling_fee_percent",
+                        min_value=0, max_value=100
+                    ) / Decimal(100)
+                    profit = (units * quantity_factor *
+                              (price * price_factor * (1 - fee_rate) -
+                               variable_unit * variable_cost_factor) - fixed_cost)
+                    three_factor_scenarios.append({
+                        "enterprise": name,
+                        "volume_multiplier": str(quantity_factor),
+                        "price_multiplier": str(price_factor),
+                        "variable_cost_multiplier": str(variable_cost_factor),
+                        "modeled_operating_profit": money(profit),
+                    })
+                    total_profit += profit
+                three_factor_portfolio.append({
+                    "volume_multiplier": str(quantity_factor),
+                    "price_multiplier": str(price_factor),
+                    "variable_cost_multiplier": str(variable_cost_factor),
+                    "modeled_operating_profit": money(total_profit),
+                })
+    # Canonical hash of the accepted *economic* model inputs, independent
+    # of irrelevant JSON key ordering or extra non-model metadata. This is an
+    # unsigned reproducibility fingerprint, never third-party source validation.
+    canonical_inputs = {
         "currency": currency,
+        "enterprises": [
+            {key: item[key] for key in (
+                "name", "units_sold", "unit_price_exact",
+                "variable_cost_per_unit_exact", "allocated_fixed_cost_exact",
+                "selling_fee_percent"
+            )}
+            for item in results
+        ],
+    }
+    canonical_bytes = json.dumps(
+        canonical_inputs, sort_keys=True, ensure_ascii=False,
+        separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    input_fingerprint = hashlib.sha256(canonical_bytes).hexdigest()
+    return {
+        "version": "1.3",
+        "currency": currency,
+        "input_fingerprint_sha256": input_fingerprint,
         "accounting_scope": "contribution_profit_before_depreciation_financing_tax",
         "input_values_independently_validated": False,
         "assumptions": [
             "All prices, quantities and costs must be entered by the user.",
             "Fixed costs are allocated per enterprise, not counted again in totals.",
             "This is a deterministic planning model, not a prediction of actual sales.",
-            "Scenario changes affect only sold quantity and unit selling price.",
+            "Legacy nine-scenario analysis changes sold quantity and unit selling price.",
+            "Extended 27-scenario analysis additionally changes unit variable input costs; fixed costs remain unchanged.",
             "Tax, financing, capital expenditure, depreciation, working capital, and seasonality are excluded.",
         ],
         "results": results,
@@ -172,36 +326,179 @@ def evaluate(data):
             "contribution_margin_total": total("contribution_margin_total"),
         },
         "scenario_results": scenarios,
+        "portfolio_scenario_results": portfolio_scenarios,
+        "three_factor_scenario_results": three_factor_scenarios,
+        "three_factor_portfolio_results": three_factor_portfolio,
     }
+
+
+def render_html_report(report):
+    """Self-contained, accessible offline management report with escaped labels."""
+    e = lambda value: html.escape(str(value), quote=True)
+    def table(columns, data, keys):
+        header = "".join("<th scope=\"col\">" + e(label) + "</th>" for label in columns)
+        body = "".join(
+            "<tr>" + "".join("<td>" + e("N/A" if row[key] is None else row[key]) + "</td>" for key in keys) + "</tr>"
+            for row in data
+        )
+        return "<div class=\"scroll\"><table><thead><tr>" + header + (
+            "</tr></thead><tbody>" + body + "</tbody></table></div>"
+        )
+    rows = report["results"]
+    portfolio = report["portfolio"]
+    summary = "".join(
+        "<div class=\"kpi\"><span>" + e(label) + "</span><strong>" + e(portfolio[key])
+        + "</strong></div>"
+        for label, key in (
+            ("Revenue", "sales_revenue"),
+            ("Total operating costs", "total_cost"),
+            ("Operating profit", "operating_profit"),
+            ("Total contribution margin", "contribution_margin_total"),
+        )
+    )
+    enterprise_table = table(
+        ("Enterprise", "Sold units", "Unit price (input precision)", "Variable cost/unit (input precision)",
+         "Contribution/unit (model precision)", "Operating profit", "Break-even whole units",
+         "Break-even quantity (continuous)", "Margin of safety (% continuous)"),
+        rows,
+        ("name", "units_sold", "unit_price_exact", "variable_cost_per_unit_exact",
+         "contribution_per_unit_exact", "operating_profit",
+         "break_even_units", "break_even_quantity_continuous",
+         "margin_of_safety_percent_continuous"),
+    )
+    stress_table = table(
+        ("Volume factor", "Selling-price factor", "Portfolio operating profit"),
+        report["portfolio_scenario_results"],
+        ("volume_multiplier", "price_multiplier", "modeled_operating_profit"),
+    )
+    joint_stress_table = table(
+        ("Volume factor", "Selling-price factor", "Variable-cost factor", "Portfolio operating profit"),
+        report["three_factor_portfolio_results"],
+        ("volume_multiplier", "price_multiplier", "variable_cost_multiplier",
+         "modeled_operating_profit"),
+    )
+    assumptions = "".join("<li>" + e(s) + "</li>" for s in report["assumptions"])
+    return """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Farm Enterprise Economics — Offline Report</title>
+<style>
+:root{color-scheme:light;font-family:system-ui,-apple-system,sans-serif;color:#14352e;background:#f5f8f5}
+body{margin:0 auto;max-width:1100px;padding:2rem 1rem;line-height:1.55}
+header{padding:1.6rem;border-radius:1rem;background:#124537;color:white}
+header p{margin-bottom:0}.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.8rem;margin:1rem 0}
+.kpi{background:white;padding:1.2rem;border:1px solid #d3ded9;border-radius:.7rem;display:grid;gap:.5rem}
+.kpi span{font-size:.9rem;color:#3c5b51}.kpi strong{font-size:1.5rem;overflow-wrap:anywhere}
+section{background:white;padding:1.2rem;border-radius:.7rem;margin:1rem 0;border:1px solid #d3ded9}
+.scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:620px}
+th,td{text-align:left;padding:.7rem;border-bottom:1px solid #d3ded9}th{background:#e7f0eb}
+aside{border-left:4px solid #a05b22;padding:1rem;background:#fff7e9}
+@media print{body{max-width:none;padding:0}header{print-color-adjust:exact}section{break-inside:avoid}}
+</style></head><body>
+<header><h1>Farm Enterprise Economics</h1><p>Private offline management report · Currency: """ + e(report["currency"]) + """</p></header>
+<p><strong>Accepted input SHA-256 fingerprint:</strong> <code>""" + e(report["input_fingerprint_sha256"]) + """</code></p>
+<main><div class="kpis">""" + summary + """</div>
+<section><h2>Enterprise operating results</h2>""" + enterprise_table + """</section>
+<section><h2>Whole-portfolio sensitivity</h2><p>Correlated volume and selling-price changes are applied to all enterprises at once. These are scenarios, not probabilities or forecasts.</p>""" + stress_table + """</section>
+<section><h2>Three-factor agricultural cost stress</h2><p>All enterprises face the same relative changes in sales volume (80/100/120%), selling price (90/100/110%) and variable cost per unit (90/100/110%). Fixed costs and selling fee rates remain unchanged. These 27 outcomes are illustrative stress calculations, not probabilities or forecasts.</p>""" + joint_stress_table + """</section>
+<section><h2>Model boundaries</h2><ul>""" + assumptions + """</ul>
+<aside>Pre-tax, pre-financing contribution model. Per-unit figures retain input/model decimal precision; displayed money totals are rounded to 0.01 currency units. Results are not forecasts or investment recommendations. Verify all entered quantities, costs, allocations and market assumptions.</aside></section>
+</main><footer><small>Generated locally. No accounts, telemetry or network connection.</small></footer></body></html>
+"""
+
+
+def stage_and_replace_reports(exports):
+    """Stage every requested report before replacing any destination.
+
+    Each individual replacement is atomic on the destination filesystem.
+    A multi-file group is not an all-or-nothing transaction if a rename fails.
+    """
+    staged = []
+    try:
+        for destination, content in exports:
+            fd, temp_name = tempfile.mkstemp(
+                prefix="." + destination.name + ".", suffix=".tmp",
+                dir=str(destination.parent)
+            )
+            temporary = Path(temp_name)
+            staged.append((temporary, destination))
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+        for temporary, destination in staged:
+            os.replace(str(temporary), str(destination))
+    finally:
+        for temporary, _ in staged:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Farm enterprise economics and sensitivity analysis")
     ap.add_argument("input_json", help="Local input JSON with user-supplied assumptions")
     ap.add_argument("--json-output", help="Write results to a local JSON file")
-    ap.add_argument("--csv-output", help="Write all scenario results to local CSV file")
+    ap.add_argument("--csv-output", help="Write legacy two-factor enterprise scenarios to CSV")
+    ap.add_argument("--three-factor-csv-output", help="Write 27 three-factor scenarios for each enterprise and the whole farm to CSV")
+    ap.add_argument("--html-output", help="Write a self-contained offline management report")
+    ap.add_argument("--verify-json", help="Read-only: recompute and compare an existing JSON report")
     args = ap.parse_args(argv)
     source = Path(args.input_json)
-    data = json.loads(source.read_text(encoding="utf-8"))
+    # Protect the customer's source data and prevent multiple formats from
+    # silently replacing one another when a CLI argument repeats a path.
+    if args.verify_json and any((args.json_output, args.csv_output, args.html_output, args.three_factor_csv_output)):
+        raise ValueError("verification is read-only and cannot be combined with output destinations")
+    output_paths = [Path(path) for path in (args.json_output, args.csv_output, args.html_output, args.three_factor_csv_output) if path]
+    canonical_paths = [source.resolve()] + [path.resolve() for path in output_paths]
+    if len(canonical_paths) != len(set(canonical_paths)):
+        raise ValueError("input and output file paths must be distinct")
+    # JSON's default float decoder truncates otherwise valid high-precision
+    # customer numbers before Decimal can validate and calculate with them.
+    # Decode decimal literals exactly, including sub-cent agricultural inputs.
+    data = json.loads(source.read_text(encoding="utf-8"), parse_float=Decimal)
     output = evaluate(data)
+    if args.verify_json:
+        previously_saved = json.loads(Path(args.verify_json).read_text(encoding="utf-8"))
+        if previously_saved != output:
+            raise ValueError("stored report does not match recomputed results from these inputs")
+        print("VERIFIED: recomputed report matches accepted inputs (SHA-256 "
+              + output["input_fingerprint_sha256"] + ")")
+        return 0
     body = json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    exports = []
     if args.json_output:
-        Path(args.json_output).write_text(body, encoding="utf-8")
-    else:
-        print(body, end="")
+        exports.append((Path(args.json_output), body))
+    if args.html_output:
+        exports.append((Path(args.html_output), render_html_report(output)))
     if args.csv_output:
-        with Path(args.csv_output).open("w", encoding="utf-8", newline="") as fp:
-            writer = csv.DictWriter(fp, fieldnames=[
-                "enterprise", "volume_multiplier", "price_multiplier", "modeled_operating_profit"
-            ], quoting=csv.QUOTE_ALL)
-            writer.writeheader()
-            writer.writerows(output["scenario_results"])
+        buffer = io.StringIO(newline="")
+        writer = csv.DictWriter(buffer, fieldnames=[
+            "enterprise", "volume_multiplier", "price_multiplier", "modeled_operating_profit"
+        ], quoting=csv.QUOTE_ALL)
+        writer.writeheader()
+        writer.writerows(output["scenario_results"])
+        exports.append((Path(args.csv_output), buffer.getvalue()))
+    if args.three_factor_csv_output:
+        buffer = io.StringIO(newline="")
+        fields = ("scope", "enterprise", "volume_multiplier", "price_multiplier",
+                  "variable_cost_multiplier", "modeled_operating_profit")
+        writer = csv.DictWriter(buffer, fieldnames=fields, quoting=csv.QUOTE_ALL)
+        writer.writeheader()
+        writer.writerows(dict(row, scope="enterprise") for row in output["three_factor_scenario_results"])
+        writer.writerows(dict(row, scope="portfolio", enterprise="WHOLE_FARM")
+                         for row in output["three_factor_portfolio_results"])
+        exports.append((Path(args.three_factor_csv_output), buffer.getvalue()))
+    stage_and_replace_reports(exports)
+    if not args.json_output:
+        print(body, end="")
     return 0
 
 
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError, InvalidOperation, json.JSONDecodeError) as error:
         print("INPUT_ERROR: " + str(error), file=sys.stderr)
         sys.exit(2)
+
