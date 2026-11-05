@@ -889,6 +889,109 @@ def staging_wsgi_entry_and_parentage_readonly() -> dict[str, object]:
                 for name, count in sorted(groups.items())]}
 
 
+
+def staging_selector_registration_and_release_chain_readonly() -> dict[str, object]:
+    """Inspect application registrations and the third release without changing hosting."""
+    import subprocess
+    selector = Path('/usr/sbin/cloudlinux-selector')
+    result: dict[str, object] = {'status': 'READ_ONLY', 'changed_files': 0}
+    if not selector.is_file() or not os.access(selector, os.X_OK):
+        result['selector'] = {'status': 'NOT_AVAILABLE'}
+    else:
+        try:
+            p = subprocess.run(
+                [str(selector), 'get', '--json', '--interpreter', 'python',
+                 '--user', pwd.getpwuid(os.geteuid()).pw_name],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=20, check=False)
+            metadata: dict[str, object] = {'exit': p.returncode}
+            if p.returncode == 0 and len(p.stdout) < 1500000:
+                doc = json.loads(p.stdout.decode('utf-8', 'replace'))
+                if isinstance(doc, dict):
+                    metadata['result'] = str(doc.get('result', ''))[:35]
+                    metadata['selector_enabled'] = doc.get('selector_enabled')
+                    metadata['passenger_active'] = doc.get('passenger_active')
+                    metadata['top_keys'] = sorted(str(k)[:55] for k in doc.keys())[:24]
+                    matches: list[dict[str, object]] = []
+                    registration_shapes: dict[str, int] = {}
+                    sensitive = re.compile(r'(?i)(?:secret|password|token|key|credential|env|auth)')
+                    permitted = {'app_root', 'app_uri', 'path', 'root', 'domain', 'document_root',
+                                 'startup_file', 'app_name', 'name', 'base_uri'}
+                    def walk(node: object, depth: int = 0) -> None:
+                        if depth > 10 or len(matches) >= 35:
+                            return
+                        if isinstance(node, dict):
+                            lowered = {str(k).lower().replace('-', '_') for k in node.keys()}
+                            if 'app_root' in lowered or 'app_uri' in lowered:
+                                shape = ','.join(sorted(k for k in lowered if not sensitive.search(k)))[:170]
+                                registration_shapes[shape] = registration_shapes.get(shape, 0) + 1
+                            for key, value in node.items():
+                                safe_key = str(key).lower().replace('-', '_')
+                                if isinstance(value, str) and 'Saeit-staging' in value and not sensitive.search(safe_key):
+                                    if safe_key in permitted and len(value) < 320 and not re.search(r'[\r\n=]', value):
+                                        sanitized = value.replace(str(HOME), '$ACCOUNT_HOME')
+                                        matches.append({'field': safe_key[:40], 'value': sanitized[:190]})
+                                    else:
+                                        matches.append({'field': safe_key[:40], 'value': 'STAGING_MENTION_REDACTED'})
+                                elif isinstance(value, (dict, list)):
+                                    walk(value, depth + 1)
+                        elif isinstance(node, list):
+                            for child in node[:160]:
+                                walk(child, depth + 1)
+                    walk(doc)
+                    metadata['staging_field_matches'] = matches
+                    metadata['application_record_shapes'] = [
+                        {'fields': shape, 'count': count}
+                        for shape, count in sorted(registration_shapes.items())[:12]]
+            result['selector'] = metadata
+        except (OSError, subprocess.TimeoutExpired, ValueError, UnicodeError):
+            result['selector'] = {'status': 'GET_FAILED'}
+    conf = HOME / 'Saeit-staging-web/.htaccess'
+    match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)', conf.read_text('utf-8', 'replace')) if conf.is_file() and not conf.is_symlink() else None
+    if not match:
+        result['roots'] = {'status': 'ACTIVE_ROOT_UNAVAILABLE'}
+        return result
+    active = Path(match.group(1).strip('"'))
+    staging = HOME / 'Saeit-staging'
+    if (active.is_symlink() or (staging / 'admin-smoke') not in active.parents
+            or staging.is_symlink()):
+        result['roots'] = {'status': 'ROOT_GUARD_FAILED'}
+        return result
+    candidate_roots = {
+        'active_snapshot': active,
+        'canonical_staging': staging,
+        'third_staff_release': staging / 'releases/staff-c153e541e8cf',
+    }
+    root_reports = {}
+    focus = re.compile(r'(?i)(?:^\s*(?:BASE|BASE_DIR|ROOT|PROJECT_ROOT)\s*=|sys\.path|site\.addsitedir|os\.chdir|DJANGO_SETTINGS_MODULE|from\s+config\.wsgi|from\s+django\.core\.wsgi|get_wsgi_application|application\s*=)')
+    private = re.compile(r'(?i)(?:secret|password|token|credential|private.?key|api.?key|authorization|bearer|database|env\()')
+    for label, root in candidate_roots.items():
+        record: dict[str, object] = {'root_exists': root.is_dir() and not root.is_symlink()}
+        if not record['root_exists']:
+            root_reports[label] = record
+            continue
+        for filename in ('passenger_wsgi.py', 'config/wsgi.py', 'config/settings.py',
+                         'core/templates/core/services.html'):
+            path = root / filename
+            if path.is_symlink() or not path.is_file() or path.stat().st_size > 150000:
+                record[filename] = {'present': False}
+                continue
+            raw = path.read_bytes()
+            info: dict[str, object] = {'present': True, 'sha256': hashlib.sha256(raw).hexdigest(),
+                                       'bytes': len(raw)}
+            if filename.endswith('.py'):
+                relevant = []
+                for number, line in enumerate(raw.decode('utf-8', 'replace').splitlines(), 1):
+                    if focus.search(line) and not private.search(line):
+                        relevant.append({'line': number,
+                                         'statement': line.strip().replace(str(HOME), '$ACCOUNT_HOME')[:155]})
+                info['bootstrap_lines'] = relevant[:24]
+            record[filename] = info
+        root_reports[label] = record
+    result['roots'] = root_reports
+    return result
+
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -915,5 +1018,6 @@ if __name__ == '__main__':
         'isolated_request_render': staging_isolated_request_render_readonly(),
         'two_restart_markers': staging_two_restart_markers_readonly(),
         'active_template_settings_block': staging_template_settings_block(),
-        'wsgi_entry_and_worker_parentage': staging_wsgi_entry_and_parentage_readonly()},
+        'wsgi_entry_and_worker_parentage': staging_wsgi_entry_and_parentage_readonly(),
+        'selector_registration_and_release_chain': staging_selector_registration_and_release_chain_readonly()},
         ensure_ascii=False, sort_keys=True))
