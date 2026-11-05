@@ -37,13 +37,14 @@ jobs:
           ssh-keygen -y -P '' -f "$d/key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o ForwardAgent=no -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o ForwardAgent=no -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'cd "$HOME/factory-runtime/django-app" && SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings "$HOME/factory-runtime/.venv/bin/python" -' <<'PY'
           import ast
           import hashlib
           import json
           from pathlib import Path
           import re
           import sqlite3
+          from django.conf import settings
 
           root = Path.home() / "factory-runtime"
           commands = root / "django-app/core/management/commands"
@@ -103,8 +104,13 @@ jobs:
           # connection, never Django management commands or a seeding routine.
           # A missing schema or busy database means UNKNOWN, not authorization.
           capability_inventory = {"state": "unknown"}
-          db = root / "private/factory-fresh-isolated.sqlite3"
-          if db.is_file() and not db.is_symlink():
+          product_db = root / "private/factory-fresh-isolated.sqlite3"
+          engine = settings.DATABASES.get("default", {}).get("ENGINE", "")
+          selected = settings.DATABASES.get("default", {}).get("NAME", "")
+          db = Path(selected).resolve() if isinstance(selected, (str, Path)) and selected else None
+          if (engine.endswith("sqlite3") and db is not None and
+                  db.is_relative_to(root / "private") and db.is_file() and
+                  not db.is_symlink()):
               connection = None
               try:
                   connection = sqlite3.connect(db.as_uri() + "?mode=ro", uri=True,
@@ -146,6 +152,7 @@ jobs:
                       capability_inventory = {
                           "state": "read_only_verified", "agents": agent_caps,
                           "f41_task_counts": task_counts,
+                          "same_as_product_line_db": db == product_db,
                       }
               except (sqlite3.Error, OSError, ValueError):
                   capability_inventory = {"state": "unknown"}
