@@ -453,7 +453,10 @@ def main(argv=None):
     canonical_paths = [source.resolve()] + [path.resolve() for path in output_paths]
     if len(canonical_paths) != len(set(canonical_paths)):
         raise ValueError("input and output file paths must be distinct")
-    data = json.loads(source.read_text(encoding="utf-8"))
+    # JSON's default float decoder truncates otherwise valid high-precision
+    # customer numbers before Decimal can validate and calculate with them.
+    # Decode decimal literals exactly, including sub-cent agricultural inputs.
+    data = json.loads(source.read_text(encoding="utf-8"), parse_float=Decimal)
     output = evaluate(data)
     if args.verify_json:
         previously_saved = json.loads(Path(args.verify_json).read_text(encoding="utf-8"))
@@ -495,7 +498,7 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError, InvalidOperation, json.JSONDecodeError) as error:
         print("INPUT_ERROR: " + str(error), file=sys.stderr)
         sys.exit(2)
 

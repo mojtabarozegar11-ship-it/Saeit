@@ -146,6 +146,51 @@ class EconomicsTests(unittest.TestCase):
         self.assertFalse(with_fixed["break_even_reachable"])
         self.assertIsNone(with_fixed["break_even_units"])
 
+    def test_cli_preserves_exact_json_decimal_literals(self):
+        # Using json.dumps on a Python float would lose the input digits before
+        # the CLI reads them; use the literal customer-provided JSON instead.
+        customer_json = (
+            '{"currency":"USD","enterprises":[{"name":"Precision Crop",'
+            '"units_sold":1,"unit_price":0.123456789012345678901234,'
+            '"variable_cost_per_unit":0,"allocated_fixed_cost":0}]}'
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            source = base / "precise-input.json"
+            destination = base / "precise-report.json"
+            source.write_text(customer_json, encoding="utf-8")
+            result = subprocess.run([
+                sys.executable, str(Path(__file__).with_name("calculator.py")),
+                str(source), "--json-output", str(destination),
+            ], capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(destination.read_text(encoding="utf-8"))
+            self.assertEqual(report["results"][0]["unit_price_exact"],
+                             "0.123456789012345678901234")
+            self.assertEqual(report["results"][0]["sales_revenue"], "0.12")
+            verified = subprocess.run([
+                sys.executable, str(Path(__file__).with_name("calculator.py")),
+                str(source), "--verify-json", str(destination),
+            ], capture_output=True, text=True, timeout=15)
+            self.assertEqual(verified.returncode, 0, verified.stderr)
+
+    def test_cli_handles_unrepresentable_json_decimal_without_traceback(self):
+        customer_json = (
+            '{"currency":"USD","enterprises":[{"name":"Bad Exponent",'
+            '"units_sold":1,"unit_price":1e99999999999999999999999999999,'
+            '"variable_cost_per_unit":0,"allocated_fixed_cost":0}]}'
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "bad-exponent.json"
+            source.write_text(customer_json, encoding="utf-8")
+            result = subprocess.run([
+                sys.executable, str(Path(__file__).with_name("calculator.py")),
+                str(source),
+            ], capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("INPUT_ERROR:", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+
     def test_scenario_range(self):
         r = evaluate(self.example)
         outcomes = [float(x["modeled_operating_profit"]) for x in r["scenario_results"]]

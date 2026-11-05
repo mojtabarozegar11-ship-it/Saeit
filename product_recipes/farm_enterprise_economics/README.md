@@ -35,6 +35,12 @@ Each item in the enterprises list must provide:
 Set currency to a consistent label such as USD, CAD, IRR, EUR or AED. The tool
 never performs currency conversion.
 
+JSON decimal literals are read directly as exact decimal numbers, without
+conversion through binary floating-point. For example, an entered unit price
+of `0.123456789012345678901234` retains all its digits in the exact-value
+report field; displayed monetary totals are still rounded to 0.01 currency
+units. Numeric inputs remain subject to the documented magnitude limits.
+
 ## Formulas
 
 Revenue = units_sold * unit_price.
