@@ -1,7 +1,7 @@
 name: Recover backed-up staging service cards after failed restart
 on:
-  push:
-    branches: [audit/live-sites-subsites-20261105]
+  pull_request:
+    types: [opened, synchronize, reopened]
     paths:
       - .github/workflows/live-staging-active-services-release-20261105.yml
 permissions:
