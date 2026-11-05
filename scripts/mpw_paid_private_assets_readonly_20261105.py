@@ -112,14 +112,13 @@ def private_delivery_runtime_shape():
             ROOT / "services/mpw_trx_commercial_web.py", "_download_paid"
         ),
         "private_file_resolver": _runtime_function_shape(
-            ROOT / "mpw_commerce/downloads.py", "_private_file"
+            ROOT / "mpw_commerce/buyer_orders.py", "_private_file"
         ),
         "email_recovery_adapter": _runtime_function_shape(
             ROOT / "services/mpw_trx_email_recovery.py", "recovery_download"
         ),
         "handler_invoked": False,
         "buyer_download_proven": False,
-        "private_delivery_runtime": private_delivery_runtime_shape(),
     }
 
 
@@ -132,6 +131,7 @@ def run():
 
     result = {
         "source": "live_mariadb_and_private_cpanel_files",
+        "private_delivery_runtime": private_delivery_runtime_shape(),
         "paid_intents": total,
         "distinct_paid_orders": 0,
         "verified_local_paid_orders": 0,
