@@ -30,6 +30,7 @@ TARGET_TABLES = {
     "core_guestrecoverytoken", "core_guestrecoveryrate",
     "mpw_commerce_commercefulfillment", "django_migrations",
 }
+SCOPED_SEED_TABLES = TARGET_TABLES - {"django_migrations"}
 
 
 def group(name):
@@ -53,6 +54,15 @@ def run():
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'
         """)
         rows = cur.fetchall()
+        cur.execute("""
+            SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME,
+                   REFERENCED_COLUMN_NAME
+            FROM information_schema.KEY_COLUMN_USAGE
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND REFERENCED_TABLE_NAME IS NOT NULL
+            ORDER BY TABLE_NAME, ORDINAL_POSITION
+        """)
+        fk_rows = cur.fetchall()
     if not rows or len(rows) > 5000:
         raise RuntimeError("DATABASE_TABLE_COUNT_UNEXPECTED")
     totals = {name: {"tables": 0, "data_bytes": 0, "index_bytes": 0}
@@ -72,6 +82,28 @@ def run():
                       "estimated_rows": count})
     clean.sort(key=lambda row: row["allocated_bytes"], reverse=True)
     targeted = [r for r in clean if r["table"] in TARGET_TABLES]
+    table_size = {r["table"]: r["allocated_bytes"] for r in clean}
+    parents = {}
+    for child, column, parent, parent_column in fk_rows:
+        child, parent = str(child), str(parent)
+        if not all(re.fullmatch(r"[A-Za-z0-9_]{1,100}", part)
+                   for part in (child, str(column), parent, str(parent_column))):
+            raise RuntimeError("UNEXPECTED_FOREIGN_KEY_NAME")
+        parents.setdefault(child, set()).add(parent)
+    missing_seeds = sorted(SCOPED_SEED_TABLES - table_size.keys())
+    closure = set(SCOPED_SEED_TABLES & table_size.keys())
+    frontier = list(closure)
+    while frontier:
+        child = frontier.pop()
+        for parent in parents.get(child, ()):
+            if parent not in table_size:
+                raise RuntimeError("FOREIGN_KEY_PARENT_NOT_LOCAL")
+            if parent not in closure:
+                closure.add(parent)
+                frontier.append(parent)
+    closure_size = sum(table_size[t] for t in closure)
+    closure_billion_plus = sorted(t for t in closure
+                                  if table_size[t] >= 1_000_000_000)
     report = {
         "source": "live_information_schema_tables",
         "engine": "mysql",
@@ -80,6 +112,17 @@ def run():
         "by_group": totals,
         "largest_tables": clean[:12],
         "purchase_and_recovery_tables": targeted,
+        "store_scoped_restore_design": {
+            "foreign_keys_observed": len(fk_rows),
+            "required_parent_closure_tables": sorted(closure),
+            "required_parent_closure_count": len(closure),
+            "required_parent_closure_allocated_bytes_estimate": closure_size,
+            "required_parent_closure_large_tables": closure_billion_plus,
+            "missing_seed_tables": missing_seeds,
+            "logical_relationships_outside_sql_fks_not_proven": True,
+            "export_or_restore_performed": False,
+            "full_database_recovery_proven": False,
+        },
         "inno_db_size_is_estimate_not_dump_size": True,
         "customer_rows_or_values_read": False,
         "database_name_logged": False,
