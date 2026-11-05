@@ -35,3 +35,18 @@ def test_risk_engine_can_deny_agent_trade():
     bridge=FinancialAgentBridge(ready, lambda req: (False,'risk-limit'), lambda *args: None)
     d=bridge.authorize(AgentFinancialRequest('1','economic-master-agent','trade','BTC',Decimal('1')))
     assert not d.allowed and d.reason == 'risk-limit'
+
+
+def test_every_transactional_action_requires_owner_approval_even_if_risk_allows():
+    ready = ProductionReadiness(True, True, True, True, True, True, True)
+    events = []
+    bridge = FinancialAgentBridge(ready, lambda req: (True, ''), _audit(events))
+    for index, action in enumerate(('buy', 'sell', 'trade', 'rebalance', 'place_order',
+                                    'payment', 'transfer_funds', 'settle')):
+        request = AgentFinancialRequest(str(index), 'economic-master-agent',
+                                        action, 'TRX', Decimal('2'))
+        decision = bridge.authorize(request)
+        assert not decision.allowed
+        assert decision.reason == 'owner-approval-required'
+        assert decision.execution_mode == 'none'
+    assert len(events) == 8
