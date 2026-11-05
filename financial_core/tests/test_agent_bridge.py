@@ -23,11 +23,23 @@ def test_transactional_robot_is_blocked_until_financial_core_ready():
 
 def test_external_value_movement_requires_owner_approval():
     ready=ProductionReadiness(True,True,True,True,True,True,True)
-    bridge=FinancialAgentBridge(ready, lambda req: (True,''), lambda *args: None)
+    bridge=FinancialAgentBridge(ready, lambda req: (True,''), lambda *args: None,
+                                 owner_approval_verifier=lambda req: req.request_id == '2')
     req=AgentFinancialRequest('1','economic-master-agent','transfer_funds','USDT',Decimal('10'))
     assert bridge.authorize(req).reason == 'owner-approval-required'
     approved=AgentFinancialRequest('2','economic-master-agent','transfer_funds','USDT',Decimal('10'),owner_approved=True)
     assert bridge.authorize(approved).allowed
+
+
+def test_request_boolean_alone_cannot_forge_trading_approval():
+    ready = ProductionReadiness(True, True, True, True, True, True, True)
+    approved_claim = AgentFinancialRequest('trade-1', 'economic-master-agent',
+                                           'trade', 'TRX', Decimal('2'), owner_approved=True)
+    missing = FinancialAgentBridge(ready, lambda req: (True, ''), lambda *args: None)
+    assert missing.authorize(approved_claim).reason == 'owner-approval-verifier-unavailable'
+    rejecting = FinancialAgentBridge(ready, lambda req: (True, ''), lambda *args: None,
+                                     owner_approval_verifier=lambda req: False)
+    assert rejecting.authorize(approved_claim).reason == 'owner-approval-unverified'
 
 
 def test_risk_engine_can_deny_agent_trade():
