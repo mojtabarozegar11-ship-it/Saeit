@@ -117,37 +117,40 @@ def atomic_write(target: Path, data: bytes, mode: int) -> None:
 
 
 def staging_owned_lswsgi_workers() -> list[int]:
-    """Require that every process mentioning the active staging root is a worker owned by this cPanel user."""
+    """Only two exact staging roots; never include the main website WSGI workers."""
     import signal
     if not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
         raise RuntimeError('SAFE_PIDFD_RESTART_UNSUPPORTED')
-    root = staging_restart_marker().parent.parent
+    active = staging_restart_marker().parent.parent
+    canonical = HOME / 'Saeit-staging'
+    if canonical.is_symlink() or not canonical.is_dir() or canonical == active:
+        raise RuntimeError('STAGING_CANONICAL_APP_ROOT_UNSAFE')
+    allowed = {str(active): 'active_snapshot', str(canonical): 'canonical_staging'}
     found: list[int] = []
-    matched = 0
+    counts = {'active_snapshot': 0, 'canonical_staging': 0}
     for folder in Path('/proc').iterdir():
         if not folder.name.isdecimal():
             continue
         try:
-            raw = (folder / 'cmdline').read_bytes()
-            command = raw.replace(b'\x00', b' ').decode('utf-8', 'replace')
-            if str(root) not in command:
+            cwd = os.readlink(str(folder / 'cwd'))
+            if cwd not in allowed:
                 continue
-            matched += 1
+            command = (folder / 'cmdline').read_bytes().replace(b'\x00', b' ').decode('utf-8', 'replace')
             status_text = (folder / 'status').read_text('utf-8', 'replace')
             uid = re.search(r'(?m)^Uid:\s+(\d+)', status_text)
             owned = bool(uid and int(uid.group(1)) == os.geteuid())
-            cwd = os.readlink(str(folder / 'cwd'))
             executable = (folder / 'exe').resolve().name
-            if not (owned and cwd == str(root) and executable == 'lswsgi'
-                    and 'passenger' in command.lower()):
+            if not (owned and executable == 'lswsgi' and 'passenger' in command.lower()):
                 raise RuntimeError('NON_STAGING_OR_UNOWNED_PROCESS_PREVENTS_RESTART')
             found.append(int(folder.name))
+            counts[allowed[cwd]] += 1
         except FileNotFoundError:
             continue
         except (OSError, PermissionError, ValueError) as exc:
             raise RuntimeError('STAGING_PROCESS_PRECHECK_UNAVAILABLE') from exc
-    if not (1 <= matched <= 10 and matched == len(found)):
-        raise RuntimeError('STAGING_LSWGI_PROCESS_SET_UNSAFE')
+    if not (1 <= counts['active_snapshot'] <= 10 and 1 <= counts['canonical_staging'] <= 10
+            and 2 <= len(found) <= 20 and sum(counts.values()) == len(found)):
+        raise RuntimeError('STAGING_TWO_APP_WORKER_SETS_UNSAFE')
     return found
 
 
@@ -185,6 +188,7 @@ def preview() -> None:
     workers = staging_owned_lswsgi_workers()
     print('STAGING_SERVICES_PREVIEW=' + json.dumps({
         'eligible_staging_only_lswsgi_worker_count': len(workers),
+        'recycled_app_roots_required': 2,
         'old_sha': digest(old), 'new_sha': digest(revised),
         'staging_template_copies_guarded': len(template_targets()),
         'duplicate_cards_repurposed': len(CHANGES), 'total_cards_deleted': 0,
