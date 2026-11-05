@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Guarded cPanel source stage for MPW-RECOVERY-01; email stays disabled.
 
-Commands: preflight STAGE, publish STAGE RUN_ID DB_BACKUP_SHA256, verify,
-rollback RUN_ID.
+Commands: preflight STAGE, publish STAGE RUN_ID DB_BACKUP_SHA256,
+publish_additive STAGE RUN_ID, verify, rollback RUN_ID.
 Requires the existing cPanel Python 3.11 venv and trusted SSH relay. A dry-run
 is read-only. The publish command writes ONLY reviewed code plus three new
 tables after confirming migration 0039 is applied. Rollback restores code;
@@ -371,6 +371,45 @@ def migrate_new_tables():
         fail("MIGRATION_EXECUTION_FAILED")
 
 
+
+def publish_additive(stage, run):
+    """Install only the additive recovery release without a full DB dump.
+
+    This mode is deliberately narrower than publish(): it requires the exact
+    pre-migration schema baseline, writes only reviewed source files plus a
+    private code manifest, runs one migration that creates three empty recovery
+    tables, and verifies both tables and flags afterward. It never exports,
+    reads or changes customer/order/payment rows. The public route and email
+    flag remain hard-coded OFF.
+    """
+    guard_host()
+    old, new = build_plan(stage)
+    require_before_schema()
+    folder, manifest = private_backup(run, old, new)
+    changed = []
+    order = ("recovery", "recovery_models", "migration", "cleanup",
+             "models", "guest", "settings")
+    try:
+        for key in order:
+            _atomic(APP / FILES[key], new[key], expected=manifest["before"][key])
+            changed.append(key)
+        migrate_new_tables()
+        report = db_state()
+        if not (report["vendor"] == "mysql" and report["m40"] is True and
+                report["unreviewed_core_migrations"] == [] and
+                len(report["tables"]) == 3 and
+                report["enabled"] is False and report["mail"] is False):
+            fail("POST_ADDITIVE_MIGRATION_STATE_DRIFT")
+        restart()
+    except BaseException:
+        restore(folder, manifest, changed=changed)
+        restart()
+        raise
+    print("MPW_RECOVERY01_ADDITIVE_CODE_AND_SCHEMA_STAGED;"
+          "EMAIL_ENABLED=FALSE;PUBLIC_RECOVERY_ENABLED=FALSE;"
+          "PAYMENTS_CREATED=0;ORDERS_CREATED=0;CUSTOMER_ROWS_READ=0")
+
+
 def publish(stage, run, backup_sha):
     guard_host()
     old, new = build_plan(stage)
@@ -443,6 +482,8 @@ def main(argv):
             "outbound_email": False,
             "payments_or_orders_changed": False,
         }, sort_keys=True))
+    elif len(argv) == 4 and argv[1] == "publish_additive":
+        publish_additive(Path(argv[2]), argv[3])
     elif len(argv) == 5 and argv[1] == "publish":
         publish(Path(argv[2]), argv[3], argv[4])
     elif len(argv) == 2 and argv[1] == "verify":
@@ -450,7 +491,7 @@ def main(argv):
     elif len(argv) == 3 and argv[1] == "rollback":
         rollback(argv[2])
     else:
-        raise SystemExit("Usage: release.py preflight STAGE | publish STAGE RUN_ID DB_BACKUP_SHA256 | verify | rollback RUN_ID")
+        raise SystemExit("Usage: release.py preflight STAGE | publish_additive STAGE RUN_ID | publish STAGE RUN_ID DB_BACKUP_SHA256 | verify | rollback RUN_ID")
 
 
 if __name__ == "__main__":
