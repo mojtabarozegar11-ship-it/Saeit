@@ -237,6 +237,50 @@ jobs:
           except OSError:
               pass
 
+          # Check the existing factory rollback snapshot and SHA-pinned
+          # inactive source staging, without copying or modifying either.
+          backup_root = root / "operations/backups"
+          backup_candidates = []
+          try:
+              if backup_root.is_dir() and not backup_root.is_symlink():
+                  backup_candidates = [p for p in backup_root.iterdir()
+                                       if p.name.startswith("single-product-runtime-")
+                                       and p.is_dir() and not p.is_symlink()]
+          except OSError:
+              pass
+          latest_backup = None
+          try:
+              if backup_candidates:
+                  latest_backup = max(backup_candidates, key=lambda p: p.stat().st_mtime)
+          except OSError:
+              pass
+          backup_archive_present = False
+          backup_archive_gzip_valid = None
+          backup_cron_copy_present = False
+          if latest_backup:
+              backup_archive = latest_backup / "runtime-before.tar.gz"
+              cron_copy = latest_backup / "crontab.before"
+              try:
+                  backup_cron_copy_present = cron_copy.is_file() and not cron_copy.is_symlink()
+                  if (backup_archive.is_file() and not backup_archive.is_symlink()
+                          and backup_archive.stat().st_size > 0):
+                      backup_archive_present = True
+                      if backup_archive.stat().st_size <= 50000000:
+                          probe = run(["gzip", "-t", str(backup_archive)])
+                          backup_archive_gzip_valid = (probe is not None and probe.returncode == 0)
+              except OSError:
+                  pass
+          stage = root / ".f01-reviewed-source/7d924d26d47051e34df4540678297b94599adcea"
+          staged_source_verified = False
+          if stage.is_dir() and not stage.is_symlink():
+              try:
+                  checked = subprocess.run(["sha256sum", "-c", "--status", "SHA256SUMS"],
+                                           cwd=stage, capture_output=True, text=True,
+                                           timeout=20, check=False)
+                  staged_source_verified = checked.returncode == 0
+              except (OSError, subprocess.TimeoutExpired):
+                  pass
+
           owner_cron = cron_count(["crontab", "-l"])
           root_cron = cron_count(["sudo", "-n", "crontab", "-u", "root", "-l"])
           age = None
@@ -277,6 +321,11 @@ jobs:
               "factory_related_githubops_cron": owner_cron,
               "factory_related_root_cron": root_cron,
               "health_age_seconds": age,
+              "local_factory_backup_snapshots": len(backup_candidates),
+              "local_latest_backup_archive_present": backup_archive_present,
+              "local_latest_backup_gzip_valid": backup_archive_gzip_valid,
+              "local_latest_backup_crontab_present": backup_cron_copy_present,
+              "staged_source_sha_verified_again": staged_source_verified,
               "offhost_restore_proof": "not_assessed",
               "global_singleton_proven": False,
               "commercial_release_approved": False,
