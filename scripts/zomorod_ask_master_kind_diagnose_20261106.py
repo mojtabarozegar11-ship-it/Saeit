@@ -16,6 +16,64 @@ WEB = Path('/home/zomorod2/public_html')
 FORM = WEB / 'ask-master/index.php'
 TRACK = WEB / 'ask-master/status.php'
 ALLOWED = (FORM, TRACK)
+ASK_DIR = WEB / 'ask-master'
+SERVICE_TAG = '[SERVICE_INQUIRY]'
+
+
+def bool_result(name, condition):
+    print(name + '=' + ('1' if condition else '0'))
+
+
+def inspect_flow(form_source, status_source):
+    """Inspect source structure only, without opening customer databases or records.
+
+    Keep the output deliberately limited to booleans and counts: PHP files can
+    contain configuration details and must never be echoed in CI logs.
+    """
+    bool_result('FLOW_SERVICE_UI_OPTION', 'value="service_question"' in form_source)
+    bool_result('FLOW_SERVICE_TO_QUESTION_MAP', bool(re.search(
+        r"\$_POST\s*\[\s*['\"]kind['\"]\s*\]\s*=\s*['\"]question['\"]", form_source)))
+    bool_result('FLOW_SERVICE_TAG_AT_INPUT', SERVICE_TAG in form_source)
+    bool_result('FLOW_CREATE_SQL', bool(re.search(r'\bINSERT\s+INTO\b', form_source, re.I)))
+    bool_result('FLOW_STATUS_POST', "REQUEST_METHOD" in status_source and 'POST' in status_source)
+    bool_result('FLOW_STATUS_TICKET_INPUT', bool(re.search(
+        r"\$_POST\s*\[\s*['\"]ticket['\"]\s*\]", status_source)))
+    bool_result('FLOW_STATUS_EMAIL_INPUT', bool(re.search(
+        r"\$_POST\s*\[\s*['\"]email['\"]\s*\]", status_source)))
+    bool_result('FLOW_STATUS_SQL_LOOKUP', bool(re.search(r'\bSELECT\b', status_source, re.I)))
+    bool_result('FLOW_STATUS_HAS_SERVICE_TAG', SERVICE_TAG in status_source)
+
+    inspected = 0
+    readers = 0
+    service_readers = 0
+    auth_readers = 0
+    metrics = 0
+    notification = 0
+    # The scan is explicitly confined to PHP *source* inside this one module.
+    # No DB files, log files, SQLite rows, sessions, or private files are read.
+    for path in sorted(ASK_DIR.glob('**/*.php')):
+        if path in ALLOWED or path.is_symlink() or not path.is_file():
+            continue
+        if any(part.startswith('.') for part in path.relative_to(ASK_DIR).parts):
+            continue
+        if path.stat().st_size > 200000 or inspected >= 80:
+            continue
+        inspected += 1
+        source = path.read_text(encoding='utf-8', errors='replace')
+        is_reader = bool(re.search(r'\bSELECT\b', source, re.I) and
+                         re.search(r'\b(ticket|question|request|message)\b', source, re.I))
+        if is_reader:
+            readers += 1
+            service_readers += SERVICE_TAG in source
+            auth_readers += bool(re.search(r'\b(session_start|password_verify|hash_equals)\b|\$_SESSION', source))
+        metrics += bool(re.search(r'\bCOUNT\s*\(', source, re.I))
+        notification += bool(re.search(r'\b(mail|PHPMailer|sendmail|smtp)\s*\(', source, re.I))
+    print('FLOW_OTHER_PHP_FILES=' + str(inspected))
+    print('FLOW_MANAGEMENT_READER_CANDIDATES=' + str(readers))
+    print('FLOW_MANAGEMENT_READERS_WITH_SERVICE_TAG=' + str(service_readers))
+    print('FLOW_MANAGEMENT_READERS_WITH_AUTH_HINT=' + str(auth_readers))
+    print('FLOW_METRICS_CODE_CANDIDATES=' + str(metrics))
+    print('FLOW_NOTIFICATION_CODE_CANDIDATES=' + str(notification))
 
 
 def safe_lines(source):
@@ -53,12 +111,14 @@ def safe_flow_excerpt(source):
 def audit():
     if os.geteuid() == 0 or os.geteuid() != WEB.stat().st_uid:
         raise RuntimeError('REFUSE_WRONG_SITE_USER')
+    sources = {}
     for path in ALLOWED:
         if path.is_symlink() or not path.is_file():
             raise RuntimeError('UNSAFE_OR_MISSING_PHP_FILE:' + str(path))
         if path.stat().st_size > 200000:
             raise RuntimeError('UNEXPECTED_SOURCE_SIZE:' + str(path))
         source = path.read_text(encoding='utf-8', errors='replace')
+        sources[path] = source
         print('FILE=' + str(path.relative_to(WEB)))
         print('BYTES=' + str(path.stat().st_size))
         print('SHA256=' + hashlib.sha256(path.read_bytes()).hexdigest())
@@ -74,6 +134,7 @@ def audit():
         else:
             print('TRACK_HAS_TICKET_FIELD=' + str('name="ticket"' in source))
             print('TRACK_HAS_EMAIL_FIELD=' + str('name="email"' in source))
+    inspect_flow(sources[FORM], sources[TRACK])
 
 
 if __name__ == '__main__':
@@ -81,6 +142,8 @@ if __name__ == '__main__':
         audit()
     elif sys.argv[1:] == ['selftest']:
         assert list(ALLOWED) == [FORM, TRACK]
+        assert ASK_DIR == FORM.parent == TRACK.parent
+        assert SERVICE_TAG.startswith('[') and SERVICE_TAG.endswith(']')
         print('ASK_MASTER_READONLY_SELFTEST_OK=1')
     else:
         raise RuntimeError('UNKNOWN_OR_UNSAFE_MODE')
