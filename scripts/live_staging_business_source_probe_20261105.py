@@ -387,6 +387,73 @@ def staging_django_bootstrap_safety() -> dict[str, object]:
                          'safe_focus_lines': safe_lines[:28]}
     return {'status': 'READ_ONLY', 'components': report}
 
+
+def staging_isolated_django_template_resolution() -> dict[str, object]:
+    """Resolve the effective Django template in a no-bytecode, isolated process."""
+    import subprocess
+    conf = HOME / 'Saeit-staging-web/.htaccess'
+    match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)', conf.read_text('utf-8', 'replace')) if conf.is_file() and not conf.is_symlink() else None
+    if not match:
+        return {'status': 'PASSENGER_ROOT_UNAVAILABLE'}
+    root = Path(match.group(1).strip('"'))
+    if root.is_symlink() or not root.is_dir() or (HOME / 'Saeit-staging/admin-smoke') not in root.parents:
+        return {'status': 'ROOT_OUT_OF_SCOPE'}
+    python = HOME / 'virtualenv/Saeit-staging/3.11/bin/python'
+    if not python.is_file() or not os.access(python, os.X_OK):
+        return {'status': 'STAGING_PYTHON_UNAVAILABLE'}
+    preflight = staging_django_bootstrap_safety()
+    if preflight.get('status') != 'READ_ONLY' or any(
+        x.get('custom_ready_method_present') or x.get('scheduling_or_network_import_mentions')
+        for x in preflight.get('components', {}).values() if isinstance(x, dict)
+    ):
+        return {'status': 'BOOTSTRAP_PRECONDITION_NOT_MET'}
+    code = r'''
+import json, os, sys
+from pathlib import Path
+root = Path(os.environ['ZM_STAGING_APP_ROOT'])
+sys.path.insert(0, str(root))
+os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings'
+import django
+django.setup()
+from django.template import engines
+from django.apps import apps
+from django.conf import settings
+backend = engines['django']
+loaded = backend.get_template('core/services.html')
+origin = Path(loaded.template.origin.name)
+if str(origin).startswith(str(root) + '/'):
+    origin_label = str(origin.relative_to(root))
+else:
+    origin_label = 'OUTSIDE_ACTIVE_STAGING_ROOT'
+loaders = [type(obj).__module__ + '.' + type(obj).__name__ for obj in backend.engine.template_loaders]
+print('DJANGO_TEMPLATE_ORIGIN_READONLY=' + json.dumps({
+    'origin_relative': origin_label,
+    'core_registered': apps.is_installed('core'),
+    'loader_classes': loaders,
+    'django_debug': bool(settings.DEBUG),
+    'cache_page_middleware_configured': any('CacheMiddleware' in str(x) for x in settings.MIDDLEWARE),
+}, sort_keys=True))
+'''
+    env = os.environ.copy()
+    env['ZM_STAGING_APP_ROOT'] = str(root)
+    env['PYTHONDONTWRITEBYTECODE'] = '1'
+    env['PYTHONNOUSERSITE'] = '1'
+    try:
+        proc = subprocess.run([str(python), '-I', '-B', '-c', code], cwd=root,
+                              env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              timeout=18, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return {'status': 'SUBPROCESS_UNAVAILABLE'}
+    marker = 'DJANGO_TEMPLATE_ORIGIN_READONLY='
+    records = [row[len(marker):] for row in proc.stdout.decode('utf-8', 'replace').splitlines() if row.startswith(marker)]
+    if proc.returncode == 0 and len(records) == 1:
+        try:
+            return {'status': 'READ_ONLY', 'resolved': json.loads(records[0])}
+        except ValueError:
+            pass
+    return {'status': 'IMPORT_OR_RESOLUTION_UNAVAILABLE', 'exit_code': proc.returncode,
+            'stderr_disclosed': False}
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -402,5 +469,6 @@ if __name__ == '__main__':
         'staging_delivery_context': staging_delivery_context(),
         'staging_process_origins': staging_passenger_process_origins(),
         'passenger_restart_tool': staging_passenger_restart_tool_capability(),
-        'django_bootstrap_preflight': staging_django_bootstrap_safety()},
+        'django_bootstrap_preflight': staging_django_bootstrap_safety(),
+        'isolated_django_template_origin': staging_isolated_django_template_resolution()},
         ensure_ascii=False, sort_keys=True))
