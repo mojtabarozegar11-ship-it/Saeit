@@ -385,7 +385,7 @@ def _existing_paid_download_readiness_readonly():
 def _guest_email_claim_coverage_readonly():
     """Count only bound email ownership claims, without retrieving addresses or links."""
     try:
-        from datetime import timedelta
+        from datetime import datetime, timedelta, timezone as dt_timezone
         from django.conf import settings
         from django.utils import timezone
         from core.models import GuestOrderEmail, Order
@@ -402,6 +402,11 @@ def _guest_email_claim_coverage_readonly():
             order_id__in=order_ids).values_list("order_id", flat=True))
         recent = timezone.now() - timedelta(hours=24)
         recent_orders = {order.pk for order in orders if order.created_at >= recent}
+        # Audited release finished 2026-11-05 18:26:32 UTC (run 42084151853).
+        # Start 28 seconds later to exclude racing old in-flight checkouts.
+        after_live_capture = datetime(2026, 11, 5, 18, 27, tzinfo=dt_timezone.utc)
+        post_release_orders = {order.pk for order in orders
+                               if order.created_at >= after_live_capture}
         paid = list(PaymentIntent.objects.filter(
             provider=PROVIDER, status="paid", order_id__in=order_ids
         ).select_related("order").order_by("pk")[:301])
@@ -423,6 +428,9 @@ def _guest_email_claim_coverage_readonly():
             "last_24h_guest_orders": len(recent_orders),
             "last_24h_guest_orders_with_claim": len(recent_orders & claimed_ids),
             "last_24h_guest_orders_without_claim": len(recent_orders - claimed_ids),
+            "guest_orders_after_release_cutover": len(post_release_orders),
+            "after_release_with_claim": len(post_release_orders & claimed_ids),
+            "after_release_without_claim": len(post_release_orders - claimed_ids),
             "locally_verified_paid_guest_orders": len(verified_ids),
             "locally_verified_paid_guest_orders_with_claim": len(verified_ids & claimed_ids),
             "locally_verified_paid_guest_orders_without_claim": len(verified_ids - claimed_ids),
