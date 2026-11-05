@@ -116,19 +116,41 @@ def is_page(path):
     return path == '/' or path.endswith(('/', '.html', '.htm', '.php'))
 
 
-def google_referral(line):
+def google_referral(line, destination_host):
     found = REFERRER.search(line)
-    if not found:
-        return False, False
-    ref = found.group(1)
-    if not ref.startswith(('https://', 'http://')):
-        return False, False
+    if not found or not found.group(1).startswith(('https://', 'http://')):
+        return False, False, 'missing_or_hidden'
     try:
-        hostname = (urlsplit(ref).hostname or '').lower()
+        hostname = (urlsplit(found.group(1)).hostname or '').lower().rstrip('.')
     except ValueError:
-        return False, False
-    is_google = bool(re.fullmatch(r'(?:[a-z0-9-]+\.)*google\.[a-z]{2,}(?:\.[a-z]{2,})?', hostname))
-    return True, is_google
+        return False, False, 'missing_or_hidden'
+    if not hostname or not VALID.fullmatch(hostname):
+        return False, False, 'missing_or_hidden'
+    if re.fullmatch(r'(?:[a-z0-9-]+\.)*google\.[a-z]{2,}(?:\.[a-z]{2,})?', hostname):
+        return True, True, 'google'
+    if hostname in (destination_host, 'www.' + destination_host):
+        return True, False, 'same_site_navigation'
+    if any(hostname == base or hostname.endswith('.' + base) for base in BASES):
+        return True, False, 'other_own_site'
+    if any(hostname == site or hostname.endswith('.' + site) for site in
+           ('bing.com', 'duckduckgo.com', 'yahoo.com', 'yandex.ru', 'yandex.com',
+            'baidu.com', 'ecosia.org', 'brave.com', 'qwant.com')):
+        return True, False, 'other_search_engine'
+    social = {
+        'instagram': ('instagram.com', 'instagr.am'),
+        'facebook': ('facebook.com', 'fb.com', 'fb.me'),
+        'telegram': ('t.me', 'telegram.org'),
+        'linkedin': ('linkedin.com',),
+        'youtube': ('youtube.com', 'youtu.be'),
+        'x_twitter': ('twitter.com', 'x.com', 't.co'),
+        'reddit': ('reddit.com',),
+        'whatsapp': ('whatsapp.com', 'wa.me'),
+        'pinterest': ('pinterest.com', 'pin.it'),
+    }
+    for source, names in social.items():
+        if any(hostname == name or hostname.endswith('.' + name) for name in names):
+            return True, False, source
+    return True, False, 'other_external_site'
 
 
 def raw_logs(hosts):
@@ -154,6 +176,8 @@ def raw_logs(hosts):
         'likely_bot_page_requests': 0, 'store_page_requests': 0,
         'product_page_requests': 0, 'checkout_page_requests': 0,
         'personal_site_human_page_requests': 0,
+        'source_categories': defaultdict(int),
+        'personal_source_categories': defaultdict(int),
         'human_page_requests_with_referrer': 0,
         'google_referral_human_page_requests': 0,
         'personal_google_referral_human_page_requests': 0,
@@ -218,7 +242,10 @@ def raw_logs(hosts):
                             row['personal_site_bot_page_requests'] += 1
                         continue
                     row['likely_human_page_requests'] += 1
-                    has_referrer, from_google = google_referral(line)
+                    has_referrer, from_google, source_category = google_referral(line, host)
+                    row['source_categories'][source_category] += 1
+                    if personal:
+                        row['personal_source_categories'][source_category] += 1
                     if has_referrer:
                         row['human_page_requests_with_referrer'] += 1
                     if from_google:
