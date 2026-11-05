@@ -4,6 +4,7 @@ on:
     branches: [audit/live-sites-subsites-20261105]
     paths:
       - .github/workflows/live-zm-legacy-redirect-release-20261105.yml
+      - scripts/live_zm_legacy_routes_release_20261105.py
 permissions:
   contents: read
 concurrency:
