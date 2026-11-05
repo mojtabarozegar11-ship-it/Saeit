@@ -1131,6 +1131,8 @@ try:
         if not str(sql).lstrip().upper().startswith(('SELECT ', 'SHOW ', 'PRAGMA ')):
             raise RuntimeError('NON_READ_SQL_BLOCKED')
         return execute(sql, params, many, context)
+    # Let Django's trusted connector establish session settings before guarding SQL.
+    connection.ensure_connection()
     with connection.execute_wrapper(selected_only):
         with connection.cursor() as cursor:
             cursor.execute('SELECT * FROM core_brandsite WHERE 1=0')
@@ -1174,6 +1176,12 @@ try:
 except Exception as exc:
     result['status'] = 'READ_ONLY_QUERY_UNAVAILABLE'
     result['reason_class'] = type(exc).__name__
+    if str(exc) == 'NON_READ_SQL_BLOCKED':
+        result['reason_code'] = 'SELECT_GUARD_BLOCKED'
+    elif 'Apps aren' in str(exc):
+        result['reason_code'] = 'DJANGO_APPS_NOT_READY'
+    else:
+        result['reason_code'] = 'OTHER'
 finally:
     try:
         connections.close_all()
