@@ -110,6 +110,10 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default=COMPANY_TRADE_EMAIL)
 
 # Independent, opt-in gates: deploy/migrate code before opening customer routes.
 # Never authorize outbound recovery email implicitly from deployment alone.
+# Independent capture-only switch: no email is sent and no public recovery URL opens.
+MPW_GUEST_EMAIL_CLAIM_CAPTURE_ENABLED = env.bool(
+    "MPW_GUEST_EMAIL_CLAIM_CAPTURE_ENABLED", default=False
+)
 MPW_GUEST_RECOVERY_ENABLED = env.bool("MPW_GUEST_RECOVERY_ENABLED", default=False)
 MPW_GUEST_RECOVERY_EMAIL_APPROVED = env.bool(
     "MPW_GUEST_RECOVERY_EMAIL_APPROVED", default=False
