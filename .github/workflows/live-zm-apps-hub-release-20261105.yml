@@ -1,0 +1,177 @@
+name: Restore real Zomorod tools and applications hub
+on:
+  push:
+    branches: [audit/live-sites-subsites-20261105]
+    paths:
+      - .github/workflows/live-zm-apps-hub-release-20261105.yml
+permissions:
+  contents: read
+concurrency:
+  group: zm-apps-hub-release-20261105
+  cancel-in-progress: false
+jobs:
+  release:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify zero-cost standalone HTML and safe release code
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/live_zm_apps_hub_release_20261105.py
+          python3 - <<'PY'
+          import hashlib
+          from html.parser import HTMLParser
+          from pathlib import Path
+          data = Path('scripts/assets/zm_apps_hub_20261105.html').read_bytes()
+          expected = 'e264451f4567589a0abdacfa3a8cbf1787cb501f6124ec1a5eac04a85f4e25c6'
+          if hashlib.sha256(data).hexdigest() != expected:
+              raise SystemExit('HTML_ASSET_NOT_PINNED')
+          HTMLParser().feed(data.decode('utf-8'))
+          if b'/store/free-products/wheat-seed-rate-planner-v1/index.html' not in data:
+              raise SystemExit('REAL_TOOL_NOT_LINKED')
+          print('LOCAL_RELEASE_PREFLIGHT_OK')
+          PY
+      - name: Pinned authenticated route to existing cPanel host
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zm-apps-ssh"
+          install -d -m 700 "$d"
+          export SSH_DIR="$d"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          source = Path('.github/workflows/mpw-guest-checkout-live-release.yml').read_text()
+          dest = Path(os.environ['SSH_DIR'])
+          for label, filename in [('vps.known', 'vps.known'), ('host.candidate', 'host.known')]:
+              suffix = f'> "$d/{label}"'
+              matches = [line.strip() for line in source.splitlines()
+                         if line.strip().startswith("printf '%s\n' '") and line.strip().endswith(suffix)]
+              if len(matches) != 1:
+                  raise SystemExit('PINNED_HOST_KEY_NOT_AVAILABLE:' + label)
+              value = matches[0].split("printf '%s\n' '", 1)[1].rsplit("' >", 1)[0]
+              (dest / filename).write_text(value + '\n')
+          for env_key, filename in [('VPS_KEY', 'vps.key'), ('HOST_KEY', 'host.key')]:
+              value = os.environ.get(env_key, '')
+              if not value:
+                  raise SystemExit('SSH_IDENTITY_NOT_CONFIGURED:' + env_key)
+              value = value.replace('\r\n', '\n').replace('\r', '').replace('\\n', '\n')
+              key_file = dest / filename
+              key_file.write_text(value.rstrip() + '\n')
+              key_file.chmod(0o600)
+          PY
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}')" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 20
+            ConnectionAttempts 1
+            ServerAliveInterval 15
+            ServerAliveCountMax 2
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          ssh_host=''
+          for attempt in 1 2 3; do
+            if timeout 45s ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = zomorod2 && test -d /home/zomorod2/public_html' >/dev/null 2>&1; then
+              ssh_host=saeit-cpanel
+              echo 'PINNED_VPS_CPANEL_RELAY'
+              break
+            fi
+          done
+          if test -z "$ssh_host"; then
+            if timeout 45s ssh -T -F "$d/config" saeit-cpanel-direct 'test "$(id -un)" = zomorod2 && test -d /home/zomorod2/public_html' >/dev/null 2>&1; then
+              ssh_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK'
+            else
+              exit 1
+            fi
+          fi
+          echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
+      - name: Upload bounded release assets to private cPanel directory
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
+          remote="/home/zomorod2/.private/apps-hub-releases/run-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$RUNNER_TEMP/zm-apps-ssh/config" "$COMMAND_HOST" "install -d -m 700 '$remote'"
+          timeout 50s scp -q -F "$RUNNER_TEMP/zm-apps-ssh/config" scripts/live_zm_apps_hub_release_20261105.py "$COMMAND_HOST:$remote/release.py"
+          timeout 50s scp -q -F "$RUNNER_TEMP/zm-apps-ssh/config" scripts/assets/zm_apps_hub_20261105.html "$COMMAND_HOST:$remote/apps-index.html"
+          timeout 50s ssh -T -F "$RUNNER_TEMP/zm-apps-ssh/config" "$COMMAND_HOST" "chmod 600 '$remote/release.py' '$remote/apps-index.html' && python3 '$remote/release.py' preview"
+      - name: Publish only the previously missing apps hub
+        id: publish
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          remote="/home/zomorod2/.private/apps-hub-releases/run-$GITHUB_RUN_ID"
+          timeout 60s ssh -T -F "$RUNNER_TEMP/zm-apps-ssh/config" "$COMMAND_HOST" "python3 '$remote/release.py' publish"
+      - name: Check that /apps/ really serves a usable Persian tools hub
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request, urlopen
+          url = 'https://zomorodmelal.ir/apps/'
+          with urlopen(Request(url, headers={'User-Agent': 'ZomorodMelal-Site-Health-Check/1.0'}), timeout=30) as response:
+              content = response.read(100000).decode('utf-8', 'replace')
+              if response.status != 200:
+                  raise RuntimeError('APPS_PAGE_HTTP_NOT_200')
+          for required in ('ابزارهای کاربردی', 'محاسبه‌گر علمی میزان بذر گندم',
+                           '/store/free-products/wheat-seed-rate-planner-v1/index.html',
+                           'https://zomorodmelal.ir/apps/'):
+              if required not in content:
+                  raise RuntimeError('APPS_PAGE_CONTENT_MISSING')
+          with urlopen('https://zomorodmelal.ir/store/free-products/wheat-seed-rate-planner-v1/index.html', timeout=25) as app:
+              if app.status != 200:
+                  raise RuntimeError('REAL_APPLICATION_TARGET_UNAVAILABLE')
+          print('VERIFIED_LIVE_APPS_HUB=200_LINKED_REAL_TOOL=200')
+          PY
+      - name: Roll back newly added page if public validation fails
+        if: failure() && steps.publish.outcome == 'success'
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          remote="/home/zomorod2/.private/apps-hub-releases/run-$GITHUB_RUN_ID"
+          timeout 50s ssh -T -F "$RUNNER_TEMP/zm-apps-ssh/config" "$COMMAND_HOST" "python3 '$remote/release.py' rollback"
