@@ -1,4 +1,4 @@
-name: Trace live staging worker requests without changes
+name: Attribute old and new staging responses to exact LiteSpeed workers
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -112,126 +112,104 @@ jobs:
             fi
           fi
           echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
-      - name: Read-only trace of staging worker activity, page headers and exact template sources
+      - name: Per-request read-only LiteSpeed worker and cached-template attribution
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
-          timeout 85s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" 'python3 -' <<'PY'
-          import hashlib
+          timeout 110s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" 'python3 -' <<'PY'
           import json
           import os
           import re
           import time
           from pathlib import Path
-          from urllib.request import Request, urlopen
+          from urllib.request import Request,urlopen
 
-          home = Path('/home/zomorod2')
-          allowed_roots = {
-              str(home / 'Saeit'): 'main',
-              str(home / 'Saeit-staging'): 'canonical_stage',
-          }
-          conf = (home / 'Saeit-staging-web/.htaccess').read_text('utf-8','replace')
-          match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)\s*$', conf)
-          if not match:
-              raise SystemExit('STAGE_HTACCESS_ROOT_NOT_FOUND')
-          active = Path(match.group(1).strip('"'))
-          if active.is_symlink() or (home / 'Saeit-staging/admin-smoke') not in active.parents:
-              raise SystemExit('STAGE_HTACCESS_ROOT_OUT_OF_SCOPE')
-          allowed_roots[str(active)] = 'configured_stage'
-          wanted = ('rchar','wchar','syscr','syscw','read_bytes','write_bytes')
-
-          def workers():
-              seen = {}
+          home=Path('/home/zomorod2')
+          conf=(home/'Saeit-staging-web/.htaccess').read_text('utf-8','replace')
+          root_match=re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)\s*$',conf)
+          if not root_match:
+              raise SystemExit('ACTIVE_APP_ROOT_NOT_FOUND')
+          active=Path(root_match.group(1).strip('"'))
+          allowed={str(active):'active_stage',str(home/'Saeit-staging'):'canonical_stage'}
+          if active.is_symlink() or (home/'Saeit-staging/admin-smoke') not in active.parents:
+              raise SystemExit('ACTIVE_APP_ROOT_INVALID')
+          def proc_workers():
+              found={}
               for p in Path('/proc').iterdir():
                   if not p.name.isdecimal():
                       continue
                   try:
-                      cwd = os.readlink(str(p / 'cwd'))
-                      category = allowed_roots.get(cwd)
-                      if not category:
+                      cwd=os.readlink(str(p/'cwd'))
+                      category=allowed.get(cwd)
+                      if category is None:
                           continue
-                      st = (p / 'status').read_text(errors='replace')
-                      uid = re.search(r'(?m)^Uid:\s+(\d+)', st)
-                      if not uid or int(uid.group(1)) != os.geteuid():
+                      status=(p/'status').read_text(errors='replace')
+                      uid=re.search(r'(?m)^Uid:\s+(\d+)',status)
+                      if not uid or int(uid.group(1))!=os.geteuid():
                           continue
-                      cmd = (p / 'cmdline').read_bytes().replace(b'\0',b' ').decode('utf-8','replace')
-                      exe = (p / 'exe').resolve().name
-                      if exe != 'lswsgi' or 'passenger' not in cmd.lower():
+                      name=(p/'exe').resolve().name
+                      cmd=(p/'cmdline').read_bytes().replace(b'\0',b' ').decode('utf-8','replace')
+                      if name!='lswsgi' or 'passenger' not in cmd.lower():
                           continue
-                      io = {}
-                      try:
-                          txt=(p / 'io').read_text()
-                          for k in wanted:
-                              m=re.search(r'(?m)^'+k+r':\s+(\d+)$',txt)
-                              if m:
-                                  io[k]=int(m.group(1))
-                      except (OSError,PermissionError):
-                          io={'unavailable':1}
-                      seen[int(p.name)]={'category':category,'io':io}
-                  except (OSError,ValueError,PermissionError,FileNotFoundError):
+                      io={}
+                      for line in (p/'io').read_text().splitlines():
+                          parts=line.split(':',1)
+                          if len(parts)==2 and parts[0] in ('syscr','rchar','syscw'):
+                              io[parts[0]]=int(parts[1].strip())
+                      age=None
+                      stat=(p/'stat').read_text()
+                      tail=stat.rsplit(')',1)[1].split()
+                      if len(tail)>19:
+                          ticks=os.sysconf('SC_CLK_TCK')
+                          uptime=float(Path('/proc/uptime').read_text().split()[0])
+                          age=round(uptime-int(tail[19])/ticks)
+                      found[int(p.name)]={'category':category,'io':io,'age_sec':age}
+                  except (FileNotFoundError,OSError,PermissionError,ValueError):
                       continue
-              return seen
+              return found
 
-          before=workers()
-          responses=[]
-          for i in range(5):
-              stamp=str(int(time.time()*1000))+'-'+str(i)
-              url='https://staging.zomorodmelal.ir/?zm_readonly_worker_trace='+stamp
-              req=Request(url,headers={'Cache-Control':'no-cache, no-store','Pragma':'no-cache',
-                  'User-Agent':'ZM-Stage-ReadOnly-Worker-Trace/1.0'})
-              with urlopen(req,timeout=10) as response:
-                  data=response.read(220000)
-                  headers={key:response.headers.get(key) for key in
-                      ('Cache-Control','Age','ETag','X-LiteSpeed-Cache',
-                       'X-Cache','Vary','Server','X-Robots-Tag')
-                      if response.headers.get(key) is not None}
-                  responses.append({'status':response.status,
-                                    'bytes':len(data),
-                                    'body_sha256':hashlib.sha256(data).hexdigest(),
-                                    'headers':headers})
-          after=workers()
-          counts={}
-          for entry in after.values():
-              cat=entry['category']
-              counts[cat]=counts.get(cat,0)+1
-          deltas={}
-          stable={}
-          for pid,a in after.items():
-              b=before.get(pid)
-              if b is None or b['category']!=a['category']:
-                  continue
-              cat=a['category']
-              stable[cat]=stable.get(cat,0)+1
-              for key in wanted:
-                  av=a['io'].get(key)
-                  bv=b['io'].get(key)
-                  if isinstance(av,int) and isinstance(bv,int):
-                      deltas.setdefault(cat,{}).setdefault(key,0)
-                      deltas[cat][key]+=max(0,av-bv)
-          inventory={}
-          candidates=[home/'Saeit/core/templates/core/services.html',
-                      home/'Saeit-staging/core/templates/core/services.html',
-                      active/'core/templates/core/services.html']
-          candidates.extend((home/'Saeit-staging/admin-smoke').glob('*/core/templates/core/services.html'))
-          for file in candidates[:150]:
-              if file.is_symlink() or not file.is_file():
-                  continue
-              item={'sha256':hashlib.sha256(file.read_bytes()).hexdigest(),
-                    'relative':str(file).replace(str(home)+'/','')}
-              inventory[item['relative']]=item['sha256']
-          markers={}
-          for root_label,root in (('canonical',home/'Saeit-staging'),
-                                  ('configured',active)):
-              marker=root/'tmp/restart.txt'
-              if marker.is_file() and not marker.is_symlink():
-                  markers[root_label]=round(time.time()-marker.stat().st_mtime)
-          print('STAGING_READONLY_REQUEST_TRACE='+json.dumps({
-              'changes':0, 'current_configured_root':str(active).replace(str(home)+'/',''),
-              'before_processes':len(before),'after_processes':len(after),
-              'stable_owned_workers':stable,'worker_counts':counts,
-              'five_request_io_deltas':deltas,'response_samples':responses,
-              'service_template_hashes':inventory,'restart_marker_ages_seconds':markers},
+          details=[]
+          observations=[]
+          for index in range(16):
+              before=proc_workers()
+              timestamp=str(int(time.time()*1000000))
+              url='https://staging.zomorodmelal.ir/?zm_worker_mix_diag='+timestamp+'-'+str(index)
+              request=Request(url,headers={'Cache-Control':'no-cache, no-store',
+                                'Pragma':'no-cache','User-Agent':'ZM-Worker-ReadOnly-Attribution/1.0'})
+              with urlopen(request,timeout=12) as response:
+                  content=response.read(220000)
+                  status=response.status
+              after=proc_workers()
+              workers=[]
+              for pid,a in after.items():
+                  b=before.get(pid)
+                  if b is None:
+                      continue
+                  reads=a['io'].get('syscr',0)-b['io'].get('syscr',0)
+                  chars=a['io'].get('rchar',0)-b['io'].get('rchar',0)
+                  if reads>0 or chars>0:
+                      workers.append({'pid':pid,'group':a['category'],'reads':reads,
+                                      'rchar':chars,'age_sec':a['age_sec']})
+              workers.sort(key=lambda x:x['reads'],reverse=True)
+              bodylen=len(content)
+              variant=('new_cards_in_memory' if bodylen==11849 else
+                       'old_cards_in_memory' if bodylen==11624 else 'other')
+              heads=[re.sub('<[^>]+>','',x).strip() for x in
+                     re.findall(r'<h2[^>]*>(.*?)</h2>',content.decode('utf-8','replace'),re.I|re.S)]
+              observations.append({'n':index+1,'http':status,'bytes':bodylen,
+                                   'variant':variant,'duplicates':sorted(set(
+                                      h for h in heads if heads.count(h)>1)),
+                                   'active_reads':workers[:5]})
+              if index==0:
+                  details=[{'pid':pid,'group':v['category'],'age_sec':v['age_sec']} for pid,v in before.items()]
+          totals={}
+          for obs in observations:
+              label=obs['variant']
+              totals[label]=totals.get(label,0)+1
+          print('STAGING_TEMPLATE_WORKER_ATTRIBUTION='+json.dumps({
+              'no_writes':True,'worker_inventory_initial':details,
+              'response_variant_counts':totals,'per_request':observations},
               ensure_ascii=False,sort_keys=True),flush=True)
           PY
