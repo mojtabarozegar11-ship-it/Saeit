@@ -64,12 +64,23 @@ def staging_restart_marker() -> Path:
     return marker
 
 
+def template_targets() -> tuple[Path, Path]:
+    active_root = staging_restart_marker().parent.parent
+    active = active_root / 'core/templates/core/services.html'
+    if active == SOURCE or active.is_symlink() or not active.is_file() or active.parent.is_symlink():
+        raise RuntimeError('ACTIVE_STAGING_TEMPLATE_UNSAFE_OR_MISSING')
+    return SOURCE, active
+
+
 def guard() -> tuple[bytes, bytes]:
     guard_paths()
-    staging_restart_marker()  # assert safe staging-only restart path before writes
+    targets = template_targets()
     before = SOURCE.read_bytes()
     if digest(before) != EXPECTED:
         raise RuntimeError('STAGING_TEMPLATE_CHANGED_FROM_INSPECTED_VERSION')
+    for target in targets:
+        if digest(target.read_bytes()) != EXPECTED:
+            raise RuntimeError('STAGING_ACTIVE_OR_SOURCE_TEMPLATE_DRIFT')
     source = before.decode('utf-8')
     revised = source
     for old, new in CHANGES.items():
@@ -90,17 +101,17 @@ def run_folder(run_id: str) -> Path:
     return BACKUPS / ('run-' + run_id)
 
 
-def atomic_write(data: bytes, mode: int) -> None:
-    fd, tmp = tempfile.mkstemp(prefix='.services-dedupe-', dir=SOURCE.parent)
+def atomic_write(target: Path, data: bytes, mode: int) -> None:
+    fd, tmp = tempfile.mkstemp(prefix='.services-dedupe-', dir=target.parent)
     try:
         os.fchmod(fd, mode)
         with os.fdopen(fd, 'wb') as out:
             out.write(data)
             out.flush()
             os.fsync(out.fileno())
-        if SOURCE.is_symlink() or not SOURCE.is_file():
+        if target.is_symlink() or not target.is_file():
             raise RuntimeError('STAGING_TEMPLATE_REPLACED_DURING_WRITE')
-        os.replace(tmp, SOURCE)
+        os.replace(tmp, target)
     finally:
         Path(tmp).unlink(missing_ok=True)
 
@@ -114,19 +125,21 @@ def preview() -> None:
     old, revised = guard()
     print('STAGING_SERVICES_PREVIEW=' + json.dumps({
         'old_sha': digest(old), 'new_sha': digest(revised),
+        'staging_template_copies_guarded': len(template_targets()),
         'duplicate_cards_repurposed': len(CHANGES), 'total_cards_deleted': 0,
         'main_site_db_payments_factory_changed': False}))
 
 
 def publish(run_id: str) -> None:
     old, revised = guard()
+    targets = template_targets()
     backup_dir = run_folder(run_id)
     if backup_dir.exists() or backup_dir.is_symlink():
         raise RuntimeError('STAGING_BACKUP_COLLISION')
     BACKUPS.mkdir(mode=0o700, exist_ok=True)
     backup_dir.mkdir(mode=0o700)
-    mode = stat.S_IMODE(SOURCE.stat().st_mode)
-    manifest = {'run_id': run_id, 'old_sha': digest(old), 'new_sha': digest(revised), 'mode': mode}
+    modes = [stat.S_IMODE(target.stat().st_mode) for target in targets]
+    manifest = {'run_id': run_id, 'old_sha': digest(old), 'new_sha': digest(revised), 'modes': modes}
     with (backup_dir / 'original.html').open('xb') as out:
         os.fchmod(out.fileno(), 0o600)
         out.write(old)
@@ -137,25 +150,31 @@ def publish(run_id: str) -> None:
         json.dump(manifest, out)
         out.flush()
         os.fsync(out.fileno())
-    if digest(SOURCE.read_bytes()) != EXPECTED:
+    if any(digest(target.read_bytes()) != EXPECTED for target in targets):
         raise RuntimeError('STAGING_CONCURRENT_TEMPLATE_EDIT')
     try:
-        atomic_write(revised, mode)
+        for target, mode in zip(targets, modes):
+            atomic_write(target, revised, mode)
         trigger_staging_only_restart()
-        if digest(SOURCE.read_bytes()) != manifest['new_sha']:
+        if any(digest(target.read_bytes()) != manifest['new_sha'] for target in targets):
             raise RuntimeError('STAGING_TEMPLATE_POSTWRITE_MISMATCH')
     except BaseException:
-        if SOURCE.is_file() and digest(SOURCE.read_bytes()) == manifest['new_sha']:
-            atomic_write(old, mode)
+        restored = False
+        for target, mode in zip(targets, modes):
+            if target.is_file() and digest(target.read_bytes()) == manifest['new_sha']:
+                atomic_write(target, old, mode)
+                restored = True
+        if restored:
             trigger_staging_only_restart()
         raise
     print('STAGING_SERVICES_PUBLISHED=' + json.dumps({
-        'changed': 'staging template only', 'cards_repurposed': 4,
+        'changed': 'staging source and active template only', 'cards_repurposed': 4,
         'private_backup': True, 'main_site_factory_or_payments_changed': False}))
 
 
 def rollback(run_id: str) -> None:
     guard_paths()
+    targets = template_targets()
     backup_dir = run_folder(run_id)
     if backup_dir.is_symlink() or not backup_dir.is_dir():
         raise RuntimeError('STAGING_BACKUP_NOT_FOUND')
@@ -163,12 +182,16 @@ def rollback(run_id: str) -> None:
     old = (backup_dir / 'original.html').read_bytes()
     if manifest['run_id'] != run_id or digest(old) != manifest['old_sha']:
         raise RuntimeError('STAGING_BACKUP_VERIFICATION_FAILED')
-    current = digest(SOURCE.read_bytes())
-    if current == manifest['new_sha']:
-        atomic_write(old, manifest['mode'])
-        trigger_staging_only_restart()
-    elif current != manifest['old_sha']:
+    if len(manifest.get('modes', [])) != len(targets):
+        raise RuntimeError('STAGING_BACKUP_TARGET_COUNT_MISMATCH')
+    current = [digest(target.read_bytes()) for target in targets]
+    if any(value not in (manifest['old_sha'], manifest['new_sha']) for value in current):
         raise RuntimeError('STAGING_TEMPLATE_CONCURRENT_EDIT_PREVENTS_ROLLBACK')
+    if manifest['new_sha'] in current:
+        for target, mode, value in zip(targets, manifest['modes'], current):
+            if value == manifest['new_sha']:
+                atomic_write(target, old, mode)
+        trigger_staging_only_restart()
     print('STAGING_SERVICES_ROLLBACK=RESTORED')
 
 
