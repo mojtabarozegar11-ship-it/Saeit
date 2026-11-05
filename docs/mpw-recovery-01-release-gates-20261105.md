@@ -22,8 +22,12 @@ the runtime is the existing Passenger/Django application on cPanel.
    access to paid claims for that verified email.
 5. Only orders with an independently verified finalized TRON receipt, matching
    ledger credit, and **all** line items in `CommerceFulfillment.ready` appear.
-   Download delegates to the already deployed private download handler, never
-   exposes a filesystem path, and rechecks finality and email ownership.
+   Download delegates directly to the already deployed inner private handler
+   `_download_paid`, because the public wrapper requires the original guest
+   cookie that the buyer is explicitly recovering from. Email ownership,
+   finality and fulfillment are checked again *before* delegation; the inner
+   handler retains its original order-owner and private-file protections.
+   The release preflight rejects a missing or renamed inner delivery handler.
 
 ## Required gated production sequence — NOT EXECUTED
 

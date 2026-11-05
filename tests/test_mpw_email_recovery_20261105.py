@@ -271,14 +271,36 @@ class RecoveryIsolationTests(unittest.TestCase):
             called.append((request.user.pk, invoice_id))
             return HttpResponse(b"synthetic-file-only")
 
-        route = SimpleNamespace(func=original, args=(), kwargs={"invoice_id": intent.pk})
+        from types import ModuleType
+        trusted = ModuleType("services.mpw_trx_commercial_web")
+        trusted._download_paid = original
         with patch.object(module, "verified_walletless_credit", return_value=True), \
              patch.object(module, "_ready", return_value=True), \
-             patch("django.urls.resolve", return_value=route):
+             patch.dict("sys.modules", {"services.mpw_trx_commercial_web": trusted}), \
+             patch("django.urls.resolve", side_effect=AssertionError(
+                 "Recovered buyer must not pass through the lost-cookie adapter")):
             res = module.recovery_download(req, intent.pk)
         self.assertEqual(res.status_code, 200)
         self.assertEqual(called, [(self.user.pk, intent.pk)])
         self.assertIn("no-store", res["Cache-Control"])
+
+    def test_missing_private_download_handler_denies_recovery(self):
+        from types import ModuleType
+        from django.core import signing
+        module.bound_checkout(self._request(), self._start, self._identity,
+                              self._install, (72,), {})
+        intent = PaymentIntent.objects.get()
+        req = self.rf.get(module.ROOT + f"download/{intent.pk}/", secure=True,
+                          HTTP_HOST="mojplaywin.com")
+        req.COOKIES[module.SESSION_COOKIE] = signing.dumps(
+            {"e": module._digest("buyer@example.com"), "n": "test"},
+            salt=module.SESSION_SALT)
+        unavailable = ModuleType("services.mpw_trx_commercial_web")
+        with patch.object(module, "verified_walletless_credit", return_value=True), \
+             patch.object(module, "_ready", return_value=True), \
+             patch.dict("sys.modules", {"services.mpw_trx_commercial_web": unavailable}):
+            with self.assertRaises(Http404):
+                module.recovery_download(req, intent.pk)
 
     def test_claim_does_not_grant_download_for_other_email(self):
         module.bound_checkout(self._request(), self._start, self._identity,

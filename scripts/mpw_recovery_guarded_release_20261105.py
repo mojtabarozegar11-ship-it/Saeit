@@ -12,6 +12,7 @@ This script is inert in GitHub: it never runs on push, PR or schedule.
 """
 from __future__ import annotations
 
+import ast
 import gzip
 import hashlib
 import hmac
@@ -43,7 +44,7 @@ FILES = {
 NEW_FILES = ("recovery", "recovery_models", "migration", "cleanup")
 SOURCE_DIGESTS = {
     "guest": "37bdfd64924ac96ec0deea203f2b377b49399950a4c4ae10080bbd8df79456ee",
-    "recovery": "3a548b982a1863793b02f8eca9a69d95f4b5dc89e07dd1b8b4ee35cb87a0b612",
+    "recovery": "8f5f4716ff4f2bb7b357a1dc634a01b3ac58349683d733d4ee3dca42fabd868a",
     "recovery_models": "6c76a40a78ad1a91c28c4bcdbc4206034f1c45d45df76242858dc7840845fe76",
     "migration": "71115b38083773ec61c1c6446e7a1477e6441c140f2300be577b80d566b91577",
     "cleanup": "0aa396229e2dec9212d0e358f6a21ff813d369405d1d253e64f17f8caf73f2d6",
@@ -111,6 +112,14 @@ def guard_host():
         code = _safe_file(APP / filename).read_text("utf-8")
         if code.count(hook) != 1 or code.count("# MPW_GUEST_CHECKOUT_LIVE_V1") != 1:
             fail("EXISTING_GUEST_HOOK_DRIFT")
+        if filename.endswith("mpw_trx_commercial_web.py"):
+            # Recovery delegates to this *inner* delivery function, never to
+            # the outer adapter that requires the buyer's missing old cookie.
+            definitions = [node for node in ast.parse(code).body
+                           if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                           and node.name == "_download_paid"]
+            if len(definitions) != 1:
+                fail("PRIVATE_DOWNLOAD_HANDLER_DRIFT")
 
 
 def _source(stage, key):

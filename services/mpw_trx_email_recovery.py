@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from importlib import import_module
 import logging
 import re
 import secrets
@@ -346,12 +347,22 @@ def recovery_download(request, invoice_id):
     claim = GuestOrderEmail.objects.filter(order=order, email_digest=digest).first()
     if claim is None or not _guest(order) or not verified_walletless_credit(order, intent) or not _ready(order):
         raise Http404
-    # Delegate file rights and private-file delivery to the existing production
-    # handler. It applies its own authorization and path/symlink protections.
-    from django.urls import resolve
-    original = resolve("/commerce/trx-easy/download/" + str(invoice_id) + "/")
+    # The public download URL has a guest-cookie adapter around the original
+    # handler. Sending a recovered buyer through that adapter would discard
+    # this independently verified identity and demand the lost cookie again.
+    # Invoke only the existing private delivery handler, after the recovery
+    # claim/finality/fulfillment checks above. The handler retains its own
+    # order-owner and protected-file authorization checks.
+    try:
+        delivery = getattr(import_module("services.mpw_trx_commercial_web"),
+                           "_download_paid", None)
+    except ImportError:
+        delivery = None
+    if not callable(delivery):
+        LOG.error("mpw_recovery_private_delivery_unavailable")
+        raise Http404
     request.user = order.customer
-    response = original.func(request, *original.args, **original.kwargs)
+    response = delivery(request, invoice_id=invoice_id)
     LOG.info("mpw_recovery_download_delegated")
     return _private(response)
 
