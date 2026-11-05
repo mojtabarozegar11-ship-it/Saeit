@@ -483,6 +483,21 @@ def verify():
 def main(argv):
     if len(argv) == 3 and argv[1] == "preflight":
         guard_host()
+        # Read-only summary to distinguish an existing reviewed marker from
+        # partial source staging; report no customer, payment or secret data.
+        models_text = _safe_file(APP / FILES["models"]).read_text("utf-8")
+        settings_text = _safe_file(APP / FILES["settings"]).read_text("utf-8")
+        print("MPW_RECOVERY01_LIVE_SOURCE_FLAGS=" + json.dumps({
+            "model_marker_count": models_text.count(MODEL_MARKER),
+            "model_import_present": "from .guest_recovery_models import" in models_text,
+            "setting_marker_count": settings_text.count(SETTING_MARKER),
+            "recovery_flag_declaration": "MPW_GUEST_RECOVERY_ENABLED" in settings_text,
+            "mail_flag_declaration": "MPW_GUEST_RECOVERY_EMAIL_APPROVED" in settings_text,
+            "additive_files_present": sorted(
+                key for key in NEW_FILES if (APP / FILES[key]).exists()),
+        }, sort_keys=True), flush=True)
+        print("MPW_RECOVERY01_LIVE_DB_STATE=" + json.dumps(db_state(), sort_keys=True),
+              flush=True)
         old, new = build_plan(Path(argv[2]))
         require_before_schema()
         print("MPW_RECOVERY01_PREFLIGHT=" + json.dumps({
