@@ -1,0 +1,60 @@
+name: Activate F-01 one-product VPS systemd automation
+
+on:
+  workflow_dispatch:
+    inputs:
+      approve_vps_systemd_install:
+        description: "Owner approval: install and enable the reviewed one-product timers on VPS"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saeit-f01-vps-systemd-activation
+  cancel-in-progress: false
+
+jobs:
+  activate:
+    if: inputs.approve_vps_systemd_install == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate reviewed automation locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_systemd_automation.sh
+          bash -n scripts/factory-runtime-watchdog.sh
+          python3 -m py_compile scripts/factory_qc1000_rework_gate.py
+          test -f deploy/systemd/saeit-factory-cycle.service
+          test -f deploy/systemd/saeit-factory-cycle.timer
+          test -f deploy/systemd/saeit-factory-watchdog.service
+          test -f deploy/systemd/saeit-factory-watchdog.timer
+
+      - name: Install reviewed systemd timers on VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/saeit-f01-vps"
+          mkdir -m 700 -p "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          SSH=(ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150)
+          remote="$HOME/factory-runtime/operations/systemd-activation-${GITHUB_SHA}"
+          tar -cf - deploy/install_factory_systemd_automation.sh scripts/factory-runtime-watchdog.sh deploy/systemd/ | "${SSH[@]}" "mkdir -p '$remote'; tar -xf - -C '$remote'"
+          "${SSH[@]}" "cd '$remote' && SAEIT_FACTORY_SYSTEMD_INSTALL_APPROVED=1 bash deploy/install_factory_systemd_automation.sh"
+          "${SSH[@]}" "systemctl is-enabled saeit-factory-cycle.timer && systemctl is-active saeit-factory-cycle.timer"
+          "${SSH[@]}" "systemctl is-enabled saeit-factory-watchdog.timer && systemctl is-active saeit-factory-watchdog.timer"
+          "${SSH[@]}" "systemctl --no-pager --full status saeit-factory-cycle.timer saeit-factory-watchdog.timer"
