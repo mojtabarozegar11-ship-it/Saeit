@@ -92,6 +92,23 @@ def source_inventory() -> dict[str, object]:
     return {name: file_info(path) for name, path in selected.items()}
 
 
+def staging_public_card_source() -> dict[str, object]:
+    path = HOME / 'Saeit-staging/core/templates/core/services.html'
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 12000:
+        return {'status': 'SOURCE_UNAVAILABLE'}
+    code = path.read_text('utf-8', 'replace')
+    if re.search(r'(?i)(?:api[_-]?key|password|client[_-]?secret|private[_-]?key)', code):
+        return {'status': 'SAFE_OUTPUT_GUARD'}
+    articles = re.findall(r'<article\b[^>]*>[\s\S]*?</article>', code, re.I)
+    cards = []
+    for item in articles[:30]:
+        title = re.search(r'<h2[^>]*>(.*?)</h2>', item, re.I | re.S)
+        if title:
+            cards.append({'title': re.sub('<[^>]+>', '', title.group(1)).strip(),
+                          'source_snippet': item[:1250]})
+    return {'status': 'READ', 'total_explicit_articles': len(articles), 'cards': cards}
+
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -100,4 +117,5 @@ if __name__ == '__main__':
         'public': {
             'staging': probe_public('https://staging.zomorodmelal.ir/'),
             'business': probe_public('https://zomorodmelal.ir/business/'),
-        }, 'source': source_inventory()}, ensure_ascii=False, sort_keys=True))
+        }, 'source': source_inventory(), 'staging_card_source': staging_public_card_source()},
+        ensure_ascii=False, sort_keys=True))
