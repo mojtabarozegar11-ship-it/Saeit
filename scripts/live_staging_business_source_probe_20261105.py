@@ -454,6 +454,35 @@ print('DJANGO_TEMPLATE_ORIGIN_READONLY=' + json.dumps({
     return {'status': 'IMPORT_OR_RESOLUTION_UNAVAILABLE', 'exit_code': proc.returncode,
             'stderr_disclosed': False}
 
+def owned_lswsgi_app_root_inventory() -> dict[str, object]:
+    """Read-only summary of same-user LiteSpeed app workdirs, never commands or envvars."""
+    roots: dict[str, int] = {}
+    errors = 0
+    for folder in Path('/proc').iterdir():
+        if not folder.name.isdecimal():
+            continue
+        try:
+            uid_match = re.search(r'(?m)^Uid:\s+(\d+)', (folder / 'status').read_text('utf-8', 'replace'))
+            if not uid_match or int(uid_match.group(1)) != os.geteuid():
+                continue
+            if (folder / 'exe').resolve().name != 'lswsgi':
+                continue
+            cwd = os.readlink(str(folder / 'cwd'))
+            if cwd.startswith(str(HOME / 'Saeit-staging/')):
+                key = cwd[len(str(HOME)) + 1:]
+            elif cwd.startswith(str(HOME / 'Saeit/')):
+                key = 'MAIN_APP_OTHER'
+            else:
+                key = 'OUTSIDE_KNOWN_STAGING_APP'
+            roots[key] = roots.get(key, 0) + 1
+        except (FileNotFoundError, PermissionError, OSError):
+            errors += 1
+    return {'status': 'READ_ONLY', 'changed_files': 0,
+            'staging_and_other_worker_groups': [{'workdir': k[:170], 'count': v}
+                                                for k, v in sorted(roots.items())][:28],
+            'race_or_permission_errors': errors}
+
+
 def staging_live_worker_nonsecret_runtime() -> dict[str, object]:
     """Whitelisted settings names only; never print a full process environment."""
     inventory = staging_owned_worker_restart_safety()
@@ -682,6 +711,7 @@ if __name__ == '__main__':
         'owned_worker_restart_safety': staging_owned_worker_restart_safety(),
         'origin_bypass_comparison': staging_origin_bypass_readonly(),
         'live_worker_nonsecret_runtime': staging_live_worker_nonsecret_runtime(),
+        'owned_lswsgi_app_root_inventory': owned_lswsgi_app_root_inventory(),
         'django_bootstrap_preflight': staging_django_bootstrap_safety(),
         'isolated_django_template_origin': staging_isolated_django_template_resolution(),
         'active_template_settings_block': staging_template_settings_block()},
