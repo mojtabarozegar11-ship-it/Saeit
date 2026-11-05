@@ -1,0 +1,113 @@
+name: F01 VPS read-only agent command dependency map
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/f01-vps-agent-command-map.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f01-vps-agent-command-dependency-map
+  cancel-in-progress: false
+
+jobs:
+  map:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.ref == 'fix/f01-single-product-handoff-lock-20261031'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Inspect callable factory agents without executing their commands
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/f01-private-command-map"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o ForwardAgent=no -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          import ast
+          import hashlib
+          import json
+          from pathlib import Path
+          import re
+
+          root = Path.home() / "factory-runtime"
+          commands = root / "django-app/core/management/commands"
+          loop = root / "operations/vps-only-loop.sh"
+          names = (
+              "factory_staging_tick", "autonomous_master_loop",
+              "intake_discovered_opportunities", "opportunity_discovery_tick",
+              "seed_factory_agents",
+          )
+          def safe_text(path):
+              if (path.is_symlink() or not path.is_file()
+                      or path.stat().st_size > 500000):
+                  return None
+              return path.read_text(encoding="utf-8")
+
+          if root.is_symlink() or commands.is_symlink() or not commands.is_dir():
+              raise SystemExit("F01_COMMAND_MAP_ROOT_UNSAFE")
+          report = {}
+          for name in names:
+              data = safe_text(commands / (name + ".py"))
+              if data is None:
+                  report[name] = {"source_present": False}
+                  continue
+              tree = ast.parse(data)
+              invoked = set()
+              mutation_calls = 0
+              dynamic_dispatch = False
+              for node in ast.walk(tree):
+                  if not isinstance(node, ast.Call):
+                      continue
+                  fn = node.func
+                  method = fn.attr if isinstance(fn, ast.Attribute) else (fn.id if isinstance(fn, ast.Name) else "")
+                  if method == "call_command":
+                      if (node.args and isinstance(node.args[0], ast.Constant)
+                              and isinstance(node.args[0].value, str)
+                              and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", node.args[0].value)):
+                          invoked.add(node.args[0].value)
+                      else:
+                          dynamic_dispatch = True
+                  if method in {"create", "update", "update_or_create", "bulk_create",
+                                "bulk_update", "delete", "save", "save_model", "execute"}:
+                      mutation_calls += 1
+              report[name] = {
+                  "source_present": True,
+                  "sha256": hashlib.sha256(data.encode("utf-8")).hexdigest(),
+                  "direct_call_commands": sorted(invoked),
+                  "dynamic_call_command": dynamic_dispatch,
+                  "direct_mutation_method_count": mutation_calls,
+                  "mentions_line41_cycle": "factory_vps_product_cycle" in data,
+                  "mentions_f01_reservation": "factory_global_singleton_v1" in data,
+                  "mentions_autonomous_master": "autonomous_master_loop" in data,
+              }
+          script = safe_text(loop)
+          if script is None:
+              raise SystemExit("F01_LOOP_SCRIPT_UNREADABLE")
+          result = {
+              "schema": "saeit.factory.f01-agent-command-dependency-map.v1",
+              "read_only": True,
+              "loop_sha256": hashlib.sha256(script.encode("utf-8")).hexdigest(),
+              "loop_manage_commands": sorted(set(re.findall(r"manage[.]py\s+([a-z][a-z0-9_]{0,63})", script))),
+              "loop_has_singleton_flock": ".f01-global-production-lane.lock" in script,
+              "loop_has_trap": bool(re.search(r"\btrap\b", script)),
+              "commands": report,
+          }
+          print("F01_AGENT_COMMAND_MAP=" + json.dumps(result, sort_keys=True))
+          print("F01_AGENT_RETIREMENT_AUTHORIZATION=NOT_INFERRED_FROM_STATIC_SOURCE")
+          print("F01_PRODUCTION_MUTATION=false")
+          PY
