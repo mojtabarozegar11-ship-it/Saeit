@@ -818,6 +818,77 @@ def staging_template_settings_block() -> dict[str, object]:
     return {'status': 'READ_ONLY', 'active_settings_sha': info.get('sha256'),
             'templates_settings_block': block}
 
+
+def staging_wsgi_entry_and_parentage_readonly() -> dict[str, object]:
+    """Identify WSGI import roots and Passenger parentage without exposing secrets."""
+    conf = HOME / 'Saeit-staging-web/.htaccess'
+    if conf.is_symlink() or not conf.is_file():
+        return {'status': 'CONF_UNAVAILABLE', 'changed_files': 0}
+    match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)', conf.read_text('utf-8', 'replace'))
+    if not match:
+        return {'status': 'APP_ROOT_MISSING', 'changed_files': 0}
+    active = Path(match.group(1).strip('"'))
+    allowed = HOME / 'Saeit-staging/admin-smoke'
+    if active.is_symlink() or not active.is_dir() or allowed not in active.parents:
+        return {'status': 'ACTIVE_ROOT_OUT_OF_SCOPE', 'changed_files': 0}
+    canonical = HOME / 'Saeit-staging'
+    roots = {'active_snapshot': active, 'canonical_staging': canonical}
+    source_records = {}
+    focus = re.compile(r'(?i)(?:sys\.path|site\.addsitedir|os\.chdir|DJANGO_SETTINGS_MODULE|os\.environ|application\s*=|get_wsgi_application|execute_from_command_line|from\s+config|import\s+config)')
+    redaction = re.compile(r'(?i)(?:password|secret|token|credential|private.?key|api.?key|authorization|bearer|mysql|postgres)')
+    for label, root in roots.items():
+        entry = root / 'passenger_wsgi.py'
+        record = {'regular': entry.is_file() and not entry.is_symlink()}
+        if record['regular'] and entry.stat().st_size <= 30000:
+            data = entry.read_bytes()
+            record['sha256'] = hashlib.sha256(data).hexdigest()
+            record['bytes'] = len(data)
+            snippets = []
+            for lineno, line in enumerate(data.decode('utf-8', 'replace').splitlines(), 1):
+                if focus.search(line) and not redaction.search(line):
+                    safe = line.strip()[:180].replace(str(HOME), '$ACCOUNT_HOME')
+                    snippets.append({'line': lineno, 'statement': safe})
+            record['bootstrap_lines'] = snippets[:25]
+        source_records[label] = record
+    groups = {}
+    for process in Path('/proc').iterdir():
+        if not process.name.isdecimal():
+            continue
+        try:
+            status = (process / 'status').read_text('utf-8', 'replace')
+            uid = re.search(r'(?m)^Uid:\s+(\d+)', status)
+            if uid is None or int(uid.group(1)) != os.geteuid():
+                continue
+            if (process / 'exe').resolve().name != 'lswsgi':
+                continue
+            cwd = os.readlink(str(process / 'cwd'))
+            if cwd == str(active):
+                group = 'active_snapshot'
+            elif cwd == str(canonical):
+                group = 'canonical_staging'
+            elif cwd.startswith(str(HOME / 'Saeit/')):
+                group = 'main_site_excluded'
+            else:
+                group = 'other_app_excluded'
+            parent = re.search(r'(?m)^PPid:\s+(\d+)', status)
+            parent_pid = parent.group(1) if parent else ''
+            parent_exe = 'UNAVAILABLE'
+            if parent_pid:
+                try:
+                    parent_exe = (Path('/proc') / parent_pid / 'exe').resolve().name[:60]
+                except (OSError, PermissionError):
+                    pass
+            key = group + ':' + parent_exe
+            groups[key] = groups.get(key, 0) + 1
+        except (OSError, PermissionError, ValueError):
+            continue
+    return {'status': 'READ_ONLY', 'changed_files': 0,
+            'wsgi_entries': source_records,
+            'worker_parent_executable_groups': [
+                {'group_and_parent': name, 'count': count}
+                for name, count in sorted(groups.items())]}
+
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -843,5 +914,6 @@ if __name__ == '__main__':
         'isolated_django_template_origin': staging_isolated_django_template_resolution(),
         'isolated_request_render': staging_isolated_request_render_readonly(),
         'two_restart_markers': staging_two_restart_markers_readonly(),
-        'active_template_settings_block': staging_template_settings_block()},
+        'active_template_settings_block': staging_template_settings_block(),
+        'wsgi_entry_and_worker_parentage': staging_wsgi_entry_and_parentage_readonly()},
         ensure_ascii=False, sort_keys=True))
