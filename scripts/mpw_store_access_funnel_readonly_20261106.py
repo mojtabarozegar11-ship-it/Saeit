@@ -38,6 +38,7 @@ CHECKOUT_RE = re.compile(r'^/commerce/book/[1-9][0-9]*/?$')
 START_RE = re.compile(r'^/commerce/trx-easy/start/[1-9][0-9]*/?$')
 INVOICE_RE = re.compile(r'^/commerce/trx-easy/invoice/[1-9][0-9]*/?$')
 DOWNLOAD_RE = re.compile(r'^/commerce/trx-easy/download/[1-9][0-9]*/?$')
+AWSTATS_RE = re.compile(r'^awstats(0[1-9]|1[0-2])(20[0-9]{2})\.(?:www\.)?mojplaywin\.com\.txt$')
 
 
 def _parse(line: str):
@@ -112,6 +113,56 @@ def _logs():
     return list(dedup.values())
 
 
+def _awstats_monthly():
+    """Read only AWStats' aggregate GENERAL block, never visit/IP sections."""
+    folder = ACCOUNT / 'tmp/awstats'
+    if not folder.is_dir():
+        return {'available': False, 'monthly': []}
+    reports = []
+    try:
+        paths = sorted(folder.iterdir(), key=lambda entry: entry.name, reverse=True)
+    except OSError:
+        return {'available': False, 'monthly': []}
+    for path in paths[:350]:
+        match = AWSTATS_RE.fullmatch(path.name)
+        if match is None:
+            continue
+        try:
+            actual = path.resolve(strict=True)
+            if not actual.is_file() or not actual.is_relative_to(ACCOUNT):
+                continue
+            month = match.group(2) + '-' + match.group(1)
+            values = {}
+            in_general = False
+            with actual.open('rb') as stream:
+                # General is at the head of AWStats files; never scan raw visitor sections.
+                for raw in stream.read(65_536).splitlines():
+                    line = raw.decode('ascii', 'replace').strip()
+                    if line.startswith('BEGIN_GENERAL'):
+                        in_general = True
+                        continue
+                    if in_general and line.startswith('END_GENERAL'):
+                        break
+                    if not in_general:
+                        continue
+                    parts = line.split(maxsplit=1)
+                    if len(parts) != 2 or parts[0] not in (
+                            'LastUpdate', 'TotalVisits', 'TotalUnique',
+                            'TotalPages', 'TotalHits'):
+                        continue
+                    if parts[1].isdecimal() and len(parts[1]) <= 18:
+                        values[parts[0]] = int(parts[1])
+            if all(key in values for key in ('TotalVisits', 'TotalPages', 'TotalHits')):
+                reports.append({'month': month,
+                                'source': 'www' if '.www.mojplaywin.com.' in path.name
+                                else 'apex', 'general': values})
+        except (OSError, RuntimeError):
+            continue
+        if len(reports) >= 6:
+            break
+    return {'available': bool(reports), 'monthly': reports}
+
+
 def _audit():
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=LOOKBACK_DAYS)
@@ -160,6 +211,7 @@ def _audit():
         'totals': dict(sorted(totals.items())),
         'daily': {day: dict(sorted(values.items()))
                   for day, values in sorted(day_counts.items())},
+        'awstats': _awstats_monthly(),
         'uniques_unavailable': True,
         'bot_classification': 'heuristic_only',
         'orders_are_not_payments': True,
@@ -182,6 +234,8 @@ def _selftest():
     assert _category('POST', '/commerce/trx-easy/start/72/') == 'order_post'
     assert _category('GET', '/commerce/trx-easy/invoice/12/') == 'invoice_get'
     assert _category('GET', '/admin/') is None
+    assert AWSTATS_RE.fullmatch('awstats112026.mojplaywin.com.txt')
+    assert not AWSTATS_RE.fullmatch('awstats112026.other-site.com.txt')
     print('MPW_ACCESS_FUNNEL_SELFTEST=PASS')
 
 
