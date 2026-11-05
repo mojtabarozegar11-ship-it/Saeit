@@ -52,6 +52,10 @@ def probe_public(url: str) -> dict[str, object]:
             duplicates = {label: destinations for label, destinations in grouped.items()
                           if len(destinations) > 1 and len(label) > 3}
             return {'http': response.status, 'x_robots_tag': response.headers.get('X-Robots-Tag'),
+                    'cache_control': response.headers.get('Cache-Control'),
+                    'age': response.headers.get('Age'),
+                    'litespeed_cache': response.headers.get('X-LiteSpeed-Cache'),
+                    'etag': response.headers.get('ETag'),
                     'title': re.findall(r'<title[^>]*>(.*?)</title>', html, re.I | re.S)[:1],
                     'total_links': len(cards.links), 'duplicate_link_labels': duplicates,
                     'h2_headings': [re.sub('<[^>]+>', '', x).strip()[:85] for x in
@@ -126,6 +130,13 @@ def staging_active_wsgi_mapping() -> dict[str, object]:
         code = wsgi.read_text('utf-8', 'replace')
         details['wsgi_path_literal_mentions'] = re.findall(r'/home/zomorod2/[-\w/]+', code)[:15]
         details['wsgi_import_mentions'] = re.findall(r'(?m)^\s*(?:from\s+[\w.]+\s+import|import\s+[\w.]+)', code)[:20]
+        if not re.search(r'(?i)(?:password|secret|token|api[_-]?key)', code):
+            details['wsgi_code_without_private_values'] = code[:2500]
+    settings_candidates = [app_root / 'config/settings.py',
+                           HOME / 'Saeit-staging/config/settings.py',
+                           HOME / 'Saeit-staging/releases/staff-c153e541e8cf/config/settings.py']
+    details['settings_candidates'] = {str(p.relative_to(HOME)): file_info(p)
+                                      for p in settings_candidates}
     root = HOME / 'Saeit-staging'
     found: list[dict[str, object]] = []
     scanned = 0
@@ -157,6 +168,7 @@ if __name__ == '__main__':
         'changed_files': 0,
         'public': {
             'staging': probe_public('https://staging.zomorodmelal.ir/'),
+            'staging_query_uncached_candidate': probe_public('https://staging.zomorodmelal.ir/?zm_template_route_diag=20261105'),
             'business': probe_public('https://zomorodmelal.ir/business/'),
         }, 'source': source_inventory(), 'staging_card_source': staging_public_card_source(),
         'active_staging_routing': staging_active_wsgi_mapping()},
