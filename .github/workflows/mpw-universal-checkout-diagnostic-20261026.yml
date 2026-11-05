@@ -58,6 +58,27 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only recent Passenger error classification
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
+            "python3 - <<'PY'
+          from pathlib import Path
+          import re
+          roots=[Path('/home/zomorod2/logs'),Path('/home/zomorod2/mojplaywin.com'),Path('/home/zomorod2')]
+          seen=set()
+          for root in roots:
+              if not root.exists(): continue
+              for p in root.rglob('*'):
+                  if not p.is_file() or p in seen or p.stat().st_size>50_000_000: continue
+                  if not re.search(r'(error|passenger|stderr|log)',p.name,re.I): continue
+                  seen.add(p)
+                  try: lines=p.read_text('utf8','replace').splitlines()[-500:]
+                  except Exception: continue
+                  hits=[x for x in lines if re.search(r'(Traceback|Exception|Error|500|start_order|record_invoice|mpw_trx_guest)',x,re.I)]
+                  if hits:
+                      print('MPW_PASSENGER_ERROR_FILE='+p.name)
+                      for line in hits[-30:]: print('MPW_PASSENGER_ERROR='+re.sub(r'(?i)[^\\s@]+@[^\\s]+','[redacted-email]',line)[:500])
+          PY"
       - name: Read-only routes, product gates, and invoice implementation
         run: |
           timeout 145s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
