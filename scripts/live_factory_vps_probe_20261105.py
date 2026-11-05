@@ -12,6 +12,7 @@ import os
 import re
 import socket
 import subprocess
+from datetime import datetime, timezone
 from collections import Counter
 from pathlib import Path
 
@@ -108,6 +109,45 @@ def app_process_counts() -> dict[str, object]:
     return {'executable_name_counts': dict(sorted(counts.items()))}
 
 
+def private_factory_artifact_presence() -> dict[str, object]:
+    # Pure path metadata: never read production state, logs, manifests or products.
+    root = Path('/home/githubops/factory-runtime')
+    files = {
+        'factory_runtime_dir': root,
+        'private_product_state': root / 'private/autonomous-product-cycle/production-state.json',
+        'private_first_recipe_output': root / 'private/autonomous-product-cycle/digital-products/farm_enterprise_economics',
+        'private_cycle_log': root / 'operations/autonomous-product-cycle.log',
+        'operations_dir': root / 'operations',
+    }
+    results = {}
+    for label, path in files.items():
+        try:
+            metadata = path.lstat()
+            item = {'exists': True, 'is_regular': path.is_file() and not path.is_symlink(),
+                    'is_directory': path.is_dir() and not path.is_symlink()}
+            if item['is_regular']:
+                item['bytes'] = metadata.st_size
+                item['modified_utc'] = datetime.fromtimestamp(
+                    metadata.st_mtime, tz=timezone.utc).isoformat(timespec='seconds')
+            results[label] = item
+        except OSError:
+            results[label] = {'exists': False}
+    return results
+
+
+def factory_cron_tag_counts() -> dict[str, object]:
+    # Never echo crontab contents: command lines may contain private paths/secrets.
+    status, output = run_readonly(['crontab', '-l'])
+    if status != 'OK':
+        return {'status': status}
+    lines = [line for line in output.splitlines() if line.strip()
+             and not line.lstrip().startswith('#')]
+    return {'status': 'OK', 'active_entry_count': len(lines),
+            'autonomous_factory_tag_mentions': sum(
+                'SAEIT_AUTONOMOUS_PRODUCTS_V2' in line for line in output.splitlines()),
+            'factory_runtime_mentions': sum('factory-runtime' in line for line in lines)}
+
+
 def main() -> None:
     user = os.environ.get('USER', '')
     uid = os.geteuid()
@@ -120,6 +160,8 @@ def main() -> None:
         'web_listeners': listening_ports(),
         'dns': local_dns(),
         'process_name_counts': app_process_counts(),
+        'private_artifact_metadata': private_factory_artifact_presence(),
+        'cron_tag_metadata': factory_cron_tag_counts(),
         'changes_performed': False,
     }, sort_keys=True))
     print('FACTORY_VPS_READONLY_COMPLETE=1')
