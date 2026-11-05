@@ -38,6 +38,15 @@ class FactorySystemdAutomationTests(unittest.TestCase):
         self.assertLess(script.index("F01_PREFLIGHT_GLOBAL_SINGLETON_NOT_PROVEN"),
                         script.index('install -d -m 700 "$runtime"'))
 
+    def test_competing_legacy_cron_is_rejected_before_install(self):
+        script = (ROOT / "deploy/install_factory_systemd_automation.sh").read_text()
+        self.assertIn("crontab -u githubops -l", script)
+        self.assertIn("SAEIT_SINGLE_PRODUCT_FACTORY_V1", script)
+        self.assertIn("F01_PREFLIGHT_COMPETING_FACTORY_CRON_PRESENT", script)
+        self.assertIn("F01_PREFLIGHT_COMPETING_SYSTEMD_TIMER_PRESENT", script)
+        self.assertLess(script.index("F01_PREFLIGHT_COMPETING_FACTORY_CRON_PRESENT"),
+                        script.index('install -d -m 700 "$runtime"'))
+
     def test_units_are_persistent_and_one_product_only(self):
         cycle = (ROOT / "deploy/systemd/saeit-factory-cycle.timer").read_text()
         watchdog = (ROOT / "deploy/systemd/saeit-factory-watchdog.timer").read_text()
