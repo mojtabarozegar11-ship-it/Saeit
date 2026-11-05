@@ -275,7 +275,7 @@ acceptance is claimed.
 
 To run the included automated tests:
 
-   python -m unittest -v test_calculator.py
+   python -m unittest -v test_calculator.py test_guided_start.py
 
 No telemetry is collected; all inputs and outputs remain on the device.
 The software rejects negative quantities/costs, non-finite numeric values,
@@ -288,9 +288,11 @@ GitHub Actions, APIs, external accounts, or production deployment:
 
     python -B build_technical_evidence.py --evidence-dir /path/to/new-private-evidence-folder
 
-The capture re-runs every calculator unit test, generates and hashes the four
-illustrative customer-facing report formats, and records exact recipe and test
-source hashes. Six candidate technical criteria (Q035, Q036, Q037, Q061, Q063,
+The capture re-runs all 39 calculator and guided-entry tests, generates and hashes
+the four illustrative customer-facing report formats, and records exact recipe,
+guided-entry, customer-guide and test source hashes. A previous ZIP that omits
+the guided entry point cannot receive these receipts. Six candidate technical
+criteria (Q035, Q036, Q037, Q061, Q063,
 Q064) receive distinct evidence records. The manifest is written last; a
 failed run cannot create a completion receipt. Use a **new empty folder** for
 each edition so old evidence cannot be silently overwritten.
