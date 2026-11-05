@@ -35,12 +35,14 @@ class F01TechnicalBridgeTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.proofs.cleanup()
 
-    def make_manufactured(self, base, *, stale=False):
+    def make_manufactured(self, base, *, stale=False, omitted=None):
         product = base / "farm_enterprise_economics"
         product.mkdir()
         archive = product / "farm_enterprise_economics-internal-qa.zip"
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as package:
             for name in bridge.PACKAGE_SOURCES:
+                if name == omitted:
+                    continue
                 data = (RECIPE / name).read_bytes()
                 if stale and name == "calculator.py":
                     data += b"\n# Changed source version\n"
@@ -71,6 +73,14 @@ class F01TechnicalBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             product = self.make_manufactured(Path(name), stale=True)
             with self.assertRaisesRegex(ValueError, "SOURCE_NOT_IN_EXACT_MANUFACTURED_ZIP"):
+                bridge.install(product, bridge.verify(RECIPE, self.evidence))
+            self.assertFalse((product / "global_quality_candidate.json").exists())
+            self.assertFalse((product / "evidence-f01").exists())
+
+    def test_legacy_bundle_missing_wizard_cannot_get_new_receipts(self):
+        with tempfile.TemporaryDirectory() as name:
+            product = self.make_manufactured(Path(name), omitted="guided_start.py")
+            with self.assertRaisesRegex(ValueError, "SOURCE_NOT_IN_EXACT_MANUFACTURED_ZIP:guided_start.py"):
                 bridge.install(product, bridge.verify(RECIPE, self.evidence))
             self.assertFalse((product / "global_quality_candidate.json").exists())
             self.assertFalse((product / "evidence-f01").exists())
