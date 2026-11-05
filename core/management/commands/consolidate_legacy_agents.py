@@ -26,6 +26,13 @@ LEGACY_AGENT_CODES = frozenset({
 })
 # The prefix alone cannot prove redundancy. Some older income agents may run
 # external integrations that are not represented by Django AgentTask rows.
+LEGACY_SUCCESSORS = {
+    "core_research": "knowledge-content-director",
+    "newsletter-specialist": "content-director",
+    "newsletter-company-news": "content-director",
+    "newsletter-world-watch": "content-director",
+    "newsletter-unit-reports": "content-director",
+}
 REVIEW_ONLY_PREFIXES = ("income-",)
 PROTECTED_AGENT_CODES = frozenset({
     "economic-master-agent",
@@ -66,6 +73,7 @@ def assess_agent(agent):
     ]
     protected = agent.code in PROTECTED_AGENT_CODES
     legacy = is_known_legacy(agent.code)
+    replacement_code = LEGACY_SUCCESSORS.get(agent.code)
 
     if protected:
         decision = "retain_required"
@@ -79,6 +87,10 @@ def assess_agent(agent):
         decision = "review_unique_capability"
     elif not legacy:
         decision = "review_live_outcomes"
+    elif replacement_code and not Agent.objects.filter(
+        code=replacement_code, active=True
+    ).exists():
+        decision = "hold_missing_successor"
     else:
         decision = "retire_safe"
 
@@ -94,6 +106,7 @@ def assess_agent(agent):
         "pending_distributions": pending_distributions,
         "unique_active_capabilities": unique_active_capabilities,
         "review_only_prefix": any(agent.code.startswith(p) for p in REVIEW_ONLY_PREFIXES),
+        "replacement_agent": replacement_code,
         "financial_outcome": "not_assessed_from_task_counts",
     }
 
@@ -143,6 +156,7 @@ class Command(BaseCommand):
                 "retired_now": sum(r["decision"] == "retired" for r in rows),
                 "ready_to_retire": sum(r["decision"] == "retire_safe" for r in rows),
                 "held_for_dependency": sum(r["decision"] == "hold_for_dependency" for r in rows),
+                "missing_successor": sum(r["decision"] == "hold_missing_successor" for r in rows),
                 "unknown_requires_live_review": sum(r["decision"] == "review_live_outcomes" for r in rows),
                 "recent_output_requires_review": sum(r["decision"] == "review_recent_outputs" for r in rows),
                 "unique_capability_requires_review": sum(r["decision"] == "review_unique_capability" for r in rows),
