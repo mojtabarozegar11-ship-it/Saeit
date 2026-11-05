@@ -2,6 +2,7 @@
 """Read-only evidence of why both Passenger and DocumentRoot routes stay 404."""
 
 import ast
+import hashlib
 import json
 import os
 import re
@@ -49,10 +50,18 @@ def htaccess_shape():
         if pattern.match(line):
             pieces = line.strip().split()
             directive = pieces[0] if pieces else ''
-            # Only print directive and rewrite MATCH pattern, not replacement,
-            # URLs, headers or app-specific secrets.
-            arg = pieces[1] if len(pieces)>1 and directive.lower() == 'rewriterule' else None
-            found.append({'directive': directive, 'match': arg})
+            # Sanitized routing metadata; exclude rewrite queries and headers.
+            arg = pieces[1] if len(pieces) > 1 and directive.lower() == 'rewriterule' else None
+            item = {'directive': directive, 'match': arg}
+            if directive.lower() == 'rewriterule' and len(pieces) > 2:
+                item['target_no_query'] = pieces[2].split('?', 1)[0][:100]
+                item['flags'] = pieces[3][:85] if len(pieces) > 3 else None
+            if directive.lower() == 'rewritecond' and len(pieces) > 2:
+                item['input_kind'] = pieces[1] if pieces[1] in {'%{REQUEST_FILENAME}', '%{REQUEST_URI}', '%{HTTP_HOST}'} else 'other'
+                item['condition_class'] = pieces[2] if pieces[2] in {'!-f', '!-d', '-f', '-d'} else 'other'
+            if directive.lower() in {'passengerbaseuri', 'passengerstartupfile', 'directoryindex'} and len(pieces) > 1:
+                item['value'] = pieces[1][:90]
+            found.append(item)
     return found[:55]
 
 
@@ -89,6 +98,7 @@ def run():
         'dns_A': socket.gethostbyname('zomorodmelal.ir'),
         'paths': paths(),
         'htaccess_directives': htaccess_shape(),
+        'htaccess_sha256': hashlib.sha256(HT.read_bytes()).hexdigest(),
         'settings': setting_summary(),
         'urls_source_includes_carpet': 'path("carpets/"' in (APP / 'config/urls.py').read_text(),
         'public_checks': [http_summary(p) for p in ('/', '/newsletter/', '/carpets/', '/signals/')],
