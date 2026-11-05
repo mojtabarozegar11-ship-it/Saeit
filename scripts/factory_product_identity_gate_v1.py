@@ -7,11 +7,13 @@ particular, a previous handoff digest is not by itself proof of valid QC or
 receiver acceptance. All producer paths must opt in before it is a global gate.
 """
 
+import argparse
 import json
 import os
 from pathlib import Path
 import re
 import stat
+import sys
 
 
 SCHEMA = "saeit.factory.protected-active-product.v1"
@@ -102,4 +104,23 @@ def require_active_product(anchor_path, lane, product_id):
     finally:
         os.close(descriptor)
     return validate_claim(data, lane, product_id)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Read-only protected product identity admission")
+    parser.add_argument("--anchor", required=True, type=Path)
+    parser.add_argument("--lane", required=True, choices=sorted(LANES))
+    parser.add_argument("--product-id", required=True)
+    args = parser.parse_args(argv)
+    claim = require_active_product(args.anchor, args.lane, args.product_id)
+    print("F01_PRODUCT_IDENTITY=VERIFIED;generation=" + str(claim["generation"]))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, ValueError) as error:
+        print("F01_PRODUCT_IDENTITY=HOLD:" + str(error), file=sys.stderr)
+        sys.exit(3)
 

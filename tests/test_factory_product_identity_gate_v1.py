@@ -1,6 +1,7 @@
 """Fail-closed claims for future production admission; no VPS writes."""
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -88,6 +89,21 @@ class ProductIdentityGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(OSError):
                 require_active_product(Path(tmp) / "missing.json", "line41", "farm_enterprise_economics")
+
+    def test_read_only_cli_fails_closed_without_admin_anchor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            anchor = Path(tmp) / "anchor.json"
+            anchor.write_text(json.dumps(self.claim), encoding="utf-8")
+            before = anchor.read_bytes()
+            result = subprocess.run([
+                sys.executable,
+                str(ROOT / "scripts" / "factory_product_identity_gate_v1.py"),
+                "--anchor", str(anchor), "--lane", "line41",
+                "--product-id", "farm_enterprise_economics",
+            ], capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 3)
+            self.assertIn("F01_PRODUCT_IDENTITY=HOLD", result.stderr)
+            self.assertEqual(anchor.read_bytes(), before)
 
 
 if __name__ == "__main__":
