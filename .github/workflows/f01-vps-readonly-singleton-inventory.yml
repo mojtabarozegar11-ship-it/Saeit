@@ -111,6 +111,17 @@ jobs:
           service_count = count_matching(run(["systemctl", "list-units", "--type=service", "--state=running", "--no-legend", "--no-pager"]))
           proc = run(["ps", "-eo", "pid=,comm=,args="])
           worker_count = count_matching(proc)
+          cron_state_call = run(["systemctl", "is-active", "cron.service"])
+          cron_service_state = (cron_state_call.stdout.strip()
+                                if cron_state_call and cron_state_call.stdout.strip()
+                                in ("active", "inactive", "failed", "activating", "deactivating")
+                                else "unknown")
+          cron_daemon_present = (
+              any(len(parts) >= 2 and parts[1] in ("cron", "crond")
+                  for line in proc.stdout.splitlines()
+                  if (parts := line.split(maxsplit=2)))
+              if proc and proc.returncode == 0 else None
+          )
           # Report only safe script basenames and SAEIT marker tokens; never full argv.
           process_labels = sorted(set(
               match.group(0)
@@ -172,6 +183,8 @@ jobs:
               "installed_core_matches_reviewed_sha": same_sha(runtime / "scripts/factory_vps_product_cycle.py", expected_core),
               "installed_singleton_matches_reviewed_sha": same_sha(runtime / "scripts/factory_global_singleton_v1.py", expected_lock),
               "factory_related_running_processes": worker_count,
+              "cron_service_state": cron_service_state,
+              "cron_daemon_running": cron_daemon_present,
               "factory_related_process_script_labels": process_labels,
               "factory_related_githubops_cron_markers": cron_markers,
               "legacy_cron_outer_flock_present": legacy_outer_lock,
