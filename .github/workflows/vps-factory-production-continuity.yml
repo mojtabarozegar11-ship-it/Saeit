@@ -344,6 +344,77 @@ jobs:
               print("FACTORY_STAGING_SOURCE_AUDIT=UNAVAILABLE")
           print("FACTORY_CROSS_LANE_SINGLETON_PROVEN=NO")
           LANE_AUDIT
+          # Inspect the distinct historical Line41 product slot without reading its private payloads.
+          python3 - "$base" <<'LINE41_AUDIT'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          import time
+          base = Path(sys.argv[1])
+          private = base / "private" / "autonomous-product-cycle"
+          slot = private / "quality-excellence/product-flow/active-slots/current.json"
+          def private_json(path, size_limit):
+              try:
+                  if any(p.is_symlink() for p in (path, *path.parents)):
+                      return None, "SYMLINK_UNSAFE"
+                  if not path.is_file():
+                      return None, "MISSING"
+                  st = path.stat()
+                  if st.st_size > size_limit or not (st.st_mode & 0o170000) == 0o100000:
+                      return None, "SIZE_OR_TYPE_UNSAFE"
+                  val = json.loads(path.read_text(encoding="utf-8"))
+                  return (val, "PRESENT") if isinstance(val, dict) else (None, "INVALID_JSON_SCHEMA")
+              except (OSError, ValueError, UnicodeError):
+                  return None, "UNREADABLE"
+          state, status = private_json(slot, 2000000)
+          print("FACTORY_LINE41_SLOT_FILE_STATUS=" + status)
+          if state is not None:
+              active = state.get("active")
+              waiting = state.get("waiting")
+              schema = state.get("schema")
+              if (schema == "saeit.factory.product-slots.v1" and isinstance(active, list)
+                      and isinstance(waiting, list) and all(isinstance(v, dict) for v in active)):
+                  recipes = [v.get("recipe") for v in active]
+                  print("FACTORY_LINE41_SLOT_SCHEMA_VALID=YES")
+                  print("FACTORY_LINE41_SLOT_ACTIVE_COUNT=" + str(len(active)))
+                  print("FACTORY_LINE41_SLOT_WAITING_COUNT=" + str(len(waiting)))
+                  print("FACTORY_LINE41_SLOT_CANONICAL_RECIPE_ACTIVE=" +
+                        str("farm_enterprise_economics" in recipes).upper())
+                  print("FACTORY_LINE41_SLOT_ACTIVE_RECIPES_UNIQUE=" +
+                        str(len(set(map(str, recipes))) == len(recipes)).upper())
+                  print("FACTORY_LINE41_SLOT_MODIFIED_AGE_SECONDS=" +
+                        str(max(0, int(time.time() - slot.stat().st_mtime))))
+              else:
+                  print("FACTORY_LINE41_SLOT_SCHEMA_VALID=NO")
+          singleton = private / ".f01-global-production-lane.json"
+          lock, lock_status = private_json(singleton, 4096)
+          print("FACTORY_LINE41_GLOBAL_LANE_STATE_FILE=" + lock_status)
+          if lock is not None and lock.get("schema") == "saeit.factory.global-single-production-lane.v1":
+              owner = lock.get("owner")
+              print("FACTORY_LINE41_GLOBAL_LANE_RECORDED_OWNER=" +
+                    (owner if owner in ("line41", "agri200") else "NONE_OR_UNKNOWN"))
+          # Existence is only a prerequisite, never a cryptographic QC/receipt check.
+          recipe = "farm_enterprise_economics"
+          manifest = private / "digital-products" / recipe / "manufacturing_manifest.json"
+          clearance = private / "quality-excellence" / "signed-clearances" / recipe / "current.json"
+          artifact = private / "digital-products" / recipe / (recipe + "-internal-qa.zip")
+          for label, path in (("MANIFEST", manifest), ("CLEARANCE", clearance), ("ARTIFACT", artifact)):
+              try:
+                  safe = path.is_file() and not any(p.is_symlink() for p in (path, *path.parents))
+              except OSError:
+                  safe = False
+              print("FACTORY_LINE41_CANONICAL_" + label + "_FILE_PRESENT=" + str(safe).upper())
+          for label, directory in (("REVIEWER", Path("/etc/saeit/factory-quality-reviewer-public-keys")),
+                                   ("RECEIVER", Path("/etc/saeit/hourly-cycle-receiver-public-keys"))):
+              try:
+                  st = directory.lstat()
+                  valid = directory.is_dir() and not directory.is_symlink() and st.st_uid == 0 and not st.st_mode & 0o022
+              except OSError:
+                  valid = False
+              print("FACTORY_LINE41_" + label + "_TRUST_DIR_PROTECTED=" + str(valid).upper())
+          print("FACTORY_LINE41_QC1000_AND_RECEIVER_ACCEPTANCE_VERIFIED=NO")
+          LINE41_AUDIT
           cd "$base/django-app"
           export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
           export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
