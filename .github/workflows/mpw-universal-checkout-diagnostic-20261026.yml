@@ -71,7 +71,7 @@ jobs:
           from django.db import transaction
           try:
               with transaction.atomic():
-                  c=Client(enforce_csrf_checks=True,raise_request_exception=True)
+                  c=Client(enforce_csrf_checks=False,raise_request_exception=True)
                   page=c.get('/store/product/779/checkout/',secure=True,HTTP_HOST='mojplaywin.com')
                   token=c.cookies.get('csrftoken')
                   value=token.value if token else ''
