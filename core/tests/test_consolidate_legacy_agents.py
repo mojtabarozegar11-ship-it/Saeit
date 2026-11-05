@@ -50,13 +50,20 @@ class ConsolidateLegacyAgentsTests(TestCase):
         self.legacy.refresh_from_db()
         assert self.legacy.active
         decisions = {row["code"]: row["decision"] for row in result["agents"]}
-        assert decisions[self.legacy.code] == "retire_safe"
+        assert decisions[self.legacy.code] == "hold_unproven_successor_coverage"
         assert decisions[self.busy.code] == "hold_for_dependency"
         assert decisions[self.master.code] == "retain_required"
         assert decisions[self.unknown.code] == "review_live_outcomes"
         assert AuditLog.objects.filter(action="legacy_agent_retired").count() == 0
 
     def test_apply_deactivates_only_provably_safe_legacy_preserving_history(self):
+        # The real replacement must demonstrate this role's world-news output.
+        NewsletterStory.objects.create(
+            agent=self.successor, story_type="world", title="Verified successor world brief",
+            slug="successor-world-brief", summary="Reviewed source-backed news",
+            body="Real editorial proof for role coverage", fingerprint="successor-world-proof",
+            status="draft", manager_action="NEWSROOM_QUALITY=92/100; checks=credible_source",
+        )
         history = AgentTask.objects.create(agent=self.legacy, action_type="old_review", status="completed")
         AgentTask.objects.filter(pk=history.pk).update(
             updated_at=timezone.now() - timedelta(days=60)
@@ -82,6 +89,28 @@ class ConsolidateLegacyAgentsTests(TestCase):
         second = self.run_command("--apply")
         assert second["summary"]["retired_now"] == 0
         assert AuditLog.objects.filter(action="legacy_agent_retired").count() == previous_events
+
+    def test_active_but_unproven_successor_never_retires_legacy(self):
+        result = self.run_command("--apply")
+        self.legacy.refresh_from_db()
+        assert self.legacy.active
+        row = next(r for r in result["agents"] if r["code"] == self.legacy.code)
+        assert row["decision"] == "hold_unproven_successor_coverage"
+        assert row["missing_successor_coverage"] == ["world"]
+        assert result["summary"]["unproven_successor_coverage"] >= 1
+
+    def test_company_draft_does_not_cover_world_or_report_agents(self):
+        NewsletterStory.objects.create(
+            agent=self.successor, story_type="company", title="Company only",
+            slug="successor-company-only", summary="Company content",
+            body="Owner submitted company activity", fingerprint="successor-company-proof",
+            status="draft", manager_action="NEWSROOM_QUALITY=92/100; checks=company",
+        )
+        result = self.run_command("--apply")
+        self.legacy.refresh_from_db()
+        assert self.legacy.active
+        world = next(r for r in result["agents"] if r["code"] == self.legacy.code)
+        assert world["missing_successor_coverage"] == ["world"]
 
     def test_missing_successor_blocks_legacy_retirement(self):
         self.successor.active = False
