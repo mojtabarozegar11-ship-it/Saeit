@@ -30,6 +30,15 @@ class FarmEvidenceCaptureTests(unittest.TestCase):
                              MOD.sha256(RECIPE / "build_technical_evidence.py"))
             for required in ("guided_start.py", "test_guided_start.py", "CUSTOMER_GUIDE.md"):
                 self.assertEqual(result["source_sha256"][required], MOD.sha256(RECIPE / required))
+            covered_guided_tests = set().union(*(set(MOD.CRITERION_TESTS[key])
+                                                for key in ("Q061", "Q063", "Q064")))
+            self.assertEqual(len([name for name in covered_guided_tests
+                                  if name.startswith("test_success_creates_") or
+                                  name in ("test_invalid_numbers_and_duplicate_names_are_reprompted",
+                                           "test_confirmation_is_fail_closed_and_creates_no_files",
+                                           "test_each_export_goes_to_new_folder_without_overwrite",
+                                           "test_output_parent_symlink_is_rejected_before_any_writes",
+                                           "test_end_of_input_is_safe_cancellation")]), 6)
             self.assertEqual(result, json.loads((folder / "manifest.json").read_text()))
             for id, receipt in result["candidate_criteria"].items():
                 proof = folder / receipt["path"]
