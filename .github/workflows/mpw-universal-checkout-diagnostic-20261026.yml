@@ -229,3 +229,226 @@ jobs:
            paths=re.findall(r'(?<![A-Za-z0-9_])(?:/[A-Za-z0-9_.-]+)+\.(?:py|sh|php)|(?<![A-Za-z0-9_])[A-Za-z0-9_.-]+\.(?:py|sh|php)',line)
            print('MPW_CRON_PATH='+json.dumps({'line':i,'schedule':line.split()[:5],'scripts':[Path(x).name for x in paths][:8],'contains_reconcile':('reconcil' in low),'contains_settle':('settl' in low),'contains_trx':('trx' in low)}))
           PY
+
+      - name: Read recent Passenger errors after live checkout probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import re
+          roots=[Path("/home/zomorod2/logs"),Path("/home/zomorod2/mojplaywin.com"),Path("/home/zomorod2/Saeit-staging"),Path("/home/zomorod2/.private_mojplaywin_main_agents")]
+          names={"error_log","passenger.log","stderr.log","application.log"}
+          seen=0
+          for root in roots:
+              if not root.is_dir(): continue
+              for path in root.rglob("*"):
+                  if seen>=20: break
+                  if path.is_file() and not path.is_symlink() and path.name in names:
+                      try: lines=path.read_text(encoding="utf-8",errors="replace").splitlines()[-300:]
+                      except OSError: continue
+                      hits=[line[:1000] for line in lines if re.search(r"Traceback|Exception|Error|Internal Server|record_invoice|guest|commerce|PaymentIntent|IntegrityError|OperationalError|DoesNotExist",line,re.I)]
+                      print("MPW_SERVER_LOG path=%s matching=%d"%(path,len(hits)))
+                      for line in hits[-120:]: print(line)
+                      seen+=1
+          if not seen: print("MPW_SERVER_LOG no_known_files")
+          PY
+
+      - name: Inspect live guest delivery function read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,inspect,json
+          os.chdir("/home/zomorod2/Saeit-staging");sys.path.insert(0,os.getcwd());os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          try:
+              import services.mpw_trx_guest_delivery as d
+              print("MPW_GUEST_DELIVERY_FILE="+str(getattr(d,"__file__","")))
+              for name in ("record_invoice","record_receipt","send_invoice","create_receipt"):
+                  obj=getattr(d,name,None)
+                  if obj is not None:
+                      print("MPW_GUEST_DELIVERY_FN="+json.dumps({"name":name,"source":inspect.getsource(obj)[:20000]}))
+          except Exception as exc:
+              print("MPW_GUEST_DELIVERY_ERROR="+type(exc).__name__+":"+str(exc)[:300])
+          PY
+
+      - name: Inspect live checkout start handler source read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,inspect,json
+          os.chdir("/home/zomorod2/Saeit-staging");sys.path.insert(0,os.getcwd());os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          for modname in ("services.mpw_trx_commercial_web","services.mpw_trx_commercial_web_public","services.mpw_trx_guest_commerce"):
+              try:
+                  mod=__import__(modname,fromlist=["dummy"])
+                  print("MPW_START_MODULE="+json.dumps({"module":modname,"file":str(getattr(mod,"__file__",""))}))
+                  for name,obj in inspect.getmembers(mod,inspect.isfunction):
+                      if obj.__module__==modname and any(x in name.lower() for x in ("start","select_order","record_invoice","invoice","checkout")):
+                          print("MPW_START_FN="+json.dumps({"module":modname,"name":name,"source":inspect.getsource(obj)[:18000]}))
+              except Exception as exc:
+                  print("MPW_START_ERROR="+json.dumps({"module":modname,"type":type(exc).__name__,"message":str(exc)[:300]}))
+          PY
+
+      - name: Inspect production app files without text-decoding binary assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,inspect
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com')
+          print('MPW_PROD_ROOT='+json.dumps({'exists':root.is_dir(),'entries':sorted(p.name for p in root.iterdir())[:40] if root.is_dir() else []}))
+          for rel in ('services/mpw_trx_guest_delivery.py','services/mpw_trx_commercial_web.py','passenger_wsgi.py'):
+              p=root/rel
+              try:
+                  b=p.read_bytes()
+                  print('MPW_PROD_FILE='+json.dumps({'path':rel,'exists':True,'size':len(b),'head_hex':b[:16].hex(),'utf8':(b.decode('utf-8') is not None)}))
+              except Exception as exc:
+                  print('MPW_PROD_FILE='+json.dumps({'path':rel,'exists':p.exists(),'type':type(exc).__name__,'message':str(exc)[:220]}))
+          os.chdir(str(root));sys.path.insert(0,str(root));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          try:
+              import django;django.setup()
+              for modname in ('services.mpw_trx_guest_delivery','services.mpw_trx_commercial_web'):
+                  try:
+                      mod=__import__(modname,fromlist=['dummy'])
+                      print('MPW_PROD_MODULE='+json.dumps({'module':modname,'file':str(getattr(mod,'__file__',''))}))
+                      for name in ('record_invoice','_start_order'):
+                          obj=getattr(mod,name,None)
+                          if obj is not None: print('MPW_PROD_FN='+json.dumps({'module':modname,'name':name,'source':inspect.getsource(obj)[:18000]}))
+                  except Exception as exc: print('MPW_PROD_IMPORT_ERROR='+json.dumps({'module':modname,'type':type(exc).__name__,'message':str(exc)[:300]}))
+          except Exception as exc: print('MPW_PROD_DJANGO_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:300]}))
+          PY
+
+      - name: Inspect production Passenger import target read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import json,os,sys
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com')
+          p=root/'passenger_wsgi.py'
+          try:
+              text=p.read_text(encoding='utf-8')
+              print('MPW_WSGI_SOURCE='+json.dumps({'path':str(p),'source':text[:10000]}))
+          except Exception as exc: print('MPW_WSGI_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:300]}))
+          for base in (Path('/home/zomorod2/Saeit-staging'),Path('/home/zomorod2/Saeit'),Path('/home/zomorod2/mojplaywin.com')):
+              print('MPW_CODE_ROOT='+json.dumps({'path':str(base),'exists':base.is_dir(),'config':(base/'config').is_dir(),'services':(base/'services').is_dir(),'passenger':(base/'passenger_wsgi.py').is_file()}))
+          print('MPW_ENV_PATH='+json.dumps({'PYTHONPATH':os.environ.get('PYTHONPATH',''),'PATH':os.environ.get('PATH','')[:300]}))
+          PY
+
+      - name: Inspect guest delivery model and import side effects read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,inspect,json
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          try:
+              import services.mpw_trx_guest_delivery as d
+              for key in ('GuestTrxDelivery','PaymentIntent','PROVIDER','PaymentHold'):
+                  obj=getattr(d,key,None)
+                  if obj is None: continue
+                  data={'name':key,'type':type(obj).__name__,'module':getattr(obj,'__module__','')}
+                  if hasattr(obj,'_meta'):
+                      data['model_fields']=[f.name+':'+f.__class__.__name__ for f in obj._meta.fields]
+                  if inspect.isclass(obj):
+                      try:data['source']=inspect.getsource(obj)[:18000]
+                      except Exception as exc:data['source_error']=type(exc).__name__
+                  print('MPW_DELIVERY_OBJECT='+json.dumps(data,default=str))
+              print('MPW_DELIVERY_GLOBALS='+json.dumps(sorted(k for k in d.__dict__ if not k.startswith('__'))[:120]))
+          except Exception as exc: print('MPW_DELIVERY_INSPECT_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:300]}))
+          PY
+
+      - name: Read-only guest delivery table and order 34 evidence
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.db import connection
+          from mpw_commerce.models import GuestTrxDelivery
+          print('MPW_DELIVERY_TABLE='+json.dumps({'db_table':GuestTrxDelivery._meta.db_table,'model':GuestTrxDelivery._meta.label}))
+          try:
+              with connection.cursor() as cur:
+                  cur.execute('SELECT COUNT(*) FROM '+connection.ops.quote_name(GuestTrxDelivery._meta.db_table))
+                  print('MPW_DELIVERY_TABLE_COUNT='+json.dumps({'count':cur.fetchone()[0]}))
+          except Exception as exc:
+              print('MPW_DELIVERY_TABLE_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:500]}))
+          try:
+              rows=list(GuestTrxDelivery.objects.filter(order_id=34).values('id','order_id','email','invoice_state','receipt_state','invoice_attempts','receipt_attempts'))
+              print('MPW_ORDER_34_DELIVERY='+json.dumps(rows,default=str))
+          except Exception as exc:
+              print('MPW_ORDER_34_DELIVERY_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:500]}))
+          PY
+
+      - name: Read-only guest predicate and order 34 ownership
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,inspect
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          import services.mpw_trx_guest_delivery as d
+          from core.models import Order,PaymentIntent
+          for name in ('_guest_user','normalize_email','_email'):
+              obj=getattr(d,name,None)
+              if callable(obj):
+                  try: src=inspect.getsource(obj)
+                  except Exception as exc: src=type(exc).__name__+':'+str(exc)
+                  print('MPW_GUEST_HELPER='+json.dumps({'name':name,'source':src[:7000]}))
+          try:
+              order=Order.objects.select_related('customer').get(pk=34)
+              pi=PaymentIntent.objects.filter(order_id=34).values('id','status','provider','amount','currency','order_id').first()
+              user=order.customer
+              print('MPW_ORDER_34_OWNER='+json.dumps({'order_id':order.pk,'status':order.status,'total':str(order.total),'currency':order.currency,'customer_id':user.pk,'email':getattr(user,'email',''),'is_authenticated':getattr(user,'is_authenticated',None),'is_active':getattr(user,'is_active',None),'is_staff':getattr(user,'is_staff',None),'is_superuser':getattr(user,'is_superuser',None),'intent':pi},default=str))
+              try: print('MPW_ORDER_34_GUEST_PREDICATE='+json.dumps({'value':bool(d._guest_user(user))}))
+              except Exception as exc: print('MPW_ORDER_34_GUEST_PREDICATE_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:300]}))
+          except Exception as exc:
+              print('MPW_ORDER_34_READ_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:500]}))
+          PY
+
+      - name: Read-only order 34 item and product identity
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Order,OrderItem,Product
+          try:
+              order=Order.objects.get(pk=34)
+              items=list(OrderItem.objects.filter(order_id=34).values('id','order_id','product_id','quantity','unit_price','currency'))
+              pids=[x['product_id'] for x in items]
+              products=list(Product.objects.filter(pk__in=pids).values('id','title','product_type','price','currency','active','factory_managed','metadata'))
+              print('MPW_ORDER_34_IDENTITY='+json.dumps({'order':{'id':order.pk,'status':order.status,'total':str(order.total),'currency':order.currency,'created_at':str(order.created_at)},'items':items,'products':[{'id':p['id'],'title':str(p['title'])[:200],'product_type':p['product_type'],'price':str(p['price']),'currency':p['currency'],'active':p['active'],'factory_managed':p['factory_managed'],'metadata_keys':list((p['metadata'] or {}).keys())[:30]} for p in products]},default=str))
+          except Exception as exc:
+              print('MPW_ORDER_34_IDENTITY_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:500]}))
+          PY
+
+      - name: Read-only latest guest checkout failure evidence
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,inspect
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Order,OrderItem,PaymentIntent
+          from mpw_commerce.models import GuestTrxDelivery
+          import services.mpw_trx_guest_delivery as d
+          latest=Order.objects.order_by('-id').first()
+          data={'order_id':latest.pk,'status':latest.status,'total':str(latest.total),'customer_id':latest.customer_id,'created_at':str(latest.created_at)}
+          u=latest.customer
+          data['user']={'username':u.get_username(),'email':u.email,'is_active':u.is_active,'is_staff':u.is_staff,'is_superuser':u.is_superuser,'has_usable_password':u.has_usable_password(),'guest_predicate':bool(d._guest_user(u))}
+          data['items']=list(OrderItem.objects.filter(order_id=latest.pk).values('product_id','unit_price','currency'))
+          data['intent']=list(PaymentIntent.objects.filter(order_id=latest.pk).values('id','status','provider','amount','currency'))
+          data['delivery']=list(GuestTrxDelivery.objects.filter(order_id=latest.pk).values('id','email','invoice_state','receipt_state','invoice_attempts','receipt_attempts'))
+          print('MPW_LATEST_GUEST_FAILURE='+json.dumps(data,default=str))
+          PY

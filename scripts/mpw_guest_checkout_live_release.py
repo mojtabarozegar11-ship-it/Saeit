@@ -65,8 +65,8 @@ def plan(src):
   installed=source_from(live)
   if installed==src: return old,old,False
   # Restrict this upgrade to the exact live version installed by successful run 41120996466.
-  if digest(installed)!='7693254e4ed72141b6de7fc283c5a3214159ea49d838318337e47e86953f5f2f':
-   fail('UNRECOGNIZED_GUEST_UPGRADE_BASE')
+  if digest(installed)!='6258de790fa95c774d847a6f3bf0cb170e69ebeccf1130a4b0b88be0bf55adc4':
+   fail('UNRECOGNIZED_GUEST_UPGRADE_BASE:'+digest(installed))
   return old,old,True
  # A module without both verified caller hooks is never safe to overwrite.
  if TARGETS['guest'].exists() or TARGETS['guest'].is_symlink():
@@ -161,7 +161,7 @@ def publish(run,src_path):
 def publish_onefile(run,src_path):
  guard()
  live=TARGETS['guest']
- expected='7693254e4ed72141b6de7fc283c5a3214159ea49d838318337e47e86953f5f2f'
+ expected='6258de790fa95c774d847a6f3bf0cb170e69ebeccf1130a4b0b88be0bf55adc4'
  if live.is_symlink() or not live.is_file() or digest(live.read_bytes())!=expected:
   fail('ONE_FILE_EXACT_OLD_SHA_REQUIRED')
  old,new,needed=plan(source_from(src_path))
@@ -194,7 +194,9 @@ def verify():
   response=Client(enforce_csrf_checks=True).get(route,secure=True,HTTP_HOST='mojplaywin.com')
   if response.status_code!=200: fail('ANONYMOUS_CHECKOUT_HTTP:'+str(pid)+':'+str(response.status_code))
   body=response.content.decode('utf8','replace')
-  if 'Create invoice and pay with TRX' not in body: fail('TRX_CTA_MISSING:'+str(pid))
+  cta_ok = ('Create invoice and pay with TRX' in body or
+            'Email my invoice and pay with TRX' in body)
+  if not cta_ok: fail('TRX_CTA_MISSING:'+str(pid))
   print('MPW_GUEST_CHECKOUT_ROUTE='+json.dumps({'product':pid,'http':response.status_code,'handler':getattr(target,'__name__','?'),'order_created':False}))
  recovery_route = '/commerce/trx-easy/purchases/'
  try:
