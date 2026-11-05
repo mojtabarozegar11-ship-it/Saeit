@@ -96,7 +96,7 @@ def _new_user(request):
     # address submitted by the checkout form before invoice binding; otherwise
     # record_invoice() correctly refuses to create an unowned delivery record.
     submitted_email = ""
-    for key in ("email", "buyer_email", "customer_email", "purchaser_email"):
+    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
         raw = request.POST.get(key) if hasattr(request, "POST") else None
         if raw is not None:
             submitted_email = str(raw).strip().lower()
@@ -148,7 +148,7 @@ def _new_user(request):
 def _bind_guest_email(request, user):
     """Bind a submitted address only to this existing guest principal."""
     submitted_email = ""
-    for key in ("email", "buyer_email", "customer_email", "purchaser_email"):
+    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
         raw = request.POST.get(key) if hasattr(request, "POST") else None
         if raw is not None:
             submitted_email = str(raw).strip().lower()
