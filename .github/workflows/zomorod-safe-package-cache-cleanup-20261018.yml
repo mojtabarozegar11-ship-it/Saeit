@@ -86,6 +86,203 @@ jobs:
             echo "CACHE_BEFORE_HEALTH=$path:$status"
             test "$status" = 200
           done
+      - name: Identify other safely reviewable storage on both hosts (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import os,subprocess
+          from pathlib import Path
+          base=Path("/home/zomorod2")
+          candidates={
+              "cpanel-user-cache":base/".cache",
+              "cpanel-node-gyp-cache":base/".cache/node-gyp",
+              "cpanel-uv-cache":base/".cache/uv",
+              "cpanel-composer-cache":base/".cache/composer",
+              "cpanel-yarn-cache":base/".cache/yarn",
+              "cpanel-pnpm-store":base/".local/share/pnpm/store",
+              "cpanel-npm-logs":base/".npm/_logs",
+              "cpanel-trash":base/".local/share/Trash/files",
+              "cpanel-temp":base/"tmp",
+              "cpanel-cpanel-temp":base/".cpanel/tmp",
+              "cpanel-repo-node-cache":base/"Saeit/node_modules/.cache",
+              "cpanel-repo-python-cache":base/"Saeit/.mypy_cache",
+              "cpanel-repo-pytest-cache":base/"Saeit/.pytest_cache",
+          }
+          for label,p in candidates.items():
+              if not p.exists():
+                  print("SPACE_CANDIDATE="+label+":ABSENT",flush=True);continue
+              if p.is_symlink() or not p.is_dir() or p.stat().st_uid!=os.geteuid():
+                  print("SPACE_CANDIDATE="+label+":UNSAFE_SKIP",flush=True);continue
+              try:
+                  res=subprocess.run(["du","-sk",str(p)],capture_output=True,text=True,timeout=18,check=True)
+                  print("SPACE_CANDIDATE="+label+":BYTES="+str(int(res.stdout.split()[0])*1024),flush=True)
+              except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+                  print("SPACE_CANDIDATE="+label+":UNAVAILABLE",flush=True)
+          PY
+          ssh -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import os,subprocess
+          from pathlib import Path
+          base=Path.home()
+          candidates={
+              "vps-user-cache":base/".cache",
+              "vps-npm-logs":base/".npm/_logs",
+              "vps-trash":base/".local/share/Trash/files",
+              "vps-temp":base/"tmp",
+              "vps-factory-temp":base/"factory-runtime/operations/tmp",
+              "vps-factory-logs":base/"factory-runtime/logs",
+              "vps-operations-logs":base/"factory-runtime/operations/logs",
+          }
+          for label,p in candidates.items():
+              if not p.exists():
+                  print("SPACE_CANDIDATE="+label+":ABSENT",flush=True);continue
+              if p.is_symlink() or not p.is_dir() or p.stat().st_uid!=os.geteuid():
+                  print("SPACE_CANDIDATE="+label+":UNSAFE_SKIP",flush=True);continue
+              try:
+                  res=subprocess.run(["du","-sk",str(p)],capture_output=True,text=True,timeout=18,check=True)
+                  print("SPACE_CANDIDATE="+label+":BYTES="+str(int(res.stdout.split()[0])*1024),flush=True)
+              except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+                  print("SPACE_CANDIDATE="+label+":UNAVAILABLE",flush=True)
+          PY
+      - name: Classify cPanel generic cache and temp contents without reading files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import os,re,subprocess,time
+          from pathlib import Path
+          home=Path("/home/zomorod2")
+          uid=os.geteuid()
+          refs=[]
+          visibility_errors=0
+          for procdir in Path("/proc").iterdir():
+              if not procdir.name.isdigit():
+                  continue
+              try:
+                  if procdir.stat().st_uid!=uid:
+                      continue
+                  refs.append(os.readlink(procdir/"cwd"))
+              except FileNotFoundError:
+                  continue
+              except OSError:
+                  visibility_errors+=1
+              try:
+                  for fd in (procdir/"fd").iterdir():
+                      try:
+                          refs.append(os.readlink(fd))
+                      except FileNotFoundError:
+                          pass
+                      except OSError:
+                          visibility_errors+=1
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  visibility_errors+=1
+          print("SPACE_DETAIL_PROC_VISIBILITY_ERRORS="+str(visibility_errors),flush=True)
+          for group,root in (("cache",home/".cache"),("temp",home/"tmp")):
+              if not root.is_dir() or root.is_symlink() or root.stat().st_uid!=uid:
+                  print("SPACE_DETAIL_GROUP="+group+":UNAVAILABLE",flush=True)
+                  continue
+              children=list(root.iterdir())
+              print("SPACE_DETAIL_GROUP="+group+":CHILDREN="+str(len(children)),flush=True)
+              for child in children[:35]:
+                  raw=child.name
+                  label=raw if re.fullmatch(r"[A-Za-z0-9_.-]{1,40}",raw) else "redacted"
+                  if child.is_symlink() or child.stat().st_uid!=uid:
+                      print("SPACE_DETAIL="+group+"/"+label+":UNSAFE_SKIP",flush=True)
+                      continue
+                  try:
+                      res=subprocess.run(["du","-sk",str(child)],capture_output=True,text=True,timeout=14,check=True)
+                      size=int(res.stdout.split()[0])*1024
+                  except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+                      print("SPACE_DETAIL="+group+"/"+label+":UNAVAILABLE",flush=True)
+                      continue
+                  age=max(0,int((time.time()-child.stat().st_mtime)/86400))
+                  root_string=str(child)
+                  referenced=any(path==root_string or path.startswith(root_string+"/") for path in refs)
+                  print("SPACE_DETAIL="+group+"/"+label+":BYTES="+str(size)+
+                        ":DIR_MTIME_DAYS="+str(age)+":PROC_REFERENCED="+str(referenced),flush=True)
+          PY
+      - name: Verify cPanel node setup cache content and live execution dependencies (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import os,re,stat,subprocess
+          from pathlib import Path
+          cache=Path("/home/zomorod2/.cache/dc-node-setup")
+          if not cache.is_dir() or cache.is_symlink() or cache.stat().st_uid!=os.geteuid():
+              raise RuntimeError("NODE_SETUP_CACHE_UNAVAILABLE_OR_UNSAFE")
+          print("NODE_SETUP_CACHE_INSPECT_READ_ONLY=true",flush=True)
+          children=list(cache.iterdir())
+          print("NODE_SETUP_CACHE_TOP_CHILDREN="+str(len(children)),flush=True)
+          for child in children[:30]:
+              label=child.name if re.fullmatch(r"[A-Za-z0-9_.-]{1,65}",child.name) else "redacted"
+              if child.is_symlink():
+                  print("NODE_SETUP_CACHE_CHILD="+label+":SYMLINK",flush=True);continue
+              try:
+                  du=subprocess.run(["du","-sk",str(child)],capture_output=True,text=True,timeout=15,check=True)
+                  size=int(du.stdout.split()[0])*1024
+                  print("NODE_SETUP_CACHE_CHILD="+label+":BYTES="+str(size)+
+                        ":IS_DIR="+str(child.is_dir()),flush=True)
+              except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+                  print("NODE_SETUP_CACHE_CHILD="+label+":UNAVAILABLE",flush=True)
+          current_use=0
+          executable_use=0
+          mapped_use=0
+          unknown=0
+          root=str(cache)
+          for procdir in Path("/proc").iterdir():
+              if not procdir.name.isdigit():
+                  continue
+              try:
+                  if procdir.stat().st_uid!=os.geteuid():
+                      continue
+              except FileNotFoundError:
+                  continue
+              except OSError:
+                  unknown+=1;continue
+              try:
+                  exe=os.readlink(procdir/"exe")
+                  executable_use+=int(exe==root or exe.startswith(root+"/"))
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  unknown+=1
+              try:
+                  cwd=os.readlink(procdir/"cwd")
+                  current_use+=int(cwd==root or cwd.startswith(root+"/"))
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  unknown+=1
+              try:
+                  for fd in (procdir/"fd").iterdir():
+                      try:
+                          target=os.readlink(fd)
+                          current_use+=int(target==root or target.startswith(root+"/"))
+                      except FileNotFoundError:
+                          pass
+                      except OSError:
+                          unknown+=1
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  unknown+=1
+              try:
+                  mapped_use+=int(any(root in line for line in (procdir/"maps").read_text().splitlines()))
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  unknown+=1
+          print("NODE_SETUP_CACHE_EXECUTABLE_REFS="+str(executable_use),flush=True)
+          print("NODE_SETUP_CACHE_CWD_OR_FD_REFS="+str(current_use),flush=True)
+          print("NODE_SETUP_CACHE_MAPPED_PROCESS_COUNT="+str(mapped_use),flush=True)
+          print("NODE_SETUP_CACHE_PROC_UNKNOWN="+str(unknown),flush=True)
+          PY
       - name: Inventory VPS filesystem and bounded cache candidates (read-only)
         shell: bash
         run: |
@@ -155,6 +352,7 @@ jobs:
           proc=subprocess.run(["ps","-u","zomorod2","-o","pid=,etimes=,args="],capture_output=True,text=True,timeout=12,check=True)
           active_counts={}
           active_profiles={}
+          active_pids=[]
           for row in proc.stdout.splitlines():
               fields=row.strip().split(None,2)
               if len(fields)!=3 or not fields[0].isdigit() or not fields[1].isdigit():
@@ -201,34 +399,221 @@ jobs:
               fd_kind=("writer" if writable_cache_fds else "reader" if cache_fds else "none")
               profile=(kind,age,cwd_kind,fd_kind)
               active_profiles[profile]=active_profiles.get(profile,0)+1
+              active_pids.append((pid,kind,age,cwd_kind))
+          # Two bounded, read-only snapshots describe whether long-lived
+          # package processes are actually consuming CPU or writing data.
+          # Emit aggregate categories only; no PIDs, command lines or paths.
+          import time
+          def counters(target_pid):
+              base=Path("/proc")/str(target_pid)
+              out={"cpu":None,"io":None,"state":"unknown","parent":"unknown"}
+              try:
+                  raw=(base/"stat").read_text()
+                  vals=raw[raw.rfind(")")+2:].split()
+                  out["cpu"]=int(vals[11])+int(vals[12])
+                  out["state"]=vals[0]
+              except (OSError,ValueError,IndexError):
+                  pass
+              try:
+                  io={}
+                  for line in (base/"io").read_text().splitlines():
+                      key,_,value=line.partition(":")
+                      if key in ("read_bytes","write_bytes"):
+                          io[key]=int(value.strip())
+                  if len(io)==2:
+                      out["io"]=sum(io.values())
+              except (OSError,ValueError):
+                  pass
+              try:
+                  statinfo=(base/"status").read_text().splitlines()
+                  ppid=int(next(line.split()[1] for line in statinfo if line.startswith("PPid:")))
+                  if ppid==1:
+                      out["parent"]="init"
+                  else:
+                      parent=Path("/proc")/str(ppid)
+                      if parent.stat().st_uid==os.geteuid():
+                          out["parent"]="same-user"
+                      else:
+                          out["parent"]="system"
+              except (OSError,ValueError,StopIteration):
+                  pass
+              return out
+          # Classify socket state from kernel procfs without logging endpoints.
+          network_sockets={}
+          for proto in ("tcp","tcp6","udp","udp6"):
+              try:
+                  for row in (Path("/proc/net")/proto).read_text().splitlines()[1:]:
+                      cols=row.split()
+                      if len(cols)>9:
+                          network_sockets[cols[9]]=cols[3]
+              except OSError:
+                  pass
+          tracked={pid:kind for pid,kind,_,_ in active_pids}
+          first={pid:counters(pid) for pid,_,_,_ in active_pids}
+          time.sleep(2)
+          for pid,kind,age,cwd_kind in active_pids:
+              prior=first[pid]
+              last=counters(pid)
+              activity=("active" if prior["cpu"] is not None and last["cpu"] is not None and last["cpu"]>prior["cpu"] else
+                        "idle" if prior["cpu"] is not None and last["cpu"] is not None else "unknown")
+              disk_io=("active" if prior["io"] is not None and last["io"] is not None and last["io"]>prior["io"] else
+                       "idle" if prior["io"] is not None and last["io"] is not None else "unknown")
+              print("PACKAGE_PROCESS_LIFECYCLE="+kind+"/"+age+"/"+cwd_kind+
+                    "/state="+last["state"]+"/parent="+last["parent"]+
+                    "/cpu="+activity+"/disk_io="+disk_io,flush=True)
+              procdir=Path("/proc")/str(pid)
+              try:
+                  cmd=(procdir/"cmdline").read_bytes().replace(b"\0",b" ").decode("utf-8","replace").lower()
+                  role=("mcp" if "mcp" in cmd else
+                        "service-like" if any(token in cmd for token in ("server","serve","listen","watch","start","vite","next dev")) else
+                        "package-build" if any(token in cmd for token in ("install","rebuild","compile"," build ")) else
+                        "package-exec" if any(token in cmd for token in ("exec","npx")) else "unknown")
+              except OSError:
+                  role="unknown"
+              try:
+                  ppid=int(next(line.split()[1] for line in (procdir/"status").read_text().splitlines() if line.startswith("PPid:")))
+                  relation=("package-parent" if ppid in tracked else "init" if ppid==1 else "other-parent")
+              except (OSError,ValueError,StopIteration):
+                  relation="unknown"
+              attached=[]
+              listener=0
+              established=0
+              stdio=[]
+              try:
+                  fd_list=list((procdir/"fd").iterdir())
+              except OSError:
+                  fd_list=[]
+              for fd in fd_list:
+                  try:
+                      dest=os.readlink(fd)
+                  except OSError:
+                      continue
+                  if dest.startswith("socket:["):
+                      inode=dest[8:-1]
+                      attached.append(inode)
+                      listener+=network_sockets.get(inode)=="0A"
+                      established+=network_sockets.get(inode)=="01"
+                  if fd.name in ("0","1","2"):
+                      io_type=("pipe" if dest.startswith("pipe:[") else
+                               "socket" if dest.startswith("socket:[") else
+                               "tty" if dest.startswith("/dev/pts") else "file")
+                      stdio.append(fd.name+":"+io_type)
+              print("PACKAGE_PROCESS_SERVICE_ROLE="+kind+"/"+cwd_kind+"/role="+role+
+                    "/ancestor="+relation+"/sockets="+str(len(attached))+
+                    "/listening="+str(listener)+"/established="+str(established)+
+                    "/stdio="+",".join(sorted(stdio)),flush=True)
+          # Report profiles but do not let npm/npx block unrelated pip/Gradle caches.
           if active_counts:
               for (kind,age,cwd_kind,fd_kind),count in sorted(active_profiles.items()):
                   print("PACKAGE_PROCESS_PROFILE="+kind+"/"+age+"/"+cwd_kind+"/"+fd_kind+":"+str(count),flush=True)
               print("PACKAGE_MANAGER_BLOCKER_CLASSES="+",".join(
                   str(k)+":"+str(v) for k,v in sorted(active_counts.items())),flush=True)
-              raise RuntimeError("PACKAGE_MANAGER_ACTIVITY_IN_PROGRESS")
-          total=0
           apply=os.environ.get("CACHE_CLEANUP_MODE")=="apply"
-          print("CACHE_APPLY="+str(apply))
+          print("CACHE_APPLY="+str(apply),flush=True)
+          # Inspect every current-user process, not just command names, for an
+          # open handle or cwd in a candidate cache. On uncertain visibility,
+          # skip deletion of ALL candidates.
+          references={rel:0 for rel in paths}
+          incomplete=0
+          uid=os.geteuid()
+          for procdir in Path("/proc").iterdir():
+              if not procdir.name.isdigit():
+                  continue
+              try:
+                  if procdir.stat().st_uid != uid:
+                      continue
+              except (FileNotFoundError,ProcessLookupError):
+                  continue
+              except OSError:
+                  incomplete+=1
+                  continue
+              try:
+                  cwd=os.readlink(procdir/"cwd")
+                  for rel in paths:
+                      root=str(home/rel)
+                      if cwd==root or cwd.startswith(root+"/"):
+                          references[rel]+=1
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  incomplete+=1
+              try:
+                  for fd in (procdir/"fd").iterdir():
+                      try:
+                          target=os.readlink(fd)
+                      except FileNotFoundError:
+                          continue
+                      except OSError:
+                          incomplete+=1
+                          continue
+                      for rel in paths:
+                          root=str(home/rel)
+                          if target==root or target.startswith(root+"/"):
+                              references[rel]+=1
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  incomplete+=1
+          print("CACHE_PROC_INSPECTION_INCOMPLETE="+str(incomplete),flush=True)
+          total=0
+          freed=0
           for rel in paths:
               p=home/rel
               if not p.exists():
-                  print("CACHE_ABSENT="+rel)
+                  print("CACHE_ABSENT="+rel,flush=True)
                   continue
-              if p.is_symlink() or not p.is_dir() or p.resolve()!=home/rel:
+              if p.is_symlink() or not p.is_dir() or p.resolve()!=p:
                   raise RuntimeError("CACHE_PATH_UNSAFE")
-              for ancestor in [p.parent,p]:
-                  if ancestor.is_symlink():
-                      raise RuntimeError("CACHE_COMPONENT_SYMLINK")
+              for ancestor in (p.parent,p):
+                  if ancestor.is_symlink() or ancestor.stat().st_uid!=uid:
+                      raise RuntimeError("CACHE_COMPONENT_UNSAFE")
               before=subprocess.run(["du","-sk",str(p)],capture_output=True,text=True,timeout=40,check=True)
-              kb=int(before.stdout.split()[0])
-              print("CACHE_CANDIDATE="+rel+" bytes_du="+str(kb*1024),flush=True)
-              total+=kb*1024
+              size=int(before.stdout.split()[0])*1024
+              print("CACHE_CANDIDATE="+rel+" bytes_du="+str(size),flush=True)
+              total+=size
+              is_npm=rel.startswith(".npm/")
+              busy=(any(k.startswith("npm") or k in ("npx","pnpm","yarn") for k in active_counts)
+                    if is_npm else
+                    (bool(active_counts.get("pip")) if rel==".cache/pip" else bool(active_counts.get("gradle"))))
+              if busy or references[rel] or incomplete:
+                  why=("package-manager-active" if busy else "cache-open-or-cwd" if references[rel] else "proc-visibility-incomplete")
+                  print("CACHE_HELD="+rel+" reason="+why+" refs="+str(references[rel]),flush=True)
+                  continue
+              print("CACHE_ELIGIBLE="+rel+" bytes_du="+str(size),flush=True)
               if apply:
+                  # Re-inspect process occupancy just before a bounded removal.
+                  # No production app, database, or backup path is ever targeted.
+                  for procdir in Path("/proc").iterdir():
+                      if not procdir.name.isdigit():
+                          continue
+                      try:
+                          if procdir.stat().st_uid!=uid:
+                              continue
+                          cwd=os.readlink(procdir/"cwd")
+                          if cwd==str(p) or cwd.startswith(str(p)+"/"):
+                              raise RuntimeError("CACHE_BECAME_IN_USE")
+                          for fd in (procdir/"fd").iterdir():
+                              try:
+                                  target=os.readlink(fd)
+                              except FileNotFoundError:
+                                  continue
+                              if target==str(p) or target.startswith(str(p)+"/"):
+                                  raise RuntimeError("CACHE_BECAME_IN_USE")
+                      except FileNotFoundError:
+                          continue
+                      except RuntimeError:
+                          raise
+                      except OSError:
+                          raise RuntimeError("CACHE_PROCESS_CHECK_FAILED")
                   shutil.rmtree(p)
-                  if p.exists():raise RuntimeError("CACHE_REMOVE_INCOMPLETE")
-                  print("CACHE_DELETED="+rel+" bytes_du="+str(kb*1024),flush=True)
-          print(("CACHE_FREED_BYTES=" if apply else "CACHE_CANDIDATE_BYTES=")+str(total))
+                  if p.exists():
+                      raise RuntimeError("CACHE_REMOVE_INCOMPLETE")
+                  freed+=size
+                  print("CACHE_DELETED="+rel+" bytes_du="+str(size),flush=True)
+          print("CACHE_CANDIDATE_BYTES="+str(total),flush=True)
+          print("CACHE_FREED_BYTES="+str(freed),flush=True)
+          if apply and freed==0:
+              print("CACHE_NO_SAFE_RECLAIM=true",flush=True)
           PY
           echo 'POST_CACHE_CPANEL_QUOTA'
           if command -v uapi >/dev/null 2>&1; then
