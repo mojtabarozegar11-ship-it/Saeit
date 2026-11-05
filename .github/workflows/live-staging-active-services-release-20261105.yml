@@ -1,4 +1,4 @@
-name: Repair staging services with both LiteSpeed app restart markers
+name: Recover backed-up staging service cards after failed restart
 on:
   push:
     branches: [audit/live-sites-subsites-20261105]
@@ -112,89 +112,59 @@ jobs:
             fi
           fi
           echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
-      - name: Preview guarded staging service card replacements
+      - name: Reconfirm original backup without a new publish
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
-          timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" 'python3 - preview' < scripts/live_staging_services_dedupe_release_20261105.py
-      - name: Publish isolated staging services template with private backup
-        id: publish
+          timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" "python3 - rollback '41974618315'" < scripts/live_staging_services_dedupe_release_20261105.py
+      - name: Read-only verify restored staging templates and visible main website
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
-          case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
-          timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" "python3 - publish '$GITHUB_RUN_ID'" < scripts/live_staging_services_dedupe_release_20261105.py
-      - name: Activate the staging Passenger app at cPanel origin and verify it
-        env:
-          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
-        run: |
-          set -euo pipefail
-          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
-          case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
-          timeout 155s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" "python3 - verify-origin '$GITHUB_RUN_ID'" < scripts/live_staging_services_dedupe_release_20261105.py
-      - name: Verify restarted Passenger output and unique public staging cards
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
+          timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" 'python3 -' <<'PY'
+          import hashlib
+          import json
           import os
           import re
-          import time
-          from urllib.request import Request, urlopen
+          from pathlib import Path
+          from urllib.request import urlopen
 
-          release_id = os.environ.get('GITHUB_RUN_ID', '')
-          if not release_id.isdecimal():
-              raise SystemExit('INVALID_RELEASE_RUN_ID')
-          required = ('پژوهش‌های کاربردی', 'ابزارهای کاربردی', 'خبرنامهٔ شرکت', 'ارتباط و همکاری')
-          retained = ('هوش مصنوعی', 'آموزش', 'دانشنامه')
-          last_error = 'NOT_ATTEMPTED'
-
-          def check(url):
-              request = Request(url, headers={
-                  'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache',
-                  'User-Agent': 'ZM-Staging-Revised-Cards-Verification/1.0'})
-              with urlopen(request, timeout=15) as response:
-                  status = response.status
-                  robots = response.headers.get('X-Robots-Tag', '')
-                  html = response.read(220000).decode('utf-8', 'replace')
-              titles = [re.sub(r'<[^>]+>', '', heading).strip()
-                        for heading in re.findall(r'<h2[^>]*>(.*?)</h2>', html, re.I | re.S)]
-              if status != 200 or 'noindex' not in robots.lower():
-                  raise RuntimeError('STAGING_HTTP_OR_NOINDEX_REGRESSION')
-              if any(titles.count(title) != 1 for title in required + retained):
-                  raise RuntimeError('STAGING_CARD_UNIQUENESS_NOT_VISIBLE')
-              if len(titles) != len(set(titles)):
-                  raise RuntimeError('DUPLICATE_STAGING_H2_CARDS_REMAIN')
-              return len(titles)
-
-          for attempt in range(25):
-              try:
-                  # The active Passenger pool can recycle >60 seconds after restart.txt changes.
-                  fresh_url = f'https://staging.zomorodmelal.ir/?zm_card_release={release_id}-{attempt}'
-                  fresh_count = check(fresh_url)
-                  root_count = check('https://staging.zomorodmelal.ir/')
-                  with urlopen('https://zomorodmelal.ir/', timeout=15) as main:
-                      if main.status != 200 or 'noindex' in main.headers.get('X-Robots-Tag', '').lower():
-                          raise RuntimeError('PRODUCTION_MAIN_REGRESSION')
-                  print(f'STAGING_UNIQUE_CARDS_VERIFIED=1 headings={root_count} fresh={fresh_count}')
-                  break
-              except Exception as exc:
-                  last_error = type(exc).__name__ + ':' + str(exc)[:100]
-                  if attempt == 24:
-                      raise RuntimeError('PUBLIC_STAGING_TEMPLATE_VERIFICATION_FAILED ' + last_error)
-                  if attempt % 5 == 0:
-                      print('WAITING_FOR_PASSENGER_RENDER attempt=' + str(attempt + 1) +
-                            ' latest=' + last_error)
-                  time.sleep(9)
+          home = Path('/home/zomorod2')
+          expected = '195994985017c1cbc0247969f9215fbcb34d4cc3bd4f8aeeac92ff270d7350bc'
+          conf = (home / 'Saeit-staging-web/.htaccess').read_text()
+          match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)\s*$', conf)
+          if not match:
+              raise SystemExit('STAGING_ROOT_MISSING')
+          root = Path(match.group(1).strip('"'))
+          if (root.is_symlink() or (home / 'Saeit-staging/admin-smoke') not in root.parents):
+              raise SystemExit('STAGING_ROOT_UNSAFE')
+          paths = (home / 'Saeit-staging/core/templates/core/services.html',
+                   root / 'core/templates/core/services.html')
+          result = {}
+          for path in paths:
+              if path.is_symlink() or not path.is_file():
+                  raise SystemExit('STAGING_TEMPLATE_PATH_UNSAFE')
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              result[str(path)] = {'sha256': digest, 'restored': digest == expected}
+              if digest != expected:
+                  raise SystemExit('STAGING_ROLLBACK_NOT_CONFIRMED:' + str(path))
+          backup = home / '.private/staging-services-backups/run-41974618315/original.html'
+          if backup.is_symlink() or not backup.is_file():
+              raise SystemExit('STAGING_ORIGINAL_BACKUP_MISSING')
+          backup_sha = hashlib.sha256(backup.read_bytes()).hexdigest()
+          if backup_sha != expected:
+              raise SystemExit('STAGING_ORIGINAL_BACKUP_MISMATCH')
+          print('STAGING_ROLLBACK_READONLY_VERIFIED=' + json.dumps(
+              {'targets_restored': len(result), 'backup_sha256': backup_sha, 'paths': result},
+              sort_keys=True), flush=True)
+          for address in ('https://staging.zomorodmelal.ir/',
+                          'https://zomorodmelal.ir/'):
+              with urlopen(address, timeout=12) as response:
+                  if response.status != 200:
+                      raise SystemExit('HTTP_REGRESSION:' + address)
+                  print('PUBLIC_HTTP_200=' + address, flush=True)
           PY
-      - name: Rollback staging service card template if verification fails
-        if: failure() && steps.publish.outcome == 'success'
-        env:
-          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
-        run: |
-          set -euo pipefail
-          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
-          timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" "python3 - rollback '$GITHUB_RUN_ID'" < scripts/live_staging_services_dedupe_release_20261105.py
