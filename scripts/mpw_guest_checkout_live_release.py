@@ -65,7 +65,7 @@ def plan(src):
   installed=source_from(live)
   if installed==src: return old,old,False
   # Restrict this upgrade to the exact live version installed by successful run 41120996466.
-  if digest(installed)!='37bdfd64924ac96ec0deea203f2b377b49399950a4c4ae10080bbd8df79456ee':
+  if digest(installed)!='6258de790fa95c774d847a6f3bf0cb170e69ebeccf1130a4b0b88be0bf55adc4':
    fail('UNRECOGNIZED_GUEST_UPGRADE_BASE:'+digest(installed))
   return old,old,True
  # A module without both verified caller hooks is never safe to overwrite.
@@ -161,7 +161,7 @@ def publish(run,src_path):
 def publish_onefile(run,src_path):
  guard()
  live=TARGETS['guest']
- expected='37bdfd64924ac96ec0deea203f2b377b49399950a4c4ae10080bbd8df79456ee'
+ expected='6258de790fa95c774d847a6f3bf0cb170e69ebeccf1130a4b0b88be0bf55adc4'
  if live.is_symlink() or not live.is_file() or digest(live.read_bytes())!=expected:
   fail('ONE_FILE_EXACT_OLD_SHA_REQUIRED')
  old,new,needed=plan(source_from(src_path))
