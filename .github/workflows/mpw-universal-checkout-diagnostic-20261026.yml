@@ -344,3 +344,28 @@ jobs:
               print('MPW_CODE_ROOT='+json.dumps({'path':str(base),'exists':base.is_dir(),'config':(base/'config').is_dir(),'services':(base/'services').is_dir(),'passenger':(base/'passenger_wsgi.py').is_file()}))
           print('MPW_ENV_PATH='+json.dumps({'PYTHONPATH':os.environ.get('PYTHONPATH',''),'PATH':os.environ.get('PATH','')[:300]}))
           PY
+
+      - name: Inspect guest delivery model and import side effects read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,inspect,json
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          try:
+              import services.mpw_trx_guest_delivery as d
+              for key in ('GuestTrxDelivery','PaymentIntent','PROVIDER','PaymentHold'):
+                  obj=getattr(d,key,None)
+                  if obj is None: continue
+                  data={'name':key,'type':type(obj).__name__,'module':getattr(obj,'__module__','')}
+                  if hasattr(obj,'_meta'):
+                      data['model_fields']=[f.name+':'+f.__class__.__name__ for f in obj._meta.fields]
+                  if inspect.isclass(obj):
+                      try:data['source']=inspect.getsource(obj)[:18000]
+                      except Exception as exc:data['source_error']=type(exc).__name__
+                  print('MPW_DELIVERY_OBJECT='+json.dumps(data,default=str))
+              print('MPW_DELIVERY_GLOBALS='+json.dumps(sorted(k for k in d.__dict__ if not k.startswith('__'))[:120]))
+          except Exception as exc: print('MPW_DELIVERY_INSPECT_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:300]}))
+          PY
