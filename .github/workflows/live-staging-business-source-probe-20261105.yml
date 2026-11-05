@@ -5,6 +5,11 @@ on:
     paths:
       - .github/workflows/live-staging-business-source-probe-20261105.yml
       - scripts/live_staging_business_source_probe_20261105.py
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/workflows/live-staging-business-source-probe-20261105.yml
+      - scripts/live_staging_business_source_probe_20261105.py
 permissions:
   contents: read
 concurrency:
