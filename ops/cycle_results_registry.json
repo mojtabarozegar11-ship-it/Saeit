@@ -48,8 +48,24 @@
     "05": {
       "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
       "sequence": 1,
-      "legacy_report_last_verified": null,
-      "primary_output": "accepted operational business gate"
+      "legacy_report_last_verified": 57,
+      "primary_output": "accepted operational business gate",
+      "legacy_source_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725",
+      "legacy_number_audit": {
+        "source_scope": "all current 67 comments on issue 1725",
+        "numbered_reports": 57,
+        "range_start": 1,
+        "range_end": 57,
+        "duplicates": 0,
+        "missing": 0,
+        "noncanonical_headers": [
+          41,
+          42,
+          43,
+          44
+        ],
+        "scope_note": "This verifies only the numbered public issue source, not unobserved private reports. New numbers must still be reserved with CAS and cross-checked against issue before publication."
+      }
     }
   },
   "receipts": [
