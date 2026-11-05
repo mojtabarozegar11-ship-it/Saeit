@@ -47,6 +47,16 @@ class FactorySystemdAutomationTests(unittest.TestCase):
         self.assertLess(script.index("F01_PREFLIGHT_COMPETING_FACTORY_CRON_PRESENT"),
                         script.index('install -d -m 700 "$runtime"'))
 
+    def test_existing_native_staging_loop_is_rejected_before_install(self):
+        script = (ROOT / "deploy/install_factory_systemd_automation.sh").read_text()
+        self.assertIn("pgrep -f", script)
+        self.assertIn("vps-only-loop", script)
+        self.assertIn("factory_staging_tick", script)
+        self.assertIn("F01_PREFLIGHT_COMPETING_STAGING_LOOP_PRESENT", script)
+        self.assertIn("F01_PREFLIGHT_PROCESS_INVENTORY_UNREADABLE", script)
+        self.assertLess(script.index("F01_PREFLIGHT_COMPETING_STAGING_LOOP_PRESENT"),
+                        script.index('install -d -m 700 "$runtime"'))
+
     def test_units_are_persistent_and_one_product_only(self):
         cycle = (ROOT / "deploy/systemd/saeit-factory-cycle.timer").read_text()
         watchdog = (ROOT / "deploy/systemd/saeit-factory-watchdog.timer").read_text()
@@ -59,3 +69,4 @@ class FactorySystemdAutomationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

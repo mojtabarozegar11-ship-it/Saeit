@@ -44,6 +44,25 @@ if printf '%s\n' "$timer_snapshot" | grep -Eiq '(factory|agri200|strict[-_]?seri
   exit 3
 fi
 
+# The live vps-only-loop.sh executes factory_staging_tick and invokes master,
+# discovery and intake commands. It is an independently running factory writer,
+# not a verified participant in the F01 global lane. Enabling an additional
+# systemd scheduler while it runs could create concurrent production paths.
+if ! command -v pgrep >/dev/null; then
+  echo F01_PREFLIGHT_PROCESS_INVENTORY_UNAVAILABLE >&2
+  exit 3
+fi
+if pgrep -f '/vps-only-loop[.]sh|manage[.]py[[:space:]]+factory_staging_tick' >/dev/null; then
+  echo F01_PREFLIGHT_COMPETING_STAGING_LOOP_PRESENT >&2
+  exit 3
+else
+  scan_status=$?
+  if [ "$scan_status" -ne 1 ]; then
+    echo F01_PREFLIGHT_PROCESS_INVENTORY_UNREADABLE >&2
+    exit 3
+  fi
+fi
+
 # Read-only admission: a timer is not evidence of a safe single-product runtime.
 # Refuse installation unless the existing VPS source and private state identify
 # exactly the one permitted product. This runs before touching systemd files.
@@ -120,3 +139,4 @@ systemctl daemon-reload
 systemctl enable --now saeit-factory-cycle.timer
 systemctl enable --now saeit-factory-watchdog.timer
 systemctl --no-pager --full status saeit-factory-cycle.timer saeit-factory-watchdog.timer
+
