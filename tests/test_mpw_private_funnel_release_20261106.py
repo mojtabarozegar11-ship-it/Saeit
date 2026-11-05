@@ -42,6 +42,7 @@ class ReleaseChecks(unittest.TestCase):
             patch.object(release, "BACKUPS", self.root / "backups"),
             patch.object(release, "GUEST_BEFORE", release.sha(self.guest.read_bytes())),
             patch.object(release, "guard_host", lambda: None),
+            patch.object(release, "ready_storage", lambda: None),
         )
         for p in self.patches:
             p.start()
@@ -80,6 +81,15 @@ class ReleaseChecks(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "METRICS_ALREADY_EXISTS"):
             release.state(self.stage)
         self.assertEqual(self.guest.read_bytes(), b"# current live guest\n")
+
+    def test_private_storage_failure_rolls_back(self):
+        before = self.guest.read_bytes(), self.settings.read_bytes()
+        with patch.object(release, "ready_storage", side_effect=RuntimeError("unsafe private storage")):
+            with patch.object(release, "restart", lambda: None):
+                with self.assertRaisesRegex(RuntimeError, "unsafe private storage"):
+                    release.publish(self.stage, "42120000002")
+        self.assertEqual((self.guest.read_bytes(), self.settings.read_bytes()), before)
+        self.assertFalse(self.metrics.exists())
 
 
 if __name__ == "__main__":
