@@ -45,6 +45,8 @@ the runtime is the existing Passenger/Django application on cPanel.
 6. With owner approval, set `MPW_GUEST_RECOVERY_ENABLED=true` while
    `MPW_GUEST_RECOVERY_EMAIL_APPROVED=false`, restart Passenger via its actual
    public app root, and perform GET/POST smoke checks **without sending email**.
+   During this period the recovery UI clearly states that it is unavailable;
+   the normal support path stays visible.
 7. **Separate explicit owner approval** is required to set
    `MPW_GUEST_RECOVERY_EMAIL_APPROVED=true` and send even the first real
    recovery email. Use a controlled real order and test download after code
@@ -77,3 +79,7 @@ python scripts/test_mpw_guest_first_order_identity.py
 
 The test settings use only an in-memory SQLite database and a local-memory
 email backend; no TRX transfer or SMTP network call is made.
+
+The repository's pre-existing model/migration mismatch for older knowledge
+models causes a separate `makemigrations --check` warning; do not generate or
+apply that unrelated destructive model-removal migration as part of this task.

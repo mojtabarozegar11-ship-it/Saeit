@@ -7,6 +7,7 @@ import unittest
 from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
+from unittest.mock import MagicMock
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.mpw_recovery_test_settings")
 
@@ -180,6 +181,61 @@ class RecoveryIsolationTests(unittest.TestCase):
             self.assertTrue(module._allowed(req))
         self.assertFalse(module._allowed(req))
         self.assertEqual(GuestRecoveryRate.objects.count(), 1)
+
+    @override_settings(MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
+    def test_approved_request_still_does_not_send_for_unknown_email(self):
+        module.bound_checkout(self._request(), self._start, self._identity,
+                              self._install, (72,), {})
+        responses = []
+        with patch.object(module, "_allowed", return_value=True), \
+             patch.object(module, "_eligible_orders") as eligible, \
+             patch.object(module, "_issue") as issue:
+            for address, found in (("buyer@example.com", True),
+                                   ("unknown@example.com", False)):
+                req = self.rf.post(module.ROOT, {"email": address}, secure=True,
+                    HTTP_HOST="mojplaywin.com",
+                    HTTP_REFERER="https://mojplaywin.com" + module.ROOT)
+                from django.middleware.csrf import get_token
+                req.META["CSRF_COOKIE"] = "B" * 32
+                req.COOKIES["csrftoken"] = "B" * 32
+                data = req.POST.copy()
+                data["csrfmiddlewaretoken"] = get_token(req)
+                req._post = data
+                eligible.return_value = ([(Order.objects.get(), PaymentIntent.objects.get())]
+                                         if found else [])
+                responses.append(module.recovery_request(req))
+            self.assertEqual(issue.call_count, 1)
+        self.assertEqual(responses[0].content, responses[1].content)
+
+    def test_fulfillment_rejects_partially_ready_order(self):
+        fake_field = SimpleNamespace(name="item", related_model=SimpleNamespace(
+            _meta=SimpleNamespace(label_lower="core.orderitem")))
+        state_field = SimpleNamespace(name="status")
+        fulfillment = SimpleNamespace(
+            _meta=SimpleNamespace(fields=[fake_field, state_field]),
+            objects=MagicMock(),
+        )
+        fulfillment.objects.filter.return_value.count.return_value = 1
+        fake_items = MagicMock()
+        fake_items.objects.filter.return_value.count.return_value = 2
+        with patch.object(module.apps, "get_model", return_value=fulfillment), \
+             patch.object(module, "OrderItem", fake_items):
+            self.assertFalse(module._ready(SimpleNamespace(pk=123)))
+            fulfillment.objects.filter.return_value.count.return_value = 2
+            self.assertTrue(module._ready(SimpleNamespace(pk=123)))
+
+    def test_prune_removes_no_persistent_order_claims(self):
+        module.bound_checkout(self._request(), self._start, self._identity,
+                              self._install, (72,), {})
+        GuestRecoveryRate.objects.create(bucket="f" * 64, count=1,
+                            expires_at=timezone.now() - timedelta(days=3))
+        GuestRecoveryToken.objects.create(token_digest="e" * 64,
+                            email_digest="a" * 64,
+                            expires_at=timezone.now() - timedelta(days=3))
+        call_command("mpw_purge_recovery_ephemeral", verbosity=0)
+        self.assertEqual(GuestOrderEmail.objects.count(), 1)
+        self.assertEqual(GuestRecoveryToken.objects.count(), 0)
+        self.assertEqual(GuestRecoveryRate.objects.count(), 0)
 
     @override_settings(MPW_GUEST_RECOVERY_ENABLED=True)
     def test_recovery_urls_are_grafted_without_replacing_existing_handlers(self):

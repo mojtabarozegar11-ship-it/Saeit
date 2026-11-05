@@ -226,7 +226,8 @@ def patch_public(namespace):
             from django.conf import settings
             recovery_link = (
                 '<p><a href="/commerce/trx-easy/recover/">Recover using purchase email</a></p>'
-                if getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True
+                if (getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True
+                    and getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True)
                 else ""
             )
             response = HttpResponse(

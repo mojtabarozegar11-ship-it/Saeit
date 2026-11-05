@@ -236,6 +236,12 @@ def _issue(email, email_digest):
 def recovery_request(request):
     if not _host(request):
         raise Http404
+    if getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is not True:
+        return _page("Email recovery is not yet available",
+                     '<p>Do not make another payment. If you already paid, '
+                     'contact <a href="mailto:support@mojplaywin.com">purchase support</a> '
+                     'with your invoice reference and transaction hash. '
+                     'Never share a wallet recovery phrase.</p>')
     if request.method == "GET":
         return _page("Recover a TRX purchase", '<p>Use the email entered at checkout.</p>' +
                      _form(request, ROOT, [("Purchase email", "email", "email")], "Request code"), request)
@@ -243,8 +249,7 @@ def recovery_request(request):
         address = _email(request.POST.get("email", ""))
     except ValueError:
         address = None
-    if address and _allowed(request, address) and (
-            getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True):
+    if address and _allowed(request, address):
         digest = _digest(address)
         try:
             orders = _eligible_orders(digest)
