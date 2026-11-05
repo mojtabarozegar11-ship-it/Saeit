@@ -1,0 +1,114 @@
+name: F01 VPS isolated factory backup restore proof
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/f01-vps-isolated-backup-restore.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f01-vps-private-restore-verification
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.ref == 'fix/f01-single-product-handoff-lock-20261031'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Validate existing backup by restoring to a temporary directory only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/f01-private-restore"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o ForwardAgent=no -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          import ast
+          import hashlib
+          from pathlib import Path, PurePosixPath
+          import shutil
+          import subprocess
+          import tarfile
+          import tempfile
+
+          base = Path.home() / "factory-runtime"
+          backups = base / "operations/backups"
+          if base.is_symlink() or not base.is_dir() or backups.is_symlink() or not backups.is_dir():
+              raise SystemExit("F01_RESTORE_BACKUP_ROOT_UNSAFE")
+          choices = [p for p in backups.iterdir()
+                     if p.name.startswith("single-product-runtime-")
+                     and p.is_dir() and not p.is_symlink()]
+          if not choices:
+              raise SystemExit("F01_RESTORE_BACKUP_NOT_FOUND")
+          source = max(choices, key=lambda path: path.stat().st_mtime)
+          archive = source / "runtime-before.tar.gz"
+          cron = source / "crontab.before"
+          if (archive.is_symlink() or not archive.is_file()
+                  or not 0 < archive.stat().st_size <= 50000000
+                  or cron.is_symlink() or not cron.is_file()
+                  or cron.stat().st_size > 200000):
+              raise SystemExit("F01_RESTORE_SOURCE_MISSING_OR_UNSAFE")
+
+          with tarfile.open(archive, mode="r:gz") as tar:
+              members = tar.getmembers()
+              if not 0 < len(members) <= 3000:
+                  raise SystemExit("F01_RESTORE_MEMBER_COUNT_UNSAFE")
+              total_bytes = sum(m.size for m in members if m.isfile())
+              if total_bytes > 150000000:
+                  raise SystemExit("F01_RESTORE_UNCOMPRESSED_SIZE_UNSAFE")
+              for m in members:
+                  parts = PurePosixPath(m.name).parts
+                  if (not parts or m.name.startswith("/") or ".." in parts
+                          or not (m.isfile() or m.isdir())):
+                      raise SystemExit("F01_RESTORE_ARCHIVE_CONTAINS_UNSAFE_MEMBER")
+
+              # TemporaryDirectory is deliberately outside the live factory
+              # runtime; it removes only the isolated extracted copy.
+              with tempfile.TemporaryDirectory(prefix="f01-single-product-restore-") as temp:
+                  root = Path(temp)
+                  for m in members:
+                      target = root.joinpath(*PurePosixPath(m.name).parts)
+                      if m.isdir():
+                          target.mkdir(parents=True, exist_ok=True)
+                      else:
+                          target.parent.mkdir(parents=True, exist_ok=True)
+                          stream = tar.extractfile(m)
+                          if stream is None:
+                              raise SystemExit("F01_RESTORE_FILE_UNREADABLE")
+                          with stream, target.open("wb") as out:
+                              shutil.copyfileobj(stream, out)
+
+                  restored = root / "single-product-runtime"
+                  runner = restored / "run-single-product-cycle.sh"
+                  core = restored / "scripts/factory_vps_product_cycle.py"
+                  if not runner.is_file() or not core.is_file():
+                      raise SystemExit("F01_RESTORE_REQUIRED_RUNTIME_FILES_MISSING")
+                  ast.parse(core.read_text(encoding="utf-8"))
+                  syntactic = subprocess.run(["bash", "-n", str(runner)],
+                                             capture_output=True, timeout=15)
+                  if syntactic.returncode != 0:
+                      raise SystemExit("F01_RESTORE_RUNNER_SYNTAX_INVALID")
+                  digest = hashlib.sha256(core.read_bytes()).hexdigest()
+                  print("F01_ISOLATED_RESTORE=PASS")
+                  print("F01_RESTORED_MEMBER_COUNT=" + str(len(members)))
+                  print("F01_RESTORED_TOTAL_BYTES=" + str(total_bytes))
+                  print("F01_RESTORED_CORE_SHA256=" + digest)
+                  print("F01_CRON_BACKUP_PRESENT=true")
+                  print("F01_LIVE_RUNTIME_CHANGED=false")
+                  print("F01_OFFHOST_RESTORE_PROOF=NOT_YET_VERIFIED")
+          PY
