@@ -17,8 +17,9 @@
    `python3 scripts/mojtrade_observe_market.py --output /var/lib/mojtrade/private/validated-payload.json`
 
 3. Inspect the exit status and JSON. The success message confirms **only** that the configured market-source responses passed basic structure and freshness checks, not execution on a broker or realized P&L.
-4. The independently scheduled templates are `deploy/systemd/mojtrade-observer.service` and `deploy/systemd/mojtrade-observer.timer`. They assume `User=mojtrade`, a readable checkout at `/opt/mojtrade`, and a private writable `/var/lib/mojtrade/private`. Install these units and enable the timer only after verifying these assumptions and VPS network access. The timer runs once per hour after minute 07, without GitHub Actions.
-5. The separately reviewed `scripts/mojtrade_sign_feed.py` (PR #1892) can sign the private payload with an environment-injected HMAC key. Moving that signed feed to cPanel and enabling public signals are **separate, not yet authorized** actions. `MOJTRADE_PUBLICATION_ENABLED=false` must remain the default.
+4. On the existing `githubops` VPS runtime, the supported manual installation route is `.github/workflows/mojtrade-vps-observer-activate.yml` using the previously pinned SSH fingerprint. It stages only the observer and `deploy/install_mojtrade_observer_vps.sh` under `~/factory-runtime/operations/mojtrade`, validates a **real** upstream candle fetch, then adds exactly one hourly cron entry. No cron is changed if source validation fails. It stores output in `~/factory-runtime/private/mojtrade` and never touches the database, factory cron or master-agent cron.
+5. The independent systemd templates are an **alternative for a VPS with a dedicated `mojtrade` user and root-managed systemd**; they are not the install route for the existing `githubops` VPS.
+6. The separately reviewed `scripts/mojtrade_sign_feed.py` (PR #1892) can sign the private payload with an environment-injected HMAC key. Moving that signed feed to cPanel and enabling public signals are **separate, not yet authorized** actions. `MOJTRADE_PUBLICATION_ENABLED=false` must remain the default.
 
 ## Release blocks
 
