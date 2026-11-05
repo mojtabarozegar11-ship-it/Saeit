@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import hmac
+import re
 import secrets
 import sys
 import types
@@ -68,6 +69,7 @@ class User:
         self.is_active = True
         self.pk = None
         self.unusable = False
+        self.email = ""
 
     def set_unusable_password(self):
         self.unusable = True
@@ -75,11 +77,14 @@ class User:
     def has_usable_password(self):
         return not self.unusable
 
-    def save(self, force_insert=False):
-        assert force_insert is True
-        if self.username in USERS:
-            raise IntegrityError("duplicate")
-        self.pk = len(USERS) + 1
+    def save(self, force_insert=False, update_fields=None):
+        if force_insert:
+            if self.username in USERS:
+                raise IntegrityError("duplicate")
+            self.pk = len(USERS) + 1
+            USERS[self.username] = self
+            return
+        assert self.username in USERS
         USERS[self.username] = self
 
 
@@ -106,7 +111,7 @@ def load_real_functions():
     ]
     assert len(functions) == 2
     namespace = {
-        "hashlib": hashlib, "hmac": hmac, "secrets": secrets,
+        "hashlib": hashlib, "hmac": hmac, "re": re, "secrets": secrets,
         "Http404": Http404, "SALT": "isolated-test", "MAX_COOKIE": 512,
         "_rate_limit": lambda request: None,
         "signing": types.SimpleNamespace(
@@ -123,7 +128,8 @@ def run():
     install_fake_django()
     functions = load_real_functions()
     request = lambda secret: types.SimpleNamespace(
-        META={"CSRF_COOKIE": secret}
+        META={"CSRF_COOKIE": secret},
+        POST={"email": "buyer@example.com"},
     )
     one, _ = functions["_new_user"](request("A" * 32))
     # Force a stale initial lookup to exercise the concurrent insert conflict.
