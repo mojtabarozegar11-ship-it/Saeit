@@ -47,7 +47,7 @@
     },
     "05": {
       "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
-      "sequence": 1,
+      "sequence": 2,
       "legacy_report_last_verified": 57,
       "primary_output": "accepted operational business gate",
       "legacy_source_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725",
@@ -78,6 +78,16 @@
       "acceptance_result": "GitHub ledger file created on dedicated branch and exact content read back",
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/e19d43c0c6c2bfe211837ff5cbd801345f9084c4",
       "impact": "Collision-aware non-sensitive result index initialized; no product or revenue claim"
+    },
+    {
+      "registry_id": "R05-0002",
+      "cycle_id": "05",
+      "run_id": "manual-20261105-pr1837-local-test-12",
+      "deliverable_key": "receipt-validator-test-execution",
+      "stage": "code",
+      "acceptance_result": "12/12 unit tests passed on exact PR #1837 head using independent Python 3.12.14; importer integration and live acceptance not verified",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/1837#issuecomment-6649575610",
+      "impact": "Removed unverified-local-test blocker only; no deployment, sales or product acceptance"
     }
   ],
   "report_reservations": [],
