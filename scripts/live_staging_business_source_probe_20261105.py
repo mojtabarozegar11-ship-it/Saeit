@@ -273,6 +273,28 @@ def staging_delivery_context() -> dict[str, object]:
     info['matching_staging_passenger_process_ages_sec'] = sorted(process_ages)[:10]
     return info
 
+
+def staging_passenger_process_origins() -> dict[str, object]:
+    """Inspect owned process workdirs without exposing commands or environments."""
+    records = []
+    for candidate in Path('/proc').iterdir():
+        if not candidate.name.isdecimal():
+            continue
+        try:
+            command = (candidate / 'cmdline').read_bytes().replace(b'\x00', b' ').decode('utf-8', 'replace')
+            if 'Saeit-staging' not in command:
+                continue
+            workdir = os.readlink(str(candidate / 'cwd'))
+            home_prefix = str(HOME) + '/'
+            sanitized_workdir = workdir[len(home_prefix):] if workdir.startswith(home_prefix) else 'OUTSIDE_EXPECTED_HOME'
+            arguments = command.lower()
+            records.append({'cwd_relative': sanitized_workdir[:160],
+                            'is_passenger': 'passenger' in arguments,
+                            'is_active_root': 'admin-smoke/ab090d03f5bc-38498776878' in arguments})
+        except (OSError, PermissionError):
+            continue
+    return {'changed_files': 0, 'matched_process_count': len(records), 'processes': records[:35]}
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -285,5 +307,6 @@ if __name__ == '__main__':
         }, 'source': source_inventory(), 'staging_card_source': staging_public_card_source(),
         'active_staging_routing': staging_active_wsgi_mapping(),
         'route_and_template_context': staging_route_and_template_context(),
-        'staging_delivery_context': staging_delivery_context()},
+        'staging_delivery_context': staging_delivery_context(),
+        'staging_process_origins': staging_passenger_process_origins()},
         ensure_ascii=False, sort_keys=True))
