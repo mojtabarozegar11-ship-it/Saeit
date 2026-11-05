@@ -2,7 +2,7 @@
 
 ## Delivered scope
 
-- Read-only collection of **actual** hourly BTC-USD and ETH-USD candles from Coinbase Exchange's public API.
+- Read-only collection of **actual** hourly BTC-USD and ETH-USD candles from Coinbase Exchange's public API, with an independent Kraken Spot OHLC fallback. Each emitted research observation identifies the provider actually used; a provider failure never results in invented prices.
 - Uses only finished hourly candles; rejects data gaps, duplicate or invalid prices, and stale observations.
 - Calculates reproducible SMA20/SMA50/momentum10 *research watch states*; these are **not** verified profitable strategies or personalized recommendations.
 - Emits exactly the schema required by the separate signed-feed interface in PR #1892 (`schema_version=1`, `source=mojtrade-vps`, `signals[]`). The output is private, atomically replaced, and expires in 90 minutes.
@@ -27,6 +27,8 @@
 - **No live trades.** Real order execution requires a distinct integration with a named broker, exchange eligibility, withdrawal-disabled credentials, limits, independent reconciliation, and the owner's transaction-level approval.
 - No financial viability claim without forward performance, fees, slippage, execution records, and independently reconciled net P&L.
 - This observer covers two cryptocurrency markets only. Forex, securities, commodities, bonds and funds remain unconnected; do not present them as operational market data.
-- If the upstream API returns incomplete data or stops serving requests, the proper outcome is a visible data-quality failure, not a fabricated signal.
+- If both official APIs return incomplete data or fail, the proper outcome is a visible data-quality failure, not a fabricated signal. This includes an explicit short HTTP/network failure classification in the private installation log.
 
 Provider reference: https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles
+
+Fallback provider reference: https://docs.kraken.com/api-reference/market-data/get-ohlc-data
