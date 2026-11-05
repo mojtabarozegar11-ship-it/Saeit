@@ -82,6 +82,44 @@ jobs:
             echo "FACTORY_AUTOSTART_BLOCKED_LOW_DISK"
             exit 1
           fi
+          # Global safety: a separate Line41 lane or its waiting queue must not be
+          # overlapped by a restarted Django loop. Missing or unsafe state is HOLD.
+          if ! "$base/.venv/bin/python" - "$base" <<'PY_LINE41'
+          import json
+          from pathlib import Path
+          import sys
+          base = Path(sys.argv[1])
+          state_path = base / "private/autonomous-product-cycle/quality-excellence/product-flow/active-slots/current.json"
+          if any(p.is_symlink() for p in (state_path, *state_path.parents)):
+              raise SystemExit("FACTORY_AUTOSTART_BLOCKED_LINE41_PATH_UNSAFE")
+          try:
+              if not state_path.is_file() or state_path.stat().st_size > 2000000:
+                  raise SystemExit("FACTORY_AUTOSTART_BLOCKED_LINE41_STATE_UNKNOWN")
+              slot = json.loads(state_path.read_text(encoding="utf-8"))
+              if (not isinstance(slot, dict) or slot.get("schema") != "saeit.factory.product-slots.v1"
+                      or not isinstance(slot.get("active"), list)
+                      or not isinstance(slot.get("waiting"), list)):
+                  raise SystemExit("FACTORY_AUTOSTART_BLOCKED_LINE41_SCHEMA")
+              if slot["active"] or slot["waiting"]:
+                  raise SystemExit("FACTORY_AUTOSTART_BLOCKED_LINE41_OWNS_OR_QUEUES_PRODUCT")
+              global_lane = base / "private/autonomous-product-cycle/.f01-global-production-lane.json"
+              if any(p.is_symlink() for p in (global_lane, *global_lane.parents)):
+                  raise SystemExit("FACTORY_AUTOSTART_BLOCKED_GLOBAL_LANE_PATH_UNSAFE")
+              if not global_lane.is_file() or global_lane.stat().st_size > 4096:
+                  raise SystemExit("FACTORY_AUTOSTART_BLOCKED_GLOBAL_LANE_NOT_PROVEN")
+              record = json.loads(global_lane.read_text(encoding="utf-8"))
+              if (not isinstance(record, dict)
+                      or record.get("schema") != "saeit.factory.global-single-production-lane.v1"
+                      or record.get("owner") is not None):
+                  raise SystemExit("FACTORY_AUTOSTART_BLOCKED_GLOBAL_LANE_OCCUPIED_OR_UNTRUSTED")
+          except (OSError, UnicodeError, ValueError):
+              raise SystemExit("FACTORY_AUTOSTART_BLOCKED_LINE41_STATE_UNREADABLE")
+          print("FACTORY_AUTOSTART_LEGACY_LANES_NOT_OCCUPIED_PREFLIGHT_ONLY")
+          PY_LINE41
+          then
+            echo "FACTORY_AUTOSTART_BLOCKED_CROSS_LANE_PREFLIGHT"
+            exit 1
+          fi
           # Fail closed if the Django factory has multiple active product identities.
           # This is a local pre-start guard, NOT proof that other producer lanes are idle.
           test -x "$base/.venv/bin/python" && test -f "$base/django-app/manage.py"
