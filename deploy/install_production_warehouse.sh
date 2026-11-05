@@ -14,6 +14,14 @@ source="$repo/scripts/factory_production_warehouse.py"
 cycle_script="$runtime/run-local-cycle.sh"
 marker="SAEIT_PRODUCTION_WAREHOUSE_V1"
 
+# CI success and a missing scheduler are not authorization to mutate the VPS.
+# The legacy bootstrap below can edit cron and install workers, so require an
+# explicit owner-approved environment gate before any installation path.
+if [ "${SAEIT_WAREHOUSE_INSTALL_APPROVED:-}" != "1" ]; then
+  echo FACTORY_WAREHOUSE_INSTALL_APPROVAL_REQUIRED >&2
+  exit 1
+fi
+
 test "$(id -un)" = githubops || { echo FACTORY_WAREHOUSE_WRONG_SERVICE_USER; exit 1; }
 test "$(id -u)" -ne 0
 test -d "$base" && test ! -L "$base"
