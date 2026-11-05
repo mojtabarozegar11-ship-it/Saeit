@@ -27,6 +27,10 @@ def test_market_research_and_scoring_are_verified_before_offer_design():
 
     assert brain.candidates(state)[0].action == "income_market_research"
 
+    # A successful internal inventory is not proof that external buyers exist.
+    state["market_inventory_measured"] = True
+    assert brain.candidates(state)[0].action == "await_external_market_evidence"
+
     state["market_research_complete"] = True
     assert brain.candidates(state)[0].action == "income_opportunity_score"
 
@@ -44,12 +48,22 @@ class VerifiedEconomicCycleTests(TestCase):
             active=True,
         )
 
-    def add_task(self, capability, created_at):
+    def add_task(self, capability, created_at, *, market_validation=False, inventory=False):
+        output = {"verified_effect": True}
+        if market_validation:
+            output["market_validation"] = {
+                "status": "independently_verified",
+                "source_type": "external_customer_demand",
+                "validated_by": "independent_market_evidence_adapter",
+                "source_id": "customer-signal-123",
+            }
+        if inventory:
+            output["evidence"] = {"kind": "database_measurement"}
         task = AgentTask.objects.create(
             agent=self.agent,
             capability_code=capability,
             status="completed",
-            output_data={"verified_effect": True},
+            output_data=output,
         )
         AgentTask.objects.filter(pk=task.pk).update(created_at=created_at)
         return task
@@ -72,10 +86,15 @@ class VerifiedEconomicCycleTests(TestCase):
         self.assertFalse(state["market_research_complete"])
         self.assertFalse(state["opportunity_scored"])
 
-        self.add_task("income_market_research", now - timedelta(hours=1))
+        self.add_task("income_market_research", now - timedelta(hours=1), inventory=True)
+        state = brain.observe()
+        self.assertTrue(state["market_inventory_measured"])
+        self.assertFalse(state["market_research_complete"])
+        self.assertFalse(state["opportunity_scored"])
+
+        self.add_task("income_market_research", now - timedelta(minutes=30), market_validation=True)
         state = brain.observe()
         self.assertTrue(state["market_research_complete"])
-        self.assertFalse(state["opportunity_scored"])
 
         self.add_task("income_opportunity_score", now)
         state = brain.observe()
