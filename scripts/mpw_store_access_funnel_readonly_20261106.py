@@ -83,6 +83,19 @@ def _category(method, path):
     return None
 
 
+def _public_error_bucket(stamp, stage, path, code, automated):
+    """Categorize server errors without retaining visitor or invoice identifiers."""
+    if code < 500 or stage not in ('checkout_get', 'order_post'):
+        return None
+    matched = (CHECKOUT_RE.fullmatch(path) if stage == 'checkout_get'
+               else START_RE.fullmatch(path))
+    if stage == 'order_post' and matched is None:
+        return None
+    public_product = int(path.rstrip('/').rsplit('/', 1)[-1]) if matched else 0
+    return (stamp.date().isoformat(), stage, code, public_product,
+            'suspected_bot' if automated else 'unclassified_browser')
+
+
 def _logs():
     candidates = []
     for folder in (ACCOUNT / 'access-logs', Path('/usr/local/apache/domlogs')):
@@ -213,6 +226,7 @@ def _audit():
     cutoff = now - timedelta(days=LOOKBACK_DAYS)
     totals = Counter()
     day_counts = defaultdict(Counter)
+    server_errors = Counter()
     raw_files = _logs()
     archived_files = _archives() if not raw_files else []
     source_files = raw_files or archived_files
@@ -248,6 +262,10 @@ def _audit():
                     key = group + ':' + stage + ':' + status_class
                     totals[key] += 1
                     day_counts[stamp.date().isoformat()][key] += 1
+                    error_bucket = _public_error_bucket(
+                        stamp, stage, req_path, code, automated)
+                    if error_bucket:
+                        server_errors[error_bucket] += 1
                 if scanned_lines > MAX_LINES:
                     break
         except (OSError, PermissionError, EOFError):
@@ -264,6 +282,13 @@ def _audit():
         'scanned_lines': min(scanned_lines, MAX_LINES),
         'scanned_bytes': min(scanned_bytes, MAX_LOG_BYTES),
         'totals': dict(sorted(totals.items())),
+        'server_errors': [
+            {'utc_day': day, 'stage': stage, 'http_status': status,
+             'public_product_id': product_id, 'agent_class': agent_class,
+             'requests': count}
+            for (day, stage, status, product_id, agent_class), count
+            in sorted(server_errors.items())
+        ],
         'daily': {day: dict(sorted(values.items()))
                   for day, values in sorted(day_counts.items())},
         'awstats': _awstats_monthly(),
@@ -292,6 +317,13 @@ def _selftest():
     assert _category('POST', '/commerce/trx-easy/start/72/') == 'order_post'
     assert _category('GET', '/commerce/trx-easy/invoice/12/') == 'invoice_get'
     assert _category('GET', '/admin/') is None
+    assert _public_error_bucket(parsed[0], 'order_post',
+                                '/commerce/trx-easy/start/72/?token=hidden', 500,
+                                False) is None
+    assert _public_error_bucket(parsed[0], 'order_post',
+                                '/commerce/trx-easy/start/72/', 500, False)[3] == 72
+    assert _public_error_bucket(parsed[0], 'invoice_get',
+                                '/commerce/trx-easy/invoice/800/', 500, False) is None
     assert AWSTATS_RE.fullmatch('awstats112026.mojplaywin.com.txt')
     assert not AWSTATS_RE.fullmatch('awstats112026.other-site.com.txt')
     print('MPW_ACCESS_FUNNEL_SELFTEST=PASS')
