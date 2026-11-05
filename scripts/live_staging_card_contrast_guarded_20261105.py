@@ -37,7 +37,7 @@ def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def app_roots() -> tuple[Path, Path]:
+def app_root() -> Path:
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise RuntimeError('WRONG_CPANEL_USER')
     if WEB_CONF.is_symlink() or not WEB_CONF.is_file():
@@ -46,23 +46,22 @@ def app_roots() -> tuple[Path, Path]:
     match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)\s*$', cfg)
     if not match:
         raise RuntimeError('STAGING_PASSENGER_ROOT_MISSING')
-    active = Path(match.group(1).strip('"'))
+    configured = match.group(1).strip('"')
     canonical = HOME / 'Saeit-staging'
-    if (active.is_symlink() or not active.is_dir() or
-            HOME / 'Saeit-staging/admin-smoke' not in active.parents or
-            canonical.is_symlink() or not canonical.is_dir() or active == canonical):
+    if (configured not in ('$ACCOUNT_HOME/Saeit-staging', str(canonical)) or
+            canonical.is_symlink() or not canonical.is_dir()):
         raise RuntimeError('STAGING_APP_ROOT_OUT_OF_SCOPE')
-    return canonical, active
+    return canonical
 
 
-def targets() -> tuple[Path, Path]:
-    canonical, active = app_roots()
-    files = (SOURCE, active / 'core/templates/core/services.html')
+def targets() -> tuple[Path, ...]:
+    canonical = app_root()
+    files = (SOURCE,)
     for target in files:
         if (target.is_symlink() or target.parent.is_symlink() or
                 not target.is_file() or target.stat().st_size > 90000):
             raise RuntimeError('STAGING_TEMPLATE_UNSAFE:' + str(target))
-    if files[0] == files[1] or files[0].parents[3] != canonical:
+    if files[0].parents[3] != canonical:
         raise RuntimeError('STAGING_SOURCE_OR_ACTIVE_TEMPLATE_MISMATCH')
     return files
 
@@ -87,9 +86,8 @@ def prepared() -> tuple[bytes, bytes]:
     return old, new
 
 
-def restart_markers() -> tuple[Path, Path]:
-    canonical, active = app_roots()
-    markers = tuple(root / 'tmp/restart.txt' for root in (canonical, active))
+def restart_markers() -> tuple[Path, ...]:
+    markers = (app_root() / 'tmp/restart.txt',)
     for index, marker in enumerate(markers):
         if (marker.parent.is_symlink() or not marker.parent.is_dir() or
                 marker.is_symlink() or
@@ -103,8 +101,8 @@ def restart_markers() -> tuple[Path, Path]:
 def staging_workers() -> list[int]:
     if not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
         raise RuntimeError('SAFE_PIDFD_RESTART_UNSUPPORTED')
-    canonical, active = app_roots()
-    allowed = {str(canonical): 0, str(active): 0}
+    canonical = app_root()
+    allowed = {str(canonical): 0}
     found: list[int] = []
     for item in Path('/proc').iterdir():
         if not item.name.isdecimal():
@@ -126,8 +124,7 @@ def staging_workers() -> list[int]:
             continue
         except (OSError, PermissionError, ValueError) as exc:
             raise RuntimeError('CANNOT_GUARD_STAGING_WORKER') from exc
-    if not (1 <= len(found) <= 20 and 1 <= allowed[str(canonical)] <= 12
-            and allowed[str(active)] <= 10):
+    if not (1 <= len(found) <= 12 and 1 <= allowed[str(canonical)] <= 12):
         raise RuntimeError('STAGING_WORKER_SET_CHANGED')
     return found
 
@@ -187,7 +184,7 @@ def preview() -> None:
     restart_markers()
     count = len(staging_workers())
     print('STAGING_CONTRAST_PREVIEW=' + json.dumps({
-        'old_sha': sha(old), 'new_sha': sha(new), 'template_copies': 2,
+        'old_sha': sha(old), 'new_sha': sha(new), 'template_copies': 1,
         'eligible_staging_workers': count, 'outside_staging_changes': False}), flush=True)
 
 
@@ -233,7 +230,7 @@ def publish(run_id: str) -> None:
             recycle_staging_only()
         raise
     print('STAGING_CONTRAST_PUBLISHED=' + json.dumps({
-        'backup': str(dest), 'templates_changed': 2,
+        'backup': str(dest), 'templates_changed': 1,
         'main_site_vps_factory_payments_changed': False}), flush=True)
 
 
