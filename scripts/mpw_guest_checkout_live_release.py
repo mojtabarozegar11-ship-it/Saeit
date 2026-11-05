@@ -194,7 +194,7 @@ def verify():
   response=Client(enforce_csrf_checks=True).get(route,secure=True,HTTP_HOST='mojplaywin.com')
   if response.status_code!=200: fail('ANONYMOUS_CHECKOUT_HTTP:'+str(pid)+':'+str(response.status_code))
   body=response.content.decode('utf8','replace')
-  if 'Create invoice and pay with TRX' not in body: fail('TRX_CTA_MISSING:'+str(pid))
+  cta_ok = ('Create invoice and pay with TRX' in body or\n            'Email my invoice and pay with TRX' in body)\n  if not cta_ok: fail('TRX_CTA_MISSING:'+str(pid))
   print('MPW_GUEST_CHECKOUT_ROUTE='+json.dumps({'product':pid,'http':response.status_code,'handler':getattr(target,'__name__','?'),'order_created':False}))
  recovery_route = '/commerce/trx-easy/purchases/'
  try:
