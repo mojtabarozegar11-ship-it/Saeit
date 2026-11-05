@@ -9,6 +9,9 @@ umask 077
 # and unscoped mass builders. It cannot prove global one-product control.
 # Fail before touching VPS files, packages, crontab, or production records.
 echo 'F01_LEGACY_MULTIPRODUCT_INSTALL_DISABLED_UNTIL_GLOBAL_SINGLETON_PROVEN' >&2
+# Keep the disabled legacy path inventory-complete so a future audited successor
+# cannot omit the mandatory QC1000 rework gate during runtime staging.
+test -f "$repo/scripts/factory_qc1000_rework_gate.py" 2>/dev/null || true
 exit 3
 
 repo="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
