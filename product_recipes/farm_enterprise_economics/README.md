@@ -269,6 +269,25 @@ No telemetry is collected; all inputs and outputs remain on the device.
 The software rejects negative quantities/costs, non-finite numeric values,
 duplicate enterprise labels, and fee percentages outside 0–100%.
 
+### Product-bound technical evidence (offline)
+
+The factory can create a fresh, immutable technical evidence folder without
+GitHub Actions, APIs, external accounts, or production deployment:
+
+    python -B build_technical_evidence.py --evidence-dir /path/to/new-private-evidence-folder
+
+The capture re-runs every calculator unit test, generates and hashes the four
+illustrative customer-facing report formats, and records exact recipe and test
+source hashes. Six candidate technical criteria (Q035, Q036, Q037, Q061, Q063,
+Q064) receive distinct evidence records. The manifest is written last; a
+failed run cannot create a completion receipt. Use a **new empty folder** for
+each edition so old evidence cannot be silently overwritten.
+
+These records cover internally reproducible technical checks only. They do
+**not** award quality points, verify real customer assumptions, authenticate
+three independent reviewers, certify 1000/1000, or authorize sale or handoff.
+The factory's separate signed release and receiving-cycle gates remain intact.
+
 ## Editorial / commercial status
 
 This toolkit is a technical candidate generated within the Saeit factory.
