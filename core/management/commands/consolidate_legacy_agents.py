@@ -30,7 +30,7 @@ PROTECTED_AGENT_CODES = frozenset({
     "knowledge-content-director",
 })
 ACTIVE_TASK_STATUSES = ("queued", "running", "blocked")
-PENDING_NEWSLETTER_STATUSES = ("draft", "scheduled", "review", "queued", "processing")
+PENDING_NEWSLETTER_STATUSES = ("draft", "approved", "scheduled", "review", "queued", "processing")
 
 
 def is_known_legacy(code):
