@@ -135,6 +135,13 @@ jobs:
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           timeout 90s ssh -T -F "$RUNNER_TEMP/live-multisite-ssh/config" "$COMMAND_HOST" 'if test -x /home/zomorod2/virtualenv/Saeit/3.11/bin/python; then exec /home/zomorod2/virtualenv/Saeit/3.11/bin/python -; else exec python3 -; fi' < scripts/live_primary_django_factory_diagnostic_20261105.py
+      - name: Check primary application compatibility with existing staging Python interpreter
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 90s ssh -T -F "$RUNNER_TEMP/live-multisite-ssh/config" "$COMMAND_HOST" 'PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' < scripts/live_primary_django_factory_diagnostic_20261105.py
       - name: Audit public sites, subsites, and critical routes by HTTPS GET
         run: |
           set -euo pipefail
