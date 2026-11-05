@@ -8,11 +8,13 @@ counter module, an explicit setting, and a Passenger refresh marker.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
 import pwd
 import re
+import sqlite3
 import stat
 import sys
 import tempfile
@@ -151,6 +153,21 @@ def restart():
     RESTART.touch()
 
 
+def ready_storage():
+    """Create only a private empty aggregate table; never fabricate an event."""
+    spec = importlib.util.spec_from_file_location("mpw_private_funnel_runtime", METRICS)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    db_file = module._private_path()
+    if db_file.is_relative_to(PUBLIC):
+        fail("METRICS_IN_PUBLIC_ROOT")
+    with sqlite3.connect(db_file, timeout=1.0) as db:
+        db.execute(module.SCHEMA)
+        columns = [row[1] for row in db.execute("PRAGMA table_info(daily)")]
+        if columns != ["day_utc", "stage", "product_id", "count"]:
+            fail("BAD_AGGREGATE_SCHEMA")
+
+
 def publish(stage, run_id):
     code, guest, settings, new_settings = state(stage)
     folder = backup_originals(run_id, guest, settings)
@@ -166,6 +183,7 @@ def publish(stage, run_id):
             fail("POST_PUBLISH_CODE_DRIFT")
         if MARKER.encode() not in owned_file(SETTINGS):
             fail("POST_PUBLISH_SETTINGS_DRIFT")
+        ready_storage()
         restart()
     except BaseException:
         if changed_settings and sha(owned_file(SETTINGS)) == sha(new_settings):
