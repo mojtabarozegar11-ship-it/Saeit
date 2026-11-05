@@ -53,6 +53,33 @@ The current edition requires **Python 3.8 or newer**, installed separately.
 There are no paid dependencies or online accounts. The calculator itself
 works offline after installation.
 
+### Recommended: guided entry, without editing a data file
+
+1. Put `guided_start.py` and `calculator.py` together in a folder where you
+   have permission to create files. They must come from the **same toolkit
+   edition**.
+2. Open a terminal or command prompt in that folder and enter:
+
+   ```sh
+   python guided_start.py
+   ```
+
+   On systems that use `python3`, use `python3 guided_start.py` instead.
+3. Answer the questions with your **own** values. A fee of `5` means 5%,
+   and decimals use a dot. The wizard validates numbers, fees, distinct
+   enterprise names and the complete budget using the same calculation engine
+   as the manual option.
+4. Review the result summary. Type uppercase `YES` to authorize the local
+   file creation; any other reply cancels without creating a report folder.
+5. Open `management-report.html` in the new `farm-budget-...` folder. The
+   folder also contains your saved input and JSON/CSV analysis files. Each
+   confirmed run creates a **different folder** so older budgets remain intact.
+
+The wizard does not upload inputs, connect to a payment service, or publish a
+product. Its figures are scenarios derived solely from your assumptions.
+
+### Advanced: manual JSON entry
+
 1. Place `calculator.py` and `example_inputs.json` together in a folder that
    you own and can write files into.
 2. Make a copy of `example_inputs.json`, named `my_farm.json`. Keep the original
