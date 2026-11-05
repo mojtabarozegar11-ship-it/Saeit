@@ -86,6 +86,45 @@ jobs:
             echo "CACHE_BEFORE_HEALTH=$path:$status"
             test "$status" = 200
           done
+      - name: Inventory VPS filesystem and bounded cache candidates (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import os,subprocess
+          from pathlib import Path
+          home=Path.home()
+          base=home/"factory-runtime"
+          st=os.statvfs("/")
+          print("VPS_DISK_FREE_BYTES="+str(st.f_bavail*st.f_frsize),flush=True)
+          print("VPS_DISK_TOTAL_BYTES="+str(st.f_blocks*st.f_frsize),flush=True)
+          candidates={
+              "apt-archive-cache":Path("/var/cache/apt/archives"),
+              "systemd-journal":Path("/var/log/journal"),
+              "system-temp":Path("/tmp"),
+              "var-temp":Path("/var/tmp"),
+              "user-pip-cache":home/".cache/pip",
+              "user-npm-cache":home/".npm/_cacache",
+              "user-npx-cache":home/".npm/_npx",
+              "user-huggingface-cache":home/".cache/huggingface",
+              "factory-runtime":base,
+              "factory-backups":base/"operations/backups"
+          }
+          for label,p in candidates.items():
+              if p.is_symlink():
+                  print("VPS_SIZE_"+label+"=SYMLINK_SKIP",flush=True);continue
+              if not p.exists():
+                  print("VPS_SIZE_"+label+"=ABSENT",flush=True);continue
+              try:
+                  result=subprocess.run(["du","-sk",str(p)],capture_output=True,text=True,timeout=22)
+                  if result.returncode:
+                      print("VPS_SIZE_"+label+"=UNAVAILABLE",flush=True)
+                  else:
+                      print("VPS_SIZE_"+label+"_BYTES="+str(int(result.stdout.split()[0])*1024),flush=True)
+              except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+                  print("VPS_SIZE_"+label+"=UNAVAILABLE",flush=True)
+          PY
       - name: Inspect or clear only disposable npm/pip/Gradle download caches
         shell: bash
         env:
@@ -113,10 +152,16 @@ jobs:
           home=Path("/home/zomorod2")
           paths=(".npm/_cacache",".npm/_npx",".cache/pip",".gradle/caches")
           print("CLEANUP_KIND=disposable_download_caches_only")
-          proc=subprocess.run(["ps","-u","zomorod2","-o","args="],capture_output=True,text=True,timeout=12,check=True)
+          proc=subprocess.run(["ps","-u","zomorod2","-o","pid=,etimes=,args="],capture_output=True,text=True,timeout=12,check=True)
           active_counts={}
+          active_profiles={}
           for row in proc.stdout.splitlines():
-              lower=row.lower()
+              fields=row.strip().split(None,2)
+              if len(fields)!=3 or not fields[0].isdigit() or not fields[1].isdigit():
+                  continue
+              pid=int(fields[0])
+              elapsed=int(fields[1])
+              lower=fields[2].lower()
               if not any(token in lower for token in ("npm ","npx ","pnpm ","yarn ",".npm/_npx","pip install","pip download","gradle ")):
                   continue
               # Never print process commands, paths, IDs or environment data.
@@ -128,7 +173,37 @@ jobs:
                     "pip" if "pip install" in lower or "pip download" in lower else
                     "gradle" if "gradle " in lower else "npm-other")
               active_counts[kind]=active_counts.get(kind,0)+1
+              age=("<5m" if elapsed<300 else "5m-1h" if elapsed<3600 else "1h-1d" if elapsed<86400 else "1d+")
+              try:
+                  cwd=os.readlink("/proc/"+str(pid)+"/cwd")
+                  cwd_kind=("npx-cache" if cwd.startswith(str(home/".npm/_npx")) else
+                            "repo" if cwd.startswith(str(home/"Saeit")) else
+                            "home" if cwd==str(home) else "other")
+              except OSError:
+                  cwd_kind="unknown"
+              cache_fds=0
+              writable_cache_fds=0
+              fd_dir=Path("/proc")/str(pid)/"fd"
+              try:
+                  for fd in fd_dir.iterdir():
+                      try:
+                          target=os.readlink(fd)
+                          if target.startswith(str(home/".npm/")) or target.startswith(str(home/".cache/pip/")):
+                              cache_fds+=1
+                              for line in (Path("/proc")/str(pid)/"fdinfo"/fd.name).read_text().splitlines():
+                                  if line.startswith("flags:") and int(line.split()[1],8)&os.O_ACCMODE:
+                                      writable_cache_fds+=1
+                                      break
+                      except (OSError,ValueError):
+                          pass
+              except OSError:
+                  pass
+              fd_kind=("writer" if writable_cache_fds else "reader" if cache_fds else "none")
+              profile=(kind,age,cwd_kind,fd_kind)
+              active_profiles[profile]=active_profiles.get(profile,0)+1
           if active_counts:
+              for (kind,age,cwd_kind,fd_kind),count in sorted(active_profiles.items()):
+                  print("PACKAGE_PROCESS_PROFILE="+kind+"/"+age+"/"+cwd_kind+"/"+fd_kind+":"+str(count),flush=True)
               print("PACKAGE_MANAGER_BLOCKER_CLASSES="+",".join(
                   str(k)+":"+str(v) for k,v in sorted(active_counts.items())),flush=True)
               raise RuntimeError("PACKAGE_MANAGER_ACTIVITY_IN_PROGRESS")
