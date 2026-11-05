@@ -49,7 +49,9 @@ def patched(data: bytes) -> bytes:
     if MARKER in text:
         raise RuntimeError('ROUTES_ALREADY_FIXED')
     anchors = list(re.finditer(r'(?mi)^RewriteEngine\s+On\s*$', text))
-    if len(anchors) != 1:
+    # The effective cPanel file has three independent RewriteEngine sections.
+    # Insert only into the first; later sections and their routing remain intact.
+    if len(anchors) != 3:
         raise RuntimeError('APACHE_REWRITE_ENGINE_ANCHOR_CHANGED')
     for pattern in (r'\^auction/\?', r'\^economic-reports/\?', r'\^ai/\?'):
         if re.search(pattern, text):
