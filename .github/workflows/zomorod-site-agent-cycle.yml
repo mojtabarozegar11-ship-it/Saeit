@@ -141,6 +141,41 @@ jobs:
             exit 0
           fi
           echo "SITE_AGENT_MIGRATIONS_PENDING=no"
+          # Bounded read-only inventory: diagnose source/schema drift before any
+          # command is allowed to create drafts or queue tasks.
+          "$python_path" - <<'AGENT_READONLY'
+          import os
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          import django
+          django.setup()
+          from django.core.management import get_commands
+          from django.db import connection
+          from django.db.migrations.loader import MigrationLoader
+          from django.db.migrations.recorder import MigrationRecorder
+          app = Path("/home/zomorod2/Saeit")
+          required = {
+              "company_activity_agent_cycle": "core/management/commands/company_activity_agent_cycle.py",
+              "company_activity_agent_module": "core/company_activity_agent.py",
+              "knowledge_agent_cycle": "core/management/commands/knowledge_agent_cycle.py",
+              "knowledge_agent_module": "core/knowledge_agent.py",
+              "knowledge_quality_module": "core/knowledge_quality.py",
+              "newsletter_process_queue": "core/management/commands/newsletter_process_queue.py",
+          }
+          registered = get_commands()
+          for label, rel in required.items():
+              print(f"CPANEL_AGENT_SOURCE_{label.upper()}={'present' if (app / rel).is_file() else 'missing'}")
+              if label.endswith("_cycle") or label == "newsletter_process_queue":
+                  print(f"CPANEL_AGENT_COMMAND_{label.upper()}={'present' if label in registered else 'missing'}")
+          existing = set(connection.introspection.table_names())
+          for table in ("core_companyactivityagentplan", "core_companyactivityreport", "core_knowledgeagentplan", "core_knowledgebook", "core_knowledgeagentrun", "core_newslettersubmission"):
+              print(f"CPANEL_AGENT_TABLE_{table.upper()}={'present' if table in existing else 'missing'}")
+          loader = MigrationLoader(connection)
+          applied = MigrationRecorder(connection).applied_migrations()
+          print("CPANEL_CORE_MIGRATIONS_ON_DISK=" + str(sum(1 for app_label, _ in loader.disk_migrations if app_label == "core")))
+          print("CPANEL_CORE_MIGRATIONS_APPLIED=" + str(sum(1 for app_label, _ in applied if app_label == "core")))
+          print("CPANEL_AGENT_INVENTORY=readonly_no_changes")
+          AGENT_READONLY
           available="$("$python_path" manage.py help --commands)"
           for command in company_activity_agent_cycle knowledge_agent_cycle; do
             if ! printf '%s\n' "$available" | grep -Fxq "$command"; then
