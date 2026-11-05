@@ -153,7 +153,7 @@ jobs:
                   raise RuntimeError('CANONICAL_SEARCH_LINK_NOT_VISIBLE')
           with urlopen('https://zomorodmelal.ir/search/?q=%DA%AF%D9%86%D8%AF%D9%85',timeout=25) as primary:
               body = primary.read(200000).decode('utf-8','replace')
-              if primary.status != 200 or 'نتیجه برای «گندم»' not in body:
+              if primary.status != 200 or '/topics/zm-r01/wheat/' not in body:
                   raise RuntimeError('PUBLIC_PRIMARY_SEARCH_UNAVAILABLE')
           print('STAGING_PUBLIC_SEARCH_LINK_LIVE=1 MAIN_SEARCH_UNCHANGED=1')
           PY
