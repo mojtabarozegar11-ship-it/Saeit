@@ -275,6 +275,75 @@ jobs:
             watchdog_configuration=CONFIGURATION_VERIFIED_ONLY
           fi
           echo "FACTORY_VPS_LOCAL_AUTONOMY=$watchdog_configuration"
+          # Privilege-aware inventory. Only aggregate counts; never dump crontabs, process arguments or file contents.
+          python3 - "$base" <<'LANE_AUDIT'
+          import ast
+          import pathlib
+          import re
+          import subprocess
+          import sys
+          pattern = re.compile(r"(?:line[-_]?41|agri[-_]?200|factory|master[-_]?agent|opportunity[-_]?discovery|intake[-_]?discovered|autonomous[-_]?product)", re.I)
+          def run(argv, timeout=10):
+              try:
+                  p = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                     text=True, errors="replace", timeout=timeout, check=False)
+                  return p.stdout if p.returncode == 0 else None
+              except (OSError, subprocess.TimeoutExpired):
+                  return None
+          def cron_matches(text):
+              return sum(bool(pattern.search(line)) for line in (text or "").splitlines()
+                         if line.strip() and not line.lstrip().startswith("#"))
+          local = run(["crontab", "-l"])
+          root = run(["sudo", "-n", "crontab", "-l", "-u", "root"])
+          print("FACTORY_PRODUCER_USER_CRON_PROBE=" + ("AVAILABLE" if local is not None else "UNAVAILABLE"))
+          print("FACTORY_PRODUCER_USER_CRON_CANDIDATE_LINES=" + (str(cron_matches(local)) if local is not None else "UNKNOWN"))
+          print("FACTORY_PRODUCER_ROOT_CRON_PROBE=" + ("AVAILABLE" if root is not None else "UNAVAILABLE"))
+          print("FACTORY_PRODUCER_ROOT_CRON_CANDIDATE_LINES=" + (str(cron_matches(root)) if root is not None else "UNKNOWN"))
+          cron_d = pathlib.Path("/etc/cron.d")
+          scanned = 0
+          matched = 0
+          skipped = 0
+          try:
+              entries = list(cron_d.iterdir())[:200]
+          except OSError:
+              entries = []
+              skipped += 1
+          for path in entries:
+              try:
+                  st = path.lstat()
+                  if not path.is_file() or path.is_symlink() or st.st_size > 1048576:
+                      skipped += 1
+                      continue
+                  matched += cron_matches(path.read_text(encoding="utf-8", errors="replace"))
+                  scanned += 1
+              except OSError:
+                  skipped += 1
+          print("FACTORY_PRODUCER_SYSTEM_CROND_FILES_SCANNED=" + str(scanned))
+          print("FACTORY_PRODUCER_SYSTEM_CROND_CANDIDATE_LINES=" + str(matched))
+          print("FACTORY_PRODUCER_SYSTEM_CROND_SKIPPED=" + str(skipped))
+          installed = run(["systemctl", "list-unit-files", "--type=service,timer", "--no-legend", "--no-pager"], 12)
+          running = run(["systemctl", "list-units", "--all", "--type=service,timer", "--no-legend", "--no-pager"], 12)
+          print("FACTORY_PRODUCER_SYSTEMD_UNIT_FILES_CANDIDATES=" + (str(cron_matches(installed)) if installed is not None else "UNKNOWN"))
+          print("FACTORY_PRODUCER_SYSTEMD_UNIT_ROWS_CANDIDATES=" + (str(cron_matches(running)) if running is not None else "UNKNOWN"))
+          cmd = pathlib.Path(sys.argv[1]) / "django-app/core/management/commands/factory_staging_tick.py"
+          try:
+              info = cmd.lstat()
+              if not cmd.is_file() or cmd.is_symlink() or info.st_size > 524288:
+                  raise ValueError("unsafe")
+              tree = ast.parse(cmd.read_text(encoding="utf-8"))
+              called = [node.args[0].value for node in ast.walk(tree)
+                        if isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Name) and node.func.id == "call_command"
+                        and node.args and isinstance(node.args[0], ast.Constant)
+                        and isinstance(node.args[0].value, str)]
+              print("FACTORY_STAGING_SOURCE_AUDIT=AST_PARSED")
+              for name in ("opportunity_discovery_tick", "intake_discovered_opportunities",
+                           "autonomous_master_loop"):
+                  print("FACTORY_STAGING_CALLS_" + name.upper() + "=" + str(called.count(name)))
+          except (OSError, SyntaxError, UnicodeError, ValueError):
+              print("FACTORY_STAGING_SOURCE_AUDIT=UNAVAILABLE")
+          print("FACTORY_CROSS_LANE_SINGLETON_PROVEN=NO")
+          LANE_AUDIT
           cd "$base/django-app"
           export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
           export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
