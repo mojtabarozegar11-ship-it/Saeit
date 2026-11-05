@@ -1,4 +1,4 @@
-name: Audit public links with referral provenance, without site mutations
+name: Audit query-aware public links and referral sources without mutations
 on:
   push:
     branches: [audit/live-sites-subsites-20261105]
