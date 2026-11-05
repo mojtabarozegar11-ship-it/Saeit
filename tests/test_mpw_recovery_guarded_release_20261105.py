@@ -100,8 +100,8 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
         self.assertIn(b"concurrent admin change", path.read_bytes())
 
     def test_staged_publish_then_exact_source_rollback(self):
-        verified = {"vendor": "mysql", "m39": True, "m40": True,
-                    "unreviewed_core_migrations": [],
+        verified = {"vendor": "mysql", "m39": True, "m49": True,
+                    "unreviewed_core_migrations": ["0040_agenttask_bridge_idempotency","0041_factorymarketeligibility","0042_factory_p0_governance","0043_factory_execution_evidence","0044_factory_p0_release_integrity","0045_factory_evidence_freshness","0046_brandsite","0047_crypto_payments","0048_business_market_architecture"],
                     "tables": ["core_guestorderemail", "core_guestrecoverytoken",
                                "core_guestrecoveryrate"],
                     "enabled": False, "mail": False}
@@ -125,8 +125,8 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
         self.assertTrue((self.backups / run / "manifest.json").is_file())
 
     def test_rollback_rejects_newer_changes(self):
-        verified = {"vendor": "mysql", "m39": True, "m40": True,
-                    "unreviewed_core_migrations": [],
+        verified = {"vendor": "mysql", "m39": True, "m49": True,
+                    "unreviewed_core_migrations": ["0040_agenttask_bridge_idempotency","0041_factorymarketeligibility","0042_factory_p0_governance","0043_factory_execution_evidence","0044_factory_p0_release_integrity","0045_factory_evidence_freshness","0046_brandsite","0047_crypto_payments","0048_business_market_architecture"],
                     "tables": ["a", "b", "c"], "enabled": False, "mail": False}
         run = "202611050043"
         snapshot_sha = self._snapshot(run)
@@ -142,8 +142,8 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
             self.assertIn(b"newer live edit", path.read_bytes())
 
     def test_schema_drift_blocks_publish_before_any_write(self):
-        invalid = {"vendor": "mysql", "m39": False, "m40": False,
-                   "unreviewed_core_migrations": [],
+        invalid = {"vendor": "mysql", "m39": False, "m49": False,
+                   "unreviewed_core_migrations": ["0040_agenttask_bridge_idempotency","0041_factorymarketeligibility","0042_factory_p0_governance","0043_factory_execution_evidence","0044_factory_p0_release_integrity","0045_factory_evidence_freshness","0046_brandsite","0047_crypto_payments","0048_business_market_architecture"],
                    "tables": [], "enabled": False, "mail": False}
         with patch.object(release, "db_state", return_value=invalid):
             with self.assertRaisesRegex(RuntimeError, "MIGRATION_BASELINE_DRIFT"):
@@ -151,7 +151,7 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
         self.assertFalse((self.app / release.FILES["migration"]).exists())
 
     def test_newer_core_schema_blocks_release_without_changes(self):
-        unexpected = {"vendor": "mysql", "m39": True, "m40": False,
+        unexpected = {"vendor": "mysql", "m39": True, "m49": False,
                       "unreviewed_core_migrations": ["0041_some_other_release"],
                       "tables": [], "enabled": False, "mail": False}
         with patch.object(release, "db_state", return_value=unexpected):
