@@ -241,6 +241,17 @@ jobs:
               except (OSError,ValueError,StopIteration):
                   pass
               return out
+          # Classify socket state from kernel procfs without logging endpoints.
+          network_sockets={}
+          for proto in ("tcp","tcp6","udp","udp6"):
+              try:
+                  for row in (Path("/proc/net")/proto).read_text().splitlines()[1:]:
+                      cols=row.split()
+                      if len(cols)>9:
+                          network_sockets[cols[9]]=cols[3]
+              except OSError:
+                  pass
+          tracked={pid:kind for pid,kind,_,_ in active_pids}
           first={pid:counters(pid) for pid,_,_,_ in active_pids}
           time.sleep(2)
           for pid,kind,age,cwd_kind in active_pids:
@@ -253,6 +264,47 @@ jobs:
               print("PACKAGE_PROCESS_LIFECYCLE="+kind+"/"+age+"/"+cwd_kind+
                     "/state="+last["state"]+"/parent="+last["parent"]+
                     "/cpu="+activity+"/disk_io="+disk_io,flush=True)
+              procdir=Path("/proc")/str(pid)
+              try:
+                  cmd=(procdir/"cmdline").read_bytes().replace(b"\0",b" ").decode("utf-8","replace").lower()
+                  role=("mcp" if "mcp" in cmd else
+                        "service-like" if any(token in cmd for token in ("server","serve","listen","watch","start","vite","next dev")) else
+                        "package-build" if any(token in cmd for token in ("install","rebuild","compile"," build ")) else
+                        "package-exec" if any(token in cmd for token in ("exec","npx")) else "unknown")
+              except OSError:
+                  role="unknown"
+              try:
+                  ppid=int(next(line.split()[1] for line in (procdir/"status").read_text().splitlines() if line.startswith("PPid:")))
+                  relation=("package-parent" if ppid in tracked else "init" if ppid==1 else "other-parent")
+              except (OSError,ValueError,StopIteration):
+                  relation="unknown"
+              attached=[]
+              listener=0
+              established=0
+              stdio=[]
+              try:
+                  fd_list=list((procdir/"fd").iterdir())
+              except OSError:
+                  fd_list=[]
+              for fd in fd_list:
+                  try:
+                      dest=os.readlink(fd)
+                  except OSError:
+                      continue
+                  if dest.startswith("socket:["):
+                      inode=dest[8:-1]
+                      attached.append(inode)
+                      listener+=network_sockets.get(inode)=="0A"
+                      established+=network_sockets.get(inode)=="01"
+                  if fd.name in ("0","1","2"):
+                      io_type=("pipe" if dest.startswith("pipe:[") else
+                               "socket" if dest.startswith("socket:[") else
+                               "tty" if dest.startswith("/dev/pts") else "file")
+                      stdio.append(fd.name+":"+io_type)
+              print("PACKAGE_PROCESS_SERVICE_ROLE="+kind+"/"+cwd_kind+"/role="+role+
+                    "/ancestor="+relation+"/sockets="+str(len(attached))+
+                    "/listening="+str(listener)+"/established="+str(established)+
+                    "/stdio="+",".join(sorted(stdio)),flush=True)
           # Report profiles but do not let npm/npx block unrelated pip/Gradle caches.
           if active_counts:
               for (kind,age,cwd_kind,fd_kind),count in sorted(active_profiles.items()):
