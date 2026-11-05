@@ -195,7 +195,7 @@ jobs:
       - name: Validate additive release source
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mpw_recovery_guarded_release_20261105.py services/mpw_trx_email_recovery.py services/mpw_trx_guest_commerce.py core/guest_recovery_models.py core/migrations/0040_mpw_guest_email_recovery.py
+          python3 -m py_compile scripts/mpw_recovery_guarded_release_20261105.py services/mpw_trx_email_recovery.py services/mpw_trx_guest_commerce.py core/guest_recovery_models.py core/migrations/0049_mpw_guest_email_recovery.py
           grep -q 'def publish_additive' scripts/mpw_recovery_guarded_release_20261105.py
           echo MPW_ADDITIVE_RELEASE_SOURCE_VALID=PASS
       - name: Establish pinned SSH relay for guarded release
@@ -249,7 +249,7 @@ jobs:
           d="$RUNNER_TEMP/mpw-additive-release-ssh"
           stage="/home/zomorod2/.local/share/mpw-recovery-01-stage-$GITHUB_RUN_ID"
           timeout 30s ssh -T -F "$d/config" saeit-cpanel "umask 077; rm -rf -- '$stage'; mkdir -p -- '$stage'"
-          tar -C "$GITHUB_WORKSPACE" -czf - scripts/mpw_recovery_guarded_release_20261105.py services/mpw_trx_email_recovery.py services/mpw_trx_guest_commerce.py core/guest_recovery_models.py core/migrations/0040_mpw_guest_email_recovery.py core/management/commands/mpw_purge_recovery_ephemeral.py | timeout 45s ssh -T -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+          tar -C "$GITHUB_WORKSPACE" -czf - scripts/mpw_recovery_guarded_release_20261105.py services/mpw_trx_email_recovery.py services/mpw_trx_guest_commerce.py core/guest_recovery_models.py core/migrations/0049_mpw_guest_email_recovery.py core/management/commands/mpw_purge_recovery_ephemeral.py | timeout 45s ssh -T -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
           case "$OPERATION" in
             preflight)
               timeout 120s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' preflight '$stage'"
