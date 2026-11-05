@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/f01-vps-stage-single-product-source.yml"
+      - "product_recipes/farm_enterprise_economics/**"
+      - "scripts/f01_technical_evidence_bridge.py"
   workflow_dispatch:
 
 permissions:
@@ -11,7 +13,7 @@ permissions:
 
 concurrency:
   group: f01-versioned-source-staging
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   stage:
