@@ -50,6 +50,26 @@ class FactorySystemdAutomationTests(unittest.TestCase):
         self.assertLess(script.index("F01_PREFLIGHT_COMPETING_FACTORY_CRON_PRESENT"),
                         script.index('install -d -m 700 "$runtime"'))
 
+    def test_all_account_and_system_cron_paths_checked_before_activation(self):
+        script = (ROOT / "deploy/install_factory_systemd_automation.sh").read_text()
+        # The installer runs as root; all user crontabs, including root, must
+        # be inventoried. Cron fragments under /etc are separate schedulers.
+        for fragment in (
+            "getent passwd", 'crontab -u "$cron_user" -l',
+            "/etc/crontab /etc/cron.d/*",
+            "F01_PREFLIGHT_USER_INVENTORY_UNREADABLE",
+            "F01_PREFLIGHT_COMPETING_SYSTEM_FACTORY_CRON_PRESENT",
+            "F01_PREFLIGHT_CRONTAB_INVENTORY_UNREADABLE",
+        ):
+            self.assertIn(fragment, script)
+        self.assertLess(script.index('crontab -u "$cron_user" -l'),
+                        script.index('install -d -m 700 "$runtime"'))
+        for fragment in (
+            "saeit-factory-cycle.service", "saeit-factory-cycle.timer",
+            "saeit-factory-watchdog.service", "saeit-factory-watchdog.timer",
+        ):
+            self.assertIn('test -f "$repo/deploy/systemd/' + fragment + '"', script)
+
     def test_existing_native_staging_loop_is_rejected_before_install(self):
         script = (ROOT / "deploy/install_factory_systemd_automation.sh").read_text()
         self.assertIn("pgrep -f", script)

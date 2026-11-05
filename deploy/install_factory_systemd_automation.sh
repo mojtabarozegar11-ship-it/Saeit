@@ -12,10 +12,10 @@ test "$(id -u)" -eq 0
 test -d /home/githubops/factory-runtime
 test -x "$runtime/run-local-cycle.sh"
 test -f "$repo/scripts/factory-runtime-watchdog.sh"
-test -f deploy/systemd/saeit-factory-cycle.service
-test -f deploy/systemd/saeit-factory-cycle.timer
-test -f deploy/systemd/saeit-factory-watchdog.service
-test -f deploy/systemd/saeit-factory-watchdog.timer
+test -f "$repo/deploy/systemd/saeit-factory-cycle.service"
+test -f "$repo/deploy/systemd/saeit-factory-cycle.timer"
+test -f "$repo/deploy/systemd/saeit-factory-watchdog.service"
+test -f "$repo/deploy/systemd/saeit-factory-watchdog.timer"
 
 # A legacy minute cron is currently present on the live VPS. Installing
 # a second scheduler without first proving a controlled migration is forbidden.
@@ -23,18 +23,46 @@ if ! command -v crontab >/dev/null; then
   echo F01_PREFLIGHT_CRONTAB_INVENTORY_UNAVAILABLE >&2
   exit 3
 fi
-if cron_snapshot="$(crontab -u githubops -l 2>&1)"; then
-  :
-elif [[ "$cron_snapshot" == *"no crontab for githubops"* ]]; then
-  cron_snapshot=""
-else
-  echo F01_PREFLIGHT_CRONTAB_INVENTORY_UNREADABLE >&2
+# Root installation is privileged; inspect EVERY account's cron as well as
+# /etc crontab entries before installing a second producer. Checking only
+# githubops would miss another production loop owned by root or another user.
+if ! command -v getent >/dev/null; then
+  echo F01_PREFLIGHT_USER_INVENTORY_UNAVAILABLE >&2
   exit 3
 fi
-if printf '%s\n' "$cron_snapshot" | grep -Eiq 'SAEIT_SINGLE_PRODUCT_FACTORY_V1|SAEIT_FACTORY_EVERY_MINUTE_V1|SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000|SAEIT_AGRI200|factory[-_/]|agri200|build50'; then
-  echo F01_PREFLIGHT_COMPETING_FACTORY_CRON_PRESENT >&2
+if ! cron_accounts="$(getent passwd)" || [ -z "$cron_accounts" ]; then
+  echo F01_PREFLIGHT_USER_INVENTORY_UNREADABLE >&2
   exit 3
 fi
+factory_cron_pattern='SAEIT_SINGLE_PRODUCT_FACTORY_V1|SAEIT_FACTORY_EVERY_MINUTE_V1|SAEIT_STRICT_SERIAL_PRODUCT_TO_QC1000|SAEIT_AGRI200|factory[-_/]|agri200|build50'
+while IFS=: read -r cron_user _; do
+  [ -n "$cron_user" ] || continue
+  if cron_snapshot="$(LC_ALL=C crontab -u "$cron_user" -l 2>&1)"; then
+    :
+  elif [[ "$cron_snapshot" == *"no crontab for $cron_user"* ]]; then
+    cron_snapshot=""
+  else
+    echo F01_PREFLIGHT_CRONTAB_INVENTORY_UNREADABLE >&2
+    exit 3
+  fi
+  if printf '%s\n' "$cron_snapshot" | grep -Eiq "$factory_cron_pattern"; then
+    echo F01_PREFLIGHT_COMPETING_FACTORY_CRON_PRESENT >&2
+    exit 3
+  fi
+done <<< "$cron_accounts"
+for cron_file in /etc/crontab /etc/cron.d/*; do
+  if [ ! -e "$cron_file" ] && [ ! -L "$cron_file" ]; then
+    continue
+  fi
+  if [ -L "$cron_file" ] || [ ! -f "$cron_file" ] || [ ! -r "$cron_file" ]; then
+    echo F01_PREFLIGHT_SYSTEM_CRON_INVENTORY_UNREADABLE >&2
+    exit 3
+  fi
+  if grep -Eiq "$factory_cron_pattern" "$cron_file"; then
+    echo F01_PREFLIGHT_COMPETING_SYSTEM_FACTORY_CRON_PRESENT >&2
+    exit 3
+  fi
+done
 timer_snapshot="$(systemctl list-timers --all --no-legend --no-pager)" || {
   echo F01_PREFLIGHT_TIMER_INVENTORY_UNREADABLE >&2
   exit 3
