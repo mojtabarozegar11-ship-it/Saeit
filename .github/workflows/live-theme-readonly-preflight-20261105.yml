@@ -4,6 +4,7 @@ on:
     branches: [fix/live-theme-audit-20261105]
     paths:
       - .github/workflows/live-theme-readonly-preflight-20261105.yml
+      - scripts/live_theme_preflight_20261105.py
 permissions:
   contents: read
 concurrency:
