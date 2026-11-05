@@ -145,6 +145,66 @@ jobs:
               except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
                   print("SPACE_CANDIDATE="+label+":UNAVAILABLE",flush=True)
           PY
+      - name: Classify cPanel generic cache and temp contents without reading files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import os,re,subprocess,time
+          from pathlib import Path
+          home=Path("/home/zomorod2")
+          uid=os.geteuid()
+          refs=[]
+          visibility_errors=0
+          for procdir in Path("/proc").iterdir():
+              if not procdir.name.isdigit():
+                  continue
+              try:
+                  if procdir.stat().st_uid!=uid:
+                      continue
+                  refs.append(os.readlink(procdir/"cwd"))
+              except FileNotFoundError:
+                  continue
+              except OSError:
+                  visibility_errors+=1
+              try:
+                  for fd in (procdir/"fd").iterdir():
+                      try:
+                          refs.append(os.readlink(fd))
+                      except FileNotFoundError:
+                          pass
+                      except OSError:
+                          visibility_errors+=1
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  visibility_errors+=1
+          print("SPACE_DETAIL_PROC_VISIBILITY_ERRORS="+str(visibility_errors),flush=True)
+          for group,root in (("cache",home/".cache"),("temp",home/"tmp")):
+              if not root.is_dir() or root.is_symlink() or root.stat().st_uid!=uid:
+                  print("SPACE_DETAIL_GROUP="+group+":UNAVAILABLE",flush=True)
+                  continue
+              children=list(root.iterdir())
+              print("SPACE_DETAIL_GROUP="+group+":CHILDREN="+str(len(children)),flush=True)
+              for child in children[:35]:
+                  raw=child.name
+                  label=raw if re.fullmatch(r"[A-Za-z0-9_.-]{1,40}",raw) else "redacted"
+                  if child.is_symlink() or child.stat().st_uid!=uid:
+                      print("SPACE_DETAIL="+group+"/"+label+":UNSAFE_SKIP",flush=True)
+                      continue
+                  try:
+                      res=subprocess.run(["du","-sk",str(child)],capture_output=True,text=True,timeout=14,check=True)
+                      size=int(res.stdout.split()[0])*1024
+                  except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+                      print("SPACE_DETAIL="+group+"/"+label+":UNAVAILABLE",flush=True)
+                      continue
+                  age=max(0,int((time.time()-child.stat().st_mtime)/86400))
+                  root_string=str(child)
+                  referenced=any(path==root_string or path.startswith(root_string+"/") for path in refs)
+                  print("SPACE_DETAIL="+group+"/"+label+":BYTES="+str(size)+
+                        ":DIR_MTIME_DAYS="+str(age)+":PROC_REFERENCED="+str(referenced),flush=True)
+          PY
       - name: Inventory VPS filesystem and bounded cache candidates (read-only)
         shell: bash
         run: |
