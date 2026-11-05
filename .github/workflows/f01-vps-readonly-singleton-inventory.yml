@@ -126,6 +126,39 @@ jobs:
               if line.strip() and not line.lstrip().startswith("#") and pattern.search(line)
               for match in re.finditer(r"SAEIT_[A-Z0-9_]+", line)
           ))[:24]
+          # Detect the legacy scheduler's nested flock deadlock without
+          # exposing cron arguments or reading any private production data.
+          legacy_cron_lines = [
+              line for line in (cron_raw.stdout.splitlines()
+                                if cron_raw and cron_raw.returncode == 0 else [])
+              if "SAEIT_SINGLE_PRODUCT_FACTORY_V1" in line
+              and not line.lstrip().startswith("#")
+          ]
+          legacy_outer_lock = any(
+              "flock -n" in line and ".single-product-cycle.lock" in line
+              and "run-single-product-cycle.sh" in line
+              for line in legacy_cron_lines
+          )
+          legacy_runner = root / "operations/single-product-runtime/run-single-product-cycle.sh"
+          legacy_runner_text = ""
+          try:
+              if (not legacy_runner.is_symlink() and legacy_runner.is_file()
+                      and legacy_runner.stat().st_size <= 50000):
+                  legacy_runner_text = legacy_runner.read_text(encoding="utf-8")
+          except (OSError, UnicodeError):
+              pass
+          legacy_inner_lock = (
+              'exec 9>' in legacy_runner_text
+              and 'flock -n 9' in legacy_runner_text
+              and '.single-product-cycle.lock' in legacy_runner_text
+          )
+          legacy_log = root / "operations/single-product-cycle.log"
+          legacy_log_age = None
+          try:
+              if legacy_log.is_file() and not legacy_log.is_symlink():
+                  legacy_log_age = max(0, round(time.time() - legacy_log.stat().st_mtime))
+          except OSError:
+              pass
           owner_cron = cron_count(["crontab", "-l"])
           root_cron = cron_count(["sudo", "-n", "crontab", "-u", "root", "-l"])
           age = None
@@ -141,6 +174,11 @@ jobs:
               "factory_related_running_processes": worker_count,
               "factory_related_process_script_labels": process_labels,
               "factory_related_githubops_cron_markers": cron_markers,
+              "legacy_cron_outer_flock_present": legacy_outer_lock,
+              "legacy_runner_inner_flock_present": legacy_inner_lock,
+              "legacy_cron_double_lock_detected": legacy_outer_lock and legacy_inner_lock,
+              "legacy_runner_readable": bool(legacy_runner_text),
+              "legacy_cron_log_age_seconds": legacy_log_age,
               "runtime_runner_present": (runtime / "run-local-cycle.sh").is_file(),
               "runtime_core_source_present": (runtime / "scripts/factory_vps_product_cycle.py").is_file(),
               "runtime_singleton_source_present": (runtime / "scripts/factory_global_singleton_v1.py").is_file(),
@@ -156,3 +194,4 @@ jobs:
           print("F01_LIVE_INVENTORY=" + json.dumps(result, sort_keys=True))
           print("F01_ACTIVATION=HOLD_UNTIL_GLOBAL_INVENTORY_AND_RESTORE_PROOF")
           PY
+
