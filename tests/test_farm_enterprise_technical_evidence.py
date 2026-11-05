@@ -15,12 +15,15 @@ SPEC.loader.exec_module(MOD)
 
 
 class FarmEvidenceCaptureTests(unittest.TestCase):
-    def test_six_proofs_are_bound_to_real_source_and_never_autocertify(self):
+    def test_eight_proofs_are_bound_to_real_source_and_never_autocertify(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory) / "new-proof"
             result = MOD.build(RECIPE, folder)
             self.assertEqual(result["test_count"], 43)
             self.assertEqual(set(result["candidate_criteria"]), set(MOD.CRITERION_TESTS))
+            self.assertEqual(len(result["candidate_criteria"]), 8)
+            self.assertIn("Q057", result["candidate_criteria"])
+            self.assertIn("Q065", result["candidate_criteria"])
             self.assertIsNone(result["verified_quality_score"])
             self.assertFalse(result["independent_reviewer_approval"])
             self.assertFalse(result["commercial_release_allowed"])

@@ -299,9 +299,9 @@ GitHub Actions, APIs, external accounts, or production deployment:
 The capture re-runs all 43 calculator and guided-entry tests, generates and hashes
 the four illustrative customer-facing report formats, and records exact recipe,
 guided-entry, customer-guide and test source hashes. A previous ZIP that omits
-the guided entry point cannot receive these receipts. Six candidate technical
-criteria (Q035, Q036, Q037, Q061, Q063,
-Q064) receive distinct evidence records. The manifest is written last; a
+the guided entry point cannot receive these receipts. Eight candidate technical
+criteria (Q035, Q036, Q037, Q057, Q061, Q063,
+Q064, Q065) receive criterion-specific evidence records. The manifest is written last; a
 failed run cannot create a completion receipt. Use a **new empty folder** for
 each edition so old evidence cannot be silently overwritten.
 

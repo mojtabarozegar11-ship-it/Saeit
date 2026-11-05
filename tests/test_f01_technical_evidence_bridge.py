@@ -55,13 +55,14 @@ class F01TechnicalBridgeTests(unittest.TestCase):
         (product / "manufacturing_manifest.json").write_text(json.dumps(manifest))
         return product
 
-    def test_bind_six_internal_receipts_to_exact_private_zip_only(self):
+    def test_bind_eight_internal_receipts_to_exact_private_zip_only(self):
         with tempfile.TemporaryDirectory() as name:
             product = self.make_manufactured(Path(name))
             validated = bridge.verify(RECIPE, self.evidence)
             bridge.verify_manufactured(product, validated)
             records = bridge.install(product, validated)
             self.assertEqual(set(records), set(bridge.CRITERIA))
+            self.assertEqual(len(records), 8)
             candidate = json.loads((product / "global_quality_candidate.json").read_text())
             self.assertIsNone(candidate["f01_technical_evidence_import"]["verified_quality_points"])
             self.assertFalse(candidate["f01_technical_evidence_import"]["commercial_release_allowed"])
@@ -101,6 +102,25 @@ class F01TechnicalBridgeTests(unittest.TestCase):
             data["commercial_release_allowed"] = True
             path.write_text(json.dumps(data))
             with self.assertRaisesRegex(ValueError, "MANIFEST_IDENTITY_OR_RELEASE_CLAIM"):
+                bridge.verify(RECIPE, copied)
+
+    def test_rehashed_receipt_cannot_borrow_unrelated_valid_test_names(self):
+        with tempfile.TemporaryDirectory() as name:
+            copied = Path(name) / "proof"
+            shutil.copytree(self.evidence, copied)
+            path = copied / "evidence-Q035.json"
+            record = json.loads(path.read_text(encoding="utf-8"))
+            # This test exists and passes, but verifies user input validation,
+            # not the farm economics reproducibility claimed by Q035.
+            record["selected_passing_tests"] = [
+                "test_invalid_numbers_and_duplicate_names_are_reprompted"
+            ]
+            path.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
+            manifest_path = copied / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["candidate_criteria"]["Q035"]["sha256"] = bridge.digest(path)
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "RECEIPT_WRONG_TEST_BINDING"):
                 bridge.verify(RECIPE, copied)
 
     def test_existing_conflicting_evidence_not_overwritten(self):

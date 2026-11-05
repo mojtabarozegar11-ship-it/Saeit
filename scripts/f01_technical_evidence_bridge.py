@@ -29,7 +29,7 @@ PACKAGE_SOURCES = tuple(name for name in SOURCES if name != "build_technical_evi
 TEST_MODULES = ("test_calculator.py", "test_guided_start.py")
 EXPORTS = ("baseline.json", "scenarios.csv", "joint-stress.csv",
            "management-report.html")
-CRITERIA = ("Q035", "Q036", "Q037", "Q061", "Q063", "Q064")
+CRITERIA = ("Q035", "Q036", "Q037", "Q057", "Q061", "Q063", "Q064", "Q065")
 HEX = re.compile(r"[a-f0-9]{64}\Z")
 
 
@@ -90,6 +90,25 @@ def verify(recipe_dir, evidence_dir):
     names = set(all_names)
     require(len(all_names) == len(names) == manifest["test_count"],
             "TEST_COUNT_SOURCE_MISMATCH")
+    # Match each receipt to the criterion-specific test selection in the
+    # hash-pinned builder source. Merely citing some passing test is not proof
+    # for an unrelated rubric criterion. Parse the assignment; do not execute
+    # code from an evidence folder while verifying it.
+    try:
+        builder_tree = ast.parse((recipe / "build_technical_evidence.py").read_text(encoding="utf-8"))
+        assignments = [node.value for node in builder_tree.body
+                       if isinstance(node, ast.Assign)
+                       and any(isinstance(target, ast.Name)
+                               and target.id == "CRITERION_TESTS" for target in node.targets)]
+        require(len(assignments) == 1, "SOURCE_CRITERION_MAP_INVALID")
+        expected_tests = ast.literal_eval(assignments[0])
+    except (SyntaxError, ValueError, TypeError, RecursionError) as exc:
+        raise ValueError("F01_EVIDENCE_SOURCE_CRITERION_MAP_INVALID") from exc
+    require(isinstance(expected_tests, dict) and set(expected_tests) == set(CRITERIA)
+            and all(isinstance(selected, tuple) and bool(selected)
+                    and all(isinstance(name, str) and name in names for name in selected)
+                    for selected in expected_tests.values()),
+            "SOURCE_CRITERION_MAP_INVALID")
     log_path = regular_file(evidence / "test_execution.log")
     log = log_path.read_text(encoding="utf-8")
     require(digest(log_path) == manifest.get("test_log_sha256")
@@ -130,6 +149,8 @@ def verify(recipe_dir, evidence_dir):
                 and record.get("real_customer_data_used") is False
                 and record.get("commercial_release_allowed") is False,
                 "RECEIPT_PROVENANCE_OR_REVIEW_INVALID:" + criterion)
+        require(selected == list(expected_tests[criterion]),
+                "RECEIPT_WRONG_TEST_BINDING:" + criterion)
         refs[criterion] = {"sha256": ref["sha256"], "filename": filename}
     return {"recipe": recipe, "evidence": evidence,
             "manifest_sha256": digest(evidence / "manifest.json"), "source_hashes": source_hashes,

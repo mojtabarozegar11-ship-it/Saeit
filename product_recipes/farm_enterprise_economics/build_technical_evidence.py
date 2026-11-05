@@ -33,6 +33,9 @@ CRITERION_TESTS = {
     "Q037": ("test_continuous_break_even_quantity_for_fractional_crop_sales",
              "test_negative_contribution_has_no_break_even",
              "test_extreme_negative_decimal_exponents_are_bounded"),
+    "Q057": ("test_cli_handles_unrepresentable_json_decimal_without_traceback",
+             "test_unreachable_break_even_is_not_rendered_as_literal_none",
+             "test_invalid_numbers_and_duplicate_names_are_reprompted"),
     "Q061": ("test_break_even_and_totals", "test_real_cli_json_and_csv",
              "test_success_creates_four_consistent_reports_and_original_inputs",
              "test_verification_is_read_only_and_requires_no_interactive_answers"),
@@ -49,6 +52,9 @@ CRITERION_TESTS = {
              "test_output_parent_symlink_is_rejected_before_any_writes",
              "test_end_of_input_is_safe_cancellation",
              "test_modified_customer_report_is_detected_without_rewriting_it"),
+    "Q065": ("test_atomic_report_success_has_no_staging_files",
+             "test_failed_export_has_no_completion_receipt",
+             "test_cli_stages_all_formats_before_replacing_any_existing_report"),
 }
 EXPORTS = {"baseline.json": "--json-output", "scenarios.csv": "--csv-output",
            "joint-stress.csv": "--three-factor-csv-output", "management-report.html": "--html-output"}
