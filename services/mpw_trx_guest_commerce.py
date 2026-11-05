@@ -152,6 +152,11 @@ def _install_cookie(response, token):
 
 
 def _dispatch(request, view, args, kwargs, *, create=False):
+    if create:
+        from django.conf import settings
+        if getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True:
+            from services.mpw_trx_email_recovery import bound_checkout
+            return bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
     user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)
@@ -218,6 +223,12 @@ def patch_public(namespace):
         authenticated = bool(current is not None and getattr(current, "is_authenticated", False))
         if not authenticated and _read_user(request) is None:
             from django.http import HttpResponse
+            from django.conf import settings
+            recovery_link = (
+                '<p><a href="/commerce/trx-easy/recover/">Recover using purchase email</a></p>'
+                if getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True
+                else ""
+            )
             response = HttpResponse(
                 '<!doctype html><html lang="en"><head><meta charset="utf-8">'
                 '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -228,6 +239,7 @@ def patch_public(namespace):
                 '<p>If you already paid, do not pay again. Contact purchase support '
                 'with your invoice reference and transaction hash. '
                 'Never share a wallet recovery phrase or private key.</p>'
+                + recovery_link +
                 '<p><a href="/store/">Return to store</a> | '
                 '<a href="mailto:support@mojplaywin.com">Purchase support</a></p>'
                 '</main></body></html>',
@@ -282,5 +294,20 @@ def patch_commercial(namespace):
             route_name = next((name for token, name in route_names if token in route), None)
             replacement = namespace.get(route_name, view)
             rebuilt.append((route, replacement))
+        from django.conf import settings
+        if getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True:
+            from services.mpw_trx_email_recovery import (
+                recovery_request, recovery_verify, recovery_orders, recovery_download,
+            )
+            extra = (
+                ("commerce/trx-easy/recover/", recovery_request),
+                ("commerce/trx-easy/recover/verify/", recovery_verify),
+                ("commerce/trx-easy/recover/orders/", recovery_orders),
+                ("commerce/trx-easy/recover/download/<int:invoice_id>/", recovery_download),
+            )
+            existing = {route for route, _ in rebuilt}
+            if any(route in existing for route, _ in extra):
+                raise RuntimeError("Recovery URL collision")
+            rebuilt.extend(extra)
         namespace["COMMERCIAL_URLPATTERNS"] = tuple(rebuilt)
     namespace["_mpw_guest_checkout_installed"] = True
