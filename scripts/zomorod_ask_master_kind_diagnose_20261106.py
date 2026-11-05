@@ -133,14 +133,23 @@ def inspect_request_aggregate():
             print('AGGREGATE_COUNTS_DEFERRED=1')
             return
         columns = {row[1] for row in db.execute('PRAGMA table_info(customer_questions)')}
-        if not {'tenant', 'kind', 'message'} <= columns:
+        print('AGGREGATE_SCHEMA_COLUMNS=' + ','.join(sorted(columns))[:400])
+        if not {'tenant', 'kind'} <= columns:
             print('AGGREGATE_UNEXPECTED_SCHEMA=1')
             return
         count = db.execute('SELECT COUNT(*) FROM customer_questions WHERE tenant=?', ('zomorod',)).fetchone()[0]
-        prefix = SERVICE_TAG + ' '
-        service = db.execute('SELECT COUNT(*) FROM customer_questions WHERE tenant=? AND kind=? AND substr(message,1,length(?))=?',
-                             ('zomorod', 'question', prefix, prefix)).fetchone()[0]
         print('AGGREGATE_ZOMOROD_REQUESTS=' + str(count))
+        candidates = ('message', 'user_message', 'question', 'question_text',
+                      'request_text', 'body', 'prompt', 'content', 'text', 'details')
+        text_column = next((x for x in candidates if x in columns), None)
+        if text_column is None:
+            print('AGGREGATE_SERVICE_TEXT_COLUMN_UNKNOWN=1')
+            return
+        prefix = SERVICE_TAG + ' '
+        # SQL identifier comes only from the fixed whitelist and PRAGMA schema.
+        service = db.execute(
+            f'SELECT COUNT(*) FROM customer_questions WHERE tenant=? AND kind=? AND substr("{text_column}",1,length(?))=?',
+            ('zomorod', 'question', prefix, prefix)).fetchone()[0]
         print('AGGREGATE_ZOMOROD_SERVICE_REQUESTS=' + str(service))
 
 
