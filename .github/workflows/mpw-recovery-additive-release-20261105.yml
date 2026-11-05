@@ -12,6 +12,7 @@ on:
           - preflight
           - publish_additive
           - verify
+          - chain_audit
 
 permissions:
   contents: read
@@ -38,7 +39,10 @@ jobs:
             services/mpw_trx_email_recovery.py \
             services/mpw_trx_guest_commerce.py \
             core/guest_recovery_models.py \
-            core/migrations/0049_mpw_guest_email_recovery.py
+            core/migrations/0049_mpw_guest_email_recovery.py \
+            scripts/mpw_paid_chain_recheck_readonly_20261105.py \
+            scripts/f41_tron_mainnet_check.py \
+            scripts/f41_merchant_audit_cli.py
           grep -q 'def publish_additive' scripts/mpw_recovery_guarded_release_20261105.py
           grep -q 'EMAIL_ENABLED=FALSE' scripts/mpw_recovery_guarded_release_20261105.py
           echo MPW_ADDITIVE_RELEASE_SOURCE_VALID=PASS
@@ -102,6 +106,9 @@ jobs:
             core/guest_recovery_models.py \
             core/migrations/0049_mpw_guest_email_recovery.py \
             core/management/commands/mpw_purge_recovery_ephemeral.py \
+            scripts/mpw_paid_chain_recheck_readonly_20261105.py \
+            scripts/f41_tron_mainnet_check.py \
+            scripts/f41_merchant_audit_cli.py \
           | timeout 45s ssh -T -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
           case "$OPERATION" in
             preflight)
@@ -112,6 +119,9 @@ jobs:
               ;;
             verify)
               timeout 120s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' verify"
+              ;;
+            chain_audit)
+              timeout 85s ssh -T -F "$d/config" saeit-cpanel "MPW_READONLY_CHAIN_ACK=mpw-existing-paid-trx-readonly-20261105 PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_paid_chain_recheck_readonly_20261105.py'"
               ;;
           esac
 
