@@ -140,6 +140,18 @@ jobs:
           PY
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
           timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_paid_provenance_readonly_20261105.py
+      - name: Verify paid private assets and per-order email claims (read only)
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast,pathlib
+          ast.parse(pathlib.Path("scripts/mpw_paid_private_assets_readonly_20261105.py").read_text("utf8"))
+          print("MPW_PAID_PRIVATE_ASSET_AUDIT_SOURCE_VALID=PASS")
+          PY
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_paid_private_assets_readonly_20261105.py
       - name: One-time support body triage inside cPanel, no message data logged
         if: github.event_name == 'push' && contains(github.event.head_commit.message, 'mpw-onetime-body-triage')
         env:
