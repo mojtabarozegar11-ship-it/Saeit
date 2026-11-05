@@ -22,6 +22,8 @@ CANDIDATES = {
     "zm_store_domain_root": ROOT / "zomorodmelal.ir/store/index.php",
     "zm_store_repo_copy": ROOT / "Saeit-staging/content/zomorod-v11/store_index.php",
     "zm_management_public_html": ROOT / "public_html/business/app.php",
+    "zm_management_private": ROOT / ".private/zomorod-business/app.php",
+    "zm_management_index": ROOT / "public_html/business/index.php",
     "zm_management_domain_root": ROOT / "zomorodmelal.ir/business/app.php",
     "zm_management_repo_copy": ROOT / "Saeit-staging/content/zomorod-business/app.php",
 }
@@ -53,6 +55,15 @@ def inventory(label: str, path: Path) -> dict[str, object]:
             "old_login_checkout_72": "/store/product/72/checkout/" in text,
             "bank_payment_disabled": "پرداخت آنلاین تا اتصال درگاه غیرفعال است" in text,
             "management_label_for": 'for="business-login-password"' in text,
+        },
+        structure={
+            "style_close_count": text.count("</style>"),
+            "header_open_count": text.count("<header"),
+            "header_close_count": text.count("</header>"),
+            "inquiry_section": "zm-store-inquiry" in text,
+            "ask_master_route": "/ask-master/index.php" in text,
+            "product_grid": 'class="grid"' in text or 'class="mpw-shop-grid"' in text,
+            "theme_fix_marker": "live-theme-fix-20261105" in text,
         },
     )
     return row
