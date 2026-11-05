@@ -1,0 +1,128 @@
+{
+  "schema": "saeit.factory.qc1000-rework-plan.v1",
+  "product_id": "farm_enterprise_economics",
+  "status": "HOLD",
+  "commercial_release": false,
+  "required_score": 1000,
+  "independent_signatures": [
+    "domain_specialist",
+    "independent_quality_auditor",
+    "rights_reviewer"
+  ],
+  "gates": [
+    {
+      "id": "G01",
+      "name": "domain_depth_and_accuracy",
+      "evidence": [
+        "domain specialist review",
+        "formula and unit validation",
+        "independent adversarial cases"
+      ],
+      "must_be_true": [
+        "domain_specialist_report_present",
+        "units_verified",
+        "boundary_cases_passed"
+      ]
+    },
+    {
+      "id": "G02",
+      "name": "global_comparative_benchmark",
+      "evidence": [
+        "five current comparable products",
+        "source-linked benchmark",
+        "reproducible comparison"
+      ],
+      "must_be_true": [
+        "five_benchmarks_present",
+        "benchmark_sources_linked",
+        "measured_superiority_verified"
+      ]
+    },
+    {
+      "id": "G03",
+      "name": "independent_adversarial_testing",
+      "evidence": [
+        "fresh test matrix",
+        "invalid input tests",
+        "recalculation and regression tests"
+      ],
+      "must_be_true": [
+        "adversarial_suite_passed",
+        "fresh_run_hash_present"
+      ]
+    },
+    {
+      "id": "G04",
+      "name": "originality_and_provenance",
+      "evidence": [
+        "source provenance",
+        "rights review",
+        "non-derivative originality review"
+      ],
+      "must_be_true": [
+        "provenance_hash_present",
+        "rights_review_passed",
+        "originality_review_passed"
+      ]
+    },
+    {
+      "id": "G05",
+      "name": "distribution_support_reliability",
+      "evidence": [
+        "clean install",
+        "customer ZIP extraction",
+        "support and recovery procedure"
+      ],
+      "must_be_true": [
+        "clean_install_passed",
+        "customer_zip_verified",
+        "recovery_run_passed"
+      ]
+    },
+    {
+      "id": "G06",
+      "name": "real_world_accessibility",
+      "evidence": [
+        "documented user workflow",
+        "accessibility checks",
+        "real-world scenario run"
+      ],
+      "must_be_true": [
+        "workflow_run_passed",
+        "accessibility_checked",
+        "scenario_evidence_present"
+      ]
+    },
+    {
+      "id": "G07",
+      "name": "quality_scorecard",
+      "evidence": [
+        "all quality groups measured",
+        "1000 points independently calculated"
+      ],
+      "must_be_true": [
+        "quality_group_count_complete",
+        "quality_points_verified_equals_1000"
+      ]
+    },
+    {
+      "id": "G08",
+      "name": "signed_acceptance_and_release",
+      "evidence": [
+        "independent signatures",
+        "receiver receipt bound to exact artifact"
+      ],
+      "must_be_true": [
+        "three_independent_signatures",
+        "receiver_receipt_verified",
+        "commercial_release_allowed_false_until_owner_gate"
+      ]
+    }
+  ],
+  "no_auto_pass_rules": [
+    "self-authored evidence cannot satisfy an independent gate",
+    "a passing CI run cannot replace independent quality signatures",
+    "a hash without a matching artifact is invalid",
+    "a missing or stale evidence record remains HOLD"
+  ]
+}
