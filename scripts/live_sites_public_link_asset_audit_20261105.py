@@ -91,7 +91,13 @@ def acceptable_url(seed: str, value: str) -> str | None:
     extension = '.' + parsed.path.rsplit('.', 1)[-1].lower() if '.' in parsed.path.rsplit('/', 1)[-1] else ''
     if extension and extension not in SAFE_EXTENSIONS:
         return None
-    return urlunsplit(('https', parsed.netloc, parsed.path or '/', '', ''))
+    # Topic cards use a public, read-only numeric id. Keep it when auditing;
+    # otherwise /topics/?id=0001 is falsely reported as broken /topics/.
+    safe_query = ''
+    if (parsed.hostname == 'mojplaywin.com' and parsed.path == '/topics/'
+            and re.fullmatch(r'id=\d{4}', parsed.query)):
+        safe_query = parsed.query
+    return urlunsplit(('https', parsed.netloc, parsed.path or '/', safe_query, ''))
 
 
 def scan() -> dict[str, object]:
@@ -141,6 +147,8 @@ def scan() -> dict[str, object]:
     caps = {'link': 45, 'css': 22, 'script': 22, 'image': 30}
     for host in SEEDS:
         for kind, cap in caps.items():
+            if host == 'mojplaywin.com' and kind == 'link':
+                cap = 105  # Includes each distinct topic-card id on homepage.
             selected.extend(grouped[host][kind][:cap])
 
     def check(item: tuple[str, str]) -> dict[str, object]:
@@ -149,6 +157,8 @@ def scan() -> dict[str, object]:
             status, final, content_type, html = get(url)
             result = {'host': urlsplit(url).hostname, 'path': urlsplit(url).path,
                       'kind': kind, 'status': status}
+            if urlsplit(url).query:
+                result['safe_query'] = urlsplit(url).query
             if urlsplit(final).hostname != urlsplit(url).hostname:
                 result['redirected_external'] = True
             if kind in ('css', 'script') and status == 200 and content_type.startswith('text/html'):
@@ -168,6 +178,8 @@ def scan() -> dict[str, object]:
               or x.get('possible_soft_404')]
     for item in broken:
         full_url = 'https://' + str(item['host']) + str(item['path'])
+        if item.get('safe_query'):
+            full_url += '?' + str(item['safe_query'])
         item['sources'] = sources.get(full_url, [])[:12]
     return {'seed_pages': seed_results, 'discovered_distinct_candidates': len(candidates),
             'checked_links_and_assets': len(selected), 'by_kind': dict(count_by_kind),
