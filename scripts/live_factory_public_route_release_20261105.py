@@ -21,6 +21,7 @@ HTACCESS = WEBROOT / '.htaccess'
 INDEX = WEBROOT / 'index.html'
 BACKUPS = HOME / '.private/factory-public-web-backups'
 MARKER = 'ZM-FACTORY-PUBLIC-20261105'
+OLD_LINK_HTML_SHA = '2d68e6367969fd3cfec3c0674a66be12c6fe8b80ab8c2636c1578fd6fcbe5f4f'
 EXPECTED_DIRECTIVES = {
     'PassengerEnabled on',
     'PassengerAppRoot /home/zomorod2/factory.zomorodmelal.ir',
@@ -171,6 +172,90 @@ def rollback(run_id: str) -> None:
     print('FACTORY_PUBLIC_ROLLBACK=RESTORED_PREVIOUS_ROUTING')
 
 
+def desired_public_html() -> bytes:
+    encoded = os.environ.get('FACTORY_HTML_B64')
+    if not encoded:
+        raise RuntimeError('CORRECTED_PUBLIC_ASSET_MISSING')
+    data = base64.b64decode(encoded, validate=True)
+    if (b'https://zomorodmelal.ir/industry/' not in data or
+            b'https://zomorodmelal.ir/business/' in data or
+            b'<html lang="fa" dir="rtl">' not in data or not 2500 < len(data) < 25000):
+        raise RuntimeError('CORRECTED_PUBLIC_ASSET_FAILED_CONTENT_CHECK')
+    return data
+
+
+def relink_guard() -> bytes:
+    check_user_and_paths()
+    if digest(HTACCESS.read_bytes()) != digest(NEW_HTACCESS):
+        raise RuntimeError('FACTORY_PUBLIC_ROUTING_CHANGED')
+    if not INDEX.is_file() or INDEX.is_symlink():
+        raise RuntimeError('FACTORY_PUBLIC_INDEX_MISSING')
+    old = INDEX.read_bytes()
+    if digest(old) != OLD_LINK_HTML_SHA:
+        raise RuntimeError('FACTORY_PUBLIC_INDEX_CHANGED_FROM_EXPECTED_RELEASE')
+    return old
+
+
+def relink_preview() -> None:
+    original = relink_guard()
+    corrected = desired_public_html()
+    print('FACTORY_PUBLIC_LINK_PREVIEW=' + json.dumps({
+        'old_sha': digest(original), 'new_sha': digest(corrected),
+        'only_public_factory_html_modified': True}))
+
+
+def relink_publish(run_id: str) -> None:
+    original = relink_guard()
+    corrected = desired_public_html()
+    folder = BACKUPS / ('run-' + run_id + '-link')
+    release_dir(run_id)  # validates run ID before making any files
+    if folder.exists() or folder.is_symlink():
+        raise RuntimeError('FACTORY_LINK_BACKUP_COLLISION')
+    folder.mkdir(mode=0o700)
+    original_path = folder / 'original-index.html'
+    with original_path.open('xb') as out:
+        os.fchmod(out.fileno(), 0o600)
+        out.write(original)
+        out.flush()
+        os.fsync(out.fileno())
+    manifest = {'run_id': run_id, 'old_sha': digest(original),
+                'new_sha': digest(corrected)}
+    with (folder / 'manifest.json').open('x') as out:
+        os.fchmod(out.fileno(), 0o600)
+        json.dump(manifest, out)
+        out.flush()
+        os.fsync(out.fileno())
+    if digest(INDEX.read_bytes()) != manifest['old_sha']:
+        raise RuntimeError('CONCURRENT_FACTORY_INDEX_EDIT')
+    try:
+        atomic_file(INDEX, corrected, 0o644)
+        if digest(INDEX.read_bytes()) != manifest['new_sha']:
+            raise RuntimeError('FACTORY_LINK_POSTWRITE_MISMATCH')
+    except BaseException:
+        if INDEX.is_file() and digest(INDEX.read_bytes()) == manifest['new_sha']:
+            atomic_file(INDEX, original, 0o644)
+        raise
+    print('FACTORY_PUBLIC_LINK_CORRECTED=' + json.dumps({
+        'destination': 'https://zomorodmelal.ir/industry/',
+        'private_backup': True, 'autonomous_runtime_modified': False}))
+
+
+def relink_rollback(run_id: str) -> None:
+    release_dir(run_id)
+    folder = BACKUPS / ('run-' + run_id + '-link')
+    if folder.is_symlink() or not folder.is_dir():
+        raise RuntimeError('FACTORY_LINK_BACKUP_MISSING')
+    manifest = json.loads((folder / 'manifest.json').read_text())
+    original = (folder / 'original-index.html').read_bytes()
+    if manifest['run_id'] != run_id or digest(original) != manifest['old_sha']:
+        raise RuntimeError('FACTORY_LINK_BACKUP_INTEGRITY_FAIL')
+    if digest(INDEX.read_bytes()) == manifest['new_sha']:
+        atomic_file(INDEX, original, 0o644)
+    elif digest(INDEX.read_bytes()) != manifest['old_sha']:
+        raise RuntimeError('FACTORY_LINK_CONCURRENT_EDIT_PREVENTS_ROLLBACK')
+    print('FACTORY_PUBLIC_LINK_ROLLBACK=RESTORED')
+
+
 if __name__ == '__main__':
     if len(sys.argv) == 2 and sys.argv[1] == 'preview':
         preview()
@@ -178,5 +263,11 @@ if __name__ == '__main__':
         publish(sys.argv[2])
     elif len(sys.argv) == 3 and sys.argv[1] == 'rollback':
         rollback(sys.argv[2])
+    elif len(sys.argv) == 2 and sys.argv[1] == 'relink-preview':
+        relink_preview()
+    elif len(sys.argv) == 3 and sys.argv[1] == 'relink-publish':
+        relink_publish(sys.argv[2])
+    elif len(sys.argv) == 3 and sys.argv[1] == 'relink-rollback':
+        relink_rollback(sys.argv[2])
     else:
         raise SystemExit('USAGE: preview | publish RUN_ID | rollback RUN_ID')
