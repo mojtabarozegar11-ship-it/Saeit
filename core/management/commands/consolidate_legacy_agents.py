@@ -8,9 +8,11 @@ or the existing content workflow. Other agents need live evidence review.
 
 import json
 import uuid
+from datetime import timedelta
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
 
 from core.models import Agent, AgentTask, AuditLog
 
@@ -22,7 +24,9 @@ LEGACY_AGENT_CODES = frozenset({
     "newsletter-world-watch",
     "newsletter-unit-reports",
 })
-LEGACY_AGENT_PREFIXES = ("income-",)
+# The prefix alone cannot prove redundancy. Some older income agents may run
+# external integrations that are not represented by Django AgentTask rows.
+REVIEW_ONLY_PREFIXES = ("income-",)
 PROTECTED_AGENT_CODES = frozenset({
     "economic-master-agent",
     "moj_1ro_1",
@@ -34,37 +38,62 @@ PENDING_NEWSLETTER_STATUSES = ("draft", "approved", "scheduled", "review", "queu
 
 
 def is_known_legacy(code):
-    return code in LEGACY_AGENT_CODES or any(code.startswith(p) for p in LEGACY_AGENT_PREFIXES)
+    return code in LEGACY_AGENT_CODES
 
 
 def assess_agent(agent):
     """Conservative classification using the *current* database, not a vanity score."""
     task_qs = AgentTask.objects.filter(agent=agent)
     active_tasks = task_qs.filter(status__in=ACTIVE_TASK_STATUSES).count()
+    review_cutoff = timezone.now() - timedelta(days=30)
+    recent_completed = task_qs.filter(
+        status="completed", updated_at__gte=review_cutoff
+    ).count()
     pending_stories = agent.newsletter_stories.filter(
         status__in=PENDING_NEWSLETTER_STATUSES
     ).count()
+    pending_distributions = agent.newsletter_stories.filter(
+        publications__status__in=("queued", "blocked")
+    ).distinct().count()
+    recent_publications = agent.newsletter_stories.filter(
+        status="published", published_at__gte=review_cutoff
+    ).count()
+    # A live, exclusively held capability might still be called by a scheduler
+    # or external system even if Django has no recent AgentTask record.
+    unique_active_capabilities = [
+        cap.code for cap in agent.capabilities.filter(active=True)
+        if not cap.agents.filter(active=True).exclude(pk=agent.pk).exists()
+    ]
     protected = agent.code in PROTECTED_AGENT_CODES
     legacy = is_known_legacy(agent.code)
 
     if protected:
         decision = "retain_required"
+    elif active_tasks or pending_stories or pending_distributions:
+        decision = "hold_for_dependency"
+    elif not agent.active:
+        decision = "already_retired"
+    elif recent_completed or recent_publications:
+        decision = "review_recent_outputs"
+    elif unique_active_capabilities:
+        decision = "review_unique_capability"
     elif not legacy:
         decision = "review_live_outcomes"
-    elif active_tasks or pending_stories:
-        decision = "hold_for_dependency"
-    elif agent.active:
-        decision = "retire_safe"
     else:
-        decision = "already_retired"
+        decision = "retire_safe"
 
     return {
         "code": agent.code,
         "active": agent.active,
         "decision": decision,
         "active_tasks": active_tasks,
+        "recent_completed_tasks": recent_completed,
+        "recent_publications": recent_publications,
         "historical_tasks": task_qs.count(),
         "pending_stories": pending_stories,
+        "pending_distributions": pending_distributions,
+        "unique_active_capabilities": unique_active_capabilities,
+        "review_only_prefix": any(agent.code.startswith(p) for p in REVIEW_ONLY_PREFIXES),
         "financial_outcome": "not_assessed_from_task_counts",
     }
 
@@ -115,5 +144,7 @@ class Command(BaseCommand):
                 "ready_to_retire": sum(r["decision"] == "retire_safe" for r in rows),
                 "held_for_dependency": sum(r["decision"] == "hold_for_dependency" for r in rows),
                 "unknown_requires_live_review": sum(r["decision"] == "review_live_outcomes" for r in rows),
+                "recent_output_requires_review": sum(r["decision"] == "review_recent_outputs" for r in rows),
+                "unique_capability_requires_review": sum(r["decision"] == "review_unique_capability" for r in rows),
             },
         }, ensure_ascii=False, default=str))
