@@ -17,6 +17,7 @@ from django.db import IntegrityError, transaction
 from enterprise_portal.github_chatgpt_reports import (
     PUBLIC_ISSUE_API, extract_receipt, AUTHOR_LOGIN,
 )
+from enterprise_portal.action_receipt_validation import validate_for_import
 from enterprise_portal.models import BusinessUnit, ChatGPTActionReport
 
 
@@ -94,6 +95,12 @@ class Command(BaseCommand):
             if receipt is None:
                 counters["skipped"] += 1
                 continue
+            # All new numbered cycle-05 receipts require a valid structured
+            # action block. Reject the whole remote snapshot before *any* DB
+            # write; historical reports predate this requirement and remain
+            # unreviewed source claims, not evidence of completed operations.
+            if validate_for_import(receipt["report_code"], receipt["body"]):
+                raise CommandError("REPORT_ACTION_RECEIPT_INVALID")
             counters["eligible"] += 1
             code = receipt["report_code"]
             if code in staged:
