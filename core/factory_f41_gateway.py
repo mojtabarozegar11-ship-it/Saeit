@@ -98,10 +98,13 @@ def build_verified_order(payload):
     # production lane.  Prevent it from creating a second product while the
     # first factory product is still reserved, including when the runtime
     # production environment is accidentally missing its active-slot file.
-    factory_private = Path.home() / "factory-runtime/private/autonomous-product-cycle"
+    production_home = Path.home()
+    factory_private = production_home / "factory-runtime/private/autonomous-product-cycle"
     line41_slot = factory_private / "quality-excellence/product-flow/active-slots/current.json"
-    if (os.getenv("SAEIT_ENV", "").lower() in ("production", "prod")
+    if (production_home == Path("/home/githubops")
+            or os.getenv("SAEIT_ENV", "").lower() in ("production", "prod")
             or line41_slot.exists()
+            or (factory_private / ".f01-global-production-lane.json").exists()
             or (factory_private / "production-state.json").exists()):
         raise ValueError("F41_GLOBAL_SINGLE_PRODUCT_LANE_NOT_ADMITTED")
     if type(payload) is not dict or not {
