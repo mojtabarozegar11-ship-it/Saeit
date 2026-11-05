@@ -167,9 +167,13 @@ from django.db.migrations.recorder import MigrationRecorder
 from django.conf import settings
 applied=set(MigrationRecorder(connection).applied_migrations())
 names=set(connection.introspection.table_names())
+forward=sorted(name for app,name in applied if app=="core"
+               and len(name)>=4 and name[:4].isdigit() and int(name[:4])>=40
+               and name!="0040_mpw_guest_email_recovery")
 print(json.dumps({"vendor":connection.vendor,
  "m39":("core","0039_educationassessment_educationattempt_and_more") in applied,
  "m40":("core","0040_mpw_guest_email_recovery") in applied,
+ "unreviewed_core_migrations":forward,
  "tables":[t for t in ("core_guestorderemail","core_guestrecoverytoken","core_guestrecoveryrate") if t in names],
  "enabled":getattr(settings,"MPW_GUEST_RECOVERY_ENABLED",False) is True,
  "mail":getattr(settings,"MPW_GUEST_RECOVERY_EMAIL_APPROVED",False) is True},sort_keys=True))
@@ -193,7 +197,8 @@ def db_state():
 def require_before_schema():
     report = db_state()
     if (report != {"vendor": "mysql", "m39": True, "m40": False,
-                   "tables": [], "enabled": False, "mail": False}):
+                   "unreviewed_core_migrations": [], "tables": [],
+                   "enabled": False, "mail": False}):
         fail("MIGRATION_BASELINE_DRIFT")
     return report
 
@@ -372,7 +377,8 @@ def publish(stage, run, backup_sha):
             changed.append(key)
         migrate_new_tables()
         report = db_state()
-        if not (report["vendor"] == "mysql" and report["m40"] is True and len(report["tables"]) == 3 and
+        if not (report["vendor"] == "mysql" and report["m40"] is True and
+                report["unreviewed_core_migrations"] == [] and len(report["tables"]) == 3 and
                 report["enabled"] is False and report["mail"] is False):
             fail("POST_MIGRATION_STATE_DRIFT")
         restart()
@@ -404,6 +410,7 @@ def verify():
     guard_host()
     report = db_state()
     if (report["vendor"] != "mysql" or not report["m40"] or
+            report["unreviewed_core_migrations"] or
             len(report["tables"]) != 3 or report["enabled"] or report["mail"]):
         fail("RELEASE_NOT_SAFELY_STAGED")
     for key in SOURCE_DIGESTS:

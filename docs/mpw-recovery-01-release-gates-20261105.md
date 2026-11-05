@@ -68,6 +68,10 @@ the runtime is the existing Passenger/Django application on cPanel.
    passing the backup and source preflight. Do not manually repeat it. Use a
    maintenance window and known restorable backup. Confirm three new tables exist and
    that other core migrations remain unchanged. Never backfill old orders.
+   The controller rejects any applied `core` migration numbered `0040` or newer
+   other than this exact recovery migration, including unexpected `0041+`
+   migrations. Investigate that condition explicitly; never fake or rewrite
+   Django migration history to bypass this gate.
    The three recovery models intentionally define no Django admin permissions;
    the isolated migration verified that zero permissions are generated for them.
 5. Run `python manage.py check`, a read-only route resolver check and a complete

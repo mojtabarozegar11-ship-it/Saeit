@@ -101,6 +101,7 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
 
     def test_staged_publish_then_exact_source_rollback(self):
         verified = {"vendor": "mysql", "m39": True, "m40": True,
+                    "unreviewed_core_migrations": [],
                     "tables": ["core_guestorderemail", "core_guestrecoverytoken",
                                "core_guestrecoveryrate"],
                     "enabled": False, "mail": False}
@@ -125,6 +126,7 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
 
     def test_rollback_rejects_newer_changes(self):
         verified = {"vendor": "mysql", "m39": True, "m40": True,
+                    "unreviewed_core_migrations": [],
                     "tables": ["a", "b", "c"], "enabled": False, "mail": False}
         run = "202611050043"
         snapshot_sha = self._snapshot(run)
@@ -141,8 +143,18 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
 
     def test_schema_drift_blocks_publish_before_any_write(self):
         invalid = {"vendor": "mysql", "m39": False, "m40": False,
+                   "unreviewed_core_migrations": [],
                    "tables": [], "enabled": False, "mail": False}
         with patch.object(release, "db_state", return_value=invalid):
+            with self.assertRaisesRegex(RuntimeError, "MIGRATION_BASELINE_DRIFT"):
+                release.require_before_schema()
+        self.assertFalse((self.app / release.FILES["migration"]).exists())
+
+    def test_newer_core_schema_blocks_release_without_changes(self):
+        unexpected = {"vendor": "mysql", "m39": True, "m40": False,
+                      "unreviewed_core_migrations": ["0041_some_other_release"],
+                      "tables": [], "enabled": False, "mail": False}
+        with patch.object(release, "db_state", return_value=unexpected):
             with self.assertRaisesRegex(RuntimeError, "MIGRATION_BASELINE_DRIFT"):
                 release.require_before_schema()
         self.assertFalse((self.app / release.FILES["migration"]).exists())
