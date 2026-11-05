@@ -181,12 +181,17 @@ def staging_route_and_template_context() -> dict[str, object]:
         'active_core_views': root / 'core/views.py',
         'active_home_template': root / 'core/templates/core/home.html',
         'active_services_template': root / 'core/templates/core/services.html',
+        'active_services_view': root / 'core/services_views.py',
+        'active_priority_services_template': root / 'templates/core/services.html',
+        'active_priority_generic_services_template': root / 'templates/services.html',
+        'canonical_services_view': HOME / 'Saeit-staging/core/services_views.py',
+        'canonical_priority_services_template': HOME / 'Saeit-staging/templates/core/services.html',
         'canonical_root_urls': HOME / 'Saeit-staging/config/urls.py',
         'canonical_core_urls': HOME / 'Saeit-staging/core/urls.py',
         'canonical_core_views': HOME / 'Saeit-staging/core/views.py',
         'canonical_home_template': HOME / 'Saeit-staging/core/templates/core/home.html',
     }
-    focus = re.compile(r'(?i)(?:TEMPLATES|APP_DIRS|DIRS|loaders|BASE_DIR|ROOT_URLCONF|INSTALLED_APPS|services|homepage|home|index|urlpatterns|path\(|re_path\(|include\(|render\(|template_name|cached\.Loader)')
+    focus = re.compile(r'(?i)(?:TEMPLATES|APP_DIRS|DIRS|loaders|BASE_DIR|ROOT_URLCONF|INSTALLED_APPS|services|homepage|home|index|urlpatterns|path\(|re_path\(|include\(|render\(|template_name|cached\.Loader|cache_page|cache\.get|cache\.set|@cache|never_cache|restart|passenger)')
     sensitive = re.compile(r'(?i)(?:password|secret|credential|private.?key|api.?key|database|smtp|authorization|bearer|ssh|token|session)')
     result = {}
     for label, path in files.items():
