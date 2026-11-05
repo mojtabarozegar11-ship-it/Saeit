@@ -39,7 +39,7 @@ class Command(BaseCommand):
             "claimed_elsewhere": 0,
             "errors": 0,
             "external_messages_sent": 0,
-            "publications_created": 0,
+            "publicly_published": 0,
         }
         error_types = {}
 
@@ -69,5 +69,5 @@ class Command(BaseCommand):
             "remaining_queued": NewsletterSubmission.objects.filter(status="queued").count(),
             "preexisting_inflight": NewsletterSubmission.objects.filter(status="processing").count(),
             "error_types": error_types,
-            "publication_gate": "owner_approval_required_by_default",
+            "publication_gate": "configured_schedule_or_default_hold",
         }, sort_keys=True))
