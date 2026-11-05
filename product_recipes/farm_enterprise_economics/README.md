@@ -63,10 +63,14 @@ and `margin_of_safety_percent` fields use that whole-unit threshold for
 compatibility with existing integer-piece consumers. This can misleadingly
 show a negative cushion for profitable fractional sales, so use the continuous
 fields for kilograms, litres, tonnes and other fractional trade units. When
-unit contribution is nonpositive, break-even quantity is undefined: selling
-more units cannot offset positive fixed costs through a nonpositive unit
-contribution. With zero fixed costs and positive contribution, the threshold
-is zero; commercial feasibility still depends on real demand and constraints.
+unit contribution is nonpositive and fixed costs are positive, break-even
+quantity is undefined: selling more units cannot offset those costs. If both
+unit contribution and fixed costs are zero, every quantity is exactly at
+break-even; the reported minimum threshold is zero and margin-of-safety
+fields are `null` because there is no positive contribution cushion. With
+zero fixed costs and positive contribution, the threshold is also zero, but
+the margin of safety can be calculated normally. Commercial feasibility still
+depends on real demand and constraints.
 
 The original nine stress tests per enterprise vary realized sales volume by
 -20%, 0%, +20% and selling price by -10%, 0%, +10%; those legacy outputs remain
@@ -266,3 +270,4 @@ Its examples and calculation methods must receive final product QA, security,
 owner licensing, commercial pricing, support-channel and distribution approval
 before it is represented as a commercially released product. Do not present
 this internal build as already available for sale.
+

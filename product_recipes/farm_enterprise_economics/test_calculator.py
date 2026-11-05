@@ -124,6 +124,28 @@ class EconomicsTests(unittest.TestCase):
         self.assertIsNone(row["break_even_units"])
         self.assertEqual(row["operating_profit"], "-200.00")
 
+    def test_zero_contribution_and_zero_fixed_cost_is_break_even_without_safety_margin(self):
+        row = enterprise({
+            "name": "Cost neutral", "units_sold": 100,
+            "unit_price": 10, "variable_cost_per_unit": 10,
+            "allocated_fixed_cost": 0,
+        })
+        self.assertEqual(row["operating_profit"], "0.00")
+        self.assertTrue(row["break_even_reachable"])
+        self.assertEqual(row["break_even_units"], 0)
+        self.assertEqual(row["break_even_quantity_continuous"], "0")
+        self.assertIsNone(row["margin_of_safety_units"])
+        self.assertIsNone(row["margin_of_safety_percent"])
+        self.assertIsNone(row["margin_of_safety_quantity_continuous"])
+        self.assertIsNone(row["margin_of_safety_percent_continuous"])
+        with_fixed = enterprise({
+            "name": "Cost neutral overhead", "units_sold": 100,
+            "unit_price": 10, "variable_cost_per_unit": 10,
+            "allocated_fixed_cost": 1,
+        })
+        self.assertFalse(with_fixed["break_even_reachable"])
+        self.assertIsNone(with_fixed["break_even_units"])
+
     def test_scenario_range(self):
         r = evaluate(self.example)
         outcomes = [float(x["modeled_operating_profit"]) for x in r["scenario_results"]]
@@ -554,3 +576,4 @@ class EconomicsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

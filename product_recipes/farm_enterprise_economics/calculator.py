@@ -96,6 +96,12 @@ def enterprise(entry):
         # legacy whole-unit ceiling used by integer-piece enterprises.
         break_even_quantity_continuous = fixed / contribution_unit
         break_even = int(break_even_quantity_continuous.to_integral_value(rounding=ROUND_CEILING))
+    elif contribution_unit == 0 and fixed == 0:
+        # Profit is identically zero at every output level. Zero is the
+        # smallest break-even quantity, but no positive contribution exists:
+        # a conventional margin of safety is therefore not meaningful.
+        break_even_quantity_continuous = Decimal(0)
+        break_even = 0
     # These are planning thresholds, not predictions. A fee of 100% makes a
     # positive break-even unit price impossible at the selected sales volume.
     price_denominator = Decimal(1) - fee_rate
@@ -105,14 +111,14 @@ def enterprise(entry):
         required = (variable + fixed / quantity) / price_denominator
         break_even_unit_price = str(required.quantize(Decimal("0.01"), rounding=ROUND_CEILING))
         break_even_unit_price_unrounded = format(required, "f")
-    safety_units = quantity - Decimal(break_even) if break_even is not None else None
+    safety_units = quantity - Decimal(break_even) if contribution_unit > 0 else None
     safety_percent = (
         (safety_units * 100 / quantity).quantize(Decimal("0.01"))
         if safety_units is not None and quantity > 0 else None
     )
     continuous_safety = (
         quantity - break_even_quantity_continuous
-        if break_even_quantity_continuous is not None else None
+        if contribution_unit > 0 else None
     )
     continuous_safety_percent = (
         (continuous_safety * 100 / quantity).quantize(Decimal("0.01"))
@@ -141,7 +147,7 @@ def enterprise(entry):
             format(break_even_quantity_continuous, "f")
             if break_even_quantity_continuous is not None else None
         ),
-        "break_even_reachable": contribution_unit > 0,
+        "break_even_reachable": contribution_unit > 0 or (contribution_unit == 0 and fixed == 0),
         "break_even_unit_price_at_planned_volume": break_even_unit_price,
         "break_even_unit_price_unrounded": break_even_unit_price_unrounded,
         "margin_of_safety_units": str(safety_units) if safety_units is not None else None,
@@ -492,3 +498,4 @@ if __name__ == "__main__":
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print("INPUT_ERROR: " + str(error), file=sys.stderr)
         sys.exit(2)
+
