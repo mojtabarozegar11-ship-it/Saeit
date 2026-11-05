@@ -44,7 +44,8 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojplaywin_recovery_isolated_once.py'
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_link_guard_20261101.py'
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_pair_identity_20261101.py'
-          python3 -m py_compile scripts/mojplaywin_backup_stream_cpanel.py scripts/mojplaywin_backup_encrypt_vps_gpg.py scripts/mojplaywin_recovery_stream_vps.py scripts/mojplaywin_restore_files_isolated_runner.py
+          python3 -m unittest discover -s tests -p 'test_mpw_isolated_sql_progress_20261105.py'
+          python3 -m py_compile scripts/mojplaywin_backup_stream_cpanel.py scripts/mojplaywin_backup_encrypt_vps_gpg.py scripts/mojplaywin_recovery_stream_vps.py scripts/mojplaywin_restore_files_isolated_runner.py scripts/mpw_isolated_sql_progress_20261105.py
       - name: Establish fingerprint-pinned VPS relay with direct same-host cPanel fallback
         id: link
         shell: bash
@@ -313,12 +314,15 @@ jobs:
           set +e
           timeout 5500s ssh -T -F "$d/config" saeit-vps \
             "python3 -B -c '$call' '$stream64' mysql-pair '$MPW_BACKUP_SET_STEM'" |
+            python3 -B scripts/mpw_isolated_sql_progress_20261105.py |
             timeout 5500s docker exec -i "$label" mariadb --no-defaults -uroot --binary-mode >/dev/null 2>"$import_errors"
           pipe_status=("${PIPESTATUS[@]}")
           set -e
-          if [ "${pipe_status[0]}" -ne 0 ] || [ "${pipe_status[1]}" -ne 0 ]; then
+          if [ "${pipe_status[0]}" -ne 0 ] || [ "${pipe_status[1]}" -ne 0 ] || [ "${pipe_status[2]}" -ne 0 ]; then
             category="ISOLATED_IMPORT_UNCLASSIFIED"
-            if grep -Eqi 'Access denied|ERROR 1045|ERROR 1698' "$import_errors"; then
+            if [ "${pipe_status[0]}" -eq 124 ] || [ "${pipe_status[2]}" -eq 124 ]; then
+              category="ISOLATED_IMPORT_TIMEOUT"
+            elif grep -Eqi 'Access denied|ERROR 1045|ERROR 1698' "$import_errors"; then
               category="ISOLATED_DB_AUTH"
             elif grep -Eqi 'No space left|Disk full|ERROR 1114' "$import_errors"; then
               category="ISOLATED_DB_CAPACITY"
@@ -327,7 +331,7 @@ jobs:
             elif grep -Eq 'ERROR [0-9]+' "$import_errors"; then
               category="ISOLATED_SQL_COMPATIBILITY"
             fi
-            echo "ISOLATED_SQL_IMPORT_FAILED source_exit=${pipe_status[0]} consumer_exit=${pipe_status[1]} category=$category" >&2
+            echo "ISOLATED_SQL_IMPORT_FAILED source_exit=${pipe_status[0]} relay_exit=${pipe_status[1]} consumer_exit=${pipe_status[2]} category=$category" >&2
             exit 1
           fi
           rm -f -- "$import_errors"
