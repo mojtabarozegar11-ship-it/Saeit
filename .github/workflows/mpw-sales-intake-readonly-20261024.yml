@@ -30,13 +30,24 @@ on:
           - preflight
           - publish_additive
           - verify
+      scoped_store_operation:
+        description: "Private 16-table store backup: none, read-only preflight, or isolated restore"
+        required: true
+        default: none
+        type: choice
+        options: [none, preflight_only, create_and_restore]
+      scoped_store_confirmation:
+        description: "Owner-only approval phrase for real scoped data export"
+        required: false
+        default: ""
+        type: string
 permissions: {contents: read}
 concurrency:
   group: mpw-intake-read-only-audit
   cancel-in-progress: false
 jobs:
   audit-live:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/mpw-recovery-01-20261105' && inputs.audit_scope == 'recovery'))
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/mpw-recovery-01-20261105' && inputs.audit_scope == 'recovery' && inputs.scoped_store_operation == 'none'))
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -221,6 +232,18 @@ jobs:
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-sales-audit-ssh"
 
+
+  scoped-store-recovery:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/feature/mpw-recovery-01-20261105' &&
+      inputs.scoped_store_operation != 'none'
+    uses: ./.github/workflows/mpw-scoped-store-backup-restore-20261105.yml
+    with:
+      operation: ${{ inputs.scoped_store_operation }}
+      confirmation: ${{ inputs.scoped_store_confirmation }}
+    secrets: inherit
 
   guarded-additive-release:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/mpw-recovery-01-20261105' && inputs.release_operation != 'none'
