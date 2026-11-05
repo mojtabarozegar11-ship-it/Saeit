@@ -61,6 +61,32 @@ def prepare() -> list[tuple[Path, bytes, bytes, int]]:
     for path, old, new in FILES:
         before = path.read_bytes()
         source = before.decode("utf-8", "strict")
+        if path == URLS and source.count(old) != 1:
+            lines = [line for line in source.splitlines()
+                     if "contact/" in line and "path(" in line]
+            print("STAGING_CONTACT_ROUTE_CANDIDATES=" + str(len(lines)), flush=True)
+            if len(lines) != 1:
+                raise RuntimeError("CONTACT_ROUTE_AMBIGUOUS")
+            observed = lines[0].strip()
+            accepted = (
+                observed.startswith((
+                    'path("contact/", RedirectView.as_view(',
+                    "path('contact/', RedirectView.as_view(",
+                ))
+                and any(token in observed for token in (
+                    'pattern_name="company"', "pattern_name='company'",
+                    'url="/company/"', "url='/company/'",
+                ))
+                and any(token in observed for token in ("permanent=True", "permanent=False"))
+                and any(token in observed for token in ('name="contact"', "name='contact'"))
+                and observed.endswith("),")
+            )
+            if not accepted:
+                print("STAGING_CONTACT_ROUTE_DIAGNOSTIC=" + observed[:220], flush=True)
+                raise RuntimeError("CONTACT_ROUTE_NOT_A_SUPPORTED_REDIRECT")
+            old = lines[0]
+            new = lines[0][:len(lines[0]) - len(lines[0].lstrip())] + NEW_ROUTE
+            print("STAGING_CONTACT_ROUTE_VARIANT_ACCEPTED=1", flush=True)
         if source.count(old) != 1 or new in source:
             raise RuntimeError("TARGET_DRIFT_OR_ALREADY_PATCHED:" + path.name)
         after = source.replace(old, new, 1).encode("utf-8")
