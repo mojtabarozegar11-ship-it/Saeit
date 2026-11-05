@@ -15,6 +15,14 @@ from enterprise_portal.models import BusinessUnit, ChatGPTActionReport
 HEADER = "## گزارش ۰۵-۰۰۰۱ | 2026-11-01 16:04 UTC | ZM-CTRL-20261101-PR1779-CI41324363802"
 BODY = HEADER + "\n\n1. اصلاح کد و آزمون؛ بدون ادعای انتشار زنده.\n"
 OWNER = "mojtabarozegar11-ship-it"
+NEW_HEADER = "## گزارش 05-0058 | 2026-11-05 05:00 UTC | ZM-CTRL-20261105-0058"
+NEW_BODY = NEW_HEADER + "\nZM_ACTIONS_V1_START\n" + json.dumps({
+    "version": 1, "report_code": "05-0058", "actions": [{
+        "id": "ZM05-0058-A01", "title_fa": "رفع تعارض", "status": "completed",
+        "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/1880",
+        "impact_fa": "رفع مانع همگام‌سازی",
+    }],
+}, ensure_ascii=False) + "\nZM_ACTIONS_V1_END"
 
 
 def comment(cid=101, body=BODY, author=OWNER):
@@ -156,3 +164,30 @@ class ReportSyncCommandTests(TestCase):
     def test_page_limits_cannot_be_bypassed(self):
         with self.assertRaisesMessage(CommandError, "PAGES_OUT_OF_RANGE"):
             call_command("sync_chatgpt_action_reports", "--pages=100")
+
+    @patch("enterprise_portal.management.commands.sync_chatgpt_action_reports.fetch_issue_comments")
+    def test_new_valid_latin_header_imports_only_as_unreviewed(self, fetch):
+        fetch.return_value = [comment(cid=158, body=NEW_BODY)]
+        with patch.dict(os.environ, {
+            "ZM_CHATGPT_REPORT_SYNC_ENABLED": "1", "ZM_CHATGPT_REPORT_DB_ATTESTED": "1"
+        }):
+            call_command("sync_chatgpt_action_reports", "--commit",
+                         "--unit-code=zm-sync", "--recorder-id=" + str(self.owner.pk),
+                         stdout=io.StringIO())
+        self.assertEqual(ChatGPTActionReport.objects.count(), 1)
+        record = ChatGPTActionReport.objects.get()
+        self.assertEqual(record.report_code, "05-0058")
+        self.assertFalse(record.evidence_reviewed)
+        self.assertEqual(record.outcome, "partial")
+
+    @patch("enterprise_portal.management.commands.sync_chatgpt_action_reports.fetch_issue_comments")
+    def test_invalid_future_receipt_blocks_full_snapshot_before_write(self, fetch):
+        fetch.return_value = [comment(101), comment(158, body=NEW_HEADER + "\nmissing block")]
+        with patch.dict(os.environ, {
+            "ZM_CHATGPT_REPORT_SYNC_ENABLED": "1", "ZM_CHATGPT_REPORT_DB_ATTESTED": "1"
+        }):
+            with self.assertRaisesMessage(CommandError, "REPORT_ACTION_RECEIPT_INVALID"):
+                call_command("sync_chatgpt_action_reports", "--commit",
+                             "--unit-code=zm-sync", "--recorder-id=" + str(self.owner.pk),
+                             stdout=io.StringIO())
+        self.assertFalse(ChatGPTActionReport.objects.exists())
