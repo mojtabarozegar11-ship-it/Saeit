@@ -15,6 +15,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 
@@ -409,10 +410,15 @@ aside{border-left:4px solid #a05b22;padding:1rem;background:#fff7e9}
 def stage_and_replace_reports(exports):
     """Stage every requested report before replacing any destination.
 
-    Each individual replacement is atomic on the destination filesystem.
-    A multi-file group is not an all-or-nothing transaction if a rename fails.
+    Each replacement is atomic on its destination filesystem. If a later
+    replacement fails, restore earlier destinations from same-filesystem
+    snapshots. A process crash or concurrent external writer can still leave
+    multiple files out of sync; guided mode uses a receipt written last.
     """
     staged = []
+    snapshots = []
+    replaced = []
+    keep_snapshots = False
     try:
         for destination, content in exports:
             fd, temp_name = tempfile.mkstemp(
@@ -425,14 +431,66 @@ def stage_and_replace_reports(exports):
                 stream.write(content)
                 stream.flush()
                 os.fsync(stream.fileno())
+        # Preserve existing report contents and even symlinks before the
+        # first replacement. A same-directory copy works on Windows, macOS
+        # and Linux even where hard links are unavailable. A missing file is
+        # recorded so an incomplete new export can be rolled back.
+        for _, destination in staged:
+            backup = None
+            if os.path.lexists(destination):
+                fd, name = tempfile.mkstemp(
+                    prefix="." + destination.name + ".", suffix=".bak",
+                    dir=str(destination.parent)
+                )
+                os.close(fd)
+                try:
+                    if destination.is_symlink():
+                        os.unlink(name)
+                        os.symlink(os.readlink(destination), name)
+                    elif destination.is_file():
+                        shutil.copy2(destination, name)
+                    else:
+                        raise ValueError("report output destination must be a regular file or symlink")
+                except Exception:
+                    if os.path.lexists(name):
+                        os.unlink(name)
+                    raise
+                backup = Path(name)
+            snapshots.append((destination, backup))
         for temporary, destination in staged:
             os.replace(str(temporary), str(destination))
+            replaced.append(destination)
+    except Exception:
+        failures = []
+        prior = dict(snapshots)
+        for destination in reversed(replaced):
+            try:
+                backup = prior[destination]
+                if backup is None:
+                    destination.unlink()
+                else:
+                    os.replace(str(backup), str(destination))
+            except OSError as error:
+                failures.append((destination, error))
+        if failures:
+            # Keep remaining .bak snapshots for manual recovery. Do not
+            # destroy the only extant copy after a rollback failure.
+            keep_snapshots = True
+            raise RuntimeError("report rollback failed; preserve .bak files and inspect destinations") from failures[0][1]
+        raise
     finally:
         for temporary, _ in staged:
             try:
                 temporary.unlink()
             except FileNotFoundError:
                 pass
+        if not keep_snapshots:
+            for _, backup in snapshots:
+                if backup is not None:
+                    try:
+                        backup.unlink()
+                    except FileNotFoundError:
+                        pass
 
 
 def main(argv=None):

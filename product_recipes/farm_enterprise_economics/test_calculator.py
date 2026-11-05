@@ -1,5 +1,6 @@
 """Executable tests for the standalone agricultural unit-economics tool."""
 import json
+import os
 import tempfile
 from pathlib import Path
 import subprocess
@@ -388,6 +389,118 @@ class EconomicsTests(unittest.TestCase):
             self.assertIn("<!doctype html>", (base / "out.html").read_text(encoding="utf-8"))
             self.assertEqual(len((base / "out.csv").read_text(encoding="utf-8").splitlines()), 10)
             self.assertEqual(list(base.glob(".*.tmp")), [])
+
+    def test_multi_format_rename_failure_restores_old_reports(self):
+        """A failed later export must not strand a newly mixed report set."""
+        from unittest.mock import patch
+        from calculator import stage_and_replace_reports
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            first = base / "results.json"
+            second = base / "scenarios.csv"
+            third = base / "management-report.html"
+            first.write_text("OLD_JSON", encoding="utf-8")
+            second.write_text("OLD_CSV", encoding="utf-8")
+            third.write_text("OLD_HTML", encoding="utf-8")
+            original_replace = os.replace
+            interrupted = False
+
+            def fail_second(source, destination):
+                nonlocal interrupted
+                if Path(destination) == second and not interrupted:
+                    interrupted = True
+                    raise OSError("injected second-report filesystem failure")
+                return original_replace(source, destination)
+
+            with patch("calculator.os.replace", side_effect=fail_second):
+                with self.assertRaisesRegex(OSError, "injected second-report"):
+                    stage_and_replace_reports([
+                        (first, "NEW_JSON"), (second, "NEW_CSV"),
+                        (third, "NEW_HTML"),
+                    ])
+            self.assertEqual(first.read_text(encoding="utf-8"), "OLD_JSON")
+            self.assertEqual(second.read_text(encoding="utf-8"), "OLD_CSV")
+            self.assertEqual(third.read_text(encoding="utf-8"), "OLD_HTML")
+            self.assertEqual(list(base.glob(".*.tmp")), [])
+            self.assertEqual(list(base.glob(".*.bak")), [])
+
+    def test_multi_format_rename_failure_removes_new_uncommitted_file(self):
+        from unittest.mock import patch
+        from calculator import stage_and_replace_reports
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            new_file = base / "new.json"
+            old_file = base / "old.csv"
+            old_file.write_text("PRESERVE", encoding="utf-8")
+            original_replace = os.replace
+            interrupted = False
+
+            def fail_second(source, destination):
+                nonlocal interrupted
+                if Path(destination) == old_file and not interrupted:
+                    interrupted = True
+                    raise OSError("injected later replacement failure")
+                return original_replace(source, destination)
+
+            with patch("calculator.os.replace", side_effect=fail_second):
+                with self.assertRaisesRegex(OSError, "later replacement failure"):
+                    stage_and_replace_reports([(new_file, "NEW"), (old_file, "CHANGED")])
+            self.assertFalse(new_file.exists())
+            self.assertEqual(old_file.read_text(encoding="utf-8"), "PRESERVE")
+            self.assertEqual(list(base.glob(".*.bak")), [])
+
+    def test_multi_format_backup_failure_preserves_reports(self):
+        """An unreadable old report must stop export before any replacement."""
+        from unittest.mock import patch
+        from calculator import stage_and_replace_reports
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            first = base / "results.json"
+            second = base / "scenarios.csv"
+            first.write_text("OLD_JSON", encoding="utf-8")
+            second.write_text("OLD_CSV", encoding="utf-8")
+            with patch("calculator.shutil.copy2", side_effect=PermissionError("cannot snapshot")):
+                with self.assertRaisesRegex(PermissionError, "cannot snapshot"):
+                    stage_and_replace_reports([(first, "NEW_JSON"), (second, "NEW_CSV")])
+            self.assertEqual(first.read_text(encoding="utf-8"), "OLD_JSON")
+            self.assertEqual(second.read_text(encoding="utf-8"), "OLD_CSV")
+            self.assertEqual(list(base.glob(".*.tmp")), [])
+            self.assertEqual(list(base.glob(".*.bak")), [])
+
+    def test_multi_format_rename_failure_restores_report_symlink(self):
+        """Rollback restores a customer symlink instead of replacing its target."""
+        from unittest.mock import patch
+        from calculator import stage_and_replace_reports
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            target = base / "old_data.json"
+            target.write_text("ORIGINAL", encoding="utf-8")
+            linked = base / "results.json"
+            try:
+                linked.symlink_to(target.name)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlinks unavailable on this filesystem")
+            later = base / "scenarios.csv"
+            later.write_text("OLD_CSV", encoding="utf-8")
+            original_replace = os.replace
+
+            def fail_later(source, destination):
+                if Path(destination) == later:
+                    raise OSError("injected later replacement failure")
+                return original_replace(source, destination)
+
+            with patch("calculator.os.replace", side_effect=fail_later):
+                with self.assertRaisesRegex(OSError, "injected later"):
+                    stage_and_replace_reports([(linked, "NEW_JSON"), (later, "NEW_CSV")])
+            self.assertTrue(linked.is_symlink())
+            self.assertEqual(os.readlink(linked), target.name)
+            self.assertEqual(target.read_text(encoding="utf-8"), "ORIGINAL")
+            self.assertEqual(later.read_text(encoding="utf-8"), "OLD_CSV")
+            self.assertEqual(list(base.glob(".*.bak")), [])
 
     def test_cli_verification_recalculates_and_rejects_tampering_without_writes(self):
         with tempfile.TemporaryDirectory() as tmp:
