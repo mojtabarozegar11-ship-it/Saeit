@@ -38,7 +38,7 @@ jobs:
             services/mpw_trx_email_recovery.py \
             services/mpw_trx_guest_commerce.py \
             core/guest_recovery_models.py \
-            core/migrations/0040_mpw_guest_email_recovery.py
+            core/migrations/0049_mpw_guest_email_recovery.py
           grep -q 'def publish_additive' scripts/mpw_recovery_guarded_release_20261105.py
           grep -q 'EMAIL_ENABLED=FALSE' scripts/mpw_recovery_guarded_release_20261105.py
           echo MPW_ADDITIVE_RELEASE_SOURCE_VALID=PASS
@@ -100,7 +100,7 @@ jobs:
             services/mpw_trx_email_recovery.py \
             services/mpw_trx_guest_commerce.py \
             core/guest_recovery_models.py \
-            core/migrations/0040_mpw_guest_email_recovery.py \
+            core/migrations/0049_mpw_guest_email_recovery.py \
             core/management/commands/mpw_purge_recovery_ephemeral.py \
           | timeout 45s ssh -T -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
           case "$OPERATION" in
