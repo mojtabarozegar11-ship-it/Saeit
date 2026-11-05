@@ -6,6 +6,7 @@ on:
       - .github/workflows/live-multisite-inventory-20261105.yml
       - scripts/live_multisite_deep_diagnostics_20261105.py
       - scripts/live_primary_django_factory_diagnostic_20261105.py
+      - scripts/live_factory_vps_probe_20261105.py
 permissions:
   contents: read
 concurrency:
@@ -23,7 +24,7 @@ jobs:
       - name: Check audit scripts locally
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/live_multisite_inventory_20261105.py scripts/live_multisite_http_audit_20261105.py scripts/live_primary_django_factory_diagnostic_20261105.py
+          python3 -m py_compile scripts/live_multisite_inventory_20261105.py scripts/live_multisite_http_audit_20261105.py scripts/live_primary_django_factory_diagnostic_20261105.py scripts/live_factory_vps_probe_20261105.py
       - name: Pinned read-only private relay to cPanel
         id: link
         shell: bash
@@ -114,6 +115,10 @@ jobs:
             fi
           fi
           echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
+      - name: Inspect VPS factory service and DNS without changing any running process
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/live-multisite-ssh/config" saeit-vps 'PYTHONDONTWRITEBYTECODE=1 python3 -' < scripts/live_factory_vps_probe_20261105.py
       - name: Read cPanel domain and webroot inventory without changes
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
