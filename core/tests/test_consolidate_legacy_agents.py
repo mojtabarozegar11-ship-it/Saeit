@@ -1,12 +1,17 @@
 import io
 import json
+from datetime import timedelta
 
 from django.core.management import call_command
 from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from core.economic_tool_pack import revenue_verify
-from core.models import Agent, AgentTask, AuditLog, LedgerEntry, NewsletterStory, Order
+from core.models import (
+    Agent, AgentCapability, AgentTask, AuditLog, LedgerEntry,
+    NewsletterPublication, NewsletterStory, Order,
+)
 
 
 class ConsolidateLegacyAgentsTests(TestCase):
@@ -47,7 +52,10 @@ class ConsolidateLegacyAgentsTests(TestCase):
         assert AuditLog.objects.filter(action="legacy_agent_retired").count() == 0
 
     def test_apply_deactivates_only_provably_safe_legacy_preserving_history(self):
-        AgentTask.objects.create(agent=self.legacy, action_type="old_review", status="completed")
+        history = AgentTask.objects.create(agent=self.legacy, action_type="old_review", status="completed")
+        AgentTask.objects.filter(pk=history.pk).update(
+            updated_at=timezone.now() - timedelta(days=60)
+        )
         result = self.run_command("--apply")
         self.legacy.refresh_from_db()
         self.busy.refresh_from_db()
@@ -82,6 +90,68 @@ class ConsolidateLegacyAgentsTests(TestCase):
         assert self.legacy.active
         row = next(r for r in result["agents"] if r["code"] == self.legacy.code)
         assert row["decision"] == "hold_for_dependency"
+
+    def test_recent_legacy_output_is_held_for_value_review(self):
+        AgentTask.objects.create(
+            agent=self.legacy, action_type="recent_publication", status="completed"
+        )
+        result = self.run_command("--apply")
+        self.legacy.refresh_from_db()
+        assert self.legacy.active
+        row = next(r for r in result["agents"] if r["code"] == self.legacy.code)
+        assert row["decision"] == "review_recent_outputs"
+        assert row["recent_completed_tasks"] == 1
+
+    def test_income_prefix_alone_never_authorizes_retirement(self):
+        AgentTask.objects.filter(agent=self.busy).delete()
+        result = self.run_command("--apply")
+        self.busy.refresh_from_db()
+        assert self.busy.active
+        row = next(r for r in result["agents"] if r["code"] == self.busy.code)
+        assert row["review_only_prefix"] is True
+        assert row["decision"] == "review_live_outcomes"
+
+    def test_published_story_in_last_month_requires_manual_value_review(self):
+        NewsletterStory.objects.create(
+            agent=self.legacy, story_type="world", title="Recently published",
+            slug="agent-retirement-recent-publication", summary="Existing newsletter",
+            body="Previously published content", fingerprint="audit-recent-publication",
+            status="published", published_at=timezone.now(),
+        )
+        result = self.run_command("--apply")
+        self.legacy.refresh_from_db()
+        assert self.legacy.active
+        row = next(r for r in result["agents"] if r["code"] == self.legacy.code)
+        assert row["decision"] == "review_recent_outputs"
+        assert row["recent_publications"] == 1
+
+    def test_queued_distribution_blocks_deactivation_of_published_story(self):
+        story = NewsletterStory.objects.create(
+            agent=self.legacy, story_type="world", title="Older newsletter",
+            slug="agent-retirement-distribution", summary="Pending distribution",
+            body="Story ready to distribute", fingerprint="audit-distribution",
+            status="published", published_at=timezone.now() - timedelta(days=60),
+        )
+        NewsletterPublication.objects.create(story=story, channel="site", status="queued")
+        result = self.run_command("--apply")
+        self.legacy.refresh_from_db()
+        assert self.legacy.active
+        row = next(r for r in result["agents"] if r["code"] == self.legacy.code)
+        assert row["decision"] == "hold_for_dependency"
+        assert row["pending_distributions"] == 1
+
+    def test_exclusive_active_capability_cannot_be_silently_retired(self):
+        cap = AgentCapability.objects.create(
+            code="exclusive-legacy-feed", name="Unique legacy feed",
+            description="Possible external dependency", active=True,
+        )
+        cap.agents.add(self.legacy)
+        result = self.run_command("--apply")
+        self.legacy.refresh_from_db()
+        assert self.legacy.active
+        row = next(r for r in result["agents"] if r["code"] == self.legacy.code)
+        assert row["decision"] == "review_unique_capability"
+        assert row["unique_active_capabilities"] == [cap.code]
 
 
 class RevenueEvidenceTests(TestCase):
