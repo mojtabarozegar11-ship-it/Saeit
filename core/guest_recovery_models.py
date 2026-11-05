@@ -17,6 +17,7 @@ class GuestOrderEmail(models.Model):
 
     class Meta:
         verbose_name = "Verified-at-checkout guest order email"
+        default_permissions = ()
 
     def save(self, *args, **kwargs):
         if self.pk is not None:
@@ -40,9 +41,15 @@ class GuestRecoveryToken(models.Model):
     expires_at = models.DateTimeField()
     consumed_at = models.DateTimeField(null=True, blank=True)
 
+    class Meta:
+        default_permissions = ()
+
 
 class GuestRecoveryRate(models.Model):
     # Per-IP and per-email HMAC buckets, with no raw IP or email recorded.
     bucket = models.CharField(max_length=64, unique=True)
     count = models.PositiveSmallIntegerField(default=0)
     expires_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        default_permissions = ()

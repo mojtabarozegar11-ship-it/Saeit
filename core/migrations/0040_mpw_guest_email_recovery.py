@@ -15,7 +15,8 @@ class Migration(migrations.Migration):
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("order", models.OneToOneField(on_delete=django.db.models.deletion.PROTECT, related_name="guest_email_claim", to="core.order")),
             ],
-            options={"verbose_name": "Verified-at-checkout guest order email"},
+            options={"verbose_name": "Verified-at-checkout guest order email",
+                     "default_permissions": ()},
         ),
         migrations.CreateModel(
             name="GuestRecoveryToken",
@@ -27,6 +28,7 @@ class Migration(migrations.Migration):
                 ("expires_at", models.DateTimeField()),
                 ("consumed_at", models.DateTimeField(blank=True, null=True)),
             ],
+            options={"default_permissions": ()},
         ),
         migrations.CreateModel(
             name="GuestRecoveryRate",
@@ -36,5 +38,6 @@ class Migration(migrations.Migration):
                 ("count", models.PositiveSmallIntegerField(default=0)),
                 ("expires_at", models.DateTimeField(db_index=True)),
             ],
+            options={"default_permissions": ()},
         ),
     ]

@@ -36,12 +36,31 @@ the runtime is the existing Passenger/Django application on cPanel.
    backup before a migration. Confirm free space and recoverability.
 3. Stage only the reviewed new module, models import, migration 0040, settings
    flags and guest adapter changes. Keep both new flags **false**.
+   The source-controlled guard is
+   `scripts/mpw_recovery_guarded_release_20261105.py`. Stage it in a private
+   directory with the five pinned source files and their repository-relative
+   paths, then invoke it with cPanel's existing Python 3.11 virtualenv:
+
+   ```
+   python -B release.py preflight /path/to/private/stage
+   python -B release.py publish /path/to/private/stage RUN_ID
+   python -B release.py verify
+   ```
+
+   `RUN_ID` must be 8–20 decimal digits; a single run's exact-source snapshot
+   is retained privately. These commands are documented for the authorized
+   GitHub Actions → fingerprint-pinned SSH relay → cPanel path, not for a public
+   URL or an untrusted shell.
 4. Run `python manage.py migrate core 0040 --plan`, then migrate on cPanel with
    a maintenance window and known backup. Confirm three new tables exist and
    that other core migrations remain unchanged. Never backfill old orders.
+   The three recovery models intentionally define no Django admin permissions;
+   the isolated migration verified that zero permissions are generated for them.
 5. Run `python manage.py check`, a read-only route resolver check and a complete
    **rolled-back** transaction for new-order email binding. Verify a genuine
    existing unpaid invoice has unchanged behavior before enabling public use.
+   Verify that cPanel's trusted `REMOTE_ADDR` represents distinct client IPs
+   for rate limiting; do not trust arbitrary `X-Forwarded-For` headers.
 6. With owner approval, set `MPW_GUEST_RECOVERY_ENABLED=true` while
    `MPW_GUEST_RECOVERY_EMAIL_APPROVED=false`, restart Passenger via its actual
    public app root, and perform GET/POST smoke checks **without sending email**.
@@ -64,6 +83,9 @@ the runtime is the existing Passenger/Django application on cPanel.
   current SHA-256 still matches the release manifest. Never overwrite newer
   edits. Keep recovery tables and claims intact so rollback never deletes
   customer data; a later controlled schema rollback needs its own backup.
+  The controller's source rollback command is `python -B release.py rollback
+  RUN_ID`. It refuses to overwrite any newer source edit and preserves all
+  recovery tables, even if their migration completed before a source failure.
 - Existing legacy paid orders whose email was not bound at the time of sale
   require manual invoice/transaction ownership verification. No bulk mapping
   from the mutable `auth.User.email` column is permitted.

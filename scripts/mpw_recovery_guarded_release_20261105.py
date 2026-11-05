@@ -1,0 +1,384 @@
+#!/usr/bin/env python3
+"""Guarded cPanel source stage for MPW-RECOVERY-01; email stays disabled.
+
+Commands: preflight STAGE, publish STAGE RUN_ID, verify, rollback RUN_ID.
+Requires the existing cPanel Python 3.11 venv and trusted SSH relay. A dry-run
+is read-only. The publish command writes ONLY reviewed code plus three new
+tables after confirming migration 0039 is applied. Rollback restores code;
+created tables are retained to avoid destructive loss of recovery claims.
+
+This script is inert in GitHub: it never runs on push, PR or schedule.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import pwd
+import re
+import stat
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+APP = Path("/home/zomorod2/Saeit-staging")
+PUBLIC = Path("/home/zomorod2/mojplaywin.com")
+BACKUPS = Path("/home/zomorod2/.local/share/mpw-recovery-01-release")
+ACCOUNT = "zomorod2"
+
+FILES = {
+    "guest": "services/mpw_trx_guest_commerce.py",
+    "models": "core/models.py",
+    "settings": "config/settings.py",
+    "recovery": "services/mpw_trx_email_recovery.py",
+    "recovery_models": "core/guest_recovery_models.py",
+    "migration": "core/migrations/0040_mpw_guest_email_recovery.py",
+    "cleanup": "core/management/commands/mpw_purge_recovery_ephemeral.py",
+}
+NEW_FILES = ("recovery", "recovery_models", "migration", "cleanup")
+SOURCE_DIGESTS = {
+    "guest": "37bdfd64924ac96ec0deea203f2b377b49399950a4c4ae10080bbd8df79456ee",
+    "recovery": "3a548b982a1863793b02f8eca9a69d95f4b5dc89e07dd1b8b4ee35cb87a0b612",
+    "recovery_models": "6c76a40a78ad1a91c28c4bcdbc4206034f1c45d45df76242858dc7840845fe76",
+    "migration": "71115b38083773ec61c1c6446e7a1477e6441c140f2300be577b80d566b91577",
+    "cleanup": "0aa396229e2dec9212d0e358f6a21ff813d369405d1d253e64f17f8caf73f2d6",
+}
+EXPECTED_GUEST_BASE = "5eb8d09323f083cf436883fc4c64e8c5f3300a9fa5de601558d7442b2468785b"
+MODEL_MARKER = "# MPW_RECOVERY01_MODELS_20261105"
+SETTING_MARKER = "# MPW_RECOVERY01_FLAGS_20261105"
+MODEL_APPEND = (
+    "\n" + MODEL_MARKER + "\n"
+    "from .guest_recovery_models import GuestOrderEmail, GuestRecoveryToken, GuestRecoveryRate\n"
+)
+# Hard-coded OFF for the first stage. Enabling either flag is a separate,
+# explicit and reviewed action, not a side effect of placing code on cPanel.
+SETTING_APPEND = (
+    "\n" + SETTING_MARKER + "\n"
+    "MPW_GUEST_RECOVERY_ENABLED = False\n"
+    "MPW_GUEST_RECOVERY_EMAIL_APPROVED = False\n"
+)
+
+
+def digest(payload):
+    return hashlib.sha256(payload).hexdigest()
+
+
+def fail(reason):
+    raise RuntimeError("MPW_RECOVERY_RELEASE_ABORT:" + reason)
+
+
+def _safe_file(path, *, existing=True):
+    if path.is_symlink() or path.parent.is_symlink() or not path.parent.is_dir():
+        fail("UNSAFE_FILE:" + path.name)
+    if existing and (not path.is_file() or not path.stat().st_size):
+        fail("MISSING_FILE:" + path.name)
+    if not existing and path.exists():
+        fail("TARGET_COLLISION:" + path.name)
+    return path
+
+
+def guard_host():
+    if pwd.getpwuid(os.geteuid()).pw_name != ACCOUNT:
+        fail("WRONG_ACCOUNT")
+    for root in (APP, PUBLIC):
+        if root.is_symlink() or not root.is_dir() or root.resolve() != root:
+            fail("UNSAFE_APP_ROOT")
+    wsgi = _safe_file(PUBLIC / "passenger_wsgi.py")
+    if "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text("utf-8", "replace"):
+        fail("PASSENGER_APP_MISMATCH")
+    htaccess = _safe_file(PUBLIC / ".htaccess")
+    if htaccess.stat().st_size > 100000:
+        fail("HTACCESS_UNSAFE")
+    roots = re.findall(
+        r"(?im)^\s*PassengerAppRoot\s+([^\r\n#]+)",
+        htaccess.read_text("utf-8", "replace"),
+    )
+    if (len(roots) != 1 or roots[0].strip().strip('"').strip("'").rstrip("/")
+            not in (str(PUBLIC), "mojplaywin.com")):
+        fail("PASSENGER_ROOT_DRIFT")
+    marker = PUBLIC / "tmp/restart.txt"
+    if marker.is_symlink() or marker.parent.is_symlink() or not marker.parent.is_dir():
+        fail("PASSENGER_RESTART_UNSAFE")
+    for filename, hook in (
+        ("services/mpw_trx_public_pages.py", "_mpw_patch_public(globals())"),
+        ("services/mpw_trx_commercial_web.py", "_mpw_patch_commercial(globals())"),
+    ):
+        code = _safe_file(APP / filename).read_text("utf-8")
+        if code.count(hook) != 1 or code.count("# MPW_GUEST_CHECKOUT_LIVE_V1") != 1:
+            fail("EXISTING_GUEST_HOOK_DRIFT")
+
+
+def _source(stage, key):
+    target = stage / FILES[key]
+    _safe_file(target)
+    if stage.is_symlink() or not stage.is_dir() or not target.resolve().is_relative_to(stage.resolve()):
+        fail("UNSAFE_STAGE_ROOT")
+    data = target.read_bytes()
+    if len(data) > 75000 or digest(data) != SOURCE_DIGESTS[key]:
+        fail("UNREVIEWED_SOURCE:" + key)
+    compile(data.decode("utf-8"), str(target), "exec")
+    return data
+
+
+def build_plan(stage):
+    """Pure source transform: no writes, Django imports or DB access."""
+    old = {}
+    new = {}
+    for key in FILES:
+        path = APP / FILES[key]
+        if key in NEW_FILES:
+            _safe_file(path, existing=False)
+            old[key] = None
+            new[key] = _source(stage, key)
+        else:
+            old[key] = _safe_file(path).read_bytes()
+
+    if digest(old["guest"]) != EXPECTED_GUEST_BASE:
+        fail("UNRECOGNIZED_GUEST_BASE")
+    new["guest"] = _source(stage, "guest")
+    models = old["models"].decode("utf-8")
+    settings = old["settings"].decode("utf-8")
+    if (MODEL_MARKER in models or SETTING_MARKER in settings or
+            "from .guest_recovery_models import" in models or
+            "MPW_GUEST_RECOVERY_ENABLED" in settings):
+        fail("EXISTING_RECOVERY_PATCH")
+    if (models.count("class Order(") != 1 or
+            models.count("class PaymentIntent(") != 1 or
+            "env.bool" not in settings or "DEFAULT_FROM_EMAIL" not in settings):
+        fail("DJANGO_MODEL_OR_SETTINGS_DRIFT")
+    new["models"] = (models.rstrip() + MODEL_APPEND).encode("utf-8")
+    new["settings"] = (settings.rstrip() + SETTING_APPEND).encode("utf-8")
+    for key in ("models", "settings"):
+        compile(new[key].decode("utf-8"), key, "exec")
+    return old, new
+
+
+CHECK_DB = r'''
+import json,os
+os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+import django;django.setup()
+from django.db import connection
+from django.db.migrations.recorder import MigrationRecorder
+from django.conf import settings
+applied=set(MigrationRecorder(connection).applied_migrations())
+names=set(connection.introspection.table_names())
+print(json.dumps({"vendor":connection.vendor,
+ "m39":("core","0039_educationassessment_educationattempt_and_more") in applied,
+ "m40":("core","0040_mpw_guest_email_recovery") in applied,
+ "tables":[t for t in ("core_guestorderemail","core_guestrecoverytoken","core_guestrecoveryrate") if t in names],
+ "enabled":getattr(settings,"MPW_GUEST_RECOVERY_ENABLED",False) is True,
+ "mail":getattr(settings,"MPW_GUEST_RECOVERY_EMAIL_APPROVED",False) is True},sort_keys=True))
+'''
+
+
+def db_state():
+    # Only schema and migration metadata; no customer, token or payment rows.
+    proc = subprocess.run([sys.executable, "-B", "-c", CHECK_DB],
+                          cwd=APP, capture_output=True, text=True, timeout=90,
+                          env={**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings",
+                               "PYTHONDONTWRITEBYTECODE": "1"})
+    if proc.returncode != 0:
+        fail("DB_PREFLIGHT_UNAVAILABLE")
+    try:
+        return json.loads(proc.stdout.strip())
+    except ValueError:
+        fail("DB_PREFLIGHT_UNEXPECTED_OUTPUT")
+
+
+def require_before_schema():
+    report = db_state()
+    if (report != {"vendor": "mysql", "m39": True, "m40": False,
+                   "tables": [], "enabled": False, "mail": False}):
+        fail("MIGRATION_BASELINE_DRIFT")
+    return report
+
+
+def _atomic(path, content, *, expected=None):
+    _safe_file(path, existing=expected is not None)
+    if expected is not None and digest(path.read_bytes()) != expected:
+        fail("CONCURRENT_FILE_EDIT:" + path.name)
+    fd, temporary = tempfile.mkstemp(prefix=".mpw-recovery-", dir=path.parent)
+    try:
+        mode = stat.S_IMODE(path.stat().st_mode) if expected is not None else 0o600
+        os.fchmod(fd, mode)
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        dirfd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(dirfd)
+        finally:
+            os.close(dirfd)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def restart():
+    path = PUBLIC / "tmp/restart.txt"
+    if path.is_symlink() or path.parent.is_symlink() or not path.parent.is_dir():
+        fail("UNSAFE_RESTART")
+    path.touch()
+
+
+def private_backup(run, old, new):
+    if not re.fullmatch(r"[0-9]{8,20}", run):
+        fail("INVALID_RUN_ID")
+    # A symlinked .local/share ancestor could redirect a private backup into a
+    # public or untrusted directory even when BACKUPS itself is not a symlink.
+    account_root = Path("/home") / ACCOUNT
+    for ancestor in (BACKUPS, *BACKUPS.parents):
+        if ancestor == account_root:
+            break
+        if ancestor.is_symlink():
+            fail("UNSAFE_BACKUP_ANCESTOR")
+    BACKUPS.mkdir(parents=True, mode=0o700, exist_ok=True)
+    if BACKUPS.is_symlink() or stat.S_IMODE(BACKUPS.stat().st_mode) & 0o077:
+        fail("UNSAFE_BACKUP_DIR")
+    folder = BACKUPS / run
+    if folder.exists() or folder.is_symlink():
+        fail("BACKUP_RUN_COLLISION")
+    folder.mkdir(mode=0o700)
+    manifest = {
+        "run": run, "schema": "new_tables_only_keep_on_rollback",
+        "before": {k: digest(v) if v is not None else None for k, v in old.items()},
+        "after": {k: digest(v) for k, v in new.items()},
+    }
+    for key, payload in old.items():
+        if payload is not None:
+            path = folder / (key + ".before")
+            with path.open("xb") as stream:
+                os.fchmod(stream.fileno(), 0o600)
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+    path = folder / "manifest.json"
+    with path.open("x") as stream:
+        os.fchmod(stream.fileno(), 0o600)
+        json.dump(manifest, stream, sort_keys=True)
+        stream.flush()
+        os.fsync(stream.fileno())
+    return folder, manifest
+
+
+def restore(folder, manifest, *, changed):
+    # Restore only our exact still-present release bytes. Never overwrite a
+    # newer administrator edit, even when recovering a partial failure.
+    for key in reversed(changed):
+        path = APP / FILES[key]
+        current = _safe_file(path).read_bytes()
+        if digest(current) != manifest["after"][key]:
+            fail("ROLLBACK_SOURCE_DRIFT:" + key)
+        before = manifest["before"][key]
+        if before is None:
+            path.unlink()
+        else:
+            payload = _safe_file(folder / (key + ".before")).read_bytes()
+            if digest(payload) != before:
+                fail("BACKUP_CORRUPT:" + key)
+            _atomic(path, payload, expected=manifest["after"][key])
+
+
+MIGRATE = r'''
+import os
+os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+import django;django.setup()
+from django.core.management import call_command
+call_command("migrate","core","0040_mpw_guest_email_recovery",interactive=False,verbosity=0)
+'''
+
+
+def migrate_new_tables():
+    proc = subprocess.run([sys.executable, "-B", "-c", MIGRATE],
+                          cwd=APP, capture_output=True, text=True, timeout=150,
+                          env={**os.environ, "DJANGO_SETTINGS_MODULE": "config.settings",
+                               "PYTHONDONTWRITEBYTECODE": "1"})
+    if proc.returncode != 0:
+        fail("MIGRATION_EXECUTION_FAILED")
+
+
+def publish(stage, run):
+    guard_host()
+    old, new = build_plan(stage)
+    require_before_schema()
+    folder, manifest = private_backup(run, old, new)
+    changed = []
+    order = ("recovery", "recovery_models", "migration", "cleanup",
+             "models", "guest", "settings")
+    try:
+        for key in order:
+            _atomic(APP / FILES[key], new[key], expected=manifest["before"][key])
+            changed.append(key)
+        migrate_new_tables()
+        report = db_state()
+        if not (report["vendor"] == "mysql" and report["m40"] is True and len(report["tables"]) == 3 and
+                report["enabled"] is False and report["mail"] is False):
+            fail("POST_MIGRATION_STATE_DRIFT")
+        restart()
+    except BaseException:
+        restore(folder, manifest, changed=changed)
+        restart()
+        raise
+    print("MPW_RECOVERY01_CODE_AND_SCHEMA_STAGED;EMAIL_ENABLED=FALSE;"
+          "PUBLIC_RECOVERY_ENABLED=FALSE;PAYMENTS_CREATED=0;ORDERS_CREATED=0")
+
+
+def rollback(run):
+    guard_host()
+    if not re.fullmatch(r"[0-9]{8,20}", run):
+        fail("INVALID_RUN_ID")
+    folder = BACKUPS / run
+    if folder.is_symlink() or not folder.is_dir():
+        fail("BACKUP_MISSING")
+    meta = json.loads(_safe_file(folder / "manifest.json").read_text("utf-8"))
+    if meta.get("run") != run or meta.get("schema") != "new_tables_only_keep_on_rollback":
+        fail("BACKUP_MANIFEST_INVALID")
+    restore(folder, meta, changed=["recovery", "recovery_models", "migration",
+                                   "cleanup", "models", "guest", "settings"])
+    restart()
+    print("MPW_RECOVERY01_CODE_ROLLED_BACK;SCHEMA_TABLES_RETAINED=TRUE")
+
+
+def verify():
+    guard_host()
+    report = db_state()
+    if (report["vendor"] != "mysql" or not report["m40"] or
+            len(report["tables"]) != 3 or report["enabled"] or report["mail"]):
+        fail("RELEASE_NOT_SAFELY_STAGED")
+    for key in SOURCE_DIGESTS:
+        if digest(_safe_file(APP / FILES[key]).read_bytes()) != SOURCE_DIGESTS[key]:
+            fail("RELEASE_SOURCE_DRIFT:" + key)
+    for key, marker in (("models", MODEL_MARKER), ("settings", SETTING_MARKER)):
+        if _safe_file(APP / FILES[key]).read_text("utf-8").count(marker) != 1:
+            fail("RELEASE_SOURCE_PATCH_MISSING:" + key)
+    print("MPW_RECOVERY01_STAGED_VERIFIED;PUBLIC_ROUTES=OFF;OUTBOUND_EMAIL=OFF")
+
+
+def main(argv):
+    if len(argv) == 3 and argv[1] == "preflight":
+        guard_host()
+        old, new = build_plan(Path(argv[2]))
+        require_before_schema()
+        print("MPW_RECOVERY01_PREFLIGHT=" + json.dumps({
+            "changed_files": len(new),
+            "existing_files": sum(value is not None for value in old.values()),
+            "new_tables": 3,
+            "outbound_email": False,
+            "payments_or_orders_changed": False,
+        }, sort_keys=True))
+    elif len(argv) == 4 and argv[1] == "publish":
+        publish(Path(argv[2]), argv[3])
+    elif len(argv) == 2 and argv[1] == "verify":
+        verify()
+    elif len(argv) == 3 and argv[1] == "rollback":
+        rollback(argv[2])
+    else:
+        raise SystemExit("Usage: release.py preflight STAGE | publish STAGE RUN_ID | verify | rollback RUN_ID")
+
+
+if __name__ == "__main__":
+    main(sys.argv)
