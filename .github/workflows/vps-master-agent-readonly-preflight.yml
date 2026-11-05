@@ -138,6 +138,9 @@ jobs:
           current="$(crontab -l 2>/dev/null || true)"
           count="$(printf '%s\n' "$current" | grep -c 'SAEIT_MASTER_AGENT_V1' || true)"
           echo "MASTER_SCHEDULE_ENTRIES=$count"
+          self_edit_count="$(printf '%s\n' "$current" | grep -c 'SAEIT_FACTORY_CODE_SELF_EDIT_HOURLY_V1' || true)"
+          echo "FACTORY_SELF_EDIT_CRON_ENTRIES=$self_edit_count"
+          if test -x "$base/operations/factory-code-self-upgrade/run-scan-and-edit.sh"; then echo FACTORY_SELF_EDIT_RUNNER_PRESENT=True; else echo FACTORY_SELF_EDIT_RUNNER_PRESENT=False; fi
           backup_count="$(find "$base/operations/backups" -maxdepth 1 -type d -name 'master-source-before-*' 2>/dev/null | wc -l | tr -d ' ')"
           echo "MASTER_SOURCE_BACKUP_SETS=$backup_count"
           echo MASTER_DB_BACKUP_FILES
