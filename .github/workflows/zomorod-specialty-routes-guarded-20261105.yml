@@ -60,10 +60,10 @@ jobs:
           for label, filename in [('vps.known', 'vps.known'), ('host.candidate', 'host.known')]:
               suffix = f'> "$d/{label}"'
               matches = [line.strip() for line in source.splitlines()
-                         if line.strip().startswith("printf '%s\\\\n' '") and line.strip().endswith(suffix)]
+                         if line.strip().startswith("printf '%s\\n' '") and line.strip().endswith(suffix)]
               if len(matches) != 1:
                   raise SystemExit('PINNED_HOST_KEY_NOT_AVAILABLE:' + label)
-              value = matches[0].split("printf '%s\\\\n' '", 1)[1].rsplit("' >", 1)[0]
+              value = matches[0].split("printf '%s\\n' '", 1)[1].rsplit("' >", 1)[0]
               (dest / filename).write_text(value + '\n')
           for env_key, filename in [('VPS_KEY', 'vps.key'), ('HOST_KEY', 'host.key')]:
               value = os.environ.get(env_key, '')
