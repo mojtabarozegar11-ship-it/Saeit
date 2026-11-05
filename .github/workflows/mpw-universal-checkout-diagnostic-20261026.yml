@@ -58,38 +58,6 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
-      - name: Read-only targeted Passenger log inventory
-        run: |
-          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel \
-            "python3 - <<'PY'
-          from pathlib import Path
-          import os,re,time
-          roots=[Path('/home/zomorod2/mojplaywin.com'),Path('/home/zomorod2/logs'),Path('/home/zomorod2')]
-          seen=set()
-          candidates=[]
-          for root in roots:
-              if not root.exists(): continue
-              try:
-                  for p in root.glob('**/*'):
-                      if not p.is_file() or p in seen: continue
-                      try: st=p.stat()
-                      except OSError: continue
-                      if st.st_size>20_000_000: continue
-                      if not (re.search(r'(passenger|stderr|error|access|log)',p.name,re.I) or p.suffix.lower() in ('.log','.err','.out')): continue
-                      seen.add(p)
-                      candidates.append((st.st_mtime,st.st_size,p))
-              except (OSError,PermissionError): continue
-          candidates.sort(reverse=True)
-          for mt,size,p in candidates[:80]:
-              print('MPW_LOG_FILE='+str(p)+'|mtime='+time.strftime('%Y-%m-%dT%H:%M:%S',time.gmtime(mt))+'|bytes='+str(size))
-              try: lines=p.read_text('utf8','replace').splitlines()[-250:]
-              except Exception: continue
-              hits=[x for x in lines if re.search(r'(Traceback|Exception|NameError|TypeError|AttributeError|OperationalError|500|start_order|mpw_trx_guest|record_invoice)',x,re.I)]
-              if hits:
-                  for line in hits[-25:]:
-                      line=re.sub(r'(?i)[^\\s@]+@[^\\s]+','[redacted-email]',line)
-                      print('MPW_TARGETED_LOG='+line[:700])
-          PY"
       - name: Read-only routes, product gates, and invoice implementation
         run: |
           timeout 145s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
