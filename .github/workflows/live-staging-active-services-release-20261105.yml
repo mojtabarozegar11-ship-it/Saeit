@@ -1,4 +1,4 @@
-name: Repair staging duplicate services across both LiteSpeed WSGI pools
+name: Repair staging services with both LiteSpeed app restart markers
 on:
   push:
     branches: [audit/live-sites-subsites-20261105]
