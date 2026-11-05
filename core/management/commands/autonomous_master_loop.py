@@ -53,6 +53,11 @@ class Command(BaseCommand):
             # Stop when progress reaches an external-world boundary rather than
             # pretending an internal artifact equals a sale.
             done.refresh_from_db()
+            if done.output_data.get("verified_effect") is not True:
+                self.stdout.write(
+                    f"AUTO_UNVERIFIED_STOP task={done.pk} action={done.action_type} requires_review=true"
+                )
+                return
             if done.action_type=="income_growth_experiment":
                 self.stdout.write("AUTO_EXTERNAL_BOUNDARY growth experiment prepared; real acquisition requires an authorized external channel.")
                 return

@@ -59,6 +59,9 @@ class AutonomousBrain:
         self_improvement_failed = economic_tasks.filter(
             capability_code="master_self_improvement", status="failed",
         ).exists()
+        self_improvement_unverified = economic_tasks.filter(
+            capability_code="master_self_improvement", status="completed",
+        ).exclude(output_data__verified_effect=True).exists()
         last_revenue_review = economic_tasks.filter(
             capability_code="income_revenue_verify", status="completed"
         ).order_by("-updated_at", "-pk").first()
@@ -88,6 +91,7 @@ class AutonomousBrain:
             "financial_event_needs_reconcile": financial_event_needs_reconcile,
             "self_improvement_complete": self_improvement_complete,
             "self_improvement_failed": self_improvement_failed,
+            "self_improvement_unverified": self_improvement_unverified,
         }
 
     def candidates(self, s):
@@ -98,6 +102,12 @@ class AutonomousBrain:
         # prerequisite. Check evidence first; never infer settled revenue.
         if s.get("financial_event_needs_reconcile", False):
             return [Candidate("income_revenue_verify", "New financial evidence needs independent reconciliation.", 10, 10, 9, 1)]
+        if s.get("self_improvement_unverified", False) and not s.get("self_improvement_complete", False):
+            return [Candidate(
+                "await_external_self_improvement_review",
+                "The private repair engine completed without verified improvement; do not repeat it without new evidence.",
+                10, 10, 10, 1,
+            )]
         if not s.get("self_improvement_complete", False) and not s.get("self_improvement_failed", False):
             return [Candidate(
                 "master_self_improvement",

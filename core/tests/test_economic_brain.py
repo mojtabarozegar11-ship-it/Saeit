@@ -1,5 +1,7 @@
 from datetime import timedelta
 from io import StringIO
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.core.management import call_command
 from django.test import TestCase
@@ -106,6 +108,40 @@ class VerifiedEconomicCycleTests(TestCase):
         state = brain.observe()
         self.assertFalse(state["self_improvement_complete"])
         self.assertEqual(brain.candidates(state)[0].action, "master_self_improvement")
+
+    def test_unverified_self_improvement_does_not_requeue_same_work(self):
+        AgentTask.objects.create(
+            agent=self.agent, action_type="master_self_improvement",
+            capability_code="master_self_improvement", status="completed",
+            output_data={"verified_effect": False},
+        )
+        state = AutonomousBrain().observe()
+        self.assertTrue(state["self_improvement_unverified"])
+        self.assertEqual(
+            AutonomousBrain().candidates(state)[0].action,
+            "await_external_self_improvement_review",
+        )
+        output = StringIO()
+        call_command("online_income_cycle", stdout=output)
+        self.assertEqual(AgentTask.objects.filter(agent=self.agent).count(), 1)
+        self.assertIn("BRAIN_EXTERNAL_BOUNDARY", output.getvalue())
+
+    def test_master_loop_stops_after_unverified_execution(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="master_self_improvement",
+            capability_code="master_self_improvement", status="queued",
+        )
+        unverified = SimpleNamespace(
+            pk=task.pk, action_type="master_self_improvement",
+            output_data={"verified_effect": False}, refresh_from_db=lambda: None,
+        )
+        output = StringIO()
+        with patch("core.management.commands.autonomous_master_loop.WorkerRunner") as worker:
+            worker.return_value.run.return_value = unverified
+            with patch("core.management.commands.autonomous_master_loop.build_economic_gateway"):
+                call_command("autonomous_master_loop", "--max-steps", "20", stdout=output)
+            self.assertEqual(worker.return_value.run.call_count, 1)
+        self.assertIn("AUTO_UNVERIFIED_STOP", output.getvalue())
 
     def test_stale_running_task_is_recovered_without_duplicate_task(self):
         task = AgentTask.objects.create(
