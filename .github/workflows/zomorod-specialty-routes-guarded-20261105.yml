@@ -1,4 +1,4 @@
-name: Read-only trace of Zomorod specialty route layer
+name: Read-only trace of Zomorod routing and rewrites
 on:
   push:
     branches: [audit/live-sites-subsites-20261105]
