@@ -205,6 +205,84 @@ jobs:
                   print("SPACE_DETAIL="+group+"/"+label+":BYTES="+str(size)+
                         ":DIR_MTIME_DAYS="+str(age)+":PROC_REFERENCED="+str(referenced),flush=True)
           PY
+      - name: Verify cPanel node setup cache content and live execution dependencies (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import os,re,stat,subprocess
+          from pathlib import Path
+          cache=Path("/home/zomorod2/.cache/dc-node-setup")
+          if not cache.is_dir() or cache.is_symlink() or cache.stat().st_uid!=os.geteuid():
+              raise RuntimeError("NODE_SETUP_CACHE_UNAVAILABLE_OR_UNSAFE")
+          print("NODE_SETUP_CACHE_INSPECT_READ_ONLY=true",flush=True)
+          children=list(cache.iterdir())
+          print("NODE_SETUP_CACHE_TOP_CHILDREN="+str(len(children)),flush=True)
+          for child in children[:30]:
+              label=child.name if re.fullmatch(r"[A-Za-z0-9_.-]{1,65}",child.name) else "redacted"
+              if child.is_symlink():
+                  print("NODE_SETUP_CACHE_CHILD="+label+":SYMLINK",flush=True);continue
+              try:
+                  du=subprocess.run(["du","-sk",str(child)],capture_output=True,text=True,timeout=15,check=True)
+                  size=int(du.stdout.split()[0])*1024
+                  print("NODE_SETUP_CACHE_CHILD="+label+":BYTES="+str(size)+
+                        ":IS_DIR="+str(child.is_dir()),flush=True)
+              except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
+                  print("NODE_SETUP_CACHE_CHILD="+label+":UNAVAILABLE",flush=True)
+          current_use=0
+          executable_use=0
+          mapped_use=0
+          unknown=0
+          root=str(cache)
+          for procdir in Path("/proc").iterdir():
+              if not procdir.name.isdigit():
+                  continue
+              try:
+                  if procdir.stat().st_uid!=os.geteuid():
+                      continue
+              except FileNotFoundError:
+                  continue
+              except OSError:
+                  unknown+=1;continue
+              try:
+                  exe=os.readlink(procdir/"exe")
+                  executable_use+=int(exe==root or exe.startswith(root+"/"))
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  unknown+=1
+              try:
+                  cwd=os.readlink(procdir/"cwd")
+                  current_use+=int(cwd==root or cwd.startswith(root+"/"))
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  unknown+=1
+              try:
+                  for fd in (procdir/"fd").iterdir():
+                      try:
+                          target=os.readlink(fd)
+                          current_use+=int(target==root or target.startswith(root+"/"))
+                      except FileNotFoundError:
+                          pass
+                      except OSError:
+                          unknown+=1
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  unknown+=1
+              try:
+                  mapped_use+=int(any(root in line for line in (procdir/"maps").read_text().splitlines()))
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  unknown+=1
+          print("NODE_SETUP_CACHE_EXECUTABLE_REFS="+str(executable_use),flush=True)
+          print("NODE_SETUP_CACHE_CWD_OR_FD_REFS="+str(current_use),flush=True)
+          print("NODE_SETUP_CACHE_MAPPED_PROCESS_COUNT="+str(mapped_use),flush=True)
+          print("NODE_SETUP_CACHE_PROC_UNKNOWN="+str(unknown),flush=True)
+          PY
       - name: Inventory VPS filesystem and bounded cache candidates (read-only)
         shell: bash
         run: |
