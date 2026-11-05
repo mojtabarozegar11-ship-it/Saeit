@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import pwd
 import re
+import subprocess
 import sys
 
 
@@ -68,6 +69,7 @@ def _commercial_delivery_aggregate():
     except LookupError:
         return {"model_available": False}
     fields = model._meta.concrete_fields
+    field_names = {field.name for field in fields}
     safe = {field.name: field for field in fields
             if field.name in ("sent_at", "delivered_at", "email_sent_at",
                               "fulfilled_at", "created_at", "last_attempt_at")}
@@ -76,11 +78,57 @@ def _commercial_delivery_aggregate():
         for name in sorted(safe):
             aggregate[name + "_nonnull"] = model.objects.filter(
                 **{name + "__isnull": False}).count()
+        from django.db.models import Count, Sum
+        for name in ("invoice_state", "receipt_state"):
+            if name in field_names:
+                states = list(model.objects.values(name).annotate(n=Count("pk")).order_by(name))
+                aggregate[name + "_counts"] = [
+                    {"state": (str(item[name]) if str(item[name]) in (
+                        "pending", "failed", "sent", "delivered", "skipped",
+                        "complete", "completed", "sending", "queued") else "other"),
+                     "count": int(item["n"])}
+                    for item in states[:15]
+                ]
+        for name in ("invoice_attempts", "receipt_attempts"):
+            if name in field_names:
+                aggregate[name + "_total"] = model.objects.aggregate(
+                    total=Sum(name))["total"] or 0
         return {"model_available": True, "aggregate": aggregate,
-                "time_fields_checked": sorted(safe)}
+                "time_fields_checked": sorted(safe),
+                "delivery_state_fields": sorted(field_names.intersection({
+                    "invoice_state", "receipt_state", "invoice_attempts",
+                    "receipt_attempts", "last_error", "last_error_at",
+                    "invoice_sent_at", "receipt_sent_at"}))}
     except Exception as exc:
         return {"model_available": True,
                 "query_status": type(exc).__name__}
+
+
+def _outbox_scheduler_readonly():
+    refs = []
+    roots = (APP / "services", APP / "core/management/commands", APP / "scripts")
+    for root in roots:
+        if not root.is_dir() or root.is_symlink():
+            continue
+        for path in root.glob("*.py"):
+            if (path.is_symlink() or not path.is_file() or
+                    not path.resolve().is_relative_to(APP.resolve()) or
+                    path.stat().st_size > 140000):
+                continue
+            if path.name == "mpw_trx_guest_delivery.py":
+                continue
+            for i, line in enumerate(path.read_text("utf-8", "replace").splitlines(), 1):
+                if "flush_outbox" in line:
+                    refs.append({"path": str(path.relative_to(APP)), "line": i})
+    try:
+        cron = subprocess.run(["crontab", "-l"], capture_output=True,
+                              text=True, timeout=5, check=False)
+        schedule = ("configured" if cron.returncode == 0 and
+                    "flush_outbox" in cron.stdout else "not_found_or_unavailable")
+    except (OSError, subprocess.TimeoutExpired):
+        schedule = "not_found_or_unavailable"
+    return {"python_callsite_references": refs[:30],
+            "cpanel_user_crontab_flush_outbox": schedule}
 
 
 def main():
@@ -160,6 +208,7 @@ def main():
         "commercial_email_backend_type": backend_type,
         "commercial_flow_static": _commercial_flow_inventory(),
         "commercial_delivery_aggregate": _commercial_delivery_aggregate(),
+        "commercial_outbox_scheduler": _outbox_scheduler_readonly(),
         "emails_sent_by_audit": 0, "emails_deleted": 0,
         "files_modified": 0,
     }, sort_keys=True))
