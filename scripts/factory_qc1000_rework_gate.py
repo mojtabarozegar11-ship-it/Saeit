@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed QC1000 readiness evaluator for the first factory product."""
+"""Fail-closed QC1000 readiness evaluator and actionable rework queue."""
 import argparse
 import json
 from pathlib import Path
@@ -8,14 +8,34 @@ import sys
 PLAN = Path(__file__).resolve().parents[1] / "factory_config" / "rework" / "farm_enterprise_economics_qc1000_v1.json"
 
 
+def _rework_queue(plan):
+    return [
+        {
+            "gate_id": gate["id"],
+            "name": gate["name"],
+            "required_evidence": list(gate["evidence"]),
+            "required_checks": list(gate["must_be_true"]),
+        }
+        for gate in plan["gates"]
+    ]
+
+
 def evaluate(root, recipe="farm_enterprise_economics"):
     root = Path(root)
     plan = json.loads(PLAN.read_text(encoding="utf-8"))
+    result = {
+        "schema": "saeit.factory.qc1000-readiness.v2",
+        "product_id": recipe,
+        "required_score": plan["required_score"],
+        "status": "HOLD",
+        "rework_queue": _rework_queue(plan),
+    }
     reasons = []
     clearance = root / "quality-excellence" / "signed-clearances" / recipe / "current.json"
     if not clearance.is_file() or clearance.is_symlink():
         reasons.append("SIGNED_CLEARANCE_MISSING")
-        return {"schema": "saeit.factory.qc1000-readiness.v1", "product_id": recipe, "status": "HOLD", "reasons": reasons}
+        result["reasons"] = reasons
+        return result
     try:
         data = json.loads(clearance.read_text(encoding="utf-8"))
     except (OSError, ValueError, UnicodeError):
@@ -32,9 +52,10 @@ def evaluate(root, recipe="farm_enterprise_economics"):
         reasons.append("PUBLICATION_NOT_LOCKED")
     if data.get("payment_activated") is not False:
         reasons.append("PAYMENT_NOT_LOCKED")
-    status = "PASS" if not reasons else "HOLD"
-    return {"schema": "saeit.factory.qc1000-readiness.v1", "product_id": recipe,
-            "status": status, "required_score": plan["required_score"], "reasons": reasons}
+    result["reasons"] = reasons
+    if not reasons:
+        result["status"] = "PASS"
+    return result
 
 
 def main():
