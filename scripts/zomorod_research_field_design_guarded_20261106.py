@@ -6,6 +6,7 @@ client-side deterministic allocation and creates local CSV/JSON downloads.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -26,6 +27,7 @@ FILES = (PAGE, ENGINE)
 BACKUPS = HOME / '.private/field-trial-design-backups'
 URL = '/topics/tools/field-trial-design/'
 MARKER = 'zm-field-trial-design-20261106'
+LEGACY_ENGINE_SHA256 = 'f5665c3db91981ed7a39f86cb1c486cab19ebf8de599e4f9910fd4698582687f'
 
 ACTION = '''\n<section id="zm-field-trial-design-action-20261106" aria-label="طراحی آزمایش کشاورزی" style="background:#173f30;border:2px solid #d6b46d;border-radius:15px;padding:20px;margin:20px auto;max-width:1140px;color:#fff0cc;line-height:1.85">
  <h2 style="color:#f6d990;margin:0 0 6px">طراحی تصادفی آزمایش مزرعه‌ای</h2>
@@ -82,28 +84,29 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,a:focus-visible{
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id),form=$('design-form'),error=$('error'),results=$('results');let exportData=null;
-function hash(value){let h=2166136261;for(const b of new TextEncoder().encode(value)){h=Math.imul(h^b,16777619)>>>0;}return h||0x9e3779b9}
-function rand(state){let x=state>>>0;return ()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return (x>>>0)}}
+function rotl(x,k){return (x<<k)|(x>>>(32-k))}
+async function randForBlock(seed,block){const bytes=new TextEncoder().encode(seed+'|block='+block),digest=await crypto.subtle.digest('SHA-256',bytes),view=new DataView(digest),s=[0,4,8,12].map(i=>view.getUint32(i,false));return ()=>{const out=Math.imul(rotl(Math.imul(s[1],5),7),9)>>>0,t=s[1]<<9;s[2]^=s[0];s[3]^=s[1];s[1]^=s[2];s[0]^=s[3];s[2]^=t;s[3]=rotl(s[3],11);return out}}
 function uniform(next,n){const limit=Math.floor(4294967296/n)*n;let x;do{x=next()}while(x>=limit);return x%n}
-function allocate(names,blocks,seed){const rows=[];for(let b=1;b<=blocks;b++){const order=names.slice(),next=rand(hash(seed+'|'+b));for(let j=order.length-1;j>0;j--){const k=uniform(next,j+1);[order[j],order[k]]=[order[k],order[j]]}for(let p=0;p<order.length;p++)rows.push({plotId:'B'+String(b).padStart(2,'0')+'-P'+String(p+1).padStart(2,'0'),block:b,position:p+1,treatment:order[p],measurement:'',unit:'',notes:''})}return rows}
+async function allocate(names,blocks,seed){const rows=[];for(let b=1;b<=blocks;b++){const order=names.slice(),next=await randForBlock(seed,b);for(let j=order.length-1;j>0;j--){const k=uniform(next,j+1);[order[j],order[k]]=[order[k],order[j]]}for(let p=0;p<order.length;p++)rows.push({plotId:'B'+String(b).padStart(2,'0')+'-P'+String(p+1).padStart(2,'0'),block:b,position:p+1,treatment:order[p],measurement:'',unit:'',notes:''})}return rows}
 function fail(message){error.textContent=message;results.hidden=true;exportData=null}
-function render(){error.textContent='';results.hidden=true;exportData=null;
+async function render(){error.textContent='';results.hidden=true;exportData=null;
  const names=$('treatments').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean),blocks=Number($('blocks').value),seed=$('seed').value.trim();
  if(names.length<2||names.length>20)return fail('بین ۲ تا ۲۰ تیمار غیرخالی را در سطرهای جداگانه وارد کنید.');
  if(names.some(x=>x.length>64))return fail('نام هر تیمار باید حداکثر ۶۴ نویسه باشد.');
  if(new Set(names.map(x=>x.normalize('NFC').toLocaleLowerCase())).size!==names.length)return fail('نام تیمارها نباید تکراری باشد.');
  if(!Number.isInteger(blocks)||blocks<2||blocks>20)return fail('تعداد بلوک باید عدد صحیح بین ۲ تا ۲۰ باشد.');
  if(!seed||seed.length>80)return fail('شناسه تصادفی‌سازی معتبر و حداکثر ۸۰ نویسه وارد کنید.');
- const rows=allocate(names,blocks,seed),table=document.createElement('table'),thead=table.createTHead(),head=thead.insertRow();
+ if(!globalThis.crypto?.subtle)return fail('مرورگر شما به رمزنگاری استاندارد برای تصادفی‌سازی دسترسی ندارد. صفحه را با HTTPS و مرورگر به‌روز باز کنید.');
+ const rows=await allocate(names,blocks,seed),table=document.createElement('table'),thead=table.createTHead(),head=thead.insertRow();
  for(const text of ['بلوک',...names.map((_,i)=>'موقعیت '+(i+1))]){const th=document.createElement('th');th.scope='col';th.textContent=text;head.appendChild(th)}
  const body=table.createTBody();for(let b=1;b<=blocks;b++){const tr=body.insertRow(),th=document.createElement('th');th.scope='row';th.textContent='بلوک '+b;tr.appendChild(th);for(const row of rows.filter(r=>r.block===b)){const cell=tr.insertCell();cell.textContent=row.treatment;cell.title=row.plotId}}
  const caption=table.createCaption();caption.textContent='موقعیت‌ها در هر بلوک، مستقل تصادفی شده‌اند. جهت فیزیکی کرت‌ها را جداگانه ثبت کنید.';
  $('layout').replaceChildren(table);$('summary').textContent=names.length+' تیمار × '+blocks+' بلوک = '+rows.length+' کرت؛ شناسه بازتولید: '+seed;
- exportData={design:'Randomized Complete Block Design (RCBD)',version:1,seed,randomizer:'UTF-8 FNV1a32 + xorshift32 + rejection-sampled Fisher-Yates per block',treatments:names,blocks,plots:rows,notes:'Assignment only; validate independent experimental units and field layout before implementation.'};results.hidden=false;
+ exportData={design:'Randomized Complete Block Design (RCBD)',version:2,seed,randomizer:'SHA-256 per block + xoshiro128** + rejection-sampled Fisher-Yates',treatments:names,blocks,plots:rows,notes:'Assignment only; validate independent experimental units and field layout before implementation.'};results.hidden=false;
 }
 function safeCsv(value){let s=String(value??'');if(/^[\s]*[=+@-]/.test(s)||/^[\s]*[\t\r]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'}
 function download(filename,mime,body){const blob=new Blob([body],{type:mime}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200)}
-form.addEventListener('submit',e=>{e.preventDefault();render()});form.addEventListener('reset',()=>{error.textContent='';results.hidden=true;exportData=null});
+form.addEventListener('submit',async e=>{e.preventDefault();const button=form.querySelector('button[type="submit"]');button.disabled=true;try{await render()}catch(ex){fail('خطا در ساخت طرح تصادفی؛ دوباره تلاش کنید.')}finally{button.disabled=false}});form.addEventListener('reset',()=>{error.textContent='';results.hidden=true;exportData=null});
 $('csv').addEventListener('click',()=>{if(!exportData)return;const cols=['plotId','block','position','treatment','measurement','unit','notes'];const rows=[cols,...exportData.plots.map(p=>cols.map(k=>p[k]))];download('zomorod-rcbd-field-plan.csv','text/csv;charset=utf-8','\ufeff'+rows.map(r=>r.map(safeCsv).join(',')).join('\r\n'))});
 $('json').addEventListener('click',()=>{if(!exportData)return;download('zomorod-rcbd-field-plan.json','application/json;charset=utf-8',JSON.stringify(exportData,null,2))});
 })();
@@ -133,6 +136,8 @@ def transform(path, source):
             return 'new-file', ENGINE_HTML
         if source == ENGINE_HTML:
             return 'already-patched', source
+        if hashlib.sha256(source.encode('utf-8')).hexdigest() == LEGACY_ENGINE_SHA256:
+            return 'needs-patch', ENGINE_HTML
         raise RuntimeError('REFUSE_EXISTING_FIELD_TOOL_DRIFT')
     if path != PAGE or source is None:
         raise RuntimeError('UNEXPECTED_PAGE')
