@@ -8,6 +8,9 @@ self-contained HTML management report for offline viewing or printing.
 All numerical assumptions are entered by the user. No external data feeds,
 API keys, payment accounts or network connections are required.
 
+For a practical first-use walkthrough, worked farm example, file explanations, and
+pre-decision checklist, see the [Customer Guide](CUSTOMER_GUIDE.md).
+
 ## Getting started
 
 1. Install Python 3.8 or later (no third-party packages).
