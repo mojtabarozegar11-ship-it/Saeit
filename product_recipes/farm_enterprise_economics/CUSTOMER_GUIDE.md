@@ -74,9 +74,24 @@ works offline after installation.
 5. Open `management-report.html` in the new `farm-budget-...` folder. The
    folder also contains your saved input and JSON/CSV analysis files. Each
    confirmed run creates a **different folder** so older budgets remain intact.
+6. Check that `integrity-manifest.json` is present. It is written last, only
+   after the saved results match the accepted input and all report files exist.
+   To recheck a folder later, without changing any files, run:
+
+   ```sh
+   python guided_start.py --verify-folder /path/to/farm-budget-folder
+   ```
+
+   Substitute the actual folder path. The checker verifies each file's
+   SHA-256 checksum, ensures no report file is missing or a symlink, and
+   recalculates the financial results from `my_farm.json`. A missing receipt
+   means the report folder may be incomplete; do not rely on it for decisions.
 
 The wizard does not upload inputs, connect to a payment service, or publish a
 product. Its figures are scenarios derived solely from your assumptions.
+The integrity receipt can detect accidental file corruption, **not** malicious
+changes where an attacker also edits the receipt. It does not certify product
+quality or establish a digital signature.
 
 ### Advanced: manual JSON entry
 
