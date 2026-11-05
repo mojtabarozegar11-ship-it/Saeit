@@ -149,9 +149,12 @@ def test_f41_active_line41_slot_denied_even_without_env(private_f41):
 
 
 def test_f41_live_vps_home_denied_without_env_or_slot(private_f41, monkeypatch):
+    import core.factory_f41_gateway as gateway
     from core.factory_f41_gateway import inspect_order, roots, build_verified_order
     root, ops = roots()
     payload = inspect_order(root, ops, "F41-pilot-vesting")
+    # Keep the isolated fixture order tree while simulating the production HOME.
+    monkeypatch.setattr(gateway, "roots", lambda: (root, ops))
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: Path("/home/githubops")))
     with pytest.raises(ValueError, match="F41_GLOBAL_SINGLE_PRODUCT_LANE_NOT_ADMITTED"):
         build_verified_order(payload)
