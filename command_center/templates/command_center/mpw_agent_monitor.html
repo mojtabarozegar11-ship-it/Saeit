@@ -106,7 +106,13 @@ async function load(){
   }
   const detail=data.source==="private_cpanel_unavailable"?"منبع خصوصی در این سرور در دسترس نیست؛ اتصالی تأیید نشده است.":
    "داده خصوصی دریافت شد؛ هر جزء فقط با شواهد و زمان آخرین گزارش ارزیابی می‌شود.";
-  txt($("intro"),detail+" | زمان بررسی: "+(data.captured_at||"نامشخص"));
+  const c=s.composition||{};
+  const composition=Number.isInteger(c.library_module_slots)?
+   " | تفکیک: "+c.library_module_slots+" ماژول کتابخانه‌ای، "+c.site_health_role_slots+
+   " نقش پایش، "+c.robot_capability_slots+" قابلیت رباتی، "+c.management_generation_slots+
+   " نسل مدیریتی، "+c.other_worker_slots+" کارگر دیگر. تعداد فرایندهای مستقل تأییدشده: نامشخص.":
+   " | تعداد فرایندهای مستقل قابل تأیید نیست.";
+  txt($("intro"),detail+composition+" | زمان بررسی: "+(data.captured_at||"نامشخص"));
   paint();
  }catch(e){rows=[];txt($("intro"),"خطا در دریافت داده؛ سلامت هیچ جزء تأیید نشده است.");$("cards").replaceChildren();$("stats").replaceChildren();}
 }
