@@ -128,37 +128,59 @@ jobs:
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
           timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" "python3 - publish '$GITHUB_RUN_ID'" < scripts/live_staging_services_dedupe_release_20261105.py
-      - name: Verify unique staging service cards and production remains healthy
+      - name: Verify restarted Passenger output and unique public staging cards
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import os
           import re
-          from urllib.request import Request, urlopen
           import time
+          from urllib.request import Request, urlopen
+
+          release_id = os.environ.get('GITHUB_RUN_ID', '')
+          if not release_id.isdecimal():
+              raise SystemExit('INVALID_RELEASE_RUN_ID')
+          required = ('پژوهش‌های کاربردی', 'ابزارهای کاربردی', 'خبرنامهٔ شرکت', 'ارتباط و همکاری')
+          retained = ('هوش مصنوعی', 'آموزش', 'دانشنامه')
           last_error = 'NOT_ATTEMPTED'
-          for attempt in range(6):
+
+          def check(url):
+              request = Request(url, headers={
+                  'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache',
+                  'User-Agent': 'ZM-Staging-Revised-Cards-Verification/1.0'})
+              with urlopen(request, timeout=15) as response:
+                  status = response.status
+                  robots = response.headers.get('X-Robots-Tag', '')
+                  html = response.read(220000).decode('utf-8', 'replace')
+              titles = [re.sub(r'<[^>]+>', '', heading).strip()
+                        for heading in re.findall(r'<h2[^>]*>(.*?)</h2>', html, re.I | re.S)]
+              if status != 200 or 'noindex' not in robots.lower():
+                  raise RuntimeError('STAGING_HTTP_OR_NOINDEX_REGRESSION')
+              if any(titles.count(title) != 1 for title in required + retained):
+                  raise RuntimeError('STAGING_CARD_UNIQUENESS_NOT_VISIBLE')
+              if len(titles) != len(set(titles)):
+                  raise RuntimeError('DUPLICATE_STAGING_H2_CARDS_REMAIN')
+              return len(titles)
+
+          for attempt in range(25):
               try:
-                  with urlopen(Request('https://staging.zomorodmelal.ir/', headers={'Cache-Control':'no-cache'}), timeout=35) as response:
-                      status, robots, html = response.status, response.headers.get('X-Robots-Tag', ''), response.read(200000).decode('utf-8', 'replace')
-                  titles = [re.sub(r'<[^>]+>', '', title).strip() for title in re.findall(r'<h2[^>]*>(.*?)</h2>', html, re.I | re.S)]
-                  required = ['پژوهش‌های کاربردی', 'ابزارهای کاربردی', 'خبرنامهٔ شرکت', 'ارتباط و همکاری']
-                  existing = ['هوش مصنوعی', 'آموزش', 'دانشنامه']
-                  if status != 200 or 'noindex' not in robots.lower():
-                      raise RuntimeError('STAGING_HTTP_OR_NOINDEX_REGRESSION')
-                  if any(titles.count(name) != 1 for name in required + existing):
-                      raise RuntimeError('STAGING_CARD_UNIQUENESS_NOT_VISIBLE')
-                  if len(titles) != len(set(titles)):
-                      raise RuntimeError('DUPLICATE_STAGING_H2_CARDS_REMAIN')
-                  with urlopen('https://zomorodmelal.ir/', timeout=35) as main:
+                  # The active Passenger pool can recycle >60 seconds after restart.txt changes.
+                  fresh_url = f'https://staging.zomorodmelal.ir/?zm_card_release={release_id}-{attempt}'
+                  fresh_count = check(fresh_url)
+                  root_count = check('https://staging.zomorodmelal.ir/')
+                  with urlopen('https://zomorodmelal.ir/', timeout=15) as main:
                       if main.status != 200 or 'noindex' in main.headers.get('X-Robots-Tag', '').lower():
                           raise RuntimeError('PRODUCTION_MAIN_REGRESSION')
-                  print('STAGING_SERVICE_CARDS_UNIQUE=1 STAGING_NOINDEX_PRESERVED=1 MAIN_SITE_UNCHANGED=1')
+                  print(f'STAGING_UNIQUE_CARDS_VERIFIED=1 headings={root_count} fresh={fresh_count}')
                   break
               except Exception as exc:
-                  last_error = type(exc).__name__ + ':' + str(exc)[:90]
-                  if attempt == 5:
+                  last_error = type(exc).__name__ + ':' + str(exc)[:100]
+                  if attempt == 24:
                       raise RuntimeError('PUBLIC_STAGING_TEMPLATE_VERIFICATION_FAILED ' + last_error)
-                  time.sleep(6)
+                  if attempt % 5 == 0:
+                      print('WAITING_FOR_PASSENGER_RENDER attempt=' + str(attempt + 1) +
+                            ' latest=' + last_error)
+                  time.sleep(9)
           PY
       - name: Rollback staging service card template if verification fails
         if: failure() && steps.publish.outcome == 'success'
