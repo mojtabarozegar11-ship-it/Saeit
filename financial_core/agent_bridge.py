@@ -66,7 +66,9 @@ class FinancialAgentBridge:
             decision = AgentFinancialDecision(request.request_id, False, reason or 'risk-denied')
             self.audit_sink(request, decision)
             return decision
-        if action in {'payment', 'transfer_funds', 'settle'} and not request.owner_approved:
+        # Buying and selling also commit owner funds. An internal risk approval
+        # never substitutes for the owner's explicit per-transaction approval.
+        if not request.owner_approved:
             decision = AgentFinancialDecision(request.request_id, False, 'owner-approval-required')
             self.audit_sink(request, decision)
             return decision
