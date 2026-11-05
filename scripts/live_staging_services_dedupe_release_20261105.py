@@ -195,6 +195,50 @@ def rollback(run_id: str) -> None:
     print('STAGING_SERVICES_ROLLBACK=RESTORED')
 
 
+
+def verify_origin(run_id: str) -> None:
+    """Read the staging page FROM cPanel to activate Passenger before external verification."""
+    from urllib.request import Request, urlopen
+    import time
+
+    guard_paths()
+    backup_dir = run_folder(run_id)
+    manifest_path = backup_dir / 'manifest.json'
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise RuntimeError('STAGING_ORIGIN_VERIFICATION_BACKUP_UNAVAILABLE')
+    manifest = json.loads(manifest_path.read_text())
+    if manifest.get('run_id') != run_id:
+        raise RuntimeError('STAGING_ORIGIN_MANIFEST_MISMATCH')
+    if any(digest(path.read_bytes()) != manifest.get('new_sha') for path in template_targets()):
+        raise RuntimeError('STAGING_ORIGIN_SOURCE_NOT_PUBLISHED')
+    required = ('پژوهش‌های کاربردی', 'ابزارهای کاربردی', 'خبرنامهٔ شرکت', 'ارتباط و همکاری')
+    retained = ('هوش مصنوعی', 'آموزش', 'دانشنامه')
+    last_issue = 'NOT_STARTED'
+    for attempt in range(12):
+        try:
+            url = 'https://staging.zomorodmelal.ir/?zm_origin_release=' + run_id + '-' + str(attempt)
+            with urlopen(Request(url, headers={'Cache-Control': 'no-cache, no-store',
+                              'Pragma': 'no-cache',
+                              'User-Agent': 'ZM-Staging-Passenger-Origin-Refresh/1.0'}), timeout=9) as response:
+                robots = response.headers.get('X-Robots-Tag', '')
+                html = response.read(200000).decode('utf-8', 'replace')
+                status = response.status
+            titles = [re.sub(r'<[^>]+>', '', value).strip() for value in
+                      re.findall(r'<h2[^>]*>(.*?)</h2>', html, re.I | re.S)]
+            if status == 200 and 'noindex' in robots.lower() and all(
+                    titles.count(title) == 1 for title in required + retained
+            ) and len(titles) == len(set(titles)):
+                print('STAGING_ORIGIN_SERVICES_VERIFIED=1 headings=' + str(len(titles)), flush=True)
+                return
+            last_issue = 'PRE_RESTART_TEMPLATE_VISIBLE'
+        except Exception as exc:
+            last_issue = type(exc).__name__
+        if attempt % 3 == 0:
+            print('WAITING_FOR_ORIGIN_PASSENGER_RENDER attempt=' + str(attempt + 1)
+                  + ' issue=' + last_issue, flush=True)
+        time.sleep(5)
+    raise RuntimeError('STAGING_ORIGIN_SERVICES_NOT_VISIBLE_AFTER_RESTART:' + last_issue)
+
 if __name__ == '__main__':
     if len(sys.argv) == 2 and sys.argv[1] == 'preview':
         preview()
@@ -202,5 +246,7 @@ if __name__ == '__main__':
         publish(sys.argv[2])
     elif len(sys.argv) == 3 and sys.argv[1] == 'rollback':
         rollback(sys.argv[2])
+    elif len(sys.argv) == 3 and sys.argv[1] == 'verify-origin':
+        verify_origin(sys.argv[2])
     else:
         raise SystemExit('USAGE: preview | publish RUN_ID | rollback RUN_ID')
