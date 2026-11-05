@@ -128,6 +128,21 @@ jobs:
             done
           done
           REMOTE
+      - name: Aggregate cPanel multisite AWStats and raw traffic read only
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          ast.parse(Path("scripts/traffic_multisite_readonly_20261105.py").read_text("utf-8"))
+          print("MULTISITE_AUDIT_SOURCE_VALID=PASS")
+          PY
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 180s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/traffic_multisite_readonly_20261105.py
+          echo MULTISITE_READONLY_STEP=PASS
       - name: Remove temporary SSH material
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
