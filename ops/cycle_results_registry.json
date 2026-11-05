@@ -47,7 +47,7 @@
     },
     "05": {
       "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
-      "sequence": 3,
+      "sequence": 4,
       "legacy_report_last_verified": 57,
       "primary_output": "accepted operational business gate",
       "legacy_source_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725",
@@ -98,6 +98,16 @@
       "acceptance_result": "PR #1880 draft source with new receipt pre-import gate; 16 new tests included in successful exact-head Django CI run 41967804873; no live deployment",
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41967804873",
       "impact": "A source/CI blocker in management report integrity was closed; operational acceptance and revenue remain unverified"
+    },
+    {
+      "registry_id": "R05-0004",
+      "cycle_id": "05",
+      "run_id": "manual-20261105-pr1880-ci-41968659233",
+      "deliverable_key": "receipt-header-normalization-and-atomic-django-regression",
+      "stage": "code",
+      "acceptance_result": "Parser and validator accept matching Persian/Latin headers, reject mismatched receipt numbers; 19 validator tests plus 2 Django integration regressions on exact head 8f4dc143; workflow 41968659233 all steps successful",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41968659233",
+      "impact": "Resolved verified false-rejection bug and verified fail-closed DB staging in isolated CI; no live deployment, product acceptance or collected revenue"
     }
   ],
   "report_reservations": [],
