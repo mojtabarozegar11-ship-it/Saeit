@@ -369,3 +369,25 @@ jobs:
               print('MPW_DELIVERY_GLOBALS='+json.dumps(sorted(k for k in d.__dict__ if not k.startswith('__'))[:120]))
           except Exception as exc: print('MPW_DELIVERY_INSPECT_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:300]}))
           PY
+
+      - name: Read-only guest delivery table and order 34 evidence
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.db import connection
+          from mpw_commerce.models import GuestTrxDelivery
+          print('MPW_DELIVERY_TABLE='+json.dumps({'db_table':GuestTrxDelivery._meta.db_table,'model':GuestTrxDelivery._meta.label}))
+          try:
+              with connection.cursor() as cur:
+                  cur.execute('SELECT COUNT(*) FROM '+connection.ops.quote_name(GuestTrxDelivery._meta.db_table))
+                  print('MPW_DELIVERY_TABLE_COUNT='+json.dumps({'count':cur.fetchone()[0]}))
+          except Exception as exc:
+              print('MPW_DELIVERY_TABLE_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:500]}))
+          try:
+              rows=list(GuestTrxDelivery.objects.filter(order_id=34).values('id','order_id','email','invoice_state','receipt_state','invoice_attempts','receipt_attempts'))
+              print('MPW_ORDER_34_DELIVERY='+json.dumps(rows,default=str))
+          except Exception as exc:
+              print('MPW_ORDER_34_DELIVERY_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:500]}))
+          PY
