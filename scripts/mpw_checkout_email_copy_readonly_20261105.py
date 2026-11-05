@@ -170,6 +170,103 @@ def _outbox_scheduler_readonly():
             "cpanel_user_crontab_accessible": cron is not None and cron.returncode == 0}
 
 
+
+def _paid_download_path_static_readonly():
+    """Sanitized control-flow evidence from deployed paid download code."""
+    specs = {
+        "services/mpw_trx_commercial_web.py": ("_download_paid", "_reconcile_invoice"),
+        "services/mpw_walletless_commercial_intent.py": (
+            "open_commercial_paid_file", "commercial_buyer_status", "_paid_read_db"),
+        "services/mpw_trx_guest_delivery.py": ("magic_link", "redeem_token", "_send_one"),
+    }
+
+    class RedactConstants(ast.NodeTransformer):
+        def visit_Constant(self, node):
+            if node.value is None or type(node.value) is bool:
+                return node
+            return ast.copy_location(ast.Constant(value="<literal>"), node)
+
+    out = []
+    for relative, wanted in specs.items():
+        path = APP / relative
+        if (path.is_symlink() or not path.is_file() or
+                not path.resolve().is_relative_to(APP.resolve()) or
+                path.stat().st_size > 140000):
+            out.append({"path": relative, "status": "unavailable"})
+            continue
+        tree = ast.parse(path.read_text("utf-8"), filename=relative)
+        functions = []
+        for node in tree.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name not in wanted:
+                continue
+            calls = sorted({name for n in ast.walk(node) if isinstance(n, ast.Call)
+                            if (name := _call_name(n.func))})[:60]
+            conditions = []
+            for n in ast.walk(node):
+                if isinstance(n, (ast.If, ast.IfExp, ast.While)) and len(conditions) < 20:
+                    safe_test = RedactConstants().visit(ast.fix_missing_locations(
+                        ast.parse(ast.unparse(n.test), mode="eval"))).body
+                    conditions.append(ast.unparse(safe_test)[:240])
+            exception_count = sum(isinstance(n, ast.Raise) for n in ast.walk(node))
+            functions.append({"name": node.name, "line": node.lineno,
+                              "calls": calls, "conditions_redacted": conditions,
+                              "explicit_raises": exception_count})
+        out.append({"path": relative, "functions": functions})
+    return out
+
+
+def _paid_order_delivery_linkage_readonly():
+    """Aggregate existing paid-order receipt linkage, without URLs or buyer identifiers."""
+    try:
+        from core.models import PaymentIntent
+        from core.crown_tron_receipts import PROVIDER, verified_walletless_credit
+        from mpw_commerce.models import GuestTrxDelivery
+        intents = list(PaymentIntent.objects.filter(provider=PROVIDER, status="paid")
+                       .select_related("order").order_by("pk")[:11])
+        if len(intents) > 10:
+            return {"status": "scope_exceeded"}
+        counters = {"paid_intents": len(intents), "locally_verified": 0,
+                    "verified_with_delivery_row": 0, "verified_without_delivery_row": 0,
+                    "verified_with_receipt_sent": 0, "verified_with_receipt_pending": 0,
+                    "verified_with_receipt_other": 0}
+        for intent in intents:
+            if not verified_walletless_credit(intent.order, intent):
+                continue
+            counters["locally_verified"] += 1
+            delivery = list(GuestTrxDelivery.objects.filter(order=intent.order)[:2])
+            if len(delivery) != 1:
+                counters["verified_without_delivery_row"] += 1
+                continue
+            counters["verified_with_delivery_row"] += 1
+            label = str(delivery[0].receipt_state)
+            bucket = label if label in ("sent", "pending") else "other"
+            counters["verified_with_receipt_" + bucket] += 1
+        return {"status": "ok", "counts": counters,
+                "file_open_attempted": False, "download_link_redeemed": False,
+                "remote_chain_recheck": False}
+    except Exception as exc:
+        return {"status": "unavailable", "error_type": type(exc).__name__}
+
+
+def _commerce_model_file_schema_readonly():
+    """List model/field *types only*; no product names, paths or records."""
+    try:
+        from django.apps import apps
+        models = []
+        for model in apps.get_app_config("mpw_commerce").get_models():
+            if any(t in model.__name__.lower() for t in
+                   ("book", "product", "order", "delivery", "asset", "file")):
+                fields = [{"name": f.name, "type": f.get_internal_type()}
+                          for f in model._meta.get_fields()
+                          if getattr(f, "concrete", False)
+                          if f.get_internal_type() in
+                          ("FileField", "ImageField", "ForeignKey", "OneToOneField")]
+                models.append({"model": model.__name__, "fields": fields[:18]})
+        return {"status": "ok", "models": models[:30]}
+    except Exception as exc:
+        return {"status": "unavailable", "error_type": type(exc).__name__}
+
+
 def main():
     if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2" or APP.is_symlink() or not APP.is_dir():
         raise RuntimeError("MPW_COPY_AUDIT_WRONG_HOST")
@@ -249,6 +346,9 @@ def main():
         "commercial_delivery_aggregate": _commercial_delivery_aggregate(),
         "commercial_outbox_scheduler": _outbox_scheduler_readonly(),
         "receipt_settlement_cross_tab": _receipt_settlement_correlation_readonly(),
+        "paid_download_path_static": _paid_download_path_static_readonly(),
+        "paid_order_delivery_linkage": _paid_order_delivery_linkage_readonly(),
+        "commerce_file_schema": _commerce_model_file_schema_readonly(),
         "emails_sent_by_audit": 0, "emails_deleted": 0,
         "files_modified": 0,
     }, sort_keys=True))
