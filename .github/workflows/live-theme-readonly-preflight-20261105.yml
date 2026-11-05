@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/live-theme-readonly-preflight-20261105.yml
       - scripts/live_theme_preflight_20261105.py
+      - scripts/live_theme_isolated_release_20261105.py
 permissions:
   contents: read
 concurrency:
@@ -126,3 +127,10 @@ jobs:
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           timeout 80s ssh -T -F "$RUNNER_TEMP/live-theme-readonly-ssh/config" "$COMMAND_HOST" 'python3 -' < scripts/live_theme_preflight_20261105.py
+      - name: Preview SHA-pinned UI changes and lint staged PHP (no live overwrite)
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 80s ssh -T -F "$RUNNER_TEMP/live-theme-readonly-ssh/config" "$COMMAND_HOST" 'python3 - preview' < scripts/live_theme_isolated_release_20261105.py
