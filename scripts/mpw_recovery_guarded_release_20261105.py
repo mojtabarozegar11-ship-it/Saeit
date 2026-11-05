@@ -43,7 +43,7 @@ FILES = {
 }
 NEW_FILES = ("recovery", "recovery_models", "migration", "cleanup")
 SOURCE_DIGESTS = {
-    "guest": "37bdfd64924ac96ec0deea203f2b377b49399950a4c4ae10080bbd8df79456ee",
+    "guest": "b45840d3e6b9acfa2c2a0bd435ec95c711183a4e0ffa9e605e0cca8258bb2868",
     "recovery": "8f5f4716ff4f2bb7b357a1dc634a01b3ac58349683d733d4ee3dca42fabd868a",
     "recovery_models": "6c76a40a78ad1a91c28c4bcdbc4206034f1c45d45df76242858dc7840845fe76",
     "migration": "c1d209a97a4f3ab6e5f4fde9a9fa1904d7f8856ef38ba8e3afddabf89bb55240",
