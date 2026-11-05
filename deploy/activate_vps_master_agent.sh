@@ -90,7 +90,14 @@ old="$ops/backups/cron-before-master-$stamp.txt"
 crontab -l > "$old" 2>/dev/null || : > "$old"
 chmod 600 "$old"
 tagged_count="$(grep -c 'SAEIT_MASTER_AGENT_V1' "$old" || true)"
-test "$tagged_count" -eq 2 || { echo MASTER_EXPECTED_TWO_TAGGED_CRON_ENTRIES; exit 1; }
+if [ "$tagged_count" -eq 0 ]; then
+  # Read-only preflight proved that the master can exist with no scheduled
+  # entries. Recover that state while preserving every unrelated cron line.
+  echo MASTER_CRON_RECOVERY_FROM_ZERO
+elif [ "$tagged_count" -ne 2 ]; then
+  echo MASTER_INCONSISTENT_TAGGED_CRON_ENTRIES
+  exit 1
+fi
 if grep -E 'economic_autorun|autonomous_master_loop' "$old" | grep -v 'SAEIT_MASTER_AGENT_V1' >/dev/null; then
   echo MASTER_COMPETING_EXISTING_CRON_DETECTED
   exit 1
