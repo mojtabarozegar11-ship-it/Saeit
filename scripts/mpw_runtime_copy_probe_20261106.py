@@ -2,6 +2,7 @@
 """Read-only live checkout routing and cache probe, with no buyer data access."""
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -14,6 +15,7 @@ from urllib.request import Request, urlopen
 
 
 ROOT = Path("/home/zomorod2/Saeit-staging")
+LIVE = Path("/home/zomorod2/mojplaywin.com")
 TEMPLATE = ROOT / "mpw_commerce/templates/mpw_commerce/product_checkout.html"
 OLD = "to recover your download"
 NEW = "Email recovery on another device is not yet available"
@@ -92,11 +94,56 @@ def passenger_hints():
             and not marker.is_symlink() else None}
 
 
+def active_root_inventory():
+    """Hashes and counts only, without loading live database or secrets."""
+    if LIVE.is_symlink() or not LIVE.is_dir():
+        return {"root_available": False}
+    inspected = {}
+    for rel in (
+        "passenger_wsgi.py",
+        "mpw_commerce/templates/mpw_commerce/product_checkout.html",
+        "services/mpw_trx_guest_commerce.py",
+        "services/mpw_trx_email_recovery.py",
+        "config/settings.py",
+        "tmp/restart.txt",
+    ):
+        p = LIVE / rel
+        if p.is_symlink() or not p.is_file() or not p.resolve().is_relative_to(LIVE):
+            inspected[rel] = {"regular_file": False}
+            continue
+        if p.stat().st_size > 180000:
+            inspected[rel] = {"oversize": True}
+            continue
+        data = p.read_bytes()
+        content = data.decode("utf-8", "replace")
+        details = {"sha256": hashlib.sha256(data).hexdigest(),
+                   "size": len(data)}
+        if rel.endswith("product_checkout.html"):
+            details.update({"old_text": OLD in content, "new_text": NEW in content,
+                            "old_occurrences": content.count(OLD)})
+        if rel == "services/mpw_trx_guest_commerce.py":
+            details["capture_setting_referenced"] = (
+                "MPW_GUEST_EMAIL_CLAIM_CAPTURE_ENABLED" in content)
+        if rel == "passenger_wsgi.py":
+            try:
+                tree = ast.parse(content)
+                path_literals = [n.value for n in ast.walk(tree)
+                                 if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                                 if ("Saeit" in n.value or "mojplaywin" in n.value)
+                                 if len(n.value) < 200]
+                details["path_hints"] = sorted(set(path_literals))[:12]
+            except SyntaxError:
+                details["parse_status"] = "syntax_error"
+        inspected[rel] = details
+    return {"root_available": True, "files": inspected}
+
+
 def main():
     if (pwd.getpwuid(os.geteuid()).pw_name != "zomorod2"
             or ROOT.is_symlink() or not ROOT.is_dir()):
         raise RuntimeError("WRONG_READONLY_HOST")
-    out = {"disk": file_check(), "passenger": passenger_hints()}
+    out = {"disk": file_check(), "passenger": passenger_hints(),
+           "active_root": active_root_inventory()}
     for key, func in (("django_route", django_check), ("public_http", public_response)):
         try:
             out[key] = func()
