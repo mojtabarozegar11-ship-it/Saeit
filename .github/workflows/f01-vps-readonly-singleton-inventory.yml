@@ -111,6 +111,21 @@ jobs:
           service_count = count_matching(run(["systemctl", "list-units", "--type=service", "--state=running", "--no-legend", "--no-pager"]))
           proc = run(["ps", "-eo", "pid=,comm=,args="])
           worker_count = count_matching(proc)
+          # Report only safe script basenames and SAEIT marker tokens; never full argv.
+          process_labels = sorted(set(
+              match.group(0)
+              for line in (proc.stdout.splitlines() if proc and proc.returncode == 0 else [])
+              if pattern.search(line)
+              for match in re.finditer(r"[a-zA-Z0-9_.-]+[.](?:py|sh)", line)
+          ))[:24]
+          cron_raw = run(["crontab", "-l"])
+          cron_markers = sorted(set(
+              match.group(0)
+              for line in (cron_raw.stdout.splitlines()
+                           if cron_raw and cron_raw.returncode == 0 else [])
+              if line.strip() and not line.lstrip().startswith("#") and pattern.search(line)
+              for match in re.finditer(r"SAEIT_[A-Z0-9_]+", line)
+          ))[:24]
           owner_cron = cron_count(["crontab", "-l"])
           root_cron = cron_count(["sudo", "-n", "crontab", "-u", "root", "-l"])
           age = None
@@ -124,6 +139,11 @@ jobs:
               "installed_core_matches_reviewed_sha": same_sha(runtime / "scripts/factory_vps_product_cycle.py", expected_core),
               "installed_singleton_matches_reviewed_sha": same_sha(runtime / "scripts/factory_global_singleton_v1.py", expected_lock),
               "factory_related_running_processes": worker_count,
+              "factory_related_process_script_labels": process_labels,
+              "factory_related_githubops_cron_markers": cron_markers,
+              "runtime_runner_present": (runtime / "run-local-cycle.sh").is_file(),
+              "runtime_core_source_present": (runtime / "scripts/factory_vps_product_cycle.py").is_file(),
+              "runtime_singleton_source_present": (runtime / "scripts/factory_global_singleton_v1.py").is_file(),
               "factory_related_running_services": service_count,
               "factory_related_systemd_timers": timer_count,
               "factory_related_githubops_cron": owner_cron,
