@@ -45,7 +45,7 @@ while IFS=: read -r cron_user _; do
     echo F01_PREFLIGHT_CRONTAB_INVENTORY_UNREADABLE >&2
     exit 3
   fi
-  if printf '%s\n' "$cron_snapshot" | grep -Eiq "$factory_cron_pattern"; then
+  if printf '%s\n' "$cron_snapshot" | grep -Ev '^[[:space:]]*(#|$)' | grep -Eiq "$factory_cron_pattern"; then
     echo F01_PREFLIGHT_COMPETING_FACTORY_CRON_PRESENT >&2
     exit 3
   fi
@@ -58,7 +58,7 @@ for cron_file in /etc/crontab /etc/cron.d/*; do
     echo F01_PREFLIGHT_SYSTEM_CRON_INVENTORY_UNREADABLE >&2
     exit 3
   fi
-  if grep -Eiq "$factory_cron_pattern" "$cron_file"; then
+  if grep -Ev '^[[:space:]]*(#|$)' "$cron_file" | grep -Eiq "$factory_cron_pattern"; then
     echo F01_PREFLIGHT_COMPETING_SYSTEM_FACTORY_CRON_PRESENT >&2
     exit 3
   fi
@@ -159,10 +159,10 @@ PY
 
 install -d -m 700 "$runtime"
 install -m 700 "$repo/scripts/factory-runtime-watchdog.sh" "$runtime/factory-runtime-watchdog.sh"
-install -m 644 deploy/systemd/saeit-factory-cycle.service /etc/systemd/system/saeit-factory-cycle.service
-install -m 644 deploy/systemd/saeit-factory-cycle.timer /etc/systemd/system/saeit-factory-cycle.timer
-install -m 644 deploy/systemd/saeit-factory-watchdog.service /etc/systemd/system/saeit-factory-watchdog.service
-install -m 644 deploy/systemd/saeit-factory-watchdog.timer /etc/systemd/system/saeit-factory-watchdog.timer
+install -m 644 "$repo/deploy/systemd/saeit-factory-cycle.service" /etc/systemd/system/saeit-factory-cycle.service
+install -m 644 "$repo/deploy/systemd/saeit-factory-cycle.timer" /etc/systemd/system/saeit-factory-cycle.timer
+install -m 644 "$repo/deploy/systemd/saeit-factory-watchdog.service" /etc/systemd/system/saeit-factory-watchdog.service
+install -m 644 "$repo/deploy/systemd/saeit-factory-watchdog.timer" /etc/systemd/system/saeit-factory-watchdog.timer
 systemctl daemon-reload
 systemctl enable --now saeit-factory-cycle.timer
 systemctl enable --now saeit-factory-watchdog.timer

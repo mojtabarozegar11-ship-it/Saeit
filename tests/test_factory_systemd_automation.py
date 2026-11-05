@@ -43,7 +43,7 @@ class FactorySystemdAutomationTests(unittest.TestCase):
 
     def test_competing_legacy_cron_is_rejected_before_install(self):
         script = (ROOT / "deploy/install_factory_systemd_automation.sh").read_text()
-        self.assertIn("crontab -u githubops -l", script)
+        self.assertIn('crontab -u "$cron_user" -l', script)
         self.assertIn("SAEIT_SINGLE_PRODUCT_FACTORY_V1", script)
         self.assertIn("F01_PREFLIGHT_COMPETING_FACTORY_CRON_PRESENT", script)
         self.assertIn("F01_PREFLIGHT_COMPETING_SYSTEMD_TIMER_PRESENT", script)
@@ -69,6 +69,7 @@ class FactorySystemdAutomationTests(unittest.TestCase):
             "saeit-factory-watchdog.service", "saeit-factory-watchdog.timer",
         ):
             self.assertIn('test -f "$repo/deploy/systemd/' + fragment + '"', script)
+            self.assertIn('install -m 644 "$repo/deploy/systemd/' + fragment + '"', script)
 
     def test_existing_native_staging_loop_is_rejected_before_install(self):
         script = (ROOT / "deploy/install_factory_systemd_automation.sh").read_text()
