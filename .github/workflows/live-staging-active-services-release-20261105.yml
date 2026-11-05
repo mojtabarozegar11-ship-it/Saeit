@@ -128,6 +128,14 @@ jobs:
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
           case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
           timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" "python3 - publish '$GITHUB_RUN_ID'" < scripts/live_staging_services_dedupe_release_20261105.py
+      - name: Activate the staging Passenger app at cPanel origin and verify it
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
+          timeout 155s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" "python3 - verify-origin '$GITHUB_RUN_ID'" < scripts/live_staging_services_dedupe_release_20261105.py
       - name: Verify restarted Passenger output and unique public staging cards
         run: |
           set -euo pipefail
