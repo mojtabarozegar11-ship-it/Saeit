@@ -19,7 +19,7 @@ class FarmEvidenceCaptureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory) / "new-proof"
             result = MOD.build(RECIPE, folder)
-            self.assertEqual(result["test_count"], 39)
+            self.assertEqual(result["test_count"], 43)
             self.assertEqual(set(result["candidate_criteria"]), set(MOD.CRITERION_TESTS))
             self.assertIsNone(result["verified_quality_score"])
             self.assertFalse(result["independent_reviewer_approval"])
@@ -32,13 +32,19 @@ class FarmEvidenceCaptureTests(unittest.TestCase):
                 self.assertEqual(result["source_sha256"][required], MOD.sha256(RECIPE / required))
             covered_guided_tests = set().union(*(set(MOD.CRITERION_TESTS[key])
                                                 for key in ("Q061", "Q063", "Q064")))
-            self.assertEqual(len([name for name in covered_guided_tests
-                                  if name.startswith("test_success_creates_") or
-                                  name in ("test_invalid_numbers_and_duplicate_names_are_reprompted",
-                                           "test_confirmation_is_fail_closed_and_creates_no_files",
-                                           "test_each_export_goes_to_new_folder_without_overwrite",
-                                           "test_output_parent_symlink_is_rejected_before_any_writes",
-                                           "test_end_of_input_is_safe_cancellation")]), 6)
+            expected_guided_tests = {
+                "test_success_creates_four_consistent_reports_and_original_inputs",
+                "test_invalid_numbers_and_duplicate_names_are_reprompted",
+                "test_confirmation_is_fail_closed_and_creates_no_files",
+                "test_each_export_goes_to_new_folder_without_overwrite",
+                "test_output_parent_symlink_is_rejected_before_any_writes",
+                "test_end_of_input_is_safe_cancellation",
+                "test_verification_is_read_only_and_requires_no_interactive_answers",
+                "test_modified_customer_report_is_detected_without_rewriting_it",
+                "test_missing_manifest_or_symlink_report_is_not_accepted",
+                "test_failed_export_has_no_completion_receipt",
+            }
+            self.assertTrue(expected_guided_tests.issubset(covered_guided_tests))
             self.assertEqual(result, json.loads((folder / "manifest.json").read_text()))
             for id, receipt in result["candidate_criteria"].items():
                 proof = folder / receipt["path"]
@@ -59,7 +65,7 @@ class FarmEvidenceCaptureTests(unittest.TestCase):
     def test_failed_suite_does_not_create_manifest(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory) / "failing-evidence"
-            with patch.object(MOD, "execute", return_value="Ran 39 tests in 0.1s\nFAILED (failures=1)\n"):
+            with patch.object(MOD, "execute", return_value="Ran 43 tests in 0.1s\nFAILED (failures=1)\n"):
                 with self.assertRaisesRegex(ValueError, "TEST_SUITE_NOT_FULLY_PASSED"):
                     MOD.build(RECIPE, folder)
             self.assertFalse((folder / "manifest.json").exists())
