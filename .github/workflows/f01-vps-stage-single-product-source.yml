@@ -1,0 +1,117 @@
+name: F01 stage reviewed one-product source on VPS without activation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/f01-vps-stage-single-product-source.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f01-versioned-source-staging
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.ref == 'fix/f01-single-product-handoff-lock-20261031'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Transfer integrity-checked source into separate VPS staging directory only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          REVIEWED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/f01-safe-stage"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_opts=(-i "$d/key" -o IdentitiesOnly=yes -o ForwardAgent=no -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          sources=(
+            scripts/factory_vps_product_cycle.py
+            scripts/factory_global_singleton_v1.py
+            scripts/factory_qc1000_rework_gate.py
+            scripts/factory-runtime-watchdog.sh
+            deploy/install_factory_systemd_automation.sh
+            deploy/systemd/saeit-factory-cycle.service
+            deploy/systemd/saeit-factory-cycle.timer
+            deploy/systemd/saeit-factory-watchdog.service
+            deploy/systemd/saeit-factory-watchdog.timer
+          )
+          test -d product_recipes/farm_enterprise_economics
+          mapfile -d '' recipe_files < <(find product_recipes/farm_enterprise_economics -type f -print0 | sort -z)
+          test "${#recipe_files[@]}" -gt 0
+          files=("${sources[@]}" "${recipe_files[@]}")
+          for f in "${files[@]}"; do test -f "$f" && test ! -L "$f"; done
+          if find product_recipes/farm_enterprise_economics -type l -print -quit | grep -q .; then
+            echo F01_STAGE_RECIPE_SYMLINK_FORBIDDEN >&2
+            exit 3
+          fi
+          sha256sum "${files[@]}" > "$d/SHA256SUMS"
+          tar -cf "$d/source.tar" "${files[@]}"
+          tar -rf "$d/source.tar" -C "$d" SHA256SUMS
+          test "$(stat -c %s "$d/source.tar")" -le 10000000
+          remote_dir="/home/githubops/factory-runtime/.f01-reviewed-source"
+          remote_archive="$remote_dir/.upload-${REVIEWED_SHA}.tar"
+          ssh -T "${ssh_opts[@]}" githubops@178.239.147.150 "umask 077; test -d /home/githubops/factory-runtime; test ! -L /home/githubops/factory-runtime; install -d -m 700 '$remote_dir'; test ! -L '$remote_dir'"
+          scp "${ssh_opts[@]}" "$d/source.tar" "githubops@178.239.147.150:$remote_archive"
+          ssh -T "${ssh_opts[@]}" githubops@178.239.147.150 "bash -s -- '$REVIEWED_SHA'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          reviewed="$1"
+          [[ "$reviewed" =~ ^[0-9a-f]{40}$ ]]
+          base="$HOME/factory-runtime"
+          stage="$base/.f01-reviewed-source"
+          archive="$stage/.upload-${reviewed}.tar"
+          dest="$stage/$reviewed"
+          test -d "$base" && test ! -L "$base"
+          test -d "$stage" && test ! -L "$stage"
+          test -f "$archive" && test ! -L "$archive"
+          test "$(stat -c %s "$archive")" -le 10000000
+          test "$(df -Pk "$stage" | awk 'NR==2{print $4}')" -ge 200000
+          if test -d "$dest"; then
+            test ! -L "$dest"
+            (cd "$dest" && sha256sum -c --status SHA256SUMS)
+            echo F01_SOURCE_STAGING=ALREADY_VERIFIED
+          else
+            incoming="$(mktemp -d "$stage/.incoming-${reviewed}.XXXXXXXX")"
+            trap 'rm -rf -- "$incoming"' EXIT
+            tar -xf "$archive" -C "$incoming" --no-same-owner --no-same-permissions
+            (cd "$incoming" && sha256sum -c --status SHA256SUMS)
+            test -f "$incoming/scripts/factory_vps_product_cycle.py"
+            test -f "$incoming/scripts/factory_global_singleton_v1.py"
+            test ! -L "$incoming/scripts/factory_global_singleton_v1.py"
+            if find "$incoming" -type l -print -quit | grep -q .; then
+              echo F01_STAGING_SYMLINK_FORBIDDEN >&2
+              exit 3
+            fi
+            mv -- "$incoming" "$dest"
+            trap - EXIT
+            echo F01_SOURCE_STAGING=NEW_SHA_VERIFIED
+          fi
+          rm -f -- "$archive"
+          echo "F01_STAGED_HEAD_SHA=$reviewed"
+          echo F01_EXISTING_RUNTIME_CHANGED=false
+          echo F01_FACTORY_ACTIVATION=NOT_REQUESTED
+          echo F01_COMMERCIAL_RELEASE=LOCKED
+          REMOTE
