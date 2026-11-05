@@ -74,3 +74,40 @@ No workflow is dispatched by these source-only changes. Even a positive
 preflight would require an independently isolated runtime, resource safety
 assessment against the single-product factory, and owner approval before any
 costly restore. Never restore into the production cPanel database.
+
+
+## Cycle 50 verified live read-only audit and cycle 51 bounded next step
+
+The successful read-only inventory run
+https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41967282629
+measured **7,102,246,912 free VPS bytes** (~6.61 GiB) and
+**7,690,735,616 available memory bytes** (~7.16 GiB). The `githubops`
+VPS command search found no accessible Docker/Podman or self-contained
+MariaDB server and initialization executable. These facts establish a
+**NO-GO** for a 40 GiB admission-screen restore on the observed home
+filesystem. They do not establish that encrypted backup pair files are
+missing: a separate legacy fixed-name metadata probe does not enumerate
+the current immutable Nov 2 set.
+
+The same run reported cPanel account quota
+**32,212,254,720 bytes**, used **28,752,969,728 bytes**, leaving
+**3,459,284,992 bytes** (~3.22 GiB) of account quota; its host-global
+free-byte reading does not override that quota. cPanel is also the
+production host and must not be treated as an isolated restore target.
+The total reported sizes of three account databases were
+**16,680,583,168 bytes**, not a confirmed map of which is the active
+MojPlayWin database. No production DB contents were read in this audit.
+
+Cycle 51 adds `scripts/mpw_vps_mount_capacity_readonly_20261105.py`:
+a mountinfo/stat-only, privacy-preserving probe for *distinct* local
+filesystems. It deduplicates bind mounts by device, ignores network and
+virtual filesystems, prints no mount paths or device IDs, and cannot
+write, mount, decrypt, restore or restart anything. Tests use synthetic
+mount tables. The existing read-only workflow is prepared to execute
+this script over the pinned VPS SSH relay, but the **feature-branch
+changes have not been merged or run on the VPS**. Thus whether any
+alternative independent mounted filesystem actually has enough
+available capacity remains **unknown**. Even a candidate with enough
+space is not automatically approved or safe for the single-product
+factory. Independent permission, factory isolation, and DB runtime
+readiness must be assessed before owner-approved restore.
