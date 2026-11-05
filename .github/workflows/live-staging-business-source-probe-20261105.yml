@@ -1,9 +1,10 @@
-name: Read-only staging template and private login source diagnosis
+name: Read-only detailed staging template duplicate-card source
 on:
   push:
     branches: [audit/live-sites-subsites-20261105]
     paths:
       - .github/workflows/live-staging-business-source-probe-20261105.yml
+      - scripts/live_staging_business_source_probe_20261105.py
 permissions:
   contents: read
 concurrency:
