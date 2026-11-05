@@ -274,7 +274,7 @@ jobs:
             capture_store_demo_publish)
               timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_store_demo_guarded_release_20261106.py' preflight"
               timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_store_demo_guarded_release_20261106.py' publish '$GITHUB_RUN_ID'"
-              timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_store_demo_guarded_release_20261106.py' verify"
+              timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_store_demo_guarded_release_20261106.py' verify '$GITHUB_RUN_ID'"
               ;;
             *)
               exit 9
