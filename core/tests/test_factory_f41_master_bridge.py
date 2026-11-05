@@ -34,6 +34,7 @@ def private_f41(tmp_path, monkeypatch):
                      private / "orders" / ("F41-pilot-" + kind.replace("_", "-") + ".json"))
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     monkeypatch.setenv("MOJ_FACTORY_LOCAL_MODE", "1")
+    monkeypatch.delenv("SAEIT_ENV", raising=False)
     return private
 
 
@@ -123,3 +124,25 @@ def test_all_nineteen_prototypes_are_audited_real_master_tasks(private_f41):
         target_type="AgentTask", target_id__in=[str(t.pk) for t in tasks]).count() == 19
     call_command("factory_f41_enqueue", execute=True, verbosity=0)
     assert AgentTask.objects.filter(action_type=ACTION).count() == 19
+
+
+def test_f41_production_build_denied_before_independent_release(private_f41, monkeypatch):
+    from core.factory_f41_gateway import inspect_order, roots, build_verified_order
+    root, ops = roots()
+    payload = inspect_order(root, ops, "F41-pilot-vesting")
+    monkeypatch.setenv("SAEIT_ENV", "production")
+    with pytest.raises(ValueError, match="F41_GLOBAL_SINGLE_PRODUCT_LANE_NOT_ADMITTED"):
+        build_verified_order(payload)
+    assert not (private_f41 / "outputs" / payload["order_id"]).exists()
+
+
+def test_f41_active_line41_slot_denied_even_without_env(private_f41):
+    from core.factory_f41_gateway import inspect_order, roots, build_verified_order
+    root, ops = roots()
+    payload = inspect_order(root, ops, "F41-pilot-vesting")
+    slot = private_f41.parent / "quality-excellence/product-flow/active-slots/current.json"
+    slot.parent.mkdir(parents=True, exist_ok=True)
+    slot.write_text('{"active": []}', encoding="utf-8")
+    with pytest.raises(ValueError, match="F41_GLOBAL_SINGLE_PRODUCT_LANE_NOT_ADMITTED"):
+        build_verified_order(payload)
+    assert not (private_f41 / "outputs" / payload["order_id"]).exists()
