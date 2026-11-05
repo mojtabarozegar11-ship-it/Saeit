@@ -1,4 +1,4 @@
-name: One-time guarded staging canonical root and services release
+name: One-time guarded staging canonical root and services release (exact root line)
 on:
   push:
     branches: [audit/live-sites-subsites-20261105]
