@@ -145,6 +145,25 @@ def _new_user(request):
     return user, token
 
 
+def _bind_guest_email(request, user):
+    """Bind a submitted address only to this existing guest principal."""
+    submitted_email = ""
+    for key in ("email", "buyer_email", "customer_email", "purchaser_email"):
+        raw = request.POST.get(key) if hasattr(request, "POST") else None
+        if raw is not None:
+            submitted_email = str(raw).strip().lower()
+            break
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", submitted_email):
+        raise Http404("Valid email address required")
+    existing_email = str(getattr(user, "email", "") or "").strip().lower()
+    if existing_email and existing_email != submitted_email:
+        raise Http404("Guest email identity mismatch")
+    if not existing_email and hasattr(user, "email"):
+        user.email = submitted_email
+        user.save(update_fields=["email"])
+    return user
+
+
 def _identity(request, *, create=False):
     if not _host_ok(request):
         raise Http404
@@ -155,6 +174,8 @@ def _identity(request, *, create=False):
     token = None
     if user is None and create:
         user, token = _new_user(request)
+    elif user is not None and create and str(getattr(user, "username", "")).startswith("mpwguest_"):
+        user = _bind_guest_email(request, user)
     if user is None:
         raise Http404("Guest purchase session missing or expired")
     return user, token
