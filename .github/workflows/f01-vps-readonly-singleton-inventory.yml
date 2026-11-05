@@ -1,0 +1,138 @@
+name: F01 VPS read-only singleton inventory
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/f01-vps-readonly-singleton-inventory.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f01-singleton-readonly-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect live product, timers and exact source bytes without mutation
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/f01-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          expected_core="$(sha256sum scripts/factory_vps_product_cycle.py | awk '{print $1}')"
+          expected_lock="$(sha256sum scripts/factory_global_singleton_v1.py | awk '{print $1}')"
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o ForwardAgent=no -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 "python3 - '$expected_core' '$expected_lock'" <<'PY'
+          import hashlib
+          import json
+          import re
+          import subprocess
+          import sys
+          import time
+          from pathlib import Path
+
+          expected_core, expected_lock = sys.argv[1:]
+          root = Path.home() / "factory-runtime"
+          private = root / "private/autonomous-product-cycle"
+          runtime = root / "operations/autonomous-product-runtime"
+          pattern = re.compile(r"factory|agri200|build50|strict[-_]?serial|leech|product[-_]?cycle", re.I)
+
+          def run(argv):
+              try:
+                  return subprocess.run(argv, capture_output=True, text=True,
+                                        timeout=15, check=False)
+              except (OSError, subprocess.TimeoutExpired):
+                  return None
+
+          def count_matching(output):
+              if output is None or output.returncode:
+                  return None
+              return sum(bool(pattern.search(line)) for line in output.stdout.splitlines()
+                         if line.strip() and not line.lstrip().startswith("#"))
+
+          def read_json(path):
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size > 200000:
+                      return None
+                  value = json.loads(path.read_text(encoding="utf-8"))
+                  return value if isinstance(value, dict) else None
+              except (OSError, ValueError, UnicodeError):
+                  return None
+
+          def same_sha(path, expected):
+              try:
+                  if path.is_symlink() or not path.is_file() or path.stat().st_size > 1000000:
+                      return False
+                  return hashlib.sha256(path.read_bytes()).hexdigest() == expected
+              except OSError:
+                  return False
+
+          def cron_count(args):
+              result = run(args)
+              if result is None:
+                  return None
+              if result.returncode == 0:
+                  return count_matching(result)
+              if "no crontab for " in result.stderr.lower():
+                  return 0
+              return None
+
+          slot = read_json(private / "quality-excellence/product-flow/active-slots/current.json")
+          state = read_json(private / "production-state.json")
+          reservation = read_json(private / ".f01-global-production-lane.json")
+          health_path = private / "production-health.json"
+          active = slot.get("active") if slot else None
+          first_only = bool(
+              slot and slot.get("capacity") == 1
+              and isinstance(active, list) and len(active) == 1
+              and isinstance(active[0], dict)
+              and active[0].get("recipe") == "farm_enterprise_economics"
+              and state and state.get("active_product_slot_recipes") == ["farm_enterprise_economics"])
+          lock_owner = reservation.get("owner") if reservation else None
+          timer_count = count_matching(run(["systemctl", "list-timers", "--all", "--no-legend", "--no-pager"]))
+          service_count = count_matching(run(["systemctl", "list-units", "--type=service", "--state=running", "--no-legend", "--no-pager"]))
+          proc = run(["ps", "-eo", "pid=,comm=,args="])
+          worker_count = count_matching(proc)
+          owner_cron = cron_count(["crontab", "-l"])
+          root_cron = cron_count(["sudo", "-n", "crontab", "-u", "root", "-l"])
+          age = None
+          if health_path.is_file() and not health_path.is_symlink():
+              age = max(0, round(time.time() - health_path.stat().st_mtime))
+          result = {
+              "schema": "saeit.factory.f01-readonly-live-inventory.v1",
+              "read_only": True,
+              "exactly_first_product_in_live_slot": first_only,
+              "global_lane_owner": lock_owner if lock_owner in ("line41", "agri200") else "unknown",
+              "installed_core_matches_reviewed_sha": same_sha(runtime / "scripts/factory_vps_product_cycle.py", expected_core),
+              "installed_singleton_matches_reviewed_sha": same_sha(runtime / "scripts/factory_global_singleton_v1.py", expected_lock),
+              "factory_related_running_processes": worker_count,
+              "factory_related_running_services": service_count,
+              "factory_related_systemd_timers": timer_count,
+              "factory_related_githubops_cron": owner_cron,
+              "factory_related_root_cron": root_cron,
+              "health_age_seconds": age,
+              "offhost_restore_proof": "not_assessed",
+              "global_singleton_proven": False,
+              "commercial_release_approved": False,
+          }
+          print("F01_LIVE_INVENTORY=" + json.dumps(result, sort_keys=True))
+          print("F01_ACTIVATION=HOLD_UNTIL_GLOBAL_INVENTORY_AND_RESTORE_PROOF")
+          PY
