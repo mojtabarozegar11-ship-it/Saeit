@@ -21,7 +21,7 @@ import tempfile
 
 PRODUCT = "farm_enterprise_economics"
 REQUIRED = ("calculator.py", "test_calculator.py", "README.md", "example_inputs.json",
-            "build_technical_evidence.py", "test_technical_evidence.py")
+            "build_technical_evidence.py")
 CRITERION_TESTS = {
     "Q035": ("test_mississippi_state_extension_2020_greenhouse_enterprise_budget",
              "test_portfolio_aggregation_without_double_fixed_costs"),

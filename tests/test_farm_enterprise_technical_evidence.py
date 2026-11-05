@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 
-RECIPE = Path(__file__).resolve().parent
+RECIPE = Path(__file__).resolve().parents[1] / "product_recipes" / "farm_enterprise_economics"
 SPEC = importlib.util.spec_from_file_location("evidence", RECIPE / "build_technical_evidence.py")
 MOD = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MOD)
