@@ -75,7 +75,7 @@ def verify(recipe_dir, evidence_dir):
             and manifest.get("product_id") == PRODUCT
             and manifest.get("source_sha256") == source_hashes
             and type(manifest.get("test_count")) is int
-            and manifest["test_count"] >= 39
+            and manifest["test_count"] >= 43
             and manifest.get("verified_quality_score") is None
             and manifest.get("independent_reviewer_approval") is False
             and manifest.get("receiver_acceptance") is False
