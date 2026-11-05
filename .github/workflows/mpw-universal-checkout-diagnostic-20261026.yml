@@ -391,3 +391,28 @@ jobs:
           except Exception as exc:
               print('MPW_ORDER_34_DELIVERY_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:500]}))
           PY
+
+      - name: Read-only guest predicate and order 34 ownership
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json,inspect
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          import services.mpw_trx_guest_delivery as d
+          from core.models import Order,PaymentIntent
+          for name in ('_guest_user','normalize_email','_email'):
+              obj=getattr(d,name,None)
+              if callable(obj):
+                  try: src=inspect.getsource(obj)
+                  except Exception as exc: src=type(exc).__name__+':'+str(exc)
+                  print('MPW_GUEST_HELPER='+json.dumps({'name':name,'source':src[:7000]}))
+          try:
+              order=Order.objects.select_related('customer').get(pk=34)
+              pi=PaymentIntent.objects.filter(order_id=34).values('id','status','provider','amount','currency','order_id').first()
+              user=order.customer
+              print('MPW_ORDER_34_OWNER='+json.dumps({'order_id':order.pk,'status':order.status,'total':str(order.total),'currency':order.currency,'customer_id':user.pk,'email':getattr(user,'email',''),'is_authenticated':getattr(user,'is_authenticated',None),'is_active':getattr(user,'is_active',None),'is_staff':getattr(user,'is_staff',None),'is_superuser':getattr(user,'is_superuser',None),'intent':pi},default=str))
+              try: print('MPW_ORDER_34_GUEST_PREDICATE='+json.dumps({'value':bool(d._guest_user(user))}))
+              except Exception as exc: print('MPW_ORDER_34_GUEST_PREDICATE_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:300]}))
+          except Exception as exc:
+              print('MPW_ORDER_34_READ_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:500]}))
+          PY
