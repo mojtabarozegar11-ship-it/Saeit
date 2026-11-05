@@ -188,7 +188,7 @@ jobs:
           ) if token in vps_loop_text)
 
           loop_manage_commands = sorted(set(re.findall(
-              r"manage[.]py\\s+([a-z][a-z0-9_]{0,79})\\b", vps_loop_text
+              r"manage[.]py\s+([a-z][a-z0-9_]{0,79})\b", vps_loop_text
           )))[:20]
           loop_factories_direct = any(term in vps_loop_text for term in (
               "factory_vps_product_cycle", "factory_build_50",
