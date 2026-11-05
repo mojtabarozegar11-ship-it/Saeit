@@ -134,9 +134,11 @@ def preflight() -> tuple[bytes, bytes, bytes, bytes, bytes, bytes]:
         raise RuntimeError('STAGING_BRAND_ANCHOR_MISSING')
     new_brand = oldbrand.replace(BRAND_LINE, '', 1).encode('utf-8')
     oldweb = old_ht.decode('utf-8')
-    if oldweb.count(OLD_ROOT_LINE) != 1 or NEW_ROOT_LINE in oldweb:
+    old_root_match = re.compile(r'(?m)^' + re.escape(OLD_ROOT_LINE) + r'$')
+    new_root_match = re.compile(r'(?m)^' + re.escape(NEW_ROOT_LINE) + r'$')
+    if len(old_root_match.findall(oldweb)) != 1 or new_root_match.search(oldweb):
         raise RuntimeError('PASSENGER_WEBROOT_ANCHOR_MISMATCH')
-    new_ht = oldweb.replace(OLD_ROOT_LINE, NEW_ROOT_LINE, 1).encode('utf-8')
+    new_ht = old_root_match.sub(lambda _: NEW_ROOT_LINE, oldweb, count=1).encode('utf-8')
     assert_registered_staging()
     with urlopen('https://staging.zomorodmelal.ir/?zm_before_align=' +
                  str(time.time_ns()), timeout=12) as response:
@@ -324,4 +326,7 @@ if __name__ == '__main__':
     if sys.argv[1] == 'publish':
         publish(sys.argv[2])
     else:
-        restore(sys.argv[2])
+        if backup_folder(sys.argv[2]).is_dir():
+            restore(sys.argv[2])
+        else:
+            print('NO_STAGING_BACKUP_CREATED_NO_ROLLBACK_NEEDED', flush=True)
