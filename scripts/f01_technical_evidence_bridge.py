@@ -168,6 +168,14 @@ def verify_manufactured(product_dir, validated):
             and manifest.get("owner_publication_approval") is False
             and digest(archive) == manifest.get("artifact_sha256"),
             "MANUFACTURED_ARTIFACT_MISMATCH")
+    inventory = manifest.get("files")
+    require(isinstance(inventory, list) and bool(inventory)
+            and len(inventory) == len(set(item for item in inventory if isinstance(item, str)))
+            and all(isinstance(item, str) and item and all(
+                re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", part) and part not in (".", "..")
+                for part in item.split("/")) for item in inventory),
+            "MANUFACTURED_MANIFEST_INVENTORY_INVALID")
+    expected_members = {PRODUCT + "/" + item for item in inventory}
     with zipfile.ZipFile(archive) as bundle:
         members = bundle.infolist()
         require(0 < len(members) <= 100, "MANUFACTURED_ZIP_INVALID")
@@ -193,6 +201,7 @@ def verify_manufactured(product_dir, validated):
                     and hashlib.sha256(bundle.read(member)).hexdigest()
                     == validated["source_hashes"][filename],
                     "SOURCE_NOT_IN_EXACT_MANUFACTURED_ZIP:" + filename)
+        require(seen == expected_members, "MANUFACTURED_ZIP_INVENTORY_MISMATCH")
     return folder
 
 

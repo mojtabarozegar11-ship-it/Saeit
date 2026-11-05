@@ -35,7 +35,8 @@ class F01TechnicalBridgeTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.proofs.cleanup()
 
-    def make_manufactured(self, base, *, stale=False, omitted=None, stale_builder=False):
+    def make_manufactured(self, base, *, stale=False, omitted=None, stale_builder=False,
+                          extra_zip_member=None, extra_declared_file=None):
         product = base / "farm_enterprise_economics"
         product.mkdir()
         archive = product / "farm_enterprise_economics-internal-qa.zip"
@@ -49,11 +50,15 @@ class F01TechnicalBridgeTests(unittest.TestCase):
                 if stale_builder and name == "build_technical_evidence.py":
                     data += b"\n# Obsolete criterion binding\n"
                 package.writestr("farm_enterprise_economics/" + name, data)
+            if extra_zip_member:
+                package.writestr("farm_enterprise_economics/" + extra_zip_member, b"unreviewed")
         manifest = {"recipe": "farm_enterprise_economics", "qa_status": "passed",
                     "commercial_status": "private_internal_qa_pass_not_published",
                     "public_listing_enabled": False,
                     "owner_publication_approval": False,
-                    "artifact_sha256": bridge.digest(archive)}
+                    "artifact_sha256": bridge.digest(archive),
+                    "files": list(bridge.PACKAGE_SOURCES)
+                    + ([extra_declared_file] if extra_declared_file else [])}
         (product / "manufacturing_manifest.json").write_text(json.dumps(manifest))
         return product
 
@@ -98,6 +103,20 @@ class F01TechnicalBridgeTests(unittest.TestCase):
                 bridge.install(product, bridge.verify(RECIPE, self.evidence))
             self.assertFalse((product / "global_quality_candidate.json").exists())
             self.assertFalse((product / "evidence-f01").exists())
+
+    def test_unlisted_zip_member_cannot_hide_in_valid_product(self):
+        with tempfile.TemporaryDirectory() as name:
+            product = self.make_manufactured(Path(name), extra_zip_member="unexpected.py")
+            with self.assertRaisesRegex(ValueError, "MANUFACTURED_ZIP_INVENTORY_MISMATCH"):
+                bridge.install(product, bridge.verify(RECIPE, self.evidence))
+            self.assertFalse((product / "global_quality_candidate.json").exists())
+
+    def test_declared_but_missing_zip_member_is_rejected(self):
+        with tempfile.TemporaryDirectory() as name:
+            product = self.make_manufactured(Path(name), extra_declared_file="BENCHMARKS_2026-11-03.md")
+            with self.assertRaisesRegex(ValueError, "MANUFACTURED_ZIP_INVENTORY_MISMATCH"):
+                bridge.install(product, bridge.verify(RECIPE, self.evidence))
+            self.assertFalse((product / "global_quality_candidate.json").exists())
 
     def test_modified_receipt_and_release_claim_are_rejected_read_only(self):
         with tempfile.TemporaryDirectory() as name:
