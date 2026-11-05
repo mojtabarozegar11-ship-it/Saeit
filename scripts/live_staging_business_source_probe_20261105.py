@@ -1212,6 +1212,68 @@ print('STAGING_BRANDSITE_READONLY=' + json.dumps(result, sort_keys=True))
             'exit_code': p.returncode, 'stderr_disclosed': False}
 
 
+
+def staging_and_mojplaywin_vhost_affinity_readonly() -> dict[str, object]:
+    """Compare public vhost document roots and their exact Passenger application roots."""
+    domains = ('staging.zomorodmelal.ir', 'mojplaywin.com',
+               'www.mojplaywin.com', 'zomorodmelal.ir')
+    records = {}
+    for domain in domains:
+        vhost_reports = []
+        for suffix in ('', '_SSL'):
+            config = Path('/var/cpanel/userdata/zomorod2') / (domain + suffix)
+            report: dict[str, object] = {'source': domain + suffix,
+                                         'readable': config.is_file() and not config.is_symlink()}
+            if not report['readable'] or config.stat().st_size > 160000:
+                vhost_reports.append(report)
+                continue
+            raw = config.read_text('utf-8', 'replace')
+            docroot = re.search(r'(?m)^\s*documentroot:\s*["\x27]?([^"\x27\n]+)', raw)
+            if not docroot:
+                report['documentroot'] = 'NOT_DECLARED'
+                vhost_reports.append(report)
+                continue
+            doc = Path(docroot.group(1).strip())
+            if not str(doc).startswith(str(HOME) + '/') or doc.is_symlink():
+                report['documentroot'] = 'OUTSIDE_ACCOUNT_OR_SYMLINK'
+                vhost_reports.append(report)
+                continue
+            report['documentroot'] = str(doc.relative_to(HOME))[:170]
+            checks = []
+            for candidate in (doc / '.htaccess', doc.parent / '.htaccess'):
+                if (candidate.is_symlink() or not candidate.is_file()
+                        or candidate.stat().st_size > 60000):
+                    continue
+                text = candidate.read_text('utf-8', 'replace')
+                directives = []
+                for line in text.splitlines():
+                    clean = line.strip()
+                    if re.match(r'(?i)^Passenger(?:AppRoot|AppType|BaseURI|StartupFile|Python)\b', clean):
+                        if re.search(r'(?i)(?:password|secret|key|token|credential)', clean):
+                            continue
+                        directives.append(clean.replace(str(HOME), '$ACCOUNT_HOME')[:200])
+                checks.append({'htaccess_relative': str(candidate.relative_to(HOME))[:170],
+                               'sha256': hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                               'passenger_directives': directives[:14]})
+            report['htaccess_sources'] = checks
+            vhost_reports.append(report)
+        records[domain] = vhost_reports
+    public = {}
+    from urllib.request import Request, urlopen
+    for host in ('https://mojplaywin.com/', 'https://staging.zomorodmelal.ir/'):
+        try:
+            with urlopen(Request(host, headers={'User-Agent': 'ZM-Affinity-ReadOnly/1.0'}),
+                         timeout=10) as response:
+                body = response.read(180000).decode('utf-8', 'replace')
+                title = re.findall(r'<title[^>]*>(.*?)</title>', body, re.I | re.S)[:1]
+                public[host] = {'http': response.status,
+                                'title': [re.sub(r'<[^>]+>', '', x).strip()[:110] for x in title]}
+        except Exception as exc:
+            public[host] = {'status': 'UNAVAILABLE', 'reason_type': type(exc).__name__}
+    return {'status': 'READ_ONLY', 'changed_files': 0,
+            'vhosts': records, 'public_titles': public}
+
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -1242,5 +1304,6 @@ if __name__ == '__main__':
         'selector_registration_and_release_chain': staging_selector_registration_and_release_chain_readonly(),
         'domain_dispatch_source': staging_domain_dispatch_source_readonly(),
         'registered_brand_home_source': staging_registered_brand_home_source_readonly(),
-        'brandsite_db_mapping': staging_brandsite_db_mapping_readonly()},
+        'brandsite_db_mapping': staging_brandsite_db_mapping_readonly(),
+        'vhost_affinity': staging_and_mojplaywin_vhost_affinity_readonly()},
         ensure_ascii=False, sort_keys=True))
