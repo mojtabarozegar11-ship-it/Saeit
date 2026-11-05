@@ -28,8 +28,21 @@ class AutonomousBrain:
             prerequisite_tasks = prerequisite_tasks.filter(
                 created_at__gt=latest_offer.created_at
             )
+        # Counting our own products is a valid inventory measurement, not
+        # independent evidence that buyers want an offer.  The existing
+        # income_market_research tool records `database_measurement` only.
+        # Keep that useful inventory step, but do not promote it to proof of
+        # external demand or allow it to unlock speculative offer creation.
+        latest_inventory = prerequisite_tasks.filter(
+            capability_code="income_market_research",
+            output_data__evidence__kind="database_measurement",
+        ).order_by("-created_at", "-pk").first()
         latest_research = prerequisite_tasks.filter(
-            capability_code="income_market_research"
+            capability_code="income_market_research",
+            output_data__market_validation__status="independently_verified",
+            output_data__market_validation__source_type="external_customer_demand",
+            output_data__market_validation__validated_by="independent_market_evidence_adapter",
+            output_data__market_validation__source_id__isnull=False,
         ).order_by("-created_at", "-pk").first()
         market_research_complete = latest_research is not None
         opportunity_scored = bool(
@@ -64,6 +77,7 @@ class AutonomousBrain:
             "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
             "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
             "market_research_complete": market_research_complete,
+            "market_inventory_measured": latest_inventory is not None,
             "opportunity_scored": opportunity_scored,
             "active_products": products.filter(active=True).count(),
             "offer_designed": products.filter(metadata__commercial_status="offer_designed").count(),
@@ -92,11 +106,17 @@ class AutonomousBrain:
             )]
         # Do not design or promote an offer until research and scoring each
         # completed with a verified effect. This prevents speculative offer creation.
-        if not s["market_research_complete"]:
+        if not s.get("market_inventory_measured", False) and not s["market_research_complete"]:
             return [Candidate(
                 "income_market_research",
-                "No verified market-research task exists; collect decision evidence first.",
+                "Measure internal inventory once before seeking real external demand evidence.",
                 10, 10, 9, 1,
+            )]
+        if not s["market_research_complete"]:
+            return [Candidate(
+                "await_external_market_evidence",
+                "Internal inventory is not evidence of buyer demand; a verified external market signal is required before a new offer.",
+                10, 10, 10, 1,
             )]
         if not s["opportunity_scored"]:
             return [Candidate(
