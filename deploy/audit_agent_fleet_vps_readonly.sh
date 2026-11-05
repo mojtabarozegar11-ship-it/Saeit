@@ -19,14 +19,93 @@ export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR
 cd "$app"
 
 echo AGENT_FLEET_DATABASE_PREVIEW_BEGIN
-"$python_bin" manage.py consolidate_legacy_agents | "$python_bin" -c '
-import json, sys
-p = json.load(sys.stdin)
-assert p["mode"] == "preview"
-allowed = {"code", "active", "decision", "active_tasks", "recent_completed_tasks", "recent_publications", "pending_stories", "pending_distributions", "unique_active_capabilities", "review_only_prefix"}
-agents = [{k: x[k] for k in allowed if k in x} for x in p["agents"]]
-print("AGENT_FLEET_DATABASE_PREVIEW=" + json.dumps({"summary": p["summary"], "agents": agents}, sort_keys=True, separators=(",", ":")))
-'
+"$python_bin" - <<'PY'
+import json
+from datetime import timedelta
+
+import django
+django.setup()
+
+from django.db import connection
+from django.utils import timezone
+from core.models import Agent, AgentTask
+
+tables = set(connection.introspection.table_names())
+assert Agent._meta.db_table in tables, "AGENT_FLEET_AGENT_TABLE_MISSING"
+assert AgentTask._meta.db_table in tables, "AGENT_FLEET_TASK_TABLE_MISSING"
+fields = {f.name for f in AgentTask._meta.fields}
+cutoff = timezone.now() - timedelta(days=30)
+protected = {"economic-master-agent", "moj_1ro_1",
+             "content-director", "knowledge-content-director"}
+legacy = {"core_research", "newsletter-specialist",
+          "newsletter-company-news", "newsletter-world-watch",
+          "newsletter-unit-reports"}
+active_statuses = {"queued", "running", "blocked"}
+pending_story_statuses = {"draft", "approved", "scheduled",
+                          "review", "queued", "processing"}
+
+rows = []
+for agent in Agent.objects.all().order_by("code").iterator():
+    tasks = AgentTask.objects.filter(agent=agent)
+    active_tasks = tasks.filter(status__in=active_statuses).count()
+    recent_completed = (tasks.filter(status="completed", updated_at__gte=cutoff).count()
+                        if "updated_at" in fields else None)
+    capabilities = getattr(agent, "capabilities", None)
+    unique_capabilities = None
+    if capabilities is not None:
+        capability_model = capabilities.model
+        join_table = capability_model.agents.through._meta.db_table
+        if capability_model._meta.db_table in tables and join_table in tables:
+            unique_capabilities = [
+                cap.code for cap in capabilities.filter(active=True)
+                if not cap.agents.filter(active=True).exclude(pk=agent.pk).exists()
+            ]
+    # A missing newsletter relation means its dependencies cannot be certified.
+    newsletter_relation = getattr(agent, "newsletter_stories", None)
+    pending_stories = pending_distributions = recent_publications = None
+    if (newsletter_relation is not None and newsletter_relation.model._meta.db_table in tables):
+        pending_stories = newsletter_relation.filter(
+            status__in=pending_story_statuses).count()
+        pending_distributions = newsletter_relation.filter(
+            publications__status__in=("queued", "blocked")).distinct().count()
+        recent_publications = newsletter_relation.filter(
+            status="published", published_at__gte=cutoff).count()
+
+    if agent.code in protected:
+        decision = "retain_protected"
+    elif not agent.active:
+        decision = "already_inactive"
+    elif active_tasks or pending_stories or pending_distributions:
+        decision = "retain_active_dependency"
+    elif recent_completed or recent_publications:
+        decision = "review_recent_output"
+    elif unique_capabilities:
+        decision = "review_unique_capability"
+    elif (agent.code in legacy and pending_stories is not None
+          and unique_capabilities is not None and recent_completed is not None):
+        # Only a *candidate*: external schedules and integrations still matter.
+        decision = "candidate_legacy_dependency_review"
+    else:
+        decision = "review_unverified_external_dependency"
+    rows.append({
+        "code": agent.code, "active": agent.active, "decision": decision,
+        "active_tasks": active_tasks, "recent_completed_tasks": recent_completed,
+        "pending_stories": pending_stories, "pending_distributions": pending_distributions,
+        "recent_publications": recent_publications,
+        "unique_active_capabilities": unique_capabilities,
+    })
+summary = {
+    "total": len(rows),
+    "active": sum(row["active"] for row in rows),
+    "candidates_not_authorized_to_retire": sum(
+        row["decision"] == "candidate_legacy_dependency_review" for row in rows),
+    "active_tasks": sum(row["active_tasks"] for row in rows),
+    "database_only": True,
+    "writes": 0,
+}
+print("AGENT_FLEET_DATABASE_PREVIEW=" +
+      json.dumps({"summary": summary, "agents": rows}, sort_keys=True, separators=(",", ":")))
+PY
 
 # Never print crontab commands, inline environment values, or process arguments.
 "$python_bin" - <<'PY'
