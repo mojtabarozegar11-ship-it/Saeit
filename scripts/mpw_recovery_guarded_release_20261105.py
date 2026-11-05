@@ -49,7 +49,7 @@ SOURCE_DIGESTS = {
     "migration": "c1d209a97a4f3ab6e5f4fde9a9fa1904d7f8856ef38ba8e3afddabf89bb55240",
     "cleanup": "0aa396229e2dec9212d0e358f6a21ff813d369405d1d253e64f17f8caf73f2d6",
 }
-EXPECTED_GUEST_BASE = "22d9320349f43ec1d6f45871ab583b18247457b8952dff2b3a371133d8ca1a60"
+EXPECTED_GUEST_BASE = "a9ea2dfc98809dc8991a5d8faf9a431d95b1c10cf4b33f174e69f9456a723d12"
 EXPECTED_LIVE_CORE_MIGRATIONS = ["0040_agenttask_bridge_idempotency","0041_factorymarketeligibility","0042_factory_p0_governance","0043_factory_execution_evidence","0044_factory_p0_release_integrity","0045_factory_evidence_freshness","0046_brandsite","0047_crypto_payments","0048_business_market_architecture"]
 MODEL_MARKER = "# MPW_RECOVERY01_MODELS_20261105"
 SETTING_MARKER = "# MPW_RECOVERY01_FLAGS_20261105"
