@@ -201,34 +201,118 @@ jobs:
               fd_kind=("writer" if writable_cache_fds else "reader" if cache_fds else "none")
               profile=(kind,age,cwd_kind,fd_kind)
               active_profiles[profile]=active_profiles.get(profile,0)+1
+          # Report profiles but do not let npm/npx block unrelated pip/Gradle caches.
           if active_counts:
               for (kind,age,cwd_kind,fd_kind),count in sorted(active_profiles.items()):
                   print("PACKAGE_PROCESS_PROFILE="+kind+"/"+age+"/"+cwd_kind+"/"+fd_kind+":"+str(count),flush=True)
               print("PACKAGE_MANAGER_BLOCKER_CLASSES="+",".join(
                   str(k)+":"+str(v) for k,v in sorted(active_counts.items())),flush=True)
-              raise RuntimeError("PACKAGE_MANAGER_ACTIVITY_IN_PROGRESS")
-          total=0
           apply=os.environ.get("CACHE_CLEANUP_MODE")=="apply"
-          print("CACHE_APPLY="+str(apply))
+          print("CACHE_APPLY="+str(apply),flush=True)
+          # Inspect every current-user process, not just command names, for an
+          # open handle or cwd in a candidate cache. On uncertain visibility,
+          # skip deletion of ALL candidates.
+          references={rel:0 for rel in paths}
+          incomplete=0
+          uid=os.geteuid()
+          for procdir in Path("/proc").iterdir():
+              if not procdir.name.isdigit():
+                  continue
+              try:
+                  if procdir.stat().st_uid != uid:
+                      continue
+              except (FileNotFoundError,ProcessLookupError):
+                  continue
+              except OSError:
+                  incomplete+=1
+                  continue
+              try:
+                  cwd=os.readlink(procdir/"cwd")
+                  for rel in paths:
+                      root=str(home/rel)
+                      if cwd==root or cwd.startswith(root+"/"):
+                          references[rel]+=1
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  incomplete+=1
+              try:
+                  for fd in (procdir/"fd").iterdir():
+                      try:
+                          target=os.readlink(fd)
+                      except FileNotFoundError:
+                          continue
+                      except OSError:
+                          incomplete+=1
+                          continue
+                      for rel in paths:
+                          root=str(home/rel)
+                          if target==root or target.startswith(root+"/"):
+                              references[rel]+=1
+              except FileNotFoundError:
+                  pass
+              except OSError:
+                  incomplete+=1
+          print("CACHE_PROC_INSPECTION_INCOMPLETE="+str(incomplete),flush=True)
+          total=0
+          freed=0
           for rel in paths:
               p=home/rel
               if not p.exists():
-                  print("CACHE_ABSENT="+rel)
+                  print("CACHE_ABSENT="+rel,flush=True)
                   continue
-              if p.is_symlink() or not p.is_dir() or p.resolve()!=home/rel:
+              if p.is_symlink() or not p.is_dir() or p.resolve()!=p:
                   raise RuntimeError("CACHE_PATH_UNSAFE")
-              for ancestor in [p.parent,p]:
-                  if ancestor.is_symlink():
-                      raise RuntimeError("CACHE_COMPONENT_SYMLINK")
+              for ancestor in (p.parent,p):
+                  if ancestor.is_symlink() or ancestor.stat().st_uid!=uid:
+                      raise RuntimeError("CACHE_COMPONENT_UNSAFE")
               before=subprocess.run(["du","-sk",str(p)],capture_output=True,text=True,timeout=40,check=True)
-              kb=int(before.stdout.split()[0])
-              print("CACHE_CANDIDATE="+rel+" bytes_du="+str(kb*1024),flush=True)
-              total+=kb*1024
+              size=int(before.stdout.split()[0])*1024
+              print("CACHE_CANDIDATE="+rel+" bytes_du="+str(size),flush=True)
+              total+=size
+              is_npm=rel.startswith(".npm/")
+              busy=(any(k.startswith("npm") or k in ("npx","pnpm","yarn") for k in active_counts)
+                    if is_npm else
+                    (bool(active_counts.get("pip")) if rel==".cache/pip" else bool(active_counts.get("gradle"))))
+              if busy or references[rel] or incomplete:
+                  why=("package-manager-active" if busy else "cache-open-or-cwd" if references[rel] else "proc-visibility-incomplete")
+                  print("CACHE_HELD="+rel+" reason="+why+" refs="+str(references[rel]),flush=True)
+                  continue
+              print("CACHE_ELIGIBLE="+rel+" bytes_du="+str(size),flush=True)
               if apply:
+                  # Re-inspect process occupancy just before a bounded removal.
+                  # No production app, database, or backup path is ever targeted.
+                  for procdir in Path("/proc").iterdir():
+                      if not procdir.name.isdigit():
+                          continue
+                      try:
+                          if procdir.stat().st_uid!=uid:
+                              continue
+                          cwd=os.readlink(procdir/"cwd")
+                          if cwd==str(p) or cwd.startswith(str(p)+"/"):
+                              raise RuntimeError("CACHE_BECAME_IN_USE")
+                          for fd in (procdir/"fd").iterdir():
+                              try:
+                                  target=os.readlink(fd)
+                              except FileNotFoundError:
+                                  continue
+                              if target==str(p) or target.startswith(str(p)+"/"):
+                                  raise RuntimeError("CACHE_BECAME_IN_USE")
+                      except FileNotFoundError:
+                          continue
+                      except RuntimeError:
+                          raise
+                      except OSError:
+                          raise RuntimeError("CACHE_PROCESS_CHECK_FAILED")
                   shutil.rmtree(p)
-                  if p.exists():raise RuntimeError("CACHE_REMOVE_INCOMPLETE")
-                  print("CACHE_DELETED="+rel+" bytes_du="+str(kb*1024),flush=True)
-          print(("CACHE_FREED_BYTES=" if apply else "CACHE_CANDIDATE_BYTES=")+str(total))
+                  if p.exists():
+                      raise RuntimeError("CACHE_REMOVE_INCOMPLETE")
+                  freed+=size
+                  print("CACHE_DELETED="+rel+" bytes_du="+str(size),flush=True)
+          print("CACHE_CANDIDATE_BYTES="+str(total),flush=True)
+          print("CACHE_FREED_BYTES="+str(freed),flush=True)
+          if apply and freed==0:
+              print("CACHE_NO_SAFE_RECLAIM=true",flush=True)
           PY
           echo 'POST_CACHE_CPANEL_QUOTA'
           if command -v uapi >/dev/null 2>&1; then
