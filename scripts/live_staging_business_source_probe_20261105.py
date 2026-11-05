@@ -939,6 +939,42 @@ def staging_selector_registration_and_release_chain_readonly() -> dict[str, obje
                             for child in node[:160]:
                                 walk(child, depth + 1)
                     walk(doc)
+                    app_records = []
+                    def enumerate_app_keys(node: object, parent_key: str = '', depth: int = 0) -> None:
+                        if depth > 10 or len(app_records) >= 20:
+                            return
+                        if not isinstance(node, dict):
+                            if isinstance(node, list):
+                                for child in node[:100]:
+                                    enumerate_app_keys(child, parent_key, depth + 1)
+                            return
+                        fields = {str(k).lower().replace('-', '_'): v for k, v in node.items()}
+                        if 'app_uri' in fields and 'app_status' in fields:
+                            key = parent_key.strip()
+                            if key.startswith(str(HOME) + '/'):
+                                root_name = key[len(str(HOME)) + 1:]
+                            elif re.fullmatch(r'[A-Za-z0-9_./-]{1,180}', key):
+                                root_name = key
+                            else:
+                                root_name = 'UNRECOGNIZED_APP_KEY'
+                            if not (root_name.startswith('Saeit') or root_name.startswith('public_html')):
+                                root_name = 'OTHER_ACCOUNT_APP'
+                            app_uri = fields.get('app_uri')
+                            domain = fields.get('domain')
+                            status = fields.get('app_status')
+                            app_records.append({
+                                'app_root_key': root_name[:185],
+                                'app_uri': app_uri[:130] if isinstance(app_uri, str)
+                                    and re.fullmatch(r'/[A-Za-z0-9_./-]{0,180}', app_uri) else 'NOT_EXPOSED',
+                                'domain': domain[:120] if isinstance(domain, str)
+                                    and re.fullmatch(r'[A-Za-z0-9.-]{1,150}', domain) else 'NOT_EXPOSED',
+                                'app_status': str(status)[:35] if isinstance(status, (bool, int, str))
+                                    else 'NOT_EXPOSED'})
+                        for key, value in node.items():
+                            if isinstance(value, (dict, list)):
+                                enumerate_app_keys(value, str(key), depth + 1)
+                    enumerate_app_keys(doc)
+                    metadata['registered_account_app_keys'] = app_records
                     metadata['staging_field_matches'] = matches
                     metadata['application_record_shapes'] = [
                         {'fields': shape, 'count': count}
