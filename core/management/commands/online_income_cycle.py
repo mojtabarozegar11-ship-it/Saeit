@@ -70,6 +70,11 @@ class Command(BaseCommand):
         if action == "continue_existing_work":
             self.stdout.write("BRAIN_CONTINUE")
             return
+        if action.startswith("await_external_"):
+            self.stdout.write(
+                f"BRAIN_EXTERNAL_BOUNDARY action={action} reason={chosen['reason']}"
+            )
+            return
         capability = agent.capabilities.filter(code=action, active=True).first()
         if not capability:
             self.stderr.write(f"BRAIN_BLOCKED missing capability={action}")
