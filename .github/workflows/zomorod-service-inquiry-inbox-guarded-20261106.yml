@@ -1,0 +1,166 @@
+name: Guarded Zomorod private service inquiry inbox
+on:
+  push:
+    branches: [audit/live-sites-subsites-20261105]
+    paths:
+      - .github/workflows/zomorod-service-inquiry-inbox-guarded-20261106.yml
+      - scripts/zomorod_service_inquiry_inbox_guarded_20261106.py
+      - content/zomorod-business/inquiries-entry.php
+      - content/zomorod-business/service_inquiries.php
+permissions:
+  contents: read
+concurrency:
+  group: zm-service-inquiry-inbox-20261106
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate isolated source and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_service_inquiry_inbox_guarded_20261106.py
+          python3 scripts/zomorod_service_inquiry_inbox_guarded_20261106.py selftest
+          php -l content/zomorod-business/inquiries-entry.php
+          php -l content/zomorod-business/service_inquiries.php
+          tar -czf "$RUNNER_TEMP/service-inquiry-inbox-${GITHUB_RUN_ID}.tgz" -- \
+            content/zomorod-business/inquiries-entry.php \
+            content/zomorod-business/service_inquiries.php
+      - name: Authenticate pinned cPanel connection
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zm-inquiry-ssh"
+          install -d -m 700 "$d"
+          export SSH_DIR="$d"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          source = Path('.github/workflows/mpw-guest-checkout-live-release.yml').read_text()
+          dest = Path(os.environ['SSH_DIR'])
+          for label, filename in [('vps.known', 'vps.known'), ('host.candidate', 'host.known')]:
+              suffix = f'> "$d/{label}"'
+              matches = [line.strip() for line in source.splitlines()
+                         if line.strip().startswith("printf '%s\\n' '") and line.strip().endswith(suffix)]
+              if len(matches) != 1:
+                  raise SystemExit('PINNED_HOST_KEY_NOT_AVAILABLE:' + label)
+              value = matches[0].split("printf '%s\\n' '", 1)[1].rsplit("' >", 1)[0]
+              (dest / filename).write_text(value + '\n')
+          for env_key, filename in [('VPS_KEY', 'vps.key'), ('HOST_KEY', 'host.key')]:
+              value = os.environ.get(env_key, '')
+              if not value:
+                  raise SystemExit('SSH_IDENTITY_NOT_CONFIGURED:' + env_key)
+              value = value.replace('\r\n', '\n').replace('\r', '').replace('\\n', '\n')
+              key_file = dest / filename
+              key_file.write_text(value.rstrip() + '\n')
+              key_file.chmod(0o600)
+          PY
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}')" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 20
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          ssh_host=''
+          if timeout 40s ssh -T -F "$d/config" saeit-cpanel-direct 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/.htaccess' >/dev/null 2>&1; then
+            ssh_host=saeit-cpanel-direct
+            echo 'AUTHENTICATED_CPANEL_DIRECT'
+          elif timeout 45s ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/.htaccess' >/dev/null 2>&1; then
+            ssh_host=saeit-cpanel
+            echo 'AUTHENTICATED_PINNED_VPS_CPANEL_RELAY'
+          else
+            exit 1
+          fi
+          echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
+      - name: Upload only source code package to private directory
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
+          remote="/home/zomorod2/.private/zomorod-business/.service-inquiry-inbox-${GITHUB_RUN_ID}.tgz"
+          timeout 35s ssh -T -F "$RUNNER_TEMP/zm-inquiry-ssh/config" "$COMMAND_HOST" "test ! -e '$remote'"
+          timeout 50s scp -q -F "$RUNNER_TEMP/zm-inquiry-ssh/config" "$RUNNER_TEMP/service-inquiry-inbox-${GITHUB_RUN_ID}.tgz" "$COMMAND_HOST:$remote"
+      - name: Preview immutable source and exact customer schema
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          timeout 65s ssh -T -F "$RUNNER_TEMP/zm-inquiry-ssh/config" "$COMMAND_HOST" "python3 - preview '$GITHUB_RUN_ID'" < scripts/zomorod_service_inquiry_inbox_guarded_20261106.py
+      - name: Install isolated service inbox
+        id: publish
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          timeout 75s ssh -T -F "$RUNNER_TEMP/zm-inquiry-ssh/config" "$COMMAND_HOST" "python3 - publish '$GITHUB_RUN_ID'" < scripts/zomorod_service_inquiry_inbox_guarded_20261106.py
+      - name: Verify installed files and public access denial
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          timeout 55s ssh -T -F "$RUNNER_TEMP/zm-inquiry-ssh/config" "$COMMAND_HOST" "python3 - verify '$GITHUB_RUN_ID'" < scripts/zomorod_service_inquiry_inbox_guarded_20261106.py
+          python3 - <<'PY'
+          from urllib.error import HTTPError
+          from urllib.request import Request, urlopen
+          url = 'https://zomorodmelal.ir/business/inquiries.php'
+          try:
+              urlopen(Request(url, headers={'Cache-Control':'no-cache'}), timeout=30)
+              raise RuntimeError('ANONYMOUS_INBOX_WAS_ACCESSIBLE')
+          except HTTPError as response:
+              body = response.read(12000).decode('utf-8', 'replace')
+              if response.code != 403 or 'ابتدا وارد میز مدیریت شوید' not in body:
+                  raise RuntimeError('ANONYMOUS_DENIAL_NOT_VERIFIED')
+          print('INQUIRY_INBOX_ANONYMOUS_DENIAL_OK=403')
+          PY
+      - name: Roll back only newly installed inquiry artifacts after failure
+        if: failure() && steps.publish.outcome == 'success'
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 70s ssh -T -F "$RUNNER_TEMP/zm-inquiry-ssh/config" "$COMMAND_HOST" "python3 - rollback '$GITHUB_RUN_ID'" < scripts/zomorod_service_inquiry_inbox_guarded_20261106.py
