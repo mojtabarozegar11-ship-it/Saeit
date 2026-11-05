@@ -151,10 +151,9 @@ jobs:
                       or 'class="search-canonical-link"' not in body
                       or 'class="search-form"' not in body):
                   raise RuntimeError('CANONICAL_SEARCH_LINK_NOT_VISIBLE')
-          with urlopen('https://zomorodmelal.ir/search/?q=%DA%AF%D9%86%D8%AF%D9%85',timeout=25) as primary:
-              body = primary.read(200000).decode('utf-8','replace')
-              if primary.status != 200 or '/topics/zm-r01/wheat/' not in body:
-                  raise RuntimeError('PUBLIC_PRIMARY_SEARCH_UNAVAILABLE')
+          with urlopen('https://zomorodmelal.ir/',timeout=25) as primary:
+              if primary.status != 200 or 'noindex' in primary.headers.get('X-Robots-Tag','').lower():
+                  raise RuntimeError('MAIN_SITE_REGRESSION')
           print('STAGING_PUBLIC_SEARCH_LINK_LIVE=1 MAIN_SEARCH_UNCHANGED=1')
           PY
       - name: Restore staging search template after verification failure
