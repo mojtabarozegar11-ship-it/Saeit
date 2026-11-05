@@ -459,7 +459,7 @@ def staging_owned_worker_restart_safety() -> dict[str, object]:
     conf = HOME / 'Saeit-staging-web/.htaccess'
     if conf.is_symlink() or not conf.is_file():
         return {'status': 'CONF_UNAVAILABLE'}
-    m = re.search(r'(?m)^PassengerAppRoot\\s+([^\\s]+)', conf.read_text('utf-8', 'replace'))
+    m = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)', conf.read_text('utf-8', 'replace'))
     if not m:
         return {'status': 'NO_ACTIVE_ROOT'}
     root = Path(m.group(1).strip('"'))
@@ -473,12 +473,12 @@ def staging_owned_worker_restart_safety() -> dict[str, object]:
         if not folder.name.isdecimal():
             continue
         try:
-            command = (folder / 'cmdline').read_bytes().replace(b'\\x00', b' ').decode('utf-8', 'replace')
+            command = (folder / 'cmdline').read_bytes().replace(b'\x00', b' ').decode('utf-8', 'replace')
             if str(root) not in command:
                 continue
             matched += 1
             process_uid = (folder / 'status').read_text('utf-8', 'replace')
-            uid_match = re.search(r'(?m)^Uid:\\s+(\\d+)', process_uid)
+            uid_match = re.search(r'(?m)^Uid:\s+(\d+)', process_uid)
             owner_matches = bool(uid_match and int(uid_match.group(1)) == current_uid)
             executable = Path((folder / 'exe').resolve()).name[:55]
             cwd = os.readlink(str(folder / 'cwd'))
