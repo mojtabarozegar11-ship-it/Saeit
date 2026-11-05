@@ -416,3 +416,20 @@ jobs:
           except Exception as exc:
               print('MPW_ORDER_34_READ_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:500]}))
           PY
+
+      - name: Read-only order 34 item and product identity
+        run: |
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd());os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Order,OrderItem,Product
+          try:
+              order=Order.objects.get(pk=34)
+              items=list(OrderItem.objects.filter(order_id=34).values('id','order_id','product_id','quantity','unit_price','currency'))
+              pids=[x['product_id'] for x in items]
+              products=list(Product.objects.filter(pk__in=pids).values('id','title','product_type','price','currency','active','factory_managed','metadata'))
+              print('MPW_ORDER_34_IDENTITY='+json.dumps({'order':{'id':order.pk,'status':order.status,'total':str(order.total),'currency':order.currency,'created_at':str(order.created_at)},'items':items,'products':[{'id':p['id'],'title':str(p['title'])[:200],'product_type':p['product_type'],'price':str(p['price']),'currency':p['currency'],'active':p['active'],'factory_managed':p['factory_managed'],'metadata_keys':list((p['metadata'] or {}).keys())[:30]} for p in products]},default=str))
+          except Exception as exc:
+              print('MPW_ORDER_34_IDENTITY_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:500]}))
+          PY
