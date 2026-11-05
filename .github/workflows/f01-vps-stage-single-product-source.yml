@@ -51,6 +51,18 @@ jobs:
             scripts/factory_vps_product_cycle.py
             scripts/factory_global_singleton_v1.py
             scripts/factory_qc1000_rework_gate.py
+            scripts/factory_master_agent_genetics_v1.py
+            scripts/factory_autonomous_portfolio.py
+            scripts/factory_product_maker.py
+            scripts/factory_product_rework.py
+            scripts/factory_verified_customer_cycle_20261021.py
+            scripts/factory_recipe_designer.py
+            scripts/factory_continuous_invention.py
+            scripts/factory_design_intake.py
+            scripts/f01_technical_evidence_bridge.py
+            factory_config/rework/farm_enterprise_economics_qc1000_v1.json
+            factory_config/design_opportunities.json
+            factory_config/internal_design_supply.json
             scripts/factory-runtime-watchdog.sh
             deploy/install_factory_systemd_automation.sh
             deploy/systemd/saeit-factory-cycle.service
