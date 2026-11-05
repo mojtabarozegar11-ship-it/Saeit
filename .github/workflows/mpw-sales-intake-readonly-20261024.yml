@@ -7,6 +7,7 @@ on:
       - "scripts/mpw_sales_intake_readonly_20261024.py"
       - "scripts/mpw_paid_provenance_readonly_20261105.py"
       - "scripts/mpw_live_email_recovery_capability_readonly_20261105.py"
+      - "scripts/mpw_live_guest_email_linkage_readonly_20261105.py"
   schedule:
     - cron: '21 * * * *'
   workflow_dispatch:
@@ -146,6 +147,19 @@ jobs:
           PY
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
           timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_live_email_recovery_capability_readonly_20261105.py
+      - name: One-time live guest email capture and aggregate linkage audit
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, 'mpw-guest-email-linkage')
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast,pathlib
+          ast.parse(pathlib.Path("scripts/mpw_live_guest_email_linkage_readonly_20261105.py").read_text("utf8"))
+          print("MPW_GUEST_LINKAGE_SOURCE_VALID=true")
+          PY
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_live_guest_email_linkage_readonly_20261105.py
       - name: Remove local SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-sales-audit-ssh"
