@@ -1,5 +1,5 @@
 name: Guarded correction of live Zomorod homepage deep-anchor layout
-# Source guard now checks the live page's zero-padded orbit-01..orbit-29 IDs.
+# Source guard now checks the original inline JS generator (runtime-built shelves).
 on:
   push:
     branches: [audit/live-sites-subsites-20261105]
