@@ -293,10 +293,16 @@ def _existing_paid_download_readiness_readonly():
                       "reconcile_commercial_intent_from_candidates"}
         if calls.intersection(disallowed):
             return {"status": "status_gate_not_readonly"}
-        arguments = list(inspect.signature(commercial.commercial_buyer_status).parameters)
-        if arguments != ["intent_id", "buyer_id"]:
+        sig = inspect.signature(commercial.commercial_buyer_status)
+        arguments = list(sig.parameters)
+        if not {"intent_id", "buyer_id"}.issubset(set(arguments)):
             return {"status": "unknown_status_gate_signature",
-                    "arguments_count": len(arguments)}
+                    "argument_names": arguments[:8]}
+        try:
+            sig.bind(intent_id=1, buyer_id=1)
+        except TypeError:
+            return {"status": "status_gate_requires_additional_arguments",
+                    "argument_names": arguments[:8]}
         intents = list(PaymentIntent.objects.filter(provider=PROVIDER, status="paid")
                        .select_related("order").order_by("pk")[:11])
         if len(intents) > 10:
@@ -313,7 +319,7 @@ def _existing_paid_download_readiness_readonly():
                 continue
             totals["verified_paid_checked"] += 1
             try:
-                state = commercial.commercial_buyer_status(intent.pk, buyer_id)
+                state = commercial.commercial_buyer_status(intent_id=intent.pk, buyer_id=buyer_id)
                 if not isinstance(state, dict) or type(state.get("ready")) is not bool:
                     totals["unavailable_status"] += 1
                 elif state["ready"]:
