@@ -32,6 +32,13 @@ class TestSourceContract(unittest.TestCase):
         self.assertIn('getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False)', guest)
         self.assertIn('getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False)', guest)
 
+    def test_email_field_names_match_guest_account_and_immutable_claim(self):
+        guest = (ROOT / "services/mpw_trx_guest_commerce.py").read_text("utf-8")
+        recovery = (ROOT / "services/mpw_trx_email_recovery.py").read_text("utf-8")
+        accepted = '("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email")'
+        self.assertEqual(guest.count(accepted), 2)
+        self.assertEqual(recovery.count(accepted), 1)
+
     def test_public_routes_still_recovery_gated(self):
         tree = ast.parse((ROOT / "services/mpw_trx_guest_commerce.py").read_text("utf-8"))
         fn = next(x for x in tree.body if isinstance(x, ast.FunctionDef) and x.name == "patch_commercial")
