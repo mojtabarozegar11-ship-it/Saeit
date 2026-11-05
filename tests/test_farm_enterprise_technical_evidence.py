@@ -2,6 +2,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -18,7 +19,7 @@ class FarmEvidenceCaptureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory) / "new-proof"
             result = MOD.build(RECIPE, folder)
-            self.assertEqual(result["test_count"], 33)
+            self.assertEqual(result["test_count"], 39)
             self.assertEqual(set(result["candidate_criteria"]), set(MOD.CRITERION_TESTS))
             self.assertIsNone(result["verified_quality_score"])
             self.assertFalse(result["independent_reviewer_approval"])
@@ -27,6 +28,8 @@ class FarmEvidenceCaptureTests(unittest.TestCase):
             self.assertEqual(result["source_sha256"]["calculator.py"], MOD.sha256(RECIPE / "calculator.py"))
             self.assertEqual(result["source_sha256"]["build_technical_evidence.py"],
                              MOD.sha256(RECIPE / "build_technical_evidence.py"))
+            for required in ("guided_start.py", "test_guided_start.py", "CUSTOMER_GUIDE.md"):
+                self.assertEqual(result["source_sha256"][required], MOD.sha256(RECIPE / required))
             self.assertEqual(result, json.loads((folder / "manifest.json").read_text()))
             for id, receipt in result["candidate_criteria"].items():
                 proof = folder / receipt["path"]
@@ -47,10 +50,20 @@ class FarmEvidenceCaptureTests(unittest.TestCase):
     def test_failed_suite_does_not_create_manifest(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory) / "failing-evidence"
-            with patch.object(MOD, "execute", return_value="Ran 33 tests in 0.1s\nFAILED (failures=1)\n"):
+            with patch.object(MOD, "execute", return_value="Ran 39 tests in 0.1s\nFAILED (failures=1)\n"):
                 with self.assertRaisesRegex(ValueError, "TEST_SUITE_NOT_FULLY_PASSED"):
                     MOD.build(RECIPE, folder)
             self.assertFalse((folder / "manifest.json").exists())
+
+    def test_missing_customer_wizard_cannot_claim_complete_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            recipe = Path(directory) / "recipe"
+            shutil.copytree(RECIPE, recipe)
+            (recipe / "guided_start.py").unlink()
+            target = Path(directory) / "evidence"
+            with self.assertRaisesRegex(ValueError, "PRODUCT_RECIPE_FILES_MISSING"):
+                MOD.build(recipe, target)
+            self.assertFalse(target.exists())
 
 
 if __name__ == "__main__":
