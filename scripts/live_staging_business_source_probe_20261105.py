@@ -336,7 +336,7 @@ def staging_passenger_restart_tool_capability() -> dict[str, object]:
                     if isinstance(obj, dict):
                         for key, value in obj.items():
                             if key.lower().replace('-', '_') in ('app_root', 'approot') and isinstance(value, str):
-                                if value.startswith('Saeit-staging/') or value.startswith('/home/zomorod2/Saeit-staging/'):
+                                if 'Saeit-staging' in value:
                                     selected.append(value[:170])
                             elif isinstance(value, (dict, list)):
                                 walk(value, depth + 1)
@@ -345,6 +345,8 @@ def staging_passenger_restart_tool_capability() -> dict[str, object]:
                             walk(element, depth + 1)
                 walk(payload)
                 report['registered_staging_app_roots'] = selected
+                report['selector_mentions_stage_root'] = 'Saeit-staging' in proc.stdout.decode('utf-8', 'replace')
+                report['selector_top_level_fields'] = [str(k)[:50] for k in list(payload)[:18]] if isinstance(payload, dict) else ['NON_OBJECT']
         except (OSError, ValueError, subprocess.TimeoutExpired):
             report['selector_readonly_get_exit'] = 'UNAVAILABLE'
     return report
