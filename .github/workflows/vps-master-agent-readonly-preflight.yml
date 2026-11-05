@@ -83,7 +83,11 @@ jobs:
           )
           failure_class = next((code for code in known_errors if code in raw_error),
                                'OTHER' if raw_error else 'NO_RECORDED_ERROR')
+          if raw_error == 'Execution became stale and retry budget was exhausted':
+              failure_class = 'STALE_RETRY_EXHAUSTED'
           print('MASTER_SELF_IMPROVEMENT_FAILURE_CLASS='+failure_class)
+          if latest_self_failure:
+              print('MASTER_SELF_IMPROVEMENT_FAILURE_ATTEMPTS='+str(latest_self_failure.attempt_count)+'/'+str(latest_self_failure.max_attempts))
           django_root=Path.cwd()
           engine=django_root/'scripts/factory_code_self_upgrade.py'
           source=Path.home()/'factory-runtime/operations/factory-code-self-upgrade/source/scripts/factory_code_self_upgrade.py'
