@@ -146,3 +146,24 @@ def test_f41_active_line41_slot_denied_even_without_env(private_f41):
     with pytest.raises(ValueError, match="F41_GLOBAL_SINGLE_PRODUCT_LANE_NOT_ADMITTED"):
         build_verified_order(payload)
     assert not (private_f41 / "outputs" / payload["order_id"]).exists()
+
+
+def test_f41_live_vps_home_denied_without_env_or_slot(private_f41, monkeypatch):
+    from core.factory_f41_gateway import inspect_order, roots, build_verified_order
+    root, ops = roots()
+    payload = inspect_order(root, ops, "F41-pilot-vesting")
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: Path("/home/githubops")))
+    with pytest.raises(ValueError, match="F41_GLOBAL_SINGLE_PRODUCT_LANE_NOT_ADMITTED"):
+        build_verified_order(payload)
+    assert not (private_f41 / "outputs" / payload["order_id"]).exists()
+
+
+def test_f41_global_reservation_marker_denied(private_f41):
+    from core.factory_f41_gateway import inspect_order, roots, build_verified_order
+    root, ops = roots()
+    payload = inspect_order(root, ops, "F41-pilot-vesting")
+    reservation = private_f41.parent / ".f01-global-production-lane.json"
+    reservation.write_text('{"owner": "line41"}', encoding="utf-8")
+    with pytest.raises(ValueError, match="F41_GLOBAL_SINGLE_PRODUCT_LANE_NOT_ADMITTED"):
+        build_verified_order(payload)
+    assert not (private_f41 / "outputs" / payload["order_id"]).exists()
