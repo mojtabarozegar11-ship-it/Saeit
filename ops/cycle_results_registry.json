@@ -47,7 +47,7 @@
     },
     "05": {
       "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
-      "sequence": 4,
+      "sequence": 5,
       "legacy_report_last_verified": 57,
       "primary_output": "accepted operational business gate",
       "legacy_source_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725",
@@ -108,6 +108,16 @@
       "acceptance_result": "Parser and validator accept matching Persian/Latin headers, reject mismatched receipt numbers; 19 validator tests plus 2 Django integration regressions on exact head 8f4dc143; workflow 41968659233 all steps successful",
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/41968659233",
       "impact": "Resolved verified false-rejection bug and verified fail-closed DB staging in isolated CI; no live deployment, product acceptance or collected revenue"
+    },
+    {
+      "registry_id": "R05-0005",
+      "cycle_id": "05",
+      "run_id": "manual-20261105-sixdomain-fivecycle-scope-verified",
+      "deliverable_key": "six-domain-task-scope-and-ownership",
+      "stage": "code",
+      "acceptance_result": "All five automation update calls succeeded; re-peek confirmed all five enabled, all task scopes present, all schedule strings unchanged; sixth automation rejected by plan limit 5",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-6650052845",
+      "impact": "Six owner-mandated operational domains now explicitly assigned across five existing hourly automations; no delivery or revenue evidence"
     }
   ],
   "report_reservations": [],
@@ -119,5 +129,20 @@
     "Atomically increment legacy_report_last_verified and append {cycle_id,run_id,number,state:'reserved'} via GitHub update_file with observed blob SHA; on stale version re-fetch/recheck/retry at most three times.",
     "Only after successfully reading back the reservation, publish the numbered report to the canonical issue, including run_id; if issue write fails leave reservation pending and repair it later. Never reuse reserved number.",
     "Upon success, update reservation to state:'published' with the comment link using another SHA-checked update. A published report is not independently accepted revenue or product."
-  ]
+  ],
+  "scope_assignment_2026_11_05": {
+    "active_scheduled_automations": 5,
+    "domains": 6,
+    "extra_cycle_create_error": "too_many_active_automations: plan limit 5",
+    "owners": {
+      "01": "Scientific papers, research and content",
+      "02": "Books, guides and written products",
+      "03": "Digital tools and products; live sites and subsites services/defects; factory, store and sales operations",
+      "04": "Game development and quality",
+      "05": "Business, sites and commerce command; operational oversight, accounting and cross-cycle result verification"
+    },
+    "source_issue_comment": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-6650052845",
+    "schedules_changed": false,
+    "disabled_automations": 0
+  }
 }
