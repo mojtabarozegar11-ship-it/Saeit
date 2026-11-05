@@ -178,7 +178,12 @@ def public_routing_indicators() -> dict[str, object]:
         candidates[short] = {'directory': path.is_dir(),
                              'passenger_wsgi': (path / 'passenger_wsgi.py').is_file(),
                              'htaccess': (path / '.htaccess').is_file()}
+    rewrite_engines = [line.strip() for line in text.splitlines()
+                       if re.search(r'(?i)\bRewriteEngine\b', line)]
     return {'status': 'READ', 'routing_lines_without_sensitive_patterns': routing[:70],
+            'rewrite_engine_count': len(rewrite_engines),
+            'rewrite_engine_directives': rewrite_engines[:10],
+            'file_starts_with_php': text.lstrip().startswith('<?php'),
             'subdomain_root_candidates': candidates}
 
 
