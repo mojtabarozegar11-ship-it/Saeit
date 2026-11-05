@@ -18,9 +18,15 @@ import zipfile
 
 
 PRODUCT = "farm_enterprise_economics"
-SOURCES = ("calculator.py", "test_calculator.py", "README.md",
-           "example_inputs.json", "build_technical_evidence.py")
-PACKAGE_SOURCES = SOURCES[:4]
+SOURCES = (
+    "calculator.py", "guided_start.py", "test_calculator.py", "test_guided_start.py",
+    "README.md", "CUSTOMER_GUIDE.md", "example_inputs.json",
+    "build_technical_evidence.py",
+)
+# A legacy ZIP without the new customer entry point is not the same product
+# as a proof captured from source that includes that entry point.
+PACKAGE_SOURCES = tuple(name for name in SOURCES if name != "build_technical_evidence.py")
+TEST_MODULES = ("test_calculator.py", "test_guided_start.py")
 EXPORTS = ("baseline.json", "scenarios.csv", "joint-stress.csv",
            "management-report.html")
 CRITERIA = ("Q035", "Q036", "Q037", "Q061", "Q063", "Q064")
@@ -69,17 +75,21 @@ def verify(recipe_dir, evidence_dir):
             and manifest.get("product_id") == PRODUCT
             and manifest.get("source_sha256") == source_hashes
             and type(manifest.get("test_count")) is int
-            and manifest["test_count"] >= 30
+            and manifest["test_count"] >= 39
             and manifest.get("verified_quality_score") is None
             and manifest.get("independent_reviewer_approval") is False
             and manifest.get("receiver_acceptance") is False
             and manifest.get("commercial_release_allowed") is False,
             "MANIFEST_IDENTITY_OR_RELEASE_CLAIM")
-    tests = ast.parse((recipe / "test_calculator.py").read_text(encoding="utf-8"))
-    names = {node.name for node in ast.walk(tests)
-             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-             and node.name.startswith("test_")}
-    require(len(names) == manifest["test_count"], "TEST_COUNT_SOURCE_MISMATCH")
+    all_names = []
+    for module in TEST_MODULES:
+        tests = ast.parse((recipe / module).read_text(encoding="utf-8"))
+        all_names.extend(node.name for node in ast.walk(tests)
+                         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                         and node.name.startswith("test_"))
+    names = set(all_names)
+    require(len(all_names) == len(names) == manifest["test_count"],
+            "TEST_COUNT_SOURCE_MISMATCH")
     log_path = regular_file(evidence / "test_execution.log")
     log = log_path.read_text(encoding="utf-8")
     require(digest(log_path) == manifest.get("test_log_sha256")
