@@ -23,6 +23,7 @@ def main():
     import django
     django.setup()
     from django.template.loader import get_template
+    from django.conf import settings
     rendered = get_template("mpw_commerce/product_checkout.html")
     checkout = Path(rendered.origin.name)
     if not checkout.resolve().is_relative_to(APP.resolve()):
@@ -52,9 +53,38 @@ def main():
             findings.append({"path": str(path.relative_to(APP)),
                              "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                              "matches": matches[:20]})
+    delivery_source = APP / "services/mpw_trx_guest_delivery.py"
+    delivery_checks = []
+    if delivery_source.is_file() and not delivery_source.is_symlink():
+        for number, line in enumerate(delivery_source.read_text("utf-8", "replace").splitlines(), 1):
+            lowered = line.lower()
+            if ("mpw_" in lowered or "send_mail" in lowered or "emailmessage" in lowered
+                    or "send_messages" in lowered or "deliver" in lowered and
+                    ("def " in lowered or "enabled" in lowered)):
+                if not any(term in lowered for term in ("password", "secret", "private_key", "token=")):
+                    delivery_checks.append({"line": number, "source": line.strip()[:210]})
+    triggers = []
+    for path in (APP / "services").glob("*.py"):
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 140000:
+            continue
+        if path.name == "mpw_trx_guest_delivery.py":
+            continue
+        for number, line in enumerate(path.read_text("utf-8", "replace").splitlines(), 1):
+            if "mpw_trx_guest_delivery" in line:
+                triggers.append({"path": str(path.relative_to(APP)), "line": number,
+                                 "source": line.strip()[:170]})
+    flags = {}
+    for name in dir(settings):
+        if name.startswith("MPW_") and any(t in name for t in ("EMAIL", "MAIL", "DELIVERY")):
+            value = getattr(settings, name)
+            if type(value) is bool:
+                flags[name] = value
     print("MPW_CHECKOUT_EMAIL_COPY_READONLY=" + json.dumps({
         "checkout_template": str(checkout.relative_to(APP)),
         "found": findings[:12],
+        "delivery_source_controls": delivery_checks[:55],
+        "delivery_module_references": triggers[:20],
+        "boolean_mail_delivery_flags": flags,
         "db_rows_read": 0, "emails_sent": 0, "emails_deleted": 0,
         "files_modified": 0,
     }, sort_keys=True))
