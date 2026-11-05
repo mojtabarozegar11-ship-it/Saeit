@@ -172,3 +172,54 @@ class TaniyaStudioPageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "/taniya/")
+
+
+class ContentDirectorSubmissionTests(TestCase):
+    """Operational content director: creates drafts, never bypasses approval."""
+
+    def setUp(self):
+        self.publisher = User.objects.create_user(username="editor", password="safe-pass-123")
+
+    def _submission(self):
+        from .newsletter_models import NewsletterSubmission
+
+        return NewsletterSubmission.objects.create(
+            subject="گزارش پیشرفت واقعی بخش کشاورزی در فصل جاری",
+            body="گزارش فعالیت‌های واقعی شرکت و مستندات موجود. " * 35,
+            created_by=self.publisher,
+            requested_publish_at=timezone.now() + timedelta(days=1),
+        )
+
+    def test_first_real_submission_bootstraps_successor_and_stays_draft(self):
+        from .newsletter_engine import process_submission
+        from .newsletter_models import NewsletterSchedule, NewsletterStory
+
+        NewsletterSchedule.objects.create(active=True, publication_requires_approval=True)
+        submission = self._submission()
+        self.assertFalse(Agent.objects.filter(code="content-director").exists())
+        story = process_submission(submission)
+        self.assertIsNotNone(story)
+        self.assertTrue(Agent.objects.filter(code="content-director", active=True).exists())
+        submission.refresh_from_db()
+        self.assertEqual(submission.status, "drafted")
+        self.assertEqual(submission.generated_story_id, story.pk)
+        self.assertEqual(story.status, "draft")
+        self.assertIsNone(story.published_at)
+        self.assertEqual(process_submission(submission).pk, story.pk)
+        self.assertEqual(NewsletterStory.objects.count(), 1)
+
+    def test_disabled_successor_queues_work_without_reactivation(self):
+        from .newsletter_engine import process_submission
+        from .newsletter_models import NewsletterStory
+
+        agent = Agent.objects.create(
+            code="content-director", name="Content Director",
+            mission="Owner content drafts", active=False,
+        )
+        submission = self._submission()
+        self.assertIsNone(process_submission(submission))
+        submission.refresh_from_db()
+        agent.refresh_from_db()
+        self.assertEqual(submission.status, "queued")
+        self.assertFalse(agent.active)
+        self.assertFalse(NewsletterStory.objects.exists())
