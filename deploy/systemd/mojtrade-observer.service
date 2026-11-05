@@ -1,0 +1,23 @@
+[Unit]
+Description=MojTrade read-only market data observer (no trading)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=mojtrade
+Group=mojtrade
+WorkingDirectory=/opt/mojtrade
+ExecStart=/usr/bin/python3 /opt/mojtrade/scripts/mojtrade_observe_market.py --output /var/lib/mojtrade/private/validated-payload.json
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mojtrade/private
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+

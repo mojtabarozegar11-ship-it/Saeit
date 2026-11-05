@@ -1,0 +1,12 @@
+[Unit]
+Description=Collect closed hourly MojTrade market candles
+
+[Timer]
+OnCalendar=*-*-* *:07:00
+RandomizedDelaySec=30s
+AccuracySec=1min
+Persistent=true
+Unit=mojtrade-observer.service
+
+[Install]
+WantedBy=timers.target
