@@ -41,7 +41,9 @@ jobs:
           echo FACTORY_TEN_GENERATIONS_PUBLICATION=false
   private-vps-builds:
     needs: offline-technical-qa
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # F-01: HOLD competing F19 VPS writes while one product is the only active lane.
+    # Offline QA remains enabled; no second factory product may be admitted.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
