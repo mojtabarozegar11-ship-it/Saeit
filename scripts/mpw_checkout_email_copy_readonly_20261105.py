@@ -381,6 +381,59 @@ def _existing_paid_download_readiness_readonly():
 
 
 
+
+def _guest_email_claim_coverage_readonly():
+    """Count only bound email ownership claims, without retrieving addresses or links."""
+    try:
+        from datetime import timedelta
+        from django.conf import settings
+        from django.utils import timezone
+        from core.models import GuestOrderEmail, Order
+        from core.models import PaymentIntent
+        from core.crown_tron_receipts import PROVIDER, verified_walletless_credit
+
+        orders = list(Order.objects.filter(
+            customer__username__startswith="mpwguest_"
+        ).select_related("customer").order_by("pk")[:301])
+        if len(orders) > 300:
+            return {"status": "scope_exceeded", "guest_order_count": "over_300"}
+        order_ids = {order.pk for order in orders}
+        claimed_ids = set(GuestOrderEmail.objects.filter(
+            order_id__in=order_ids).values_list("order_id", flat=True))
+        recent = timezone.now() - timedelta(hours=24)
+        recent_orders = {order.pk for order in orders if order.created_at >= recent}
+        paid = list(PaymentIntent.objects.filter(
+            provider=PROVIDER, status="paid", order_id__in=order_ids
+        ).select_related("order").order_by("pk")[:301])
+        if len(paid) > 300:
+            return {"status": "paid_scope_exceeded"}
+        verified_ids = {intent.order_id for intent in paid
+                        if verified_walletless_credit(intent.order, intent)}
+        return {
+            "status": "ok",
+            "capture_enabled": getattr(
+                settings, "MPW_GUEST_EMAIL_CLAIM_CAPTURE_ENABLED", False) is True,
+            "public_recovery_enabled": getattr(
+                settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True,
+            "outbound_recovery_email_approved": getattr(
+                settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True,
+            "guest_orders": len(order_ids),
+            "guest_orders_with_claim": len(order_ids & claimed_ids),
+            "guest_orders_without_claim": len(order_ids - claimed_ids),
+            "last_24h_guest_orders": len(recent_orders),
+            "last_24h_guest_orders_with_claim": len(recent_orders & claimed_ids),
+            "last_24h_guest_orders_without_claim": len(recent_orders - claimed_ids),
+            "locally_verified_paid_guest_orders": len(verified_ids),
+            "locally_verified_paid_guest_orders_with_claim": len(verified_ids & claimed_ids),
+            "locally_verified_paid_guest_orders_without_claim": len(verified_ids - claimed_ids),
+            "total_claim_rows": GuestOrderEmail.objects.count(),
+            "historical_orders_backfilled": False,
+            "checkout_or_email_sent_by_audit": False,
+        }
+    except Exception as exc:
+        return {"status": "unavailable", "error_type": type(exc).__name__}
+
+
 def main():
     if pwd.getpwuid(os.geteuid()).pw_name != "zomorod2" or APP.is_symlink() or not APP.is_dir():
         raise RuntimeError("MPW_COPY_AUDIT_WRONG_HOST")
@@ -464,6 +517,7 @@ def main():
         "paid_order_delivery_linkage": _paid_order_delivery_linkage_readonly(),
         "commerce_file_schema": _commerce_model_file_schema_readonly(),
         "existing_paid_download_readiness": _existing_paid_download_readiness_readonly(),
+        "guest_email_claim_coverage": _guest_email_claim_coverage_readonly(),
         "emails_sent_by_audit": 0, "emails_deleted": 0,
         "files_modified": 0,
     }, sort_keys=True))
