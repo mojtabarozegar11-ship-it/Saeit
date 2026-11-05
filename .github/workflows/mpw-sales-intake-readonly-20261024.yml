@@ -191,6 +191,19 @@ jobs:
           PY
           d="$RUNNER_TEMP/mpw-sales-audit-ssh"
           timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_live_guest_email_linkage_readonly_20261105.py
+      - name: Inventory live MariaDB table allocation without customer data (read only)
+        if: github.event_name == 'workflow_dispatch' && inputs.audit_scope == 'recovery'
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast,pathlib
+          ast.parse(pathlib.Path("scripts/mpw_live_mariadb_table_capacity_readonly_20261105.py").read_text("utf8"))
+          print("MPW_MARIADB_CAPACITY_SOURCE_VALID=PASS")
+          PY
+          d="$RUNNER_TEMP/mpw-sales-audit-ssh"
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -" < scripts/mpw_live_mariadb_table_capacity_readonly_20261105.py
       - name: Probe existing encrypted VPS backup size and restore capacity (read only)
         if: github.event_name == 'workflow_dispatch' && inputs.audit_scope == 'recovery'
         env:
