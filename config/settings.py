@@ -141,3 +141,8 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+# Private, anonymous daily *event* counters; production enablement is separate.
+MPW_PRIVATE_FUNNEL_COUNTERS_ENABLED = env.bool(
+    "MPW_PRIVATE_FUNNEL_COUNTERS_ENABLED", default=False
+)
