@@ -1,4 +1,4 @@
-name: Recover backed-up staging service cards after failed restart
+name: Trace live staging worker requests without changes
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -112,59 +112,126 @@ jobs:
             fi
           fi
           echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
-      - name: Reconfirm original backup without a new publish
+      - name: Read-only trace of staging worker activity, page headers and exact template sources
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
-          timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" "python3 - rollback '41974618315'" < scripts/live_staging_services_dedupe_release_20261105.py
-      - name: Read-only verify restored staging templates and visible main website
-        env:
-          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
-        run: |
-          set -euo pipefail
-          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
-          timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" 'python3 -' <<'PY'
+          timeout 85s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" 'python3 -' <<'PY'
           import hashlib
           import json
           import os
           import re
+          import time
           from pathlib import Path
-          from urllib.request import urlopen
+          from urllib.request import Request, urlopen
 
           home = Path('/home/zomorod2')
-          expected = '195994985017c1cbc0247969f9215fbcb34d4cc3bd4f8aeeac92ff270d7350bc'
-          conf = (home / 'Saeit-staging-web/.htaccess').read_text()
+          allowed_roots = {
+              str(home / 'Saeit'): 'main',
+              str(home / 'Saeit-staging'): 'canonical_stage',
+          }
+          conf = (home / 'Saeit-staging-web/.htaccess').read_text('utf-8','replace')
           match = re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)\s*$', conf)
           if not match:
-              raise SystemExit('STAGING_ROOT_MISSING')
-          root = Path(match.group(1).strip('"'))
-          if (root.is_symlink() or (home / 'Saeit-staging/admin-smoke') not in root.parents):
-              raise SystemExit('STAGING_ROOT_UNSAFE')
-          paths = (home / 'Saeit-staging/core/templates/core/services.html',
-                   root / 'core/templates/core/services.html')
-          result = {}
-          for path in paths:
-              if path.is_symlink() or not path.is_file():
-                  raise SystemExit('STAGING_TEMPLATE_PATH_UNSAFE')
-              digest = hashlib.sha256(path.read_bytes()).hexdigest()
-              result[str(path)] = {'sha256': digest, 'restored': digest == expected}
-              if digest != expected:
-                  raise SystemExit('STAGING_ROLLBACK_NOT_CONFIRMED:' + str(path))
-          backup = home / '.private/staging-services-backups/run-41974618315/original.html'
-          if backup.is_symlink() or not backup.is_file():
-              raise SystemExit('STAGING_ORIGINAL_BACKUP_MISSING')
-          backup_sha = hashlib.sha256(backup.read_bytes()).hexdigest()
-          if backup_sha != expected:
-              raise SystemExit('STAGING_ORIGINAL_BACKUP_MISMATCH')
-          print('STAGING_ROLLBACK_READONLY_VERIFIED=' + json.dumps(
-              {'targets_restored': len(result), 'backup_sha256': backup_sha, 'paths': result},
-              sort_keys=True), flush=True)
-          for address in ('https://staging.zomorodmelal.ir/',
-                          'https://zomorodmelal.ir/'):
-              with urlopen(address, timeout=12) as response:
-                  if response.status != 200:
-                      raise SystemExit('HTTP_REGRESSION:' + address)
-                  print('PUBLIC_HTTP_200=' + address, flush=True)
+              raise SystemExit('STAGE_HTACCESS_ROOT_NOT_FOUND')
+          active = Path(match.group(1).strip('"'))
+          if active.is_symlink() or (home / 'Saeit-staging/admin-smoke') not in active.parents:
+              raise SystemExit('STAGE_HTACCESS_ROOT_OUT_OF_SCOPE')
+          allowed_roots[str(active)] = 'configured_stage'
+          wanted = ('rchar','wchar','syscr','syscw','read_bytes','write_bytes')
+
+          def workers():
+              seen = {}
+              for p in Path('/proc').iterdir():
+                  if not p.name.isdecimal():
+                      continue
+                  try:
+                      cwd = os.readlink(str(p / 'cwd'))
+                      category = allowed_roots.get(cwd)
+                      if not category:
+                          continue
+                      st = (p / 'status').read_text(errors='replace')
+                      uid = re.search(r'(?m)^Uid:\s+(\d+)', st)
+                      if not uid or int(uid.group(1)) != os.geteuid():
+                          continue
+                      cmd = (p / 'cmdline').read_bytes().replace(b'\0',b' ').decode('utf-8','replace')
+                      exe = (p / 'exe').resolve().name
+                      if exe != 'lswsgi' or 'passenger' not in cmd.lower():
+                          continue
+                      io = {}
+                      try:
+                          txt=(p / 'io').read_text()
+                          for k in wanted:
+                              m=re.search(r'(?m)^'+k+r':\s+(\d+)$',txt)
+                              if m:
+                                  io[k]=int(m.group(1))
+                      except (OSError,PermissionError):
+                          io={'unavailable':1}
+                      seen[int(p.name)]={'category':category,'io':io}
+                  except (OSError,ValueError,PermissionError,FileNotFoundError):
+                      continue
+              return seen
+
+          before=workers()
+          responses=[]
+          for i in range(5):
+              stamp=str(int(time.time()*1000))+'-'+str(i)
+              url='https://staging.zomorodmelal.ir/?zm_readonly_worker_trace='+stamp
+              req=Request(url,headers={'Cache-Control':'no-cache, no-store','Pragma':'no-cache',
+                  'User-Agent':'ZM-Stage-ReadOnly-Worker-Trace/1.0'})
+              with urlopen(req,timeout=10) as response:
+                  data=response.read(220000)
+                  headers={key:response.headers.get(key) for key in
+                      ('Cache-Control','Age','ETag','X-LiteSpeed-Cache',
+                       'X-Cache','Vary','Server','X-Robots-Tag')
+                      if response.headers.get(key) is not None}
+                  responses.append({'status':response.status,
+                                    'bytes':len(data),
+                                    'body_sha256':hashlib.sha256(data).hexdigest(),
+                                    'headers':headers})
+          after=workers()
+          counts={}
+          for entry in after.values():
+              cat=entry['category']
+              counts[cat]=counts.get(cat,0)+1
+          deltas={}
+          stable={}
+          for pid,a in after.items():
+              b=before.get(pid)
+              if b is None or b['category']!=a['category']:
+                  continue
+              cat=a['category']
+              stable[cat]=stable.get(cat,0)+1
+              for key in wanted:
+                  av=a['io'].get(key)
+                  bv=b['io'].get(key)
+                  if isinstance(av,int) and isinstance(bv,int):
+                      deltas.setdefault(cat,{}).setdefault(key,0)
+                      deltas[cat][key]+=max(0,av-bv)
+          inventory={}
+          candidates=[home/'Saeit/core/templates/core/services.html',
+                      home/'Saeit-staging/core/templates/core/services.html',
+                      active/'core/templates/core/services.html']
+          candidates.extend((home/'Saeit-staging/admin-smoke').glob('*/core/templates/core/services.html'))
+          for file in candidates[:150]:
+              if file.is_symlink() or not file.is_file():
+                  continue
+              item={'sha256':hashlib.sha256(file.read_bytes()).hexdigest(),
+                    'relative':str(file).replace(str(home)+'/','')}
+              inventory[item['relative']]=item['sha256']
+          markers={}
+          for root_label,root in (('canonical',home/'Saeit-staging'),
+                                  ('configured',active)):
+              marker=root/'tmp/restart.txt'
+              if marker.is_file() and not marker.is_symlink():
+                  markers[root_label]=round(time.time()-marker.stat().st_mtime)
+          print('STAGING_READONLY_REQUEST_TRACE='+json.dumps({
+              'changes':0, 'current_configured_root':str(active).replace(str(home)+'/',''),
+              'before_processes':len(before),'after_processes':len(after),
+              'stable_owned_workers':stable,'worker_counts':counts,
+              'five_request_io_deltas':deltas,'response_samples':responses,
+              'service_template_hashes':inventory,'restart_marker_ages_seconds':markers},
+              ensure_ascii=False,sort_keys=True),flush=True)
           PY
