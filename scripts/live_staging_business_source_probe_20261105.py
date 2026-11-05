@@ -314,7 +314,40 @@ def staging_passenger_restart_tool_capability() -> dict[str, object]:
         candidate = Path(entry)
         if candidate.is_file() and os.access(candidate, os.X_OK):
             found.append(str(candidate))
-    return {'changed_files': 0, 'documented_restart_tool_paths': found[:8]}
+    import subprocess
+    selector_choices = [shutil.which('cloudlinux-selector'),
+                        '/usr/bin/cloudlinux-selector', '/usr/sbin/cloudlinux-selector']
+    available = next((path for path in selector_choices if path
+                      and Path(path).is_file() and os.access(path, os.X_OK)), None)
+    report = {'changed_files': 0, 'documented_restart_tool_paths': found[:8],
+              'cloudlinux_selector_path': available}
+    if available is not None:
+        try:
+            proc = subprocess.run([available, 'get', '--json', '--interpreter', 'python'],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  check=False, timeout=14)
+            report['selector_readonly_get_exit'] = proc.returncode
+            if proc.returncode == 0 and len(proc.stdout) < 1000000:
+                payload = json.loads(proc.stdout.decode('utf-8', 'replace'))
+                selected = []
+                def walk(obj: object, depth: int = 0) -> None:
+                    if depth > 9 or len(selected) >= 12:
+                        return
+                    if isinstance(obj, dict):
+                        for key, value in obj.items():
+                            if key.lower().replace('-', '_') in ('app_root', 'approot') and isinstance(value, str):
+                                if value.startswith('Saeit-staging/') or value.startswith('/home/zomorod2/Saeit-staging/'):
+                                    selected.append(value[:170])
+                            elif isinstance(value, (dict, list)):
+                                walk(value, depth + 1)
+                    elif isinstance(obj, list):
+                        for element in obj[:100]:
+                            walk(element, depth + 1)
+                walk(payload)
+                report['registered_staging_app_roots'] = selected
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            report['selector_readonly_get_exit'] = 'UNAVAILABLE'
+    return report
 
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
