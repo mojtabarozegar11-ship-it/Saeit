@@ -145,6 +145,65 @@ jobs:
               except (OSError,ValueError,IndexError,subprocess.TimeoutExpired):
                   print("SPACE_CANDIDATE="+label+":UNAVAILABLE",flush=True)
           PY
+      - name: Map cPanel top-level quota drivers without touching files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 python3 -' <<'PY'
+          import hashlib,os,re,subprocess,time
+          from pathlib import Path
+          home=Path("/home/zomorod2")
+          assert home.is_dir() and not home.is_symlink() and home.stat().st_uid==os.geteuid()
+          protected={"public_html","www","mail","etc","ssl","logs","access-logs","Saeit",
+                     "backup","backups","softaculous_backups","database","databases",
+                     ".ssh",".cpanel",".trash",".htpasswds",".cl.selector",".cagefs",
+                     "python","virtualenv","repositories","public_ftp","site","sites"}
+          review={".cache",".npm","tmp",".local","cache","temp"}
+          print("HOME_STORAGE_MAP=READ_ONLY",flush=True)
+          try:
+              run=subprocess.run(["nice","-n","15","du","-k","--max-depth=1",
+                                  "--one-file-system",str(home)],
+                                  capture_output=True,text=True,timeout=100)
+              entries=[]
+              for line in run.stdout.splitlines():
+                  size,sep,path=line.partition("\t")
+                  p=Path(path)
+                  if sep and size.isdigit() and p.parent==home:
+                      entries.append((int(size)*1024,p.name))
+              entries.sort(reverse=True)
+              print("HOME_DU_STATUS="+("complete" if run.returncode==0 else "partial"),flush=True)
+              print("HOME_DU_VISIBLE_DIRECTORIES="+str(len(entries)),flush=True)
+              for size,name in entries[:32]:
+                  safe=name if re.fullmatch(r"[A-Za-z0-9_.-]{1,48}",name) else "private-"+hashlib.sha256(name.encode()).hexdigest()[:10]
+                  role="PROTECT" if name in protected or name.lower().startswith(("backup","database","site","app","mail")) else ("REVIEW_ONLY" if name in review else "UNKNOWN_PROTECT")
+                  print("HOME_QUOTA_DIR="+safe+":BYTES="+str(size)+":ROLE="+role,flush=True)
+              if len(entries)>32:
+                  print("HOME_OTHER_DIR_COUNT="+str(len(entries)-32)+
+                        ":BYTES="+str(sum(x[0] for x in entries[32:])),flush=True)
+          except subprocess.TimeoutExpired:
+              print("HOME_DU_STATUS=timeout_no_deletion",flush=True)
+          files=[]
+          try:
+              for p in home.iterdir():
+                  if p.is_file() and not p.is_symlink():
+                      s=p.stat()
+                      if s.st_uid==os.geteuid():
+                          files.append((s.st_size,p.name,s.st_mtime))
+              files.sort(reverse=True)
+              print("HOME_ROOT_REGULAR_FILES="+str(len(files)),flush=True)
+              print("HOME_ROOT_REGULAR_FILES_BYTES="+str(sum(f[0] for f in files)),flush=True)
+              for size,name,mtime in files[:12]:
+                  extension=("archive" if name.lower().endswith((".zip",".tar.gz",".tgz",".gz",".tar",".bz2",".xz",".7z")) else
+                             "log" if name.lower().endswith((".log",".log.1")) else
+                             "sql" if name.lower().endswith((".sql",".sql.gz")) else "other")
+                  fingerprint=hashlib.sha256(name.encode()).hexdigest()[:12]
+                  age=max(0,int((time.time()-mtime)/86400))
+                  print("HOME_ROOT_FILE=HASH:"+fingerprint+":KIND:"+extension+
+                        ":BYTES:"+str(size)+":AGE_DAYS:"+str(age)+":PROTECTED_REVIEW",flush=True)
+          except OSError:
+              print("HOME_ROOT_FILE_SCAN=INCOMPLETE",flush=True)
+          PY
       - name: Classify cPanel generic cache and temp contents without reading files
         shell: bash
         run: |
