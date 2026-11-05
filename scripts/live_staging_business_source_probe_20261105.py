@@ -454,6 +454,46 @@ print('DJANGO_TEMPLATE_ORIGIN_READONLY=' + json.dumps({
     return {'status': 'IMPORT_OR_RESOLUTION_UNAVAILABLE', 'exit_code': proc.returncode,
             'stderr_disclosed': False}
 
+def staging_owned_worker_restart_safety() -> dict[str, object]:
+    """Read only: identify exact app-specific Passenger workers eligible for a targeted restart."""
+    conf = HOME / 'Saeit-staging-web/.htaccess'
+    if conf.is_symlink() or not conf.is_file():
+        return {'status': 'CONF_UNAVAILABLE'}
+    m = re.search(r'(?m)^PassengerAppRoot\\s+([^\\s]+)', conf.read_text('utf-8', 'replace'))
+    if not m:
+        return {'status': 'NO_ACTIVE_ROOT'}
+    root = Path(m.group(1).strip('"'))
+    base = HOME / 'Saeit-staging/admin-smoke'
+    if root.is_symlink() or not root.is_dir() or base not in root.parents:
+        return {'status': 'OUT_OF_SCOPE'}
+    current_uid = os.geteuid()
+    items = []
+    matched = 0
+    for folder in Path('/proc').iterdir():
+        if not folder.name.isdecimal():
+            continue
+        try:
+            command = (folder / 'cmdline').read_bytes().replace(b'\\x00', b' ').decode('utf-8', 'replace')
+            if str(root) not in command:
+                continue
+            matched += 1
+            process_uid = (folder / 'status').read_text('utf-8', 'replace')
+            uid_match = re.search(r'(?m)^Uid:\\s+(\\d+)', process_uid)
+            owner_matches = bool(uid_match and int(uid_match.group(1)) == current_uid)
+            executable = Path((folder / 'exe').resolve()).name[:55]
+            cwd = os.readlink(str(folder / 'cwd'))
+            same_workdir = cwd == str(root)
+            is_passenger = 'passenger' in command.lower()
+            items.append({'pid': int(folder.name), 'owner_matches': owner_matches,
+                          'cwd_is_exact_active_root': same_workdir,
+                          'is_passenger': is_passenger, 'executable_name': executable,
+                          'eligible_for_targeted_restart': owner_matches and same_workdir and is_passenger})
+        except (OSError, PermissionError, ValueError):
+            continue
+    return {'status': 'READ_ONLY', 'changed_files': 0,
+            'matching_root_process_count': matched, 'details': items[:16]}
+
+
 def staging_registered_passenger_apps() -> dict[str, object]:
     """List only staging cPanel Passenger registrations; omit environment variables."""
     import subprocess
@@ -552,6 +592,7 @@ if __name__ == '__main__':
         'staging_process_origins': staging_passenger_process_origins(),
         'passenger_restart_tool': staging_passenger_restart_tool_capability(),
         'registered_passenger_apps': staging_registered_passenger_apps(),
+        'owned_worker_restart_safety': staging_owned_worker_restart_safety(),
         'django_bootstrap_preflight': staging_django_bootstrap_safety(),
         'isolated_django_template_origin': staging_isolated_django_template_resolution(),
         'active_template_settings_block': staging_template_settings_block()},
