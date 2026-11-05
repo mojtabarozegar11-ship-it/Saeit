@@ -1103,6 +1103,107 @@ def staging_registered_brand_home_source_readonly() -> dict[str, object]:
     return {'status': 'READ_ONLY', 'changed_files': 0, 'canonical_home_sources': results}
 
 
+
+def staging_brandsite_db_mapping_readonly() -> dict[str, object]:
+    """Query only public-domain routing fields through Django in a no-bytecode process."""
+    import subprocess
+    canonical = HOME / 'Saeit-staging'
+    python = HOME / 'virtualenv/Saeit-staging/3.11/bin/python'
+    if canonical.is_symlink() or not canonical.is_dir() or not python.is_file():
+        return {'status': 'ROOT_OR_PYTHON_UNAVAILABLE', 'changed_files': 0}
+    brand_module = canonical / 'core/brand.py'
+    if brand_module.is_symlink() or not brand_module.is_file():
+        return {'status': 'BRAND_SOURCE_UNAVAILABLE', 'changed_files': 0}
+    code = r'''
+import json, os, re, sys
+from pathlib import Path
+root = Path(os.environ['ZM_CANONICAL_APP_ROOT'])
+sys.path.insert(0, str(root))
+os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings'
+from django.conf import settings
+from django.db import connections
+result = {'status': 'READ_ONLY', 'changed_files': 0}
+try:
+    config = settings.DATABASES['default']
+    result['db_engine_family'] = str(config['ENGINE']).split('.')[-1][:30]
+    connection = connections['default']
+    def selected_only(execute, sql, params, many, context):
+        if not str(sql).lstrip().upper().startswith(('SELECT ', 'SHOW ', 'PRAGMA ')):
+            raise RuntimeError('NON_READ_SQL_BLOCKED')
+        return execute(sql, params, many, context)
+    with connection.execute_wrapper(selected_only):
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT * FROM core_brandsite WHERE 1=0')
+            columns = [str(item[0]) for item in cursor.description]
+            needed = ['primary_domain', 'aliases', 'active']
+            if not all(field in columns for field in needed):
+                result['status'] = 'EXPECTED_BRAND_FIELDS_MISSING'
+                result['known_field_names'] = [field for field in needed if field in columns]
+            else:
+                safe = [field for field in ('primary_domain','aliases','active','code',
+                                           'brand_code','template','brand','name') if field in columns]
+                names = ', '.join(connection.ops.quote_name(field) for field in safe)
+                cursor.execute('SELECT ' + names + ' FROM core_brandsite WHERE active = %s LIMIT 100', [1])
+                rows = [dict(zip(safe, row)) for row in cursor.fetchall()]
+                domain = 'staging.zomorodmelal.ir'
+                matches = []
+                for item in rows:
+                    primary = str(item.get('primary_domain') or '').strip().lower()
+                    alias_data = item.get('aliases')
+                    if isinstance(alias_data, str):
+                        try:
+                            alias_data = json.loads(alias_data)
+                        except ValueError:
+                            alias_data = []
+                    aliases = [str(v).strip().lower() for v in alias_data] if isinstance(alias_data, list) else []
+                    if primary != domain and domain not in aliases:
+                        continue
+                    record = {
+                        'matched_primary': primary == domain,
+                        'matched_alias': domain in aliases,
+                        'brand_fields_present': [name for name in ('code','brand_code','template','brand','name') if name in item],
+                    }
+                    for key in ('code','brand_code','template','brand','name'):
+                        value = item.get(key)
+                        if isinstance(value, str) and re.fullmatch(r'[a-zA-Z0-9_./ -]{1,140}', value):
+                            record[key] = value[:100]
+                    matches.append(record)
+                result['active_rows_inspected_bounded'] = len(rows)
+                result['staging_domain_matches'] = matches[:8]
+                result['query_truncated_at_100'] = len(rows) == 100
+except Exception as exc:
+    result['status'] = 'READ_ONLY_QUERY_UNAVAILABLE'
+    result['reason_class'] = type(exc).__name__
+finally:
+    try:
+        connections.close_all()
+    except Exception:
+        pass
+print('STAGING_BRANDSITE_READONLY=' + json.dumps(result, sort_keys=True))
+'''
+    env = os.environ.copy()
+    env['ZM_CANONICAL_APP_ROOT'] = str(canonical)
+    env['PYTHONDONTWRITEBYTECODE'] = '1'
+    env['PYTHONNOUSERSITE'] = '1'
+    try:
+        p = subprocess.run([str(python), '-I', '-B', '-c', code],
+                           cwd=canonical, env=env, stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, check=False, timeout=25)
+    except (OSError, subprocess.TimeoutExpired):
+        return {'status': 'QUERY_PROCESS_UNAVAILABLE', 'changed_files': 0}
+    prefix = 'STAGING_BRANDSITE_READONLY='
+    lines = [line[len(prefix):] for line in
+             p.stdout.decode('utf-8', 'replace').splitlines()
+             if line.startswith(prefix)]
+    if len(lines) == 1:
+        try:
+            return json.loads(lines[0])
+        except ValueError:
+            pass
+    return {'status': 'ISOLATED_QUERY_FAILED', 'changed_files': 0,
+            'exit_code': p.returncode, 'stderr_disclosed': False}
+
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -1132,5 +1233,6 @@ if __name__ == '__main__':
         'wsgi_entry_and_worker_parentage': staging_wsgi_entry_and_parentage_readonly(),
         'selector_registration_and_release_chain': staging_selector_registration_and_release_chain_readonly(),
         'domain_dispatch_source': staging_domain_dispatch_source_readonly(),
-        'registered_brand_home_source': staging_registered_brand_home_source_readonly()},
+        'registered_brand_home_source': staging_registered_brand_home_source_readonly(),
+        'brandsite_db_mapping': staging_brandsite_db_mapping_readonly()},
         ensure_ascii=False, sort_keys=True))
