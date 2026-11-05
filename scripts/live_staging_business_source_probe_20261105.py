@@ -1070,6 +1070,39 @@ def staging_domain_dispatch_source_readonly() -> dict[str, object]:
     return {'status': 'READ_ONLY', 'changed_files': 0, 'route_sources': results}
 
 
+
+def staging_registered_brand_home_source_readonly() -> dict[str, object]:
+    """Trace the registered WSGI root's public home dispatch by static source only."""
+    root = HOME / 'Saeit-staging'
+    if root.is_symlink() or not root.is_dir():
+        return {'status': 'CANONICAL_ROOT_UNAVAILABLE', 'changed_files': 0}
+    files = ('core/brand_views.py', 'core/brand.py', 'core/mojplaywin_views.py')
+    patterns = re.compile(r'(?i)(?:def branded_home\(|def brand_for_request\(|def branded_home_dispatch\(|def home\(|staging\.zomorodmelal|zomorodmelal\.ir|return\s+services\(|return\s+render\(|render\(|get_host\(|core/services\.html|services_views|template_name|brand\s*=)')
+    sensitive = re.compile(r'(?i)(?:secret|password|token|private.?key|credential|api.?key|authorization|bearer|database|payment|wallet)')
+    results = {}
+    for rel in files:
+        path = root / rel
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 200000:
+            results[rel] = {'present': False}
+            continue
+        raw = path.read_bytes()
+        lines = raw.decode('utf-8', 'replace').splitlines()
+        wanted = set()
+        for n, line in enumerate(lines):
+            if patterns.search(line):
+                wanted.update(range(max(0, n - 2), min(len(lines), n + 7)))
+        selection = []
+        for n in sorted(wanted):
+            line = lines[n]
+            if sensitive.search(line) or len(line) > 350 or len(selection) >= 150:
+                continue
+            selection.append({'line': n + 1,
+                              'statement': line.strip().replace(str(HOME), '$ACCOUNT_HOME')[:190]})
+        results[rel] = {'present': True, 'sha256': hashlib.sha256(raw).hexdigest(),
+                        'safe_route_lines': selection}
+    return {'status': 'READ_ONLY', 'changed_files': 0, 'canonical_home_sources': results}
+
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -1098,5 +1131,6 @@ if __name__ == '__main__':
         'active_template_settings_block': staging_template_settings_block(),
         'wsgi_entry_and_worker_parentage': staging_wsgi_entry_and_parentage_readonly(),
         'selector_registration_and_release_chain': staging_selector_registration_and_release_chain_readonly(),
-        'domain_dispatch_source': staging_domain_dispatch_source_readonly()},
+        'domain_dispatch_source': staging_domain_dispatch_source_readonly(),
+        'registered_brand_home_source': staging_registered_brand_home_source_readonly()},
         ensure_ascii=False, sort_keys=True))
