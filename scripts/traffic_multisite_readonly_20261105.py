@@ -199,6 +199,8 @@ def page_group(host, path):
         if p == '/':
             return 'homepage'
         return 'other'
+    if p.startswith('/store/'):
+        return 'corporate_store'
     if p.startswith(('/business/', '/services/', '/service/')):
         return 'corporate_business'
     if p.startswith(('/agriculture/', '/industry/')):
@@ -292,6 +294,19 @@ def raw_logs(hosts):
                     row['first_utc'] = min(row['first_utc'], date) if row['first_utc'] else date
                     row['last_utc'] = max(row['last_utc'], date) if row['last_utc'] else date
                     target = target.split('?', 1)[0]
+                    if method == 'POST':
+                        post_route = None
+                        if host.endswith('zomorodmelal.ir'):
+                            if target.startswith('/ask-master/'):
+                                post_route = 'inquiry_form'
+                            elif target in ('/contact/', '/contact.php'):
+                                post_route = 'company_contact_form'
+                        elif host == 'mojplaywin.com' and target.startswith('/mojtaba.roozegar/contact/'):
+                            post_route = 'personal_contact_form'
+                        if post_route:
+                            status_group = status[0] + 'xx'
+                            quality[host].setdefault('lead_related_post_responses', defaultdict(int))
+                            quality[host]['lead_related_post_responses'][post_route + '_' + status_group] += 1
                     if not is_page(target) or method != 'GET':
                         continue
                     personal = host == 'mojplaywin.com' and (
@@ -377,6 +392,11 @@ def raw_logs(hosts):
         q['estimated_sessions_with_multiple_page_requests'] = 0
         q['estimated_sessions_suspicious_40plus_pages'] = 0
         q['estimated_sessions_with_ai_referrer'] = 0
+        q['estimated_personal_to_store_sessions'] = 0
+        q['estimated_product_to_checkout_sessions'] = 0
+        q['estimated_business_to_contact_sessions'] = 0
+        q['estimated_company_store_to_contact_sessions'] = 0
+        q['estimated_company_store_sessions'] = 0
 
         def add_session(s):
             if s is None:
@@ -401,6 +421,16 @@ def raw_logs(hosts):
                 q['estimated_sessions_suspicious_40plus_pages'] += 1
             if s['ai']:
                 q['estimated_sessions_with_ai_referrer'] += 1
+            if s['personal_to_store']:
+                q['estimated_personal_to_store_sessions'] += 1
+            if s['product_to_checkout']:
+                q['estimated_product_to_checkout_sessions'] += 1
+            if s['business_to_contact']:
+                q['estimated_business_to_contact_sessions'] += 1
+            if s['company_store_to_contact']:
+                q['estimated_company_store_to_contact_sessions'] += 1
+            if 'corporate_store' in groups:
+                q['estimated_company_store_sessions'] += 1
 
         current_key = None
         previous_at = None
@@ -412,7 +442,18 @@ def raw_logs(hosts):
                 session = {
                     'source': ref if ref != 'same_site_navigation' else 'missing_or_hidden',
                     'landing': group, 'groups': set(), 'pages': 0, 'ai': False,
+                    'personal_to_store': False, 'product_to_checkout': False,
+                    'business_to_contact': False, 'company_store_to_contact': False,
                 }
+            past = session['groups']
+            if group.startswith('store_') and {'personal_profile', 'personal_other'} & past:
+                session['personal_to_store'] = True
+            if group == 'store_checkout' and 'store_product' in past:
+                session['product_to_checkout'] = True
+            if group == 'corporate_contact' and {'corporate_business', 'corporate_services'} & past:
+                session['business_to_contact'] = True
+            if group == 'corporate_contact' and 'corporate_store' in past:
+                session['company_store_to_contact'] = True
             session['groups'].add(group)
             session['pages'] += 1
             session['ai'] = session['ai'] or bool(ai)
@@ -426,6 +467,7 @@ def raw_logs(hosts):
             'Browser markers are not proof of humans; automated browsers can imitate them; '
             'IP plus user-agent plus 30-minute gap yields approximate sessions, not GA4 sessions. '
             'Page-group visit is not buyer intent; checkout page is not payment. '
+            'Lead POST counts are response codes, not verified inquiries. '
             'No identities, IPs, UAs, URLs or orders are printed.'
         ),
     })
