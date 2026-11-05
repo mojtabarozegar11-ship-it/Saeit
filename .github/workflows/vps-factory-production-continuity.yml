@@ -415,6 +415,86 @@ jobs:
               print("FACTORY_LINE41_" + label + "_TRUST_DIR_PROTECTED=" + str(valid).upper())
           print("FACTORY_LINE41_QC1000_AND_RECEIVER_ACCEPTANCE_VERIFIED=NO")
           LINE41_AUDIT
+          # Verify the exact private Line41 package without extracting or publishing it.
+          python3 - "$base" <<'LINE41_PACKAGE_AUDIT'
+          import hashlib
+          import json
+          from pathlib import Path, PurePosixPath
+          import re
+          import stat
+          import sys
+          import zipfile
+          base = Path(sys.argv[1])
+          recipe = "farm_enterprise_economics"
+          product = base / "private/autonomous-product-cycle/digital-products" / recipe
+          manifest_path = product / "manufacturing_manifest.json"
+          artifact_path = product / (recipe + "-internal-qa.zip")
+          def safe_file(path, limit):
+              try:
+                  if any(p.is_symlink() for p in (path, *path.parents)):
+                      return False
+                  st = path.stat()
+                  return stat.S_ISREG(st.st_mode) and 0 < st.st_size <= limit
+              except OSError:
+                  return False
+          if not safe_file(manifest_path, 2097152):
+              print("FACTORY_LINE41_PACKAGE_MANIFEST_STATUS=UNAVAILABLE")
+              raise SystemExit(0)
+          try:
+              manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          except (OSError, ValueError, UnicodeError):
+              manifest = None
+          if not isinstance(manifest, dict):
+              print("FACTORY_LINE41_PACKAGE_MANIFEST_STATUS=INVALID")
+              raise SystemExit(0)
+          print("FACTORY_LINE41_PACKAGE_MANIFEST_STATUS=PARSED")
+          print("FACTORY_LINE41_PACKAGE_RECIPE_MATCH=" + str(manifest.get("recipe") == recipe).upper())
+          print("FACTORY_LINE41_PACKAGE_SCHEMA_V2=" + str(manifest.get("schema_version") == 2).upper())
+          print("FACTORY_LINE41_PACKAGE_TECHNICAL_QA_STATUS=" +
+                (manifest.get("qa_status") if manifest.get("qa_status") in ("passed", "failed", "pending") else "OTHER_OR_MISSING"))
+          measure = manifest.get("qa_measurements")
+          tests = measure.get("successful_tests") if isinstance(measure, dict) else None
+          print("FACTORY_LINE41_PACKAGE_RECORDED_SUCCESSFUL_TESTS=" +
+                (str(tests) if type(tests) is int and 0 <= tests <= 100000 else "UNKNOWN"))
+          grade = manifest.get("professional_quality_score")
+          print("FACTORY_LINE41_PACKAGE_PROFESSIONAL_GRADE=" +
+                (str(grade) if type(grade) is int and 0 <= grade <= 1000 else "NOT_VERIFIED"))
+          print("FACTORY_LINE41_PACKAGE_RECORDED_PROFESSIONAL_APPROVED=" +
+                str(manifest.get("professional_quality_approved") is True).upper())
+          print("FACTORY_LINE41_PACKAGE_RECORDED_PUBLIC_LISTING=" +
+                str(manifest.get("public_listing_enabled") is True).upper())
+          if not safe_file(artifact_path, 268435456):
+              print("FACTORY_LINE41_PACKAGE_ARTIFACT_HASH=UNAVAILABLE_OR_OVER_LIMIT")
+              raise SystemExit(0)
+          h = hashlib.sha256()
+          with artifact_path.open("rb") as stream:
+              for chunk in iter(lambda: stream.read(1048576), b""):
+                  h.update(chunk)
+          expected = manifest.get("artifact_sha256")
+          good_sha = isinstance(expected, str) and bool(re.fullmatch(r"[a-f0-9]{64}", expected))
+          print("FACTORY_LINE41_PACKAGE_ARTIFACT_SHA256_MATCH=" +
+                str(good_sha and h.hexdigest() == expected).upper())
+          print("FACTORY_LINE41_PACKAGE_ARTIFACT_BYTES=" + str(artifact_path.stat().st_size))
+          try:
+              with zipfile.ZipFile(artifact_path) as archive:
+                  members = archive.infolist()
+                  names = [m.filename for m in members]
+                  unpacked = sum(m.file_size for m in members)
+                  unsafe = sum(bool(n.startswith("/") or ".." in PurePosixPath(n).parts or "\\" in n)
+                               for n in names)
+                  print("FACTORY_LINE41_PACKAGE_ZIP_MEMBER_COUNT=" + str(len(members)))
+                  print("FACTORY_LINE41_PACKAGE_ZIP_UNPACKED_BYTES=" + str(unpacked))
+                  print("FACTORY_LINE41_PACKAGE_ZIP_DUPLICATE_NAMES=" + str(len(names) - len(set(names))))
+                  print("FACTORY_LINE41_PACKAGE_ZIP_UNSAFE_PATHS=" + str(unsafe))
+                  if len(members) <= 1000 and unpacked <= 67108864 and unsafe == 0:
+                      print("FACTORY_LINE41_PACKAGE_ZIP_CRC=" +
+                            ("PASS" if archive.testzip() is None else "FAIL"))
+                  else:
+                      print("FACTORY_LINE41_PACKAGE_ZIP_CRC=NOT_RUN_SAFETY_LIMIT")
+          except (OSError, ValueError, zipfile.BadZipFile, RuntimeError):
+              print("FACTORY_LINE41_PACKAGE_ZIP_CRC=INVALID_ARCHIVE")
+          print("FACTORY_LINE41_PACKAGE_COMMERCIAL_RELEASE_AUTHORIZED=NO")
+          LINE41_PACKAGE_AUDIT
           cd "$base/django-app"
           export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
           export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
