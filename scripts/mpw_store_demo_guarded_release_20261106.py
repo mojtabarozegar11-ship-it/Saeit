@@ -2,7 +2,7 @@
 """One-file, rollback-capable removal of a misdirected MojPlayWin store demo link.
 
 Never touches checkout handlers, products, price, orders, invoices, database,
-payment configuration or mail. The live source must match the reviewed SHA-256.
+payment configuration or mail. Keeps every live byte except the exact bad anchor.
 """
 from __future__ import annotations
 
@@ -23,14 +23,12 @@ PUBLIC = Path("/home/zomorod2/mojplaywin.com")
 TARGET = APP / "core/templates/mojplaywin/store.html"
 RESTART = PUBLIC / "tmp/restart.txt"
 BACKUPS = Path("/home/zomorod2/.local/share/mpw-store-demo-releases")
-BEFORE_SHA = "8e7e7f0209fd08704f94940574cb13e04996c94f79d1cfebb3be373f38305383"
 AFTER_SHA = "d5e0419ec6e48b2c9f85f20860a910fc43b069d14ffd86d6cb11e00a0d7f0cec"
 DEMO = ('<a class="mpw-product-demo" '
         'href="https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/" '
         'target="_blank" rel="noopener noreferrer">Open the live demo '
         '<span aria-hidden="true">↗</span></a>').encode("utf-8")
-REQUIRED = (b'mpw-product-879-title', b'href="/store/product/879/"',
-            b'US $6.80', b'US $7.50', b'US $4.00')
+PRODUCT_CONTEXT = (b'mpw-product--atelier', b'mpw-product-879-title')
 
 
 def sha(content):
@@ -71,11 +69,16 @@ def reviewed(data):
             data.count(b'atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/') != 1 or
             data.count(b'Open the live demo') != 1):
         fail("DEMO_LINK_NOT_UNIQUE_OR_CHANGED")
-    if not all(token in data for token in REQUIRED):
-        fail("PRODUCT_CONTRACT_CHANGED")
+    # The cPanel template can contain independently edited prices and products.
+    # Require the mistaken link inside the Atelier product card, but leave all
+    # other live content byte-for-byte intact regardless of its source revision.
+    start = data.rfind(b'<article', 0, data.index(DEMO))
+    end = data.find(b'</article>', data.index(DEMO))
+    if (start < 0 or end < 0 or
+            not all(token in data[start:end] for token in PRODUCT_CONTEXT)):
+        fail("DEMO_OUTSIDE_ATELIER_CARD")
     after = data.replace(DEMO, b"", 1)
-    if len(data) - len(after) != len(DEMO) or not all(
-            token in after for token in REQUIRED):
+    if len(data) - len(after) != len(DEMO) or after.count(b'Open the live demo'):
         fail("UNEXPECTED_DIFF")
     return after
 
@@ -83,8 +86,7 @@ def reviewed(data):
 def preflight():
     guard_host()
     current = checked_file(TARGET)
-    if DEMO not in current and b'Open the live demo' not in current and all(
-            token in current for token in REQUIRED):
+    if DEMO not in current and b'Open the live demo' not in current:
         print("MPW_STORE_DEMO_PREFLIGHT=ALREADY_FIXED;NO_CHANGE=TRUE")
         return
     reviewed(current)
@@ -119,8 +121,7 @@ def publish(run_id):
         fail("BAD_RUN_ID")
     guard_host()
     before = checked_file(TARGET)
-    if DEMO not in before and b'Open the live demo' not in before and all(
-            token in before for token in REQUIRED):
+    if DEMO not in before and b'Open the live demo' not in before:
         print("MPW_STORE_DEMO_PUBLISH=ALREADY_FIXED;NO_CHANGE=TRUE")
         return
     after = reviewed(before)
@@ -169,8 +170,7 @@ def verify(run_id):
             fail("VERIFY_DIFF_FROM_BACKUP")
     elif DEMO in current or b'Open the live demo' in current:
         fail("VERIFY_NOT_PUBLISHED")
-    if DEMO in current or not all(
-            token in current for token in REQUIRED):
+    if DEMO in current or b'Open the live demo' in current:
         fail("VERIFY_NOT_PUBLISHED")
     print("MPW_STORE_DEMO_VERIFY=PASS;NO_PAYMENT=TRUE;NO_EMAIL=TRUE", flush=True)
 
@@ -180,12 +180,23 @@ def selftest():
     assert sample.count(DEMO) == 1
     assert sample.replace(DEMO, b"", 1) == b"prefixsuffix"
     assert sha(sample) != sha(sample.replace(DEMO, b"", 1))
+    live = (b'<article class="mpw-product--atelier"><h3 id="mpw-product-879-title">'
+            b'Atelier</h3><p>Independent price and listing edits</p>' + DEMO +
+            b'</article><article>Other product unchanged</article>')
+    assert reviewed(live) == live.replace(DEMO, b"", 1)
+    try:
+        reviewed(b'<article>Unrelated product</article>' + live.replace(
+            b'<article class="mpw-product--atelier">', b'<div>'))
+    except RuntimeError as exc:
+        assert "DEMO_OUTSIDE_ATELIER_CARD" in str(exc)
+    else:
+        raise AssertionError("foreign demo link was accepted")
     fixed_source = Path(__file__).resolve().parents[1] / "core/templates/mojplaywin/store.html"
     if fixed_source.is_file():
         fixed = fixed_source.read_bytes()
         assert sha(fixed) == AFTER_SHA
         assert DEMO not in fixed
-        assert all(token in fixed for token in REQUIRED)
+        assert all(token in fixed for token in PRODUCT_CONTEXT)
     print("MPW_STORE_DEMO_SELFTEST=PASS")
 
 
