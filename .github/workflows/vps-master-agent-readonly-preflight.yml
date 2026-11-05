@@ -66,6 +66,36 @@ jobs:
               for status in ('queued','running','failed','completed'):
                   print('MASTER_SELF_IMPROVEMENT_'+status.upper()+'='+str(AgentTask.objects.filter(
                       agent=agent,capability_code='master_self_improvement',status=status).count()))
+          # Read-only diagnosis: do not print raw task errors or customer data.
+          from core.autonomous_brain import AutonomousBrain
+          latest_self_failure = AgentTask.objects.filter(
+              agent__code='economic-master-agent',
+              capability_code='master_self_improvement',status='failed'
+          ).order_by('-updated_at','-pk').first()
+          raw_error = str((latest_self_failure.output_data or {}).get('error','')) if latest_self_failure else ''
+          known_errors = (
+              'MASTER_SELF_IMPROVEMENT_ENGINE_MISSING',
+              'CODE_UPGRADE_FACTORY_SOURCE_MISSING',
+              'CODE_UPGRADE_EXPECTED_MODULE_MISSING',
+              'CODE_UPGRADE_OUTPUT_MUST_BE_PRIVATE_OUTSIDE_CHECKOUT',
+              'CODE_UPGRADE_PROBE_FAIL',
+              'CODE_UPGRADE_UNREPAIRED_UNSUPPORTED_SOURCE',
+          )
+          failure_class = next((code for code in known_errors if code in raw_error),
+                               'OTHER' if raw_error else 'NO_RECORDED_ERROR')
+          print('MASTER_SELF_IMPROVEMENT_FAILURE_CLASS='+failure_class)
+          django_root=Path.cwd()
+          engine=django_root/'scripts/factory_code_self_upgrade.py'
+          source=Path.home()/'factory-runtime/operations/factory-code-self-upgrade/source/scripts/factory_code_self_upgrade.py'
+          dossier=Path.home()/'factory-runtime/private/autonomous-product-cycle/code-self-upgrade/evolution-proof.json'
+          print('MASTER_DJANGO_UPGRADE_ENGINE_PRESENT='+str(engine.is_file() and not engine.is_symlink()))
+          print('MASTER_ISOLATED_UPGRADE_ENGINE_PRESENT='+str(source.is_file() and not source.is_symlink()))
+          print('MASTER_ISOLATED_UPGRADE_DOSSIER_PRESENT='+str(dossier.is_file() and not dossier.is_symlink()))
+          try:
+              decision=AutonomousBrain().decide()['chosen']
+              print('MASTER_NEXT_ACTION='+str(decision['action']))
+          except Exception as exc:
+              print('MASTER_DECISION_ERROR_CLASS='+type(exc).__name__)
           from django.utils import timezone
           from core.models import Product
           running=AgentTask.objects.filter(agent__code='economic-master-agent',status='running').order_by('updated_at')
