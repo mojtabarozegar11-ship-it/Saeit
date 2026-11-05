@@ -177,3 +177,40 @@ def test_failed_self_improvement_does_not_block_commercial_pipeline():
     }
 
     assert brain.candidates(state)[0].action == "income_market_research"
+
+
+def test_existing_catalog_without_real_customer_channel_stops_noop_loop():
+    state = {
+        "unfinished_tasks": 0, "market_research_complete": True,
+        "opportunity_scored": True, "self_improvement_complete": True,
+        "active_products": 4, "offer_designed": 0, "mvp_built": 0,
+        "growth_ready": 0, "orders": 0, "paid_orders": 0,
+        "financial_event_needs_reconcile": False,
+    }
+    action = AutonomousBrain().candidates(state)[0].action
+    assert action == "await_external_acquisition"
+
+
+def test_growth_ready_without_new_money_evidence_does_not_repeat_profit_review():
+    state = {
+        "unfinished_tasks": 0, "market_research_complete": True,
+        "opportunity_scored": True, "self_improvement_complete": True,
+        "active_products": 0, "offer_designed": 0, "mvp_built": 0,
+        "growth_ready": 1, "orders": 0, "paid_orders": 0,
+        "financial_event_needs_reconcile": False,
+    }
+    brain = AutonomousBrain()
+    assert brain.candidates(state)[0].action == "await_external_acquisition"
+    state["financial_event_needs_reconcile"] = True
+    assert brain.candidates(state)[0].action == "income_revenue_verify"
+
+
+def test_new_payment_evidence_takes_priority_over_internal_research():
+    state = {
+        "unfinished_tasks": 0, "market_research_complete": False,
+        "opportunity_scored": False, "self_improvement_complete": False,
+        "active_products": 0, "offer_designed": 0, "mvp_built": 0,
+        "growth_ready": 0, "orders": 1, "paid_orders": 1,
+        "financial_event_needs_reconcile": True,
+    }
+    assert AutonomousBrain().candidates(state)[0].action == "income_revenue_verify"
