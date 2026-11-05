@@ -237,7 +237,7 @@ def factory_entrypoint_readonly() -> dict[str, object]:
         if filename == '.htaccess':
             entry['passenger_configuration'] = [line.strip()[:180]
                 for line in content.splitlines()
-                if re.match(r'^\s*(?:Passenger|RewriteRule|RewriteCond|SetHandler|AddHandler)\b', line, re.I)
+                if re.match(r'^\s*(?:Passenger\w*|RewriteRule|RewriteCond|SetHandler|AddHandler)\b', line, re.I)
                 and not re.search(r'token|secret|password|api[_-]?key', line, re.I)][:30]
         else:
             try:
@@ -256,12 +256,46 @@ def factory_entrypoint_readonly() -> dict[str, object]:
                         if isinstance(statement, ast.Assign)
                         else isinstance(statement.target, ast.Name) and statement.target.id == 'application'
                     ) for statement in tree.body)
+                home_literal_paths = sorted({node.value for node in ast.walk(tree)
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str)
+                    and node.value.startswith(str(HOME)) and len(node.value) < 220})
+                entry['home_directory_references'] = home_literal_paths[:10]
+                entry['django_settings_module_mentions'] = sorted({node.value
+                    for node in ast.walk(tree) if isinstance(node, ast.Constant)
+                    and isinstance(node.value, str) and node.value.endswith('.settings')
+                    and len(node.value) < 120})
             except SyntaxError:
                 entry['parse_error'] = 'SYNTAX_ERROR'
         item[filename] = entry
     item['app_file_indicators'] = {filename: (root / filename).exists()
         for filename in ('app.py', 'config.py', 'requirements.txt', 'index.html', 'tmp/restart.txt')}
     return item
+
+
+def cpanel_passenger_comparison_readonly() -> dict[str, object]:
+    roots = {'factory': HOME / 'factory.zomorodmelal.ir',
+             'staging': HOME / 'Saeit-staging-web',
+             'mojplaywin': HOME / 'mojplaywin.com',
+             'main': HOME / 'public_html'}
+    result: dict[str, object] = {}
+    for name, root in roots.items():
+        ht = root / '.htaccess'
+        if not ht.is_file() or ht.is_symlink():
+            result[name] = {'status': 'HTACCESS_MISSING'}
+            continue
+        text = ht.read_text('utf-8', 'replace')
+        directives = []
+        for line in text.splitlines():
+            line = line.strip()
+            if re.match(r'^(?:Passenger\w*|SetHandler|AddHandler|ErrorDocument)\b', line, re.I):
+                if not re.search(r'secret|password|token|authorization|api[_-]?key', line, re.I):
+                    directives.append(line[:220])
+        result[name] = {'directives': directives[:35],
+                        'newsletter_mentions': len(re.findall(r'newsletter', text, re.I)),
+                        'factory_mentions': len(re.findall(r'factory', text, re.I)),
+                        'rewrite_rules': len(re.findall(r'(?im)^\s*RewriteRule\b', text)),
+                        'wsgi_entrypoint_present': (root / 'passenger_wsgi.py').is_file()}
+    return result
 
 
 def log_error_signatures_readonly() -> list[dict[str, object]]:
@@ -305,6 +339,8 @@ def main() -> None:
                                                       ensure_ascii=False, sort_keys=True))
     print('LIVE_FACTORY_ENTRYPOINT=' + json.dumps(factory_entrypoint_readonly(),
                                                   ensure_ascii=False, sort_keys=True))
+    print('LIVE_PASSENGER_CONFIG_COMPARE=' + json.dumps(cpanel_passenger_comparison_readonly(),
+                                                       ensure_ascii=False, sort_keys=True))
     print('LIVE_LOG_SIGNATURES=' + json.dumps(log_error_signatures_readonly(),
                                               ensure_ascii=False, sort_keys=True))
     print('READ_ONLY_DIAGNOSTIC_COMPLETE=1')
