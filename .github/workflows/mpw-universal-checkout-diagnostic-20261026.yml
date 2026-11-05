@@ -58,6 +58,30 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
+      - name: Execute guest start for new and existing email inside rollback-only transactions
+        run: |
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,traceback,json
+          os.chdir('/home/zomorod2/Saeit-staging');sys.path.insert(0,os.getcwd())
+          runpy=None
+          import runpy
+          runpy.run_path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
+          import django; django.setup()
+          from django.test import Client
+          from django.db import transaction
+          for email in ('rollback-only@example.invalid','mojtaba.rozegar11@gmail.com'):
+              try:
+                  with transaction.atomic():
+                      c=Client(enforce_csrf_checks=False,raise_request_exception=True)
+                      page=c.get('/store/product/779/checkout/',secure=True,HTTP_HOST='mojplaywin.com')
+                      token=c.cookies.get('csrftoken'); value=token.value if token else ''
+                      response=c.post('/commerce/trx-easy/start/779/',{'email':email},secure=True,HTTP_HOST='mojplaywin.com',HTTP_X_CSRFTOKEN=value)
+                      print('MPW_ROLLBACK_EMAIL_RESULT='+json.dumps({'email':email,'page':page.status_code,'status':response.status_code,'location':response.get('Location','')}))
+                      raise RuntimeError('intentional rollback after response')
+              except Exception as exc:
+                  print('MPW_ROLLBACK_EMAIL_EXCEPTION='+json.dumps({'email':email,'type':type(exc).__name__,'message':str(exc)[:500]}))
+                  traceback.print_exc()
+          PY
       - name: Read-only routes, product gates, and invoice implementation
         run: |
           timeout 145s ssh -T -F "$RUNNER_TEMP/mpw-invoice-diag-ssh/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
