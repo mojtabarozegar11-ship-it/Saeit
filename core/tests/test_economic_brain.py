@@ -1,5 +1,7 @@
 from datetime import timedelta
+from io import StringIO
 
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
@@ -85,6 +87,76 @@ class VerifiedEconomicCycleTests(TestCase):
         state = brain.observe()
         self.assertFalse(state["self_improvement_complete"])
         self.assertEqual(brain.candidates(state)[0].action, "master_self_improvement")
+
+    def test_stale_running_task_is_recovered_without_duplicate_task(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_market_research",
+            capability_code="income_market_research", status="running",
+            attempt_count=1, max_attempts=3, execution_id="obsolete-worker",
+        )
+        AgentTask.objects.filter(pk=task.pk).update(
+            updated_at=timezone.now() - timedelta(minutes=20)
+        )
+        output = StringIO()
+        call_command("online_income_cycle", stdout=output)
+        task.refresh_from_db()
+        self.assertEqual(task.status, "queued")
+        self.assertEqual(task.execution_id, "")
+        self.assertEqual(AgentTask.objects.filter(agent=self.agent).count(), 1)
+        self.assertIn("BRAIN_RECOVERED", output.getvalue())
+
+    def test_blocked_task_requires_review_without_spawning_replacement(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_growth_experiment",
+            capability_code="income_growth_experiment", status="blocked",
+        )
+        output = StringIO()
+        call_command("online_income_cycle", stdout=output)
+        self.assertIn(f"BRAIN_BLOCKED task={task.pk}", output.getvalue())
+        self.assertEqual(AgentTask.objects.filter(agent=self.agent).count(), 1)
+
+    def test_dry_run_does_not_recover_stale_running_task(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_market_research",
+            capability_code="income_market_research", status="running",
+            attempt_count=1, execution_id="old-worker",
+        )
+        AgentTask.objects.filter(pk=task.pk).update(
+            updated_at=timezone.now() - timedelta(minutes=25)
+        )
+        call_command("online_income_cycle", "--dry-run", stdout=StringIO())
+        task.refresh_from_db()
+        self.assertEqual(task.status, "running")
+        self.assertEqual(task.execution_id, "old-worker")
+
+    def test_exhausted_stale_task_fails_without_infinite_retry(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_market_research",
+            capability_code="income_market_research", status="running",
+            attempt_count=3, max_attempts=3, execution_id="expired-worker",
+        )
+        AgentTask.objects.filter(pk=task.pk).update(
+            updated_at=timezone.now() - timedelta(minutes=30)
+        )
+        output = StringIO()
+        call_command("online_income_cycle", stdout=output)
+        task.refresh_from_db()
+        self.assertEqual(task.status, "failed")
+        self.assertEqual(AgentTask.objects.filter(agent=self.agent).count(), 1)
+        self.assertIn("status=failed", output.getvalue())
+
+    def test_recent_running_task_is_not_reclaimed(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_market_research",
+            capability_code="income_market_research", status="running",
+            attempt_count=1, execution_id="live-worker",
+        )
+        output = StringIO()
+        call_command("online_income_cycle", stdout=output)
+        task.refresh_from_db()
+        self.assertEqual(task.status, "running")
+        self.assertEqual(task.execution_id, "live-worker")
+        self.assertIn("awaiting_heartbeat_or_recovery", output.getvalue())
 
 
 def test_failed_self_improvement_does_not_block_commercial_pipeline():
