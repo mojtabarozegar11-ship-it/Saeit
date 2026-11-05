@@ -190,6 +190,7 @@ PY
 # factory code can differ from the repository, so inspect bounded live evidence
 # without claiming a worker from a mere filename or process-name match.
 "$python_bin" - <<'PY'
+import ast
 import collections
 import hashlib
 import json
@@ -210,6 +211,7 @@ owners = ("factory-market-research-agent", "factory-opportunity-validation-agent
 open_statuses = ("queued", "running", "blocked")
 fields = {field.name for field in Task._meta.fields}
 has_run_link = "factory_run" in fields
+has_run_product = any(field.name == "product" for field in Run._meta.fields)
 active_run_ids = set(Run.objects.filter(status="active").values_list("pk", flat=True))
 
 def age_hours(value):
@@ -265,6 +267,10 @@ for owner in owners:
         "attempt_budget_exhausted": dict(sorted(attempt_exhausted.items())),
         "blocked_reason_categories": dict(sorted(reasons.items())),
         "factory_run_links": dict(sorted(links.items())) if has_run_link else "field_absent",
+        "queued_on_active_django_products": (
+            tasks.filter(status="queued", factory_run__product__active=True).count()
+            if has_run_link and has_run_product else None
+        ),
         **recent,
     })
 
@@ -286,12 +292,23 @@ for label, path in known_sources.items():
         sources[label] = {"state": "oversized_not_inspected"}
     else:
         data = path.read_bytes()
+        try:
+            parsed = ast.parse(data, filename=label)
+            dispatch_functions = sorted(set(
+                node.name for node in ast.walk(parsed)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and any(tag in node.name.lower() for tag in
+                        ("worker", "dispatch", "research", "validat", "task", "staging"))
+            ))[:20]
+        except (SyntaxError, UnicodeDecodeError):
+            dispatch_functions = []
         sources[label] = {
             "state": "present", "sha256_prefix": hashlib.sha256(data).hexdigest()[:16],
             "mentions_research": b"product_research" in data,
             "mentions_validation": b"product_validation" in data,
             "mentions_worker_runner": b"WorkerRunner" in data,
             "mentions_task_runtime": b"TaskRuntime" in data,
+            "candidate_function_names": dispatch_functions,
         }
 
 print("AGENT_FLEET_FACTORY_BACKLOG_EXECUTION_EVIDENCE=" + json.dumps({
@@ -300,6 +317,7 @@ print("AGENT_FLEET_FACTORY_BACKLOG_EXECUTION_EVIDENCE=" + json.dumps({
     "active_factory_runs": len(active_run_ids),
     "active_django_products": Product.objects.filter(active=True).count(),
     "task_factory_run_field_present": has_run_link,
+    "factory_run_product_field_present": has_run_product,
     "agents": rows, "installed_source_indicators": sources,
     "worker_execution_proven": False,
     "blocked_tasks_resumed": 0, "tasks_modified": 0,
@@ -328,8 +346,15 @@ for line in cron.stdout.splitlines():
     # A stable command fingerprint permits duplicates to be located without
     # disclosing URLs, inline secrets, personal paths or command arguments.
     markers = re.findall(r"#\s*([A-Z][A-Z0-9_-]{5,})\s*$", command)
+    route_flags = {
+        "factory_agent_runtime": "factory_agent_runtime" in command,
+        "factory_staging_tick": "factory_staging_tick" in command,
+        "stage4_due_dispatch": "stage4-due-dispatch" in command or "stage4_due_dispatch" in command,
+        "economic_worker": "economic_worker" in command,
+    }
     entries.append({"schedule": schedule, "marker": markers[-1] if markers else None,
-                    "command_sha256": hashlib.sha256(command.encode()).hexdigest()[:16]})
+                    "command_sha256": hashlib.sha256(command.encode()).hexdigest()[:16],
+                    "route_flags": route_flags})
 print("AGENT_FLEET_USER_CRON=" + json.dumps({"readable": cron.returncode == 0,
     "entries": entries}, sort_keys=True, separators=(",", ":")))
 
