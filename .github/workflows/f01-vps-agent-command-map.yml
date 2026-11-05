@@ -109,7 +109,7 @@ jobs:
           selected = settings.DATABASES.get("default", {}).get("NAME", "")
           db = Path(selected).resolve() if isinstance(selected, (str, Path)) and selected else None
           if (engine.endswith("sqlite3") and db is not None and
-                  db.is_relative_to(root / "private") and db.is_file() and
+                  db.is_relative_to(root) and db.is_file() and
                   not db.is_symlink()):
               connection = None
               try:
