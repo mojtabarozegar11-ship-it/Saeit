@@ -1,0 +1,135 @@
+name: F01 private QA v2 exact ZIP stage only
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/f01-vps-private-qa-candidate-v2-20261106.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f01-single-private-candidate-stage
+  cancel-in-progress: false
+
+jobs:
+  private-stage:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.ref == 'fix/f01-financial-export-recovery-20261106'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 3
+          persist-credentials: false
+      - name: Build exact F01 privately and stage only in isolated VPS directory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          RUN_NONCE: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          reviewed='7defe0fd2624887cf23e28529848b5daaff29c36'
+          expected_zip='bff291fa69cc23b9253c28fc0d35041b3c7ad92e9814ba7aee8f1a4fff7e292b'
+          test -n "$VPS_KEY"
+          [[ "$RUN_NONCE" =~ ^[0-9]+$ ]]
+          git cat-file -e "$reviewed^{commit}"
+          git diff --quiet "$reviewed" HEAD -- \
+            product_recipes/farm_enterprise_economics \
+            scripts/factory_product_maker.py \
+            scripts/factory_personal_owner_passport_policy_20261020.py \
+            scripts/f01_technical_evidence_bridge.py
+          d="$RUNNER_TEMP/f01-private-qa-v2"
+          install -d -m 700 "$d/recipes" "$d/candidate/products" "$d/candidate/source/product_recipes" "$d/candidate/source/scripts" "$d/ssh"
+          trap 'rm -rf -- "$d"' EXIT
+          cp -a product_recipes/farm_enterprise_economics "$d/recipes/"
+          cp -a "$d/recipes/farm_enterprise_economics" "$d/candidate/source/product_recipes/"
+          cp scripts/f01_technical_evidence_bridge.py "$d/candidate/source/scripts/"
+          if find "$d/candidate/source" -type l -print -quit | grep -q .; then
+            echo F01_SOURCE_SYMLINK_FORBIDDEN >&2; exit 3
+          fi
+          python3 scripts/factory_product_maker.py \
+            --recipes "$d/recipes" --out "$d/candidate/products" \
+            --recipe farm_enterprise_economics --max-builds 1
+          python3 "$d/recipes/farm_enterprise_economics/build_technical_evidence.py" \
+            --recipe-dir "$d/recipes/farm_enterprise_economics" \
+            --evidence-dir "$d/candidate/evidence"
+          product="$d/candidate/products/farm_enterprise_economics"
+          python3 scripts/f01_technical_evidence_bridge.py \
+            --recipe-dir "$d/recipes/farm_enterprise_economics" \
+            --evidence-dir "$d/candidate/evidence" \
+            --product-dir "$product" --install
+          zip_file="$product/farm_enterprise_economics-internal-qa.zip"
+          zip_sha="$(sha256sum "$zip_file" | cut -d ' ' -f 1)"
+          test "$zip_sha" = "$expected_zip"
+          python3 "$d/candidate/source/scripts/f01_technical_evidence_bridge.py" \
+            --recipe-dir "$d/candidate/source/product_recipes/farm_enterprise_economics" \
+            --evidence-dir "$d/candidate/evidence" --product-dir "$product"
+          tar -czf "$d/candidate.tar.gz" -C "$d/candidate" products evidence source
+          test "$(stat -c %s "$d/candidate.tar.gz")" -le 1000000
+          tar_sha="$(sha256sum "$d/candidate.tar.gz" | cut -d ' ' -f 1)"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/ssh/key"
+          chmod 600 "$d/ssh/key"
+          ssh-keygen -y -P '' -f "$d/ssh/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/ssh/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/ssh/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-i "$d/ssh/key" -o IdentitiesOnly=yes -o ForwardAgent=no -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/ssh/known" -o ConnectTimeout=15)
+          ssh -T "${opts[@]}" githubops@178.239.147.150 \
+            "umask 077; test -d \"\$HOME/factory-runtime\" && test ! -L \"\$HOME/factory-runtime\"; install -d -m 700 \"\$HOME/factory-runtime/.f01-private-qa-candidates\""
+          remote_tar="/home/githubops/factory-runtime/.f01-private-qa-candidates/.upload-${RUN_NONCE}.tar.gz"
+          scp "${opts[@]}" "$d/candidate.tar.gz" "githubops@178.239.147.150:$remote_tar"
+          ssh -T "${opts[@]}" githubops@178.239.147.150 \
+            "bash -s -- '$RUN_NONCE' '$tar_sha' '$zip_sha' '$reviewed'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run_nonce="$1" tar_sha="$2" zip_sha="$3" reviewed="$4"
+          [[ "$run_nonce" =~ ^[0-9]+$ && "$tar_sha" =~ ^[a-f0-9]{64}$ && "$zip_sha" =~ ^[a-f0-9]{64}$ && "$reviewed" =~ ^[a-f0-9]{40}$ ]]
+          base="$HOME/factory-runtime"
+          staging="$base/.f01-private-qa-candidates"
+          input="$staging/.upload-${run_nonce}.tar.gz"
+          destination="$staging/$zip_sha"
+          test -d "$staging" && test ! -L "$staging"
+          test -f "$input" && test ! -L "$input"
+          test "$(sha256sum "$input" | cut -d ' ' -f 1)" = "$tar_sha"
+          test "$(stat -c %s "$input")" -le 1000000
+          incoming="$(mktemp -d "$staging/.incoming-${run_nonce}.XXXXXXXX")"
+          trap 'rm -f -- "$input"; rm -rf -- "$incoming"' EXIT
+          tar -xzf "$input" -C "$incoming" --no-same-owner --no-same-permissions
+          if find "$incoming" -type l -print -quit | grep -q .; then
+            echo F01_PRIVATE_QA_SYMLINK_FORBIDDEN >&2; exit 3
+          fi
+          archive="$incoming/products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip"
+          test -f "$archive" && test ! -L "$archive"
+          test "$(sha256sum "$archive" | cut -d ' ' -f 1)" = "$zip_sha"
+          bridge="$incoming/source/scripts/f01_technical_evidence_bridge.py"
+          recipe="$incoming/source/product_recipes/farm_enterprise_economics"
+          test -f "$bridge" && test ! -L "$bridge"
+          python3 "$bridge" --recipe-dir "$recipe" --evidence-dir "$incoming/evidence" \
+            --product-dir "$incoming/products/farm_enterprise_economics"
+          if test -e "$destination" || test -L "$destination"; then
+            test -d "$destination" && test ! -L "$destination"
+            old_archive="$destination/products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip"
+            test -f "$old_archive" && test ! -L "$old_archive"
+            test "$(sha256sum "$old_archive" | cut -d ' ' -f 1)" = "$zip_sha"
+            python3 "$destination/source/scripts/f01_technical_evidence_bridge.py" \
+              --recipe-dir "$destination/source/product_recipes/farm_enterprise_economics" \
+              --evidence-dir "$destination/evidence" \
+              --product-dir "$destination/products/farm_enterprise_economics"
+            echo F01_VPS_PRIVATE_CANDIDATE=ALREADY_PRESENT
+          else
+            mv -- "$incoming" "$destination"
+            trap 'rm -f -- "$input"' EXIT
+            echo F01_VPS_PRIVATE_CANDIDATE=NEW_SHA_VERIFIED
+          fi
+          echo "F01_VPS_PRIVATE_QA_ZIP_SHA=$zip_sha"
+          echo "F01_SOURCE_COMMIT=$reviewed"
+          echo F01_OPERATING_PRODUCT_ZIP_CHANGED=false
+          echo F01_CRON_OR_SERVICES_CHANGED=false
+          echo F01_FACTORY_ACTIVATION=NOT_REQUESTED
+          echo F01_COMMERCIAL_RELEASE=FALSE
+          REMOTE
