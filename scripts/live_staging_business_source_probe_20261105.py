@@ -454,6 +454,40 @@ print('DJANGO_TEMPLATE_ORIGIN_READONLY=' + json.dumps({
     return {'status': 'IMPORT_OR_RESOLUTION_UNAVAILABLE', 'exit_code': proc.returncode,
             'stderr_disclosed': False}
 
+def staging_live_worker_nonsecret_runtime() -> dict[str, object]:
+    """Whitelisted settings names only; never print a full process environment."""
+    inventory = staging_owned_worker_restart_safety()
+    if inventory.get('status') != 'READ_ONLY':
+        return {'status': 'WORKER_SAFETY_UNAVAILABLE'}
+    workers = [x for x in inventory.get('details', []) if x.get('eligible_for_targeted_restart')]
+    records = []
+    for item in workers[:10]:
+        try:
+            pid = item['pid']
+            env_values = (Path('/proc') / str(pid) / 'environ').read_bytes().split(b'\x00')
+            def known_value(key: bytes) -> str | None:
+                prefix = key + b'='
+                found = [v[len(prefix):] for v in env_values if v.startswith(prefix)]
+                if len(found) != 1 or len(found[0]) > 2000:
+                    return None
+                return found[0].decode('utf-8', 'replace')
+            settings = known_value(b'DJANGO_SETTINGS_MODULE')
+            pythonpath = known_value(b'PYTHONPATH')
+            virtualenv = known_value(b'VIRTUAL_ENV')
+            root = str(HOME / 'Saeit-staging/admin-smoke/ab090d03f5bc-38498776878')
+            records.append({
+                'settings_module': settings if settings and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_.]{1,80}', settings) else 'UNSET_OR_OTHER',
+                'pythonpath_has_exact_active_root': bool(pythonpath and root in pythonpath.split(':')),
+                'pythonpath_has_canonical_stage_root': bool(pythonpath and str(HOME / 'Saeit-staging') in pythonpath.split(':')),
+                'virtualenv_matches_staging': bool(virtualenv and str(HOME / 'virtualenv/Saeit-staging/3.11') == virtualenv),
+                'environment_readable': True
+            })
+        except (OSError, PermissionError, ValueError):
+            records.append({'environment_readable': False})
+    return {'status': 'READ_ONLY', 'changed_files': 0, 'workers_inspected': len(records),
+            'whitelisted_runtime': records}
+
+
 def staging_origin_bypass_readonly() -> dict[str, object]:
     """Compare public DNS route against explicitly-pinned hosting origin with TLS validation."""
     import shutil
@@ -647,6 +681,7 @@ if __name__ == '__main__':
         'registered_passenger_apps': staging_registered_passenger_apps(),
         'owned_worker_restart_safety': staging_owned_worker_restart_safety(),
         'origin_bypass_comparison': staging_origin_bypass_readonly(),
+        'live_worker_nonsecret_runtime': staging_live_worker_nonsecret_runtime(),
         'django_bootstrap_preflight': staging_django_bootstrap_safety(),
         'isolated_django_template_origin': staging_isolated_django_template_resolution(),
         'active_template_settings_block': staging_template_settings_block()},
