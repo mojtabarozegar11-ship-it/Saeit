@@ -42,6 +42,7 @@ jobs:
           export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
           "$base/.venv/bin/python" - <<'PY'
           import os,importlib
+          from pathlib import Path
           import django
           django.setup()
           from django.conf import settings
