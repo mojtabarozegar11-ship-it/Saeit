@@ -30,6 +30,11 @@ class ConsolidateLegacyAgentsTests(TestCase):
             code="economic-master-agent",
             defaults={"name": "Master", "mission": "Orchestrate", "active": True},
         )
+        self.successor, _ = Agent.objects.update_or_create(
+            code="content-director",
+            defaults={"name": "Content Director", "mission": "Consolidated newsletter",
+                      "active": True},
+        )
         self.unknown, _ = Agent.objects.update_or_create(
             code="site-purchase-delivery",
             defaults={"name": "Delivery", "mission": "Fulfil orders", "active": True},
@@ -77,6 +82,18 @@ class ConsolidateLegacyAgentsTests(TestCase):
         second = self.run_command("--apply")
         assert second["summary"]["retired_now"] == 0
         assert AuditLog.objects.filter(action="legacy_agent_retired").count() == previous_events
+
+    def test_missing_successor_blocks_legacy_retirement(self):
+        self.successor.active = False
+        self.successor.save(update_fields=["active"])
+        result = self.run_command("--apply")
+        self.legacy.refresh_from_db()
+        assert self.legacy.active
+        row = next(r for r in result["agents"] if r["code"] == self.legacy.code)
+        assert row["decision"] == "hold_missing_successor"
+        assert row["replacement_agent"] == "content-director"
+        assert result["summary"]["missing_successor"] >= 1
+        assert not AuditLog.objects.filter(action="legacy_agent_retired").exists()
 
     def test_approved_content_prevents_retirement(self):
         NewsletterStory.objects.create(
