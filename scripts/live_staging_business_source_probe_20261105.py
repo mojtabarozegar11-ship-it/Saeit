@@ -295,6 +295,27 @@ def staging_passenger_process_origins() -> dict[str, object]:
             continue
     return {'changed_files': 0, 'matched_process_count': len(records), 'processes': records[:35]}
 
+
+def staging_passenger_restart_tool_capability() -> dict[str, object]:
+    """Check documented Passenger restart tool availability, without restarting."""
+    import shutil
+    choices = [
+        shutil.which('passenger-config'),
+        '/usr/bin/passenger-config',
+        '/usr/local/bin/passenger-config',
+        '/opt/cpanel/ea-ruby27/root/usr/bin/passenger-config',
+        '/opt/cpanel/ea-ruby33/root/usr/bin/passenger-config',
+        '/opt/cpanel/ea-ruby32/root/usr/bin/passenger-config',
+    ]
+    found = []
+    for entry in choices:
+        if not entry or entry in found:
+            continue
+        candidate = Path(entry)
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            found.append(str(candidate))
+    return {'changed_files': 0, 'documented_restart_tool_paths': found[:8]}
+
 if __name__ == '__main__':
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         raise SystemExit('CPANEL_IDENTITY_MISMATCH')
@@ -308,5 +329,6 @@ if __name__ == '__main__':
         'active_staging_routing': staging_active_wsgi_mapping(),
         'route_and_template_context': staging_route_and_template_context(),
         'staging_delivery_context': staging_delivery_context(),
-        'staging_process_origins': staging_passenger_process_origins()},
+        'staging_process_origins': staging_passenger_process_origins(),
+        'passenger_restart_tool': staging_passenger_restart_tool_capability()},
         ensure_ascii=False, sort_keys=True))
