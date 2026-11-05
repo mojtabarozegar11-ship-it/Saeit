@@ -186,6 +186,126 @@ else:
     }, sort_keys=True, separators=(",", ":")))
 PY
 
+# Distinguish a historical backlog from a live, executable queue. Installed
+# factory code can differ from the repository, so inspect bounded live evidence
+# without claiming a worker from a mere filename or process-name match.
+"$python_bin" - <<'PY'
+import collections
+import hashlib
+import json
+from datetime import timedelta
+from pathlib import Path
+
+import django
+django.setup()
+
+from django.apps import apps
+from django.utils import timezone
+
+Task = apps.get_model("core", "AgentTask")
+Run = apps.get_model("core", "FactoryRun")
+Product = apps.get_model("core", "Product")
+now = timezone.now()
+owners = ("factory-market-research-agent", "factory-opportunity-validation-agent")
+open_statuses = ("queued", "running", "blocked")
+fields = {field.name for field in Task._meta.fields}
+has_run_link = "factory_run" in fields
+active_run_ids = set(Run.objects.filter(status="active").values_list("pk", flat=True))
+
+def age_hours(value):
+    return max(0, int((now - value).total_seconds() // 3600)) if value else None
+
+def reason_group(output):
+    if not isinstance(output, dict):
+        return "no_structured_reason"
+    # Never emit arbitrary task error text or inputs. These are merely
+    # diagnostic categories; they do not confer approval to resume a task.
+    value = str(output.get("error") or output.get("reason") or "").lower()
+    for category, terms in (
+        ("owner_or_approval", ("owner", "approval", "provenance", "permission")),
+        ("budget_or_capacity", ("budget", "capacity", "quota", "cost")),
+        ("research_or_evidence", ("research", "source", "evidence", "citation")),
+        ("retry_or_timeout", ("retry", "timeout", "stale", "lock")),
+        ("configuration", ("config", "provider", "credential", "missing")),
+    ):
+        if any(term in value for term in terms):
+            return category
+    return "other_or_unrecorded"
+
+rows = []
+for owner in owners:
+    tasks = Task.objects.filter(agent__code=owner)
+    recent = {
+        "completed_last_hour": tasks.filter(status="completed", updated_at__gte=now-timedelta(hours=1)).count(),
+        "completed_last_day": tasks.filter(status="completed", updated_at__gte=now-timedelta(days=1)).count(),
+        "completed_last_week": tasks.filter(status="completed", updated_at__gte=now-timedelta(days=7)).count(),
+    }
+    counts = collections.Counter()
+    reasons = collections.Counter()
+    links = collections.Counter()
+    ages = collections.defaultdict(list)
+    attempt_exhausted = collections.Counter()
+    for task in tasks.filter(status__in=open_statuses).only(
+        "status", "created_at", "updated_at", "attempt_count", "max_attempts",
+        "output_data", *( ["factory_run"] if has_run_link else [] )
+    ).iterator(chunk_size=200):
+        counts[task.status] += 1
+        ages[task.status].append(age_hours(task.created_at))
+        if task.attempt_count >= task.max_attempts:
+            attempt_exhausted[task.status] += 1
+        if task.status == "blocked":
+            reasons[reason_group(task.output_data)] += 1
+        if has_run_link:
+            link = task.factory_run_id
+            links["unlinked" if link is None else
+                  "linked_active_run" if link in active_run_ids else "linked_nonactive_run"] += 1
+    rows.append({
+        "agent": owner, "open_counts": dict(sorted(counts.items())),
+        "oldest_open_age_hours": {key: max(values) for key, values in ages.items() if values},
+        "attempt_budget_exhausted": dict(sorted(attempt_exhausted.items())),
+        "blocked_reason_categories": dict(sorted(reasons.items())),
+        "factory_run_links": dict(sorted(links.items())) if has_run_link else "field_absent",
+        **recent,
+    })
+
+base = Path.home() / "factory-runtime"
+known_sources = {
+    "factory_staging_tick": base / "django-app/core/management/commands/factory_staging_tick.py",
+    "factory_agent_runtime": base / "django-app/core/factory_agent_runtime.py",
+    "factory_stage4": base / "django-app/core/factory_stage4.py",
+    "native_factory_loop": base / "operations/vps-only-loop.sh",
+    "stage4_due_dispatch": base / "operations/stage4-due-dispatch.py",
+}
+sources = {}
+for label, path in known_sources.items():
+    if path.is_symlink():
+        sources[label] = {"state": "unsafe_symlink"}
+    elif not path.is_file():
+        sources[label] = {"state": "absent"}
+    elif path.stat().st_size > 300000:
+        sources[label] = {"state": "oversized_not_inspected"}
+    else:
+        data = path.read_bytes()
+        sources[label] = {
+            "state": "present", "sha256_prefix": hashlib.sha256(data).hexdigest()[:16],
+            "mentions_research": b"product_research" in data,
+            "mentions_validation": b"product_validation" in data,
+            "mentions_worker_runner": b"WorkerRunner" in data,
+            "mentions_task_runtime": b"TaskRuntime" in data,
+        }
+
+print("AGENT_FLEET_FACTORY_BACKLOG_EXECUTION_EVIDENCE=" + json.dumps({
+    "schema": "saeit.factory.agent-backlog-execution-evidence.v1",
+    "read_only": True, "utc": now.isoformat(),
+    "active_factory_runs": len(active_run_ids),
+    "active_django_products": Product.objects.filter(active=True).count(),
+    "task_factory_run_field_present": has_run_link,
+    "agents": rows, "installed_source_indicators": sources,
+    "worker_execution_proven": False,
+    "blocked_tasks_resumed": 0, "tasks_modified": 0,
+}, sort_keys=True, separators=(",", ":")))
+PY
+
 # Never print crontab commands, inline environment values, or process arguments.
 "$python_bin" - <<'PY'
 import hashlib
