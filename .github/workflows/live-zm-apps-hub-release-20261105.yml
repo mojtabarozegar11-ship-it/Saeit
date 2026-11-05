@@ -150,21 +150,40 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import os
+          import time
+          from urllib.error import HTTPError
           from urllib.request import Request, urlopen
-          url = 'https://zomorodmelal.ir/apps/'
-          with urlopen(Request(url, headers={'User-Agent': 'ZomorodMelal-Site-Health-Check/1.0'}), timeout=30) as response:
-              content = response.read(100000).decode('utf-8', 'replace')
-              if response.status != 200:
-                  raise RuntimeError('APPS_PAGE_HTTP_NOT_200')
-          for required in ('ابزارهای کاربردی', 'محاسبه‌گر علمی میزان بذر گندم',
-                           '/store/free-products/wheat-seed-rate-planner-v1/index.html',
-                           'https://zomorodmelal.ir/apps/'):
-              if required not in content:
-                  raise RuntimeError('APPS_PAGE_CONTENT_MISSING')
+          run = os.environ['GITHUB_RUN_ID']
+          urls = ['https://zomorodmelal.ir/apps/?release=' + run,
+                  'https://zomorodmelal.ir/apps/index.html?release=' + run,
+                  'https://zomorodmelal.ir/apps/']
+          required = ('ابزارهای کاربردی', 'محاسبه‌گر علمی میزان بذر گندم',
+                      '/store/free-products/wheat-seed-rate-planner-v1/index.html',
+                      'https://zomorodmelal.ir/apps/')
+          verified = []
+          for attempt in range(4):
+              for url in urls:
+                  try:
+                      response = urlopen(Request(url, headers={'User-Agent': 'ZomorodMelal-Site-Health-Check/1.0',
+                                                              'Cache-Control': 'no-cache'}), timeout=20)
+                      with response:
+                          body = response.read(100000).decode('utf-8', 'replace')
+                          if response.status == 200 and all(x in body for x in required):
+                              verified.append(url)
+                          else:
+                              print('APPS_UNVERIFIED_STATUS=' + str(response.status) + ' URL=' + url)
+                  except HTTPError as err:
+                      print('APPS_HTTP_ERROR=' + str(err.code) + ' URL=' + url)
+              if verified:
+                  break
+              time.sleep(2)
+          if not verified:
+              raise RuntimeError('APPS_PAGE_NO_VALID_PUBLIC_200_AFTER_CACHE_BYPASS')
           with urlopen('https://zomorodmelal.ir/store/free-products/wheat-seed-rate-planner-v1/index.html', timeout=25) as app:
               if app.status != 200:
                   raise RuntimeError('REAL_APPLICATION_TARGET_UNAVAILABLE')
-          print('VERIFIED_LIVE_APPS_HUB=200_LINKED_REAL_TOOL=200')
+          print('VERIFIED_LIVE_APPS_HUB=200_LINKED_REAL_TOOL=200 PATHS=' + ','.join(verified))
           PY
       - name: Roll back newly added page if public validation fails
         if: failure() && steps.publish.outcome == 'success'
