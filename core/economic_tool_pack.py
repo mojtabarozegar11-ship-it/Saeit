@@ -300,17 +300,27 @@ def growth_experiment(payload):
 
 
 def revenue_verify(payload):
-    # Never invent revenue: only persisted payment/ledger evidence may support it.
+    # A payment webhook or an internal ledger entry is NOT proof that funds were
+    # independently settled. In particular, payment + settlement for the same
+    # order must never be summed as two receipts. An external reconciliation
+    # adapter must establish provider reference, finality and currency before
+    # this agent is allowed to publish a non-null verified revenue figure.
     from .models import LedgerEntry
-    settled = list(LedgerEntry.objects.filter(entry_type__in=("settlement", "payment")).values(
-        "id", "amount", "currency", "reference"
-    )[:100])
-    total = sum((item["amount"] for item in settled), 0)
+    payment_events = LedgerEntry.objects.filter(entry_type="payment").count()
+    settlement_candidates = LedgerEntry.objects.filter(entry_type="settlement").count()
     return {
-        "action_performed": "Reconciled persisted ledger payment/settlement evidence; no unevidenced revenue was counted.",
+        "action_performed": (
+            "Inspected internal payment and settlement entry counts; "
+            "withheld revenue claims pending independent external reconciliation."
+        ),
         "verified_effect": True,
-        "evidence": _evidence("ledger_reconciliation", {"entries": len(settled), "total": total}),
-        "verified_revenue": str(total),
+        "evidence": _evidence("internal_ledger_inventory", {
+            "payment_entries": payment_events,
+            "settlement_candidates": settlement_candidates,
+            "external_reconciliation_verified": False,
+        }),
+        "verified_revenue": None,
+        "revenue_status": "external_settlement_evidence_required",
         "next_action": "income_profit_optimize",
     }
 

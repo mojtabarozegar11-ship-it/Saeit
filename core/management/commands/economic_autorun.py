@@ -1,3 +1,5 @@
+from io import StringIO
+
 from django.core.cache import cache
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
@@ -15,8 +17,15 @@ class Command(BaseCommand):
             self.stdout.write("SKIP: economic cycle already running.")
             return
         try:
-            call_command("online_income_cycle")
-            call_command("economic_worker", limit=1)
-            self.stdout.write(self.style.SUCCESS("ECONOMIC_CYCLE_FINISHED"))
+            plan_output = StringIO()
+            worker_output = StringIO()
+            call_command("online_income_cycle", stdout=plan_output)
+            call_command("economic_worker", limit=1, stdout=worker_output)
+            self.stdout.write(plan_output.getvalue().strip())
+            self.stdout.write(worker_output.getvalue().strip())
+            if "EXECUTED task=" in worker_output.getvalue():
+                self.stdout.write("ECONOMIC_INTERNAL_TASK_EXECUTED revenue_not_assessed")
+            else:
+                self.stdout.write("ECONOMIC_NO_TASK_EXECUTED")
         finally:
             cache.delete(LOCK_KEY)

@@ -1,7 +1,8 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from core.autonomous_brain import AutonomousBrain
 from core.models import Agent, AgentTask
+from core.task_runtime import TaskExecutionError, TaskRuntime
 
 MASTER_AGENT_CODE = "economic-master-agent"
 
@@ -10,21 +11,57 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument("--stale-after-seconds", type=int, default=900)
 
     @transaction.atomic
     def handle(self, *args, **options):
+        if options["stale_after_seconds"] < 300:
+            raise CommandError("stale-after-seconds must be at least 300")
         agent = Agent.objects.filter(code=MASTER_AGENT_CODE, active=True).first()
         if not agent:
             self.stderr.write("Missing active economic-master-agent.")
             return
 
-        active = AgentTask.objects.filter(
-            agent=agent, status__in=("queued","running","blocked")
-        ).order_by("created_at").first()
-        if active:
+        queued = AgentTask.objects.filter(agent=agent, status="queued").order_by("created_at").first()
+        if queued:
             self.stdout.write(
-                f"BRAIN_CONTINUE task={active.pk} action={active.action_type} status={active.status}"
+                f"BRAIN_CONTINUE task={queued.pk} action={queued.action_type} status={queued.status}"
             )
+            return
+
+        running = AgentTask.objects.filter(agent=agent, status="running").order_by("updated_at").first()
+        if running:
+            if options["dry_run"]:
+                self.stdout.write(f"BRAIN_RUNNING task={running.pk} dry_run=true")
+                return
+            try:
+                recovered = TaskRuntime().recover_stale(
+                    running.pk, stale_after_seconds=options["stale_after_seconds"]
+                )
+            except TaskExecutionError:
+                self.stdout.write(f"BRAIN_RUNNING task={running.pk} awaiting_heartbeat_or_recovery")
+                return
+            self.stdout.write(f"BRAIN_RECOVERED task={recovered.pk} status={recovered.status}")
+            return
+
+        blocked = AgentTask.objects.filter(agent=agent, status="blocked").order_by("created_at").first()
+        if blocked:
+            # A blocked task may be awaiting owner authorization. Never silently
+            # retry it, spawn duplicates, or report a successful autonomous step.
+            self.stdout.write(f"BRAIN_BLOCKED task={blocked.pk} requires_review=true")
+            return
+
+        # Only the path that could create a new task locks the agent row.
+        # Stale-task recovery happens beforehand to retain the worker's lock
+        # order (task first, agent second) and avoid a database deadlock.
+        agent = Agent.objects.select_for_update().filter(pk=agent.pk, active=True).first()
+        if agent is None:
+            self.stderr.write("Economic master agent was deactivated during planning.")
+            return
+        if AgentTask.objects.filter(
+            agent=agent, status__in=("queued", "running", "blocked")
+        ).exists():
+            self.stdout.write("BRAIN_RECHECK pending_task_created_concurrently")
             return
 
         decision = AutonomousBrain().decide()
@@ -32,6 +69,11 @@ class Command(BaseCommand):
         action = chosen["action"]
         if action == "continue_existing_work":
             self.stdout.write("BRAIN_CONTINUE")
+            return
+        if action.startswith("await_external_"):
+            self.stdout.write(
+                f"BRAIN_EXTERNAL_BOUNDARY action={action} reason={chosen['reason']}"
+            )
             return
         capability = agent.capabilities.filter(code=action, active=True).first()
         if not capability:
