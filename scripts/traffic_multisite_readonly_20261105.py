@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 import gzip
 import json
 import re
@@ -23,6 +24,7 @@ CUTOFF = NOW - timedelta(days=30)
 BOT = re.compile(r'bot|spider|crawl|monitor|uptime|headless|curl|wget|python-requests|postman|github-actions|go-http-client', re.I)
 APACHE = re.compile(r'^(\S+)\s+\S+\s+\S+\s+\[([^\]]+)\]\s+"(GET|POST|HEAD)\s+(\S+)\s+HTTP/[^\"]+"\s+(\d{3})\s+.*?"[^\"]*"\s+"([^\"]*)"')
 VALID = re.compile(r'^[a-z0-9][a-z0-9.-]{2,252}$')
+REFERRER = re.compile(r'"\s+\d{3}\s+\S+\s+"([^"]*)"\s+"[^"]*"')
 
 
 def report(key, data):
@@ -114,6 +116,21 @@ def is_page(path):
     return path == '/' or path.endswith(('/', '.html', '.htm', '.php'))
 
 
+def google_referral(line):
+    found = REFERRER.search(line)
+    if not found:
+        return False, False
+    ref = found.group(1)
+    if not ref.startswith(('https://', 'http://')):
+        return False, False
+    try:
+        hostname = (urlsplit(ref).hostname or '').lower()
+    except ValueError:
+        return False, False
+    is_google = bool(re.fullmatch(r'(?:[a-z0-9-]+\.)*google\.[a-z]{2,}(?:\.[a-z]{2,})?', hostname))
+    return True, is_google
+
+
 def raw_logs(hosts):
     folder = ROOT / 'logs'
     files = []
@@ -137,6 +154,9 @@ def raw_logs(hosts):
         'likely_bot_page_requests': 0, 'store_page_requests': 0,
         'product_page_requests': 0, 'checkout_page_requests': 0,
         'personal_site_human_page_requests': 0,
+        'human_page_requests_with_referrer': 0,
+        'google_referral_human_page_requests': 0,
+        'personal_google_referral_human_page_requests': 0,
         'personal_site_bot_page_requests': 0,
         'personal_site_4xx_page_requests': 0,
         'personal_site_5xx_page_requests': 0,
@@ -145,6 +165,8 @@ def raw_logs(hosts):
     })
     unique = defaultdict(set)
     personal_unique = defaultdict(set)
+    google_unique = defaultdict(set)
+    personal_google_unique = defaultdict(set)
     truncated = False
     scanned = 0
     for host, path in selected:
@@ -196,6 +218,17 @@ def raw_logs(hosts):
                             row['personal_site_bot_page_requests'] += 1
                         continue
                     row['likely_human_page_requests'] += 1
+                    has_referrer, from_google = google_referral(line)
+                    if has_referrer:
+                        row['human_page_requests_with_referrer'] += 1
+                    if from_google:
+                        row['google_referral_human_page_requests'] += 1
+                        if len(google_unique[host]) < 100000:
+                            google_unique[host].add(ip)
+                        if personal:
+                            row['personal_google_referral_human_page_requests'] += 1
+                            if len(personal_google_unique[host]) < 100000:
+                                personal_google_unique[host].add(ip)
                     if personal:
                         row['personal_site_human_page_requests'] += 1
                         if len(personal_unique[host]) < 100000:
@@ -215,6 +248,8 @@ def raw_logs(hosts):
     for host, row in totals.items():
         row['approx_distinct_ips'] = len(unique[host])
         row['personal_site_approx_distinct_ips'] = len(personal_unique[host])
+        row['google_referral_approx_distinct_ips'] = len(google_unique[host])
+        row['personal_google_referral_approx_distinct_ips'] = len(personal_google_unique[host])
     report('MULTISITE_RAW_LOGS', {
         'source': 'cpanel_raw_access_30d', 'generated_utc': NOW.isoformat(),
         'cutoff_utc': CUTOFF.isoformat(), 'available': folder.is_dir(),
