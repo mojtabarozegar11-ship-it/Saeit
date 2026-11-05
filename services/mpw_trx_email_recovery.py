@@ -9,6 +9,7 @@ No request changes a payment, payment ledger, fulfillment, or old order owner.
 """
 from __future__ import annotations
 
+from contextvars import ContextVar
 import hashlib
 import hmac
 from importlib import import_module
@@ -43,6 +44,7 @@ from core.crown_tron_receipts import PROVIDER, verified_walletless_credit
 
 
 LOG = logging.getLogger("mpw.guest_recovery")
+_CHECKOUT_SIGNAL_SCOPE = ContextVar("mpw_checkout_signal_scope", default=None)
 ROOT = "/commerce/trx-easy/recover/"
 SESSION_COOKIE = "mpw_recovery_scope"
 SESSION_SALT = "mpw.guest.recovery.scope.v1"
@@ -389,8 +391,12 @@ def bound_checkout(request, view, identity, install_cookie, args, kwargs):
             response = view(request, *args, **kwargs)
             return install_cookie(response, cookie)
 
+        scope = object()
+
         def record_order(sender, instance, created, **unused):
-            if not created:
+            # Django signals are process-global. Ignore events emitted by
+            # other concurrent checkout requests, even for the same guest.
+            if _CHECKOUT_SIGNAL_SCOPE.get() is not scope or not created:
                 return
             if instance.customer_id != user.pk:
                 raise ValueError("TRX checkout did not retain guest owner")
@@ -400,11 +406,15 @@ def bound_checkout(request, view, identity, install_cookie, args, kwargs):
             captured.append(instance.pk)
 
         signal_id = ("mpw_guest_checkout_email", id(request))
-        post_save.connect(record_order, sender=Order, weak=False, dispatch_uid=signal_id)
+        scope_token = _CHECKOUT_SIGNAL_SCOPE.set(scope)
         try:
+            post_save.connect(record_order, sender=Order, weak=False, dispatch_uid=signal_id)
             response = view(request, *args, **kwargs)
         finally:
-            post_save.disconnect(sender=Order, dispatch_uid=signal_id)
+            try:
+                post_save.disconnect(sender=Order, dispatch_uid=signal_id)
+            finally:
+                _CHECKOUT_SIGNAL_SCOPE.reset(scope_token)
 
         match = INVOICE_RE.fullmatch(response.get("Location", "")) if response.status_code in (302, 303) else None
         if match is not None:
