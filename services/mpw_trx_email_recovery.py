@@ -75,7 +75,7 @@ def _posted_email(request):
     # Different checkout templates have historically used these four names.
     # Reject conflicting values instead of choosing an attacker-controlled one.
     values = []
-    for key in ("email", "buyer_email", "customer_email", "purchase_email"):
+    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
         for value in request.POST.getlist(key):
             if value:
                 values.append(_email(value))
