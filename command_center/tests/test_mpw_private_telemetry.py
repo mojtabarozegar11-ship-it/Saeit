@@ -58,6 +58,15 @@ class TelemetryTests(unittest.TestCase):
         self.assertEqual(result["summary"]["healthy"], 24)
         self.assertEqual(result["summary"]["loaded_only"], 77)
         self.assertEqual(result["summary"]["unknown"], 2)
+        composition = result["summary"]["composition"]
+        self.assertEqual(composition["library_module_slots"], 77)
+        self.assertEqual(composition["site_health_role_slots"], 11)
+        self.assertEqual(composition["robot_capability_slots"], 11)
+        self.assertEqual(composition["management_generation_slots"], 2)
+        self.assertEqual(composition["other_worker_slots"], 2)
+        self.assertEqual(composition["fresh_nonmodule_reports"], 24)
+        self.assertEqual(composition["module_functional_executions_verified"], 0)
+        self.assertIsNone(composition["independent_worker_process_count"])
         self.assertTrue(all(not item["metrics"]["functional_execution_verified"]
             for item in result["items"] if item["kind"] == "module"))
 
