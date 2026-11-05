@@ -1,7 +1,10 @@
 import os
+import json
 from pathlib import Path
 import subprocess
+from tempfile import TemporaryDirectory
 import unittest
+from datetime import datetime, timedelta, timezone
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -65,6 +68,56 @@ class FactorySystemdAutomationTests(unittest.TestCase):
         self.assertIn("OnUnitActiveSec=1min", cycle)
         self.assertIn("Persistent=true", watchdog)
         self.assertIn("SAEIT_FACTORY_AUTORUN_ENABLED=1", service)
+
+    def test_watchdog_requires_singleton_and_does_not_certify_qc(self):
+        watchdog = (ROOT / "scripts/factory-runtime-watchdog.sh").read_text()
+        start = 'python3 - "$health" "$slots" "$state" "$lane" <<\'PY\'\n'
+        self.assertIn(start, watchdog)
+        payload = watchdog.split(start, 1)[1].split("\nPY\n", 1)[0]
+        compile(payload, "f01-factory-watchdog", "exec")
+        self.assertIn("F01_WATCHDOG_QC_RECEIPT=NOT_ASSESSED", payload)
+
+        with TemporaryDirectory() as temp:
+            path = Path(temp)
+            data = [
+                {"schema": "saeit.factory.production-health.v1",
+                 "last_cycle_finished_at_utc": datetime.now(timezone.utc).isoformat()},
+                {"schema": "saeit.factory.product-slots.v1", "capacity": 1,
+                 "active": [{"recipe": "farm_enterprise_economics"}]},
+                {"active_product_slot_capacity": 1,
+                 "active_product_slot_recipes": ["farm_enterprise_economics"],
+                 "publication_locked_until_owner_approval": True,
+                 "commercial_quality_review_completed": False,
+                 "publishable_product_count": 0},
+                {"schema": "saeit.factory.global-single-production-lane.v1",
+                 "owner": "line41", "generation": 1},
+            ]
+            files = [path / f"state-{i}.json" for i in range(4)]
+
+            def check():
+                for p, document in zip(files, data):
+                    p.write_text(json.dumps(document), encoding="utf-8")
+                return subprocess.run(
+                    ["python3", "-", *[str(p) for p in files]],
+                    input=payload, capture_output=True, text=True)
+
+            passing = check()
+            self.assertEqual(passing.returncode, 0, passing.stderr)
+            self.assertIn("F01_WATCHDOG_RUNTIME_HEALTH=PASS", passing.stdout)
+            self.assertIn("F01_WATCHDOG_QC_RECEIPT=NOT_ASSESSED", passing.stdout)
+
+            data[1]["active"].append({"recipe": "second_product"})
+            self.assertNotEqual(check().returncode, 0)
+            data[1]["active"].pop()
+            data[3]["owner"] = "unknown"
+            self.assertNotEqual(check().returncode, 0)
+            data[3]["owner"] = "line41"
+            data[2]["publishable_product_count"] = 1
+            self.assertNotEqual(check().returncode, 0)
+            data[2]["publishable_product_count"] = 0
+            data[0]["last_cycle_finished_at_utc"] = (
+                datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+            self.assertNotEqual(check().returncode, 0)
 
 
 if __name__ == "__main__":
