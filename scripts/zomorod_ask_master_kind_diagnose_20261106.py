@@ -37,6 +37,19 @@ def safe_lines(source):
     print('SAFE_KIND_LINES_REPORTED=' + str(seen))
 
 
+def safe_flow_excerpt(source):
+    lines = source.splitlines()
+    forbidden = re.compile(r'(?i)(password|secret|token|api[_-]?key|smtp|dsn|credential|authorization|private[_-]?key|\$db|\$pdo|\$mysqli)')
+    selected = list(range(112, 146)) + list(range(153, 165))
+    for number in selected:
+        if number > len(lines):
+            continue
+        line = lines[number - 1].strip()
+        if not line or len(line) > 270 or forbidden.search(line):
+            continue
+        print('SAFE_FLOW_LINE_' + str(number) + '=' + repr(line))
+
+
 def audit():
     if os.geteuid() == 0 or os.geteuid() != WEB.stat().st_uid:
         raise RuntimeError('REFUSE_WRONG_SITE_USER')
@@ -55,7 +68,9 @@ def audit():
             print('HAS_KIND_ENFORCEMENT=' + str(bool(re.search(r'(?i)(in_array|array_search|match|switch).*kind|kind.*(in_array|array_search|match|switch)', source))))
             print('HAS_INSERT=' + str(bool(re.search(r'(?i)\bINSERT\s+INTO\b', source))))
             print('HAS_REQUIRE=' + str(bool(re.search(r'(?i)\b(require|include)(_once)?\b', source))))
+            print('HAS_STRICT_TYPES=' + str('declare(strict_types=1);' in source))
             safe_lines(source)
+            safe_flow_excerpt(source)
         else:
             print('TRACK_HAS_TICKET_FIELD=' + str('name="ticket"' in source))
             print('TRACK_HAS_EMAIL_FIELD=' + str('name="email"' in source))
