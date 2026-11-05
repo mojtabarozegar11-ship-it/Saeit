@@ -323,7 +323,7 @@ def staging_passenger_restart_tool_capability() -> dict[str, object]:
               'cloudlinux_selector_path': available}
     if available is not None:
         try:
-            proc = subprocess.run([available, 'get', '--json', '--interpreter', 'python'],
+            proc = subprocess.run([available, 'get', '--json', '--interpreter', 'python', '--user', 'zomorod2'],
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                   check=False, timeout=14)
             report['selector_readonly_get_exit'] = proc.returncode
