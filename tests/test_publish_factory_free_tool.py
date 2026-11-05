@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1] / "scripts"
@@ -68,6 +69,41 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "REFUSING_TO_REPLACE"):
             publisher.publish(self.inbox, self.webroot, release_authorized=True)
         self.assertEqual((dest / "index.html").read_text(), "existing customer-facing content")
+
+    def test_versioned_public_preview_cannot_be_silently_replaced(self):
+        dest = self.webroot / "factory-releases" / publisher.PUBLIC_SLUG
+        dest.mkdir(parents=True)
+        prior = dest / publisher.PUBLIC_FILENAME
+        prior.write_bytes(b"already-downloaded-public-edition")
+        old_digest = hashlib.sha256(prior.read_bytes()).hexdigest()
+        (dest / "SHA256SUMS.txt").write_text(
+            old_digest + "  " + publisher.PUBLIC_FILENAME + "\n"
+        )
+        (dest / "index.html").write_text("previously-public-version")
+        source = self.inbox / "packages" / publisher.RECIPE / (self.sha + ".zip")
+        with patch.object(publisher, "prepare_private_product", return_value=(self.sha, source)):
+            with self.assertRaisesRegex(ValueError, "VERSIONED_PUBLIC_RELEASE_IMMUTABLE"):
+                publisher.publish(
+                    self.inbox, self.webroot, release_authorized=True,
+                    uncertified_preview=True, expected_sha256=self.sha,
+                )
+        self.assertEqual(hashlib.sha256(prior.read_bytes()).hexdigest(), old_digest)
+        self.assertEqual((dest / "index.html").read_text(), "previously-public-version")
+
+    def test_uncertified_public_preview_is_not_reported_as_certified_release(self):
+        dest = self.webroot / "factory-releases" / publisher.PUBLIC_SLUG
+        dest.mkdir(parents=True)
+        source = self.inbox / "packages" / publisher.RECIPE / (self.sha + ".zip")
+        (dest / publisher.PUBLIC_FILENAME).write_bytes(source.read_bytes())
+        (dest / "SHA256SUMS.txt").write_text(
+            self.sha + "  " + publisher.PUBLIC_FILENAME + "\n"
+        )
+        page = publisher.landing_page(self.sha, uncertified_preview=True)
+        (dest / "index.html").write_text(page)
+        with patch.object(publisher, "prepare_private_product", return_value=(self.sha, source)):
+            with self.assertRaisesRegex(ValueError, "CERTIFICATION_STATUS_MISMATCH"):
+                publisher.publish(self.inbox, self.webroot, release_authorized=True)
+        self.assertEqual((dest / "index.html").read_text(), page)
 
     def test_checksum_integrity_before_publication(self):
         artifact = self.inbox / "packages" / publisher.RECIPE / (self.sha + ".zip")
@@ -137,3 +173,4 @@ class ReleaseTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
