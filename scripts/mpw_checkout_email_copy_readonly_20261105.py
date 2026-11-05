@@ -104,6 +104,40 @@ def _commercial_delivery_aggregate():
                 "query_status": type(exc).__name__}
 
 
+def _receipt_settlement_correlation_readonly():
+    """Cross-tab mail receipts with locally verified paid intents; no identifiers logged."""
+    try:
+        from mpw_commerce.models import GuestTrxDelivery
+        from core.models import PaymentIntent
+        from core.crown_tron_receipts import PROVIDER, verified_walletless_credit
+        rows = list(GuestTrxDelivery.objects.select_related("order").order_by("pk")[:11])
+        if len(rows) > 10:
+            return {"status": "scope_exceeded", "rows_examined": 0}
+        counts = {
+            "verified_paid_receipt_sent": 0,
+            "verified_paid_receipt_pending": 0,
+            "verified_paid_receipt_other": 0,
+            "not_verified_paid_receipt_sent": 0,
+            "not_verified_paid_receipt_pending": 0,
+            "not_verified_paid_receipt_other": 0,
+        }
+        for row in rows:
+            order = row.order
+            intents = list(PaymentIntent.objects.filter(
+                provider=PROVIDER, order=order, status="paid").order_by("pk")[:2])
+            verified = (len(intents) == 1 and
+                        verified_walletless_credit(order, intents[0]))
+            group = "verified_paid" if verified else "not_verified_paid"
+            state = str(row.receipt_state)
+            label = "sent" if state == "sent" else (
+                "pending" if state == "pending" else "other")
+            counts[group + "_receipt_" + label] += 1
+        return {"status": "ok", "rows_examined": len(rows), "counts": counts,
+                "independent_mainnet_recheck_performed": False}
+    except Exception as exc:
+        return {"status": "unavailable", "error_type": type(exc).__name__}
+
+
 def _outbox_scheduler_readonly():
     refs = []
     roots = (APP / "services", APP / "core/management/commands", APP / "scripts")
@@ -120,6 +154,7 @@ def _outbox_scheduler_readonly():
             for i, line in enumerate(path.read_text("utf-8", "replace").splitlines(), 1):
                 if "flush_outbox" in line:
                     refs.append({"path": str(path.relative_to(APP)), "line": i})
+    cron = None
     try:
         cron = subprocess.run(["crontab", "-l"], capture_output=True,
                               text=True, timeout=5, check=False)
@@ -127,8 +162,12 @@ def _outbox_scheduler_readonly():
                     "flush_outbox" in cron.stdout else "not_found_or_unavailable")
     except (OSError, subprocess.TimeoutExpired):
         schedule = "not_found_or_unavailable"
+    cron_reconcile = (cron is not None and cron.returncode == 0 and
+                      "mpw_trx_commercial_reconcile_cron" in cron.stdout)
     return {"python_callsite_references": refs[:30],
-            "cpanel_user_crontab_flush_outbox": schedule}
+            "cpanel_user_crontab_flush_outbox": schedule,
+            "cpanel_user_crontab_reconcile_script": bool(cron_reconcile),
+            "cpanel_user_crontab_accessible": cron is not None and cron.returncode == 0}
 
 
 def main():
@@ -209,6 +248,7 @@ def main():
         "commercial_flow_static": _commercial_flow_inventory(),
         "commercial_delivery_aggregate": _commercial_delivery_aggregate(),
         "commercial_outbox_scheduler": _outbox_scheduler_readonly(),
+        "receipt_settlement_cross_tab": _receipt_settlement_correlation_readonly(),
         "emails_sent_by_audit": 0, "emails_deleted": 0,
         "files_modified": 0,
     }, sort_keys=True))
