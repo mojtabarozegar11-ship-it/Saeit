@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import stat
 
 SCHEMA = "saeit.factory.global-single-production-lane.v1"
 LANES = frozenset(("line41", "agri200"))
@@ -21,10 +22,26 @@ STATE_NAME = ".f01-global-production-lane.json"
 
 
 def _safe_root(value):
+    """Resolve only a private root whose full ancestry cannot be replaced.
+
+    The singleton state and lock are security-sensitive admission records. A
+    factory-owned root is allowed, but no component may be a symlink or be
+    writable by group/others; otherwise an attacker could swap the directory
+    containing the durable reservation between checks.
+    """
     path = Path(value)
-    if path.is_symlink() or not path.is_dir():
-        raise RuntimeError("F01_GLOBAL_ROOT_MISSING_OR_UNSAFE")
-    return path.resolve(strict=True)
+    if not path.is_absolute():
+        path = path.resolve()
+    try:
+        for part in (path, *path.parents):
+            info = part.lstat()
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                raise RuntimeError("F01_GLOBAL_ROOT_MISSING_OR_UNSAFE")
+            if info.st_mode & 0o022:
+                raise RuntimeError("F01_GLOBAL_ROOT_ANCESTRY_WRITABLE")
+        return path.resolve(strict=True)
+    except OSError as exc:
+        raise RuntimeError("F01_GLOBAL_ROOT_MISSING_OR_UNSAFE") from exc
 
 
 def _state(path):
