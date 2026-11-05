@@ -28,9 +28,9 @@ class FactorySystemdAutomationTests(unittest.TestCase):
 
     def test_live_singleton_preflight_runs_before_install(self):
         script = (ROOT / "deploy/install_factory_systemd_automation.sh").read_text()
-        start = 'python3 - "$runtime" <<\'PY\'\\n'
+        start = 'python3 - "$runtime" <<\'PY\'\n'
         self.assertIn(start, script)
-        payload = script.split(start, 1)[1].split("\\nPY\\n", 1)[0]
+        payload = script.split(start, 1)[1].split("\nPY\n", 1)[0]
         compile(payload, "f01-systemd-preflight", "exec")
         self.assertIn("F01_PREFLIGHT_SLOT_NOT_EXACT_FIRST_PRODUCT", payload)
         self.assertIn("F01_PREFLIGHT_GLOBAL_SINGLETON_NOT_PROVEN", payload)
