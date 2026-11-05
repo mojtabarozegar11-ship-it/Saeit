@@ -325,3 +325,22 @@ jobs:
                   except Exception as exc: print('MPW_PROD_IMPORT_ERROR='+json.dumps({'module':modname,'type':type(exc).__name__,'message':str(exc)[:300]}))
           except Exception as exc: print('MPW_PROD_DJANGO_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:300]}))
           PY
+
+      - name: Inspect production Passenger import target read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-invoice-diag-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import json,os,sys
+          from pathlib import Path
+          root=Path('/home/zomorod2/mojplaywin.com')
+          p=root/'passenger_wsgi.py'
+          try:
+              text=p.read_text(encoding='utf-8')
+              print('MPW_WSGI_SOURCE='+json.dumps({'path':str(p),'source':text[:10000]}))
+          except Exception as exc: print('MPW_WSGI_ERROR='+json.dumps({'type':type(exc).__name__,'message':str(exc)[:300]}))
+          for base in (Path('/home/zomorod2/Saeit-staging'),Path('/home/zomorod2/Saeit'),Path('/home/zomorod2/mojplaywin.com')):
+              print('MPW_CODE_ROOT='+json.dumps({'path':str(base),'exists':base.is_dir(),'config':(base/'config').is_dir(),'services':(base/'services').is_dir(),'passenger':(base/'passenger_wsgi.py').is_file()}))
+          print('MPW_ENV_PATH='+json.dumps({'PYTHONPATH':os.environ.get('PYTHONPATH',''),'PATH':os.environ.get('PATH','')[:300]}))
+          PY
