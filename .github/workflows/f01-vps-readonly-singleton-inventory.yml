@@ -187,6 +187,17 @@ jobs:
               "sleep", "flock", "systemd", "cron",
           ) if token in vps_loop_text)
 
+          loop_manage_commands = sorted(set(re.findall(
+              r"manage[.]py\\s+([a-z][a-z0-9_]{0,79})\\b", vps_loop_text
+          )))[:20]
+          loop_factories_direct = any(term in vps_loop_text for term in (
+              "factory_vps_product_cycle", "factory_build_50",
+              "factory_product_maker", "farm_enterprise_economics",
+              "factory_agri200",
+          ))
+          loop_sha256 = (hashlib.sha256(vps_loop_text.encode("utf-8")).hexdigest()
+                         if vps_loop_text else None)
+
           owner_cron = cron_count(["crontab", "-l"])
           root_cron = cron_count(["sudo", "-n", "crontab", "-u", "root", "-l"])
           age = None
@@ -204,6 +215,9 @@ jobs:
               "cron_daemon_running": cron_daemon_present,
               "vps_only_loop_readable": bool(vps_loop_text),
               "vps_only_loop_source_markers": loop_markers,
+              "vps_only_loop_manage_commands": loop_manage_commands,
+              "vps_only_loop_direct_factory_reference": loop_factories_direct,
+              "vps_only_loop_source_sha256": loop_sha256,
               "factory_related_process_script_labels": process_labels,
               "factory_related_githubops_cron_markers": cron_markers,
               "legacy_cron_outer_flock_present": legacy_outer_lock,
