@@ -6,6 +6,8 @@ on:
       - ".github/workflows/f01-vps-stage-single-product-source.yml"
       - "product_recipes/farm_enterprise_economics/**"
       - "scripts/f01_technical_evidence_bridge.py"
+      - "scripts/factory_quality_1000_v2.py"
+      - "factory_config/quality_100_criteria.json"
   workflow_dispatch:
 
 permissions:
@@ -62,6 +64,8 @@ jobs:
             scripts/factory_continuous_invention.py
             scripts/factory_design_intake.py
             scripts/f01_technical_evidence_bridge.py
+            scripts/factory_quality_1000_v2.py
+            factory_config/quality_100_criteria.json
             factory_config/rework/farm_enterprise_economics_qc1000_v1.json
             factory_config/design_opportunities.json
             factory_config/internal_design_supply.json
