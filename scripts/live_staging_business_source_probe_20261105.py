@@ -454,6 +454,59 @@ print('DJANGO_TEMPLATE_ORIGIN_READONLY=' + json.dumps({
     return {'status': 'IMPORT_OR_RESOLUTION_UNAVAILABLE', 'exit_code': proc.returncode,
             'stderr_disclosed': False}
 
+def staging_registered_passenger_apps() -> dict[str, object]:
+    """List only staging cPanel Passenger registrations; omit environment variables."""
+    import subprocess
+    cli = Path('/usr/local/cpanel/bin/uapi')
+    if not cli.is_file() or not os.access(cli, os.X_OK):
+        return {'status': 'CPANEL_UAPI_UNAVAILABLE', 'changed_files': 0}
+    try:
+        p = subprocess.run(
+            [str(cli), '--user=zomorod2', '--output=json', 'PassengerApps', 'list_applications'],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=23, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return {'status': 'CPANEL_UAPI_COMMAND_UNAVAILABLE', 'changed_files': 0}
+    result: dict[str, object] = {'status': 'READ_ONLY', 'changed_files': 0,
+                                 'command_exit': p.returncode}
+    if p.returncode != 0 or len(p.stdout) > 1500000:
+        result['status'] = 'CPANEL_UAPI_FAILED'
+        return result
+    try:
+        payload = json.loads(p.stdout.decode('utf-8', 'replace'))
+    except (ValueError, UnicodeError):
+        result['status'] = 'CPANEL_UAPI_INVALID_RESPONSE'
+        return result
+    api_result = payload.get('result', {}) if isinstance(payload, dict) else {}
+    if not isinstance(api_result, dict):
+        result['status'] = 'CPANEL_UAPI_UNEXPECTED_RESULT'
+        return result
+    result['api_success'] = api_result.get('status') == 1
+    data = api_result.get('data')
+    if not result['api_success'] or not isinstance(data, (dict, list)):
+        result['status'] = 'CPANEL_UAPI_NO_REGISTRY'
+        return result
+    applications = []
+    items = list(data.values()) if isinstance(data, dict) else data
+    for row in items[:120]:
+        if not isinstance(row, dict):
+            continue
+        path = str(row.get('path', ''))
+        domain = str(row.get('domain', ''))
+        if not (path.startswith('/home/zomorod2/Saeit-staging') or
+                domain == 'staging.zomorodmelal.ir'):
+            continue
+        applications.append({
+            'path_relative': path[len('/home/zomorod2/'):] if path.startswith('/home/zomorod2/') else 'OUTSIDE_EXPECTED_HOME',
+            'domain_is_staging': domain == 'staging.zomorodmelal.ir',
+            'name': str(row.get('name', ''))[:90],
+            'enabled': row.get('enabled') == 1,
+            'base_uri': str(row.get('base_uri', ''))[:90],
+        })
+    result['registered_staging_applications'] = applications[:12]
+    result['total_entries'] = len(items)
+    return result
+
+
 def staging_template_settings_block() -> dict[str, object]:
     """Bounded, nonsecret TEMPLATES configuration block from active staging only."""
     conf = HOME / 'Saeit-staging-web/.htaccess'
@@ -496,6 +549,7 @@ if __name__ == '__main__':
         'staging_delivery_context': staging_delivery_context(),
         'staging_process_origins': staging_passenger_process_origins(),
         'passenger_restart_tool': staging_passenger_restart_tool_capability(),
+        'registered_passenger_apps': staging_registered_passenger_apps(),
         'django_bootstrap_preflight': staging_django_bootstrap_safety(),
         'isolated_django_template_origin': staging_isolated_django_template_resolution(),
         'active_template_settings_block': staging_template_settings_block()},
