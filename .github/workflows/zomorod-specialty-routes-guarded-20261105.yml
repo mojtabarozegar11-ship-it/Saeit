@@ -1,4 +1,4 @@
-name: Guarded live Zomorod specialty route release
+name: Guarded static public Zomorod specialty release
 on:
   push:
     branches: [audit/live-sites-subsites-20261105]
@@ -20,21 +20,52 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Check and package exact specialty page source
+      - name: Render and validate four static guides from the approved source
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile core/specialty_pages.py scripts/zomorod_specialty_routes_guarded_deploy_20261105.py
+          python3 -m py_compile core/specialty_pages.py scripts/zomorod_specialty_static_release_guarded_20261105.py
           python3 - <<'PY'
           import base64
+          import importlib.util
           import os
+          import sys
+          import types
           from pathlib import Path
-          source = Path('core/specialty_pages.py').read_bytes()
-          installer = Path('scripts/zomorod_specialty_routes_guarded_deploy_20261105.py').read_text()
-          marker = 'SPECIALTY_SOURCE_BASE64 = None  # Packed by the workflow; never a network fetch.'
+          class MockResponse:
+              def __init__(self, body, content_type):
+                  self.content = body.encode('utf-8')
+                  self.headers = {}
+              def __setitem__(self, key, value):
+                  self.headers[key] = value
+          http = types.ModuleType('django.http')
+          http.Http404 = type('Http404', (Exception,), {})
+          http.HttpResponse = MockResponse
+          decorators = types.ModuleType('django.views.decorators.http')
+          decorators.require_safe = lambda fn: fn
+          for name, module in [
+              ('django', types.ModuleType('django')),
+              ('django.http', http),
+              ('django.views', types.ModuleType('django.views')),
+              ('django.views.decorators', types.ModuleType('django.views.decorators')),
+              ('django.views.decorators.http', decorators),
+          ]:
+              sys.modules[name] = module
+          spec = importlib.util.spec_from_file_location('zm_specialty_export', 'core/specialty_pages.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          request = type('SiteRequest', (), {'get_host': lambda self: 'zomorodmelal.ir'})()
+          payload = {}
+          for slug in ('carpets', 'real-estate', 'restaurant', 'signals'):
+              result = module.specialty_page(request, slug).content
+              if not result.startswith(b'<!doctype html>') or slug.encode() not in result:
+                  raise SystemExit('INVALID_STATIC_RENDER:' + slug)
+              payload[slug] = base64.b64encode(result)
+          installer = Path('scripts/zomorod_specialty_static_release_guarded_20261105.py').read_text()
+          marker = 'STATIC_PAGES_BASE64 = None  # Packed from core/specialty_pages.py by CI.'
           if installer.count(marker) != 1:
-              raise SystemExit('SOURCE_PACKAGING_MARKER_MISSING')
-          packaged = installer.replace(marker, 'SPECIALTY_SOURCE_BASE64 = ' + repr(base64.b64encode(source)))
+              raise SystemExit('STATIC_PACKAGING_MARKER_MISSING')
+          packaged = installer.replace(marker, 'STATIC_PAGES_BASE64 = ' + repr(payload))
           target = Path(os.environ['RUNNER_TEMP']) / 'zm-specialties-guarded-installer.py'
           target.write_text(packaged)
           import ast
@@ -128,7 +159,7 @@ jobs:
             fi
           fi
           echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
-      - name: Backup, publish, reload Passenger, verify, and rollback on failure
+      - name: Publish isolated static guides, verify, and rollback if unreachable
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         shell: bash
