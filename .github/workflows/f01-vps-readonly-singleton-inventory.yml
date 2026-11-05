@@ -41,6 +41,7 @@ jobs:
           expected_core="$(sha256sum scripts/factory_vps_product_cycle.py | awk '{print $1}')"
           expected_lock="$(sha256sum scripts/factory_global_singleton_v1.py | awk '{print $1}')"
           ssh -T -i "$d/key" -o IdentitiesOnly=yes -o ForwardAgent=no -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 "python3 - '$expected_core' '$expected_lock'" <<'PY'
+          import ast
           import hashlib
           import json
           import re
@@ -198,6 +199,44 @@ jobs:
           loop_sha256 = (hashlib.sha256(vps_loop_text.encode("utf-8")).hexdigest()
                          if vps_loop_text else None)
 
+          tick_path = root / "django-app/core/management/commands/factory_staging_tick.py"
+          tick_text = ""
+          tick_command_names = set()
+          tick_parsed = False
+          try:
+              if (not tick_path.is_symlink() and tick_path.is_file()
+                      and tick_path.stat().st_size <= 500000):
+                  tick_text = tick_path.read_text(encoding="utf-8")
+                  tree = ast.parse(tick_text)
+                  tick_parsed = True
+                  for call in ast.walk(tree):
+                      if (isinstance(call, ast.Call)
+                              and isinstance(call.func, ast.Name)
+                              and call.func.id == "call_command"
+                              and call.args and isinstance(call.args[0], ast.Constant)
+                              and isinstance(call.args[0].value, str)
+                              and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", call.args[0].value)):
+                          tick_command_names.add(call.args[0].value)
+          except (OSError, UnicodeError, ValueError, SyntaxError):
+              pass
+          tick_log_age = None
+          tick_log_counts = {}
+          tick_log = root / "operations/vps-only-factory.log"
+          try:
+              if tick_log.is_file() and not tick_log.is_symlink():
+                  with tick_log.open("rb") as handle:
+                      handle.seek(max(0, tick_log.stat().st_size - 100000))
+                      tail = handle.read(100000).decode("utf-8", errors="replace")
+                  tick_log_age = max(0, round(time.time() - tick_log.stat().st_mtime))
+                  tick_log_counts = {
+                      "tick_ok": tail.count("FACTORY_TICK_OK"),
+                      "tick_fail": tail.count("TICK_EXIT_FAILURE"),
+                      "sqlite_locked": tail.count("database is locked"),
+                      "stage4_wait": tail.count("Stage 4 retry window has not elapsed"),
+                  }
+          except OSError:
+              pass
+
           owner_cron = cron_count(["crontab", "-l"])
           root_cron = cron_count(["sudo", "-n", "crontab", "-u", "root", "-l"])
           age = None
@@ -218,6 +257,11 @@ jobs:
               "vps_only_loop_manage_commands": loop_manage_commands,
               "vps_only_loop_direct_factory_reference": loop_factories_direct,
               "vps_only_loop_source_sha256": loop_sha256,
+              "staging_tick_source_parsed": tick_parsed,
+              "staging_tick_command_names": sorted(tick_command_names)[:20],
+              "staging_tick_sha256": (hashlib.sha256(tick_text.encode("utf-8")).hexdigest() if tick_text else None),
+              "staging_tick_log_age_seconds": tick_log_age,
+              "staging_tick_log_last100k_counts": tick_log_counts,
               "factory_related_process_script_labels": process_labels,
               "factory_related_githubops_cron_markers": cron_markers,
               "legacy_cron_outer_flock_present": legacy_outer_lock,
