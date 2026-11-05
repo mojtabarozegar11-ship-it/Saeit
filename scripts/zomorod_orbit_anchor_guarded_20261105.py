@@ -55,10 +55,13 @@ def patch_homepage(original: bytes) -> bytes:
         raise RuntimeError('HOMEPAGE_CSS_BASELINE_CHANGED_ABORT')
     if original.lower().count(b'</head>') != 1:
         raise RuntimeError('HOMEPAGE_HEAD_STRUCTURE_CHANGED_ABORT')
-    if original.count(b'orbit-shelf') < 29 or not all(
-        (b'id="orbit-' + f'{number:02d}'.encode() + b'"') in original
-        for number in (1, 12, 17, 29)
-    ):
+    # The 29 shelves are built by the page's inline JavaScript at runtime;
+    # their section IDs do not exist in the static HTML before that script runs.
+    if not all(signature in original for signature in (
+        b'function buildShelf(row,i)',
+        b"className:'orbit-shelf',id:row.target",
+        b'content-visibility:auto',
+    )):
         raise RuntimeError('ORBIT_ANCHOR_STRUCTURE_CHANGED_ABORT')
     result = re.sub(rb'</head>', lambda _: INSERT + b'</head>', original,
                     count=1, flags=re.IGNORECASE)
@@ -122,10 +125,9 @@ def verify_live(patched: bytes) -> bool:
         b'body .orbit-shelf { contain-intrinsic-size:auto 363px !important; }',
     )):
         return False
-    # The browser receives the same verified file's unique style, and all
-    # prior section ids remain available for fragment-based navigation.
-    if not all((b'id="orbit-' + f'{n:02d}'.encode() + b'"') in body
-               for n in (1, 12, 17, 29)):
+    # Preserve the runtime shelf generator. Browser QA validates the actual
+    # dynamically constructed fragment IDs separately after HTTP checks.
+    if b"className:'orbit-shelf',id:row.target" not in body:
         return False
     return True
 
@@ -138,6 +140,13 @@ def run(mode: str) -> dict:
         safety_check()
         current = HTML.read_bytes()
         if mode == 'preview':
+            print('ORBIT_STATIC_SOURCE_GUARD=' + json.dumps({
+                'desktop_rule': current.count(OLD_DESKTOP),
+                'mobile_rule': current.count(OLD_MOBILE),
+                'build_shelf_definition': current.count(b'function buildShelf(row,i)'),
+                'runtime_shelf_class': current.count(b"className:'orbit-shelf',id:row.target"),
+                'head_close_count': current.lower().count(b'</head>'),
+            }, sort_keys=True), flush=True)
             changed = patch_homepage(current)
             baseline_live()
             return {'status': 'PREVIEW_ONLY', 'homepage_sha256': digest(current),
@@ -187,9 +196,9 @@ def run(mode: str) -> dict:
 
 def selftest() -> None:
     sample = (b'<html><head><style>' + OLD_DESKTOP + OLD_MOBILE + b'</style></head>'
-              b'<body>' + b''.join(b'<section class="orbit-shelf" id="orbit-' +
-                                 f'{n:02d}'.encode() + b'"></section>'
-                                 for n in range(1, 30)) + b'</body></html>')
+              b'<body><script>function buildShelf(row,i) { const section=el('
+              b"'section',{className:'orbit-shelf',id:row.target}); }</script>"
+              b'</body></html>')
     result = patch_homepage(sample)
     assert result.count(MARKER) == 1
     assert result.replace(INSERT, b'', 1) == sample
