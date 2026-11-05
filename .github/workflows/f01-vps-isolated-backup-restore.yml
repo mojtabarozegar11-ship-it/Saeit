@@ -112,3 +112,95 @@ jobs:
                   print("F01_LIVE_RUNTIME_CHANGED=false")
                   print("F01_OFFHOST_RESTORE_PROOF=NOT_YET_VERIFIED")
           PY
+
+      - name: Verify off-host ephemeral restoration without modifying the VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/f01-offhost-restore.XXXXXXXX")"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o ForwardAgent=no -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' > "$d/archive.tar.gz" <<'REMOTE'
+          import shutil
+          import sys
+          from pathlib import Path
+          base = Path.home() / "factory-runtime"
+          backups = base / "operations/backups"
+          if (base.is_symlink() or not base.is_dir()
+                  or backups.is_symlink() or not backups.is_dir()):
+              raise SystemExit("F01_OFFHOST_BACKUP_ROOT_INVALID")
+          choices = [p for p in backups.iterdir()
+                     if p.name.startswith("single-product-runtime-")
+                     and p.is_dir() and not p.is_symlink()]
+          if not choices:
+              raise SystemExit("F01_OFFHOST_BACKUP_NOT_FOUND")
+          latest = max(choices, key=lambda p: p.stat().st_mtime)
+          archive = latest / "runtime-before.tar.gz"
+          if (archive.is_symlink() or not archive.is_file()
+                  or not 0 < archive.stat().st_size <= 50000000):
+              raise SystemExit("F01_OFFHOST_BACKUP_UNSAFE")
+          with archive.open("rb") as source:
+              shutil.copyfileobj(source, sys.stdout.buffer, length=1024 * 1024)
+          REMOTE
+          test -s "$d/archive.tar.gz"
+          python3 - "$d/archive.tar.gz" <<'PY'
+          import ast
+          from pathlib import Path, PurePosixPath
+          import subprocess
+          import sys
+          import tarfile
+          import tempfile
+
+          archive = Path(sys.argv[1])
+          if archive.stat().st_size > 50000000:
+              raise SystemExit("F01_OFFHOST_ARCHIVE_OVERSIZE")
+          with tarfile.open(archive, "r:gz") as tar:
+              members = tar.getmembers()
+              if not 0 < len(members) <= 3000:
+                  raise SystemExit("F01_OFFHOST_MEMBER_COUNT_INVALID")
+              total = sum(m.size for m in members if m.isfile())
+              if total > 150000000:
+                  raise SystemExit("F01_OFFHOST_UNCOMPRESSED_OVERSIZE")
+              for member in members:
+                  parts = PurePosixPath(member.name).parts
+                  if (not parts or member.name.startswith("/")
+                          or ".." in parts
+                          or not (member.isfile() or member.isdir())):
+                      raise SystemExit("F01_OFFHOST_MEMBER_UNSAFE")
+              with tempfile.TemporaryDirectory(prefix="f01-offhost-restored-") as directory:
+                  root = Path(directory)
+                  for member in members:
+                      destination = root.joinpath(*PurePosixPath(member.name).parts)
+                      if member.isdir():
+                          destination.mkdir(parents=True, exist_ok=True)
+                      else:
+                          destination.parent.mkdir(parents=True, exist_ok=True)
+                          stream = tar.extractfile(member)
+                          if stream is None:
+                              raise SystemExit("F01_OFFHOST_MEMBER_UNREADABLE")
+                          with stream, destination.open("wb") as target:
+                              import shutil
+                              shutil.copyfileobj(stream, target)
+                  restored = root / "single-product-runtime"
+                  runner = restored / "run-single-product-cycle.sh"
+                  core = restored / "scripts/factory_vps_product_cycle.py"
+                  if not runner.is_file() or not core.is_file():
+                      raise SystemExit("F01_OFFHOST_REQUIRED_FILES_MISSING")
+                  ast.parse(core.read_text(encoding="utf-8"))
+                  if subprocess.run(["bash", "-n", str(runner)],
+                                    capture_output=True, timeout=15).returncode:
+                      raise SystemExit("F01_OFFHOST_RUNNER_SYNTAX_ERROR")
+                  print("F01_OFFHOST_EPHEMERAL_RESTORE=PASS")
+                  print("F01_OFFHOST_RESTORED_MEMBERS=" + str(len(members)))
+                  print("F01_OFFHOST_RESTORED_BYTES=" + str(total))
+                  print("F01_OFFHOST_DURABLE_BACKUP_CREATED=false")
+                  print("F01_LIVE_VPS_CHANGED=false")
+          PY
