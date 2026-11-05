@@ -1,4 +1,4 @@
-name: Attribute old and new staging responses to exact LiteSpeed workers
+name: Release unique staging service cards after exact-worker cache recycle
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -112,104 +112,89 @@ jobs:
             fi
           fi
           echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
-      - name: Per-request read-only LiteSpeed worker and cached-template attribution
+      - name: Preview guarded staging service card replacements
         env:
           COMMAND_HOST: ${{ steps.link.outputs.command_host }}
         run: |
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
-          timeout 110s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" 'python3 -' <<'PY'
-          import json
+          timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" 'python3 - preview' < scripts/live_staging_services_dedupe_release_20261105.py
+      - name: Publish isolated staging services template with private backup
+        id: publish
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
+          timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" "python3 - publish '$GITHUB_RUN_ID'" < scripts/live_staging_services_dedupe_release_20261105.py
+      - name: Activate the staging Passenger app at cPanel origin and verify it
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
+          timeout 155s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" "python3 - verify-origin '$GITHUB_RUN_ID'" < scripts/live_staging_services_dedupe_release_20261105.py
+      - name: Verify restarted Passenger output and unique public staging cards
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
           import os
           import re
           import time
-          from pathlib import Path
-          from urllib.request import Request,urlopen
+          from urllib.request import Request, urlopen
 
-          home=Path('/home/zomorod2')
-          conf=(home/'Saeit-staging-web/.htaccess').read_text('utf-8','replace')
-          root_match=re.search(r'(?m)^PassengerAppRoot\s+([^\s]+)\s*$',conf)
-          if not root_match:
-              raise SystemExit('ACTIVE_APP_ROOT_NOT_FOUND')
-          active=Path(root_match.group(1).strip('"'))
-          allowed={str(active):'active_stage',str(home/'Saeit-staging'):'canonical_stage'}
-          if active.is_symlink() or (home/'Saeit-staging/admin-smoke') not in active.parents:
-              raise SystemExit('ACTIVE_APP_ROOT_INVALID')
-          def proc_workers():
-              found={}
-              for p in Path('/proc').iterdir():
-                  if not p.name.isdecimal():
-                      continue
-                  try:
-                      cwd=os.readlink(str(p/'cwd'))
-                      category=allowed.get(cwd)
-                      if category is None:
-                          continue
-                      status=(p/'status').read_text(errors='replace')
-                      uid=re.search(r'(?m)^Uid:\s+(\d+)',status)
-                      if not uid or int(uid.group(1))!=os.geteuid():
-                          continue
-                      name=(p/'exe').resolve().name
-                      cmd=(p/'cmdline').read_bytes().replace(b'\0',b' ').decode('utf-8','replace')
-                      if name!='lswsgi' or 'passenger' not in cmd.lower():
-                          continue
-                      io={}
-                      for line in (p/'io').read_text().splitlines():
-                          parts=line.split(':',1)
-                          if len(parts)==2 and parts[0] in ('syscr','rchar','syscw'):
-                              io[parts[0]]=int(parts[1].strip())
-                      age=None
-                      stat=(p/'stat').read_text()
-                      tail=stat.rsplit(')',1)[1].split()
-                      if len(tail)>19:
-                          ticks=os.sysconf('SC_CLK_TCK')
-                          uptime=float(Path('/proc/uptime').read_text().split()[0])
-                          age=round(uptime-int(tail[19])/ticks)
-                      found[int(p.name)]={'category':category,'io':io,'age_sec':age}
-                  except (FileNotFoundError,OSError,PermissionError,ValueError):
-                      continue
-              return found
+          release_id = os.environ.get('GITHUB_RUN_ID', '')
+          if not release_id.isdecimal():
+              raise SystemExit('INVALID_RELEASE_RUN_ID')
+          required = ('پژوهش‌های کاربردی', 'ابزارهای کاربردی', 'خبرنامهٔ شرکت', 'ارتباط و همکاری')
+          retained = ('هوش مصنوعی', 'آموزش', 'دانشنامه')
+          last_error = 'NOT_ATTEMPTED'
 
-          details=[]
-          observations=[]
-          for index in range(16):
-              before=proc_workers()
-              timestamp=str(int(time.time()*1000000))
-              url='https://staging.zomorodmelal.ir/?zm_worker_mix_diag='+timestamp+'-'+str(index)
-              request=Request(url,headers={'Cache-Control':'no-cache, no-store',
-                                'Pragma':'no-cache','User-Agent':'ZM-Worker-ReadOnly-Attribution/1.0'})
-              with urlopen(request,timeout=12) as response:
-                  content=response.read(220000)
-                  status=response.status
-              after=proc_workers()
-              workers=[]
-              for pid,a in after.items():
-                  b=before.get(pid)
-                  if b is None:
-                      continue
-                  reads=a['io'].get('syscr',0)-b['io'].get('syscr',0)
-                  chars=a['io'].get('rchar',0)-b['io'].get('rchar',0)
-                  if reads>0 or chars>0:
-                      workers.append({'pid':pid,'group':a['category'],'reads':reads,
-                                      'rchar':chars,'age_sec':a['age_sec']})
-              workers.sort(key=lambda x:x['reads'],reverse=True)
-              bodylen=len(content)
-              variant=('new_cards_in_memory' if bodylen==11849 else
-                       'old_cards_in_memory' if bodylen==11624 else 'other')
-              heads=[re.sub('<[^>]+>','',x).strip() for x in
-                     re.findall(r'<h2[^>]*>(.*?)</h2>',content.decode('utf-8','replace'),re.I|re.S)]
-              observations.append({'n':index+1,'http':status,'bytes':bodylen,
-                                   'variant':variant,'duplicates':sorted(set(
-                                      h for h in heads if heads.count(h)>1)),
-                                   'active_reads':workers[:5]})
-              if index==0:
-                  details=[{'pid':pid,'group':v['category'],'age_sec':v['age_sec']} for pid,v in before.items()]
-          totals={}
-          for obs in observations:
-              label=obs['variant']
-              totals[label]=totals.get(label,0)+1
-          print('STAGING_TEMPLATE_WORKER_ATTRIBUTION='+json.dumps({
-              'no_writes':True,'worker_inventory_initial':details,
-              'response_variant_counts':totals,'per_request':observations},
-              ensure_ascii=False,sort_keys=True),flush=True)
+          def check(url):
+              request = Request(url, headers={
+                  'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache',
+                  'User-Agent': 'ZM-Staging-Revised-Cards-Verification/1.0'})
+              with urlopen(request, timeout=15) as response:
+                  status = response.status
+                  robots = response.headers.get('X-Robots-Tag', '')
+                  html = response.read(220000).decode('utf-8', 'replace')
+              titles = [re.sub(r'<[^>]+>', '', heading).strip()
+                        for heading in re.findall(r'<h2[^>]*>(.*?)</h2>', html, re.I | re.S)]
+              if status != 200 or 'noindex' not in robots.lower():
+                  raise RuntimeError('STAGING_HTTP_OR_NOINDEX_REGRESSION')
+              if any(titles.count(title) != 1 for title in required + retained):
+                  raise RuntimeError('STAGING_CARD_UNIQUENESS_NOT_VISIBLE')
+              if len(titles) != len(set(titles)):
+                  raise RuntimeError('DUPLICATE_STAGING_H2_CARDS_REMAIN')
+              return len(titles)
+
+          for attempt in range(25):
+              try:
+                  # The active Passenger pool can recycle >60 seconds after restart.txt changes.
+                  fresh_url = f'https://staging.zomorodmelal.ir/?zm_card_release={release_id}-{attempt}'
+                  fresh_count = check(fresh_url)
+                  root_count = check('https://staging.zomorodmelal.ir/')
+                  with urlopen('https://zomorodmelal.ir/', timeout=15) as main:
+                      if main.status != 200 or 'noindex' in main.headers.get('X-Robots-Tag', '').lower():
+                          raise RuntimeError('PRODUCTION_MAIN_REGRESSION')
+                  print(f'STAGING_UNIQUE_CARDS_VERIFIED=1 headings={root_count} fresh={fresh_count}')
+                  break
+              except Exception as exc:
+                  last_error = type(exc).__name__ + ':' + str(exc)[:100]
+                  if attempt == 24:
+                      raise RuntimeError('PUBLIC_STAGING_TEMPLATE_VERIFICATION_FAILED ' + last_error)
+                  if attempt % 5 == 0:
+                      print('WAITING_FOR_PASSENGER_RENDER attempt=' + str(attempt + 1) +
+                            ' latest=' + last_error)
+                  time.sleep(9)
           PY
+      - name: Rollback staging service card template if verification fails
+        if: failure() && steps.publish.outcome == 'success'
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-dedupe-ssh/config" "$COMMAND_HOST" "python3 - rollback '$GITHUB_RUN_ID'" < scripts/live_staging_services_dedupe_release_20261105.py
