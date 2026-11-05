@@ -1,6 +1,6 @@
 """Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
-from core.models import AgentTask, Product, Order
+from core.models import AgentTask, Product, Order, LedgerEntry
 
 @dataclass(frozen=True)
 class Candidate:
@@ -46,6 +46,20 @@ class AutonomousBrain:
         self_improvement_failed = economic_tasks.filter(
             capability_code="master_self_improvement", status="failed",
         ).exists()
+        last_revenue_review = economic_tasks.filter(
+            capability_code="income_revenue_verify", status="completed"
+        ).order_by("-updated_at", "-pk").first()
+        latest_paid_order_at = Order.objects.filter(
+            status__in=("paid", "completed")
+        ).order_by("-updated_at").values_list("updated_at", flat=True).first()
+        latest_payment_entry_at = LedgerEntry.objects.filter(
+            entry_type__in=("payment", "settlement")
+        ).order_by("-created_at").values_list("created_at", flat=True).first()
+        last_review_at = last_revenue_review.updated_at if last_revenue_review else None
+        financial_event_needs_reconcile = any(
+            seen_at is not None and (last_review_at is None or seen_at > last_review_at)
+            for seen_at in (latest_paid_order_at, latest_payment_entry_at)
+        )
         return {
             "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
             "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
@@ -57,6 +71,7 @@ class AutonomousBrain:
             "growth_ready": products.filter(metadata__commercial_status="growth_ready").count(),
             "orders": Order.objects.count(),
             "paid_orders": Order.objects.filter(status__in=("paid","completed")).count(),
+            "financial_event_needs_reconcile": financial_event_needs_reconcile,
             "self_improvement_complete": self_improvement_complete,
             "self_improvement_failed": self_improvement_failed,
         }
@@ -65,6 +80,10 @@ class AutonomousBrain:
         c=[]
         if s["unfinished_tasks"]:
             return [Candidate("continue_existing_work","An unfinished task must be resolved first.",10,10,10,1)]
+        # A newly recorded payment is more urgent than any internal planning
+        # prerequisite. Check evidence first; never infer settled revenue.
+        if s.get("financial_event_needs_reconcile", False):
+            return [Candidate("income_revenue_verify", "New financial evidence needs independent reconciliation.", 10, 10, 9, 1)]
         if not s.get("self_improvement_complete", False) and not s.get("self_improvement_failed", False):
             return [Candidate(
                 "master_self_improvement",
@@ -85,19 +104,31 @@ class AutonomousBrain:
                 "Market research is verified; score the opportunity before offer design.",
                 10, 9, 9, 1,
             )]
-        # Dependencies are inferred from observed state, not a fixed pipeline.
-        if s["growth_ready"] and s["orders"]:
-            c.append(Candidate("income_revenue_verify","Orders exist for commercialized work; reconcile evidence.",10,10,9,1))
+        # Reconcile after a *new* order/payment event, not on every clock tick.
+        # This does not claim actual settlement; the ledger tool still requires
+        # independent provider evidence before reporting verified cash.
         if s["mvp_built"]:
             c.append(Candidate("income_growth_experiment","A built MVP exists; prepare/test acquisition.",10,9,9,2))
         if s["offer_designed"]:
             c.append(Candidate("income_mvp_build","A designed offer exists without a built MVP.",10,10,10,2))
+        if (s["growth_ready"] or s["active_products"]) and not c:
+            # No built MVP remains, and the current growth tool merely changes
+            # metadata. Re-running it or 'profit optimization' would be a fake
+            # business outcome and could repeat forever without any buyer.
+            c.append(Candidate(
+                "await_external_acquisition",
+                "An existing offer needs an authorized real customer channel; internal metadata changes cannot create a buyer.",
+                10, 10, 10, 1,
+            ))
         if not s["offer_designed"] and not s["mvp_built"] and not s["growth_ready"]:
-            c.append(Candidate("income_offer_design","No prepared offer exists; create the highest-value concrete offer.",9,9,8,2))
-            c.append(Candidate("income_market_research","Commercial state is insufficient; gather decision evidence.",8,8,8,1))
-        if s["active_products"] and not s["orders"]:
-            c.append(Candidate("income_growth_experiment","Active product has no orders; acquisition is the bottleneck.",10,9,7,2))
-        c.append(Candidate("income_profit_optimize","Measure economics and identify the next bottleneck.",6,5,8,1))
+            if not s["active_products"]:
+                c.append(Candidate("income_offer_design","No prepared offer exists; create one bounded offer.",9,9,8,2))
+        if not c:
+            c.append(Candidate(
+                "await_external_evidence",
+                "No new external outcome exists; do not manufacture repeated internal progress reports.",
+                10, 10, 10, 1,
+            ))
         return sorted(c,key=lambda x:x.score,reverse=True)
 
     def decide(self):
