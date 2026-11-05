@@ -273,6 +273,7 @@ def _existing_paid_download_readiness_readonly():
     try:
         import inspect
         from core.models import PaymentIntent
+        from django.contrib.auth import get_user_model
         from core.crown_tron_receipts import PROVIDER, verified_walletless_credit
         from services import mpw_walletless_commercial_intent as commercial
 
@@ -338,7 +339,10 @@ def _existing_paid_download_readiness_readonly():
             return {"status": "scope_exceeded"}
         totals = {"verified_paid_checked": 0, "guard_true": 0, "guard_false": 0,
                   "unavailable_status": 0, "invalid_buyer_relation": 0,
-                  "state_exceptions": 0}
+                  "state_exceptions": 0,
+                  "cross_buyer_checks": 0, "cross_buyer_denied": 0,
+                  "cross_buyer_allowed": 0, "cross_buyer_raised": 0,
+                  "cross_buyer_unavailable": 0}
         result_kinds = {}
         safe_state_keys = set()
         for intent in intents:
@@ -349,6 +353,23 @@ def _existing_paid_download_readiness_readonly():
                 totals["invalid_buyer_relation"] += 1
                 continue
             totals["verified_paid_checked"] += 1
+            # Check the same deployed, AST-screened read-only status gate with
+            # a different *existing* Django account. Never log account IDs.
+            other_id = (get_user_model().objects.exclude(pk=buyer_id)
+                        .order_by("pk").values_list("pk", flat=True).first())
+            if type(other_id) is int and other_id != buyer_id:
+                totals["cross_buyer_checks"] += 1
+                try:
+                    other_state = commercial.commercial_buyer_status(
+                        intent_id=intent.pk, buyer_id=other_id)
+                    if (isinstance(other_state, dict)
+                            and type(other_state.get(acceptance_key)) is bool):
+                        totals["cross_buyer_allowed" if other_state[acceptance_key]
+                               else "cross_buyer_denied"] += 1
+                    else:
+                        totals["cross_buyer_unavailable"] += 1
+                except Exception:
+                    totals["cross_buyer_raised"] += 1
             try:
                 state = commercial.commercial_buyer_status(intent_id=intent.pk, buyer_id=buyer_id)
                 kind = type(state).__name__
