@@ -17,6 +17,72 @@ test -f deploy/systemd/saeit-factory-cycle.timer
 test -f deploy/systemd/saeit-factory-watchdog.service
 test -f deploy/systemd/saeit-factory-watchdog.timer
 
+# Read-only admission: a timer is not evidence of a safe single-product runtime.
+# Refuse installation unless the existing VPS source and private state identify
+# exactly the one permitted product. This runs before touching systemd files.
+python3 - "$runtime" <<'PY'
+import json
+import os
+from pathlib import Path
+import sys
+
+runtime = Path(sys.argv[1])
+private = Path("/home/githubops/factory-runtime/private/autonomous-product-cycle")
+expected = "farm_enterprise_economics"
+
+def verified_json(path):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 100000:
+        raise SystemExit("F01_PREFLIGHT_MISSING_OR_UNSAFE_STATE:" + path.name)
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        raise SystemExit("F01_PREFLIGHT_INVALID_STATE:" + path.name)
+    if not isinstance(obj, dict):
+        raise SystemExit("F01_PREFLIGHT_INVALID_STATE:" + path.name)
+    return obj
+
+slot = verified_json(private / "quality-excellence/product-flow/active-slots/current.json")
+active = slot.get("active")
+if (slot.get("schema") != "saeit.factory.product-slots.v1"
+        or slot.get("capacity") != 1
+        or not isinstance(active, list)
+        or len(active) != 1
+        or not isinstance(active[0], dict)
+        or active[0].get("recipe") != expected):
+    raise SystemExit("F01_PREFLIGHT_SLOT_NOT_EXACT_FIRST_PRODUCT")
+
+state = verified_json(private / "production-state.json")
+if (state.get("active_product_slot_capacity") != 1
+        or state.get("active_product_slot_recipes") != [expected]
+        or state.get("publication_locked_until_owner_approval") is not True
+        or state.get("commercial_quality_review_completed") is not False):
+    raise SystemExit("F01_PREFLIGHT_STATE_NOT_EXACT_FIRST_PRODUCT")
+
+reservation = verified_json(private / ".f01-global-production-lane.json")
+if (reservation.get("schema") != "saeit.factory.global-single-production-lane.v1"
+        or reservation.get("owner") != "line41"
+        or type(reservation.get("generation")) is not int
+        or reservation["generation"] < 1):
+    raise SystemExit("F01_PREFLIGHT_GLOBAL_SINGLETON_NOT_PROVEN")
+
+runner = runtime / "run-local-cycle.sh"
+core = runtime / "scripts/factory_vps_product_cycle.py"
+singleton = runtime / "scripts/factory_global_singleton_v1.py"
+for path in (runner, core, singleton):
+    if (path.is_symlink() or not path.is_file()
+            or path.stat().st_size > 1000000):
+        raise SystemExit("F01_PREFLIGHT_RUNTIME_SOURCE_MISSING:" + path.name)
+runner_text = runner.read_text(encoding="utf-8")
+core_text = core.read_text(encoding="utf-8")
+if (expected not in runner_text
+        or "factory_vps_product_cycle.py" not in runner_text
+        or "factory_global_singleton_v1.py" not in core_text):
+    raise SystemExit("F01_PREFLIGHT_UNVERIFIED_RUNNER_CONTENT")
+if not os.access(runner, os.X_OK):
+    raise SystemExit("F01_PREFLIGHT_RUNNER_NOT_EXECUTABLE")
+print("F01_PREFLIGHT_LOCAL_SINGLE_PRODUCT=PASS")
+PY
+
 install -d -m 700 "$runtime"
 install -m 700 "$repo/scripts/factory-runtime-watchdog.sh" "$runtime/factory-runtime-watchdog.sh"
 install -m 644 deploy/systemd/saeit-factory-cycle.service /etc/systemd/system/saeit-factory-cycle.service
