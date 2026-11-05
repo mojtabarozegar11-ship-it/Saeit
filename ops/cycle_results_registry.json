@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "created_at_utc": "2026-11-05",
+  "kind": "non_sensitive_cross_cycle_result_index",
+  "scope": "coordination metadata only; not production financial records, not factory runtime",
+  "repository": "mojtabarozegar11-ship-it/Saeit",
+  "branch": "ops/zm-cycle-outcome-ledger",
+  "registry_id_rule": "R{cycle_id}-{sequence_4_digits}; separate from historical report numbers",
+  "write_protocol": [
+    "Fetch this exact file from this branch and keep returned blob SHA.",
+    "Read existing receipts and per-cycle sequence; reject duplicate (cycle_id,run_id,deliverable_key) before any write.",
+    "Only for material verified change, reserve next per-cycle sequence and append one redacted receipt in a single JSON update_file call using the observed blob SHA.",
+    "If GitHub rejects the update due to a stale SHA or concurrency, do not claim success; re-fetch, recheck duplicates, recompute sequence, retry at most 3 times.",
+    "After success, re-fetch and ensure exact receipt exists once with the assigned registry_id.",
+    "Never use this index alone as proof of live deployment, accepted output, customer payment, or revenue."
+  ],
+  "report_numbering": "Existing 01-NNNN..05-NNNN numbering remains independent and unverified until a conflict-safe legacy migration. Never infer legacy numbers from this registry.",
+  "security": [
+    "Public-safe metadata only; no names of clients, emails, account or wallet addresses, secrets, financial amounts, private documents, contract contents, or personal information.",
+    "No messages on project 39. No payments, external sending, publishing, deployment, factory startup, or Remote Desktop Commander.",
+    "GitHub is not a runtime dependency of the VPS single-product factory."
+  ],
+  "cycles": {
+    "01": {
+      "automation_id": "6adcb348d5388191b11dfcde9edb8ee3",
+      "sequence": 0,
+      "legacy_report_last_verified": null,
+      "primary_output": "validated manuscript"
+    },
+    "02": {
+      "automation_id": "6adde91161708191b6e89b01870a092b",
+      "sequence": 0,
+      "legacy_report_last_verified": null,
+      "primary_output": "accepted publication-ready book"
+    },
+    "03": {
+      "automation_id": "6ae7484cd8a88191ba55377a41096912",
+      "sequence": 0,
+      "legacy_report_last_verified": null,
+      "primary_output": "accepted guest checkout and delivery"
+    },
+    "04": {
+      "automation_id": "6ade4fc089588191ad08b8a8f03bbab7",
+      "sequence": 0,
+      "legacy_report_last_verified": null,
+      "primary_output": "accepted playable game build"
+    },
+    "05": {
+      "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
+      "sequence": 0,
+      "legacy_report_last_verified": null,
+      "primary_output": "accepted operational business gate"
+    }
+  },
+  "receipts": []
+}
