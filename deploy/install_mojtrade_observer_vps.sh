@@ -43,7 +43,7 @@ test "$(stat -c %a "$private")" = 700 || { echo MOJTRADE_PRIVATE_DIR_INSECURE; e
 # An outage or provider restriction leaves all existing schedules untouched.
 candidate="$private/validated-payload.candidate.json"
 test ! -L "$candidate" || { echo MOJTRADE_CANDIDATE_SYMLINK; exit 2; }
-timeout 45 "$python_bin" "$staged" --output "$candidate"
+timeout 80 "$python_bin" "$staged" --output "$candidate"
 "$python_bin" - "$candidate" <<'PY'
 import json,sys
 from pathlib import Path

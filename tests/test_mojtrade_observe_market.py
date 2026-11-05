@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 
 SOURCE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "mojtrade_observe_market.py"
@@ -103,6 +104,31 @@ class ObserverTests(unittest.TestCase):
             link.symlink_to(private / "target.json")
             with self.assertRaises(ValueError):
                 observer.write_private(payload, link)
+
+    def test_kraken_response_normalizes_to_common_ohlc_schema(self):
+        coinbase_rows = sample(self.now)
+        kraken_rows = [
+            [row[0], str(row[3]), str(row[2]), str(row[1]), str(row[4]), str(row[4]), str(row[5]), 5]
+            for row in coinbase_rows
+        ]
+        with patch.object(observer, "_fetch_json", return_value={
+            "error": [], "result": {"XXBTZUSD": kraken_rows, "last": coinbase_rows[0][0]},
+        }):
+            normalized = observer._fetch_kraken_candles("BTC-USD")
+            self.assertEqual(
+                observer._validated_closes(normalized, self.now),
+                observer._validated_closes(coinbase_rows, self.now),
+            )
+
+    def test_fallback_tracks_real_provider_and_never_fabricates_on_total_outage(self):
+        with patch.object(observer, "_fetch_candles", side_effect=observer.MarketDataError("coinbase_http_403")):
+            with patch.object(observer, "_fetch_kraken_candles", return_value=sample(self.now)):
+                result = observer._observed_signal("BTC-USD", self.now)
+                self.assertEqual(result["data_source"], observer.KRAKEN_SOURCE)
+                self.assertEqual(result["stance"], "watch_buy")
+            with patch.object(observer, "_fetch_kraken_candles", side_effect=observer.MarketDataError("kraken_network_timeout")):
+                with self.assertRaisesRegex(observer.MarketDataError, "coinbase_http_403;kraken_network_timeout"):
+                    observer._observed_signal("BTC-USD", self.now)
 
 
 if __name__ == "__main__":
