@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% block title %}آموزش — Zomorodmelal{% endblock %}
+{% block meta_description %}مرکز آموزش Zomorodmelal؛ از ابتدایی تا کنکور و دانشگاه، دوره‌های فنی و مهارتی و آموزش‌های تخصصی کشاورزی، صنعت، هوش مصنوعی و کسب‌وکار.{% endblock %}
+{% block body_class %}page-academy education-page{% endblock %}
+{% block content %}
+<section class="education-hero">
+  <div class="education-hero-copy">
+    <span class="education-kicker">EDUCATION · KNOWLEDGE · SKILLS · CAREER</span>
+    <h1>آموزش؛ از اولین درس تا مهارت حرفه‌ای.</h1>
+    <p>یک مسیر یکپارچه برای یادگیری مدرسه، کنکور، دانشگاه، فنی‌وحرفه‌ای و دانش تخصصی زنجیره‌های واقعی تولید و کسب‌وکار.</p>
+    <div class="education-actions"><a class="education-primary" href="#catalog">استفاده از ابزارهای آموزشی فعال</a><a class="education-secondary" href="#tracks">مشاهده مسیرهای یادگیری</a></div>
+  </div>
+  <div class="education-command-card">
+    <span>APPLIED LEARNING · LIVE RESOURCES</span>
+    <strong>۴</strong>
+    <p>چهار مسیر قابل استفاده در همین سایت: دو محاسبه‌گر رایگان، راهنمای ریسک و ثبت درخواست تحلیل تخصصی.</p>
+    <b>دسترسی مستقیم · بدون لینک نمایشی</b>
+  </div>
+</section>
+
+<section class="education-principles">
+  <article><b>01</b><strong>علمی و کاربردی</strong><span>محتوا باید قابل فهم، مستند، به‌روز و قابل اجرا باشد.</span></article>
+  <article><b>02</b><strong>مسیرمحور</strong><span>هر دانش‌آموز یا دانشجو مسیر مشخص از سطح فعلی تا هدف دارد.</span></article>
+  <article><b>03</b><strong>رایگان + حرفه‌ای</strong><span>ورود رایگان با محدودیت، و مسیرهای کامل و تخصصی به‌صورت پولی.</span></article>
+  <article><b>04</b><strong>یادگیری تا درآمد</strong><span>آموزش به مهارت، پروژه، محصول و فرصت اقتصادی متصل می‌شود.</span></article>
+</section>
+
+<section class="education-section" id="tracks">
+  <div class="education-heading"><span>LEARNING PATHS</span><h2>مسیرهای آموزشی</h2><p>ساختار آموزش از پایه تا تخصص، بدون محدود شدن به یک مقطع یا رشته.</p></div>
+  <div class="education-track-grid">
+    {% for track in tracks %}
+    <article class="education-track-card"><span>{{ track.meta }}</span><h3>{{ track.title }}</h3><p>{{ track.text }}</p><a href="#catalog">ورود به مسیر ↗</a></article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="education-catalog" id="catalog">
+  <div class="education-heading"><span>AVAILABLE NOW</span><h2>ابزارها و منابع فعال آموزشی</h2><p>این منابع همین حالا در دسترس‌اند؛ دوره‌های ساختاریافته فقط پس از کنترل کیفیت و انتشار نمایش داده می‌شوند.</p></div>
+  <div class="education-resource-grid">
+    <article><b>ابزار رایگان</b><span>فعال</span><h3>محاسبه نقطه سربه‌سر مزرعه</h3><p>بررسی هزینه، درآمد و مقدار فروش لازم برای رسیدن به نقطه سربه‌سر.</p><a href="/agriculture/free-tools/20261025/farm-break-even/">استفاده از ابزار ↗</a></article>
+    <article><b>ابزار رایگان</b><span>فعال</span><h3>برآورد هزینه واردات</h3><p>محاسبه اقلام اصلی بهای تمام‌شده واردات برای تصمیم‌گیری بهتر.</p><a href="/agriculture/free-tools/20261025/import-landed-cost/">استفاده از ابزار ↗</a></article>
+    <article><b>راهنمای عملی</b><span>منتشرشده</span><h3>ارزیابی ریسک مزرعه</h3><p>راهنمای شناسایی و اولویت‌بندی ریسک‌های تولید.</p><a href="/resources/20261025/farm-risk/">مطالعه راهنما ↗</a></article>
+    <article><b>خدمت تخصصی</b><span>پذیرش درخواست</span><h3>درخواست تحلیل اقتصاد تولید</h3><p>ثبت درخواست واقعی تحلیل تخصصی و دریافت کد رهگیری.</p><a href="/ask-master/index.php?service=1">ثبت درخواست خدمت ↗</a></article>
+  </div>
+</section>
+
+{% if courses %}
+{% include "core/education_catalog_filters.html" %}
+
+<section class="education-section education-live-catalog">
+  <div class="education-heading"><span>LIVE CATALOG</span><h2>دوره‌های منتشرشده</h2><p>دوره‌هایی که از چرخه محتوا، کنترل کیفیت و تأیید انتشار عبور کرده‌اند.</p></div>
+  <div class="education-course-grid">
+    {% for course in courses %}
+    <article class="education-course-card">
+      <span>{{ course.track.title }} · {{ course.currency }}</span>
+      <h3>{{ course.title }}</h3>
+      <p>{{ course.summary }}</p>
+      <div><b>{% if course.is_free %}رایگان{% else %}دوره حرفه‌ای{% endif %}</b><strong>{% if course.is_free %}بدون هزینه{% else %}{{ course.price }} {{ course.currency }}{% endif %}</strong></div>
+      <a href="/amozeshgah/course/{{ course.slug }}/">مشاهده دوره ↗</a>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% if not courses %}
+<section class="education-section education-live-catalog" aria-labelledby="academy-status-title">
+  <div class="education-heading"><span>COURSE AVAILABILITY</span><h2 id="academy-status-title">وضعیت دوره‌های آموزشگاه</h2><p>در حال حاضر دورهٔ ساختاریافتهٔ تأییدشده‌ای برای ثبت‌نام عمومی منتشر نشده است. از ابزارهای فعال بالا استفاده کنید؛ دوره‌ها پس از تکمیل محتوا و ارزیابی تخصصی در همین صفحه نمایش داده می‌شوند.</p></div>
+  <p><a class="education-primary" href="/services/">بررسی خدمات تخصصی قابل درخواست ↗</a></p>
+</section>
+{% endif %}
+
+<section class="education-access">
+  <article class="education-free"><span>FREE ACCESS</span><h2>منابع رایگان موجود</h2><p>با ابزارهای فعال اقتصاد تولید و راهنمای ریسک، مسئلهٔ واقعی خود را بررسی کنید.</p><ul><li>محاسبه نقطه سربه‌سر و بررسی اقتصادی مزرعه</li><li>برآورد اولیه بهای تمام‌شده واردات</li><li>مطالعه راهنمای کاربردی ارزیابی ریسک مزرعه</li><li>دسترسی مستقیم به ابزارهای واقعی و بدون ثبت‌نام</li></ul></article>
+  {% if has_paid_courses %}<article class="education-paid"><span>PREMIUM LEARNING</span><h2>دوره‌های کامل و حرفه‌ای</h2><p>جزئیات و شرایط ثبت‌نام دوره‌های منتشرشده را در کاتالوگ بالا بررسی کنید.</p><ul>{% for item in paid_features %}<li>{{ item }}</li>{% endfor %}</ul><a href="#catalog">مشاهده کاتالوگ ↗</a></article>{% endif %}
+</section>
+
+<section class="education-teaching-tools">
+  <div class="education-heading"><span>TEACHER · PROFESSOR · COACH</span><h2>ابزار تدریس حرفه‌ای</h2><p>پاورپوینت‌های اختصاصی برای استاد، معلم و مربی؛ همراه با سناریوی تدریس، یادداشت ارائه، فعالیت کلاسی و ارزیابی.</p></div>
+  <div class="education-teaching-grid">
+    <article><b>استاد</b><h3>کلاس دانشگاهی</h3><p>اسلایدهای مفهومی، منابع، نکات ارائه و فعالیت پژوهشی.</p></article>
+    <article><b>معلم</b><h3>کلاس مدرسه و کنکور</h3><p>اسلاید مرحله‌ای، مثال، تمرین کلاسی و سنجش یادگیری.</p></article>
+    <article><b>مربی</b><h3>کارگاه مهارتی</h3><p>سناریوی کارگاهی، تمرین عملی، پروژه و چک‌لیست ارزیابی.</p></article>
+  </div>
+</section>
+
+<section class="education-quality">
+  <div><span>QUALITY STANDARD</span><h2>هدف طراحی محتوا: نزدیک‌شدن مستمر به استاندارد کیفیت آموزشی ۱۰۰/۱۰۰</h2></div>
+  <div class="education-quality-grid">
+    <article><b>ساختار</b><span>سرفصل کامل، سطح‌بندی و نقشه راه</span></article>
+    <article><b>محتوا</b><span>علمی، کاربردی، شفاف و قابل سنجش</span></article>
+    <article><b>تمرین</b><span>مثال، تمرین، پروژه و آزمون</span></article>
+    <article><b>کنترل کیفیت</b><span>بازبینی، نسخه‌بندی و بهبود مستمر</span></article>
+  </div>
+</section>
+
+<section class="education-agent">
+  <span>INTELLIGENT EDUCATION</span>
+  <h2>آموزش به‌عنوان یک سیستم زنده</h2>
+  <p>معماری صفحه برای بهبود مستمر کاتالوگ، پیشنهاد مسیر، تحلیل تقاضا، بهبود محتوا و اتصال محصولات آموزشی به فروشگاه طراحی شده است.</p>
+</section>
+{% include "core/includes/zomorod_editorial_20261016.html" %}
+{% endblock %}
