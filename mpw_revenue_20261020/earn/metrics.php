@@ -8,7 +8,7 @@ header('X-Content-Type-Options: nosniff');
 header('X-Robots-Tag: noindex, nofollow');
 $pixel=base64_decode('R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=');
 $slugs=['website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care'];
-$events=['quote_click','tool_generated','game_interacted','inquiry_submitted'];
+$events=['quote_click','tool_generated','game_interacted'];
 $s=(string)($_GET['slug']??'');$e=(string)($_GET['event']??'');
 if ($_SERVER['REQUEST_METHOD']==='GET' && in_array($s,$slugs,true) && in_array($e,$events,true)) {
  try {
