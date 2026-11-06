@@ -21,6 +21,7 @@ ALLOWED_STANCES = frozenset({"watch_buy", "watch_sell", "neutral"})
 ALLOWED_SOURCES = frozenset({
     "coinbase-exchange-public-candles",
     "kraken-spot-public-ohlc",
+    "bitfinex-public-candles",
 })
 
 
