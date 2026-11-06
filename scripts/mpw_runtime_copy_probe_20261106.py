@@ -70,13 +70,15 @@ def public_response():
 
 
 def passenger_hints():
+    # Never publish PassengerAppRoot or other raw directives in public CI logs.
+    # A UAPI app root and the WSGI module import path are different identities.
     candidates = [
-        Path("/home/zomorod2/public_html/.htaccess"),
-        Path("/home/zomorod2/mojplaywin.com/.htaccess"),
-        ROOT / ".htaccess",
+        ("public_html", Path("/home/zomorod2/public_html/.htaccess")),
+        ("site_root", LIVE / ".htaccess"),
+        ("source_root", ROOT / ".htaccess"),
     ]
     clues = []
-    for path in candidates:
+    for label, path in candidates:
         if not path.is_file() or path.is_symlink() or path.stat().st_size > 40000:
             continue
         settings = {}
@@ -84,9 +86,16 @@ def passenger_hints():
             parts = line.strip().split(maxsplit=1)
             if len(parts) == 2 and parts[0] in (
                     "PassengerAppRoot", "PassengerStartupFile", "PassengerBaseURI"):
-                settings[parts[0]] = parts[1][:180]
+                settings[parts[0]] = parts[1].strip()
         if settings:
-            clues.append({"location": str(path), "directives": settings})
+            clues.append({
+                "location_label": label,
+                "app_root_is_site_root": settings.get("PassengerAppRoot") == str(LIVE),
+                "app_root_is_source_root": settings.get("PassengerAppRoot") == str(ROOT),
+                "startup_is_passenger_wsgi": settings.get("PassengerStartupFile") == "passenger_wsgi.py",
+                "base_uri_is_root": settings.get("PassengerBaseURI") == "/",
+                "has_root_directive": "PassengerAppRoot" in settings,
+            })
     marker = ROOT / "tmp/restart.txt"
     return {"directives": clues,
             "restart_marker_exists": marker.is_file() and not marker.is_symlink(),
@@ -131,9 +140,14 @@ def active_root_inventory():
                                  if isinstance(n, ast.Constant) and isinstance(n.value, str)
                                  if ("Saeit" in n.value or "mojplaywin" in n.value)
                                  if len(n.value) < 200]
-                details["path_hints"] = sorted(set(path_literals))[:12]
+                details["source_root_literal_present"] = str(ROOT) in path_literals
+                details["site_root_literal_present"] = str(LIVE) in path_literals
+                details["wsgi_parse_status"] = "valid_python"
+                details["important_limitation"] = (
+                    "WSGI path literals alone do not establish the effective imported app"
+                )
             except SyntaxError:
-                details["parse_status"] = "syntax_error"
+                details["wsgi_parse_status"] = "syntax_error"
         inspected[rel] = details
     return {"root_available": True, "files": inspected}
 
@@ -150,7 +164,10 @@ def main():
         except Exception as exc:
             out[key] = {"error_type": type(exc).__name__}
     out.update({"read_only": True, "emails_sent": 0,
-                "db_writes": 0, "payments": 0})
+                "db_writes": 0, "payments": 0,
+                "effective_wsgi_import_verified": False,
+                "recovery_backup_verified": False,
+                "release_permitted": False})
     print("MPW_RUNTIME_COPY_PROBE=" + json.dumps(out, sort_keys=True), flush=True)
 
 
