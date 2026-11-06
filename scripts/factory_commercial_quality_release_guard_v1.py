@@ -102,8 +102,10 @@ def _safe_proof_file(container, filename, expected_sha):
     if (not isinstance(filename,str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{2,120}",filename)
             or not isinstance(expected_sha,str) or not SHA.fullmatch(expected_sha)):
         raise ValueError("BUYER_VALUE_PROOF_PATH_INVALID")
-    path=container/"buyer-proof"/filename
-    if (path.is_symlink() or not path.is_file() or not 80<=path.stat().st_size<=2_000_000
+    directory=container/"buyer-proof"
+    path=directory/filename
+    if (container.is_symlink() or directory.is_symlink() or not directory.is_dir()
+            or path.is_symlink() or not path.is_file() or not 80<=path.stat().st_size<=2_000_000
             or _digest_file(path)!=expected_sha):
         raise ValueError("BUYER_VALUE_PROOF_NOT_VERIFIED")
     return path
@@ -118,7 +120,7 @@ def require_buyer_value_evidence(inbox,recipe,artifact_sha):
     """
     container=Path(inbox)/"quality-clearance"/recipe/artifact_sha
     evidence_path=container/"buyer-value-evidence.json"
-    if (evidence_path.is_symlink() or not evidence_path.is_file()
+    if (container.is_symlink() or evidence_path.is_symlink() or not evidence_path.is_file()
             or not 100<evidence_path.stat().st_size<=150_000):
         raise ValueError("BUYER_VALUE_EVIDENCE_MISSING")
     try:
@@ -190,6 +192,7 @@ def require_buyer_value_evidence(inbox,recipe,artifact_sha):
     if not isinstance(signals,list) or not 1<=len(signals)<=12:
         raise ValueError("BUYER_VALUE_DEMAND_EVIDENCE_MISSING")
     real_demand=False
+    signal_files=set()
     for signal in signals:
         if (not isinstance(signal,dict)
                 or signal.get("kind") not in REAL_BUYER_SIGNALS|{"public_market_research"}
@@ -197,8 +200,11 @@ def require_buyer_value_evidence(inbox,recipe,artifact_sha):
                 or not _substantive(signal.get("limitations"))):
             raise ValueError("BUYER_VALUE_DEMAND_EVIDENCE_INVALID")
         if signal["kind"] in REAL_BUYER_SIGNALS:
+            if signal.get("proof_filename") in files|signal_files:
+                raise ValueError("BUYER_VALUE_DEMAND_PROOF_NOT_INDEPENDENT")
             _safe_proof_file(container,signal.get("proof_filename"),signal.get("proof_sha256"))
             real_demand=True
+            signal_files.add(signal["proof_filename"])
         elif (not isinstance(signal.get("source_url"),str)
               or not re.fullmatch(r"https://[^\s/]+/[^\s]*",signal["source_url"])):
             raise ValueError("BUYER_VALUE_RESEARCH_SOURCE_MISSING")

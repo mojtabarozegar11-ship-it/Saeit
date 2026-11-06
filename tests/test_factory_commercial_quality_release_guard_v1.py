@@ -186,6 +186,27 @@ class PublicReleaseSafety(unittest.TestCase):
             path.write_text(json.dumps(document),encoding="utf8")
             with self.assertRaisesRegex(ValueError,"BUYER_VALUE_WORKFLOW_DUPLICATED"):
                 mod.require_buyer_value_evidence(root,"test_product",digest)
+
+    def test_reused_workflow_proof_cannot_pretend_to_be_customer_feedback(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t); digest="e"*64
+            path,document=buyer_value_fixture(root,"test_product",digest,paid=True,real_buyer=True)
+            document["demand_signals"][1]["proof_filename"]=document["customer_workflows"][0]["proof_filename"]
+            document["demand_signals"][1]["proof_sha256"]=document["customer_workflows"][0]["proof_sha256"]
+            path.write_text(json.dumps(document),encoding="utf8")
+            with self.assertRaisesRegex(ValueError,"BUYER_VALUE_DEMAND_PROOF_NOT_INDEPENDENT"):
+                mod.require_buyer_value_evidence(root,"test_product",digest)
+
+    def test_symlinked_buyer_proof_directory_fails_closed(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t); digest="f"*64
+            path,_=buyer_value_fixture(root,"test_product",digest)
+            folder=path.parent/"buyer-proof"
+            outside=root/"external"
+            folder.rename(outside)
+            folder.symlink_to(outside,target_is_directory=True)
+            with self.assertRaisesRegex(ValueError,"BUYER_VALUE_PROOF_NOT_VERIFIED"):
+                mod.require_buyer_value_evidence(root,"test_product",digest)
     def test_public_release_rights_gate_still_blocks_without_evidence(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t)
