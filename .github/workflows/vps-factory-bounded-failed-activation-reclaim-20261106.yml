@@ -241,4 +241,67 @@ jobs:
                       "rows": op_rows[:28], "deletion_performed": False}, sort_keys=True), flush=True)
               except subprocess.TimeoutExpired:
                   print("VPS_OPERATIONS_SUBTREE=timed_out", flush=True)
+
+          # Resolve only two stale temporary artifacts, without exposing names
+          # or interpreting backup contents. This step never deletes.
+          temporary_targets = {
+              "9824c5f31b": ("c4e1ebe02f", ".partial", 1673216872),
+              "9e7b2a0270": ("4491021f0d", ".part", 84672512),
+          }
+          temp_checks = []
+          for directory in Path("/home/githubops").iterdir():
+              tag = hash_name(directory.name)
+              if tag not in temporary_targets or directory.is_symlink() or not directory.is_dir():
+                  continue
+              expected_name_hash, expected_ext, expected_size = temporary_targets[tag]
+              for item in directory.iterdir():
+                  if hash_name(item.name) != expected_name_hash:
+                      continue
+                  status = {"directory_hash": tag, "name_hash": expected_name_hash}
+                  info = item.lstat()
+                  status["regular_owner_link1"] = (stat.S_ISREG(info.st_mode) and
+                      info.st_uid == os.geteuid() and info.st_nlink == 1)
+                  status["exact_size"] = info.st_size == expected_size
+                  status["suffix_ok"] = item.name.endswith(expected_ext)
+                  status["age_days"] = round(max(0, time.time()-info.st_mtime)/86400, 2)
+                  counterpart = item.with_name(item.name[:-len(expected_ext)])
+                  if counterpart.is_file() and not counterpart.is_symlink():
+                      full = counterpart.stat()
+                      status["complete_sibling_exists"] = True
+                      status["complete_sibling_bytes"] = full.st_size
+                      status["complete_sibling_older"] = full.st_mtime < info.st_mtime
+                      status["complete_sibling_header"] = header_kind(counterpart)
+                  else:
+                      status["complete_sibling_exists"] = False
+                  references = 0
+                  for manifest in directory.glob("*.json"):
+                      if manifest.is_file() and not manifest.is_symlink() and manifest.stat().st_size < 1048576:
+                          try:
+                              data = manifest.read_text(encoding="utf-8")
+                              if item.name in data:
+                                  references += 1
+                          except (OSError, UnicodeError):
+                              references += 1
+                  status["manifest_references"] = references
+                  status["cron_referenced"] = str(item) in cron.stdout
+                  opened = False
+                  uncertain_processes = 0
+                  for proc in Path("/proc").iterdir():
+                      if not proc.name.isdigit():
+                          continue
+                      try:
+                          for fd in (proc / "fd").iterdir():
+                              try:
+                                  if os.readlink(fd) == str(item):
+                                      opened = True
+                              except OSError:
+                                  continue
+                      except (OSError, PermissionError):
+                          uncertain_processes += 1
+                  status["open_file_descriptor_seen"] = opened
+                  status["process_scan_partial"] = uncertain_processes > 0
+                  temp_checks.append(status)
+          print("VPS_STALE_TEMP_PREDELETE_GATES=" +
+                json.dumps({"schema": "vps.temp.predelete.readonly.v1", "deletion_performed": False,
+                            "targets": temp_checks}, sort_keys=True), flush=True)
           PY
