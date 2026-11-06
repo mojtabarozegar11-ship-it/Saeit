@@ -8,12 +8,12 @@ from pathlib import Path
 import random
 import shutil
 import subprocess
+import sys
 import unittest
 
+ROOT = Path(__file__).resolve().parents[1] / 'product_recipes' / 'farm_enterprise_economics'
+sys.path.insert(0, str(ROOT))
 from calculator import evaluate
-
-
-ROOT = Path(__file__).resolve().parent
 
 
 def browser_calculate(input_data):
@@ -41,14 +41,25 @@ def crop(name, quantity, price, variable, fixed, fee="0", **additional):
 
 class OfflineBrowserContractTests(unittest.TestCase):
     def test_browser_files_are_packaged_as_maker_source(self):
-        from importlib.util import module_from_spec, spec_from_file_location
+        # Recipes are copied alone to isolated customers / QA sandboxes.
+        # Their tests MUST NOT depend on the manufacturer script being beside
+        # the copied folder. Verify the full contract in either layout.
+        expected = ("offline_calculator.html", "offline_engine.js",
+                    "offline_ui.js", "test_offline_package.py")
+        for name in expected:
+            self.assertTrue((ROOT / name).is_file(), name)
+            self.assertFalse((ROOT / name).is_symlink(), name)
+        self.assertTrue((ROOT / "README.md").is_file())
+        self.assertTrue((ROOT / "test_calculator.py").is_file())
         maker_path = ROOT.parent.parent / "scripts" / "factory_product_maker.py"
-        spec = spec_from_file_location("browser_recipe_maker", maker_path)
-        maker = module_from_spec(spec)
-        spec.loader.exec_module(maker)
-        _, files = maker.inspect_recipe(ROOT)
-        for name in ("offline_calculator.html", "offline_engine.js", "offline_ui.js", "test_offline_browser.py"):
-            self.assertIn(name, files)
+        if maker_path.is_file():
+            from importlib.util import module_from_spec, spec_from_file_location
+            spec = spec_from_file_location("browser_recipe_maker", maker_path)
+            maker = module_from_spec(spec)
+            spec.loader.exec_module(maker)
+            _, files = maker.inspect_recipe(ROOT)
+            for name in expected:
+                self.assertIn(name, files)
 
     def test_interface_has_offline_content_policy_and_no_remote_assets(self):
         body = (ROOT / "offline_calculator.html").read_text(encoding="utf-8")

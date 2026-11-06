@@ -165,9 +165,13 @@ an endorsement or independent review of this product.
 
 ## Verification and support
 
-To run the included automated tests:
+To run the included automated tests (Python only, no Node needed):
 
-   python -m unittest -v test_calculator.py
+   python -m unittest discover -v -p 'test_*.py'
+
+The independent browser-versus-Python arithmetic comparison is an additional
+source-repository CI check, intentionally separate from the buyer ZIP so
+extracted private packages remain testable on a machine without Node.js.
 
 No telemetry is collected; all inputs and outputs remain on the device.
 The software rejects negative quantities/costs, non-finite numeric values,

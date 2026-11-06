@@ -33,10 +33,16 @@ jobs:
         run: |
           set -euo pipefail
           python -B -m unittest discover -v -p 'test_*.py'
-          python -B -m py_compile calculator.py test_calculator.py test_offline_browser.py
+          python -B -m py_compile calculator.py test_calculator.py test_offline_package.py
           node --check offline_engine.js
           node --check offline_ui.js
           node -e 'const fs=require("fs"); const e=require("./offline_engine.js"); if(e.evaluate(JSON.parse(fs.readFileSync("example_inputs.json"))).results.length!==2)process.exit(1);'
           echo FARM_ENTERPRISE_SPECIALIST_INTERNAL_TESTS=PASS
           echo FACTORY_INDEPENDENT_QUALITY_CLEARANCE=false
           echo FACTORY_COMMERCIAL_RELEASE_ALLOWED=false
+      - name: Cross-runtime browser arithmetic compared with independent Python engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v node
+          python -B -m unittest -v tests.test_farm_browser_parity
