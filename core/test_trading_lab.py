@@ -106,3 +106,32 @@ def test_problem_solution_journal_and_durable_export_shape():
     json.dumps(exported)
     assert exported["mode"] == "DEMO_ONLY"
     assert exported["agents"][0]["experiences"][0]["action"] == "LEARN"
+
+def test_state_round_trip_and_atomic_tamper_rejection():
+    lab = make_lab()
+    agent = lab.agents[0]
+    opened = lab.submit_demo_trade(agent, "TEST", "BUY")
+    state_with_open_order = lab.export_state()
+
+    restored = make_lab()
+    restored.restore_state(state_with_open_order)
+    assert restored.export_state() == state_with_open_order
+
+    tampered = json.loads(json.dumps(state_with_open_order))
+    tampered["agents"][0]["open_order_ids"] = ["ghost-order"]
+    before = restored.export_state()
+    with pytest.raises(ValueError, match="state_open_order_reconciliation_invalid"):
+        restored.restore_state(tampered)
+    assert restored.export_state() == before
+
+    restored.close_demo_trade(
+        restored.agents[0],
+        opened.order_id,
+        7.5,
+        datetime(2026, 11, 6, 14, tzinfo=timezone.utc),
+    )
+    closed_state = restored.export_state()
+    closed_round_trip = make_lab()
+    closed_round_trip.restore_state(closed_state)
+    assert closed_round_trip.export_state() == closed_state
+    assert closed_round_trip.leaderboard()[0]["pnl"] == 7.5
