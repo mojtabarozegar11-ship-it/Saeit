@@ -84,9 +84,10 @@ jobs:
               }
               print('HANDLER_AUDIT='+name+' bytes='+str(len(data))+' sha256='+hashlib.sha256(data).hexdigest())
               print('HANDLER_CHECKS='+name+' '+','.join(k+':'+('yes' if v else 'no') for k,v in checks.items()))
-              includes=sorted(set(re.findall(rb'(?:require|include)(?:_once)?\\s*\\(?\\s*[\\\'\"]([^\\\'\"]+\\.php)[\\\'\"]',data,re.I)))
+              text=data.decode('utf8','ignore')
+              includes=sorted(set(re.findall(r"""(?:require|include)(?:_once)?\\s*\\(?\\s*['"]([^'"]+\\.php)['"]""",text,re.I)))
               print('HANDLER_INCLUDES='+name+' '+','.join(v.decode('utf8','replace') for v in includes))
-              tables=sorted(set(v.decode('ascii','ignore') for v in re.findall(rb'\\b(?:INSERT\\s+INTO|UPDATE)\\s+[`\\\'\"]?([A-Za-z_][A-Za-z0-9_]*)',data,re.I)))
+              tables=sorted(set(re.findall(r"""\\b(?:INSERT\\s+INTO|UPDATE)\\s+[`'"]?([A-Za-z_][A-Za-z0-9_]*)""",text,re.I)))
               print('HANDLER_WRITE_TABLES='+name+' '+','.join(tables))
           PY
       - name: Add only release-local Passenger-off and DirectoryIndex configuration
