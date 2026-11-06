@@ -168,14 +168,30 @@ jobs:
           print("SELECTOR_ROOT_APP_MAPPING=verified")
           print("SELECTOR_PYTHON_VERSION=3.10")
           PY
-          # Passenger imports with this virtualenv. Reconcile its production packages with
-          # the project's declared versions, keeping already compatible versions.
+          # Security preflight is read-only: never install or upgrade production
+          # packages from this publication workflow, before a recovery snapshot.
           passenger_python="$HOME/virtualenv/Saeit/3.10/bin/python"
           test -x "$passenger_python" || { echo "PASSENGER_PYTHON=missing" >&2; exit 1; }
-          if ! "$passenger_python" -c 'import environ, rest_framework, whitenoise.middleware, openai, psycopg, PIL, pydantic_core' >/dev/null 2>&1; then
-            "$passenger_python" -m pip --disable-pip-version-check install --upgrade-strategy only-if-needed 'Django>=5.2,<6.0' 'django-environ>=0.12,<1.0' 'djangorestframework>=3.16,<4.0' 'psycopg[binary]>=3.2,<4.0' 'openai>=1.100,<2.0' 'pydantic>=2.0,<3.0' 'whitenoise>=6.9,<7.0' 'Pillow>=10,<12'
-          fi
-          "$passenger_python" -c 'import django, environ, rest_framework, whitenoise, openai, psycopg, PIL, pydantic_core; print("PASSENGER_RUNTIME_DEPENDENCIES=verified")'
+          "$passenger_python" -B - <<'PY'
+          import sys
+          import django
+          import environ
+          import rest_framework
+          import whitenoise.middleware
+          import openai
+          import psycopg
+          import PIL
+          import pydantic_core
+
+          print("PASSENGER_RUNTIME_PYTHON=" + ".".join(map(str, sys.version_info[:3])))
+          print("PASSENGER_RUNTIME_DJANGO=" + django.get_version())
+          if sys.version_info[:2] != (3, 10):
+              raise SystemExit("PASSENGER_PYTHON_RUNTIME_UNEXPECTED")
+          if django.VERSION[:2] != (5, 2) or django.VERSION[:3] < (5, 2, 19) or django.VERSION[3] != "final":
+              raise SystemExit("PASSENGER_DJANGO_SECURITY_FLOOR_NOT_MET")
+          print("PASSENGER_DJANGO_SECURITY_FLOOR=verified")
+          print("PASSENGER_RUNTIME_DEPENDENCIES=verified")
+          PY
           recovery="$HOME/.backups/zomorodmelal-app/b78498ecccc3b99784a0cb060ea2c59bec65c505"
           if test -f "$recovery/deployed.flag"; then
             htaccess_recovery="$HOME/.backups/zomorodmelal-app/2532ea0d2e5c143a2369104dbb0cac36bac6ec26"
