@@ -23,7 +23,7 @@
   "cycles": {
     "01": {
       "automation_id": "6adcb348d5388191b11dfcde9edb8ee3",
-      "sequence": 1,
+      "sequence": 2,
       "legacy_report_last_verified": null,
       "primary_output": "validated manuscript"
     },
@@ -168,6 +168,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514",
       "acceptance_result": "One unverified source attribution explicitly flagged in C113 DOCX and matching 608-page PDF; SHA readback of both private Library files succeeded; not author approved",
       "impact": "Removed misleading implied citation verification; no approved book, live SKU or revenue"
+    },
+    {
+      "registry_id": "R01-0002",
+      "cycle_id": "01",
+      "run_id": "github-42264835596-head-d1e53bbd",
+      "deliverable_key": "irrigation-import-fix-postchange-ci-42264835596",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42264835596",
+      "acceptance_result": "CI and Django CI on exact corrected commit d1e53bbd succeeded; earlier CI 42242506241 failed on ModuleNotFoundError paired_scenario_audit during collection",
+      "impact": "Import/collection regression closed at CI level; manuscript scientific acceptance and income not verified"
     }
   ],
   "report_reservations": [],
