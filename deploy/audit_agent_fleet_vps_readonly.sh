@@ -546,6 +546,77 @@ print("AGENT_FLEET_FACTORY_DISPATCH_TRACE="+json.dumps({
 },sort_keys=True,separators=(",",":")))
 PY
 
+# Check whether the live-only factory command can resolve its planning method
+# and whether the dedicated gateway actually registers both queued actions.
+"$python_bin" - <<'PY'
+import ast
+import json
+from pathlib import Path
+
+import django
+django.setup()
+from core.autonomous_brain import AutonomousBrain
+from core.factory_tool_pack import build_factory_gateway
+
+root = Path.home() / "factory-runtime/django-app/core"
+command_path = root / "management/commands/factory_product_step.py"
+if not command_path.is_file() or command_path.is_symlink() or command_path.stat().st_size > 350000:
+    raise RuntimeError("FACTORY_COMMAND_SOURCE_UNAVAILABLE")
+tree = ast.parse(command_path.read_text(encoding="utf-8"))
+imports = []
+arguments = []
+call_sites = []
+constructor_bindings = []
+for node in ast.walk(tree):
+    if isinstance(node,ast.ImportFrom) and node.module and node.module.startswith("core"):
+        imports.append({"module":node.module,"names":sorted(alias.name for alias in node.names)[:12]})
+    if isinstance(node,ast.Call):
+        name = node.func.attr if isinstance(node.func,ast.Attribute) else (
+            node.func.id if isinstance(node.func,ast.Name) else "")
+        if name == "add_argument":
+            arguments.extend(arg.value for arg in node.args if isinstance(arg,ast.Constant)
+                             and isinstance(arg.value,str) and arg.value.startswith("--"))
+        if name in ("plan_product_factory_step", "decide_product_factory_step", "run"):
+            receiver = node.func.value if isinstance(node.func,ast.Attribute) else None
+            if isinstance(receiver,ast.Name):
+                receiver_name = receiver.id
+            elif isinstance(receiver,ast.Call) and isinstance(receiver.func,ast.Name):
+                receiver_name = receiver.func.id + "()"
+            else:
+                receiver_name = "other_expression"
+            call_sites.append({"method":name,"receiver":receiver_name,
+                               "keyword_names":sorted(k.arg for k in node.keywords if k.arg)})
+    if isinstance(node,ast.Assign) and isinstance(node.value,ast.Call):
+        constructor = node.value.func.id if isinstance(node.value.func,ast.Name) else None
+        if constructor:
+            for target in node.targets:
+                if isinstance(target,ast.Name) and target.id in ("brain", "planner", "runner", "worker"):
+                    constructor_bindings.append({"variable":target.id,"constructor":constructor})
+
+allowed = {"product_research", "product_validation"}
+gateway_codes = set(build_factory_gateway().describe())
+defined_planners = []
+for path in sorted(root.glob("*.py"))[:300]:
+    if not path.is_file() or path.is_symlink() or path.stat().st_size > 350000:
+        continue
+    data = path.read_bytes()
+    if b"def plan_product_factory_step" in data or b"def decide_product_factory_step" in data:
+        defined_planners.append(path.stem)
+
+print("AGENT_FLEET_FACTORY_COMMAND_PREFLIGHT="+json.dumps({
+    "schema":"saeit.agent.factory-command-preflight.v1", "read_only":True,
+    "command_imports":imports[:20],
+    "command_cli_options":sorted(set(arguments))[:30],
+    "command_dispatch_calls":call_sites[:15],
+    "command_constructor_bindings":constructor_bindings[:12],
+    "factory_gateway_supports":sorted(allowed & gateway_codes),
+    "factory_gateway_missing":sorted(allowed - gateway_codes),
+    "planner_definition_module_names":defined_planners[:20],
+    "autonomous_brain_has_product_factory_plan":hasattr(AutonomousBrain,"plan_product_factory_step"),
+    "task_mutations":0,"commands_executed":0,
+},sort_keys=True,separators=(",",":")))
+PY
+
 # Distinguish a historical backlog from a live, executable queue. Installed
 # factory code can differ from the repository, so inspect bounded live evidence
 # without claiming a worker from a mere filename or process-name match.
