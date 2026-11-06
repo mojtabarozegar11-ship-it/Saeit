@@ -1,0 +1,127 @@
+name: VPS F01 existing single-product runner one real cycle (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saeit-vps-f01-existing-runner-once
+  cancel-in-progress: false
+
+jobs:
+  run-one-existing-cycle:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Run one already-installed F01 private cycle with a pinned runner
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          keydir="$RUNNER_TEMP/saeit-f01-existing-worker"
+          install -d -m 700 "$keydir"
+          trap 'rm -rf -- "$keydir"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$keydir/key"
+          chmod 600 "$keydir/key"
+          ssh-keygen -y -P '' -f "$keydir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$keydir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$keydir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$keydir/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$keydir/known" -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 githubops@178.239.147.150 'python3 -B -' <<'REMOTE'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import pwd
+          import shutil
+          import subprocess
+
+          base = Path('/home/githubops/factory-runtime')
+          private = base / 'private/autonomous-product-cycle'
+          runner = base / 'operations/single-product-runtime/run-single-product-cycle.sh'
+          log = base / 'operations/single-product-cycle.log'
+          slot = private / 'quality-excellence/product-flow/active-slots/current.json'
+          health = private / 'production-health.json'
+          state = private / 'production-state.json'
+          expected_runner_sha = '546895c9d04d21360132394335f08851ab0ed2e5603e3d47e8a7d2471ed1e0d9'
+          recipe = 'farm_enterprise_economics'
+
+          def fail(reason):
+              raise SystemExit('F01_EXISTING_CYCLE_ABORTED_' + reason)
+
+          def safe_doc(path):
+              if path.is_symlink() or not path.is_file() or path.stat().st_size >= 2_000_000:
+                  fail('UNSAFE_SOURCE')
+              data = json.loads(path.read_text(encoding='utf-8'))
+              if not isinstance(data, dict):
+                  fail('INVALID_SOURCE')
+              return data
+
+          if (os.geteuid() == 0 or pwd.getpwuid(os.geteuid()).pw_name != 'githubops'
+                  or base.is_symlink() or private.is_symlink()):
+              fail('WRONG_USER_OR_ROOT')
+          if not runner.is_file() or runner.is_symlink() or not os.access(runner, os.X_OK):
+              fail('RUNNER_MISSING_OR_UNSAFE')
+          if hashlib.sha256(runner.read_bytes()).hexdigest() != expected_runner_sha:
+              fail('RUNNER_VERSION_CHANGED')
+          slot_data = safe_doc(slot)
+          if (slot_data.get('schema') != 'saeit.factory.product-slots.v1'
+                  or not isinstance(slot_data.get('active'), list)
+                  or len(slot_data['active']) != 1
+                  or slot_data['active'][0].get('recipe') != recipe):
+              fail('NATIVE_SINGLE_PRODUCT_LOCK_UNVERIFIED')
+          before = safe_doc(health)
+          if before.get('schema') != 'saeit.factory.production-health.v1':
+              fail('HEARTBEAT_SCHEMA_MISMATCH')
+          schedule = subprocess.run(['crontab', '-l'], capture_output=True,
+                                    text=True, timeout=7, check=False)
+          if schedule.returncode:
+              fail('CRON_UNREADABLE')
+          matches = [line for line in schedule.stdout.splitlines()
+                     if 'SAEIT_SINGLE_PRODUCT_FACTORY_V1' in line
+                     and line.strip() and not line.lstrip().startswith('#')]
+          if len(matches) != 1:
+              fail('CRON_NOT_EXACTLY_ONE')
+          if shutil.disk_usage(private).free < 512 * 1024 * 1024:
+              fail('DISK_SPACE_BELOW_SAFE_LIMIT')
+          if log.is_symlink() or not log.parent.is_dir():
+              fail('LOG_TARGET_UNSAFE')
+
+          prior = before.get('completed_cycles')
+          print('F01_EXISTING_CYCLE_PREVIOUS_COUNT=' + str(prior))
+          env = dict(os.environ, SAEIT_ENV='production', MOJ_FACTORY_LOCAL_MODE='1',
+                     MOJ_PAID_LLM_ENABLED='0', MOJ_LLM_DAILY_CALL_BUDGET='0',
+                     MOJ_LLM_MAX_COST_MINOR='0')
+          with log.open('ab') as output:
+              # The installed runner already uses a nonblocking private flock.
+              # timeout is bounded and the subprocess stdout remains on VPS.
+              result = subprocess.run(['/usr/bin/timeout', '-k', '3s', '55s', str(runner)],
+                                      stdout=output, stderr=subprocess.STDOUT,
+                                      env=env, cwd=str(base / 'operations'), timeout=62,
+                                      check=False)
+          after = safe_doc(health)
+          after_slot = safe_doc(slot)
+          after_state = safe_doc(state)
+          if (after_slot.get('active') != slot_data.get('active')
+                  or after_state.get('active_product_slot_recipes') != [recipe]
+                  or after_state.get('publishable_product_count') != 0
+                  or after_state.get('commercial_quality_review_completed') is not False):
+              fail('PRODUCT_LOCK_OR_RELEASE_STATE_CHANGED')
+          new_count = after.get('completed_cycles')
+          advanced = (type(prior) is int and type(new_count) is int
+                      and new_count > prior
+                      and after.get('last_cycle_finished_at_utc') != before.get('last_cycle_finished_at_utc'))
+          print('F01_EXISTING_CYCLE_PROCESS_EXIT=' + str(result.returncode))
+          print('F01_EXISTING_CYCLE_NEW_COUNT=' + str(new_count))
+          print('F01_EXISTING_CYCLE_HEARTBEAT_ADVANCED=' + str(advanced).lower())
+          print('F01_EXISTING_CYCLE_SINGLE_PRODUCT_LOCK=PASS')
+          print('F01_EXISTING_CYCLE_COMMERCIAL_RELEASE=LOCKED')
+          if result.returncode or not advanced:
+              fail('NO_VERIFIED_NEW_PRODUCTION_HEARTBEAT')
+          print('F01_EXISTING_CYCLE_REAL_EXECUTION=PASS')
+          REMOTE
