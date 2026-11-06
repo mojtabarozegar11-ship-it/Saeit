@@ -114,6 +114,19 @@ class GuardTests(unittest.TestCase):
                     with self.assertRaises(RuntimeError):
                         guard.transform(key,corrupted)
 
+    def test_drift_preflight_reports_anchor_counts_and_digest_without_source(self):
+        original=fixture()["pages"]
+        broken=original.replace(
+            guard.PAGES_CHECKOUT_OLD,
+            "    if product is None: raise Http404\n",
+        )
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"SOURCE_DRIFT_OR_AMBIGUOUS:pages:anchor=2:old_count=0:"
+            r"new_count=0:sha256=[0-9a-f]{64}",
+        ):
+            guard.transform("pages",broken)
+
     def test_partial_module_is_refused(self):
         src=fixture()["web"].replace(guard.WEB_IMPORT_OLD,guard.WEB_IMPORT_NEW,1)
         with self.assertRaisesRegex(RuntimeError,"PARTIAL_MODULE_PATCH"):
