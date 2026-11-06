@@ -1,22 +1,6 @@
 name: VPS Three Verified Source Upgrades (Private Pilot)
 on:
-  push:
-    branches: [main]
-    paths:
-      - "product_recipes/farm_enterprise_economics/**"
-      - "product_recipes/greenhouse_crop_margin/**"
-      - "product_recipes/water_budget_economics/**"
-      - "scripts/factory_three_private_upgrade_pilot_20261023.py"
-      - "tests/test_factory_three_private_upgrade_pilot_20261023.py"
-      - ".github/workflows/vps-three-private-source-upgrades.yml"
-  pull_request:
-    paths:
-      - "product_recipes/farm_enterprise_economics/**"
-      - "product_recipes/greenhouse_crop_margin/**"
-      - "product_recipes/water_budget_economics/**"
-      - "scripts/factory_three_private_upgrade_pilot_20261023.py"
-      - "tests/test_factory_three_private_upgrade_pilot_20261023.py"
-      - ".github/workflows/vps-three-private-source-upgrades.yml"
+  # Dormant legacy multi-product pilot: no automatic VPS staging or CI fan-out.
   workflow_dispatch:
 permissions:
   contents: read
@@ -45,7 +29,10 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_factory_three_private_upgrade_pilot_20261023.py' -v
   build-three-on-vps:
     needs: verify-real-recipes
-    if: github.event_name != 'pull_request' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    # Line 41 is permanently single-product until the owner explicitly changes
+    # the capacity policy. This legacy three-product builder is kept only for
+    # its historical verification recipe; it must not stage other products.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

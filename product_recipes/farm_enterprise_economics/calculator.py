@@ -50,6 +50,16 @@ def money(value):
     return str(value.quantize(Decimal("0.01")))
 
 
+def optional_resource(entry, field, *, positive=False):
+    """Keep absent resource observations distinct from measured zero usage."""
+    if field not in entry:
+        return None
+    amount = decimal_number(entry[field], field, min_value=0)
+    if positive and amount == 0:
+        raise ValueError(field + ": must be positive when supplied")
+    return amount
+
+
 @bounded_model_precision
 def enterprise(entry):
     if not isinstance(entry, dict):
@@ -91,6 +101,8 @@ def enterprise(entry):
         (safety_units * 100 / quantity).quantize(Decimal("0.01"))
         if safety_units is not None and quantity > 0 else None
     )
+    hectares = optional_resource(entry, "land_area_hectares", positive=True)
+    water = optional_resource(entry, "irrigation_water_m3")
     return {
         "name": name,
         "units_sold": str(quantity),
@@ -110,6 +122,23 @@ def enterprise(entry):
         "break_even_unit_price_at_planned_volume": break_even_unit_price,
         "margin_of_safety_units": str(safety_units) if safety_units is not None else None,
         "margin_of_safety_percent": str(safety_percent) if safety_percent is not None else None,
+        "land_area_hectares": str(hectares) if hectares is not None else None,
+        "irrigation_water_m3": str(water) if water is not None else None,
+        "units_sold_per_hectare": (
+            str((quantity / hectares).quantize(Decimal("0.0001")))
+            if hectares is not None else None
+        ),
+        "operating_profit_per_hectare": (
+            money(operating_profit / hectares) if hectares is not None else None
+        ),
+        "units_sold_per_irrigation_m3": (
+            str((quantity / water).quantize(Decimal("0.0001")))
+            if water is not None and water > 0 else None
+        ),
+        "operating_profit_per_irrigation_m3": (
+            money(operating_profit / water)
+            if water is not None and water > 0 else None
+        ),
     }
 
 
@@ -133,6 +162,16 @@ def evaluate(data):
         results.append(item)
     def total(key):
         return money(sum((Decimal(r[key]) for r in results), Decimal(0)))
+    resource_coverage = {}
+    for field in ("land_area_hectares", "irrigation_water_m3"):
+        recorded = [Decimal(r[field]) for r in results if r[field] is not None]
+        resource_coverage[field] = {
+            "provided_enterprises": len(recorded),
+            "complete_for_portfolio": len(recorded) == len(results),
+            # Never present partial observations as the whole portfolio's usage.
+            "portfolio_total": (money(sum(recorded, Decimal(0)))
+                                if len(recorded) == len(results) else None),
+        }
     scenarios = []
     for r in rows:
         name = str(r["name"]).strip()
@@ -153,7 +192,7 @@ def evaluate(data):
                     "modeled_operating_profit": money(profit),
                 })
     return {
-        "version": "1.1",
+        "version": "1.2",
         "currency": currency,
         "accounting_scope": "contribution_profit_before_depreciation_financing_tax",
         "input_values_independently_validated": False,
@@ -163,6 +202,8 @@ def evaluate(data):
             "This is a deterministic planning model, not a prediction of actual sales.",
             "Scenario changes affect only sold quantity and unit selling price.",
             "Tax, financing, capital expenditure, depreciation, working capital, and seasonality are excluded.",
+            "Resource intensity uses only user-provided land and irrigation amounts for the same accounting period.",
+            "A negative profit per unit of land or water is a loss rate, not a marginal productivity estimate.",
         ],
         "results": results,
         "portfolio": {
@@ -171,6 +212,7 @@ def evaluate(data):
             "operating_profit": total("operating_profit"),
             "contribution_margin_total": total("contribution_margin_total"),
         },
+        "resource_coverage": resource_coverage,
         "scenario_results": scenarios,
     }
 

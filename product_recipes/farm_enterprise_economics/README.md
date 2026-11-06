@@ -1,8 +1,9 @@
-# Farm Enterprise Economics Toolkit — Edition 1.0
+# Farm Enterprise Economics Toolkit — Edition 1.2
 
 A working, offline agricultural enterprise calculator written in Python 3.8+.
 It estimates contribution margin, annual operating result, break-even sales
-quantity, and nine price/quantity sensitivity cases for each enterprise.
+quantity, nine price/quantity sensitivity cases for each enterprise, and
+optional land/water resource-efficiency calculations.
 All numerical assumptions are entered by the user. No external data feeds,
 API keys, payment accounts or network connections are required.
 
@@ -28,9 +29,34 @@ Each item in the enterprises list must provide:
 | variable_cost_per_unit | Incremental cost per unit sold | 4 |
 | allocated_fixed_cost | Fixed cost assigned to that enterprise for the same period | 3000 |
 | selling_fee_percent | Optional percent of gross sales charged as fees | 5 |
+| land_area_hectares | Optional **positive** cultivated area assigned to the same enterprise and accounting period | 2.5 |
+| irrigation_water_m3 | Optional measured irrigation consumption for the same enterprise and period; zero is permitted for rainfed farming | 500 |
 
 Set currency to a consistent label such as USD, CAD, IRR, EUR or AED. The tool
 never performs currency conversion.
+
+## Optional farm resource analysis
+
+When `land_area_hectares` is supplied, the output reports sold units per
+hectare and operating profit per hectare. When positive `irrigation_water_m3`
+is supplied, it reports sold units and operating profit per cubic metre of
+irrigation water. Water use of exactly zero is recorded, but ratios with a zero
+denominator remain `null` rather than claiming infinite productivity.
+
+For example, the illustrative enterprise with 1,000 sold units and 2,500
+currency units of modeled operating profit uses 2.5 hectares and 500 m³ of
+irrigation water if the operator **explicitly provides** those two quantities.
+It would then display 400 sold units/ha, 1,000 currency units profit/ha,
+2 sold units/m³, and 5 currency units profit/m³. These are mathematical
+illustrations, not independent agronomic measurements.
+
+`resource_coverage` identifies how many enterprises supplied each resource.
+It reports portfolio resource totals **only when all enterprises** supplied
+the corresponding quantity. A missing resource observation is not treated as
+zero. Costs related to land and irrigation must already be allocated into the
+existing variable or fixed cost fields; this extension does not add them again.
+Do not interpret profit per hectare/water as an estimate of marginal value,
+water-saving potential, hydrological impact, or recommended irrigation rates.
 
 ## Formulas
 
