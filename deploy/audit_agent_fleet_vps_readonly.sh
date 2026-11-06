@@ -213,6 +213,85 @@ print("AGENT_FLEET_ECONOMIC_OUTCOME_EVIDENCE=" + json.dumps({
 }, sort_keys=True, separators=(",", ":")))
 PY
 
+# Determine whether apparent profit-optimization churn is still happening,
+# when its tasks were created, and which permitted task-planning path created
+# them.  Never print task identifiers, raw JSON payloads or customer data.
+"$python_bin" - <<'PY'
+import collections
+import hashlib
+import json
+from datetime import timedelta
+from pathlib import Path
+
+import django
+django.setup()
+
+from django.utils import timezone
+from core.models import AgentTask
+
+now = timezone.now()
+qs = AgentTask.objects.filter(
+    agent__code="economic-master-agent",
+    action_type="income_profit_optimize",
+).order_by("-created_at")
+
+def age_bucket(value):
+    hours = max(0, (now - value).total_seconds() / 3600)
+    if hours < 1: return "under_1h"
+    if hours < 6: return "1_to_6h"
+    if hours < 12: return "6_to_12h"
+    if hours < 24: return "12_to_24h"
+    if hours < 72: return "1_to_3d"
+    if hours < 168: return "3_to_7d"
+    return "over_7d"
+
+creation = collections.Counter()
+completion = collections.Counter()
+origin = collections.Counter()
+last_created = None
+last_completed = None
+for task in qs.filter(created_at__gte=now-timedelta(days=7)).only(
+    "created_at", "updated_at", "input_data", "status"
+).iterator(chunk_size=200):
+    if last_created is None or task.created_at > last_created:
+        last_created = task.created_at
+    creation[age_bucket(task.created_at)] += 1
+    data = task.input_data if isinstance(task.input_data, dict) else {}
+    if isinstance(data.get("brain_decision"), dict):
+        origin["brain_decision"] += 1
+    elif "replanned_from" in data:
+        origin["replanned_prerequisite"] += 1
+    else:
+        origin["no_brain_decision_marker"] += 1
+    if task.status == "completed":
+        completion[age_bucket(task.updated_at)] += 1
+        if last_completed is None or task.updated_at > last_completed:
+            last_completed = task.updated_at
+
+root = Path.home() / "factory-runtime/django-app/core/management/commands"
+source = {}
+for label, name in (("online_income_cycle", "online_income_cycle.py"),
+                    ("autonomous_master_loop", "autonomous_master_loop.py")):
+    file = root / name
+    if file.is_file() and not file.is_symlink() and file.stat().st_size < 100000:
+        source[label] = hashlib.sha256(file.read_bytes()).hexdigest()[:16]
+    else:
+        source[label] = "unavailable_or_unsafe"
+
+print("AGENT_FLEET_PROFIT_CHURN_PROVENANCE="+json.dumps({
+    "schema":"saeit.agent.profit-churn.v1", "read_only":True,
+    "profit_tasks_created_by_age_bucket_7d":dict(sorted(creation.items())),
+    "profit_tasks_completed_by_age_bucket_7d":dict(sorted(completion.items())),
+    "creation_origin_marker_7d":dict(sorted(origin.items())),
+    "latest_creation_age_minutes": (
+        int((now-last_created).total_seconds()//60) if last_created else None),
+    "latest_completion_age_minutes": (
+        int((now-last_completed).total_seconds()//60) if last_completed else None),
+    "installed_entrypoint_sha256_prefix":source,
+    "task_mutations":0, "cron_mutations":0,
+},sort_keys=True,separators=(",",":")))
+PY
+
 # Inspect only the two previously observed factory backlog owners. Do not
 # read task payloads or change their states; this identifies missing dispatch
 # routes without pretending that a DB row is an operating agent.
