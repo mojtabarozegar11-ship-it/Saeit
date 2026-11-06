@@ -62,7 +62,7 @@ def main() -> int:
         passed = []
         for criterion_id, ok in checks:
             if not ok: continue
-            path = evidence_root / ("evidence-" + criterion_id + ".json")
+            path = evidence_root / (criterion_id + ".json")
             record = {"schema": SCHEMA, "product_id": PRODUCT,
                       "criterion_id": criterion_id, "artifact_sha256": artifact,
                       "status": "PASS", "source": "live-vps-package-check",
