@@ -1,0 +1,105 @@
+name: MPW one-time direct browser-tool links guarded release
+
+on:
+  push:
+    branches: [fix/mpw-revenue-direct-tool-links-20261106]
+    paths:
+      - .github/workflows/mpw-revenue-direct-tool-links-20261106.yml
+
+permissions: {contents: read}
+concurrency:
+  group: mpw-revenue-direct-tool-links-20261106
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mpw-revenue-direct-tool-links-20261106'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify local guarded transformation
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_revenue_links_guarded_release_20261106.py
+          python3 scripts/mpw_revenue_links_guarded_release_20261106.py selftest
+      - name: Establish verified one-shot VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-tool-links-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 30s ssh -i "$d/vps.key" -p 22 -o UserKnownHostsFile="$d/vps.known" -o StrictHostKeyChecking=yes -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Pinned preflight and atomic publication of one static file
+        id: publication
+        run: |
+          set -euo pipefail
+          payload="$(base64 -w0 scripts/mpw_revenue_links_guarded_release_20261106.py)"
+          config="$RUNNER_TEMP/mpw-tool-links-ssh/config"
+          timeout 60s ssh -T -F "$config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))' preflight"
+          timeout 60s ssh -T -F "$config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))' publish '$GITHUB_RUN_ID'"
+      - name: Independently check twelve public deep links and original store
+        run: |
+          python3 - <<'PY'
+          import urllib.request, html.parser
+          host='https://mojplaywin.com'
+          slugs=('website-doctor','landing-page-studio','ai-automation','business-spreadsheets','website-templates','social-media-kits','resume-builder','logo-studio','browser-games','marketing-ai','business-calculators','website-care')
+          with urllib.request.urlopen(host+'/mpw-editorial/revenue/index.html?tool-links-release=20261106',timeout=25) as response:
+              page=response.read(250000).decode('utf8')
+              assert response.status == 200
+          assert page.count('class="mpw-direct-free-tool"')==12
+          for slug in slugs:
+              assert f'/mpw-editorial/revenue/{slug}/index.html#mpw-functional-tool' in page,slug
+          with urllib.request.urlopen(host+'/store/',timeout=25) as response:
+              assert response.status==200 and b'mpw-products' in response.read(100000)
+          print('MPW_TWELVE_DIRECT_TOOLS_AND_STORE_PUBLIC=PASS')
+          PY
+      - name: Restore original revenue hub after failed public verification
+        if: failure() && steps.publication.outcome == 'success'
+        run: |
+          payload="$(base64 -w0 scripts/mpw_revenue_links_guarded_release_20261106.py)"
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-tool-links-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))' rollback '$GITHUB_RUN_ID'"
+      - name: Remove runner-only relay credentials
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-tool-links-ssh"
+          if test -d "$d"; then
+            rm -f -- "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+            rmdir -- "$d"
+          fi
