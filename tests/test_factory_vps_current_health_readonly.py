@@ -59,6 +59,31 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "UNSAFE_OR_MISSING"):
                     audit.inventory()
 
+    def test_quality_returns_separate_active_from_historical_without_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            private = Path(tmp)
+            state = {
+                "active_product_slot_recipes": ["farm_enterprise_economics"],
+                "quality_returns_to_production": {"orders": [
+                    {"recipe": "farm_enterprise_economics"},
+                    {"recipe": "old_product_a"},
+                    {"recipe": "old_product_b"}], "invalid_orders": 2},
+                "quality_return_build_candidates": [
+                    {"recipe": "farm_enterprise_economics",
+                     "status": "source_repair_still_required"},
+                    {"recipe": "old_product_a",
+                     "status": "awaiting_independent_reinspection"}],
+            }
+            (private / "production-state.json").write_text(json.dumps(state))
+            result = audit.quality_return_scope(private)
+            self.assertEqual(result["total_open_quality_returns"], 3)
+            self.assertEqual(result["active_product_quality_returns"], 1)
+            self.assertEqual(result["other_product_quality_returns"], 2)
+            self.assertEqual(result["active_product_build_candidate_status_counts"],
+                             {"source_repair_still_required": 1})
+            self.assertNotIn("old_product_a", json.dumps(result))
+            self.assertNotIn("farm_enterprise_economics", json.dumps(result))
+
 
     def test_line41_diagnoses_stale_full_slot_without_mutation(self):
         with tempfile.TemporaryDirectory() as temporary:
