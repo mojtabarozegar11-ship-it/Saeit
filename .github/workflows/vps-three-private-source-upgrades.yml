@@ -1,22 +1,6 @@
 name: VPS Three Verified Source Upgrades (Private Pilot)
 on:
-  push:
-    branches: [main]
-    paths:
-      - "product_recipes/farm_enterprise_economics/**"
-      - "product_recipes/greenhouse_crop_margin/**"
-      - "product_recipes/water_budget_economics/**"
-      - "scripts/factory_three_private_upgrade_pilot_20261023.py"
-      - "tests/test_factory_three_private_upgrade_pilot_20261023.py"
-      - ".github/workflows/vps-three-private-source-upgrades.yml"
-  pull_request:
-    paths:
-      - "product_recipes/farm_enterprise_economics/**"
-      - "product_recipes/greenhouse_crop_margin/**"
-      - "product_recipes/water_budget_economics/**"
-      - "scripts/factory_three_private_upgrade_pilot_20261023.py"
-      - "tests/test_factory_three_private_upgrade_pilot_20261023.py"
-      - ".github/workflows/vps-three-private-source-upgrades.yml"
+  # Dormant legacy multi-product pilot: no automatic VPS staging or CI fan-out.
   workflow_dispatch:
 permissions:
   contents: read
