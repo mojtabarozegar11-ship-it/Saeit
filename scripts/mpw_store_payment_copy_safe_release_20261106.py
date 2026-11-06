@@ -14,6 +14,7 @@ from pathlib import Path
 import pwd
 import re
 import stat
+import subprocess
 import sys
 import tempfile
 
@@ -86,9 +87,64 @@ def trusted_dir(path):
         fail("UNTRUSTED_DIRECTORY:" + path.name)
 
 
+def validate_passenger_mapping(payload):
+    """Require one exact main-domain Passenger mapping to this app root.
+
+    A similarly named folder or a Passenger app on an unrelated sub-URI
+    cannot authorize a production storefront edit.
+    """
+    if not isinstance(payload, dict):
+        fail("PASSENGER_INVENTORY_INVALID")
+    result = payload.get("result")
+    if not isinstance(result, dict) or result.get("status") not in (1, True, "1"):
+        fail("PASSENGER_INVENTORY_FAILED")
+    mappings = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            domain = str(node.get("domain") or "").strip().lower()
+            if domain == "mojplaywin.com":
+                root = node.get("app_root") or node.get("app_path") or node.get("application_root")
+                uri = node.get("base_uri") or node.get("app_uri") or node.get("application_uri")
+                if not isinstance(root, str) or not root.strip() or not isinstance(uri, str):
+                    fail("PASSENGER_MAIN_MAPPING_AMBIGUOUS")
+                value = Path(root.strip())
+                if ".." in value.parts or not value.parts:
+                    fail("PASSENGER_MAIN_MAPPING_UNSAFE")
+                if not value.is_absolute():
+                    value = Path("/home/zomorod2") / value
+                if uri.strip() == "/":
+                    mappings.add(str(value))
+            for child in node.values():
+                walk(child)
+        elif isinstance(node, list):
+            for child in node:
+                walk(child)
+
+    walk(result)
+    if mappings != {str(ROOT)}:
+        fail("PASSENGER_EFFECTIVE_ROOT_NOT_VERIFIED")
+
+
+def verify_live_passenger_mapping():
+    try:
+        result = subprocess.run(
+            ["uapi", "--output=json", "PassengerApps", "list_applications"],
+            capture_output=True, timeout=20, check=True,
+        )
+        if len(result.stdout) > 250_000:
+            fail("PASSENGER_INVENTORY_TOO_LARGE")
+        payload = json.loads(result.stdout)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            ValueError, UnicodeDecodeError):
+        fail("PASSENGER_INVENTORY_UNAVAILABLE")
+    validate_passenger_mapping(payload)
+
+
 def preflight():
     if pwd.getpwuid(os.geteuid()).pw_name != ACCOUNT:
         fail("WRONG_ACCOUNT")
+    verify_live_passenger_mapping()
     for path in (ROOT, ROOT / "core", ROOT / "core/templates", STORE.parent,
                  SITE, RESTART.parent):
         trusted_dir(path)

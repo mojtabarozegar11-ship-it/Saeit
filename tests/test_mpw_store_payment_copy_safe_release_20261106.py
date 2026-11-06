@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -19,6 +20,38 @@ def baseline():
 
 
 class StorePaymentCopySafety(unittest.TestCase):
+    def inventory(self, app_root="/home/zomorod2/Saeit-staging", base_uri="/", status=1):
+        return {"result": {"status": status, "data": {"applications": [
+            {"domain": "mojplaywin.com", "app_root": app_root,
+             "base_uri": base_uri},
+            {"domain": "zomorodmelal.ir", "app_root": "/home/zomorod2/other",
+             "base_uri": "/"},
+        ]}}}
+
+    def test_exact_main_passenger_root_is_required_before_publish(self):
+        release.validate_passenger_mapping(self.inventory())
+        release.validate_passenger_mapping(self.inventory(app_root="Saeit-staging"))
+        for rejected in (
+                self.inventory(app_root="/home/zomorod2/unrelated-app"),
+                self.inventory(base_uri="/unrelated-subsite/"),
+                self.inventory(app_root="../Saeit-staging"),
+                self.inventory(status=0),
+                {"result": {"status": 1, "data": {"applications": []}}},
+                {"result": {"status": 1, "data": {"applications": [
+                    {"domain": "mojplaywin.com", "app_root": "/home/zomorod2/Saeit-staging", "base_uri": "/"},
+                    {"domain": "mojplaywin.com", "app_root": "/home/zomorod2/other", "base_uri": "/"},
+                ]}}},
+        ):
+            with self.subTest(rejected=rejected), self.assertRaisesRegex(
+                    RuntimeError, "MPW_STORE_COPY_ABORT"):
+                release.validate_passenger_mapping(rejected)
+
+    def test_uapi_unavailable_fails_closed_and_does_not_print_paths(self):
+        with patch.object(release.subprocess, "run",
+                          side_effect=subprocess.CalledProcessError(1, ["uapi"])):
+            with self.assertRaisesRegex(RuntimeError, "PASSENGER_INVENTORY_UNAVAILABLE"):
+                release.verify_live_passenger_mapping()
+
     def test_approved_copy_matches_source_control(self):
         latest = SOURCE.read_bytes()
         self.assertIn(release.NEW, latest)
