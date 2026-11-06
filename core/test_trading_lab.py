@@ -185,3 +185,25 @@ def test_close_rejects_unregistered_agent():
     )
     with pytest.raises(ValueError, match="agent_not_registered"):
         lab.close_demo_trade(foreign, "unknown", 1.0)
+
+def test_restore_reconciles_daily_pnl_to_close_timestamps():
+    lab = make_lab()
+    agent = lab.agents[0]
+    opened = lab.submit_demo_trade(agent, "TEST", "BUY")
+    lab.close_demo_trade(
+        agent,
+        opened.order_id,
+        12.5,
+        datetime(2026, 11, 6, 14, tzinfo=timezone.utc),
+    )
+    exported = lab.export_state()
+    assert exported["agents"][0]["experiences"][-1]["closed_at"] == "2026-11-06T14:00:00+00:00"
+
+    restored = make_lab()
+    restored.restore_state(exported)
+    tampered = json.loads(json.dumps(exported))
+    tampered["agents"][0]["daily_pnl_by_date"]["2026-11-06"] = 99.0
+    before = restored.export_state()
+    with pytest.raises(ValueError, match="state_daily_pnl_reconciliation_invalid"):
+        restored.restore_state(tampered)
+    assert restored.export_state() == before
