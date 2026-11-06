@@ -71,8 +71,17 @@ jobs:
                   matched[0].endswith('# ' + marker)).lower())
               print('F01_CRON_ENTRY_DIAGNOSTIC_LENGTH=' + str(len(matched[0])))
               print('F01_CRON_ENTRY_DIAGNOSTIC_EXPECTED_LENGTH=' + str(len(exact)))
-          if len([r for r in rules if marker in r]) != 1 or exact not in rules:
-              raise SystemExit('F01_CRON_RELOAD_ABORT_SCHEDULE_DIFFERENT')
+          # An existing owner's Cron entry may contain extra environment guards.
+          # Preserve those bytes; require the known cadence, runner, timeout,
+          # output location, and unique trailing marker, not a replacement line.
+          if len(matched) != 1 or not (
+              matched[0].startswith('* * * * * ')
+              and '/usr/bin/timeout 55s ' in matched[0]
+              and str(runner) in matched[0]
+              and '/home/githubops/factory-runtime/operations/single-product-cycle.log' in matched[0]
+              and matched[0].endswith('# ' + marker)
+          ):
+              raise SystemExit('F01_CRON_RELOAD_ABORT_SCHEDULE_CONTRACT_DIFFERENT')
           active = subprocess.run(['systemctl', 'is-active', 'cron.service'],
                                   text=True, capture_output=True, timeout=7, check=False)
           if active.returncode or active.stdout.strip() != 'active':
