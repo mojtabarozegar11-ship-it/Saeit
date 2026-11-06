@@ -2,12 +2,87 @@
 from pathlib import Path
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from scripts import mpw_runtime_copy_probe_20261106 as probe
 
 
 class ReadOnlyRuntimeEvidenceTests(unittest.TestCase):
+    def test_product_detail_source_map_records_only_hashes_and_candidates(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "Saeit-staging"
+            (source / "core").mkdir(parents=True)
+            (source / "templates").mkdir()
+            view_file = source / "core" / "product_views.py"
+            template_file = source / "templates" / "mpw_detail.html"
+            view_file.write_text(
+                'def detail(request):\n    return render(request, "mpw_detail.html")\n',
+                encoding="utf-8",
+            )
+            template_file.write_text("<p>public template</p>", encoding="utf-8")
+
+            def detail(request):
+                return request
+
+            def resolve(path):
+                self.assertTrue(path.startswith("/store/product/"))
+                return SimpleNamespace(func=detail, url_name="store_product_detail")
+
+            def get_template(name):
+                self.assertEqual(name, "mpw_detail.html")
+                return SimpleNamespace(origin=SimpleNamespace(name=str(template_file)))
+
+            with (patch.object(probe, "ROOT", source),
+                  patch.object(probe.inspect, "getsourcefile", return_value=str(view_file))):
+                result = probe.product_detail_source_map(resolve, get_template)
+            self.assertEqual(set(result["configured_django_details"]), {"72", "225", "879"})
+            for value in result["configured_django_details"].values():
+                self.assertTrue(value["route_resolved"])
+                self.assertTrue(value["view_source_available"])
+                self.assertEqual(value["view_source_relative"], "core/product_views.py")
+                self.assertEqual(len(value["view_source_sha256"]), 64)
+                self.assertEqual(value["candidate_templates"][0]["relative"],
+                                 "templates/mpw_detail.html")
+            self.assertFalse(result["effective_public_worker_verified"])
+            self.assertFalse(result["template_candidates_are_active"])
+            self.assertFalse(result["release_permitted"])
+            self.assertNotIn(str(source), repr(result))
+
+    def test_product_detail_probe_rejects_symlinked_source_and_private_paths(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            source = base / "Saeit-staging"
+            source.mkdir()
+            private = base / "private.py"
+            private.write_text("PRIVATE_SECRET=123", encoding="utf-8")
+            (source / "linked.py").symlink_to(private)
+
+            def detail(_request):
+                pass
+
+            def resolve(_path):
+                return SimpleNamespace(func=detail, url_name="detail")
+
+            with (patch.object(probe, "ROOT", source),
+                  patch.object(probe.inspect, "getsourcefile",
+                               return_value=str(source / "linked.py"))):
+                result = probe.product_detail_source_map(resolve, lambda _: None)
+            self.assertTrue(all(not info["view_source_available"]
+                                for info in result["configured_django_details"].values()))
+            self.assertNotIn("PRIVATE_SECRET", repr(result))
+            self.assertNotIn(str(base), repr(result))
+
+    def test_product_detail_probe_missing_route_does_not_claim_release(self):
+        def absent(_path):
+            raise LookupError("private backend path")
+
+        result = probe.product_detail_source_map(absent, lambda _: None)
+        self.assertEqual(result["configured_django_details"]["72"],
+                         {"route_resolved": False, "error_type": "LookupError"})
+        self.assertNotIn("private backend path", repr(result))
+        self.assertFalse(result["release_permitted"])
+
     def test_htaccess_produces_boolean_binding_hints_without_raw_paths(self):
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder)
