@@ -16,7 +16,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: zomorod-editorial-content-only
+  group: zomorod-site-deploy
   cancel-in-progress: false
 jobs:
   publish:
@@ -140,7 +140,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for route in industry research knowledge economy market studio agents company blog weather store auctions newsletter amozeshgah; do
+          for route in blog weather store auctions newsletter amozeshgah; do
             file="$RUNNER_TEMP/zm-${route}.html"
             result="$(curl -L --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}' "https://zomorodmelal.ir/$route/" || true)"
             echo "EDITORIAL_ROUTE=$route HTTP=$result"
