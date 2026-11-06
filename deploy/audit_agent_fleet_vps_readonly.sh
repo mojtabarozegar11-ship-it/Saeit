@@ -460,6 +460,92 @@ print("AGENT_FLEET_INSTALLED_EXECUTOR_DISCOVERY="+json.dumps({
 },sort_keys=True,separators=(",",":")))
 PY
 
+# Trace the actual installed factory command path and its open-task product
+# relationships. File contents and individual task payloads remain private.
+"$python_bin" - <<'PY'
+import ast
+import collections
+import hashlib
+import json
+from pathlib import Path
+
+import django
+django.setup()
+from django.apps import apps
+from django.db.models import Count
+
+app = Path.home() / "factory-runtime/django-app/core"
+modules = {
+    "factory_command": app / "management/commands/factory_product_step.py",
+    "factory_tools": app / "factory_tool_pack.py",
+    "factory_governance": app / "factory_governance.py",
+    "factory_runtime": app / "factory_agent_runtime.py",
+}
+route_call_names = {
+    "run", "execute", "handle", "claim", "complete", "fail", "invoke",
+    "plan_product_factory_step", "decide_product_factory_step",
+    "create", "call_command", "factory_product_step", "run_factory_step",
+    "build_factory_gateway", "build_economic_gateway", "select_for_update",
+}
+module_flags = {}
+for label, path in modules.items():
+    if not path.is_file() or path.is_symlink() or path.stat().st_size > 350000:
+        module_flags[label] = {"state":"unavailable_or_unsafe"}
+        continue
+    data = path.read_bytes()
+    tree = ast.parse(data, filename=path.name)
+    direct_functions = sorted({node.name for node in tree.body
+                               if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef))})
+    class_methods = sorted({node.name for cls in tree.body if isinstance(cls,ast.ClassDef)
+                            for node in cls.body if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef))})
+    calls = set()
+    for node in ast.walk(tree):
+        if isinstance(node,ast.Call):
+            name = node.func.attr if isinstance(node.func,ast.Attribute) else (
+                node.func.id if isinstance(node.func,ast.Name) else "")
+            if name in route_call_names:
+                calls.add(name)
+    module_flags[label] = {
+        "state":"present","sha256_prefix":hashlib.sha256(data).hexdigest()[:16],
+        "direct_functions":direct_functions[:35],
+        "class_methods":class_methods[:35],
+        "known_dispatch_calls":sorted(calls),
+        "mentions_worker_runner":b"WorkerRunner" in data,
+        "mentions_task_runtime":b"TaskRuntime" in data,
+    }
+
+Task = apps.get_model("core", "AgentTask")
+groups = collections.Counter()
+rows = Task.objects.filter(
+    agent__code__in=("factory-market-research-agent", "factory-opportunity-validation-agent"),
+    status__in=("queued", "blocked"),
+).values(
+    "action_type", "status", "factory_run__status",
+    "factory_run__product_id", "factory_run__product__active"
+).annotate(count=Count("pk"))
+for row in rows:
+    if row["factory_run__status"] is None:
+        relation = "no_run"
+    elif row["factory_run__status"] != "active":
+        relation = "inactive_run"
+    elif row["factory_run__product_id"] is None:
+        relation = "active_run_no_product"
+    elif row["factory_run__product__active"]:
+        relation = "active_run_active_product"
+    else:
+        relation = "active_run_inactive_product"
+    groups[(row["action_type"],row["status"],relation)] += row["count"]
+
+print("AGENT_FLEET_FACTORY_DISPATCH_TRACE="+json.dumps({
+    "schema":"saeit.agent.factory-dispatch-trace.v1", "read_only":True,
+    "installed_module_routes":module_flags,
+    "open_task_run_product_relationships":[
+        {"action":action,"status":status,"relation":relation,"count":count}
+        for (action,status,relation),count in sorted(groups.items())],
+    "tasks_executed":0,"tasks_modified":0,
+},sort_keys=True,separators=(",",":")))
+PY
+
 # Distinguish a historical backlog from a live, executable queue. Installed
 # factory code can differ from the repository, so inspect bounded live evidence
 # without claiming a worker from a mere filename or process-name match.
