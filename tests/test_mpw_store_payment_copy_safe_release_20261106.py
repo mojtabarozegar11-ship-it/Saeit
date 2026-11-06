@@ -53,6 +53,30 @@ class StorePaymentCopySafety(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "PASSENGER_INVENTORY_UNAVAILABLE"):
                 release.verify_live_passenger_mapping()
 
+    def test_cloudlinux_shared_source_other_domain_blocks_publication(self):
+        def registry(domain, root="Saeit-staging"):
+            return {"result": "success", "data": {"applications": {
+                root: {"domain": domain, "startup_file": "passenger_wsgi.py"},
+            }}}
+        release.validate_cloudlinux_source_isolation(registry("mojplaywin.com"))
+        release.validate_cloudlinux_source_isolation(registry("zomorodmelal.ir", "unrelated-app"))
+        for payload in (
+                registry("another.example"),
+                registry(""),
+                {"result": "error", "data": {"applications": {}}},
+                {"result": "success", "data": {"applications": {
+                    "Saeit-staging": {"domain": "mojplaywin.com"},
+                    "/home/zomorod2/Saeit-staging": {"domain": "another.example"},
+                }}}):
+            with self.subTest(payload=payload), self.assertRaisesRegex(
+                    RuntimeError, "MPW_STORE_COPY_ABORT"):
+                release.validate_cloudlinux_source_isolation(payload)
+
+    def test_cloudlinux_selector_unavailable_refuses_release(self):
+        with patch.object(release.Path, "is_file", return_value=False):
+            with self.assertRaisesRegex(RuntimeError, "CLOUDLINUX_SELECTOR_UNAVAILABLE"):
+                release.verify_cloudlinux_source_isolation()
+
     def test_approved_copy_matches_source_control(self):
         latest = SOURCE.read_bytes()
         self.assertIn(release.NEW, latest)

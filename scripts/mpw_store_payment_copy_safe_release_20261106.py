@@ -143,10 +143,62 @@ def verify_live_passenger_mapping():
     validate_passenger_mapping(payload)
 
 
+def validate_cloudlinux_source_isolation(payload):
+    """Refuse edits to shared source registered to another domain.
+
+    The public domain may load Django through its WSGI file, while a separate
+    CloudLinux Python application may also serve the same staging directory.
+    That second registration must be removed or isolated before a source edit.
+    """
+    if not isinstance(payload, dict) or payload.get("result") not in ("success", True):
+        fail("CLOUDLINUX_INVENTORY_UNVERIFIED")
+    pending = [payload]
+    visited = 0
+    while pending:
+        visited += 1
+        if visited > 500:
+            fail("CLOUDLINUX_INVENTORY_TOO_COMPLEX")
+        current = pending.pop()
+        if isinstance(current, list):
+            pending.extend(current[:100])
+        elif isinstance(current, dict):
+            apps = current.get("applications")
+            if isinstance(apps, dict):
+                for app_root, details in list(apps.items())[:100]:
+                    if not isinstance(app_root, str) or not isinstance(details, dict):
+                        fail("CLOUDLINUX_APP_RECORD_INVALID")
+                    root = Path(app_root.strip())
+                    if not root.is_absolute():
+                        root = Path("/home/zomorod2") / root
+                    if root == ROOT and str(details.get("domain") or "").lower() not in (
+                            "mojplaywin.com", "www.mojplaywin.com"):
+                        fail("CLOUDLINUX_STAGING_SHARED_WITH_OTHER_DOMAIN")
+            pending.extend(list(current.values())[:100])
+
+
+def verify_cloudlinux_source_isolation():
+    command = "/usr/sbin/cloudlinux-selector"
+    if not Path(command).is_file():
+        fail("CLOUDLINUX_SELECTOR_UNAVAILABLE")
+    try:
+        result = subprocess.run(
+            [command, "get", "--json", "--interpreter", "python"],
+            capture_output=True, timeout=20, check=True,
+        )
+        if len(result.stdout) > 1_000_000:
+            fail("CLOUDLINUX_INVENTORY_TOO_LARGE")
+        payload = json.loads(result.stdout)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            ValueError, UnicodeDecodeError):
+        fail("CLOUDLINUX_SELECTOR_UNAVAILABLE")
+    validate_cloudlinux_source_isolation(payload)
+
+
 def preflight():
     if pwd.getpwuid(os.geteuid()).pw_name != ACCOUNT:
         fail("WRONG_ACCOUNT")
     verify_live_passenger_mapping()
+    verify_cloudlinux_source_isolation()
     for path in (ROOT, ROOT / "core", ROOT / "core/templates", STORE.parent,
                  SITE, RESTART.parent):
         trusted_dir(path)
