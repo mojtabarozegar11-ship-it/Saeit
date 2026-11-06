@@ -50,6 +50,14 @@ def verified_walletless_credit(order, intent):
     except (TypeError, ValueError, KeyError, InvalidOperation, OverflowError, AttributeError):
         return False
 
+    # A previously settled on-chain credit is not sufficient after an order
+    # refund or reversal.  Check the whole order, including adjustments that
+    # were recorded without a payment_intent FK, before granting downloads.
+    if LedgerEntry.objects.filter(
+            order=order, entry_type__in=("refund", "reversal", "chargeback")
+    ).exists():
+        return False
+
     events = list(PaymentWebhookEvent.objects.filter(
         payment_intent=intent, provider=PROVIDER,
         event_type="tron_finalized", status="processed",
