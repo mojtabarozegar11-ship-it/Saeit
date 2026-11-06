@@ -1,0 +1,28 @@
+name: F01 scoped QC1000 machine gate
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - factory_config/f01_quality_100_criteria.json
+      - scripts/f01_quality_1000_machine_gate.py
+      - tests/test_f01_quality_1000_machine_gate.py
+      - .github/workflows/f01-qc1000-machine-gate.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - name: Run F01 exact machine-gate tests
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p test_f01_quality_1000_machine_gate.py -v
+          python3 -m py_compile scripts/f01_quality_1000_machine_gate.py
+          echo F01_QC1000_MACHINE_GATE_CONTRACT=PASS
+          echo F01_PROFESSIONAL_QC1000=LOCKED_UNTIL_INDEPENDENT_SIGNOFF
