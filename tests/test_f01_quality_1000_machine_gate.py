@@ -31,4 +31,10 @@ class F01QualityGateTests(unittest.TestCase):
   self.assertEqual(r["machine_documentary_points"],0)
   self.assertEqual(len(r["missing_criteria"]),100)
   self.assertFalse(r["professional_qc1000_certified"])
+ def test_cyclic_evidence_root_is_missing_not_crash(self):
+  bad_root=self.root/"cyclic-root"; bad_root.symlink_to(bad_root.name,target_is_directory=True)
+  r=evaluate(self.package,self.catalog,bad_root)
+  self.assertEqual(r["machine_documentary_points"],0)
+  self.assertEqual(len(r["missing_criteria"]),100)
+  self.assertFalse(r["commercial_release_allowed"])
 if __name__=="__main__": unittest.main()
