@@ -551,8 +551,7 @@ def disk_pressure_map():
     }
 
 
-if __name__ == "__main__":
-    print("VPS_DISK_PRESSURE_READONLY=" + json.dumps(disk_pressure_map(), sort_keys=True))
+# Disk-pressure map sampled in run 22 and 23; no repeated full du on low disk.
 
 
 def _large_files_bounded(root, max_seconds=8, max_entries=100000):
@@ -598,6 +597,50 @@ def _large_files_bounded(root, max_seconds=8, max_entries=100000):
             "large_files_found": len(top), "largest_files": top[:20]}
 
 
+# Large-file sample completed in run 23; now classify immediate large files.
+
+
+def _classify_large_factory_files():
+    """Fast stat-only top two levels, no filenames, content, or server writes."""
+    rows = []
+    known_extensions = {".log", ".zip", ".gz", ".tar", ".db", ".sqlite",
+                        ".sqlite3", ".bak", ".jsonl", ".pack", ".tmp",
+                        ".part", ".bin"}
+    if BASE.is_symlink() or not BASE.is_dir():
+        return {"state": "unsafe"}
+    for directory in BASE.iterdir():
+        if directory.is_symlink() or not directory.is_dir():
+            continue
+        try:
+            entries = list(directory.iterdir())
+        except OSError:
+            continue
+        for path in entries:
+            try:
+                if path.is_symlink() or not path.is_file():
+                    continue
+                stat = path.stat()
+                if stat.st_size < 64 * 2**20:
+                    continue
+                suffix = path.suffix.lower()
+                age = max(0, (datetime.now(timezone.utc).timestamp()
+                              - stat.st_mtime) / 86400)
+                rows.append({
+                    "bytes": stat.st_size,
+                    "subsystem": _safe_child_label(directory),
+                    "extension": suffix if suffix in known_extensions else "other",
+                    "age_days": round(age, 2),
+                    "link_count": stat.st_nlink,
+                    "basename_sha256_prefix": hashlib.sha256(
+                        path.name.encode("utf8")).hexdigest()[:12],
+                })
+            except OSError:
+                continue
+    rows.sort(key=lambda entry: entry["bytes"], reverse=True)
+    return {"state": "complete", "large_file_count": len(rows),
+            "files": rows[:20]}
+
+
 if __name__ == "__main__":
-    print("VPS_LARGE_FILE_SAMPLE_READONLY=" +
-          json.dumps(_large_files_bounded(Path("/home/githubops")), sort_keys=True))
+    print("VPS_LARGE_FILE_CLASSIFICATION_READONLY=" +
+          json.dumps(_classify_large_factory_files(), sort_keys=True))
