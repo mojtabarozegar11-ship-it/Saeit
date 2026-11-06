@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed, reversible installation of three QC-only verifier modules.
+"""Fail-closed installation of QC verifiers and an inactive-draft intake.
 
 Never touches orders, products, databases, web roots, permissions to sell,
 runner keys, signing keys, or evidence verdicts.
@@ -97,9 +97,40 @@ def verify_negative_controls(bin_dir):
             or "clearance.get(\"1000_quality_verified\") is not True" not in publisher):
         raise RuntimeError("QC1000_PUBLISHER_EXIT_GATE_NOT_STRICT")
     importer = (bin_dir / "import_factory_store_drafts.py").read_text(encoding="utf-8")
-    if ("STORE_BLOCKED_UNTIL_CHATGPT_AND_QC1000_APPROVE" not in importer
-            or "factory_commercial_quality_release_guard_v1.py" not in importer):
-        raise RuntimeError("QC1000_CHATGPT_STORE_IMPORT_GATE_NOT_STRICT")
+    # New private drafts are not commercial releases. In particular, the
+    # importer must never synthesize a 1000/1000 or ChatGPT approval, accept a
+    # bulk backlog, or activate products. The publisher above still requires
+    # the authentic independently signed premium evidence on exact ZIP bytes.
+    required_draft_controls = (
+        "def selected_receipt(root, recipe, digest):",
+        "recipe, digest = selected_receipt(root, recipe, digest)",
+        '"factory_quality_1000_verified": False',
+        '"factory_chatgpt_final_review": "pending_independent_review"',
+        '"factory_publication_permission": False',
+        '"factory_commercial_release": False',
+        '"active": False',
+        'p.add_argument("--sha256", required=True',
+    )
+    if (any(control not in importer for control in required_draft_controls)
+            or '"approved_for_store"' in importer
+            or '"factory_quality_1000_verified": True' in importer
+            or "def catalog_receipts(" in importer):
+        raise RuntimeError("QC1000_PRIVATE_DRAFT_INTAKE_MUST_STAY_INACTIVE")
+    spec = importlib.util.spec_from_file_location(
+        "installed_exact_draft_selector", bin_dir / "import_factory_store_drafts.py"
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("QC1000_PRIVATE_DRAFT_SELECTOR_UNAVAILABLE")
+    draft = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(draft)
+    for candidate in (("../other", "a" * 64),
+                      ("farm_enterprise_economics", "not-a-sha")):
+        try:
+            draft.selected_receipt(bin_dir, *candidate)
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError("QC1000_PRIVATE_DRAFT_SELECTOR_ACCEPTED_UNSAFE_INPUT")
 
 
 def install(staging, expected):

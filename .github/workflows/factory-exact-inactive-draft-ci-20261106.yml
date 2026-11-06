@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - scripts/import_factory_store_drafts.py
+      - deploy/install_factory_qc1000_cpanel_private_20261024.py
       - tests/test_factory_store_draft_importer.py
       - .github/workflows/vps-store-django-draft-import.yml
       - .github/workflows/factory-exact-inactive-draft-ci-20261106.yml
@@ -23,6 +24,12 @@ jobs:
           python-version: '3.11'
       - name: Install required Django test runtime
         run: python -m pip install -r requirements.txt
+      - name: Build Django's hashed static manifest for storefront-view tests
+        env:
+          DEBUG: 'False'
+          SECRET_KEY: github-ci-only-not-live
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py collectstatic --noinput
       - name: Verify private draft admission and public-release guard coexist
         env:
           DEBUG: 'False'
