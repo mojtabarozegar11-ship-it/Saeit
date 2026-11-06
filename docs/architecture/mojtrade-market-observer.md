@@ -2,7 +2,7 @@
 
 ## Delivered scope
 
-- Read-only collection of **actual** hourly BTC-USD and ETH-USD candles from Coinbase Exchange's public API, with an independent Kraken Spot OHLC fallback. Each emitted research observation identifies the provider actually used; a provider failure never results in invented prices.
+- Read-only collection of **actual** hourly BTC-USD and ETH-USD candles from Coinbase Exchange's public API, with independent Kraken Spot OHLC and Bitfinex public-candle fallbacks. Each emitted research observation identifies the provider actually used; a provider failure never results in invented prices.
 - Uses only finished hourly candles; rejects data gaps, duplicate or invalid prices, and stale observations.
 - Calculates reproducible SMA20/SMA50/momentum10 *research watch states*; these are **not** verified profitable strategies or personalized recommendations.
 - Emits exactly the schema required by the separate signed-feed interface in PR #1892 (`schema_version=1`, `source=mojtrade-vps`, `signals[]`). The output is private, atomically replaced, and expires in 90 minutes.
@@ -36,3 +36,5 @@
 Provider reference: https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-candles
 
 Fallback provider reference: https://docs.kraken.com/api-reference/market-data/get-ohlc-data
+
+Third provider reference: https://docs.bitfinex.com/reference/rest-public-candles
