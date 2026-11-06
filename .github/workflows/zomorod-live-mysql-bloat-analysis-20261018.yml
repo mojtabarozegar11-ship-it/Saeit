@@ -109,6 +109,56 @@ jobs:
           print("MYSQL_METADATA_AUDIT_COMPLETE=yes")
           PY
           REMOTE
+      - name: Read-only age and retention signals for dominant live tables
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          from pathlib import Path
+          import subprocess,tempfile,urllib.parse,json
+          home=Path.home()
+          envfile=home/"Saeit-staging/.env"
+          raw=next((line.split("=",1)[1].strip().strip("'") for line in envfile.read_text().splitlines() if line.startswith("DATABASE_URL=")),None)
+          parsed=urllib.parse.urlsplit(raw)
+          db=parsed.path.strip("/")
+          opts={"user":urllib.parse.unquote(parsed.username or ""), "password":urllib.parse.unquote(parsed.password or ""), "host":parsed.hostname or "localhost", "port":str(parsed.port or 3306)}
+          with tempfile.TemporaryDirectory(prefix=".mysql-readonly-retention-",dir=str(home/".cagefs/tmp")) as tmp:
+              optfile=Path(tmp)/"client.cnf"
+              def esc(v): return '"' + str(v).replace("\\","\\\\").replace('"','\\"') + '"'
+              optfile.write_text("[client]\n"+"".join("{}={}\n".format(k,esc(v)) for k,v in opts.items()))
+              optfile.chmod(0o600)
+              def q(sql):
+                  r=subprocess.run(["mysql","--defaults-extra-file="+str(optfile),"--batch","--skip-column-names","--raw",db,"--execute",sql],capture_output=True,text=True,timeout=45,check=True)
+                  return r.stdout.splitlines()
+              tables=["core_agenttask","core_factoryevidence","core_report","core_auditlog"]
+              cols={}
+              sql="SELECT TABLE_NAME,COLUMN_NAME,DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='"+db+"' AND TABLE_NAME IN ("+ ",".join("'"+t+"'" for t in tables)+") ORDER BY TABLE_NAME,ORDINAL_POSITION"
+              for line in q(sql):
+                  t,col,typ=line.split("\t")
+                  cols.setdefault(t,[]).append({"column":col,"type":typ})
+              print("RETENTION_TABLE_COLUMNS="+json.dumps(cols,separators=(",",":")),flush=True)
+              for t in tables:
+                  if t not in cols: continue
+                  names=set(x["column"] for x in cols[t])
+                  datecol=next((x for x in ("created_at","created","date_created","timestamp","updated_at","run_at","started_at") if x in names),None)
+                  if not datecol:
+                      print("RETENTION_SIGNAL="+t+":NO_DATE_COLUMN",flush=True); continue
+                  row=q("SELECT MIN("+datecol+"),MAX("+datecol+"),COUNT(*) FROM "+t)[0].split("\t")
+                  print("RETENTION_SIGNAL="+t+":DATE_COLUMN="+datecol+":MIN="+row[0]+":MAX="+row[1]+":ROWS="+row[2],flush=True)
+                  for y in ("2024","2025","2026"):
+                      nxt=str(int(y)+1)
+                      count=q("SELECT COUNT(*) FROM "+t+" WHERE "+datecol+" >= '"+y+"-01-01' AND "+datecol+" < '"+nxt+"-01-01'")[0]
+                      print("RETENTION_YEAR="+t+":"+y+":ROWS="+count,flush=True)
+              if "core_agenttask" in cols and "status" in set(x["column"] for x in cols["core_agenttask"]):
+                  print("AGENTTASK_STATUS_COUNTS="+json.dumps(q("SELECT COALESCE(status,'(null)'),COUNT(*) FROM core_agenttask GROUP BY status ORDER BY COUNT(*) DESC"),separators=(",",":")),flush=True)
+              if "core_factoryevidence" in cols and "status" in set(x["column"] for x in cols["core_factoryevidence"]):
+                  print("EVIDENCE_STATUS_COUNTS="+json.dumps(q("SELECT COALESCE(status,'(null)'),COUNT(*) FROM core_factoryevidence GROUP BY status ORDER BY COUNT(*) DESC"),separators=(",",":")),flush=True)
+          print("MYSQL_RETENTION_AUDIT_COMPLETE=yes")
+          PY
+          REMOTE
       - name: Delete SSH credentials
         if: always()
         shell: bash
