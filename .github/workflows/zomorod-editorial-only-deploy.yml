@@ -119,7 +119,7 @@ jobs:
             if test -f "$app/$rel"; then
               cp -p "$app/$rel" "$backup/$rel"
               printf '%s\n' "$rel" >> "$backup/existed"
-            elif [[ "$rel" != "core/templates/core/includes/zomorod_editorial_20261016.html" && "$rel" != "core/templates/core/blog.html" ]]; then
+            elif [[ "$rel" != "core/templates/core/includes/zomorod_editorial_20261016.html" && "$rel" != "core/templates/core/blog.html" && "$rel" != "core/templates/core/academy.html" && "$rel" != "core/templates/core/weather.html" && "$rel" != "core/templates/core/store.html" && "$rel" != "core/templates/core/auctions.html" && "$rel" != "core/templates/core/newsletter.html" ]]; then
               echo "Original template missing: $rel" >&2
               exit 1
             fi
