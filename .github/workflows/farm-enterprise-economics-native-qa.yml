@@ -27,13 +27,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - name: Validate full retail recipe economics and spreadsheet safety
+      - name: Validate Python and offline browser arithmetic parity, input safety and packaging
         shell: bash
         working-directory: product_recipes/farm_enterprise_economics
         run: |
           set -euo pipefail
-          python -B -m unittest -v test_calculator.py
-          python -B -m py_compile calculator.py test_calculator.py
+          python -B -m unittest discover -v -p 'test_*.py'
+          python -B -m py_compile calculator.py test_calculator.py test_offline_browser.py
+          node --check offline_engine.js
+          node --check offline_ui.js
+          node -e 'const fs=require("fs"); const e=require("./offline_engine.js"); if(e.evaluate(JSON.parse(fs.readFileSync("example_inputs.json"))).results.length!==2)process.exit(1);'
           echo FARM_ENTERPRISE_SPECIALIST_INTERNAL_TESTS=PASS
           echo FACTORY_INDEPENDENT_QUALITY_CLEARANCE=false
           echo FACTORY_COMMERCIAL_RELEASE_ALLOWED=false
