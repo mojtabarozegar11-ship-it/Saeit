@@ -78,10 +78,12 @@ def main():
     previous_asset=ORIGINAL/"logo.png"
     if ASSET.exists():
         if previous_asset.exists():
-            raise RuntimeError("Original transparent asset backup already exists")
-        shutil.copy2(ASSET, previous_asset)
-        if previous_asset.read_bytes()!=ASSET.read_bytes():
-            raise RuntimeError("Original transparent asset backup validation failed")
+            if previous_asset.read_bytes()!=ASSET.read_bytes():
+                raise RuntimeError("Original transparent asset backup mismatch")
+        else:
+            shutil.copy2(ASSET, previous_asset)
+            if previous_asset.read_bytes()!=ASSET.read_bytes():
+                raise RuntimeError("Original transparent asset backup validation failed")
     logo=STAGE/"logo.png"
     png=logo.read_bytes()
     if not png.startswith(b"\x89PNG\r\n\x1a\n") or b"tRNS" not in png or len(png)<4000:
