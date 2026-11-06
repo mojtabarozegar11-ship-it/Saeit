@@ -294,19 +294,23 @@ class TradingLab:
                 experiences.append(experience)
             submitted_items = [item for item in experiences if item.action == "DEMO_ORDER"]
             closed_items = [item for item in experiences if item.action == "DEMO_CLOSE"]
-            journal_order_ids = [item.order_id for item in submitted_items + closed_items]
-            if (any(not isinstance(order_id, str) or not order_id.strip() for order_id in journal_order_ids)
-                    or len(set(journal_order_ids)) != len(journal_order_ids)):
+            submitted_ids = [item.order_id for item in submitted_items]
+            closed_ids = [item.order_id for item in closed_items]
+            if (any(not isinstance(order_id, str) or not order_id.strip()
+                    for order_id in submitted_ids + closed_ids)
+                    or len(set(submitted_ids)) != len(submitted_ids)
+                    or len(set(closed_ids)) != len(closed_ids)):
                 raise ValueError("state_order_journal_invalid")
-            submitted = {item.order_id for item in submitted_items}
-            closed = {item.order_id for item in closed_items}
+            submitted = set(submitted_ids)
+            closed = set(closed_ids)
             if closed - submitted:
                 raise ValueError("state_close_without_order_invalid")
             if not set(open_ids).issubset(submitted) or set(open_ids) & closed:
                 raise ValueError("state_open_order_reconciliation_invalid")
-            if all_order_ids & set(journal_order_ids):
+            order_identity_ids = submitted | closed
+            if all_order_ids & order_identity_ids:
                 raise ValueError("state_order_identity_collision")
-            all_order_ids.update(journal_order_ids)
+            all_order_ids.update(order_identity_ids)
             staged.append((agent, list(open_ids), float(peak), dict(daily), experiences))
         if seen != set(by_id):
             raise ValueError("state_agent_identity_incomplete")
