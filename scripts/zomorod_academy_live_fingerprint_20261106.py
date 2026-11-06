@@ -179,6 +179,34 @@ def main() -> None:
                 print('ACADEMY_SELECTOR_USER_APP_ROOTS=' + ','.join(str(x)[:100] for x in list(apps)[:20]))
     except Exception:
         print('ACADEMY_SELECTOR_USER_SCOPED_AVAILABLE=false')
+    # Official cPanel Application Manager inventory. It is read only; report
+    # only routing fields, never environment variables, tokens or credentials.
+    cpanel_cli = Path('/usr/local/cpanel/bin/uapi')
+    if cpanel_cli.is_file():
+        try:
+            p = subprocess.run([str(cpanel_cli), '--output=json', 'PassengerApps',
+                                'list_applications'], capture_output=True, text=True,
+                               timeout=16, check=False)
+            response = json.loads(p.stdout) if p.returncode == 0 else {}
+            result = response.get('result', {}) if isinstance(response, dict) else {}
+            items = result.get('data', []) if isinstance(result, dict) else []
+            if isinstance(items, dict):
+                items = list(items.values())
+            print('ACADEMY_CPANEL_PASSENGER_INVENTORY=' +
+                  ('AVAILABLE' if isinstance(items, list) and p.returncode == 0 else 'UNAVAILABLE'))
+            if isinstance(items, list):
+                print('ACADEMY_CPANEL_PASSENGER_APP_COUNT=' + str(len(items)))
+                for item in items[:25]:
+                    if not isinstance(item, dict):
+                        continue
+                    safe = {k: str(item.get(k, ''))[:160] for k in
+                            ('application_path', 'app_path', 'app_root', 'domain',
+                             'base_uri', 'enabled', 'deployment_mode') if k in item}
+                    print('ACADEMY_CPANEL_PASSENGER_APP=' + json.dumps(safe, ensure_ascii=False))
+        except Exception:
+            print('ACADEMY_CPANEL_PASSENGER_INVENTORY=UNAVAILABLE')
+    else:
+        print('ACADEMY_CPANEL_PASSENGER_INVENTORY=CLI_NOT_PRESENT')
     # Read only table names through the existing Django database connection.
     # No ORM queries, user records, writes, migrations or model data are read.
     interpreter = HOME / 'virtualenv/Saeit/3.10/bin/python'
