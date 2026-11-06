@@ -77,6 +77,38 @@ def collect():
         node.id for node in ast.walk(sellable_local)
         if isinstance(node, ast.Name)
     })[:45] if sellable_local else []
+    # Inspect control flow rather than relying on mere identifier presence.
+    # This is a bounded shape-only record; no original statements are emitted.
+    sellable_guard_shape = []
+    if sellable_local:
+        for statement in sellable_local.body:
+            if not isinstance(statement, ast.If):
+                continue
+            calls = [node for node in ast.walk(statement.test)
+                     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)]
+            called = sorted({node.func.id for node in calls})
+            returns_none = any(isinstance(node, ast.Return)
+                               and isinstance(node.value, ast.Constant)
+                               and node.value.value is None
+                               for node in statement.body)
+            returns_false = any(isinstance(node, ast.Return)
+                                and isinstance(node.value, ast.Constant)
+                                and node.value.value is False
+                                for node in statement.body)
+            sellable_guard_shape.append({
+                "line": statement.lineno,
+                "test_kind": type(statement.test).__name__,
+                "calls_rights": "rights_cleared_for_sale" in called,
+                "calls_eligible": "_eligible" in called,
+                "returns_none": returns_none,
+                "returns_false": returns_false,
+                "has_else": bool(statement.orelse),
+            })
+    public_helper_return_calls = sorted({
+        node.value.func.id for node in ast.walk(catalog_helper)
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+    }) if catalog_helper else []
     catalog_names = sorted({
         node.id for node in ast.walk(catalog_helper)
         if isinstance(node, ast.Name)
@@ -143,6 +175,8 @@ def collect():
         "sellable_helper_is_local": sellable_local is not None,
         "sellable_helper_imports": sellable_imports,
         "sellable_local_names": sellable_local_names,
+        "sellable_guard_shape": sellable_guard_shape[:16],
+        "public_product_return_calls": public_helper_return_calls[:16],
         "catalog_helper_mentions_rights": "rights_cleared_for_sale" in catalog_names,
         "catalog_helper_mentions_eligible": "_eligible" in catalog_names,
         "import_old_count": source.count(IMPORT_OLD),
