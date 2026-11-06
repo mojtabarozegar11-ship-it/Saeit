@@ -1,10 +1,11 @@
 name: VPS F01 Single Product Source Upgrade
 on:
-  push:
-    branches: [main]
-    paths:
-      - "product_recipes/farm_enterprise_economics/**"
-      - ".github/workflows/vps-f01-actual-source-upgrade.yml"
+  # Dormant manual bridge, not an autonomous factory scheduler. The 2026-11-06
+  # automatic run failed at the old "active must equal F01" assertion after
+  # Line 41 validly technical-exited F01 (Action 42275993209). Never auto-stage
+  # source on each main push until the runtime's current slot and recoverable
+  # rollback evidence are re-audited. VPS-native cron remains independent.
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -12,7 +13,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   source-upgrade:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    # Previous operator assumes the obsolete pre-technical-exit lifecycle and
+    # backs up source alone, not all private manufacturing manifests/archives.
+    # Do not allow manual dispatch to bypass a correct rollback redesign.
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
