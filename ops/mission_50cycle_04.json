@@ -1,0 +1,167 @@
+{
+  "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
+  "cycle_id": "04",
+  "scope": "game development and acceptance",
+  "run_counter": 1,
+  "last_run_id": "04-20261106T202407+0330-automation-turn11",
+  "runs": [
+    {
+      "slot": "C01",
+      "run_id": "04-20261106T202407+0330-automation-turn11",
+      "date_local": "2026-11-06T20:24:07+03:30",
+      "result": "baseline-only; no product acceptance",
+      "verified_actions": 0
+    }
+  ],
+  "obligations": [
+    {
+      "priority": "P0",
+      "key": "trx-unique-claim",
+      "description": "قید یکتای شبکه و شناسه تراکنش در MariaDB",
+      "acceptance": "تست هم‌زمانی واقعی و رد بازپخش",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P0",
+      "key": "atomic-settlement",
+      "description": "تسویه اتمیک و دفتر پاداش سمت سرور",
+      "acceptance": "عدم دوباره‌پرداخت و rollback",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P0",
+      "key": "minor-safety",
+      "description": "حفاظت نوجوانان، گزارش تخلف و کنترل صوت",
+      "acceptance": "پذیرش ایمنی و حریم خصوصی",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P0",
+      "key": "backup-rollback",
+      "description": "بکاپ، بازیابی و بازگشت نسخه",
+      "acceptance": "بازیابی مستقل موفق",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P1",
+      "key": "unified-game",
+      "description": "یکپارچگی کنترل‌شده PR 68 و 69",
+      "acceptance": "نسخه واحد قابل اجرا",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P1",
+      "key": "onboarding",
+      "description": "شروع عمودی و آموزش اجباری",
+      "acceptance": "آزمون مرورگر/موبایل",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P1",
+      "key": "economy",
+      "description": "نانوایی، بانک، مدیر، سفارش خودکار LC-ECONOMY-07",
+      "acceptance": "ذخیره سروری و رفتار درست",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P1",
+      "key": "content",
+      "description": "شغل‌ها، شخصیت‌ها، ۱۹ قهرمان، ۵۶ کارت و ارتقا",
+      "acceptance": "تجربه واقعی بدون تکرار",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P1",
+      "key": "mystery",
+      "description": "داستان 23:17 و تله حقیقت",
+      "acceptance": "کنش عملی و کشف قابل استنتاج",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P1",
+      "key": "mafia-voice",
+      "description": "چت صوتی واقعی انسانی و همگام‌سازی دور",
+      "acceptance": "پذیرش مجاز ایمنی و عملکرد",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P1",
+      "key": "languages",
+      "description": "۲۰ زبان",
+      "acceptance": "بررسی تجربه نسخه واقعی",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P1",
+      "key": "in-game-shop",
+      "description": "فروشگاه مستقل درون بازی با تفکیک سفارش",
+      "acceptance": "تأیید امنیتی بدون پرداخت واقعی",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P2",
+      "key": "ramadan-r58",
+      "description": "بسته قابل بازی و بازیابی جنگ رمضان",
+      "acceptance": "کنترل موبایل/۱۰۰ جان/ذخیره/ZIP و مرورگر",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P2",
+      "key": "other-games",
+      "description": "Crown Defender، Air Supremacy، رهام، تانیا و سایر بازی‌ها",
+      "acceptance": "نسخه‌های قابل بازی و پذیرفته‌شده",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    },
+    {
+      "priority": "P2",
+      "key": "release",
+      "description": "مجوز حقوقی، پذیرش، انتشار و درآمد",
+      "acceptance": "رسید مستقل نسخه و سفارش/وجه",
+      "owner": "04",
+      "status": "open",
+      "evidence": null
+    }
+  ],
+  "policy": {
+    "max_runs": 50,
+    "max_actions_per_run": 20,
+    "public_release": "HOLD",
+    "payments": "HOLD",
+    "remote_desktop": "FORBIDDEN",
+    "factory": "HOLD",
+    "project39_correspondence": "FORBIDDEN"
+  },
+  "sources": [
+    "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725",
+    "https://github.com/mojtabarozegar11-ship-it/Bazei/pull/68",
+    "https://github.com/mojtabarozegar11-ship-it/Bazei/pull/69"
+  ]
+}
