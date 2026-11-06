@@ -1,0 +1,30 @@
+name: Zomorod office canonical login fallback regression
+on:
+  push:
+    branches: [fix/zm-office-login-to-business-20261101]
+    paths:
+      - config/urls.py
+      - content/zomorod-business/index.php
+      - content/zomorod-business/.htaccess
+      - tests/test_zm_office_canonical_login.py
+      - .github/workflows/zm-office-login-fallback-ci-20261101.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - config/urls.py
+      - content/zomorod-business/index.php
+      - content/zomorod-business/.htaccess
+      - tests/test_zm_office_canonical_login.py
+      - .github/workflows/zm-office-login-fallback-ci-20261101.yml
+permissions:
+  contents: read
+jobs:
+  static-routing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test the isolated business fallback without any server or DB access
+        run: python3 -m unittest discover -s tests -p test_zm_office_canonical_login.py -v
