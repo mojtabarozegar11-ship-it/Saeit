@@ -159,3 +159,21 @@ def test_restore_rejects_cross_agent_order_identity_collision():
     with pytest.raises(ValueError):
         restored.restore_state(tampered)
     assert restored.export_state() == before
+
+def test_export_restore_preserves_demo_safety_policy():
+    lab = make_lab()
+    exported = lab.export_state()
+    assert exported["safety"] == {
+        "trading_mode": "DEMO",
+        "live_trading_enabled": False,
+        "kill_switch": True,
+        "customer_revenue_ledger": "SEPARATE_NOT_PRESENT",
+    }
+    restored = make_lab()
+    restored.restore_state(exported)
+    tampered = json.loads(json.dumps(exported))
+    tampered["safety"]["live_trading_enabled"] = True
+    before = restored.export_state()
+    with pytest.raises(ValueError, match="state_safety_policy_rejected"):
+        restored.restore_state(tampered)
+    assert restored.export_state() == before
