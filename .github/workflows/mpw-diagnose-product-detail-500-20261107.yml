@@ -1,0 +1,76 @@
+name: Diagnose MojPlayWin product detail HTTP 500s
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-diagnose-product-detail-500-20261107.yml"]
+permissions: {contents: read}
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish pinned relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail; umask 077; d="$RUNNER_TEMP/r"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/v"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/h"
+          chmod 600 "$d/"*; ssh-keygen -y -P "" -f "$d/v" >/dev/null; ssh-keygen -y -P "" -f "$d/h" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vk" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vk" -E sha256|awk '{print $2}'|sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/c" <<EOF
+          Host v
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/v
+            UserKnownHostsFile $d/vk
+          Host h
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/h
+            UserKnownHostsFile $d/hk
+            ProxyJump v
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            RequestTTY no
+          EOF
+          timeout 30s ssh -F "$d/c" v 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/hc" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/hc" -E sha256|awk '{print $2}'|sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; mv "$d/hc" "$d/hk"
+      - name: Capture exact Django exception without writes
+        run: |
+          timeout 120s ssh -T -F "$RUNNER_TEMP/r/c" h "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,traceback,inspect,json
+          from pathlib import Path
+          A=Path('/home/zomorod2/Saeit-staging'); os.chdir(A);sys.path.insert(0,str(A));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.test import Client
+          from core.models import Product
+          from django.urls import resolve
+          print('MPW_PRODUCT_ROWS='+json.dumps(list(Product.objects.filter(pk__in=(72,225,879)).values('id','title','active','currency','price','product_type','knowledge_article_id')),default=str))
+          for pk in (72,225,879):
+              route=f'/store/product/{pk}/'
+              print('MPW_ROUTE='+route)
+              try:
+                  match=resolve(route); print('MPW_RESOLVED='+match.func.__module__+'.'+match.func.__name__)
+                  response=Client(raise_request_exception=False).get(route,secure=True,HTTP_HOST='mojplaywin.com')
+                  print('MPW_RESPONSE='+json.dumps({'status':response.status_code,'content_type':response.get('Content-Type'),'len':len(response.content),'location':response.get('Location')}))
+                  if response.status_code>=500:
+                      print('MPW_BODY_HEAD='+response.content[:1200].decode('utf8','replace'))
+              except Exception:
+                  print('MPW_EXCEPTION_BEGIN'); traceback.print_exc(); print('MPW_EXCEPTION_END')
+          try:
+              import core.product_seo_views as m
+              print('MPW_PRODUCT_VIEW_SOURCE_BEGIN'); print(inspect.getsource(m.product_detail)); print('MPW_PRODUCT_VIEW_SOURCE_END')
+          except Exception:
+              traceback.print_exc()
+          PY
+      - name: Clean relay
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/r"
