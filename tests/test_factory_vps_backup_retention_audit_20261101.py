@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import sqlite3
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -153,6 +154,20 @@ class FactoryBackupAuditTests(unittest.TestCase):
         healthy, result = audit_module.check_database(path, seconds=-1)
         self.assertFalse(healthy)
         self.assertEqual(result, "quick_check_timed_out")
+        self.assertEqual(before, (path.read_bytes(), path.stat().st_mtime_ns))
+
+    def test_blocked_sqlite_io_child_is_killed_at_wall_clock_timeout(self):
+        path = self.make_database("master-before-20261027T151515Z.sqlite3")
+        before = (path.read_bytes(), path.stat().st_mtime_ns)
+        with mock.patch.object(
+            audit_module.subprocess, "run",
+            side_effect=subprocess.TimeoutExpired(cmd="read_only_sqlite", timeout=0.01),
+        ) as run:
+            healthy, reason = audit_module.check_database(path, seconds=0.01)
+        self.assertFalse(healthy)
+        self.assertEqual(reason, "quick_check_timed_out")
+        self.assertEqual(run.call_args.kwargs["timeout"], 0.01)
+        self.assertEqual(run.call_args.args[0][1:3], ["-B", "-c"])
         self.assertEqual(before, (path.read_bytes(), path.stat().st_mtime_ns))
 
     def test_wal_or_journal_sidecar_blocks_snapshot_verification(self):
