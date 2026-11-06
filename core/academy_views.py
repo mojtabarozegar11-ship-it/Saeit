@@ -61,7 +61,9 @@ def academy(request):
         "تمرین، پروژه و آزمون جامع",
         "گواهی، مسیر مهارتی و محتوای تخصصی",
     ]
-    return render(request, "core/academy.html", {
+    # Dedicated verified template avoids the production-only shadowing file in
+    # templates/core/academy.html while preserving that original file intact.
+    return render(request, "core/academy_live_resources_20261106.html", {
         "tracks": tracks,
         "resources": resources,
         "courses": courses,
