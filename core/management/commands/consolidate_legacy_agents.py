@@ -8,6 +8,7 @@ or the existing content workflow. Other agents need live evidence review.
 
 import json
 import uuid
+from contextlib import nullcontext
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
@@ -154,11 +155,17 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         rows = []
-        with transaction.atomic():
-            agents = Agent.objects.select_for_update().order_by("code")
+        applying = bool(options["apply"])
+        # Inventory mode must neither lock agent rows nor start a write
+        # transaction: it can run while production workers are dispatching.
+        with transaction.atomic() if applying else nullcontext():
+            agents = (
+                Agent.objects.select_for_update().order_by("code")
+                if applying else Agent.objects.order_by("code")
+            )
             for agent in agents:
                 row = assess_agent(agent)
-                if options["apply"] and row["decision"] == "retire_safe":
+                if applying and row["decision"] == "retire_safe":
                     agent.active = False
                     agent.save(update_fields=["active", "updated_at"])
                     AuditLog.objects.create(

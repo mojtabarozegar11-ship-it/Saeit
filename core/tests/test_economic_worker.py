@@ -1,11 +1,15 @@
 import os
+from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from core.economic_tool_pack import build_mvp_asset, offer_design
-from core.models import AgentTask, Product
+from core.models import Agent, AgentTask, Product
 
 
 @pytest.mark.django_db
@@ -37,6 +41,46 @@ def test_cycle_advances_from_self_improvement_to_verified_market_research(monkey
     assert tasks[0].status == "completed"
     assert tasks[1].capability_code == "income_market_research"
     assert tasks[1].status == "queued"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("drain,expected", [(False, 1), (True, 20)])
+def test_economic_worker_bounded_drain_never_repeats_a_task(drain, expected):
+    agent, _ = Agent.objects.update_or_create(
+        code="economic-master-agent",
+        defaults={"name": "Master", "mission": "Verified economic actions", "active": True},
+    )
+    tasks = AgentTask.objects.bulk_create([
+        AgentTask(agent=agent, action_type="income_market_research",
+                  capability_code="income_market_research", status="queued")
+        for _ in range(21)
+    ])
+    executed_ids = []
+
+    def safe_fake_run(task_id):
+        executed_ids.append(task_id)
+        AgentTask.objects.filter(pk=task_id).update(status="completed")
+        return SimpleNamespace(pk=task_id, status="completed",
+                               output_data={"action_performed": "verified_action"})
+
+    gateway = SimpleNamespace(describe=lambda: {"income_market_research": {}})
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway), patch(
+                   "core.management.commands.run_economic_worker.WorkerRunner"
+               ) as runner:
+        runner.return_value.run.side_effect = safe_fake_run
+        output = StringIO()
+        call_command("run_economic_worker", *("--drain",) if drain else (),
+                     stdout=output)
+
+    assert len(executed_ids) == expected
+    assert len(set(executed_ids)) == expected
+    assert set(executed_ids).issubset({task.pk for task in tasks})
+    assert AgentTask.objects.filter(agent=agent, status="queued").count() == 21 - expected
+    if drain:
+        assert "DRAIN_SUMMARY completed=20 limit=20" in output.getvalue()
+    else:
+        assert "DRAIN_SUMMARY" not in output.getvalue()
 
 
 def test_mvp_builder_writes_private_verified_customer_workbook(tmp_path):
@@ -77,3 +121,109 @@ def test_offer_design_creates_isolated_inactive_draft_without_relabeling_catalog
     assert draft.metadata["pricing_status"] == "requires_market_evidence"
     assert result["evidence"]["kind"] == "product_record"
     assert str(draft.pk) in result["evidence"]["value"]
+
+
+@pytest.mark.parametrize("command,kwargs", [
+    ("economic_worker", {"limit": 0}),
+    ("economic_worker", {"limit": 21}),
+    ("run_economic_worker", {"limit": -1}),
+    ("run_economic_worker", {"drain": True, "limit": 4}),
+    ("run_economic_worker", {"task_id": -3}),
+])
+def test_all_economic_worker_entry_points_enforce_bounded_execution(command, kwargs):
+    with pytest.raises(CommandError):
+        call_command(command, **kwargs)
+
+
+@pytest.mark.django_db
+def test_legacy_worker_is_a_single_controlled_dispatcher_and_requires_active_agent():
+    agent = Agent.objects.create(
+        code="economic-master-agent", name="Master", mission="Economic tasks", active=False
+    )
+    tasks = AgentTask.objects.bulk_create([
+        AgentTask(agent=agent, action_type="income_market_research",
+                  capability_code="income_market_research", status="queued")
+        for _ in range(3)
+    ])
+    output = StringIO()
+    call_command("economic_worker", limit=3, stdout=output)
+    assert "IDLE: no queued economic task." in output.getvalue()
+    assert AgentTask.objects.filter(agent=agent, status="queued").count() == 3
+
+    agent.active = True
+    agent.save(update_fields=["active"])
+    completed_ids = []
+
+    def complete(task_id):
+        completed_ids.append(task_id)
+        AgentTask.objects.filter(pk=task_id).update(status="completed")
+        return SimpleNamespace(pk=task_id, status="completed", output_data={
+            "action_performed": "internal_inspection", "verified_effect": True,
+        })
+
+    gateway = SimpleNamespace(describe=lambda: {"income_market_research": {}})
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway), patch(
+                   "core.management.commands.run_economic_worker.WorkerRunner"
+               ) as runner:
+        runner.return_value.run.side_effect = complete
+        output = StringIO()
+        call_command("economic_worker", limit=3, stdout=output)
+
+    assert set(completed_ids) == {task.pk for task in tasks}
+    assert "revenue_not_assessed=true" in output.getvalue()
+
+
+@pytest.mark.django_db
+def test_worker_skips_unregistered_income_tool_without_consuming_attempts():
+    agent = Agent.objects.create(
+        code="economic-master-agent", name="Master", mission="Bounded work", active=True,
+    )
+    unsupported = AgentTask.objects.create(
+        agent=agent, action_type="income_unregistered_external_post",
+        capability_code="income_unregistered_external_post", status="queued",
+    )
+    supported = AgentTask.objects.create(
+        agent=agent, action_type="income_market_research",
+        capability_code="income_market_research", status="queued",
+    )
+
+    def complete(task_id):
+        AgentTask.objects.filter(pk=task_id).update(status="completed")
+        return SimpleNamespace(pk=task_id, status="completed", output_data={"verified_effect": True})
+
+    gateway = SimpleNamespace(describe=lambda: {"income_market_research": {"enabled": True}})
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway), patch(
+                   "core.management.commands.run_economic_worker.WorkerRunner"
+               ) as runner:
+        runner.return_value.run.side_effect = complete
+        output = StringIO()
+        call_command("run_economic_worker", limit=2, stdout=output)
+        runner.return_value.run.assert_called_once_with(supported.pk)
+
+    unsupported.refresh_from_db()
+    supported.refresh_from_db()
+    assert supported.status == "completed"
+    assert unsupported.status == "queued"
+    assert unsupported.attempt_count == 0
+    assert "completed=1" not in output.getvalue()  # only --drain prints a summary
+
+
+@pytest.mark.django_db
+def test_worker_reports_unknown_only_queue_without_executing():
+    agent = Agent.objects.create(
+        code="economic-master-agent", name="Master", mission="Bounded work", active=True,
+    )
+    unsupported = AgentTask.objects.create(
+        agent=agent, action_type="income_missing_tool", capability_code="income_missing_tool",
+        status="queued",
+    )
+    with patch("core.management.commands.run_economic_worker.WorkerRunner") as runner:
+        output = StringIO()
+        call_command("run_economic_worker", stdout=output)
+        runner.assert_not_called()
+    unsupported.refresh_from_db()
+    assert unsupported.attempt_count == 0
+    assert unsupported.status == "queued"
+    assert "BLOCKED_UNSUPPORTED" in output.getvalue()

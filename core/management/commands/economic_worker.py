@@ -1,37 +1,25 @@
-from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Q
-from core.models import AgentTask
-from core.worker_runner import WorkerRunner
-from core.economic_tool_pack import build_economic_gateway
+"""Compatibility entry point for the single, bounded economic worker.
+
+The autonomous scheduler still invokes ``economic_worker``. Preserve that
+public CLI but never maintain a competing dispatcher with different limits.
+"""
+
+from django.core.management import call_command
+from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    help = "Execute queued economic master-agent tasks through the controlled gateway."
+    help = "Execute up to 20 queued tasks through the single controlled economic worker."
 
     def add_arguments(self, parser):
         parser.add_argument("--task-id", type=int)
         parser.add_argument("--limit", type=int, default=1)
 
     def handle(self, *args, **options):
-        qs = AgentTask.objects.filter(
-            agent__code="economic-master-agent",
-            status="queued",
-        ).filter(
-            Q(capability_code__startswith="income_")
-            | Q(capability_code="master_self_improvement")
-        ).order_by("created_at")
-        if options["task_id"]:
-            qs = qs.filter(pk=options["task_id"])
-        ids = list(qs.values_list("pk", flat=True)[:max(1, options["limit"])])
-        if not ids:
-            self.stdout.write("NO_QUEUED_ECONOMIC_TASK")
-            return
-        runner = WorkerRunner(build_economic_gateway())
-        for task_id in ids:
-            try:
-                task = runner.run(task_id)
-            except Exception as exc:
-                raise CommandError(f"Task {task_id} failed: {exc}") from exc
-            self.stdout.write(self.style.SUCCESS(
-                f"EXECUTED task={task.pk} action={task.action_type} status={task.status}"
-            ))
+        call_command(
+            "run_economic_worker",
+            task_id=options["task_id"],
+            limit=options["limit"],
+            stdout=self.stdout,
+            stderr=self.stderr,
+        )

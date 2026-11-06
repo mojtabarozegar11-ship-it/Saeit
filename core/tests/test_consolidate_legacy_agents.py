@@ -1,6 +1,7 @@
 import io
 import json
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.core.management import call_command
 from django.test import TestCase
@@ -55,6 +56,14 @@ class ConsolidateLegacyAgentsTests(TestCase):
         assert decisions[self.master.code] == "retain_required"
         assert decisions[self.unknown.code] == "review_live_outcomes"
         assert AuditLog.objects.filter(action="legacy_agent_retired").count() == 0
+
+    def test_preview_does_not_request_database_row_locks(self):
+        # A read-only status inspection must not block live agent dispatch.
+        with patch("django.db.models.query.QuerySet.select_for_update",
+                   side_effect=AssertionError("preview must not lock agent rows")):
+            result = self.run_command()
+        assert result["mode"] == "preview"
+        assert result["summary"]["retired_now"] == 0
 
     def test_apply_deactivates_only_provably_safe_legacy_preserving_history(self):
         # The real replacement must demonstrate this role's world-news output.

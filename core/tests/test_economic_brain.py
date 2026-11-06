@@ -138,10 +138,67 @@ class VerifiedEconomicCycleTests(TestCase):
         output = StringIO()
         with patch("core.management.commands.autonomous_master_loop.WorkerRunner") as worker:
             worker.return_value.run.return_value = unverified
-            with patch("core.management.commands.autonomous_master_loop.build_economic_gateway"):
+            gateway = SimpleNamespace(describe=lambda: {"master_self_improvement": {"enabled": True}})
+            with patch("core.management.commands.autonomous_master_loop.build_economic_gateway", return_value=gateway):
                 call_command("autonomous_master_loop", "--max-steps", "20", stdout=output)
             self.assertEqual(worker.return_value.run.call_count, 1)
         self.assertIn("AUTO_UNVERIFIED_STOP", output.getvalue())
+
+    def test_master_loop_never_dispatches_queued_task_for_inactive_agent(self):
+        self.agent.active = False
+        self.agent.save(update_fields=["active"])
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_market_research",
+            capability_code="income_market_research", status="queued",
+        )
+        output = StringIO()
+        with patch("core.management.commands.autonomous_master_loop.WorkerRunner") as worker:
+            call_command("autonomous_master_loop", "--max-steps", "1", stdout=output)
+            worker.assert_not_called()
+        task.refresh_from_db()
+        self.assertEqual(task.status, "queued")
+        self.assertIn("AUTONOMOUS_IDLE", output.getvalue())
+
+    def test_master_loop_reports_unregistered_queued_capability_without_dispatch(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="external_unreviewed_tool",
+            capability_code="external_unreviewed_tool", status="queued",
+        )
+        output = StringIO()
+        with patch("core.management.commands.autonomous_master_loop.WorkerRunner") as worker:
+            call_command("autonomous_master_loop", "--max-steps", "1", stdout=output)
+            worker.assert_not_called()
+        task.refresh_from_db()
+        self.assertEqual(task.status, "queued")
+        self.assertIn("AUTO_BLOCKED_UNSUPPORTED_TASK", output.getvalue())
+
+    def test_master_loop_never_claims_unknown_income_prefixed_tool(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_unregistered_external_post",
+            capability_code="income_unregistered_external_post", status="queued",
+        )
+        output = StringIO()
+        with patch("core.management.commands.autonomous_master_loop.WorkerRunner") as worker:
+            call_command("autonomous_master_loop", "--max-steps", "1", stdout=output)
+            worker.return_value.run.assert_not_called()
+        task.refresh_from_db()
+        self.assertEqual(task.status, "queued")
+        self.assertEqual(task.attempt_count, 0)
+        self.assertIn("AUTO_BLOCKED_UNSUPPORTED_TASK", output.getvalue())
+
+    def test_master_loop_skips_mismatched_action_snapshot(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_profit_optimize",
+            capability_code="income_market_research", status="queued",
+        )
+        output = StringIO()
+        with patch("core.management.commands.autonomous_master_loop.WorkerRunner") as worker:
+            call_command("autonomous_master_loop", "--max-steps", "1", stdout=output)
+            worker.return_value.run.assert_not_called()
+        task.refresh_from_db()
+        self.assertEqual(task.status, "queued")
+        self.assertEqual(task.attempt_count, 0)
+        self.assertIn("AUTO_BLOCKED_UNSUPPORTED_TASK", output.getvalue())
 
     def test_stale_running_task_is_recovered_without_duplicate_task(self):
         task = AgentTask.objects.create(
@@ -183,6 +240,16 @@ class VerifiedEconomicCycleTests(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.status, "running")
         self.assertEqual(task.execution_id, "old-worker")
+
+    def test_idle_dry_run_does_not_lock_master_agent(self):
+        # Preview must remain safe even while live dispatch is taking place.
+        with patch("django.db.models.query.QuerySet.select_for_update",
+                   side_effect=AssertionError("dry-run must not lock database rows")):
+            output, errors = StringIO(), StringIO()
+            call_command("online_income_cycle", "--dry-run",
+                         stdout=output, stderr=errors)
+        self.assertEqual(AgentTask.objects.filter(agent=self.agent).count(), 0)
+        self.assertIn("BRAIN_", output.getvalue() + errors.getvalue())
 
     def test_exhausted_stale_task_fails_without_infinite_retry(self):
         task = AgentTask.objects.create(

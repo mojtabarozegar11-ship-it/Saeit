@@ -51,18 +51,19 @@ class Command(BaseCommand):
             self.stdout.write(f"BRAIN_BLOCKED task={blocked.pk} requires_review=true")
             return
 
-        # Only the path that could create a new task locks the agent row.
-        # Stale-task recovery happens beforehand to retain the worker's lock
-        # order (task first, agent second) and avoid a database deadlock.
-        agent = Agent.objects.select_for_update().filter(pk=agent.pk, active=True).first()
-        if agent is None:
-            self.stderr.write("Economic master agent was deactivated during planning.")
-            return
-        if AgentTask.objects.filter(
-            agent=agent, status__in=("queued", "running", "blocked")
-        ).exists():
-            self.stdout.write("BRAIN_RECHECK pending_task_created_concurrently")
-            return
+        # Read-only dry-run must never take a row lock; it merely reports a
+        # snapshot. Only the path that could create work needs serialization.
+        # Stale-task recovery happens first to retain the worker lock order.
+        if not options["dry_run"]:
+            agent = Agent.objects.select_for_update().filter(pk=agent.pk, active=True).first()
+            if agent is None:
+                self.stderr.write("Economic master agent was deactivated during planning.")
+                return
+            if AgentTask.objects.filter(
+                agent=agent, status__in=("queued", "running", "blocked")
+            ).exists():
+                self.stdout.write("BRAIN_RECHECK pending_task_created_concurrently")
+                return
 
         decision = AutonomousBrain().decide()
         chosen = decision["chosen"]

@@ -1,6 +1,6 @@
 from django.db import transaction
 
-from core.models import Agent, AgentTask, ApprovalRequest
+from core.models import AgentTask, ApprovalRequest
 from core.agent_registry import AgentRegistry
 from core.services import normalize_action, normalize_risk, requires_owner_approval
 
@@ -10,21 +10,9 @@ class MasterAgent:
 
     def _select_agent(self, action):
         normalized_action = normalize_action(action)
-        registered = AgentRegistry().resolve(normalized_action)
-        if registered:
-            return registered
-        agents = Agent.objects.filter(active=True).order_by("risk_level", "id")
-        if normalized_action:
-            preferred = agents.filter(mission__icontains=normalized_action).first()
-            if preferred:
-                return preferred
-            # Fall back to individual capability words for missions written as prose.
-            for token in normalized_action.split("_"):
-                if len(token) >= 3:
-                    preferred = agents.filter(mission__icontains=token).first()
-                    if preferred:
-                        return preferred
-        return agents.first()
+        # A mission description is not an executable capability. Route only
+        # to an explicitly registered, active capability to avoid phantom work.
+        return AgentRegistry().resolve(normalized_action)
 
     @transaction.atomic
     def plan(self, project, action, payload, risk="low"):

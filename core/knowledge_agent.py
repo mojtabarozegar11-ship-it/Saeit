@@ -62,9 +62,29 @@ def queue_cycle():
         plan.next_run_at = None
         plan.save(update_fields=["last_run_at", "next_run_at", "updated_at"])
         return None
-    run = KnowledgeAgentRun.objects.create(plan=plan, book=book, objective=f"تولید بخش بعدی برای {book.title}؛ مبنا از {START.isoformat()}؛ با منابع قابل ردیابی.", approval_required=plan.require_owner_approval)
+    run = KnowledgeAgentRun.objects.create(
+        plan=plan,
+        book=book,
+        objective=f"تولید بخش بعدی برای {book.title}؛ مبنا از {START.isoformat()}؛ با منابع قابل ردیابی.",
+        approval_required=True,  # paid model calls always require explicit authorization
+    )
     agent, _ = Agent.objects.get_or_create(code="knowledge-content-director", defaults={"name":"Knowledge Content Director","mission":plan.mission,"risk_level":"low","active":True})
-    AgentTask.objects.create(agent=agent, action_type="knowledge_content_generation", capability_code="research-write-review", risk_snapshot="low", input_data={"run_id":run.id,"book_id":book.id,"start_date":START.isoformat()}, status="queued")
+    # An unattended, API-backed generation can incur a charge even when its
+    # draft is private. Route it through the high-risk owner approval path.
+    AgentTask.objects.create(
+        agent=agent,
+        action_type="knowledge_content_generation",
+        capability_code="research-write-review",
+        risk_snapshot="high",
+        input_data={
+            "run_id": run.id,
+            "book_id": book.id,
+            "start_date": START.isoformat(),
+            "approval_required": True,
+            "paid_model": True,
+        },
+        status="queued",
+    )
     plan.last_run_at = now
     plan.next_run_at = now + timezone.timedelta(hours=plan.cadence_hours)
     plan.save(update_fields=["last_run_at", "next_run_at", "updated_at"])

@@ -34,6 +34,7 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 modules=(
   core/autonomous_brain.py
   core/economic_tool_pack.py
+  core/isolated_upgrade_proof.py
   core/economic_master_agent.py
   core/self_funding_policy.py
   core/task_runtime.py
@@ -159,10 +160,13 @@ for module in "${modules[@]}"; do
   mv -f "$target.deploy.tmp" "$target"
 done
 "$py" -m py_compile \
-  core/autonomous_brain.py core/economic_tool_pack.py core/economic_master_agent.py \
+  core/autonomous_brain.py core/economic_tool_pack.py core/isolated_upgrade_proof.py core/economic_master_agent.py \
   core/self_funding_policy.py core/task_runtime.py \
   core/management/commands/seed_online_income_agents.py \
   core/management/commands/run_economic_worker.py core/management/commands/economic_worker.py core/recovery_scheduler.py core/management/commands/recover_stale_tasks.py
+"$py" -m py_compile \
+  core/management/commands/autonomous_master_loop.py \
+  core/management/commands/online_income_cycle.py
 "$py" manage.py check
 "$py" manage.py seed_online_income_agents
 "$py" - <<'PY'
@@ -203,8 +207,15 @@ except (FileNotFoundError,ValueError,TypeError,KeyError):
 print(min(20, max(1, steps)))
 PY
 )"
-flock -n "$root/master-cycle.lock" timeout 30 "$py" manage.py recover_stale_tasks --agent-code economic-master-agent --limit 20 --stale-after 900
-flock -n "$root/master-cycle.lock" timeout 780 "$py" manage.py autonomous_master_loop --max-steps "$steps"
+# Hold one lock across recovery AND planning/execution. Two independent
+# flock invocations leave a race window that can spawn duplicate master work.
+exec 9>"$root/master-cycle.lock"
+if ! flock -n 9; then
+  echo MASTER_CYCLE_ALREADY_RUNNING
+  exit 0
+fi
+timeout 30 "$py" manage.py recover_stale_tasks --agent-code economic-master-agent --limit 20 --stale-after 900
+timeout 780 "$py" manage.py autonomous_master_loop --max-steps "$steps"
 SH
 chmod 700 "$master/run-cycle.sh.tmp"
 mv -f "$master/run-cycle.sh.tmp" "$master/run-cycle.sh"
