@@ -47,7 +47,9 @@ jobs:
           root="/home/githubops/factory-runtime/private/autonomous-product-cycle"
           python="/home/githubops/factory-runtime/.venv/bin/python"
           timeout 35s ssh -T "${opts[@]}" "$host" "set -eu; test ! -e '$stage'; install -d -m 700 '$stage'"
-          scp -q "${opts[@]}" scripts/f01_quality_1000_machine_gate.py scripts/f01_vps_quality_measurement.py factory_config/f01_quality_100_criteria.json "$host:$stage/"
+          scp -q "${opts[@]}" scripts/f01_quality_1000_machine_gate.py scripts/f01_vps_quality_measurement.py scripts/f01_generate_live_evidence.py factory_config/f01_quality_100_criteria.json "$host:$stage/"
+          artifact="$(ssh -T "${opts[@]}" "$host" "ls -t '$root'/digital-products/farm_enterprise_economics/*.zip | head -n1")"
+          timeout 300s ssh -T "${opts[@]}" "$host" python3 -B "$stage/f01_generate_live_evidence.py" "$artifact" "$root/quality-excellence/f01-qc1000/evidence" "$RUN_ID"
           timeout 300s ssh -T "${opts[@]}" "$host" python3 -B "$stage/f01_vps_quality_measurement.py" --private-root "$root" --catalog "$stage/f01_quality_100_criteria.json" --gate "$stage/f01_quality_1000_machine_gate.py" --run-id "$RUN_ID"
           ssh -T "${opts[@]}" "$host" "rm -f -- '$stage/f01_quality_1000_machine_gate.py' '$stage/f01_vps_quality_measurement.py' '$stage/f01_generate_live_evidence.py' '$stage/f01_quality_100_criteria.json'; rmdir -- '$stage'"
       - name: Remove runner credential
