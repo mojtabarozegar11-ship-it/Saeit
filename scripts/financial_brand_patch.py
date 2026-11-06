@@ -14,10 +14,10 @@ def patch_financial_urls(source):
             'path(f"{_brand_slug}/digital-products/",',
         ).replace(
             'path(f"ar/{_brand_slug}/store/",',
-            'path(f"ar/{_brand_slug}/digital-products/",',
+            'path(f"arabic/{_brand_slug}/digital-products/",',
         ).replace(
             'path(f"ar/{_brand_slug}/digital-store/",',
-            'path(f"ar/{_brand_slug}/digital-products/",',
+            'path(f"arabic/{_brand_slug}/digital-products/",',
         )
     imports = ""
     if "from functools import partial" not in source:
@@ -39,8 +39,8 @@ for _brand_slug, _fa, _en, _ar in BRANDS:
     _finance_routes.extend([
         path(f"{_brand_slug}/market-signals/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="signals"), name=f"finance_{_brand_slug}_signals"),
         path(f"{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="store"), name=f"finance_{_brand_slug}_store"),
-        path(f"ar/{_brand_slug}/market-signals/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="signals"), name=f"finance_ar_{_brand_slug}_signals"),
-        path(f"ar/{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="store"), name=f"finance_ar_{_brand_slug}_store"),
+        path(f"arabic/{_brand_slug}/market-signals/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="signals"), name=f"finance_ar_{_brand_slug}_signals"),
+        path(f"arabic/{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="store"), name=f"finance_ar_{_brand_slug}_store"),
     ])
 urlpatterns = _finance_routes + urlpatterns
 """
