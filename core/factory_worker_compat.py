@@ -6,7 +6,9 @@ tasks whose ToolGateway and FactoryAgentRuntime are still installed on VPS.
 """
 
 from decimal import Decimal, InvalidOperation
+import json
 import os
+from pathlib import Path
 
 from django.db import transaction
 from django.utils import timezone
@@ -35,6 +37,12 @@ class FactoryWorkerCompatibility:
     ALLOWED_VALIDATION_OUTCOMES = frozenset({
         "VALIDATED", "NEEDS_MORE_EVIDENCE", "RESEARCH_AGAIN", "REJECTED", "BLOCKED"
     })
+    NATIVE_RECIPE = "farm_enterprise_economics"
+    NATIVE_SLOT_SCHEMA = "saeit.factory.product-slots.v1"
+    NATIVE_SLOT_PATH = Path(
+        "/home/githubops/factory-runtime/private/autonomous-product-cycle/"
+        "quality-excellence/product-flow/active-slots/current.json"
+    )
 
     def __init__(self, gateway, factory_executor):
         if factory_executor is None:
@@ -43,9 +51,52 @@ class FactoryWorkerCompatibility:
         self.factory_executor = factory_executor
         self.runtime = TaskRuntime()
 
-    @staticmethod
-    def _preflight(task):
-        if task.action_type not in FactoryWorkerCompatibility.ALLOWED_ACTIONS:
+    @classmethod
+    def _verify_native_product_binding(cls, task):
+        # The Django FactoryRun table has hundreds of historical "active" rows.
+        # An operator-supplied run ID must not override the native VPS factory's
+        # single-product lock. Require exact Product metadata, not a title or
+        # other human-readable string that could describe a different product.
+        metadata = task.product.metadata if task.product is not None else None
+        if not isinstance(metadata, dict):
+            raise FactoryWorkerCompatibilityError("Existing Product lacks explicit recipe metadata")
+        recipe = cls.NATIVE_RECIPE
+        matches = any(metadata.get(key) == recipe for key in (
+            "recipe", "recipe_slug", "product_slug", "product_code", "sku"
+        ))
+        for container in ("factory", "production", "source_recipe"):
+            value = metadata.get(container)
+            if isinstance(value, dict):
+                matches |= any(value.get(key) == recipe for key in (
+                    "recipe", "recipe_slug", "product_slug"
+                ))
+            elif container == "source_recipe" and value == recipe:
+                matches = True
+        if not matches:
+            raise FactoryWorkerCompatibilityError("Product is not proven to be the native active recipe")
+
+        slot = cls.NATIVE_SLOT_PATH
+        try:
+            safe_slot = not slot.is_symlink() and slot.is_file() and slot.stat().st_size < 2000000
+        except OSError:
+            safe_slot = False
+        if not safe_slot:
+            raise FactoryWorkerCompatibilityError("Native factory active slot is missing or unsafe")
+        try:
+            data = json.loads(slot.read_text(encoding="utf-8"))
+        except (OSError, ValueError, UnicodeError, TypeError) as exc:
+            raise FactoryWorkerCompatibilityError("Native factory active slot is unreadable") from exc
+        if (not isinstance(data, dict)
+                or data.get("schema") != cls.NATIVE_SLOT_SCHEMA
+                or not isinstance(data.get("active"), list)
+                or len(data["active"]) != 1
+                or not isinstance(data["active"][0], dict)
+                or data["active"][0].get("recipe") != recipe):
+            raise FactoryWorkerCompatibilityError("Native factory active slot does not match the product")
+
+    @classmethod
+    def _preflight(cls, task):
+        if task.action_type not in cls.ALLOWED_ACTIONS:
             raise FactoryWorkerCompatibilityError("Factory action is not reconciled for this worker")
         if task.action_type != task.capability_code:
             raise FactoryWorkerCompatibilityError("Factory task and capability mismatch")
@@ -68,6 +119,7 @@ class FactoryWorkerCompatibility:
         bound_run = os.environ.get("MOJ_FACTORY_SINGLE_ACTIVE_RUN_ID", "").strip()
         if not bound_run or task.factory_run.run_id != bound_run:
             raise FactoryWorkerCompatibilityError("No verified single active FactoryRun binding")
+        cls._verify_native_product_binding(task)
 
     @staticmethod
     def _normalize_result(result):
@@ -84,6 +136,7 @@ class FactoryWorkerCompatibility:
 
     @classmethod
     def _verify_validation_effect(cls, task, output):
+        cls._verify_native_product_binding(task)
         if output.get("verified_effect") is not True:
             raise FactoryWorkerCompatibilityError("Factory validation has no verified effect")
         if output.get("product_id") != task.product_id:
@@ -118,6 +171,7 @@ class FactoryWorkerCompatibility:
         try:
             self.runtime.heartbeat(task.pk, execution_id=execution_id)
             with transaction.atomic():
+                self._verify_native_product_binding(task)
                 payload = task.input_data or {}
                 if not isinstance(payload, dict):
                     raise FactoryWorkerCompatibilityError("Factory task input must be an object")
