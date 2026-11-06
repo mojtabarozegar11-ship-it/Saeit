@@ -18,6 +18,13 @@ export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=conf
 export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
 cd "$app"
 
+# Run the source-level fleet audit against the live database before the
+# broader compatibility inventory. The command is strictly read-only and
+# emits no task payloads, identifiers, messages or financial data.
+echo AGENT_FLEET_COMMAND_AUDIT_BEGIN
+"$python_bin" manage.py audit_agent_fleet --days 30 --stale-after 900
+echo AGENT_FLEET_COMMAND_AUDIT_END
+
 echo AGENT_FLEET_DATABASE_PREVIEW_BEGIN
 "$python_bin" - <<'PY'
 import json
