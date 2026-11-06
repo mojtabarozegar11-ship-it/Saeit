@@ -75,9 +75,8 @@ def test_rejects_invalid_order_inputs():
     with pytest.raises(ValueError, match="stop_pct_out_of_range"):
         lab.submit_demo_trade(agent, "TEST", "BUY", stop_pct=0)
     with pytest.raises(ValueError, match="invalid_equity"):
-        TradingLab({"DEMO_A": FakeBroker("A", equity=float("nan")), "DEMO_B": FakeBroker("B")}).submit_demo_trade(
-            agent, "TEST", "BUY"
-        )
+        bad_lab = TradingLab({"DEMO_A": FakeBroker("A", equity=float("nan")), "DEMO_B": FakeBroker("B")})
+        bad_lab.submit_demo_trade(bad_lab.agents[0], "TEST", "BUY")
 
 
 def test_problem_solution_journal_and_durable_export_shape():
