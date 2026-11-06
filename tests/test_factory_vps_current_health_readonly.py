@@ -131,6 +131,24 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
             self.assertEqual(result["native_single_product_runner"]["executable"], False)
             self.assertEqual(result["server_written_bytes"], 0)
 
+    def test_stalled_runner_log_reports_only_redacted_error_classes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            ops = base / "operations"
+            ops.mkdir()
+            log = ops / "single-product-cycle.log"
+            secret = "private key path /home/user/secrettoken"
+            log.write_text("Traceback (most recent call last):\n"
+                           "ModuleNotFoundError: " + secret + "\n"
+                           "No such file or directory: " + secret + "\n", encoding="utf8")
+            before = log.read_bytes()
+            result = audit.native_single_product_log_diagnostic(base)
+            self.assertEqual(result["state"], "readable")
+            self.assertEqual(result["tail_error_group_counts"]["python_traceback"], 1)
+            self.assertEqual(result["tail_error_group_counts"]["module_not_found"], 1)
+            self.assertNotIn(secret, json.dumps(result))
+            self.assertEqual(log.read_bytes(), before)
+
     def test_heartbeat_real_counter_only_and_no_server_write(self):
         with tempfile.TemporaryDirectory() as tmp:
             private = Path(tmp)
