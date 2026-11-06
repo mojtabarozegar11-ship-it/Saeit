@@ -115,5 +115,5 @@ jobs:
         run: |
           set -euo pipefail
           case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
-          timeout 70s ssh -T -F "$RUNNER_TEMP/zm-academy-inspector-ssh/config" "$COMMAND_HOST" 'PYTHONDONTWRITEBYTECODE=1 python3 -' < scripts/zomorod_academy_live_fingerprint_20261106.py
+          timeout 105s ssh -T -F "$RUNNER_TEMP/zm-academy-inspector-ssh/config" "$COMMAND_HOST" 'PYTHONDONTWRITEBYTECODE=1 python3 -' < scripts/zomorod_academy_live_fingerprint_20261106.py
           echo 'ACADEMY_READONLY_INSPECTION_COMPLETE=yes'
