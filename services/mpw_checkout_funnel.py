@@ -21,7 +21,11 @@ import stat
 ACCOUNT = "zomorod2"
 DATA_DIR = Path("/home/zomorod2/.local/share/mpw-private-funnel")
 DATA_FILE = DATA_DIR / "daily-counts.sqlite3"
-STAGES = frozenset({"checkout_view", "order_start_accepted", "invoice_view", "paid_download"})
+STAGES = frozenset({
+    "checkout_view", "order_start_attempt", "order_start_accepted",
+    "order_start_not_invoiced", "order_start_exception",
+    "invoice_view", "paid_download",
+})
 BOT_UA = re.compile(r"bot|crawl|spider|curl/|wget/|python-|headless|lighthouse|pagespeed|monitor", re.I)
 MAX_COUNT = 1_000_000
 SCHEMA = """CREATE TABLE IF NOT EXISTS daily (
@@ -99,7 +103,8 @@ def record(request, stage, product_id=0):
             return False
         if type(product_id) is not int or not 0 <= product_id <= 999_999:
             return False
-        if stage in ("checkout_view", "order_start_accepted"):
+        if stage in ("checkout_view", "order_start_attempt", "order_start_accepted",
+                     "order_start_not_invoiced", "order_start_exception"):
             from django.conf import settings
             if product_id not in getattr(settings, "MPW_TRX_PUBLIC_PRODUCT_IDS", ()):
                 return False

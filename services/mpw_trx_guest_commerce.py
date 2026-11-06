@@ -224,22 +224,34 @@ def _install_cookie(response, token):
 
 def _dispatch(request, view, args, kwargs, *, create=False):
     if create:
-        from django.conf import settings
-        # Capturing immutable checkout ownership is independent of opening
-        # public recovery routes or approving outbound recovery mail.
-        if (getattr(settings, "MPW_GUEST_EMAIL_CLAIM_CAPTURE_ENABLED", False) is True
-                or getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True):
-            from services.mpw_trx_email_recovery import bound_checkout
-            response = bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
-            if _is_invoice_redirect(response):
-                _count_checkout_event(request, "order_start_accepted", args, kwargs)
-            return response
-    user, token = _identity(request, create=create)
-    request.user = user
-    response = view(request, *args, **kwargs)
-    response = _install_cookie(response, token)
-    if create and _is_invoice_redirect(response):
-        _count_checkout_event(request, "order_start_accepted", args, kwargs)
+        # This follows the POST/CSRF decorators; only anonymous aggregate
+        # counters are recorded. No email, IP, invoice or browser ID is stored.
+        _count_checkout_event(request, "order_start_attempt", args, kwargs)
+    try:
+        if create:
+            from django.conf import settings
+            # Capturing immutable checkout ownership is independent of opening
+            # public recovery routes or approving outbound recovery mail.
+            if (getattr(settings, "MPW_GUEST_EMAIL_CLAIM_CAPTURE_ENABLED", False) is True
+                    or getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True):
+                from services.mpw_trx_email_recovery import bound_checkout
+                response = bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
+            else:
+                user, token = _identity(request, create=True)
+                request.user = user
+                response = _install_cookie(view(request, *args, **kwargs), token)
+        else:
+            user, token = _identity(request, create=False)
+            request.user = user
+            response = _install_cookie(view(request, *args, **kwargs), token)
+    except Exception:
+        if create:
+            _count_checkout_event(request, "order_start_exception", args, kwargs)
+        raise
+    if create:
+        stage = ("order_start_accepted" if _is_invoice_redirect(response)
+                 else "order_start_not_invoiced")
+        _count_checkout_event(request, stage, args, kwargs)
     return response
 
 

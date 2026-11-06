@@ -46,7 +46,10 @@ class Metrics(unittest.TestCase):
 
     def test_private_counts_without_visitor_records(self):
         self.assertTrue(metric.record(self.request, "checkout_view", 779))
+        self.assertTrue(metric.record(self.request, "order_start_attempt", 779))
         self.assertTrue(metric.record(self.request, "order_start_accepted", 779))
+        self.assertTrue(metric.record(self.request, "order_start_not_invoiced", 779))
+        self.assertTrue(metric.record(self.request, "order_start_exception", 779))
         self.assertTrue(metric.record(self.request, "paid_download", 12345))
         report = metric.report()
         self.assertEqual(report["status"], "aggregated")
@@ -54,6 +57,9 @@ class Metrics(unittest.TestCase):
                           for item in report["daily"]],
                          [("checkout_view", 779, 1),
                           ("order_start_accepted", 779, 1),
+                          ("order_start_attempt", 779, 1),
+                          ("order_start_exception", 779, 1),
+                          ("order_start_not_invoiced", 779, 1),
                           ("paid_download", 0, 1)])
         self.assertEqual(stat.S_IMODE(self.dir.stat().st_mode), 0o700)
         self.assertEqual(stat.S_IMODE(metric.DATA_FILE.stat().st_mode), 0o600)

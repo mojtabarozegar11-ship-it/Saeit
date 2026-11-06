@@ -56,7 +56,7 @@ class FunnelTruth(unittest.TestCase):
 
     def test_valid_invoice_redirect_counts_once(self):
         self.checkout(Response(302, "/commerce/trx-easy/invoice/123/"))
-        self.assertEqual(self.events, ["order_start_accepted"])
+        self.assertEqual(self.events, ["order_start_attempt", "order_start_accepted"])
 
     def test_validation_page_or_failure_redirect_does_not_count(self):
         for response in (Response(200), Response(302, "/store/"),
@@ -66,14 +66,22 @@ class FunnelTruth(unittest.TestCase):
                          Response(302, "https://other.example/invoice/10/")):
             with self.subTest(response=response):
                 self.checkout(response)
-        self.assertEqual(self.events, [])
+        self.assertEqual(self.events, ["order_start_attempt", "order_start_not_invoiced"] * 6)
 
     def test_claim_capture_branch_uses_same_invoice_gate(self):
         self.settings.MPW_GUEST_EMAIL_CLAIM_CAPTURE_ENABLED = True
         self.checkout(Response(302, "/store/"))
-        self.assertEqual(self.events, [])
+        self.assertEqual(self.events, ["order_start_attempt", "order_start_not_invoiced"])
         self.checkout(Response(303, "/commerce/trx-easy/invoice/222/"))
-        self.assertEqual(self.events, ["order_start_accepted"])
+        self.assertEqual(self.events, ["order_start_attempt", "order_start_not_invoiced",
+                                      "order_start_attempt", "order_start_accepted"])
+
+    def test_exception_is_re_raised_and_counted_without_buyer_identity(self):
+        def broken(request):
+            raise ValueError("no invoice")
+        with self.assertRaisesRegex(ValueError, "no invoice"):
+            self.space["_dispatch"](self.request, broken, (), {}, create=True)
+        self.assertEqual(self.events, ["order_start_attempt", "order_start_exception"])
 
     def test_existing_purchase_views_never_count_order_creation(self):
         self.space["_dispatch"](self.request, lambda request: Response(302,
