@@ -138,8 +138,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       $_SESSION['mpw_inquiry_token']=bin2hex(random_bytes(24));
       $token=$_SESSION['mpw_inquiry_token'];
       $sent=true;
-      $body="MojPlayWin commercial inquiry received and stored privately.\nService: ".$title."\nReference: ".$reference."\n\nReview the private cPanel revenue-inquiries record. No customer data is logged to CI.\n";
-      @mail('support@mojplaywin.com','New MojPlayWin web inquiry '.$reference,$body,"From: support@mojplaywin.com\r\nContent-Type: text/plain; charset=UTF-8");
+      /* Owner's 2026-11-06 approval gate: no automatic email is sent.
+         The encrypted record, private reference and server-side metric remain available
+         for an expressly approved review; no customer message is queued or dispatched. */
     } catch (Throwable $e) {$errors[]='We could not securely save the request. Please use the email fallback.';error_log('MPW_INQUIRY_STORAGE_FAILURE');}
   }
 }
@@ -155,7 +156,7 @@ $fallback='mailto:support@mojplaywin.com?subject='.$subject;
 .inquiry-form :focus-visible{outline:3px solid #fff1ad;outline-offset:3px}
 .inquiry-note{color:#d7e0ea;font-size:.94rem}.inquiry-status{border:1px solid #9ed4a1;background:#172d22;padding:16px;border-radius:12px}.inquiry-error{border:1px solid #f0a7a7;background:#391e22;padding:16px;border-radius:12px}
 .honey{position:absolute;left:-10000px;height:0;overflow:hidden}@media(max-width:680px){.inquiry-form{grid-template-columns:1fr}}
-</style></head><body><header><a class="brand" href="/">MojPlayWin</a><nav aria-label="Service navigation"><a href="/mpw-editorial/revenue/index.html">All offers</a><a href="/privacy/">Privacy</a></nav></header><main id="main"><div class="inquiry-wrap"><p class="eyebrow">Commercial inquiry · No payment</p><h1><?=h($title)?></h1><p>Describe the result you need. This first-party form records your inquiry securely and provides a reference even if email delivery is delayed. No payment, binding order or contract is created.</p>
+</style></head><body><header><a class="brand" href="/">MojPlayWin</a><nav aria-label="Service navigation"><a href="/mpw-editorial/revenue/index.html">All offers</a><a href="/privacy/">Privacy</a></nav></header><main id="main"><div class="inquiry-wrap"><p class="eyebrow">Commercial inquiry · No payment</p><h1><?=h($title)?></h1><p>Describe the result you need. This first-party form stores your inquiry securely and provides a private reference. Automatic email notifications are disabled; requests are reviewed from private records. No payment, binding order or contract is created.</p>
 <?php if($sent): ?>
 <section class="inquiry-status" role="status"><h2>Inquiry received</h2><p>Private record reference: <strong><?=h($reference)?></strong></p><p>Keep this reference for follow-up. A response time or availability is not guaranteed.</p></section>
 <?php else: ?>
@@ -174,5 +175,5 @@ $fallback='mailto:support@mojplaywin.com?subject='.$subject;
 <button class="span-2" type="submit">Send secure inquiry</button>
 </form>
 <?php endif; ?>
-<p class="inquiry-note">Email fallback: <a href="<?=h($fallback)?>">support@mojplaywin.com — <?=h($title)?></a>. If you cannot receive a confirmation, retain your reference or contact support separately.</p>
+<p class="inquiry-note">For manual follow-up, keep your private reference and contact <a href="<?=h($fallback)?>">support@mojplaywin.com — <?=h($title)?></a>. No automatic email receipt or response is sent by this form.</p>
 </div></main><footer>© 2026 MojPlayWin · <a href="/terms/">Terms</a> · <a href="/mpw-editorial/revenue/index.html">All 12 offers</a></footer></body></html>
