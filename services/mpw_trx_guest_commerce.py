@@ -164,11 +164,38 @@ def _bind_guest_email(request, user):
     return user
 
 
+def _required_checkout_email(request):
+    """Every invoice POST, including signed-in checkout, must carry one valid email."""
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    values = []
+    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
+        for raw in request.POST.getlist(key):
+            address = str(raw).strip().casefold()
+            if not address:
+                continue
+            if len(address) > 254:
+                raise Http404("Valid purchase email required")
+            try:
+                validate_email(address)
+            except ValidationError as exc:
+                raise Http404("Valid purchase email required") from exc
+            values.append(address)
+    if not values or any(value != values[0] for value in values):
+        raise Http404("Missing or conflicting purchase email")
+    return values[0]
+
+
 def _identity(request, *, create=False):
     if not _host_ok(request):
         raise Http404
+    # A browser's required HTML field cannot protect direct POST requests.
+    checkout_email = _required_checkout_email(request) if create else None
     current = getattr(request, "user", None)
     if current is not None and getattr(current, "is_authenticated", False):
+        if create and str(getattr(current, "email", "") or "").strip().casefold() != checkout_email:
+            raise Http404("Account email must match purchase email")
         return current, None
     user = _read_user(request)
     token = None
