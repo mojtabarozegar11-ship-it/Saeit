@@ -47,7 +47,7 @@
     },
     "05": {
       "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
-      "sequence": 8,
+      "sequence": 9,
       "legacy_report_last_verified": 57,
       "primary_output": "accepted operational business gate",
       "legacy_source_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725",
@@ -188,6 +188,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514",
       "acceptance_result": "Private DOCX/PDF uploaded and independently re-fetched; 608 PDF pages, zero blank; SHA256 DOCX b818060022deddc83b0cfaf5440c54dd4caaa09ad16f5cae92b40c7e7fa65307, PDF 8fce1dd7e72de114f1f9c3e097b9b57edf6d8aabab0dd81a3560c3fc4b66cd03; editorial review only",
       "impact": "Corrected regulatory-scope teaching paragraph in C113; publication and revenue gates remain HOLD"
+    },
+    {
+      "registry_id": "R05-0009",
+      "cycle_id": "05",
+      "run_id": "ZM50-C05-20261106T220123Z-turn11",
+      "deliverable_key": "pr2066-closed-unmerged-and-conflict-gates",
+      "stage": "blocked",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2066",
+      "acceptance_result": "Live GitHub PR metadata: #2066 closed, unmerged, draft at head 97bde3eb; #2053 and #1976 open but mergeable=false. No deployment or runtime/DB/restore proof.",
+      "impact": "CI-passed source #2066 cannot be treated as pending deployable PR; conflict gates on #2053/#1976 remain. No revenue."
     }
   ],
   "report_reservations": [],
@@ -290,7 +300,7 @@
     "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
     "supersedes": "ZM-20DAY-COMMERCIAL-MISSION-20261106",
     "cycle_owner": "05",
-    "counter": 2,
+    "counter": 3,
     "max_runs": 50,
     "runs": [
       {
@@ -313,6 +323,16 @@
         "owner": "03",
         "oversight_owner": "05",
         "next_acceptance": "Independent isolation proof and actual restore/rollback evidence; no deployment until both pass"
+      },
+      {
+        "slot": "C03",
+        "run_id": "ZM50-C05-20261106T220123Z-turn11",
+        "stage": "blocked",
+        "accepted_deliverables": 0,
+        "primary_gate": "pr2066-closed-unmerged;pr2053-pr1976-not-mergeable",
+        "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2066",
+        "owner": "05",
+        "next_acceptance": "Reconcile closure reason and exact main/head differences; resolve conflicts source-only; independent VPS restore/isolation gate before any deployment"
       }
     ],
     "owners": {
