@@ -41,7 +41,7 @@
     },
     "04": {
       "automation_id": "6ade4fc089588191ad08b8a8f03bbab7",
-      "sequence": 0,
+      "sequence": 1,
       "legacy_report_last_verified": null,
       "primary_output": "accepted playable game build"
     },
@@ -198,6 +198,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/pull/2066",
       "acceptance_result": "Live GitHub PR metadata: #2066 closed, unmerged, draft at head 97bde3eb; #2053 and #1976 open but mergeable=false. No deployment or runtime/DB/restore proof.",
       "impact": "CI-passed source #2066 cannot be treated as pending deployable PR; conflict gates on #2053/#1976 remain. No revenue."
+    },
+    {
+      "registry_id": "R04-0001",
+      "cycle_id": "04",
+      "run_id": "ZM50-C02-20261107T022553+0330",
+      "deliverable_key": "mojcoin-tron-network-tx-atomic-claim",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Bazei/commit/7aafff3ab32ecbd51ac546bb2b0bff2b8777ad03",
+      "acceptance_result": "MariaDB-compatible unique network/tx model, migration, atomic settlement call and two Django tests committed; no DB integration or concurrency execution",
+      "impact": "Source-level replay defense added; production, acceptance and revenue remain unverified"
     }
   ],
   "report_reservations": [],
