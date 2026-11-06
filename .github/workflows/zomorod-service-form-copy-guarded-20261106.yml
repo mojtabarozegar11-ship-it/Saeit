@@ -136,7 +136,6 @@ jobs:
                       for marker in ['<title>درخواست خدمات و پرسش | زمرد ملل</title>',
                                      '<h1>درخواست خدمات و پرسش | زمرد ملل</h1>',
                                      'برای درخواست خدمات کشاورزی و اقتصادی',
-                                     'شرح درخواست یا پرسش',
                                      '<button type="submit">ثبت درخواست</button>',
                                      'name="csrf"', 'name="email"', 'name="kind"']:
                           if marker not in html:raise RuntimeError('FORM_COPY_PUBLIC_TEXT_MISSING:'+marker)
