@@ -192,9 +192,29 @@ try {
             $sku=req('sku');$name=req('name');if($sku===''||$name==='')bail('شناسه کالا و نام لازم است.');
             $db->prepare('INSERT INTO inventory(sku,name,unit,reorder_level) VALUES(?,?,?,?)')->execute([$sku,$name,req('unit','عدد'),max(0,(int)req('reorder_level','0'))]);audit($db,'create','inventory',(int)$db->lastInsertId());
         } elseif($action==='stock'){
-            $id=(int)req('inventory_id');$qty=(int)req('qty');if(!one($db,'SELECT id FROM inventory WHERE id=?',[$id])||$qty===0||abs($qty)>100000000)bail('مقدار کالا نامعتبر است.');
-            $now=(int)one($db,'SELECT COALESCE(SUM(qty),0) FROM inventory_movements WHERE inventory_id=?',[$id]);if($now+$qty<0)bail('موجودی انبار منفی می‌شود.');
-            $db->prepare('INSERT INTO inventory_movements(inventory_id,movement_date,qty,note,created_by) VALUES(?,?,?,?,?)')->execute([$id,inputDate('date'),$qty,req('note'),actor()]);audit($db,'move','inventory-stock',(int)$db->lastInsertId());
+            // Stock check + movement + audit must share one SQLite write lock.
+            // A read followed by an unlocked insert can oversell under concurrent POSTs.
+            $rawId=req('inventory_id');$rawQty=req('qty');
+            if(!ctype_digit($rawId)||!preg_match('/^-?(?:0|[1-9][0-9]{0,8})$/D',$rawQty))bail('مقدار کالا نامعتبر است.');
+            $id=(int)$rawId;$qty=(int)$rawQty;
+            if($id<=0||$qty===0||abs($qty)>100000000)bail('مقدار کالا نامعتبر است.');
+            $date=inputDate('date');$note=req('note');
+            $db->exec('BEGIN IMMEDIATE');
+            try{
+                if(!one($db,'SELECT id FROM inventory WHERE id=?',[$id]))bail('کالا پیدا نشد.');
+                $now=(int)one($db,'SELECT COALESCE(SUM(qty),0) FROM inventory_movements WHERE inventory_id=?',[$id]);
+                if($now+$qty<0)bail('موجودی انبار منفی می‌شود.');
+                $db->prepare('INSERT INTO inventory_movements(inventory_id,movement_date,qty,note,created_by) VALUES(?,?,?,?,?)')->execute([$id,$date,$qty,$note,actor()]);
+                audit($db,'move','inventory-stock',(int)$db->lastInsertId());
+                // Raw BEGIN IMMEDIATE must be paired with raw COMMIT/ROLLBACK;
+                // PDO::commit() may reject a transaction started through exec().
+                $db->exec('COMMIT');
+            }catch(Throwable $e){
+                try{$db->exec('ROLLBACK');}catch(Throwable $rollback){
+                    error_log('ZM stock rollback failed: '.get_class($rollback));
+                }
+                throw $e;
+            }
         } elseif($action==='employee'){
             $fullname=req('fullname');$job=req('job_title');if($fullname===''||$job==='')bail('نام و سمت لازم است.');
             $db->prepare('INSERT INTO employees(fullname,job_title,start_date,monthly_salary) VALUES(?,?,?,?)')->execute([$fullname,$job,inputDate('start_date'),cents(req('salary','0'))]);audit($db,'create','employee',(int)$db->lastInsertId());
