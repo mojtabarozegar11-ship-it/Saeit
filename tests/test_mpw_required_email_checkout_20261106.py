@@ -39,7 +39,7 @@ class POST:
 class CheckoutEmail(unittest.TestCase):
     def setUp(self):
         tree = ast.parse(SOURCE.read_text("utf-8"))
-        wanted = {"_required_checkout_email", "_identity"}
+        wanted = {"_required_checkout_email", "_identity", "_bind_guest_email"}
         selected = [x for x in tree.body if isinstance(x, ast.FunctionDef) and x.name in wanted]
         self.assertEqual({fn.name for fn in selected}, wanted)
         validators = ModuleType("django.core.validators")
@@ -88,6 +88,23 @@ class CheckoutEmail(unittest.TestCase):
     def test_identical_case_insensitive_aliases_allowed(self):
         user, _ = self.identity(self.request(email=" Me@Example.ORG ", buyer_email="me@example.org"), create=True)
         self.assertTrue(user.username.startswith("mpwguest_"))
+
+    def test_blank_legacy_alias_does_not_block_valid_purchase_email(self):
+        guest = SimpleNamespace(email="", save=lambda update_fields: None)
+        self.space["_bind_guest_email"](
+            self.request(email=" ", buyer_email="buyer@example.org"), guest)
+        self.assertEqual(guest.email, "buyer@example.org")
+
+    def test_recovery_email_parser_ignores_blank_alias_consistently(self):
+        recovery = ROOT / "services/mpw_trx_email_recovery.py"
+        tree = ast.parse(recovery.read_text("utf-8"))
+        node = next(x for x in tree.body if isinstance(x, ast.FunctionDef)
+                    and x.name == "_posted_email")
+        space = {"_email": lambda value: value.strip().casefold(), "ValueError": ValueError}
+        exec(compile(ast.Module(body=[node], type_ignores=[]), str(recovery), "exec"), space)
+        address = space["_posted_email"](self.request(
+            email=" ", buyer_email="Buyer@Example.ORG"))
+        self.assertEqual(address, "buyer@example.org")
 
     def test_authenticated_account_email_is_still_required(self):
         account = SimpleNamespace(is_authenticated=True, email="member@example.org")

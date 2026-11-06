@@ -77,7 +77,7 @@ def _posted_email(request):
     values = []
     for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
         for value in request.POST.getlist(key):
-            if value:
+            if value and value.strip():
                 values.append(_email(value))
     if not values or any(value != values[0] for value in values):
         raise ValueError("Missing or conflicting checkout email")

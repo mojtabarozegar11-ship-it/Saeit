@@ -114,6 +114,7 @@ def load_real_functions():
         "hashlib": hashlib, "hmac": hmac, "re": re, "secrets": secrets,
         "Http404": Http404, "SALT": "isolated-test", "MAX_COOKIE": 512,
         "_rate_limit": lambda request: None,
+        "_required_checkout_email": lambda request: request.POST["email"],
         "signing": types.SimpleNamespace(
             dumps=lambda claim, salt: "signed-test:" + str(claim)
         ),

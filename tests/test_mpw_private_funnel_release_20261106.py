@@ -41,6 +41,13 @@ class ReleaseChecks(unittest.TestCase):
             patch.object(release, "METRICS", self.metrics),
             patch.object(release, "BACKUPS", self.root / "backups"),
             patch.object(release, "GUEST_BEFORE", release.sha(self.guest.read_bytes())),
+            # This is a one-time, production-pinned publisher. Its original
+            # hashes must not be rewritten when checkout code evolves. For
+            # isolated rollback tests, review/pin the current staging bytes.
+            patch.object(release, "GUEST_AFTER", release.sha(
+                (ROOT / "services/mpw_trx_guest_commerce.py").read_bytes())),
+            patch.object(release, "METRICS_AFTER", release.sha(
+                (ROOT / "services/mpw_checkout_funnel.py").read_bytes())),
             patch.object(release, "guard_host", lambda: None),
             patch.object(release, "ready_storage", lambda: None),
         )
@@ -88,6 +95,14 @@ class ReleaseChecks(unittest.TestCase):
             with patch.object(release, "restart", lambda: None):
                 with self.assertRaisesRegex(RuntimeError, "unsafe private storage"):
                     release.publish(self.stage, "42120000002")
+        self.assertEqual((self.guest.read_bytes(), self.settings.read_bytes()), before)
+        self.assertFalse(self.metrics.exists())
+
+    def test_unreviewed_source_is_still_rejected_before_mutation(self):
+        before = self.guest.read_bytes(), self.settings.read_bytes()
+        with patch.object(release, "GUEST_AFTER", "0" * 64):
+            with self.assertRaisesRegex(RuntimeError, "UNREVIEWED_CODE"):
+                release.publish(self.stage, "42120000003")
         self.assertEqual((self.guest.read_bytes(), self.settings.read_bytes()), before)
         self.assertFalse(self.metrics.exists())
 

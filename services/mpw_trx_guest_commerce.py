@@ -22,6 +22,7 @@ SALT = "mpw.trx.guest.owner.v1"
 COOKIE_AGE = 30 * 86400
 COOKIE_PATH = "/commerce/trx-easy/"
 MAX_COOKIE = 512
+INVOICE_LOCATION = re.compile(r"\A/commerce/trx-easy/invoice/[1-9][0-9]*/\Z")
 
 
 def _host_ok(request):
@@ -95,16 +96,7 @@ def _new_user(request):
     # The guest principal is the durable owner of the order.  Persist the
     # address submitted by the checkout form before invoice binding; otherwise
     # record_invoice() correctly refuses to create an unowned delivery record.
-    submitted_email = ""
-    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
-        raw = request.POST.get(key) if hasattr(request, "POST") else None
-        if raw is not None:
-            submitted_email = str(raw).strip().lower()
-            break
-    if not submitted_email:
-        raise Http404("Email address required")
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", submitted_email):
-        raise Http404("Valid email address required")
+    submitted_email = _required_checkout_email(request)
 
     _rate_limit(request)
     Model = get_user_model()
@@ -147,14 +139,7 @@ def _new_user(request):
 
 def _bind_guest_email(request, user):
     """Bind a submitted address only to this existing guest principal."""
-    submitted_email = ""
-    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
-        raw = request.POST.get(key) if hasattr(request, "POST") else None
-        if raw is not None:
-            submitted_email = str(raw).strip().lower()
-            break
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", submitted_email):
-        raise Http404("Valid email address required")
+    submitted_email = _required_checkout_email(request)
     existing_email = str(getattr(user, "email", "") or "").strip().lower()
     if existing_email and existing_email != submitted_email:
         raise Http404("Guest email identity mismatch")
@@ -231,16 +216,28 @@ def _dispatch(request, view, args, kwargs, *, create=False):
                 or getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True):
             from services.mpw_trx_email_recovery import bound_checkout
             response = bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
-            if 200 <= getattr(response, "status_code", 500) < 400:
+            if _is_invoice_redirect(response):
                 _count_checkout_event(request, "order_start_accepted", args, kwargs)
             return response
     user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)
     response = _install_cookie(response, token)
-    if create and 200 <= getattr(response, "status_code", 500) < 400:
+    if create and _is_invoice_redirect(response):
         _count_checkout_event(request, "order_start_accepted", args, kwargs)
     return response
+
+
+def _is_invoice_redirect(response):
+    """Only an issued invoice counts as an accepted checkout.
+
+    Validation pages (HTTP 200) and redirects back to the store (HTTP 302)
+    are not new invoices.  No payment or buyer details are inspected here.
+    """
+    location = response.get("Location", "")
+    return (getattr(response, "status_code", None) in (302, 303)
+            and isinstance(location, str)
+            and INVOICE_LOCATION.fullmatch(location) is not None)
 
 
 def _count_checkout_event(request, stage, args=(), kwargs=None):
