@@ -154,26 +154,42 @@ def validate_cloudlinux_source_isolation(payload):
         fail("CLOUDLINUX_INVENTORY_UNVERIFIED")
     pending = [payload]
     visited = 0
+    matching_registrations = 0
     while pending:
         visited += 1
         if visited > 500:
             fail("CLOUDLINUX_INVENTORY_TOO_COMPLEX")
         current = pending.pop()
         if isinstance(current, list):
-            pending.extend(current[:100])
+            if len(current) > 100:
+                fail("CLOUDLINUX_INVENTORY_TOO_COMPLEX")
+            pending.extend(current)
         elif isinstance(current, dict):
+            if len(current) > 100:
+                fail("CLOUDLINUX_INVENTORY_TOO_COMPLEX")
             apps = current.get("applications")
             if isinstance(apps, dict):
-                for app_root, details in list(apps.items())[:100]:
-                    if not isinstance(app_root, str) or not isinstance(details, dict):
+                if len(apps) > 100:
+                    fail("CLOUDLINUX_INVENTORY_TOO_LARGE")
+                for app_root, details in apps.items():
+                    if (not isinstance(app_root, str) or not app_root.strip()
+                            or not isinstance(details, dict)):
                         fail("CLOUDLINUX_APP_RECORD_INVALID")
                     root = Path(app_root.strip())
+                    if ".." in root.parts:
+                        fail("CLOUDLINUX_APP_ROOT_UNSAFE")
                     if not root.is_absolute():
                         root = Path("/home/zomorod2") / root
-                    if root == ROOT and str(details.get("domain") or "").lower() not in (
-                            "mojplaywin.com", "www.mojplaywin.com"):
-                        fail("CLOUDLINUX_STAGING_SHARED_WITH_OTHER_DOMAIN")
-            pending.extend(list(current.values())[:100])
+                    if root == ROOT:
+                        domain = str(details.get("domain") or "").strip().lower()
+                        if domain not in ("mojplaywin.com", "www.mojplaywin.com"):
+                            fail("CLOUDLINUX_STAGING_SHARED_WITH_OTHER_DOMAIN")
+                        matching_registrations += 1
+            pending.extend(current.values())
+    # An empty/incomplete app inventory is not evidence of source isolation.
+    # Multiple aliases for the same source also have ambiguous ownership.
+    if matching_registrations != 1:
+        fail("CLOUDLINUX_STAGING_OWNERSHIP_NOT_PROVEN")
 
 
 def verify_cloudlinux_source_isolation():

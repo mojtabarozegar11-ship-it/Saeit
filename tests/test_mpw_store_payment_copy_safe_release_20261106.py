@@ -59,10 +59,23 @@ class StorePaymentCopySafety(unittest.TestCase):
                 root: {"domain": domain, "startup_file": "passenger_wsgi.py"},
             }}}
         release.validate_cloudlinux_source_isolation(registry("mojplaywin.com"))
-        release.validate_cloudlinux_source_isolation(registry("zomorodmelal.ir", "unrelated-app"))
+        release.validate_cloudlinux_source_isolation(registry(" WWW.MOJPLAYWIN.COM "))
         for payload in (
                 registry("another.example"),
                 registry(""),
+                registry("zomorodmelal.ir", "unrelated-app"),
+                {"result": "success", "data": {"applications": {}}},
+                {"result": "success", "data": {"unrelated": "ok"}},
+                {"result": "success", "data": {"applications": {
+                    "Saeit-staging": {"domain": "mojplaywin.com"},
+                    "/home/zomorod2/Saeit-staging": {"domain": "www.mojplaywin.com"},
+                }}},
+                {"result": "success", "data": {"applications": {
+                    f"unrelated-{n}": {"domain": "other.example"} for n in range(101)
+                }}},
+                {"result": "success", "data": {"applications": {
+                    "Saeit-staging": {"domain": "mojplaywin.com"}},
+                    "extra": [None] * 101}},
                 {"result": "error", "data": {"applications": {}}},
                 {"result": "success", "data": {"applications": {
                     "Saeit-staging": {"domain": "mojplaywin.com"},
