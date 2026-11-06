@@ -57,7 +57,7 @@ def test_open_position_limit_and_close_updates_pnl():
     agent = lab.agents[0]
     first = lab.submit_demo_trade(agent, "TEST", "BUY")
     blocked = lab.submit_demo_trade(agent, "TEST", "BUY")
-    assert blocked.action == "LEARN"
+    assert blocked.action == "DEMO_REJECTED"
     assert blocked.problem == "open_position_limit"
     closed = lab.close_demo_trade(agent, first.order_id, 12.5,
                                   datetime(2026, 11, 6, 14, tzinfo=timezone.utc))
@@ -177,3 +177,11 @@ def test_export_restore_preserves_demo_safety_policy():
     with pytest.raises(ValueError, match="state_safety_policy_rejected"):
         restored.restore_state(tampered)
     assert restored.export_state() == before
+
+def test_close_rejects_unregistered_agent():
+    lab = make_lab()
+    foreign = type(lab.agents[0])(
+        999, "DEMO_A", "trend",
+    )
+    with pytest.raises(ValueError, match="agent_not_registered"):
+        lab.close_demo_trade(foreign, "unknown", 1.0)
