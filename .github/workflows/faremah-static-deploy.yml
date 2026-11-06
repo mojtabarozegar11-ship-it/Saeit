@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           test -s faremah/index.html
-          grep -Fq 'فره‌ماه' faremah/index.html
+          grep -Fq 'فریماه' faremah/index.html
           grep -Fq 'مرکز لیزر و زیبایی' faremah/index.html
           grep -Fq 'action="/ask-master/index.php?service=1"' faremah/contact.html
           test -s core/faremah_views.py
