@@ -1,0 +1,169 @@
+name: Guarded Zomorod scoped rewrite and specialty publication
+on:
+  push:
+    branches: [audit/live-sites-subsites-20261105]
+    paths:
+      - .github/workflows/zomorod-specialty-routes-guarded-20261105.yml
+permissions:
+  contents: read
+concurrency:
+  group: zm-specialty-pages-guarded-20261105
+  cancel-in-progress: false
+jobs:
+  release:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Render four pages and package a guarded static rewrite release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile core/specialty_pages.py scripts/zomorod_specialty_rewrite_release_guarded_20261105.py
+          python3 - <<'PY'
+          import base64
+          import importlib.util
+          import os
+          import sys
+          import types
+          from pathlib import Path
+          class MockResponse:
+              def __init__(self, body, content_type):
+                  self.content = body.encode('utf-8')
+                  self.headers = {}
+              def __setitem__(self, key, value):
+                  self.headers[key] = value
+          http = types.ModuleType('django.http')
+          http.Http404 = type('Http404', (Exception,), {})
+          http.HttpResponse = MockResponse
+          decorators = types.ModuleType('django.views.decorators.http')
+          decorators.require_safe = lambda fn: fn
+          for name, module in [
+              ('django', types.ModuleType('django')),
+              ('django.http', http),
+              ('django.views', types.ModuleType('django.views')),
+              ('django.views.decorators', types.ModuleType('django.views.decorators')),
+              ('django.views.decorators.http', decorators),
+          ]:
+              sys.modules[name] = module
+          spec = importlib.util.spec_from_file_location('zm_specialty_export', 'core/specialty_pages.py')
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          request = type('SiteRequest', (), {'get_host': lambda self: 'zomorodmelal.ir'})()
+          payload = {}
+          for slug in ('carpets', 'real-estate', 'restaurant', 'signals'):
+              result = module.specialty_page(request, slug).content
+              if not result.startswith(b'<!doctype html>') or slug.encode() not in result:
+                  raise SystemExit('INVALID_STATIC_RENDER:' + slug)
+              payload[slug] = base64.b64encode(result)
+          installer = Path('scripts/zomorod_specialty_rewrite_release_guarded_20261105.py').read_text()
+          marker = 'STATIC_PAGES_BASE64 = None  # Packed from core/specialty_pages.py by CI.'
+          if installer.count(marker) != 1:
+              raise SystemExit('STATIC_PACKAGING_MARKER_MISSING')
+          packaged = installer.replace(marker, 'STATIC_PAGES_BASE64 = ' + repr(payload))
+          target = Path(os.environ['RUNNER_TEMP']) / 'zm-specialties-rewrite-installer.py'
+          target.write_text(packaged)
+          import ast
+          ast.parse(packaged, filename=str(target))
+          PY
+      - name: Authenticate pinned VPS and cPanel SSH host
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zm-specialty-ssh"
+          install -d -m 700 "$d"
+          export SSH_DIR="$d"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          source = Path('.github/workflows/mpw-guest-checkout-live-release.yml').read_text()
+          dest = Path(os.environ['SSH_DIR'])
+          for label, filename in [('vps.known', 'vps.known'), ('host.candidate', 'host.known')]:
+              suffix = f'> "$d/{label}"'
+              matches = [line.strip() for line in source.splitlines()
+                         if line.strip().startswith("printf '%s\\n' '") and line.strip().endswith(suffix)]
+              if len(matches) != 1:
+                  raise SystemExit('PINNED_HOST_KEY_NOT_AVAILABLE:' + label)
+              value = matches[0].split("printf '%s\\n' '", 1)[1].rsplit("' >", 1)[0]
+              (dest / filename).write_text(value + '\n')
+          for env_key, filename in [('VPS_KEY', 'vps.key'), ('HOST_KEY', 'host.key')]:
+              value = os.environ.get(env_key, '')
+              if not value:
+                  raise SystemExit('SSH_IDENTITY_NOT_CONFIGURED:' + env_key)
+              value = value.replace('\r\n', '\n').replace('\r', '').replace('\\n', '\n')
+              key_file = dest / filename
+              key_file.write_text(value.rstrip() + '\n')
+              key_file.chmod(0o600)
+          PY
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}')" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 20
+            ConnectionAttempts 1
+            ServerAliveInterval 15
+            ServerAliveCountMax 2
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          ssh_host=''
+          for attempt in 1 2 3; do
+            if timeout 45s ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/Saeit-staging-web/.htaccess' >/dev/null 2>&1; then
+              ssh_host=saeit-cpanel
+              echo 'AUTHENTICATED_VPS_CPANEL_RELAY'
+              break
+            fi
+          done
+          if test -z "$ssh_host"; then
+            if timeout 45s ssh -T -F "$d/config" saeit-cpanel-direct 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/Saeit-staging-web/.htaccess' >/dev/null 2>&1; then
+              ssh_host=saeit-cpanel-direct
+              echo 'AUTHENTICATED_CPANEL_DIRECT'
+            else
+              exit 1
+            fi
+          fi
+          echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
+      - name: Backup and add one scoped rewrite; verify and rollback on any failure
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 275s ssh -T -F "$RUNNER_TEMP/zm-specialty-ssh/config" "$COMMAND_HOST" 'python3 - guarded' < "$RUNNER_TEMP/zm-specialties-rewrite-installer.py"

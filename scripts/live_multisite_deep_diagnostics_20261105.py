@@ -1,0 +1,350 @@
+#!/usr/bin/env python3
+"""Strictly read-only diagnostics for live newsletter, routed sections and subdomains."""
+
+from __future__ import annotations
+
+import json
+import ast
+import os
+import pwd
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+HOME = Path('/home/zomorod2')
+APP = HOME / 'Saeit-staging'
+DOMAINS = ('zomorodmelal.ir', 'mojplaywin.com',
+           'factory.zomorodmelal.ir', 'staging.zomorodmelal.ir')
+
+
+def safe_problem(exc: BaseException) -> dict[str, str]:
+    detail = str(exc)
+    if re.search(r'no such table|does not exist|undefined table', detail, re.I):
+        kind = 'MISSING_DATABASE_TABLE'
+    elif re.search(r'no such column|unknown column|undefined column', detail, re.I):
+        kind = 'MISSING_DATABASE_COLUMN'
+    elif re.search(r'permission denied|access denied', detail, re.I):
+        kind = 'PERMISSION_DENIED'
+    elif re.search(r'connection refused|connect timeout|cannot connect', detail, re.I):
+        kind = 'DATABASE_OR_SERVICE_CONNECTION'
+    elif re.search(r'template.*does not exist', detail, re.I):
+        kind = 'MISSING_TEMPLATE'
+    else:
+        kind = 'OTHER'
+    return {'exception': type(exc).__name__, 'category': kind}
+
+
+def domain_roots() -> list[dict[str, object]]:
+    exe = shutil.which('uapi') or '/usr/local/cpanel/bin/uapi'
+    if not Path(exe).is_file():
+        return [{'status': 'UAPI_MISSING'}]
+    results = []
+    for domain in DOMAINS:
+        try:
+            proc = subprocess.run([exe, '--output=json', 'DomainInfo', 'domains_data',
+                                   'domain=' + domain], capture_output=True,
+                                  text=True, timeout=15, check=False)
+            if proc.returncode != 0:
+                results.append({'domain': domain, 'status': 'NONZERO'})
+                continue
+            doc = json.loads(proc.stdout)
+            data = (doc.get('result') or {}).get('data') or {}
+            candidates: list[dict[str, str]] = []
+            def collect_domain_root_pairs(node: object, depth: int = 0) -> None:
+                if depth > 8:
+                    return
+                if isinstance(node, dict):
+                    names = [v for k, v in node.items() if k.lower() in
+                             ('domain', 'domainname', 'servername') and isinstance(v, str)]
+                    roots = [v for k, v in node.items() if k.lower().replace('_', '') ==
+                             'documentroot' and isinstance(v, str)]
+                    if names and roots and any(v == domain for v in names):
+                        candidates.append({'domain': domain, 'documentroot': roots[0]})
+                    for value in node.values():
+                        if isinstance(value, (dict, list)):
+                            collect_domain_root_pairs(value, depth + 1)
+                elif isinstance(node, list):
+                    for item in node[:100]:
+                        collect_domain_root_pairs(item, depth + 1)
+            collect_domain_root_pairs(data)
+            nested_roots: list[str] = []
+
+            def collect_roots(node: object) -> None:
+                if isinstance(node, dict):
+                    for key, value in node.items():
+                        if key.lower().replace('_', '') in ('documentroot', 'homedir') and isinstance(value, str):
+                            if value.startswith(str(HOME)):
+                                nested_roots.append(value)
+                        elif isinstance(value, (dict, list)):
+                            collect_roots(value)
+                elif isinstance(node, list):
+                    for child in node[:200]:
+                        collect_roots(child)
+
+            collect_roots(data)
+            if isinstance(data, list):
+                data = data[0] if data else {}
+            # cPanel installations disagree about the response envelope.
+            if isinstance(data, dict) and domain in data and isinstance(data[domain], dict):
+                data = data[domain]
+            root = (candidates[0]['documentroot'] if candidates else
+                    data.get('documentroot') or data.get('document_root') or
+                    (nested_roots[0] if nested_roots else ''))
+            if isinstance(root, str) and root.startswith(str(HOME)):
+                path = Path(root)
+                results.append({'domain': domain, 'status': 'OK',
+                                'webroot': root, 'root_exists': path.is_dir(),
+                                'symlink': path.is_symlink(),
+                                'htaccess_present': (path / '.htaccess').is_file(),
+                                'passenger_wsgi_present': (path / 'passenger_wsgi.py').is_file(),
+                                'matched_domain_root_pair': bool(candidates),
+                                'response_data_type': type((doc.get('result') or {}).get('data')).__name__})
+            else:
+                results.append({'domain': domain, 'status': 'ROOT_NOT_IN_USER_HOME_OR_UNKNOWN'})
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            results.append({'domain': domain, 'status': type(exc).__name__})
+    return results
+
+
+def newsletter_readonly_probe() -> dict[str, object]:
+    if not APP.is_dir() or not (APP / 'config/settings.py').is_file():
+        return {'status': 'DJANGO_APP_NOT_AVAILABLE'}
+    venv = HOME / 'virtualenv/Saeit-staging/3.11/bin/python'
+    result: dict[str, object] = {'python_venv_exists': venv.is_file()}
+    os.chdir(APP)
+    sys.path.insert(0, str(APP))
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+    try:
+        import django
+        django.setup()
+        from django.db import connection
+        from django.test import Client, RequestFactory
+        from django.conf import settings
+        from django.test.utils import override_settings
+        from core.newsletter_views import newsletter_home
+        from core.models import NewsletterStory, NewsletterSource, NewsletterPublication, NewsletterSchedule
+
+        result['django_ready'] = True
+        result['allowed_hosts'] = [host for host in settings.ALLOWED_HOSTS
+                                   if isinstance(host, str) and len(host) < 150]
+        result['db_engine'] = connection.vendor
+        tables = set(connection.introspection.table_names())
+        models = [NewsletterStory, NewsletterSource, NewsletterPublication, NewsletterSchedule]
+        results = []
+        for model in models:
+            table = model._meta.db_table
+            item: dict[str, object] = {'table': table, 'table_exists': table in tables}
+            if table in tables:
+                cols = {col.name for col in connection.introspection.get_table_description(
+                    connection.cursor(), table)}
+                item['missing_model_columns'] = sorted(field.column for field in model._meta.concrete_fields
+                                                        if field.column not in cols)
+            results.append(item)
+        result['model_schema_checks'] = results
+        try:
+            request = RequestFactory().get('/newsletter/', secure=True,
+                                           HTTP_HOST='zomorodmelal.ir')
+            response = newsletter_home(request)
+            result['view_result'] = {'status': getattr(response, 'status_code', None),
+                                     'rendered_bytes': len(response.content)}
+        except BaseException as exc:
+            result['view_result'] = {'status': 'ERROR', **safe_problem(exc)}
+        result['full_request_results'] = []
+        for hostname in ('zomorodmelal.ir', 'mojplaywin.com'):
+            try:
+                response = Client(raise_request_exception=True).get(
+                    '/newsletter/', secure=True, HTTP_HOST=hostname)
+                result['full_request_results'].append(
+                    {'host': hostname, 'status': response.status_code,
+                     'bytes': len(response.content)})
+            except BaseException as exc:
+                result['full_request_results'].append(
+                    {'host': hostname, 'status': 'ERROR', **safe_problem(exc)})
+        with override_settings(ALLOWED_HOSTS=['zomorodmelal.ir', 'mojplaywin.com']):
+            try:
+                response = Client(raise_request_exception=True).get(
+                    '/newsletter/', secure=True, HTTP_HOST='zomorodmelal.ir')
+                result['zomorod_host_with_temporary_test_override'] = {
+                    'status': response.status_code, 'bytes': len(response.content)}
+            except BaseException as exc:
+                result['zomorod_host_with_temporary_test_override'] = safe_problem(exc)
+    except BaseException as exc:
+        result['django_ready'] = False
+        result['problem'] = safe_problem(exc)
+    return result
+
+
+def known_route_inventory() -> dict[str, object]:
+    roots = [HOME / 'public_html', APP]
+    routes = ('apps', 'newsletter', 'economic-reports', 'auction', 'ai',
+              'auctions', 'economy', 'agents')
+    state = {}
+    for root in roots:
+        key = 'public_html' if root.name == 'public_html' else 'django_app'
+        state[key] = {route: {'directory': (root / route).is_dir(),
+                              'index_html': (root / route / 'index.html').is_file(),
+                              'index_php': (root / route / 'index.php').is_file()}
+                      for route in routes}
+    return state
+
+
+def public_routing_indicators() -> dict[str, object]:
+    ht = HOME / 'public_html/.htaccess'
+    if ht.is_symlink() or not ht.is_file():
+        return {'status': 'UNAVAILABLE'}
+    text = ht.read_text('utf-8', 'replace')
+    routing = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not re.match(r'^(?:RewriteRule|RewriteCond|Passenger|AddHandler|SetHandler|ErrorDocument)\b',
+                        stripped, re.I):
+            continue
+        if re.search(r'(?:token|secret|password|credential|cookie|authorization|api[_-]?key)',
+                     stripped, re.I):
+            continue
+        routing.append(stripped[:260])
+    candidates = {}
+    for short in ('factory.zomorodmelal.ir', 'staging.zomorodmelal.ir',
+                  'public_html/factory', 'public_html/staging'):
+        path = HOME / short
+        candidates[short] = {'directory': path.is_dir(),
+                             'passenger_wsgi': (path / 'passenger_wsgi.py').is_file(),
+                             'htaccess': (path / '.htaccess').is_file()}
+    rewrite_engines = [line.strip() for line in text.splitlines()
+                       if re.search(r'(?i)\bRewriteEngine\b', line)]
+    return {'status': 'READ', 'routing_lines_without_sensitive_patterns': routing[:70],
+            'rewrite_engine_count': len(rewrite_engines),
+            'rewrite_engine_directives': rewrite_engines[:10],
+            'file_starts_with_php': text.lstrip().startswith('<?php'),
+            'subdomain_root_candidates': candidates}
+
+
+def factory_entrypoint_readonly() -> dict[str, object]:
+    root = HOME / 'factory.zomorodmelal.ir'
+    if not root.is_dir():
+        return {'status': 'FACTORY_WEBROOT_MISSING'}
+    item: dict[str, object] = {'status': 'READ', 'directory_present': True}
+    for filename in ('.htaccess', 'passenger_wsgi.py'):
+        path = root / filename
+        if not path.is_file() or path.is_symlink():
+            item[filename] = {'status': 'MISSING_OR_SYMLINK'}
+            continue
+        content = path.read_text('utf-8', 'replace')
+        entry: dict[str, object] = {'bytes': path.stat().st_size}
+        if filename == '.htaccess':
+            entry['passenger_configuration'] = [line.strip()[:180]
+                for line in content.splitlines()
+                if re.match(r'^\s*(?:Passenger\w*|RewriteRule|RewriteCond|SetHandler|AddHandler)\b', line, re.I)
+                and not re.search(r'token|secret|password|api[_-]?key', line, re.I)][:30]
+        else:
+            try:
+                tree = ast.parse(content)
+                modules = []
+                for statement in tree.body:
+                    if isinstance(statement, ast.Import):
+                        modules += [module.name for module in statement.names]
+                    elif isinstance(statement, ast.ImportFrom) and statement.module:
+                        modules.append(statement.module)
+                entry['imported_modules'] = modules[:30]
+                entry['defines_application'] = any(
+                    isinstance(statement, (ast.Assign, ast.AnnAssign)) and (
+                        any(isinstance(target, ast.Name) and target.id == 'application'
+                            for target in statement.targets)
+                        if isinstance(statement, ast.Assign)
+                        else isinstance(statement.target, ast.Name) and statement.target.id == 'application'
+                    ) for statement in tree.body)
+                home_literal_paths = sorted({node.value for node in ast.walk(tree)
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str)
+                    and node.value.startswith(str(HOME)) and len(node.value) < 220})
+                entry['home_directory_references'] = home_literal_paths[:10]
+                entry['django_settings_module_mentions'] = sorted({node.value
+                    for node in ast.walk(tree) if isinstance(node, ast.Constant)
+                    and isinstance(node.value, str) and node.value.endswith('.settings')
+                    and len(node.value) < 120})
+            except SyntaxError:
+                entry['parse_error'] = 'SYNTAX_ERROR'
+        item[filename] = entry
+    item['app_file_indicators'] = {filename: (root / filename).exists()
+        for filename in ('app.py', 'config.py', 'requirements.txt', 'index.html', 'tmp/restart.txt')}
+    return item
+
+
+def cpanel_passenger_comparison_readonly() -> dict[str, object]:
+    roots = {'factory': HOME / 'factory.zomorodmelal.ir',
+             'staging': HOME / 'Saeit-staging-web',
+             'mojplaywin': HOME / 'mojplaywin.com',
+             'main': HOME / 'public_html'}
+    result: dict[str, object] = {}
+    for name, root in roots.items():
+        ht = root / '.htaccess'
+        if not ht.is_file() or ht.is_symlink():
+            result[name] = {'status': 'HTACCESS_MISSING'}
+            continue
+        text = ht.read_text('utf-8', 'replace')
+        directives = []
+        for line in text.splitlines():
+            line = line.strip()
+            if re.match(r'^(?:Passenger\w*|SetHandler|AddHandler|ErrorDocument)\b', line, re.I):
+                if not re.search(r'secret|password|token|authorization|api[_-]?key', line, re.I):
+                    directives.append(line[:220])
+        result[name] = {'directives': directives[:35],
+                        'newsletter_mentions': len(re.findall(r'newsletter', text, re.I)),
+                        'factory_mentions': len(re.findall(r'factory', text, re.I)),
+                        'rewrite_rules': len(re.findall(r'(?im)^\s*RewriteRule\b', text)),
+                        'wsgi_entrypoint_present': (root / 'passenger_wsgi.py').is_file()}
+    return result
+
+
+def log_error_signatures_readonly() -> list[dict[str, object]]:
+    """Count high-level error signatures only; never echo raw log content."""
+    paths = [HOME / 'public_html/error_log', HOME / 'factory.zomorodmelal.ir/error_log',
+             APP / 'stderr.log', APP / 'error_log', HOME / 'logs/error_log']
+    results: list[dict[str, object]] = []
+    signatures = {
+        'NEWSLETTER_PATH': r'/newsletter(?:/|\b)',
+        'PASSENGER_ERROR': r'Passenger|Phusion',
+        'DISALLOWED_HOST': r'DisallowedHost|Invalid HTTP_HOST',
+        'IMPORT_ERROR': r'ImportError|ModuleNotFoundError',
+        'DATABASE_ERROR': r'OperationalError|ProgrammingError|IntegrityError',
+        'TEMPLATE_ERROR': r'TemplateDoesNotExist|TemplateSyntaxError',
+        'TRACEBACK': r'Traceback \(most recent call last\)',
+        'PERMISSION_ERROR': r'PermissionError|Permission denied',
+    }
+    for path in paths:
+        if not path.is_file() or path.is_symlink():
+            continue
+        try:
+            with path.open('rb') as file:
+                file.seek(max(0, path.stat().st_size - 262144))
+                tail = file.read().decode('utf-8', 'replace')
+            results.append({'location': str(path.relative_to(HOME)),
+                            'bytes': path.stat().st_size,
+                            'signature_counts': {name: len(re.findall(pattern, tail, re.I))
+                                                 for name, pattern in signatures.items()}})
+        except OSError:
+            results.append({'location': str(path.relative_to(HOME)), 'status': 'UNREADABLE'})
+    return results
+
+
+def main() -> None:
+    if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
+        raise SystemExit('CPANEL_USER_MISMATCH')
+    print('LIVE_SUBSITE_DOMAIN_ROOTS=' + json.dumps(domain_roots(), ensure_ascii=False))
+    print('LIVE_SECTION_PATHS=' + json.dumps(known_route_inventory(), ensure_ascii=False))
+    print('LIVE_ROOT_ROUTING=' + json.dumps(public_routing_indicators(), ensure_ascii=False))
+    print('LIVE_NEWSLETTER_DIAGNOSTIC=' + json.dumps(newsletter_readonly_probe(),
+                                                      ensure_ascii=False, sort_keys=True))
+    print('LIVE_FACTORY_ENTRYPOINT=' + json.dumps(factory_entrypoint_readonly(),
+                                                  ensure_ascii=False, sort_keys=True))
+    print('LIVE_PASSENGER_CONFIG_COMPARE=' + json.dumps(cpanel_passenger_comparison_readonly(),
+                                                       ensure_ascii=False, sort_keys=True))
+    print('LIVE_LOG_SIGNATURES=' + json.dumps(log_error_signatures_readonly(),
+                                              ensure_ascii=False, sort_keys=True))
+    print('READ_ONLY_DIAGNOSTIC_COMPLETE=1')
+
+
+if __name__ == '__main__':
+    main()

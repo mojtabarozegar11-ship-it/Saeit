@@ -33,6 +33,8 @@ urlpatterns = [
     path("amozeshgah/assets/zomorod-education-v1/<str:filename>.webp", zomorod_hero_image, name="education_hero_asset"),
     path("static/site/heroes/<str:filename>.webp", zomorod_hero_image, name="site_hero_image"),
     path("industry/", lambda request: platform_page(request, "industry"), name="industry"),
+    # Preserve legacy public jewelry links; the specialist Tala section is live.
+    path("gold/", RedirectView.as_view(url="/tala/", permanent=True), name="gold_legacy_tala"),
     path("ventures/<slug:slug>/", venture, name="mojplaywin_venture"),
     path("research/", lambda request: platform_page(request, "research"), name="research"),
     path("knowledge/", lambda request: platform_page(request, "knowledge"), name="knowledge"),

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#092c24">
+  <meta name="description" content="ابزارهای کاربردی و رایگان شرکت کشت و صنعت زمرد ملل؛ دسترسی مستقیم به محاسبه‌گر علمی میزان بذر گندم و سایر منابع دیجیتال موجود شرکت.">
+  <meta name="robots" content="index,follow">
+  <link rel="canonical" href="https://zomorodmelal.ir/apps/">
+  <title>ابزارها و برنامه‌های کاربردی | شرکت کشت و صنعت زمرد ملل</title>
+  <style>
+    :root{color-scheme:dark;--bg:#061c19;--surface:#10372b;--surface2:#164836;--gold:#f3d78a;--light:#f8f5e9;--muted:#d4e6d5;--line:#b7a05b72}
+    *,*::before,*::after{box-sizing:border-box}
+    body{margin:0;min-height:100vh;font-family:Tahoma,"Noto Sans Arabic",Arial,sans-serif;color:var(--light);background:radial-gradient(ellipse at 75% -20%,#256b43 0%,transparent 48%),radial-gradient(ellipse at 5% 80%,#124d40 0%,transparent 56%),var(--bg);line-height:1.9}
+    a{color:inherit}
+    a:focus-visible{outline:3px solid #ffe69c;outline-offset:4px}
+    .skip{position:absolute;top:-100px;right:1rem;background:#fff;color:#082a20;padding:.5rem 1rem;z-index:10}
+    .skip:focus{top:1rem}
+    .wrap{width:min(1100px,calc(100% - 2rem));margin:auto}
+    .top{border-bottom:1px solid var(--line);background:#08261fdd;backdrop-filter:blur(8px)}
+    .top-inner{display:flex;align-items:center;justify-content:space-between;gap:1.5rem;padding:1rem 0;flex-wrap:wrap}
+    .brand{display:flex;align-items:center;gap:.8rem;text-decoration:none;font-weight:800;color:var(--gold);letter-spacing:.01em}
+    .mark{width:2.9rem;height:2.9rem;border-radius:50%;display:grid;place-items:center;border:2px solid var(--gold);background:radial-gradient(circle at 30% 20%,#307a46,#09271f);box-shadow:0 0 0 4px #e4bd5724;font-size:1.35rem}
+    nav{display:flex;flex-wrap:wrap;gap:.3rem .9rem;font-size:.91rem}
+    nav a{text-decoration:none;padding:.35rem .55rem;border-radius:.5rem}
+    nav a:hover,nav a[aria-current=page]{background:#2d6e4a;color:#fff2bb}
+    .hero{position:relative;padding:5rem 0 3rem;overflow:hidden}
+    .hero::before{content:"";position:absolute;left:1%;top:0;width:22rem;height:22rem;border:1px solid #edc96a22;border-radius:50%;box-shadow:0 0 0 3.5rem #dfc06b0b,0 0 0 7rem #dfc06b07;pointer-events:none}
+    .eyebrow{color:var(--gold);font-size:.9rem;letter-spacing:.05em;font-weight:700}
+    h1{font-size:clamp(2rem,5vw,3.6rem);line-height:1.35;margin:.5rem 0 1rem}
+    h1 span{color:var(--gold)}
+    .lead{font-size:clamp(1rem,2.1vw,1.2rem);max-width:780px;color:var(--muted);margin:0 0 1.8rem}
+    .buttons{display:flex;gap:.8rem;flex-wrap:wrap}
+    .button{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;min-height:3rem;border:1px solid #e2ca81;border-radius:.8rem;padding:.55rem 1.25rem;text-decoration:none;font-weight:750;background:linear-gradient(130deg,#ffe6a0,#b89544);color:#173325}
+    .button.secondary{background:transparent;color:var(--light);border-color:#adc99588}
+    .button:hover{filter:brightness(1.12)}
+    main section{margin:1.5rem 0 3.7rem}
+    .section-label{color:var(--gold);font-weight:700;font-size:.88rem}
+    h2{font-size:clamp(1.4rem,3vw,2rem);margin:.4rem 0 1.25rem;line-height:1.5}
+    .card{border:1px solid var(--line);border-radius:1.4rem;padding:clamp(1.3rem,3vw,2.2rem);background:linear-gradient(150deg,var(--surface2),var(--surface) 55%,#0b281f);box-shadow:0 20px 55px #0003;display:grid;grid-template-columns:1fr auto;align-items:center;gap:2rem}
+    .tool-title{margin:0 0 .45rem;color:#f6e0a5;font-size:1.5rem;line-height:1.5}
+    .card p{margin:.6rem 0;color:var(--muted);max-width:680px}
+    .meta{display:flex;gap:.6rem;flex-wrap:wrap;margin:1rem 0 1.5rem}
+    .pill{display:inline-block;font-size:.78rem;border:1px solid #c5d2a26b;border-radius:10rem;padding:.15rem .85rem;background:#0f3028}
+    .symbol{display:grid;place-items:center;width:8.5rem;height:8.5rem;border:2px solid #e4c46b8c;border-radius:2rem;background:radial-gradient(circle at 40% 35%,#41834d,#103b2b);font-size:4rem;box-shadow:inset 0 0 50px #f2c95c1b}
+    .notice{border-right:4px solid var(--gold);background:#11352ba8;padding:1rem 1.25rem;border-radius:.5rem;color:var(--muted)}
+    footer{border-top:1px solid var(--line);padding:1.5rem 0 2rem;color:var(--muted);font-size:.88rem}
+    footer .wrap{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+    @media(max-width:680px){.hero{padding:3.5rem 0 2rem}.card{grid-template-columns:1fr}.symbol{grid-row:1;width:5.7rem;height:5.7rem;font-size:2.6rem;border-radius:1.3rem}.top-inner{justify-content:center}nav{justify-content:center}.buttons .button{width:100%}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  </style>
+</head>
+<body>
+  <a href="#main" class="skip">رفتن به محتوای اصلی</a>
+  <header class="top">
+    <div class="wrap top-inner">
+      <a class="brand" href="/" aria-label="زمرد ملل؛ صفحهٔ اصلی"><span class="mark" aria-hidden="true">❧</span><span>شرکت کشت و صنعت زمرد ملل</span></a>
+      <nav aria-label="ناوبری اصلی">
+        <a href="/">خانه</a><a href="/topics/">دانشنامه</a><a href="/research/">پژوهش‌ها</a><a href="/store/">فروشگاه</a><a href="/apps/" aria-current="page">برنامه‌ها</a>
+      </nav>
+    </div>
+  </header>
+  <main id="main" class="wrap">
+    <div class="hero">
+      <div class="eyebrow">ZOMOROD MELAL · DIGITAL TOOLS</div>
+      <h1>برنامه‌ها و <span>ابزارهای کاربردی</span></h1>
+      <p class="lead">دسترسی مستقیم به ابزارهای دیجیتال منتشرشدهٔ زمرد ملل برای محاسبات و تصمیم‌گیری آگاهانه در کشاورزی. ابزارهای این صفحه بدون نیاز به خرید یا ثبت‌نام در دسترس‌اند.</p>
+      <div class="buttons"><a class="button" href="#available-tools">مشاهده ابزار موجود ←</a><a class="button secondary" href="/store/">مشاهده محصولات فروشگاه</a></div>
+    </div>
+    <section id="available-tools" aria-labelledby="tools-title">
+      <div class="section-label">ابزار منتشرشده و قابل استفاده</div>
+      <h2 id="tools-title">ابزار دیجیتال کشاورزی</h2>
+      <article class="card">
+        <div>
+          <h3 class="tool-title">محاسبه‌گر علمی میزان بذر گندم</h3>
+          <p>با واردکردن تراکم هدف بوته‌ها، وزن هزار دانه، قوهٔ نامیه، درصد سبزشدن مزرعه‌ای و مساحت زمین، میزان بذر موردنیاز را محاسبه کنید. روش محاسبه و محدودیت‌های علمی نیز در خود ابزار توضیح داده شده است.</p>
+          <div class="meta" aria-label="ویژگی‌های ابزار"><span class="pill">رایگان</span><span class="pill">محاسبه در مرورگر</span><span class="pill">قابل ذخیره برای استفادهٔ آفلاین</span></div>
+          <a class="button" href="/store/free-products/wheat-seed-rate-planner-v1/index.html">اجرای محاسبه‌گر گندم ←</a>
+        </div>
+        <div class="symbol" role="img" aria-label="نماد خوشهٔ گندم">🌾</div>
+      </article>
+    </section>
+    <section aria-labelledby="guidance-title">
+      <h2 id="guidance-title">راهنمای استفاده</h2>
+      <p class="notice">نتایج محاسبه‌گر برای برنامه‌ریزی اولیه‌اند و جایگزین آزمایش بذر و مشاورهٔ تخصصی متناسب با اقلیم و مزرعه نیستند. برای آگاهی از داده‌های موردنیاز، توضیحات علمی داخل ابزار را بخوانید.</p>
+    </section>
+  </main>
+  <footer><div class="wrap"><span>© شرکت کشت و صنعت زمرد ملل · ابزارهای علمی و کاربردی</span><a href="/contact/">ارتباط با شرکت</a></div></footer>
+</body>
+</html>

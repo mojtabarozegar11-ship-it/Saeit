@@ -1,0 +1,164 @@
+name: Correct staging mobile search form with rollback
+on:
+  push:
+    branches: [audit/live-sites-subsites-20261105]
+    paths:
+      - .github/workflows/zomorod-staging-search-mobile-guarded-20261105.yml
+      - scripts/live_staging_search_mobile_guarded_20261105.py
+permissions:
+  contents: read
+concurrency:
+  group: zm-staging-service-search-mobile-20261105
+  cancel-in-progress: false
+jobs:
+  release:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile staging-only mobile search repair
+        run: python3 -m py_compile scripts/live_staging_search_mobile_guarded_20261105.py
+      - name: Authenticate through pinned VPS to cPanel
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zm-staging-search-mobile-ssh"
+          install -d -m 700 "$d"
+          export SSH_DIR="$d"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          source = Path('.github/workflows/mpw-guest-checkout-live-release.yml').read_text()
+          dest = Path(os.environ['SSH_DIR'])
+          for label, filename in [('vps.known', 'vps.known'), ('host.candidate', 'host.known')]:
+              suffix = f'> "$d/{label}"'
+              matches = [line.strip() for line in source.splitlines()
+                         if line.strip().startswith("printf '%s\\n' '") and line.strip().endswith(suffix)]
+              if len(matches) != 1:
+                  raise SystemExit('PINNED_HOST_KEY_NOT_AVAILABLE:' + label)
+              value = matches[0].split("printf '%s\\n' '", 1)[1].rsplit("' >", 1)[0]
+              (dest / filename).write_text(value + '\n')
+          for env_key, filename in [('VPS_KEY', 'vps.key'), ('HOST_KEY', 'host.key')]:
+              value = os.environ.get(env_key, '')
+              if not value:
+                  raise SystemExit('SSH_IDENTITY_NOT_CONFIGURED:' + env_key)
+              value = value.replace('\r\n', '\n').replace('\r', '').replace('\\n', '\n')
+              key_file = dest / filename
+              key_file.write_text(value.rstrip() + '\n')
+              key_file.chmod(0o600)
+          PY
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}')" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 20
+            ConnectionAttempts 1
+            ServerAliveInterval 15
+            ServerAliveCountMax 2
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          ssh_host=''
+          for attempt in 1 2 3; do
+            if timeout 45s ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/Saeit-staging-web/.htaccess' >/dev/null 2>&1; then
+              ssh_host=saeit-cpanel
+              echo 'AUTHENTICATED_VPS_CPANEL_RELAY'
+              break
+            fi
+          done
+          if test -z "$ssh_host"; then
+            if timeout 45s ssh -T -F "$d/config" saeit-cpanel-direct 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/Saeit-staging-web/.htaccess' >/dev/null 2>&1; then
+              ssh_host=saeit-cpanel-direct
+              echo 'AUTHENTICATED_CPANEL_DIRECT'
+            else
+              exit 1
+            fi
+          fi
+          echo "command_host=$ssh_host" >> "$GITHUB_OUTPUT"
+      - name: Guard staging search template
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 60s ssh -T -F "$RUNNER_TEMP/zm-staging-search-mobile-ssh/config" "$COMMAND_HOST" 'python3 - preview' < scripts/live_staging_search_mobile_guarded_20261105.py
+      - name: Patch staging search markup with private backup
+        id: publish
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
+          timeout 70s ssh -T -F "$RUNNER_TEMP/zm-staging-search-mobile-ssh/config" "$COMMAND_HOST" "python3 - publish '$GITHUB_RUN_ID'" < scripts/live_staging_search_mobile_guarded_20261105.py
+      - name: Confirm active staging Passenger serves mobile search
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 130s ssh -T -F "$RUNNER_TEMP/zm-staging-search-mobile-ssh/config" "$COMMAND_HOST" "python3 - verify-origin '$GITHUB_RUN_ID'" < scripts/live_staging_search_mobile_guarded_20261105.py
+      - name: Verify live mobile-search selector and production isolation
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen
+          with urlopen('https://staging.zomorodmelal.ir/search/?q=%DA%AF%D9%86%D8%AF%D9%85', timeout=25) as staging:
+              html = staging.read(250000).decode('utf-8', 'replace')
+              if staging.status != 200 or 'noindex' not in staging.headers.get('X-Robots-Tag', '').lower():
+                  raise RuntimeError('STAGING_SEARCH_REGRESSION')
+              if html.count('<form class="search-form" method="get" role="search"') != 1:
+                  raise RuntimeError('MOBILE_SEARCH_FORM_CLASS_NOT_LIVE')
+              if html.count('style="flex:1;min-width:0;padding:18px;') != 1:
+                  raise RuntimeError('MOBILE_SEARCH_INPUT_MINWIDTH_NOT_LIVE')
+              if 'نتیجه برای «گندم»' not in html:
+                  raise RuntimeError('SEARCH_RESULTS_REGRESSION')
+          with urlopen('https://zomorodmelal.ir/', timeout=25) as main:
+              if main.status != 200 or 'noindex' in main.headers.get('X-Robots-Tag', '').lower():
+                  raise RuntimeError('MAIN_SITE_REGRESSION')
+          print('STAGING_MOBILE_SEARCH_CLASS_LIVE=1 SEARCH_FUNCTIONAL=1 MAIN_UNCHANGED=1')
+          PY
+      - name: Restore staging search template after verification failure
+        if: failure() && steps.publish.outcome == 'success'
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 70s ssh -T -F "$RUNNER_TEMP/zm-staging-search-mobile-ssh/config" "$COMMAND_HOST" "python3 - rollback '$GITHUB_RUN_ID'" < scripts/live_staging_search_mobile_guarded_20261105.py
