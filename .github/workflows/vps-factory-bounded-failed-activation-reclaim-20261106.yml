@@ -1,6 +1,10 @@
-name: VPS factory failed-activation residue inventory (read-only)
+name: VPS deep disk and factory residue inventory (read-only)
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/vps-factory-bounded-failed-activation-reclaim-20261106.yml
 permissions:
   contents: read
 concurrency:
@@ -10,7 +14,7 @@ jobs:
   inspect:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
     runs-on: ubuntu-24.04
-    timeout-minutes: 6
+    timeout-minutes: 10
     steps:
       - name: Inventory old reclaim candidates without deletion or cron changes
         env:
@@ -68,4 +72,57 @@ jobs:
           print("FACTORY_DELETION_ATTEMPTED=false", flush=True)
           print("FACTORY_CRONTAB_MODIFIED=false", flush=True)
           print("FACTORY_BACKUP_RESTORE_EVIDENCE_VERIFIED=false", flush=True)
+
+          # Inventory major reachable directories. Every command is read-only,
+          # bounded by a timeout, and may report partial permission-limited data.
+          import hashlib, json
+          allowed_names = {"factory-runtime", "operations", "backups", "django-app",
+                           ".cache", ".local", ".npm", ".venv", "python311",
+                           "private", "master-agent", "downloads", "tmp",
+                           "log", "lib", "cache", "opt", "usr", "home"}
+          checks = [
+              ("githubops-home", "/home/githubops", 115),
+              ("system-var", "/var", 60),
+              ("system-opt", "/opt", 35),
+              ("system-tmp", "/tmp", 30),
+              ("usr-local", "/usr/local", 45),
+          ]
+          inventory = []
+          for label, location, budget in checks:
+              target = Path(location)
+              if target.is_symlink() or not target.is_dir():
+                  inventory.append({"scope": label, "state": "skipped_unsafe_or_missing"})
+                  continue
+              try:
+                  proc = subprocess.run(["du", "-x", "-B1", "-d2", str(target)],
+                                        capture_output=True, text=True, timeout=budget)
+              except subprocess.TimeoutExpired:
+                  inventory.append({"scope": label, "state": "timed_out", "budget_sec": budget})
+                  continue
+              rows = []
+              for line in proc.stdout.splitlines():
+                  parts = line.split("\t", 1)
+                  if len(parts) != 2 or not parts[0].isdigit():
+                      continue
+                  relative = os.path.relpath(parts[1], str(target))
+                  names = relative.split(os.sep)
+                  labels = []
+                  for name in names:
+                      if name in (".", ""):
+                          continue
+                      if name in allowed_names:
+                          labels.append(name)
+                      else:
+                          labels.append("sha256_" + hashlib.sha256(name.encode()).hexdigest()[:10])
+                  rows.append({"area": "/".join(labels) if labels else ".", "bytes": int(parts[0])})
+              rows.sort(key=lambda item: -item["bytes"])
+              inventory.append({"scope": label, "state": "complete" if proc.returncode == 0 else "partial",
+                                "rows": rows[:24], "reported_dirs": len(rows)})
+          disk = os.statvfs(root)
+          print("VPS_DEEP_STORAGE_MAP=" + json.dumps({
+              "schema": "vps.deep.storage.readonly.v1", "observed_utc_epoch": int(time.time()),
+              "root_free_bytes": disk.f_bavail * disk.f_frsize,
+              "root_total_bytes": disk.f_blocks * disk.f_frsize,
+              "map": inventory, "deletion_performed": False,
+              "cron_modified": False}, sort_keys=True), flush=True)
           PY
