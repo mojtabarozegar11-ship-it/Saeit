@@ -1,0 +1,109 @@
+name: Factory C09 Guarded VPS Physical Precision Promotion
+on:
+  pull_request:
+    paths:
+      - .github/workflows/factory-c09-vps-precision-promotion.yml
+      - scripts/factory_c09_guarded_promotion.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-single-product-factory
+  cancel-in-progress: false
+jobs:
+  promote-private-source:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/factory-c09-vps-precision-promotion-20261106'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline transaction and conflict-guard tests
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest tests.test_factory_c09_guarded_promotion -v
+      - name: Promote verified VPS candidate with snapshot and lock
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          PROMOTION_REV: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          [[ "$PROMOTION_REV" =~ ^[0-9a-f]{40}$ ]]
+          d="$(mktemp -d "$RUNNER_TEMP/c09-ssh.XXXXXXXX")"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          trap 'shred -u -- "$d/key" || true' EXIT
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
+          stage_revision='0c9be14690ea7ad8dcb2d57822413849653b1518'
+          tar -cf - scripts/factory_c09_guarded_promotion.py | \
+            ssh "${ssh_opts[@]}" githubops@178.239.147.150 \
+              "tar -xf - -C \"\$HOME/factory-runtime/operations/f01-c08-private-stage-$stage_revision\""
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 "bash -se -- $PROMOTION_REV" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          revision="$1"
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          test "$(id -un)" = githubops
+          base="$HOME/factory-runtime"
+          stage="$base/operations/f01-c08-private-stage-0c9be14690ea7ad8dcb2d57822413849653b1518"
+          py="$base/.venv/bin/python"
+          test -x "$py"
+          "$py" -B "$stage/scripts/factory_c09_guarded_promotion.py" \
+            --base "$base" --stage "$stage" --revision "$revision"
+          REMOTE
+      - name: Prove native autonomous runner consumes upgraded source
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$(mktemp -d "$RUNNER_TEMP/c09-verify-ssh.XXXXXXXX")"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          trap 'shred -u -- "$d/key" || true' EXIT
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          base="$HOME/factory-runtime"
+          runner="$base/operations/single-product-runtime/run-single-product-cycle.sh"
+          private="$base/private/autonomous-product-cycle"
+          py="$base/.venv/bin/python"
+          test -x "$runner"
+          for attempt in 1 2 3 4; do
+            "$runner" >> "$base/operations/f01-c09-native-cycle-verification.log" 2>&1 || :
+            if "$py" -B - "$private" <<'PY'
+          import json,pathlib,sys
+          root=pathlib.Path(sys.argv[1]);name='farm_enterprise_economics'
+          slot=json.loads((root/'quality-excellence/product-flow/active-slots/current.json').read_text())
+          proof=(slot.get('technical_exited') or {}).get(name) or {}
+          assert slot.get('active')==[]
+          assert slot.get('capacity')==1
+          assert proof.get('source_sha256')=='d75a687a0bb97529586b90dc91e4c75a5efa8e107f5a3110109159a78a87ff3b'
+          assert proof.get('artifact_sha256')=='04c0045d4610c2d15ef86146ec66d0baed5eebb475d57e8b6648152b56c7f335'
+          state=json.loads((root/'production-state.json').read_text())
+          assert state.get('publishable_product_count')==0
+          assert state.get('commercial_quality_review_completed') is False
+          print('C09_NATIVE_F01_TECHNICAL_EXIT_NEW_SOURCE=PASS')
+          PY
+            then
+              echo C09_NATIVE_CRON_CONTINUES_INDEPENDENTLY=PASS
+              exit 0
+            fi
+            sleep 2
+          done
+          echo C09_NATIVE_TECHNICAL_EXIT_NOT_YET_VERIFIED
+          exit 1
+          REMOTE
