@@ -320,6 +320,117 @@ def inventory_factory_operations(root: Path = FACTORY_OPERATIONS_ROOT) -> dict:
     }
 
 
+
+# Finished product packages are saleable inventory, never cleanup candidates.
+# Keep this scan independent of operational backup/log scans.
+FACTORY_FINISHED_ROOT = Path(
+    "/home/githubops/factory-runtime/private/autonomous-product-cycle/"
+    "production-warehouse/finished"
+)
+FINISHED_MAX_FILES = 20_000
+FINISHED_MAX_SECONDS = 20
+FINISHED_MAX_DEPTH = 8
+
+
+def inventory_factory_finished(root: Path = FACTORY_FINISHED_ROOT) -> dict:
+    root = Path(root)
+    report = {
+        "schema": "factory.vps.finished.products.inventory.v1",
+        "read_only": True, "files_changed_or_deleted": 0,
+        "protected_saleable_inventory": True,
+        "deletion_allowed": False,
+    }
+    if not root.exists():
+        return dict(report, root_present=False)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("FACTORY_FINISHED_ROOT_UNSAFE")
+    base = root.resolve(strict=True)
+    device = os.lstat(base).st_dev
+    started = time.monotonic()
+    files_scanned = 0
+    zip_count = 0
+    zip_bytes = 0
+    zip_headers_ok = 0
+    other_bytes = 0
+    symlinks_skipped = 0
+    entries_skipped = 0
+    truncated = False
+    largest = []
+    for directory, folders, files in os.walk(base, topdown=True, followlinks=False):
+        here = Path(directory)
+        if (len(here.relative_to(base).parts) > FINISHED_MAX_DEPTH
+                or time.monotonic() - started >= FINISHED_MAX_SECONDS):
+            truncated = True
+            break
+        safe_folders = []
+        for name in sorted(folders):
+            if time.monotonic() - started >= FINISHED_MAX_SECONDS:
+                truncated = True
+                break
+            try:
+                info = os.lstat(here / name)
+                if stat.S_ISLNK(info.st_mode):
+                    symlinks_skipped += 1
+                elif stat.S_ISDIR(info.st_mode) and info.st_dev == device:
+                    safe_folders.append(name)
+                else:
+                    entries_skipped += 1
+            except OSError:
+                entries_skipped += 1
+        folders[:] = safe_folders
+        if truncated:
+            break
+        for name in sorted(files):
+            if (files_scanned >= FINISHED_MAX_FILES
+                    or time.monotonic() - started >= FINISHED_MAX_SECONDS):
+                truncated = True
+                break
+            try:
+                path = here / name
+                info = os.lstat(path)
+                if stat.S_ISLNK(info.st_mode):
+                    symlinks_skipped += 1
+                    continue
+                if not stat.S_ISREG(info.st_mode) or info.st_dev != device:
+                    entries_skipped += 1
+                    continue
+                files_scanned += 1
+                if name == "product.zip":
+                    zip_count += 1
+                    zip_bytes += info.st_size
+                    # ZIP signature only; NOT a full package integrity check.
+                    with path.open("rb") as stream:
+                        if stream.read(4) in (b"PK\x03\x04", b"PK\x05\x06"):
+                            zip_headers_ok += 1
+                    relative = path.relative_to(base).as_posix()
+                    largest.append({
+                        "relative_sha256_prefix": hashlib.sha256(
+                            relative.encode("utf-8")
+                        ).hexdigest()[:16],
+                        "bytes": info.st_size,
+                        "age_days": round(max(0, time.time() - info.st_mtime) / 86400, 2),
+                        "protected": True,
+                    })
+                    largest.sort(key=lambda row: -row["bytes"])
+                    del largest[10:]
+                else:
+                    other_bytes += info.st_size
+            except OSError:
+                entries_skipped += 1
+        if truncated:
+            break
+    return dict(report, root_present=True, files_scanned=files_scanned,
+                product_zip_count=zip_count, product_zip_bytes=zip_bytes,
+                product_zip_headers_ok=zip_headers_ok,
+                full_zip_integrity_verified=False,
+                other_files_bytes=other_bytes,
+                bytes_observed=zip_bytes + other_bytes,
+                entries_skipped=entries_skipped,
+                symlinks_skipped=symlinks_skipped,
+                scan_truncated=truncated,
+                largest_protected_packages=largest)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT,
@@ -330,6 +441,8 @@ def main() -> None:
     if args.root == DEFAULT_ROOT:
         print("FACTORY_OPERATIONS_INVENTORY=" + json.dumps(
             inventory_factory_operations(), sort_keys=True))
+        print("FACTORY_FINISHED_PRODUCT_INVENTORY=" + json.dumps(
+            inventory_factory_finished(), sort_keys=True))
     if not result["sqlite_count"]:
         raise SystemExit("NO_SQLITE_BACKUPS_FOUND")
 
