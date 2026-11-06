@@ -1,6 +1,6 @@
 """Minimal private MojPlayWin checkout funnel counters, with no visitor records.
 
-An event is counted only after its existing Django handler succeeds.  No IP,
+Events can count a checkout attempt, an exception, or a completed stage. No IP,
 cookie, session, referrer, email, URL, transaction or invoice identifier is
 stored.  Counts are *events*, never unique buyers or confirmed payments.
 
