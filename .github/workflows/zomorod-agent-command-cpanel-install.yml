@@ -1,4 +1,4 @@
-name: Install missing Zomorod site agent commands once
+name: Install or repair pinned Zomorod agent commands
 on:
   workflow_dispatch:
 permissions:
@@ -82,7 +82,7 @@ jobs:
             | ssh -F "$d/config" saeit-cpanel \
               "tar -xf - -C '/home/zomorod2/.private/saeit-agent-cmd-$run_id' --no-same-owner"
           echo "CPANEL_AGENT_COMMAND_STAGE=verified"
-      - name: Install with schema checks and atomic no-overwrite rollback
+      - name: Install with schema checks and pinned atomic rollback
         shell: bash
         run: |
           set -euo pipefail
