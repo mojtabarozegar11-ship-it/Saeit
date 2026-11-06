@@ -1,0 +1,42 @@
+name: Factory C05 VPS read-only runtime inventory
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/factory-c05-vps-readonly-inventory.yml'
+      - 'scripts/factory_c05_live_readonly_inventory.py'
+      - 'tests/test_factory_c05_readonly_inventory.py'
+permissions:
+  contents: read
+jobs:
+  live-inventory:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify that the bounded inventory does not write to a filesystem fixture
+        run: |
+          set -euo pipefail
+          python3 -B -m unittest discover -s tests -p 'test_factory_c05_readonly_inventory.py' -v
+          python3 -B -m py_compile scripts/factory_c05_live_readonly_inventory.py
+      - name: Read native factory mapping and exact artifact hash without mutations
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-c05-readonly"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 \
+            'test -x "$HOME/factory-runtime/.venv/bin/python" && exec "$HOME/factory-runtime/.venv/bin/python" -B -' \
+            < scripts/factory_c05_live_readonly_inventory.py
