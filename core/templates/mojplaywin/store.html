@@ -68,6 +68,11 @@
 @media(max-width:650px){.mpw-shop{padding:14px}.mpw-shop-hero{grid-template-columns:1fr;gap:18px;padding:25px 20px}.mpw-shop-art{width:min(100%,360px);grid-row:1;grid-template-columns:1fr 1fr;gap:9px}.mpw-shop-art-book{min-height:172px;padding:14px 11px}.mpw-shop-art-book:nth-child(2){min-height:153px;transform:translateY(14px) rotate(5deg)}.mpw-shop-hero h1{font-size:clamp(2.45rem,12vw,4.1rem)}.mpw-shop-hero p{font-size:.94rem}.mpw-shop-catalog{padding-top:42px}.mpw-shop-catalog-head{align-items:start;flex-direction:column;gap:5px}.mpw-shop-grid{grid-template-columns:1fr;gap:15px}.mpw-product:last-child{grid-column:auto;display:flex}.mpw-product:last-child .mpw-product-visual{min-height:190px;border-right:0;border-bottom:1px solid var(--line)}.mpw-product-visual{min-height:190px}.mpw-product-body{padding:19px}.mpw-shop-payment{grid-template-columns:1fr;gap:10px}}
 @media(prefers-reduced-motion:reduce){.mpw-shop *{scroll-behavior:auto!important;transition:none!important}}
 .mpw-product-visual{height:clamp(245px,25vw,330px)}.mpw-product-image{position:relative;z-index:1;display:block;width:100%;height:100%;object-fit:contain;object-position:center;padding:10px}.mpw-shop-art-image{display:block;width:100%;height:255px;object-fit:contain;object-position:center;border-radius:12px;border:1px solid rgba(225,189,99,.35);background:#0c100e;box-shadow:7px 12px 25px #0009}@media(max-width:650px){.mpw-shop-art-image{height:clamp(155px,45vw,235px)}.mpw-product-visual{height:280px}}
+/* Keep all three per-product actions visible inside clipped product cards. */
+.mpw-product-bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);align-items:center;gap:12px 10px}
+.mpw-product-bottom .mpw-shop-secondary{width:100%;min-width:0;overflow-wrap:anywhere}
+.mpw-product-bottom .mpw-product-demo{grid-column:1/-1;margin-top:0;overflow-wrap:anywhere}
+@media(max-width:650px){.mpw-product-bottom{grid-template-columns:minmax(0,1fr)}.mpw-product-bottom .mpw-product-demo{grid-column:1}}
 </style>
 <div class="mpw-shop"><div class="mpw-shop-inner">
   <section class="mpw-shop-hero" aria-labelledby="mpw-shop-title">
