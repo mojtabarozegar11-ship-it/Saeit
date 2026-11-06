@@ -221,6 +221,22 @@ class FactoryBackupAuditTests(unittest.TestCase):
         self.assertEqual(before, (archived.read_bytes(), archived.stat().st_mtime_ns))
         self.assertNotIn("historic-complete.log", json.dumps(result))
 
+
+    def test_factory_operations_deadline_is_enforced_inside_file_loop(self):
+        operations = Path(self.tmp.name) / "operations"
+        operations.mkdir()
+        for index in range(6):
+            (operations / f"candidate-{index}.log").write_bytes(b"item")
+        ticks = iter([0, 0, 0, 51])
+        with mock.patch.object(
+            audit_module.time, "monotonic",
+            side_effect=lambda: next(ticks, 51),
+        ):
+            report = audit_module.inventory_factory_operations(operations)
+        self.assertTrue(report["scan_truncated"])
+        self.assertLess(report["files_scanned"], 6)
+        self.assertEqual(report["files_changed_or_deleted"], 0)
+
     def test_factory_operations_inventory_rejects_symlink_root(self):
         operations = Path(self.tmp.name) / "operations"
         operations.mkdir()
