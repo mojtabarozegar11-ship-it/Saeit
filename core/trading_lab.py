@@ -38,6 +38,15 @@ class RiskPolicy:
     max_open_positions_per_agent: int = 1
     min_reward_risk: float = 1.5
 
+    def __post_init__(self) -> None:
+        ratios = (self.risk_per_trade, self.max_daily_loss, self.max_drawdown)
+        if not all(math.isfinite(value) and 0 < value <= 1 for value in ratios):
+            raise ValueError("risk_ratios_must_be_finite_between_zero_and_one")
+        if type(self.max_open_positions_per_agent) is not int or self.max_open_positions_per_agent < 1:
+            raise ValueError("max_open_positions_must_be_positive_integer")
+        if not math.isfinite(self.min_reward_risk) or self.min_reward_risk < 1:
+            raise ValueError("min_reward_risk_must_be_finite_at_least_one")
+
 
 @dataclass
 class Experience:
