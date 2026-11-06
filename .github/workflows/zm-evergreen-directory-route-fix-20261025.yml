@@ -91,7 +91,7 @@ jobs:
                   raise
               assert target.read_bytes()==data
               print('ISOLATED_ZOMOROD_DIRECTORY_INDEX_CONFIG_INSTALLED')
-              with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf8') as out:out.write('created=true\\n')
+              with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf8') as out:out.write('created=true\n')
           PY
       - name: Repair only four broken links in two isolated indexes
         id: patch
