@@ -30,8 +30,10 @@ workers. Do not mass-retire identities for lack of one ledger's receipts.
 2. **Unobservable queue health:** the existing legacy consolidation preview
    proves only a limited set of dependencies. The new read-only
    `audit_agent_fleet` command exposes inactive pending work, known-executor
-   mismatches, stale running tasks, recent Django task/newsletter receipts and
-   conservative retirement candidates; it cannot certify live cron or cash.
+   mismatches, stale running tasks, recent Django task/newsletter receipts,
+   exact mission/capability overlap and conservative retirement candidates;
+   it cannot certify live cron or cash. Even an exact role overlap is a
+   **review candidate**, not permission to remove an external integration.
 3. **Internal activity is not revenue:** `income_market_research` measures
    inventory; `income_offer_design` writes an inactive draft; `income_mvp_build`
    creates a private asset; `income_revenue_verify` deliberately withholds

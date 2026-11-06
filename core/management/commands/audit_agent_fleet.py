@@ -45,6 +45,7 @@ class Command(BaseCommand):
             code for code, info in gateway.describe().items() if info["enabled"]
         }
         agents = []
+        duplicate_signatures = {}
         for agent in Agent.objects.order_by("code").prefetch_related("capabilities"):
             tasks = AgentTask.objects.filter(agent=agent)
             active_caps = sorted(
@@ -102,8 +103,26 @@ class Command(BaseCommand):
                     "queued_without_known_handler": unsupported,
                 },
                 "legacy_consolidation_decision": legacy,
+                "exact_role_duplicates": [],
                 "findings": findings,
             })
+
+            # Only flag *exact* matches; similar names or a shared capability
+            # are not proof that externally integrated agents are redundant.
+            normalized_mission = " ".join((agent.mission or "").split()).casefold()
+            if agent.active and active_caps and normalized_mission:
+                duplicate_signatures.setdefault(
+                    (normalized_mission, tuple(active_caps)), []
+                ).append(agents[-1])
+
+        for peers in duplicate_signatures.values():
+            if len(peers) < 2:
+                continue
+            for row in peers:
+                row["exact_role_duplicates"] = sorted(
+                    other["code"] for other in peers if other is not row
+                )
+                row["findings"].append("exact_mission_and_capabilities_overlap_review_only")
 
         result = {
             "mode": "read_only",
@@ -122,6 +141,9 @@ class Command(BaseCommand):
                 ),
                 "retirement_candidates": sum(
                     row["legacy_consolidation_decision"] == "retire_safe" for row in agents
+                ),
+                "exact_duplicate_role_groups": sum(
+                    len(peers) > 1 for peers in duplicate_signatures.values()
                 ),
             },
             "agents": agents,
