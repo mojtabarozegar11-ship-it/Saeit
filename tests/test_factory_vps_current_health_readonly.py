@@ -149,6 +149,17 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
             self.assertNotIn(secret, json.dumps(result))
             self.assertEqual(log.read_bytes(), before)
 
+    def test_cron_journal_reports_aggregates_and_never_command_text(self):
+        raw = ("(githubops) CMD (/private/single-product-runtime/run-single-product-cycle.sh "
+               "--secret do-not-print)\n(root) CMD (other)\n"
+               "(githubops) CMD (/usr/bin/true)\n")
+        with patch.object(audit, "command", return_value=raw):
+            result = audit.cron_recent_journal_diagnostic()
+        self.assertEqual(result["recent_entry_count"], 3)
+        self.assertEqual(result["githubops_job_count"], 2)
+        self.assertEqual(result["single_product_job_count"], 1)
+        self.assertNotIn("do-not-print", json.dumps(result))
+
     def test_heartbeat_real_counter_only_and_no_server_write(self):
         with tempfile.TemporaryDirectory() as tmp:
             private = Path(tmp)
