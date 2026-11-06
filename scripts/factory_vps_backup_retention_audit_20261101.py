@@ -23,6 +23,8 @@ SQLITE_MAGIC = b"SQLite format 3\x00"
 MAX_WALK_FILES = 30_000
 MAX_DEPTH = 8
 MAX_CHECK_SECONDS = 75
+# Budget applies across all SQLite snapshots, not once per multi-GB file.
+MAX_TOTAL_VERIFICATION_SECONDS = 240
 
 
 def check_database(path: Path, seconds: int = MAX_CHECK_SECONDS) -> tuple[bool, str]:
@@ -93,32 +95,59 @@ def audit(root: Path) -> dict:
             pre = os.lstat(path)
             if not stat.S_ISREG(pre.st_mode) or pre.st_dev != device:
                 continue
-            stable_link = pre.st_nlink == 1
-            started = time.monotonic()
-            verified, check = check_database(path) if stable_link else (False, "hardlinked")
-            check_elapsed_seconds = round(time.monotonic() - started, 2)
-            post = os.lstat(path)
-            stable = (
-                pre.st_dev == post.st_dev and pre.st_ino == post.st_ino
-                and pre.st_size == post.st_size and pre.st_mtime_ns == post.st_mtime_ns
-                and pre.st_nlink == post.st_nlink
+            # Collect metadata first: newest snapshots must not wait behind older files.
+            records_with_mtime.append((
+                pre.st_mtime_ns, path.relative_to(base).as_posix(), path, pre
+            ))
+    records_with_mtime.sort(key=lambda item: (-item[0], item[1]))
+    budget_started = time.monotonic()
+    skipped_budget_count = 0
+    records = []
+    for _, relative, path, pre in records_with_mtime:
+        started = time.monotonic()
+        remaining = MAX_TOTAL_VERIFICATION_SECONDS - (started - budget_started)
+        # Recheck the identity before reading, preserving fail-closed semantics.
+        current = os.lstat(path)
+        unchanged_before_check = (
+            stat.S_ISREG(current.st_mode)
+            and pre.st_dev == current.st_dev and pre.st_ino == current.st_ino
+            and pre.st_size == current.st_size
+            and pre.st_mtime_ns == current.st_mtime_ns
+            and pre.st_nlink == current.st_nlink
+        )
+        if not unchanged_before_check:
+            verified, check = False, "changed_before_verification"
+        elif pre.st_nlink != 1:
+            verified, check = False, "hardlinked"
+        elif remaining <= 1:
+            verified, check = False, "global_verification_budget_exhausted"
+            skipped_budget_count += 1
+        else:
+            verified, check = check_database(
+                path, seconds=min(MAX_CHECK_SECONDS, remaining)
             )
-            records_with_mtime.append((pre.st_mtime_ns, {
-                "path_relative": path.relative_to(base).as_posix(),
-                "bytes": pre.st_size,
-                "age_days": round(max(0, time.time() - pre.st_mtime) / 86400, 2),
-                "links": pre.st_nlink,
-                # Only root-level snapshots qualify for future keep recommendations.
-                # Nested copies remain visible but are never promoted as masters.
-                "exact_master_before_name": path.parent == base and bool(EXACT_SNAPSHOT.fullmatch(name)),
-                "stable_during_audit": stable,
-                "quick_check_ok": verified and stable,
-                "check_result": check if stable else "changed_during_audit",
-                "check_elapsed_seconds": check_elapsed_seconds,
-                "approved_for_deletion": False,
-            }))
-    records_with_mtime.sort(key=lambda item: (-item[0], item[1]["path_relative"]))
-    records = [record for _, record in records_with_mtime]
+        check_elapsed_seconds = round(time.monotonic() - started, 2)
+        post = os.lstat(path)
+        stable = (
+            unchanged_before_check
+            and pre.st_dev == post.st_dev and pre.st_ino == post.st_ino
+            and pre.st_size == post.st_size and pre.st_mtime_ns == post.st_mtime_ns
+            and pre.st_nlink == post.st_nlink
+        )
+        records.append({
+            "path_relative": relative,
+            "bytes": pre.st_size,
+            "age_days": round(max(0, time.time() - pre.st_mtime) / 86400, 2),
+            "links": pre.st_nlink,
+            "exact_master_before_name": path.parent == base and bool(
+                EXACT_SNAPSHOT.fullmatch(path.name)
+            ),
+            "stable_during_audit": stable,
+            "quick_check_ok": verified and stable,
+            "check_result": check if stable else "changed_during_audit",
+            "check_elapsed_seconds": check_elapsed_seconds,
+            "approved_for_deletion": False,
+        })
     verified_master = [r for r in records if (
         r["exact_master_before_name"] and r["quick_check_ok"]
     )]
@@ -133,6 +162,8 @@ def audit(root: Path) -> dict:
         "offsite_functional_restore_verified": False,
         "active_references_verified": False,
         "deletion_gate": "BLOCKED_PENDING_OFFSITE_RESTORE_AND_SEPARATE_APPROVAL",
+        "verification_budget_seconds": MAX_TOTAL_VERIFICATION_SECONDS,
+        "verification_skipped_budget_count": skipped_budget_count,
         "files_scanned": seen,
         "sqlite_count": len(records),
         "sqlite_total_bytes": sum(r["bytes"] for r in records),
