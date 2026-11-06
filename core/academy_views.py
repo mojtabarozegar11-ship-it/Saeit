@@ -114,12 +114,12 @@ def education_course_detail(request, slug):
     assessments = course.assessments.filter(active=True, approved=True).prefetch_related("questions")
     enrollment = None
     progress_map = {}
-    bookmarked = False
     if request.user.is_authenticated:
-        enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status="active").first()
+        enrollment = EducationEnrollment.objects.filter(
+            course=course, user=request.user, status__in=("active", "completed")
+        ).first()
         if enrollment:
             progress_map = {p.lesson_id: p for p in enrollment.progress.all()}
-        bookmarked = EducationBookmark.objects.filter(user=request.user, lesson=lesson).exists()
     lesson_rows = [{"lesson": lesson, "progress": progress_map.get(lesson.id)} for lesson in lessons]
     return render(request, "core/education_course_detail.html", {
         "course": course,
@@ -152,6 +152,8 @@ def education_enroll(request, slug):
         course=course, user=request.user,
         defaults={"source": source},
     )
+    if request.POST.get("response_format") == "html":
+        return redirect("education_course_detail", slug=course.slug)
     return JsonResponse({"ok": True, "created": created, "enrollment_id": enrollment.pk})
 
 
@@ -190,7 +192,12 @@ def education_lesson(request, slug, lesson_id):
     previous_lesson = lessons[position - 1] if position > 0 else None
     next_lesson = lessons[position + 1] if position + 1 < len(lessons) else None
     bookmarked = request.user.is_authenticated and EducationBookmark.objects.filter(user=request.user, lesson=lesson).exists()
-    enrollment = EducationEnrollment.objects.filter(course=course, user=request.user, status="active").first()
+    enrollment = (
+        EducationEnrollment.objects.filter(
+            course=course, user=request.user, status__in=("active", "completed")
+        ).first()
+        if request.user.is_authenticated else None
+    )
     if not enrollment:
         if not (course.is_free and lesson.is_free_preview):
             return JsonResponse({"ok": False, "error": "enrollment_required"}, status=403)

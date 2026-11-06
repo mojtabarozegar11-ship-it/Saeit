@@ -1,5 +1,6 @@
 
 from django.contrib import admin
+from django.contrib.auth.views import LoginView, LogoutView
 from django.views.generic import TemplateView
 from django.urls import include, path
 from django.views.generic import RedirectView
@@ -25,6 +26,11 @@ from core.knowledge_views import knowledge_article_detail, knowledge_book_detail
 
 urlpatterns = [
     path("", services, name="home"),
+    # Public education accounts need a real login destination for @login_required.
+    path("accounts/login/", LoginView.as_view(
+        template_name="registration/login.html", redirect_authenticated_user=True,
+    ), name="login"),
+    path("accounts/logout/", LogoutView.as_view(next_page="education"), name="logout"),
     path("authors/mojtaba-rozegar/", persian_author_profile, name="mojtaba_roozegar_author_profile"),
     path("ghanadi/", TemplateView.as_view(template_name="core/ghanadi.html"), name="ghanadi"),
     path("agriculture/", agriculture_index, name="agriculture"),
