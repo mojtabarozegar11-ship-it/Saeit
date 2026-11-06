@@ -7,9 +7,9 @@ def patch_financial_urls(source):
         return source
     imports = ""
     if "from functools import partial" not in source:
-        imports += "from functools import partial\\n"
+        imports += "from functools import partial\n"
     if "from core.financial_brand_pages import BRANDS, financial_brand_page" not in source:
-        imports += "from core.financial_brand_pages import BRANDS, financial_brand_page\\n"
+        imports += "from core.financial_brand_pages import BRANDS, financial_brand_page\n"
     source = imports + source
     tree = ast.parse(source)
     assignment = next((node for node in tree.body
@@ -18,11 +18,6 @@ def patch_financial_urls(source):
             for target in node.targets) and isinstance(node.value, (ast.List, ast.Tuple))), None)
     if assignment is None:
         raise ValueError("Expected a literal urlpatterns list")
-    imports = ""
-    if "from functools import partial" not in source:
-        imports += "from functools import partial\n"
-    if "from core.financial_brand_pages import BRANDS, financial_brand_page" not in source:
-        imports += "from core.financial_brand_pages import BRANDS, financial_brand_page\n"
     block = """
 # Add localized branded financial analysis and shop pages ahead of existing routes.
 _finance_routes = []
@@ -36,10 +31,7 @@ for _brand_slug, _fa, _en, _ar in BRANDS:
 urlpatterns = _finance_routes + urlpatterns
 """
     lines = source.splitlines(keepends=True)
-    lines.insert(0, imports)
-    # AST line positions are shifted by the imports inserted above.
-    shifted_end = assignment.end_lineno + imports.count("\n")
-    lines.insert(shifted_end, block)
+    lines.insert(assignment.end_lineno, block)
     result = "".join(lines)
     ast.parse(result)
     return result
