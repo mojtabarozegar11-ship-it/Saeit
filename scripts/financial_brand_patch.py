@@ -5,6 +5,12 @@ import ast
 def patch_financial_urls(source):
     if "_finance_routes" in source:
         return source
+    imports = ""
+    if "from functools import partial" not in source:
+        imports += "from functools import partial\\n"
+    if "from core.financial_brand_pages import BRANDS, financial_brand_page" not in source:
+        imports += "from core.financial_brand_pages import BRANDS, financial_brand_page\\n"
+    source = imports + source
     tree = ast.parse(source)
     assignment = next((node for node in tree.body
         if isinstance(node, ast.Assign) and any(
