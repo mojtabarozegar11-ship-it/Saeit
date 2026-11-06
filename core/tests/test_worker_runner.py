@@ -93,7 +93,8 @@ def test_runner_fails_when_retry_budget_is_exhausted(queued_task):
 
 def test_runner_supports_explicit_tool_mapping(queued_task):
     gateway = ToolGateway([
-        ToolSpec(code="research_lookup", handler=lambda payload: {"found": payload["q"]}),
+        ToolSpec(code="research_lookup", allowed_actions=("research",),
+                 handler=lambda payload: {"found": payload["q"]}),
     ])
 
     task = WorkerRunner(

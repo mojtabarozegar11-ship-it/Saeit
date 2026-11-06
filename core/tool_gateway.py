@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
+from .agent_registry import AgentRegistry, RISK_ORDER
 from .models import AgentTask, ApprovalRequest, AuditLog
 from .services import normalize_action, normalize_risk, requires_owner_approval
 
@@ -15,6 +16,9 @@ class ToolSpec:
     handler: Callable[[dict], Any]
     risk: str = "low"
     enabled: bool = True
+    # An action may call a differently named adapter only when the adapter
+    # explicitly declares that alias. A worker's tool_map is not authority.
+    allowed_actions: tuple[str, ...] = ()
 
 
 class ToolGateway:
@@ -32,8 +36,14 @@ class ToolGateway:
         risk = normalize_risk(spec.risk)
         if not callable(spec.handler):
             raise ToolGatewayError("Tool handler must be callable")
+        allowed_actions = tuple(
+            dict.fromkeys(normalize_action(action) for action in (spec.allowed_actions or (code,)))
+        )
+        if any(not action for action in allowed_actions):
+            raise ToolGatewayError("Allowed action codes must be non-empty")
         self._tools[code] = ToolSpec(
-            code=code, handler=spec.handler, risk=risk, enabled=spec.enabled
+            code=code, handler=spec.handler, risk=risk, enabled=spec.enabled,
+            allowed_actions=allowed_actions,
         )
 
     def describe(self):
@@ -60,8 +70,33 @@ class ToolGateway:
                 "Execution identity does not match the active task execution"
             )
 
-        if requires_owner_approval(spec.code, spec.risk):
+        if not task.agent.active:
+            raise ToolGatewayError("Task agent is inactive")
+        registry = AgentRegistry()
+        capability = registry.capability_for(task.agent, task.action_type)
+        if capability is None or (
+            task.capability_code and task.capability_code != capability.code
+        ):
+            raise ToolGatewayError("Task capability has been revoked or changed")
+        if normalize_action(task.action_type) not in spec.allowed_actions:
+            raise ToolGatewayError("Tool is not authorized for this task action")
+        snapshot_risk = normalize_risk(task.risk_snapshot)
+        if registry.effective_risk(capability, snapshot_risk) != snapshot_risk:
+            raise ToolGatewayError("Task risk policy changed after planning")
+        # A sensitive adapter cannot be smuggled into a low-risk task through
+        # an alias. The task must first be planned at the higher risk.
+        if (
+            RISK_ORDER[spec.risk] > RISK_ORDER[snapshot_risk]
+            and requires_owner_approval(spec.code, spec.risk)
+        ):
+            raise ToolGatewayError("Tool risk exceeds the approved task risk snapshot")
+
+        if (
+            requires_owner_approval(spec.code, spec.risk)
+            or requires_owner_approval(task.action_type, snapshot_risk)
+        ):
             approved = ApprovalRequest.objects.filter(
+                action_type=normalize_action(task.action_type),
                 target_type="AgentTask",
                 target_id=str(task.pk),
                 status="approved",
