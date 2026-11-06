@@ -1,5 +1,6 @@
 name: MojPlayWin final buyer payment and delivery evidence read only 2026-10-20
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths: [".github/workflows/mpw-final-real-payment-readonly-20261020.yml"]
