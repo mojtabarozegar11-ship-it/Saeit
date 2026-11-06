@@ -304,4 +304,72 @@ jobs:
           print("VPS_STALE_TEMP_PREDELETE_GATES=" +
                 json.dumps({"schema": "vps.temp.predelete.readonly.v1", "deletion_performed": False,
                             "targets": temp_checks}, sort_keys=True), flush=True)
+
+          # Compare old local archives by file metadata, then by exact content
+          # hash only for plausible duplicate sizes. Never modify any archive.
+          archive_parents = {"98da9d80b7", "03c268f48a"}
+          archive_areas = []
+          archive_files = {}
+          for parent in Path("/home/githubops").iterdir():
+              tag = hash_name(parent.name)
+              if tag not in archive_parents or parent.is_symlink() or not parent.is_dir():
+                  continue
+              ar = parent / "archive"
+              if ar.is_symlink() or not ar.is_dir() or ar.stat().st_uid != os.geteuid():
+                  archive_areas.append({"parent_hash": tag, "state": "unsafe_or_missing_archive"})
+                  continue
+              items, by_ext, directories, truncated = [], {}, 0, False
+              for idx, entry in enumerate(ar.iterdir()):
+                  if idx >= 4500:
+                      truncated = True
+                      break
+                  try:
+                      info = entry.lstat()
+                  except OSError:
+                      continue
+                  if stat.S_ISREG(info.st_mode) and info.st_uid == os.geteuid():
+                      items.append((info.st_size, entry, info))
+                      name = suffix_label(entry.name)
+                      slot = by_ext.setdefault(name, {"count": 0, "bytes": 0})
+                      slot["count"] += 1
+                      slot["bytes"] += info.st_size
+                  elif stat.S_ISDIR(info.st_mode):
+                      directories += 1
+              items.sort(key=lambda row: -row[0])
+              archive_files[tag] = items
+              archive_areas.append({"parent_hash": tag, "state": "scanned",
+                                    "direct_files": len(items), "direct_directories": directories,
+                                    "truncated": truncated, "types": by_ext,
+                                    "largest": [{"name_hash": hash_name(entry.name), "bytes": size,
+                                                 "age_days": round(max(0, time.time()-info.st_mtime)/86400, 2),
+                                                 "type": header_kind(entry), "links": info.st_nlink}
+                                                for size, entry, info in items[:15]]})
+          duplicates = []
+          left = archive_files.get("98da9d80b7", [])
+          right = archive_files.get("03c268f48a", [])
+          byte_budget = 8 * 1024**3
+          for ls, lp, li in left:
+              for rs, rp, ri in right:
+                  if ls != rs or ls < 1024 * 1024 or ls * 2 > byte_budget:
+                      continue
+                  def digest(path):
+                      h = hashlib.sha256()
+                      with path.open("rb") as stream:
+                          while True:
+                              chunk = stream.read(4 * 1024**2)
+                              if not chunk:
+                                  break
+                              h.update(chunk)
+                      return h.digest()
+                  left_hash, right_hash = digest(lp), digest(rp)
+                  byte_budget -= ls * 2
+                  if left_hash == right_hash:
+                      duplicates.append({"bytes": ls, "left_hash": hash_name(lp.name),
+                                         "right_hash": hash_name(rp.name),
+                                         "link_counts": [li.st_nlink, ri.st_nlink]})
+          print("VPS_ARCHIVE_DUPLICATE_AUDIT=" + json.dumps({
+              "schema": "vps.archive.duplicate.readonly.v1", "areas": archive_areas,
+              "cross_area_exact_duplicates": duplicates,
+              "hash_bytes_budget_remaining": byte_budget,
+              "deletion_performed": False}, sort_keys=True), flush=True)
           PY
