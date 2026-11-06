@@ -617,6 +617,56 @@ print("AGENT_FLEET_FACTORY_COMMAND_PREFLIGHT="+json.dumps({
 },sort_keys=True,separators=(",",":")))
 PY
 
+# Confirm factory-specific worker API compatibility against the installed
+# runtime without claiming or completing any queued task.
+"$python_bin" - <<'PY'
+import hashlib
+import inspect
+import json
+from pathlib import Path
+
+import django
+django.setup()
+from core.worker_runner import WorkerRunner
+from core.task_runtime import TaskRuntime
+from core.tool_gateway import ToolGateway
+
+def signature(obj, name):
+    method = getattr(obj, name, None)
+    if method is None:
+        return {"exists":False}
+    result = {"exists":True}
+    try:
+        result["parameter_names"] = list(inspect.signature(method).parameters)
+    except (ValueError, TypeError):
+        result["parameter_names"] = None
+    return result
+
+root = Path.home() / "factory-runtime/django-app/core"
+filenames = ("worker_runner.py", "task_runtime.py", "tool_gateway.py",
+             "factory_contracts.py", "autonomous_brain.py")
+source_hashes = {}
+for name in filenames:
+    path = root / name
+    if path.is_file() and not path.is_symlink() and path.stat().st_size < 350000:
+        source_hashes[name] = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    else:
+        source_hashes[name] = "unavailable_or_unsafe"
+
+print("AGENT_FLEET_FACTORY_WORKER_COMPATIBILITY="+json.dumps({
+    "schema":"saeit.agent.factory-worker-compatibility.v1", "read_only":True,
+    "worker_init":signature(WorkerRunner,"__init__"),
+    "worker_run":signature(WorkerRunner,"run"),
+    "runtime_complete":signature(TaskRuntime,"complete"),
+    "runtime_fail":signature(TaskRuntime,"fail"),
+    "gateway_invoke":signature(ToolGateway,"invoke"),
+    "gateway_authorize":signature(ToolGateway,"authorize"),
+    "gateway_factory_adapter":signature(ToolGateway,"execute_factory_adapter"),
+    "sha256_prefixes":source_hashes,
+    "tasks_modified":0,"tasks_executed":0,
+},sort_keys=True,separators=(",",":")))
+PY
+
 # Distinguish a historical backlog from a live, executable queue. Installed
 # factory code can differ from the repository, so inspect bounded live evidence
 # without claiming a worker from a mere filename or process-name match.
