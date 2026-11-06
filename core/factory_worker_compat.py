@@ -6,6 +6,7 @@ tasks whose ToolGateway and FactoryAgentRuntime are still installed on VPS.
 """
 
 from decimal import Decimal, InvalidOperation
+import os
 
 from django.db import transaction
 from django.utils import timezone
@@ -60,6 +61,13 @@ class FactoryWorkerCompatibility:
             raise FactoryWorkerCompatibilityError("Factory task has an inactive or mismatched Run")
         if task.factory_run.environment != task.environment:
             raise FactoryWorkerCompatibilityError("Factory task environment differs from its Run")
+        # The historical database contains hundreds of active FactoryRun rows,
+        # whereas the owner permits only one genuine factory product at a time.
+        # Never infer the selected run from those stale status flags. An explicit
+        # operations binding is mandatory before any validation can be claimed.
+        bound_run = os.environ.get("MOJ_FACTORY_SINGLE_ACTIVE_RUN_ID", "").strip()
+        if not bound_run or task.factory_run.run_id != bound_run:
+            raise FactoryWorkerCompatibilityError("No verified single active FactoryRun binding")
 
     @staticmethod
     def _normalize_result(result):

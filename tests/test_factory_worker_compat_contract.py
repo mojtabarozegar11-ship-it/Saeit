@@ -19,6 +19,7 @@ def extract_class():
         "FactoryWorkerCompatibilityError": type("FactoryWorkerCompatibilityError", (ValueError,), {}),
         "Decimal": Decimal, "InvalidOperation": InvalidOperation,
         "timezone": SimpleNamespace(now=lambda: None),
+        "os": SimpleNamespace(environ={"MOJ_FACTORY_SINGLE_ACTIVE_RUN_ID": "run-3"}),
     }
     exec(compile(ast.Module(body=[cls], type_ignores=[]), str(path), "exec"), namespace)
     return namespace["FactoryWorkerCompatibility"], namespace["FactoryWorkerCompatibilityError"]
@@ -31,9 +32,14 @@ class FactoryWorkerCompatibilityTests(unittest.TestCase):
             status="queued", capability_code="product_validation",
             attempt_count=0, max_attempts=3, next_retry_at=None,
             factory_run_id=2, product_id=3, environment="production",
-            factory_run=SimpleNamespace(status="active", product_id=3, environment="production"),
+            factory_run=SimpleNamespace(status="active", product_id=3, environment="production", run_id="run-3"),
         )
         worker._preflight(SimpleNamespace(**base, action_type="product_validation"))
+        binding = worker._preflight.__globals__["os"].environ
+        binding.clear()
+        with self.assertRaises(error):
+            worker._preflight(SimpleNamespace(**base, action_type="product_validation"))
+        binding["MOJ_FACTORY_SINGLE_ACTIVE_RUN_ID"] = "run-3"
         with self.assertRaises(error):
             worker._preflight(SimpleNamespace(**base, action_type="product_research"))
         with self.assertRaises(error):
@@ -41,7 +47,7 @@ class FactoryWorkerCompatibilityTests(unittest.TestCase):
                                               action_type="product_validation"))
         with self.assertRaises(error):
             worker._preflight(SimpleNamespace(**{**base, "factory_run":SimpleNamespace(
-                status="active", product_id=4, environment="production")},
+                status="active", product_id=4, environment="production", run_id="run-3")},
                 action_type="product_validation"))
 
     def test_cost_must_really_be_zero(self):
