@@ -8,13 +8,13 @@
     <span class="education-kicker">EDUCATION · KNOWLEDGE · SKILLS · CAREER</span>
     <h1>آموزش؛ از اولین درس تا مهارت حرفه‌ای.</h1>
     <p>یک مسیر یکپارچه برای یادگیری مدرسه، کنکور، دانشگاه، فنی‌وحرفه‌ای و دانش تخصصی زنجیره‌های واقعی تولید و کسب‌وکار.</p>
-    <div class="education-actions"><a class="education-primary" href="#tracks">شروع مسیر یادگیری</a><a class="education-secondary" href="#catalog">مشاهده جزوه و دوره</a></div>
+    <div class="education-actions"><a class="education-primary" href="#catalog">استفاده از ابزارهای آموزشی فعال</a><a class="education-secondary" href="#tracks">مشاهده مسیرهای یادگیری</a></div>
   </div>
   <div class="education-command-card">
-    <span>INTELLIGENT EDUCATION ENGINE</span>
-    <strong>24/7</strong>
-    <p>محتوا، مسیرها، تمرین‌ها و پیشنهادهای آموزشی به‌صورت داده‌محور مدیریت و تکمیل می‌شوند؛ انتشار اقدامات مدیریتی طبق سیاست مجوز مالک انجام می‌شود.</p>
-    <b>مدیریت هوشمند · بهبود مستمر</b>
+    <span>APPLIED LEARNING · LIVE RESOURCES</span>
+    <strong>۴</strong>
+    <p>چهار مسیر قابل استفاده در همین سایت: دو محاسبه‌گر رایگان، راهنمای ریسک و ثبت درخواست تحلیل تخصصی.</p>
+    <b>دسترسی مستقیم · بدون لینک نمایشی</b>
   </div>
 </section>
 
@@ -35,10 +35,10 @@
 </section>
 
 <section class="education-catalog" id="catalog">
-  <div class="education-heading"><span>CONTENT CATALOG</span><h2>جزوه، دوره، آزمون و پروژه</h2><p>هر محصول آموزشی باید هدف، سطح، پیش‌نیاز، سرفصل، تمرین، ارزیابی و خروجی روشن داشته باشد.</p></div>
+  <div class="education-heading"><span>AVAILABLE NOW</span><h2>ابزارها و منابع فعال آموزشی</h2><p>این منابع همین حالا در دسترس‌اند؛ دوره‌های ساختاریافته فقط پس از کنترل کیفیت و انتشار نمایش داده می‌شوند.</p></div>
   <div class="education-resource-grid">
     {% for resource in resources %}
-    <article><b>{{ resource.kind }}</b><span>{{ resource.access }}</span><h3>{{ resource.title }}</h3><p>{{ resource.text }}</p><a href="/store/">مشاهده در فروشگاه ↗</a></article>
+    <article><b>{{ resource.kind }}</b><span>{{ resource.access }}</span><h3>{{ resource.title }}</h3><p>{{ resource.text }}</p><a href="{{ resource.url }}">{{ resource.action }} ↗</a></article>
     {% endfor %}
   </div>
 </section>
@@ -61,10 +61,16 @@
   </div>
 </section>
 {% endif %}
+{% if not courses %}
+<section class="education-section education-live-catalog" aria-labelledby="academy-status-title">
+  <div class="education-heading"><span>COURSE AVAILABILITY</span><h2 id="academy-status-title">وضعیت دوره‌های آموزشگاه</h2><p>در حال حاضر دورهٔ ساختاریافتهٔ تأییدشده‌ای برای ثبت‌نام عمومی منتشر نشده است. از ابزارهای فعال بالا استفاده کنید؛ دوره‌ها پس از تکمیل محتوا و ارزیابی تخصصی در همین صفحه نمایش داده می‌شوند.</p></div>
+  <p><a class="education-primary" href="/services/">بررسی خدمات تخصصی قابل درخواست ↗</a></p>
+</section>
+{% endif %}
 
 <section class="education-access">
-  <article class="education-free"><span>FREE ACCESS</span><h2>رایگان، اما هدفمند</h2><p>بخشی از دانش برای آشنایی، شروع یادگیری و ارزیابی اولیه همیشه در دسترس خواهد بود.</p><ul>{% for item in free_features %}<li>{{ item }}</li>{% endfor %}</ul></article>
-  <article class="education-paid"><span>PREMIUM LEARNING</span><h2>دوره‌های کامل و حرفه‌ای</h2><p>برای مسیرهای عمیق‌تر، محتوای کامل و تجربه آموزشی ساختاریافته ارائه می‌شود.</p><ul>{% for item in paid_features %}<li>{{ item }}</li>{% endfor %}</ul><a href="/store/">ورود به فروشگاه آموزش ↗</a></article>
+  <article class="education-free"><span>FREE ACCESS</span><h2>منابع رایگان موجود</h2><p>با ابزارهای فعال اقتصاد تولید و راهنمای ریسک، مسئلهٔ واقعی خود را بررسی کنید.</p><ul>{% for item in free_features %}<li>{{ item }}</li>{% endfor %}</ul></article>
+  {% if has_paid_courses %}<article class="education-paid"><span>PREMIUM LEARNING</span><h2>دوره‌های کامل و حرفه‌ای</h2><p>جزئیات و شرایط ثبت‌نام دوره‌های منتشرشده را در کاتالوگ بالا بررسی کنید.</p><ul>{% for item in paid_features %}<li>{{ item }}</li>{% endfor %}</ul><a href="#catalog">مشاهده کاتالوگ ↗</a></article>{% endif %}
 </section>
 
 <section class="education-teaching-tools">
