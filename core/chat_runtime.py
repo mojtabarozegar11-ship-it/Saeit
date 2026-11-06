@@ -30,27 +30,58 @@ class MasterAgentChat:
 
         ChatMessage.objects.create(session=session, role="user", content=text)
 
-        # Ordinary chat can now produce a bounded operation request. The chat
-        # never executes it directly: it creates an owner approval record.
+        # Explicit operational language becomes a structured operation.
+        # The owner chat executes synchronously; all other users remain queued
+        # behind the existing approval lifecycle.
         from .operation_planner import approval_reason, plan_chat_operation
-        from .models import ApprovalRequest
+        from .models import ApprovalRequest, AuditLog
 
         operation = plan_chat_operation(text)
         if operation is not None:
+            direct_owner = bool(session.user.is_authenticated and session.user.is_superuser)
             approval = ApprovalRequest.objects.create(
                 action_type="chat:" + operation.action,
                 target_type="ChatOperation",
                 target_id=operation.operation_id,
                 reason=approval_reason(operation),
                 risk=operation.risk,
-                status="pending",
+                status="approved" if direct_owner else "pending",
+                decision_note="direct_owner_chat_execution" if direct_owner else "",
                 requested_by=session.user,
             )
-            reply = (
-                "درخواست عملیاتی ثبت شد و هنوز اجرا نشده است. "
-                f"شماره تأیید: {approval.pk} | عملیات: {operation.action} | "
-                "پس از تأیید مالک، worker سایت آن را فقط در محدوده مجاز اجرا و نتیجه را ثبت می‌کند."
-            )
+            if direct_owner:
+                from .operation_executor import execute_approved_chat_operation
+                import json
+                try:
+                    result = execute_approved_chat_operation(approval)
+                    reply = (
+                        "اجرا انجام شد. "
+                        f"عملیات: {operation.action} | "
+                        + json.dumps(result.get("result", result), ensure_ascii=False, default=str)[:3500]
+                    )
+                    execution = "direct_owner_chat_executed"
+                except Exception as exc:
+                    approval.status = "rejected"
+                    approval.decision_note = "direct_owner_chat_failed:" + type(exc).__name__
+                    approval.save(update_fields=["status", "decision_note", "updated_at"])
+                    AuditLog.objects.create(
+                        actor_type="owner_chat",
+                        actor_id=str(session.user.pk),
+                        action="chat_operation_failed",
+                        target_type="ApprovalRequest",
+                        target_id=str(approval.pk),
+                        after_state={"operation": operation.action, "error": type(exc).__name__},
+                        trace_id="chat-operation-failed-" + operation.operation_id,
+                    )
+                    reply = "اجرای مستقیم ناموفق بود و هیچ موفقیتی گزارش نشده است: " + type(exc).__name__
+                    execution = "direct_owner_chat_failed"
+            else:
+                reply = (
+                    "درخواست عملیاتی ثبت شد و هنوز اجرا نشده است. "
+                    f"شماره تأیید: {approval.pk} | عملیات: {operation.action} | "
+                    "این درخواست فقط پس از تأیید مالک اجرا می‌شود."
+                )
+                execution = "approval_required"
             ChatMessage.objects.create(
                 session=session,
                 role="assistant",
@@ -60,7 +91,7 @@ class MasterAgentChat:
                     "capability_pack": "1.0.0",
                     "operation_id": operation.operation_id,
                     "approval_id": approval.pk,
-                    "execution": "approval_required",
+                    "execution": execution,
                 },
             )
             return reply
