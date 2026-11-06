@@ -127,7 +127,7 @@ receipt = {
     "publication_enabled": False,
     "delivery_enabled": False,
 }
-destination.write_text(json.dumps(receipt, separators=(",", ":")) + "\\n", encoding="utf-8")
+destination.write_text(json.dumps(receipt, separators=(",", ":")) + "\n", encoding="utf-8")
 os.chmod(destination, 0o600)
 PY
 mv -f -- "$receipt_tmp" "$receipt"
