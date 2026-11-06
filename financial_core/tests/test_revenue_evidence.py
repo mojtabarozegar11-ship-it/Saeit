@@ -37,14 +37,17 @@ class RevenueEvidenceTests(unittest.TestCase):
             verify_customer_revenue(self.evidence(independently_reconciled=False))
 
     def test_rejects_missing_or_invalid_settlement_evidence(self):
-        for changes, reason in (
-            ({"settlement_reference": ""}, "required_settlement_evidence_missing"),
-            ({"amount": Decimal("0")}, "settled_amount_must_be_positive"),
-            ({"currency": "usd"}, "currency_must_be_canonical_uppercase"),
-            ({"settled_at": datetime(2026, 11, 6, 14, 0)}, "settled_at_must_be_timezone_aware"),
+        for changes, reasons in (
+            ({"settlement_reference": ""}, ("required_settlement_evidence_missing",)),
+            ({"amount": Decimal("0")}, ("settled_amount_must_be_finite_positive",)),
+            ({"amount": Decimal("NaN")}, ("settled_amount_must_be_finite_positive",)),
+            ({"amount": Decimal("Infinity")}, ("settled_amount_must_be_finite_positive",)),
+            ({"amount": 25}, ("settled_amount_must_be_decimal",)),
+            ({"currency": "usd"}, ("currency_must_be_canonical_uppercase",)),
+            ({"settled_at": datetime(2026, 11, 6, 14, 0)}, ("settled_at_must_be_timezone_aware",)),
         ):
-            with self.subTest(reason=reason):
-                with self.assertRaisesRegex(RevenueEvidenceError, reason):
+            with self.subTest(changes=changes):
+                with self.assertRaisesRegex(RevenueEvidenceError, reasons[0]):
                     verify_customer_revenue(self.evidence(**changes))
 
 
