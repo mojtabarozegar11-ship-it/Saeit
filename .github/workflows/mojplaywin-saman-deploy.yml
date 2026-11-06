@@ -165,7 +165,7 @@ jobs:
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/mojplaywin-ssh"
-          timeout 45s ssh -F "$WORK/config" saeit-host 'selector restart --json --interpreter python --user zomorod2 --app-root Saeit-staging >/dev/null || selector restart --json --interpreter python --user zomorod2 --app-root Saeit >/dev/null'
+          timeout 45s ssh -F "$WORK/config" saeit-host 'selector_bin="$(command -v cloudlinux-selector || true)"; test -n "$selector_bin" || selector_bin=/usr/sbin/cloudlinux-selector; "$selector_bin" restart --json --interpreter python --user zomorod2 --app-root Saeit-staging >/dev/null || "$selector_bin" restart --json --interpreter python --user zomorod2 --app-root Saeit >/dev/null'
           echo "PASSENGER_SELECTOR_RESTART=success"
 
       - name: Verify Django runtime route
