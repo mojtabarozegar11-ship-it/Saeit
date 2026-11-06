@@ -4,6 +4,7 @@ from openai import OpenAI
 
 from .models import ChatMessage
 from .master_agent_capability_pack import capability_pack_prompt
+from .chat_operation_security import is_authorized_chat_operator
 
 
 SYSTEM_PROMPT = """
@@ -38,7 +39,21 @@ class MasterAgentChat:
 
         operation = plan_chat_operation(text)
         if operation is not None:
-            direct_owner = bool(session.user.is_authenticated and session.user.is_superuser)
+            direct_owner = is_authorized_chat_operator(session.user)
+            if not direct_owner:
+                reply = "اجرای دستور مدیریتی از این حساب مجاز نیست؛ فقط مدیر ارشد فعال می‌تواند دستور عملیاتی صادر کند."
+                ChatMessage.objects.create(
+                    session=session,
+                    role="assistant",
+                    content=reply,
+                    metadata={
+                        "agent": "master_agent",
+                        "capability_pack": "1.0.0",
+                        "operation_id": operation.operation_id,
+                        "execution": "forbidden",
+                    },
+                )
+                return reply
             approval = ApprovalRequest.objects.create(
                 action_type="chat:" + operation.action,
                 target_type="ChatOperation",
@@ -61,9 +76,8 @@ class MasterAgentChat:
                     )
                     execution = "direct_owner_chat_executed"
                 except Exception as exc:
-                    approval.status = "rejected"
-                    approval.decision_note = "direct_owner_chat_failed:" + type(exc).__name__
-                    approval.save(update_fields=["status", "decision_note", "updated_at"])
+                    # The executor owns terminal states. Never reset an already
+                    # claimed action to "approved" or hide an ambiguous outcome.
                     AuditLog.objects.create(
                         actor_type="owner_chat",
                         actor_id=str(session.user.pk),
