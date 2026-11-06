@@ -9,7 +9,7 @@ from .task_runtime import TaskExecutionError, TaskRuntime
 
 
 from .orchestrator import MasterAgent
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.conf import settings
 from django.utils import timezone
 import hashlib
@@ -267,13 +267,18 @@ class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
             return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
         if quantity < 1:
             return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            product = Product.objects.select_for_update().get(pk=product_id, active=True, knowledge_article__published=True)
-        except (Product.DoesNotExist, TypeError, ValueError):
-            return Response({"detail": "Active, published-knowledge-backed product not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        from django.db import transaction
+        # MariaDB requires SELECT ... FOR UPDATE to run inside the transaction.
+        # Keep the product price snapshot and order-item creation in one unit.
         with transaction.atomic():
+            try:
+                product = Product.objects.select_for_update().get(
+                    pk=product_id, active=True, knowledge_article__published=True
+                )
+            except (Product.DoesNotExist, TypeError, ValueError):
+                return Response(
+                    {"detail": "Active, published-knowledge-backed product not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
             order = Order.objects.create(
                 customer=request.user,
                 status="pending",
@@ -311,44 +316,82 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="create")
     def create_intent(self, request):
-        order_id = request.data.get("order_id")
+        # A payment request may create an external financial obligation later.
+        # Staff can manage internal records, but cannot self-authorize payments.
+        if not is_authorized_chat_operator(request.user):
+            return Response(
+                {"detail": "Only an active superuser can initiate payment approval."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        raw_order_id = request.data.get("order_id")
         key = str(request.data.get("idempotency_key", "")).strip()
-        if not order_id or not key:
+        if not raw_order_id or not key:
             return Response(
                 {"detail": "order_id and idempotency_key are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        order = Order.objects.filter(pk=order_id, customer=request.user).first()
-        if order is None:
-            return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
-        if order.status != "pending":
-            return Response({"detail": "Only pending orders can start payment."}, status=status.HTTP_409_CONFLICT)
+        try:
+            order_id = int(raw_order_id)
+        except (TypeError, ValueError):
+            return Response({"detail": "order_id must be an integer."}, status=status.HTTP_400_BAD_REQUEST)
+        if order_id < 1 or len(key) > 128:
+            return Response({"detail": "Invalid order_id or idempotency_key."}, status=status.HTTP_400_BAD_REQUEST)
 
-        existing = PaymentIntent.objects.filter(idempotency_key=key).first()
-        if existing:
-            if existing.order_id != order.pk:
-                return Response({"detail": "Idempotency key is already bound to another order."}, status=status.HTTP_409_CONFLICT)
+        try:
+            with transaction.atomic():
+                order = Order.objects.select_for_update().filter(
+                    pk=order_id, customer=request.user
+                ).first()
+                if order is None:
+                    return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+                if order.status != "pending":
+                    return Response(
+                        {"detail": "Only pending orders can start payment."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+
+                # An order can only have one payment intent. Repeated identical
+                # keys return its original receipt; a changed key is a conflict.
+                existing = PaymentIntent.objects.filter(order=order).first()
+                if existing:
+                    if existing.idempotency_key != key:
+                        return Response(
+                            {"detail": "Order already has a different payment intent."},
+                            status=status.HTTP_409_CONFLICT,
+                        )
+                    return Response(
+                        {"status": "existing", "payment_intent": self.get_serializer(existing).data},
+                        status=status.HTTP_200_OK,
+                    )
+                if PaymentIntent.objects.filter(idempotency_key=key).exists():
+                    return Response(
+                        {"detail": "Idempotency key is already bound to another order."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
+
+                intent = PaymentIntent.objects.create(
+                    order=order,
+                    amount=order.total,
+                    currency=order.currency,
+                    idempotency_key=key,
+                    status="awaiting_approval",
+                    provider="not_configured",
+                )
+                approval = ApprovalRequest.objects.create(
+                    action_type="payment",
+                    target_type="PaymentIntent",
+                    target_id=str(intent.pk),
+                    reason="Owner approval required before initiating an external payment.",
+                    risk="critical",
+                    requested_by=request.user,
+                )
+        except IntegrityError:
+            # Global unique keys also protect two different orders racing to
+            # create the same intent. Never expose an unhandled server error.
             return Response(
-                {"status": "existing", "payment_intent": self.get_serializer(existing).data},
-                status=status.HTTP_200_OK,
+                {"detail": "Payment intent already exists; refresh the order."},
+                status=status.HTTP_409_CONFLICT,
             )
-
-        intent = PaymentIntent.objects.create(
-            order=order,
-            amount=order.total,
-            currency=order.currency,
-            idempotency_key=key,
-            status="awaiting_approval",
-            provider="not_configured",
-        )
-        approval = ApprovalRequest.objects.create(
-            action_type="payment",
-            target_type="PaymentIntent",
-            target_id=str(intent.pk),
-            reason="Owner approval required before initiating an external payment.",
-            risk="critical",
-            requested_by=request.user,
-        )
         return Response(
             {
                 "status": "approval_required",
@@ -357,7 +400,6 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
             },
             status=status.HTTP_202_ACCEPTED,
         )
-
 
 class PaymentWebhookViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
@@ -554,9 +596,9 @@ class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"], url_path="decide")
     def decide(self, request, pk=None):
         approval = self.get_object()
-        if approval.target_type == "ChatOperation" and not is_authorized_chat_operator(request.user):
+        if approval.target_type in {"ChatOperation", "PaymentIntent"} and not is_authorized_chat_operator(request.user):
             return Response(
-                {"detail": "Only an active superuser can approve chat operations."},
+                {"detail": "Only an active superuser can approve critical operations."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         if approval.requested_by_id != request.user.pk:
