@@ -36,6 +36,14 @@ class EconomicIsolationReleaseTests(unittest.TestCase):
         self.assertEqual(archive, manifest)
         self.assertIn("core/economic_execution.py", manifest)
 
+    def test_no_implicit_production_activation_on_merge_and_guard_before_stage(self):
+        self.assertIn("github.event_name == 'workflow_dispatch'", WORKFLOW)
+        self.assertIn("github.ref == 'refs/heads/main'", WORKFLOW)
+        self.assertLess(WORKFLOW.index("MASTER_VPS_REMOTE_DISK_GUARD_BLOCKED"),
+                        WORKFLOW.index('tar -cf "$d/bundle.tar"'))
+        self.assertLess(WORKFLOW.index("MASTER_VPS_REMOTE_DISK_GUARD_BLOCKED"),
+                        WORKFLOW.index("master-activation-source\"'"))
+
     def test_preserves_factory_bytes_and_rolls_back_failed_first_cycle(self):
         for path in SHARED_RUNTIME:
             self.assertIn(path, SCRIPT)
