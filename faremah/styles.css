@@ -9,7 +9,28 @@ section{padding:72px 0;border-top:1px solid #d7ad6244}h2{font-size:2.15rem;margi
 .split{display:grid;grid-template-columns:1fr 1fr;gap:30px}.featuregrid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:26px}form{display:grid;gap:12px}input,select,textarea{width:100%;border:2px solid #9d7135;border-radius:14px;background:#120820;color:var(--cream);padding:13px;font:inherit}input:focus,select:focus,textarea:focus{outline:2px solid var(--gold2)}input::placeholder,textarea::placeholder{color:#a995ba}textarea{min-height:110px;resize:vertical}.pagehead{padding:65px 0 38px}.pagehead h1{font-size:clamp(2.2rem,5vw,4rem);margin:8px 0;background:linear-gradient(110deg,#fff8df,#d7ad62);-webkit-background-clip:text;background-clip:text;color:transparent}
 footer{padding:36px 0;color:var(--muted);font-size:.85rem;display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;border-top:1px solid #d7ad6244}
 @media(max-width:850px){.navlinks{order:3;width:100%;justify-content:center}.hero,.split{grid-template-columns:1fr}.hero{padding:42px 0 65px}.visual{height:310px}.cards,.featuregrid{grid-template-columns:1fr}nav{flex-wrap:wrap}.hero h1{font-size:3rem}}
-\n.consent{display:flex;align-items:flex-start;gap:8px;color:var(--muted);font-size:.82rem}.consent input{width:auto;margin-top:8px;accent-color:var(--gold)}\n\n.honeypot{position:absolute;left:-99999px;width:1px;height:1px;overflow:hidden}\n
+.consent{display:flex;align-items:flex-start;gap:8px;color:var(--muted);font-size:.82rem}.consent input{width:auto;margin-top:8px;accent-color:var(--gold)}.honeypot{position:absolute;left:-99999px;width:1px;height:1px;overflow:hidden}
 .photo{width:100%;height:250px;object-fit:cover;display:block;border:4px solid var(--gold);border-radius:22px;margin-bottom:18px;box-shadow:0 0 0 2px #f6dc9d44,0 16px 40px #05020d66}.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.visual img{width:100%;height:100%;object-fit:cover;opacity:.72;mix-blend-mode:screen}.visual:after{z-index:2}@media(max-width:850px){.photo-grid{grid-template-columns:1fr}}
 
 .pagehead{display:grid;grid-template-columns:1.12fr .88fr;gap:28px;align-items:center}.pagephoto{width:100%;height:260px;object-fit:cover;border:5px solid var(--gold);border-radius:28px;box-shadow:0 0 0 2px #f6dc9d55,0 18px 50px #05020d77}.pagecopy{min-width:0}@media(max-width:850px){.pagehead{grid-template-columns:1fr}.pagephoto{height:230px}}
+
+
+/* Faremah poster and responsive image system v20261106-4 */
+.poster-frame{width:100%;aspect-ratio:1122 / 1402;max-height:640px;border:5px solid var(--gold);border-radius:34px;overflow:hidden;background:#11091f;box-shadow:0 0 0 2px #f6dc9d55,0 24px 70px #05020d99;position:relative}
+.poster-frame:after{content:"";position:absolute;inset:13px;border:2px solid #f6dc9d88;border-radius:25px;pointer-events:none}
+.poster-image{width:100%;height:100%;display:block;object-fit:cover;object-position:center top}
+.photo{height:auto;aspect-ratio:4 / 3;object-fit:cover}
+.pagephoto{height:auto;aspect-ratio:4 / 3;object-fit:cover;object-position:center}
+@media(max-width:850px){
+  .hero{gap:28px;padding:38px 0 58px}
+  .poster-frame{width:min(100%,520px);margin-inline:auto;aspect-ratio:1122 / 1402;max-height:none;border-width:4px;border-radius:28px}
+  .poster-frame:after{inset:10px;border-radius:20px}
+  .pagephoto{aspect-ratio:4 / 3;height:auto;border-width:4px;border-radius:24px}
+  .photo{aspect-ratio:4 / 3;border-width:4px}
+}
+@media(max-width:430px){
+  .wrap{padding-inline:14px}
+  .hero h1{font-size:2.45rem}
+  .poster-frame{border-radius:24px}
+  .poster-frame:after{inset:8px;border-radius:17px}
+}
