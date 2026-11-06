@@ -137,3 +137,48 @@ class InternalCommerceSafetyTests(TransactionTestCase):
         self.assertEqual(intent.status, "succeeded")
         self.assertEqual(order.status, "paid")
         self.assertEqual(LedgerEntry.objects.filter(order=order, entry_type="payment").count(), 1)
+
+    @override_settings(PAYMENT_WEBHOOK_SECRET="integration-test-secret")
+    def test_provider_receipt_cannot_settle_two_orders(self):
+        orders = [
+            Order.objects.create(customer=self.owner, total=Decimal("15.00"), currency="IRR")
+            for _ in range(2)
+        ]
+        intents = [
+            PaymentIntent.objects.create(
+                order=order, amount=Decimal("15.00"), currency="IRR",
+                provider="pay-test", idempotency_key=f"receipt-{index}",
+                status="gateway_pending",
+            )
+            for index, order in enumerate(orders)
+        ]
+
+        def settle(intent, event_id):
+            payload = {
+                "event_type": "payment.succeeded",
+                "payment_intent_id": intent.pk,
+                "provider_reference": "same-provider-receipt",
+                "amount": "15.00",
+                "currency": "IRR",
+            }
+            raw = json.dumps(payload, sort_keys=True).encode("utf-8")
+            signature = hmac.new(b"integration-test-secret", raw, hashlib.sha256).hexdigest()
+            return self.client.post(
+                "/api/payment-webhooks/", raw, content_type="application/json",
+                HTTP_X_PAYMENT_PROVIDER="pay-test",
+                HTTP_X_PAYMENT_EVENT_ID=event_id,
+                HTTP_X_PAYMENT_SIGNATURE=signature, secure=True,
+            )
+
+        first = settle(intents[0], "evt-first")
+        second = settle(intents[1], "evt-second")
+        self.assertEqual(first.status_code, 200, first.data)
+        self.assertEqual(second.status_code, 409, second.data)
+        for order, intent in zip(orders, intents):
+            order.refresh_from_db()
+            intent.refresh_from_db()
+        self.assertEqual(orders[0].status, "paid")
+        self.assertEqual(intents[0].status, "succeeded")
+        self.assertEqual(orders[1].status, "pending")
+        self.assertEqual(intents[1].status, "gateway_pending")
+        self.assertEqual(LedgerEntry.objects.filter(entry_type="payment").count(), 1)
