@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""Read-only cPanel source fingerprint for the already-reviewed academy patch.
+
+Run as the unprivileged zomorod2 cPanel account, via a pinned SSH relay.
+Never print source, credentials, environment values, or user/database data.
+"""
+from __future__ import annotations
+
+import hashlib
+import os
+from pathlib import Path
+
+HOME = Path('/home/zomorod2')
+APP = HOME / 'Saeit'
+WEB = HOME / 'public_html'
+EXPECTED = {
+    'config/settings.py': '02befe24a8a2636c498b51f4ad1fe7b237c636ec37f026a9e74209ee4eb9b6c5',
+    'config/urls.py': 'c97c92579df9dd38676d65d2e1c8507750549e4f680197082834e64040e50823',
+    'core/academy_views.py': '8e53348804828cb72a255efd517f206a12d8d1ded08a3f74a4a6c14174c5b3b0',
+    'core/templates/core/education_course_detail.html': 'd3d9b83c9f6a4b389a109ca028fb8855488113da819ad33c49763c257a24f393',
+    'core/templates/core/education_dashboard.html': 'c5050aa854e4db29582f64a59d267917106faa6fda2c933b0797e1029daf56cb',
+    'core/templates/core/education_lesson.html': '6d407ecea2f692086b607c8f1f6ae39333bf474685bfaee6eac26c0c0ab390e7',
+}
+NEW_TEMPLATE = 'core/templates/registration/login.html'
+
+
+def hash_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open('rb') as stream:
+        for block in iter(lambda: stream.read(1 << 20), b''):
+            h.update(block)
+    return h.hexdigest()
+
+
+def main() -> None:
+    if os.geteuid() == 0 or os.geteuid() != HOME.stat().st_uid:
+        raise RuntimeError('CPANEL_USER_NOT_VERIFIED')
+    if APP.is_symlink() or not APP.is_dir() or not (APP / 'manage.py').is_file():
+        raise RuntimeError('DJANGO_APP_PATH_UNSAFE')
+    if WEB.is_symlink() or not WEB.is_dir():
+        raise RuntimeError('PUBLIC_SITE_PATH_UNSAFE')
+    root_config = WEB / '.htaccess'
+    if not root_config.is_file() or root_config.is_symlink():
+        raise RuntimeError('ROOT_PASSENGER_CONFIG_NOT_VERIFIED')
+    lines = root_config.read_text(errors='replace').splitlines()
+    app_root = any('PassengerAppRoot' in line and '/home/zomorod2/Saeit' in line for line in lines)
+    root_uri = any('PassengerBaseURI' in line and '"/"' in line for line in lines)
+    print('PASSENGER_APP_ROOT_MATCH=' + str(app_root).lower())
+    print('PASSENGER_ROOT_URI_MATCH=' + str(root_uri).lower())
+    matches = 0
+    for name, expected in EXPECTED.items():
+        path = APP / name
+        if path.is_symlink() or not path.is_file():
+            result = 'MISSING_OR_SYMLINK'
+        else:
+            result = 'MATCH' if hash_file(path) == expected else 'DIFFERENT'
+        matches += result == 'MATCH'
+        print('ACADEMY_BASELINE_FILE=' + name + ' status=' + result)
+    new_template = APP / NEW_TEMPLATE
+    print('ACADEMY_NEW_LOGIN_TEMPLATE=' + (
+        'ABSENT' if not new_template.exists() else
+        'PRESENT' if new_template.is_file() and not new_template.is_symlink() else
+        'UNSAFE'
+    ))
+    print('ACADEMY_BASELINE_MATCHED=' + str(matches) + '/' + str(len(EXPECTED)))
+    print('APP_VENV_PYTHON_PRESENT=' + str((HOME / 'virtualenv/Saeit/3.10/bin/python').is_file()).lower())
+    # Do not mutate the app, restart Passenger, inspect credentials, or touch DB.
+
+
+if __name__ == '__main__':
+    main()
