@@ -1,0 +1,62 @@
+name: VPS factory one-time verified lifecycle log rotation
+
+on:
+  pull_request:
+    paths:
+      - scripts/rotate_verified_retired_factory_lifecycle_log_20261106.py
+      - tests/test_rotate_verified_retired_factory_lifecycle_log_20261106.py
+      - .github/workflows/vps-factory-one-time-verified-lifecycle-log-rotation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saeit-vps-lifecycle-log-one-time-rotation
+  cancel-in-progress: false
+
+jobs:
+  synthetic-regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify pinned source and reversible log roundtrip
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s tests -p test_rotate_verified_retired_factory_lifecycle_log_20261106.py -v
+
+  vps-one-time-rotation:
+    # PR never gets credentials; source size/age, exclusive factory lock, SHA
+    # roundtrip and preserved original log path are enforced by the script.
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    needs: synthetic-regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compress and safely empty one inactive factory lifecycle log
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-factory-lifecycle-log-rotation"
+          install -d -m 700 "$d"
+          trap 'rm -f -- "$d/key" "$d/known"; rmdir "$d" || true' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          actual="$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 150s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'PYTHONDONTWRITEBYTECODE=1 python3 -B - --apply' < scripts/rotate_verified_retired_factory_lifecycle_log_20261106.py
+          echo FACTORY_LIFECYCLE_ROTATION_ONLY=true
+          echo FACTORY_PRODUCTS_DATABASE_BACKUPS_UNTOUCHED=true
