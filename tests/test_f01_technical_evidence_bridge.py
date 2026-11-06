@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 
@@ -34,6 +35,33 @@ class F01TechnicalBridgeTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.proofs.cleanup()
+
+    def test_failed_evidence_capture_can_retry_without_manual_cleanup(self):
+        with tempfile.TemporaryDirectory() as name:
+            destination = Path(name) / "evidence"
+            with patch.object(builder, "execute", side_effect=ValueError("CAPTURE_FAILED")):
+                with self.assertRaisesRegex(ValueError, "CAPTURE_FAILED"):
+                    builder.build(RECIPE, destination)
+            self.assertFalse(destination.exists(), "empty failed target must not block a retry")
+            success = builder.build(RECIPE, destination)
+            self.assertTrue((destination / "manifest.json").is_file())
+            self.assertEqual(success["test_count"], 47)
+            self.assertFalse(success["commercial_release_allowed"])
+
+    def test_failed_capture_never_erases_partially_published_artifact(self):
+        with tempfile.TemporaryDirectory() as name:
+            destination = Path(name) / "evidence"
+
+            def partial_capture(argv, cwd):
+                (destination / "partial-preserve.txt").write_text("recoverable-evidence")
+                raise ValueError("CAPTURE_FAILED")
+
+            with patch.object(builder, "execute", side_effect=partial_capture):
+                with self.assertRaisesRegex(ValueError, "CAPTURE_FAILED"):
+                    builder.build(RECIPE, destination)
+            self.assertEqual((destination / "partial-preserve.txt").read_text(),
+                             "recoverable-evidence")
+            self.assertFalse((destination / "manifest.json").exists())
 
     def make_manufactured(self, base, *, stale=False, omitted=None, stale_builder=False,
                           extra_zip_member=None, extra_declared_file=None):

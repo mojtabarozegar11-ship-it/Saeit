@@ -8,6 +8,7 @@ marker; a failed check never produces that marker.
 """
 import argparse
 import ast
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -83,6 +84,24 @@ def execute(argv, cwd):
     return result.stdout + result.stderr
 
 
+@contextmanager
+def evidence_staging(target):
+    """Remove only an empty directory we just created if capture fails.
+
+    A pre-test failure must not permanently prevent a retry. Never discard
+    partially published receipts: those are retained for forensic inspection.
+    """
+    try:
+        with tempfile.TemporaryDirectory(prefix=".f01-evidence-", dir=str(target)) as temporary:
+            yield temporary
+    except BaseException:
+        try:
+            target.rmdir()  # Succeeds only when no artifact was published.
+        except OSError:
+            pass
+        raise
+
+
 def build(recipe_dir, evidence_dir):
     recipe = Path(recipe_dir)
     target = Path(evidence_dir)
@@ -116,7 +135,7 @@ def build(recipe_dir, evidence_dir):
         target.mkdir(mode=0o700)
     except FileExistsError:
         raise ValueError("PRODUCT_EVIDENCE_DESTINATION_NOT_EMPTY") from None
-    with tempfile.TemporaryDirectory(prefix=".f01-evidence-", dir=str(target)) as ephemeral:
+    with evidence_staging(target) as ephemeral:
         stage = Path(ephemeral)
         test_log = execute([sys.executable, "-B", "-m", "unittest", "-q", *TEST_MODULES], recipe)
         ran = re.search(r"Ran (\d+) tests? in", test_log)

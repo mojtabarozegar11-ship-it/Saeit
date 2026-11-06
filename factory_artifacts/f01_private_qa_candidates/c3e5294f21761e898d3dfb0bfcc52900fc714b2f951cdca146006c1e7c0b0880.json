@@ -1,0 +1,19 @@
+{
+  "schema": "saeit.f01.private-qa-transport.v1",
+  "recipe": "farm_enterprise_economics",
+  "archive_filename": "farm_enterprise_economics-internal-qa.zip",
+  "archive_sha256": "c3e5294f21761e898d3dfb0bfcc52900fc714b2f951cdca146006c1e7c0b0880",
+  "archive_size_bytes": 44868,
+  "archive_git_blob_sha": "e5aa9a18f607ea1c3504c3427a71252c59d57642",
+  "source_sha256": "d57ce31548739e42b05813d7ddb428a04d6d4e058ecf9e0485e3cff7d84fc7c0",
+  "source_evidence_builder_blob_sha": "ccd21fe097b1c93244a905a024f40ad8e25d7fac",
+  "evidence_retry_tests_blob_sha": "b57d703d2126caee644d992e733678c14845677f",
+  "internal_product_tests_passed": 47,
+  "evidence_bridge_regression_tests_passed": 11,
+  "internally_documented_criteria": 8,
+  "independent_quality_score": null,
+  "independent_signatures_verified": false,
+  "customer_acceptance_receipt_verified": false,
+  "commercial_release_allowed": false,
+  "production_activation_authorized": false
+}
