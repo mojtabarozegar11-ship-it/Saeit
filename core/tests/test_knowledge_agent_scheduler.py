@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from core.knowledge_agent import DEFAULT_OUTLINE, queue_cycle, seed_library
 from core.knowledge_agent_models import KnowledgeAgentPlan, KnowledgeAgentRun
+from core.models import AgentTask
 
 
 class KnowledgeAgentSchedulerTests(TestCase):
@@ -18,6 +19,10 @@ class KnowledgeAgentSchedulerTests(TestCase):
         first = queue_cycle()
         self.assertIsNotNone(first)
         self.assertEqual(KnowledgeAgentRun.objects.filter(plan=first.plan).count(), 1)
+        task = AgentTask.objects.get(action_type="knowledge_content_generation", input_data__run_id=first.pk)
+        self.assertEqual(task.risk_snapshot, "high")
+        self.assertTrue(task.input_data["paid_model"])
+        self.assertTrue(first.approval_required)
         self.assertIsNotNone(first.plan.next_run_at)
         self.assertIsNone(queue_cycle())
         first.plan.next_run_at = timezone.now() - timedelta(minutes=1)

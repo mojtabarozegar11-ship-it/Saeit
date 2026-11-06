@@ -7,13 +7,13 @@ from core.models import Agent, AgentCapability
 CAPABILITIES = [
     ("factory_native_review", "Factory native evidence review", "Reopen independently reviewed private native build receipts and queue verified specialist/device gaps. No commercial release.", "low"),
     ("factory_f41_private_build", "F41 private blockchain utility build", "Build only bounded vetted F41 orders in the private warehouse; no wallets, network, sales or public deployment.", "low"),
-    ("income_market_research", "Income market research", "Research legal online markets, demand, competitors and payment feasibility.", "low"),
-    ("income_opportunity_score", "Income opportunity scoring", "Score opportunities by startup cost, time-to-revenue, margin, scalability, risk and automation potential.", "low"),
-    ("income_offer_design", "Offer design", "Design measurable online service, digital product, SaaS, education, content, affiliate or commerce offers.", "medium"),
+    ("income_market_research", "Internal commercial inventory", "Measure local product inventory and queued tasks. Does not verify external customer demand, competitors, legal feasibility or willingness to pay.", "low"),
+    ("income_opportunity_score", "Product baseline inventory", "Record the existing catalog for later evaluation. Does not score market margins, startup costs or demand until external evidence exists.", "low"),
+    ("income_offer_design", "Private draft offer design", "Create one inactive, zero-price internal draft service offer. No seller claim, customer contact, public listing or payment activation.", "medium"),
     ("income_mvp_build", "Revenue MVP build", "Prepare an MVP or sales-ready deliverable without making external financial commitments.", "medium"),
-    ("income_growth_experiment", "Growth experiment", "Plan and evaluate lawful acquisition, conversion and retention experiments; no spam or deceptive practices.", "medium"),
+    ("income_growth_experiment", "Internal growth hypothesis", "Record a private acquisition hypothesis for an existing MVP; no public experiment, spend, conversion measurement or customer outreach.", "medium"),
     ("income_revenue_verify", "Revenue verification", "Verify revenue only from reconciled payment evidence and reject vanity or unverified revenue claims.", "medium"),
-    ("income_profit_optimize", "Profit optimization", "Compare verified revenue, direct costs, margin, repeatability and operational load to improve allocation.", "medium"),
+    ("income_profit_optimize", "Catalog profit baseline", "Inspect active catalog items. Do not claim profit optimization or verified margin without independent revenue and cost evidence.", "medium"),
     ("master_self_improvement", "Master self-improvement audit", "Run the bounded private source-upgrade engine, test allowlisted repairs, and record immutable before/after evidence. Never promote unreviewed code.", "medium"),
 ]
 

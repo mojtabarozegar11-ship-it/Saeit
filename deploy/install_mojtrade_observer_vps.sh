@@ -24,6 +24,12 @@ command -v crontab >/dev/null && command -v flock >/dev/null && command -v timeo
 if ! systemctl is-active --quiet cron 2>/dev/null && ! systemctl is-active --quiet crond 2>/dev/null; then
   echo MOJTRADE_CRON_DAEMON_INACTIVE; exit 2
 fi
+# The repository also ships a systemd timer for this observer. Never install
+# a second hourly cron runner when that timer is already active or enabled.
+if systemctl is-active --quiet mojtrade-observer.timer 2>/dev/null || \
+   systemctl is-enabled --quiet mojtrade-observer.timer 2>/dev/null; then
+  echo MOJTRADE_COMPETING_SYSTEMD_TIMER_FOUND; exit 2
+fi
 test -f "$staged" && test ! -L "$staged" && test ! -L "$operations" || {
   echo MOJTRADE_STAGED_SOURCE_INVALID; exit 2;
 }
