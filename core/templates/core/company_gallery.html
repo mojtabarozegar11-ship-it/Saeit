@@ -3,5 +3,41 @@
 {% block title %}گالری شرکت | تصاویر و ویدئوها{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'site/company-gallery.css' %}">{% endblock %}
 {% block content %}
-<div class="company-gallery"><header><span>COMPANY / MEDIA ARCHIVE</span><h1>گالری شرکت</h1><p>آرشیو تصویری و ویدئویی مستند شرکت؛ رسانه‌ها می‌توانند به پرونده‌های پژوهشی، پروژه‌ها و زنجیره‌های تخصصی شرکت متصل شوند.</p><nav><a href="/company-gallery/">همه</a><a href="?type=image">تصاویر</a><a href="?type=video">ویدئوها</a></nav></header><section class="gallery-grid">{% for item in media %}<article>{% if item.media_type == 'image' and item.image %}<img src="{{ item.image.url }}" alt="{{ item.title }}" loading="lazy">{% elif item.media_type == 'video' and item.video %}<video controls preload="metadata"><source src="{{ item.video.url }}"></video>{% endif %}<div><small>{{ item.research_domain|default:'COMPANY MEDIA' }}</small><h2>{{ item.title }}</h2>{% if item.description %}<p>{{ item.description }}</p>{% endif %}{% if item.target_path %}<a href="{{ item.target_path }}">پرونده مرتبط ↗</a>{% endif %}</div></article>{% empty %}<div class="gallery-empty"><h2>آرشیو رسانه‌ای آماده توسعه است</h2><p>هنوز رسانه‌ای برای انتشار عمومی ثبت نشده است.</p></div>{% endfor %}</section></div>
+<div class="company-gallery">
+  <header>
+    <span>COMPANY / MEDIA ARCHIVE</span>
+    <h1>گالری شرکت</h1>
+    <p>آرشیو تصویری و ویدئویی مستند شرکت؛ هر رسانه منتشرشده به حوزه یا پروندهٔ مرتبط وصل می‌شود.</p>
+    <form class="gallery-filters" method="get" action="/company-gallery/" role="search">
+      <label>جست‌وجوی عنوان
+        <input type="search" name="q" value="{{ query }}" placeholder="عنوان رسانه">
+      </label>
+      <label>نوع رسانه
+        <select name="type">
+          <option value="">همه رسانه‌ها</option>
+          <option value="image"{% if kind == "image" %} selected{% endif %}>تصویر</option>
+          <option value="video"{% if kind == "video" %} selected{% endif %}>ویدئو</option>
+        </select>
+      </label>
+      <button type="submit">اعمال فیلتر</button>
+      <a href="/company-gallery/">پاک‌کردن فیلتر</a>
+    </form>
+  </header>
+  <section class="gallery-grid" aria-live="polite">
+    {% for item in media %}<article>{% if item.media_type == 'image' and item.image %}<img src="{{ item.image.url }}" alt="{{ item.title }}" loading="lazy">{% elif item.media_type == 'video' and item.video %}<video controls preload="metadata"><source src="{{ item.video.url }}"></video>{% endif %}<div><small>{{ item.research_domain|default:'رسانهٔ شرکت' }}</small><h2>{{ item.title }}</h2>{% if item.description %}<p>{{ item.description }}</p>{% endif %}{% if item.target_path %}<a href="{{ item.target_path }}">پروندهٔ مرتبط ↗</a>{% endif %}</div></article>
+    {% empty %}
+      <div class="gallery-empty" role="status">
+        {% if query or kind %}
+          <h2>رسانه‌ای با این فیلتر پیدا نشد</h2>
+          <p>عبارت جست‌وجو یا نوع رسانه را تغییر دهید یا فیلترها را پاک کنید.</p>
+          <a href="/company-gallery/">نمایش همهٔ رسانه‌ها</a>
+        {% else %}
+          <h2>هنوز رسانهٔ عمومی منتشر نشده است</h2>
+          <p>به‌محض ثبت و تأیید تصویر یا ویدئوی مستند، این بخش آن را با عنوان، توضیح و پیوند پرونده نمایش می‌دهد. برای پیشنهاد رسانه یا ثبت درخواست همکاری از فرم رسمی استفاده کنید.</p>
+          <a href="/contact/">ثبت درخواست رسانه یا همکاری ↗</a>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </section>
+</div>
 {% endblock %}
