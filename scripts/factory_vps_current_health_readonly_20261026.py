@@ -644,3 +644,77 @@ def _classify_large_factory_files():
 if __name__ == "__main__":
     print("VPS_LARGE_FILE_CLASSIFICATION_READONLY=" +
           json.dumps(_classify_large_factory_files(), sort_keys=True))
+
+
+def _large_file_reference_inspection():
+    """Read-only inode/sidecar/fd check; preserves filenames and contents."""
+    targets = {
+        "8476ead3d550", "1994c139ca3b",
+        "52d6b65484cf", "1c96d4888f8e",
+    }
+    records = []
+    for subdir in BASE.iterdir():
+        if subdir.is_symlink() or not subdir.is_dir():
+            continue
+        for file in subdir.iterdir():
+            try:
+                if file.is_symlink() or not file.is_file():
+                    continue
+                digest = hashlib.sha256(file.name.encode("utf8")).hexdigest()[:12]
+                if digest not in targets:
+                    continue
+                stat = file.stat()
+                if stat.st_size < 64 * 2**20:
+                    continue
+                row = {
+                    "basename_sha256_prefix": digest,
+                    "subsystem": _safe_child_label(subdir),
+                    "bytes": stat.st_size,
+                    "allocated_bytes": stat.st_blocks * 512,
+                    "mode_owner_write": bool(stat.st_mode & 0o200),
+                    "sqlite_header_valid": None,
+                    "wal_present": False, "shm_present": False,
+                    "fd_references": 0,
+                    "fd_scan_access_limited": False,
+                }
+                if file.suffix.lower() == ".sqlite3":
+                    with file.open("rb") as readable:
+                        row["sqlite_header_valid"] = (
+                            readable.read(16) == b"SQLite format 3\x00")
+                    for suffix in ("-wal", "-shm"):
+                        peer = file.with_name(file.name + suffix)
+                        if peer.is_file() and not peer.is_symlink():
+                            row[suffix[1:] + "_present"] = True
+                records.append((row, stat.st_dev, stat.st_ino))
+            except OSError:
+                continue
+    # Only own-account process descriptors are normally observable.
+    checked = 0
+    for proc_entry in Path("/proc").iterdir():
+        if not proc_entry.name.isdecimal():
+            continue
+        fd_dir = proc_entry / "fd"
+        try:
+            descriptors = list(fd_dir.iterdir())
+            checked += 1
+        except OSError:
+            for row, _, _ in records:
+                row["fd_scan_access_limited"] = True
+            continue
+        for descriptor in descriptors:
+            try:
+                current = descriptor.stat()
+            except OSError:
+                continue
+            for row, device, inode in records:
+                if current.st_dev == device and current.st_ino == inode:
+                    row["fd_references"] += 1
+    return {"schema": "saeit.vps.large-file-reference-inspection.v1",
+            "read_only": True, "server_written_bytes": 0,
+            "proc_entries_accessible": checked,
+            "files": [row for row, _, _ in records]}
+
+
+if __name__ == "__main__":
+    print("VPS_LARGE_FILE_REFERENCES_READONLY=" +
+          json.dumps(_large_file_reference_inspection(), sort_keys=True))
