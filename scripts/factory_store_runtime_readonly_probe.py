@@ -5,6 +5,7 @@ Run as cPanel account through the pinned VPS SSH relay. Does not open database
 connections, inspect credentials, print server paths, publish, or write files.
 """
 import json
+import importlib.util
 from pathlib import Path
 import subprocess
 import sys
@@ -43,6 +44,10 @@ def classify_root(raw):
         return "mojplaywin_public_root", normalized
     if normalized == SHARED_STAGE:
         return "saeit_staging", normalized
+    # Permit boolean existence checks only within this cPanel account. Never
+    # print the actual root path or inspect an outside-owner path.
+    if CPANEL_HOME in normalized.parents and normalized != CPANEL_HOME:
+        return "other_root", normalized
     return "other_root", None
 
 
@@ -55,6 +60,9 @@ def summarize(uapi):
     matches = []
     non_root_kinds = {}
     all_domain_mappings = 0
+    nonroot_has_django = False
+    nonroot_has_php = False
+    nonroot_has_wsgi = False
     for entry in app_records(result.get("data")):
         if str(entry.get("domain") or "").lower().strip() != "mojplaywin.com":
             continue
@@ -67,23 +75,42 @@ def summarize(uapi):
         )
         if uri.rstrip("/") != "":
             non_root_kinds[kind] = non_root_kinds.get(kind, 0) + 1
+            if path is not None:
+                nonroot_has_django |= (path / "manage.py").is_file()
+                nonroot_has_php |= ((path / "index.php").is_file()
+                                    or (path / "app.php").is_file())
+                nonroot_has_wsgi |= (path / "passenger_wsgi.py").is_file()
             continue
         matches.append((kind, path))
     matched = matches[0] if len(matches) == 1 else ("missing_or_ambiguous", None)
     kind, root = matched
     private = CPANEL_HOME / ".saeit-factory-inbox" / "receipts" / RECIPE
     count = 0
+    receipt_versions = []
     if private.is_dir() and not private.is_symlink():
-        count = sum(1 for receipt in private.iterdir() if receipt.is_file()
-                    and not receipt.is_symlink() and receipt.suffix == ".json"
-                    and len(receipt.stem) == 64
-                    and all(ch in "0123456789abcdef" for ch in receipt.stem))
+        receipt_versions = sorted(receipt.stem for receipt in private.iterdir()
+                                  if receipt.is_file() and not receipt.is_symlink()
+                                  and receipt.suffix == ".json" and len(receipt.stem) == 64
+                                  and all(ch in "0123456789abcdef" for ch in receipt.stem))
+        count = len(receipt_versions)
+    receiver_path = CPANEL_HOME / ".saeit-factory-inbox/bin/store_receiver.py"
+    verified = None
+    if receiver_path.is_file() and not receiver_path.is_symlink() and count <= 20:
+        spec = importlib.util.spec_from_file_location("readonly_factory_receiver", receiver_path)
+        if spec is not None and spec.loader is not None:
+            receiver = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(receiver)
+            verified = sum(bool(receiver.status(private.parents[1], RECIPE, digest))
+                           for digest in receipt_versions)
     return {
         "schema": "saeit.factory.live-storefront-runtime-readonly.v1",
         "read_only": True,
         "passenger_main_domain_mapping_count_all_uris": all_domain_mappings,
         "passenger_main_domain_root_mappings": len(matches),
         "passenger_main_domain_nonroot_mapping_root_kinds": non_root_kinds,
+        "nonroot_mapping_contains_manage_py": nonroot_has_django,
+        "nonroot_mapping_contains_php_entrypoint": nonroot_has_php,
+        "nonroot_mapping_contains_passenger_wsgi": nonroot_has_wsgi,
         "passenger_root_kind": kind,
         "mapped_app_has_manage_py": bool(root and (root / "manage.py").is_file()),
         "mapped_app_has_django_settings": bool(root and (root / "config/settings.py").is_file()),
@@ -93,6 +120,7 @@ def summarize(uapi):
         "staging_django_source_exists": (SHARED_STAGE / "manage.py").is_file(),
         "public_docroot_passenger_wsgi_exists": (PUBLIC_ROOT / "passenger_wsgi.py").is_file(),
         "private_flagship_receipt_files": count,
+        "private_flagship_receipts_verified_by_receiver": verified,
         "runtime_database_mapping_proven": False,
         "recoverable_production_backup_proven": False,
         "public_release_permitted": False,
