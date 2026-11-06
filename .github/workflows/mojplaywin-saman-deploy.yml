@@ -1,5 +1,5 @@
 name: Deploy SAMAN to MojPlayWin
-# Finance page deployment: 34 English + 34 Arabic routes.
+# Finance page deployment: 34 English + 34 Arabic routes (live prefix /ar/).
 
 on:
   push:
