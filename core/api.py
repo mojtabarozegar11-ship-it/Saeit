@@ -484,25 +484,55 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                     event.save(update_fields=["status", "error", "processed_at", "updated_at"])
                     return Response({"detail": event.error}, status=status.HTTP_409_CONFLICT)
 
+                # One provider receipt must never settle two orders, even when
+                # the provider retries it with a new event_id. Check legacy
+                # settled intents, then atomically claim the unique ledger key
+                # before switching the intent/order to paid.
+                if PaymentIntent.objects.filter(
+                    provider=provider,
+                    provider_reference=provider_reference,
+                    status="succeeded",
+                ).exclude(pk=intent.pk).exists():
+                    event.status = "rejected"
+                    event.error = "Provider receipt was already used for another payment."
+                    event.processed_at = timezone.now()
+                    event.save(update_fields=["status", "error", "processed_at", "updated_at"])
+                    return Response({"detail": event.error}, status=status.HTTP_409_CONFLICT)
+
+                receipt_key = hashlib.sha256(
+                    (provider + "\x00" + provider_reference).encode("utf-8")
+                ).hexdigest()
+                order = intent.order
+                try:
+                    # LedgerEntry.reference is UNIQUE at the database level.
+                    # The nested savepoint lets a receipt collision be rejected
+                    # without leaving the outer transaction in an error state.
+                    with transaction.atomic():
+                        LedgerEntry.objects.create(
+                            reference=f"payment_receipt:{receipt_key}",
+                            order=order,
+                            payment_intent=intent,
+                            entry_type="payment",
+                            amount=intent.amount,
+                            currency=intent.currency,
+                            metadata={
+                                "provider": provider,
+                                "event_id": event_id,
+                                "provider_reference": provider_reference,
+                            },
+                        )
+                except IntegrityError:
+                    event.status = "rejected"
+                    event.error = "Provider receipt already has a ledger entry."
+                    event.processed_at = timezone.now()
+                    event.save(update_fields=["status", "error", "processed_at", "updated_at"])
+                    return Response({"detail": event.error}, status=status.HTTP_409_CONFLICT)
+
                 intent.status = "succeeded"
                 intent.provider_reference = provider_reference
                 intent.save(update_fields=["status", "provider_reference", "updated_at"])
-
-                order = intent.order
                 order.status = "paid"
                 order.save(update_fields=["status", "updated_at"])
-
-                LedgerEntry.objects.get_or_create(
-                    reference=f"payment:{provider}:{event_id}",
-                    defaults={
-                        "order": order,
-                        "payment_intent": intent,
-                        "entry_type": "payment",
-                        "amount": intent.amount,
-                        "currency": intent.currency,
-                        "metadata": {"provider": provider, "event_id": event_id},
-                    },
-                )
                 event.status = "processed"
             elif event_type == "payment.failed":
                 # Out-of-order provider webhooks must never reverse a settled
