@@ -19,7 +19,8 @@ RECIPE = "farm_enterprise_economics"
 def app_records(value):
     if isinstance(value, dict):
         if "domain" in value and any(
-            key in value for key in ("app_root", "app_path", "application_root")
+            key in value for key in ("app_root", "app_path", "application_root",
+                                     "path", "base_uri", "app_uri", "application_uri")
         ):
             yield value
         for child in value.values():
@@ -62,7 +63,7 @@ def summarize(uapi):
                   or entry.get("application_uri") or "/").strip()
         kind, path = classify_root(
             entry.get("app_root") or entry.get("app_path")
-            or entry.get("application_root")
+            or entry.get("application_root") or entry.get("path")
         )
         if uri.rstrip("/") != "":
             non_root_kinds[kind] = non_root_kinds.get(kind, 0) + 1
