@@ -438,6 +438,13 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                 provider=provider, event_id=event_id
             ).first()
             if existing:
+                # An event ID is immutable. Do not silently acknowledge a
+                # provider retry whose signed payload differs from the original.
+                if existing.payload_hash != payload_hash:
+                    return Response(
+                        {"detail": "Provider event ID was reused with a different payload."},
+                        status=status.HTTP_409_CONFLICT,
+                    )
                 return Response(
                     {"status": existing.status, "event_id": event_id},
                     status=status.HTTP_200_OK,
@@ -449,14 +456,38 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
             if intent is None:
                 return Response({"detail": "Payment intent not found for provider."}, status=status.HTTP_404_NOT_FOUND)
 
-            event = PaymentWebhookEvent.objects.create(
-                provider=provider,
-                event_id=event_id,
-                event_type=event_type,
-                payment_intent=intent,
-                payload_hash=payload_hash,
-                status="received",
-            )
+            try:
+                # Concurrent signed deliveries of the same event can both
+                # observe no row. The database unique (provider, event_id)
+                # constraint is final authority, with a savepoint to keep the
+                # outer transaction usable after a collision.
+                with transaction.atomic():
+                    event = PaymentWebhookEvent.objects.create(
+                        provider=provider,
+                        event_id=event_id,
+                        event_type=event_type,
+                        payment_intent=intent,
+                        payload_hash=payload_hash,
+                        status="received",
+                    )
+            except IntegrityError:
+                recorded = PaymentWebhookEvent.objects.filter(
+                    provider=provider, event_id=event_id
+                ).first()
+                if recorded is not None:
+                    if recorded.payload_hash != payload_hash:
+                        return Response(
+                            {"detail": "Provider event ID was reused with a different payload."},
+                            status=status.HTTP_409_CONFLICT,
+                        )
+                    return Response(
+                        {"status": recorded.status, "event_id": event_id},
+                        status=status.HTTP_200_OK,
+                    )
+                return Response(
+                    {"detail": "Concurrent event collision; retry reconciliation."},
+                    status=status.HTTP_409_CONFLICT,
+                )
 
             if event_type == "payment.succeeded":
                 # Compare numeric amounts, not display formatting (15 == 15.00).
