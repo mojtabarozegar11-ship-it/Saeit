@@ -54,14 +54,10 @@ class StoreMobileCheckoutTests(unittest.TestCase):
         css = self.source.split('<style id="mpw-store-catalog-20261026">', 1)[1].split(
             "</style>", 1
         )[0]
-        checkout_rule = css.split("/* Keep all three per-product actions visible", 1)[1].split(
+        checkout_rule = css.split("/* Match the live storefront: wrapping keeps", 1)[1].split(
             ".mpw-product-bottom{", 1
         )[1].split("}", 1)[0]
-        self.assertIn("display:grid", checkout_rule)
-        self.assertIn("grid-template-columns:minmax(0,1fr)", checkout_rule)
-        self.assertIn("width:100%", css.split(".mpw-product-bottom .mpw-shop-secondary{", 1)[1].split("}", 1)[0])
-        self.assertIn("grid-column:1/-1", css.split(".mpw-product-bottom .mpw-product-demo{", 1)[1].split("}", 1)[0])
-        self.assertIn("@media(max-width:650px){.mpw-product-bottom{grid-template-columns:minmax(0,1fr)}", css)
+        self.assertIn("flex-wrap:wrap", checkout_rule)
 
     def test_checkout_copy_requires_email_and_discloses_no_cross_device_recovery(self):
         self.assertIn("a valid purchase email must be entered", self.source)
