@@ -83,6 +83,18 @@ independent gains and does not certify customer revenue.
    in the same invocation. Failures remain visible via nonzero exit status;
    handler error text is not printed in shared logs. Master-loop replanning
    also records a safe error type instead of persisting raw exception text.
+7. **Seeder revocation bypass:** repeated execution of the initial seeder no
+   longer reactivates manually disabled agents/capabilities, resets owner risk
+   policy, or silently restores removed grants. Existing factory identity and
+   permissions remain untouched. Newly created internal capabilities are
+   assigned to the economic master only when created by the trusted seeder.
+8. **Real inbound demand handoff:** the existing economic master can now
+   discover a persisted `CompanyInquiry` of commercial/project/technology type,
+   create one idempotent `income_inbound_lead_review` task, and mark a new
+   inquiry as `reviewing` with a privacy-preserving internal note. No customer
+   name, email, message or payment claim is copied into the task evidence;
+   there is no outbound contact, public publication or payment. The record is
+   an inquiry, **not** evidence of verified demand, a quote, a sale or cash.
 
 ## Safe operational sequence (no automatic external writes)
 

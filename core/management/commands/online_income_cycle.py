@@ -112,6 +112,8 @@ class Command(BaseCommand):
             capability_code=action,
             risk_snapshot=capability.risk_level,
             input_data={
+                **({"inquiry_id": decision["state"]["new_inbound_inquiry_id"]}
+                   if action == "income_inbound_lead_review" else {}),
                 "objective": agent.mission,
                 "brain_decision": decision,
                 "execution_contract": {
