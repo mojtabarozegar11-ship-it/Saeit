@@ -80,10 +80,27 @@ class Command(BaseCommand):
             if completed.status != "completed":
                 raise CommandError(f"Task {task.pk} was not completed; status={completed.status}")
             executed += 1
-            verified_effect = bool((completed.output_data or {}).get('verified_effect', False))
+            output = completed.output_data if isinstance(completed.output_data, dict) else {}
+            verified_effect = output.get("verified_effect") is True
             self.stdout.write(self.style.SUCCESS(
                 f"EXECUTED task={completed.pk} action={task.action_type} status={completed.status} "
                 f"internal_effect_verified={int(verified_effect)} revenue_not_assessed=true"
             ))
+            # A completed task can still have no independently checked internal
+            # effect. Do not drain the rest of the queue after that signal: it
+            # needs human review rather than another batch of claimed progress.
+            if not verified_effect:
+                self.stdout.write(
+                    f"DRAIN_PAUSED_UNVERIFIED task={completed.pk} requires_review=true"
+                )
+                break
+            # Acquisition beyond the private growth hypothesis is an external
+            # authorization boundary, even when the hypothesis was recorded.
+            if task.action_type == "income_growth_experiment":
+                self.stdout.write(
+                    "DRAIN_EXTERNAL_BOUNDARY growth experiment prepared; "
+                    "customer acquisition requires an authorized channel."
+                )
+                break
         if options["drain"]:
             self.stdout.write(f"DRAIN_SUMMARY completed={executed} limit={self.MAX_DRAIN_TASKS}")
