@@ -4,8 +4,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sqlite3
+import shutil
 import subprocess
 import tempfile
+import unittest
+
+
+if shutil.which("php") is None:
+    raise unittest.SkipTest("PHP CLI is required for the owner-password rotation QA")
 
 ROOT=Path(__file__).resolve().parent.parent
 SCRIPT=ROOT/"scripts/zomorod_owner_password_rotate.php"

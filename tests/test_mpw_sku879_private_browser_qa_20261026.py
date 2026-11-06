@@ -1,9 +1,14 @@
 import base64
 from pathlib import Path
 import importlib.util
+import shutil
 import tempfile
 import unittest
 import zipfile
+
+
+if not (shutil.which("google-chrome") or shutil.which("chromium")) or not shutil.which("chromedriver"):
+    raise unittest.SkipTest("Chromium and ChromeDriver are required for browser QA")
 
 spec = importlib.util.spec_from_file_location(
     "sku879_browser",
