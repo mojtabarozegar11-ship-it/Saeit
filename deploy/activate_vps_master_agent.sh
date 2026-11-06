@@ -53,6 +53,26 @@ for func, parameters in required.items():
 assert callable(WorkerRunner.run) and callable(ToolGateway.invoke)
 print("MASTER_FACTORY_SHARED_ABI_PRESERVED_PREFLIGHT")
 PY
+# Previous production activations exhausted the VPS filesystem while taking
+# the SQLite snapshot. Reject low headroom before touching cron or sources.
+"$py" - <<'PY'
+import shutil
+from pathlib import Path
+from django.conf import settings
+
+db = settings.DATABASES["default"]
+assert "sqlite3" in db["ENGINE"], "MASTER_DB_BACKEND_UNEXPECTED"
+configured = Path(db["NAME"])
+assert not configured.is_symlink(), "MASTER_DB_SYMLINK_UNSAFE"
+source = configured.resolve(strict=True)
+assert source.is_file(), "MASTER_DB_MISSING"
+free = shutil.disk_usage(source.parent).free
+needed = source.stat().st_size + max(512 * 1024 * 1024, source.stat().st_size // 10)
+if free < needed:
+    print(f"MASTER_DISK_PREFLIGHT_BLOCKED free_bytes={free} required_bytes={needed}")
+    raise SystemExit(72)
+print(f"MASTER_DISK_PREFLIGHT_OK free_bytes={free} required_bytes={needed}")
+PY
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 modules=(
   core/autonomous_brain.py
@@ -81,30 +101,51 @@ for module in "${modules[@]}"; do
   fi
 done
 rollback_sources() {
+  if [ "${sources_mutated:-0}" -ne 1 ]; then
+    echo MASTER_SOURCE_ROLLBACK_NOT_NEEDED
+    return 0
+  fi
+  local failed=0
   for module in "${modules[@]}"; do
     backup="$source_backup/$module"
     target="$app/$module"
     if [ -s "$backup" ] && [ ! -L "$backup" ] && [ ! -L "$target" ]; then
-      install -D -m 600 "$backup" "$target.rollback.tmp"
-      mv -f "$target.rollback.tmp" "$target"
+      if install -D -m 600 "$backup" "$target.rollback.tmp"; then
+        mv -f "$target.rollback.tmp" "$target" || failed=1
+      else
+        failed=1
+      fi
     elif [ -f "$backup.absent" ] && [ ! -L "$target" ]; then
-      rm -f "$target"
+      rm -f "$target" || failed=1
     fi
   done
+  if [ "$failed" -eq 1 ]; then
+    echo MASTER_SOURCE_ROLLBACK_INCOMPLETE
+    return 1
+  fi
   echo MASTER_SOURCE_ROLLBACK_COMPLETED
 }
 restore_all() {
-  result=$?
+  local result=$?
+  local rollback_failed=0
   trap - EXIT
-  if [ "$result" -ne 0 ]; then rollback_sources; fi
+  if [ "$result" -ne 0 ]; then rollback_sources || rollback_failed=1; fi
   if [ "$result" -ne 0 ] && [ "${backup_verified:-0}" -eq 0 ] && [ -f "$ops/backups/master-before-$stamp.sqlite3" ]; then
-    rm -f "$ops/backups/master-before-$stamp.sqlite3"
-    echo MASTER_INCOMPLETE_DB_BACKUP_REMOVED
+    if rm -f "$ops/backups/master-before-$stamp.sqlite3"; then
+      echo MASTER_INCOMPLETE_DB_BACKUP_REMOVED
+    else
+      rollback_failed=1
+    fi
   fi
   if [ "${cron_paused:-0}" -eq 1 ]; then
-    crontab "$old"
-    echo MASTER_CRON_RESTORED_AFTER_FAILURE
+    if crontab "$old"; then
+      echo MASTER_CRON_RESTORED_AFTER_FAILURE
+    else
+      rollback_failed=1
+      echo MASTER_CRON_RESTORE_FAILED
+    fi
   fi
+  if [ "$rollback_failed" -ne 0 ]; then echo MASTER_ROLLBACK_INCOMPLETE; fi
   return "$result"
 }
 old="$ops/backups/cron-before-master-$stamp.txt"
@@ -174,6 +215,7 @@ print("MASTER_DB_BACKUP_INTEGRITY_OK")
 PY
 echo MASTER_BACKUP_VERIFIED
 backup_verified=1
+sources_mutated=1
 for module in "${modules[@]}"; do
   target="$app/$module"
   install -D -m 600 "$source_root/$module" "$target.deploy.tmp"
@@ -277,11 +319,11 @@ chmod 600 "$tmp"
 crontab "$tmp"
 rm -f "$tmp"
 test "$(crontab -l | grep -c 'SAEIT_MASTER_AGENT_V1')" -eq 2
-trap - EXIT
 if ! "$master/run-cycle.sh" >> "$master/cycle.log" 2>&1; then
   echo MASTER_INITIAL_CYCLE_FAILED_ROLLING_BACK
   exit 1
 fi
+trap - EXIT
 echo MASTER_INITIAL_CYCLE_COMPLETED
 echo MASTER_CRON_FIVE_MINUTE_CYCLE_VERIFIED
 echo MASTER_SERIAL_STEPS_UP_TO_20_VERIFIED

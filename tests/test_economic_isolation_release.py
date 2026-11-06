@@ -44,6 +44,24 @@ class EconomicIsolationReleaseTests(unittest.TestCase):
         self.assertIn("MASTER_INITIAL_CYCLE_FAILED_ROLLING_BACK", SCRIPT)
         self.assertIn("trap restore_all EXIT", SCRIPT)
 
+    def test_full_disk_fails_before_cron_pause_or_source_replacement(self):
+        preflight = SCRIPT.index("MASTER_DISK_PREFLIGHT_BLOCKED")
+        cron_pause = SCRIPT.index('crontab "$paused"')
+        deployment = SCRIPT.index('sources_mutated=1')
+        self.assertLess(preflight, cron_pause)
+        self.assertLess(preflight, deployment)
+        self.assertIn('needed = source.stat().st_size + max(512 * 1024 * 1024', SCRIPT)
+
+    def test_failure_restores_cron_even_if_source_rollback_fails(self):
+        self.assertIn('rollback_sources || rollback_failed=1', SCRIPT)
+        self.assertIn('if crontab "$old"; then', SCRIPT)
+        self.assertIn('MASTER_ROLLBACK_INCOMPLETE', SCRIPT)
+        initial_run = SCRIPT.index('if ! "$master/run-cycle.sh"')
+        first_cycle_complete = SCRIPT.index('echo MASTER_INITIAL_CYCLE_COMPLETED')
+        disable_rollback = SCRIPT.rindex('trap - EXIT')
+        self.assertLess(initial_run, disable_rollback)
+        self.assertLess(disable_rollback, first_cycle_complete)
+
 
 if __name__ == "__main__":
     unittest.main()
