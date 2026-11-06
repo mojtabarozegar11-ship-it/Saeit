@@ -1,4 +1,4 @@
-# Farm Enterprise Economics Toolkit — Edition 1.3 (offline browser + Python)
+# Farm Enterprise Economics Toolkit — Edition 1.4 (offline browser + Python)
 
 A working, offline agricultural enterprise calculator for a modern browser or Python 3.8+.
 It estimates contribution margin, annual operating result, break-even sales
@@ -81,6 +81,8 @@ It reports portfolio resource totals **only when all enterprises** supplied
 the corresponding quantity. A missing resource observation is not treated as
 zero. Costs related to land and irrigation must already be allocated into the
 existing variable or fixed cost fields; this extension does not add them again.
+Portfolio land and water totals retain the precision entered by the operator;
+they are physical quantities and are **never rounded to monetary cents**.
 Do not interpret profit per hectare/water as an estimate of marginal value,
 water-saving potential, hydrological impact, or recommended irrigation rates.
 

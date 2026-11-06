@@ -185,7 +185,7 @@
       const observed = dataRows.filter((x) => x.numbers[key] !== null);
       const complete = observed.length === dataRows.length;
       resources[field] = { provided_enterprises: observed.length, complete_for_portfolio: complete,
-        portfolio_total: complete ? format(observed.reduce((sum, x) => add(sum, x.numbers[key]), ZERO)) : null };
+        portfolio_total: complete ? exact(observed.reduce((sum, x) => add(sum, x.numbers[key]), ZERO)) : null };
     }
     const scenario = [];
     for (const x of dataRows) {
@@ -199,7 +199,7 @@
         }
       }
     }
-    return { version: '1.2-browser', currency,
+    return { version: '1.4-browser', currency,
       accounting_scope: 'contribution_profit_before_depreciation_financing_tax',
       input_values_independently_validated: false,
       assumptions: [

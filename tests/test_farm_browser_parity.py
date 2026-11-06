@@ -122,6 +122,12 @@ class OfflineBrowserArithmeticParityTests(unittest.TestCase):
             crop("Zero margin", 100, 10, 10, 50, 0),
         ]})
 
+    def test_tiny_physical_totals_never_round_to_zero_currency_cents(self):
+        self.assert_parity({"currency": "USD", "enterprises": [
+            crop("Micro plot", "1", "100", "40", "10", "0",
+                 land_area_hectares="0.004", irrigation_water_m3="0.0005")
+        ]})
+
     def test_deterministic_differential_cases(self):
         # Independent evaluation of 30 varied multi-enterprise farm scenarios.
         rng = random.Random(20261106)

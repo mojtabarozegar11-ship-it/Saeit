@@ -118,8 +118,16 @@ class EconomicsTests(unittest.TestCase):
         self.assertEqual(row["units_sold_per_irrigation_m3"], "2.0000")
         self.assertEqual(row["operating_profit_per_irrigation_m3"], "5.00")
         result = evaluate({"currency": "USD", "enterprises": [crop]})
-        self.assertEqual(result["resource_coverage"]["land_area_hectares"]["portfolio_total"], "2.50")
-        self.assertEqual(result["resource_coverage"]["irrigation_water_m3"]["portfolio_total"], "500.00")
+        self.assertEqual(result["resource_coverage"]["land_area_hectares"]["portfolio_total"], "2.5")
+        self.assertEqual(result["resource_coverage"]["irrigation_water_m3"]["portfolio_total"], "500")
+
+    def test_physical_portfolio_totals_preserve_fractional_measured_inputs(self):
+        crop = dict(self.example["enterprises"][0],
+                    land_area_hectares="0.004", irrigation_water_m3="0.0005")
+        result = evaluate({"currency": "USD", "enterprises": [crop]})
+        self.assertEqual(result["resource_coverage"]["land_area_hectares"]["portfolio_total"], "0.004")
+        self.assertEqual(result["resource_coverage"]["irrigation_water_m3"]["portfolio_total"], "0.0005")
+        self.assertEqual(result["version"], "1.4")
 
     def test_partial_resource_records_do_not_misrepresent_portfolio_totals(self):
         first = dict(self.example["enterprises"][0],
