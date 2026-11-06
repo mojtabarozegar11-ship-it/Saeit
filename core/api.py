@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated, IsAuthenticatedOrReadOnly
@@ -421,6 +423,8 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
             return Response({"detail": "Webhook payload must be valid JSON."}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(payload, dict):
+            return Response({"detail": "Webhook payload must be an object."}, status=status.HTTP_400_BAD_REQUEST)
 
         event_type = str(payload.get("event_type", "")).strip()
         intent_id = payload.get("payment_intent_id")
@@ -455,9 +459,18 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
             )
 
             if event_type == "payment.succeeded":
-                amount = str(payload.get("amount", ""))
+                # Compare numeric amounts, not display formatting (15 == 15.00).
+                # Reject non-finite or malformed values before crediting an order.
+                try:
+                    amount = Decimal(str(payload.get("amount", "")))
+                except (InvalidOperation, TypeError, ValueError):
+                    amount = None
                 currency = str(payload.get("currency", "")).strip()
-                if amount != str(intent.amount) or currency != intent.currency:
+                if (
+                    amount is None or not amount.is_finite()
+                    or amount != intent.amount or currency != intent.currency
+                    or not provider_reference
+                ):
                     event.status = "rejected"
                     event.error = "Amount or currency mismatch."
                     event.processed_at = timezone.now()
@@ -492,15 +505,21 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                 )
                 event.status = "processed"
             elif event_type == "payment.failed":
-                intent.status = "failed"
-                intent.provider_reference = provider_reference
-                intent.save(update_fields=["status", "provider_reference", "updated_at"])
-                event.status = "processed"
+                # Out-of-order provider webhooks must never reverse a settled
+                # payment or contradict the immutable financial ledger.
+                if intent.status not in {"ready_for_gateway", "gateway_pending"}:
+                    event.status = "ignored"
+                    event.error = "Payment is not in a fail-able state."
+                else:
+                    intent.status = "failed"
+                    intent.provider_reference = provider_reference
+                    intent.save(update_fields=["status", "provider_reference", "updated_at"])
+                    event.status = "processed"
             else:
                 event.status = "ignored"
 
             event.processed_at = timezone.now()
-            event.save(update_fields=["status", "processed_at", "updated_at"])
+            event.save(update_fields=["status", "error", "processed_at", "updated_at"])
             AuditLog.objects.create(
                 actor_type="payment_provider",
                 actor_id=provider,
