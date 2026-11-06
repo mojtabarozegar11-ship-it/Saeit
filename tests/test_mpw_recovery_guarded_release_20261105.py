@@ -64,6 +64,14 @@ class GuardedRecoveryReleaseTests(unittest.TestCase):
             patch.object(release, "APP", self.app),
             patch.object(release, "BACKUPS", self.backups),
             patch.object(release, "EXPECTED_GUEST_BASE", release.digest(self.fake["guest"])),
+            # The 2026-11-05 release is deliberately pinned to its original
+            # deployed payload. New source revisions need a new release, not
+            # relaxed production hashes. Only this isolated fixture is repinned
+            # so backup/rollback behaviors remain testable as code evolves.
+            patch.dict(release.SOURCE_DIGESTS, {
+                key: release.digest((SOURCE / release.FILES[key]).read_bytes())
+                for key in release.SOURCE_DIGESTS
+            }),
             patch.object(release, "guard_host"),
         ]
         for patcher in self.patches:

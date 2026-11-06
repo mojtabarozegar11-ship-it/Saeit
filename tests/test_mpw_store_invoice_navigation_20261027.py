@@ -12,7 +12,7 @@ class StoreInvoiceNavigationTests(unittest.TestCase):
 
     def test_customer_has_single_purchases_and_invoices_link(self):
         self.assertEqual(self.page.count('href="/commerce/trx-easy/purchases/"'), 1)
-        self.assertIn("View your purchases and invoices</a>", self.page)
+        self.assertIn("My TRX purchases</a>", self.page)
 
     def test_existing_product_destinations_remain_intact(self):
         for sku in (72, 225, 879):
@@ -25,8 +25,8 @@ class StoreInvoiceNavigationTests(unittest.TestCase):
 
 
     def test_invoice_recovery_link_contrast_and_keyboard_focus(self):
-        self.assertIn(".mpw-shop-payment a{color:#f0d98f!important;text-decoration:underline", self.page)
-        self.assertIn(".mpw-shop-payment a:focus-visible{outline:3px solid #fff", self.page)
+        self.assertIn(".mpw-shop-payment a,.mpw-shop-footer a{color:#f0d98f!important;text-decoration:underline", self.page)
+        self.assertIn(".mpw-shop-payment a:focus-visible,.mpw-shop-footer a:focus-visible{outline:3px solid #fff", self.page)
         self.assertIn("background:#111310", self.page)
 
         def luminance(color):

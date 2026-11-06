@@ -28,6 +28,48 @@ from core.models import LedgerEntry, OrderItem, PaymentIntent, PaymentWebhookEve
 from core.crown_tron_receipts import PROVIDER, verified_walletless_credit
 
 
+TRACKED_SKUS = (72, 225, 779, 879)
+
+
+def tracked_sku_paid_summary(rows, total):
+    """Aggregate only verified-in-database evidence, never customer identities.
+
+    One paid intent containing a SKU is one count, regardless of quantity.
+    Zero in a truncated sample must not be presented as zero across the DB.
+    These counters do NOT prove an independent mainnet transfer or download.
+    """
+    paid = {str(sku): 0 for sku in TRACKED_SKUS}
+    credits = {str(sku): 0 for sku in TRACKED_SKUS}
+    prepared = {str(sku): 0 for sku in TRACKED_SKUS}
+    tracked = set(TRACKED_SKUS)
+    for row in rows:
+        products = row.get("products", [])
+        if not isinstance(products, list):
+            continue
+        sku_ids = {sku for sku in products if type(sku) is int and sku in tracked}
+        for sku in sku_ids:
+            key = str(sku)
+            paid[key] += 1
+            if row.get("persisted_walletless_credit_verified") is True:
+                credits[key] += 1
+            fulfillment = row.get("fulfillment")
+            if isinstance(fulfillment, dict) and type(fulfillment.get("ready")) is int:
+                if fulfillment["ready"] > 0:
+                    prepared[key] += 1
+    return {
+        "tracked_skus": list(TRACKED_SKUS),
+        "sample_complete": total == len(rows) and not any(
+            row.get("products_truncated") is True for row in rows),
+        "paid_intents_containing_sku": paid,
+        "persisted_walletless_credit_intents_containing_sku": credits,
+        "paid_intents_with_any_ready_fulfillment_containing_sku": prepared,
+        "independent_mainnet_payment_reverified": False,
+        "authenticated_buyer_download_verified": False,
+        "zero_is_global_only_if_sample_complete": True,
+        "unit": "payment_intents_with_sku_not_units_sold",
+    }
+
+
 def fulfillment_for_order(order_id):
     """Count linked state only; READY is not proof the buyer downloaded."""
     try:
@@ -171,6 +213,7 @@ def run():
         )
         rows.append({
             "products": products[:12],
+            "products_truncated": len(products) > 12,
             "provider": provider,
             "order_paid_flag": order.status == "paid",
             "customer_class": customer_class,
@@ -187,6 +230,7 @@ def run():
         "truncated": total > len(rows),
         "provider_counts_examined": dict(sorted(provider_counts.items())),
         "walletless_persisted_credit_verified": valid_walletless_credits,
+        "tracked_sku_summary": tracked_sku_paid_summary(rows, total),
         "fulfillment_schema_metadata": fulfillment_model_shape(),
         "delivery_model_inventory": delivery_model_inventory(),
         "independent_mainnet_recheck_performed": False,

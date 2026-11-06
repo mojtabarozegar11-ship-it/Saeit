@@ -63,6 +63,28 @@ def guard_host():
         fail("UNSAFE_RESTART")
 
 
+def require_isolated_source():
+    """Reuse the stricter on-host UAPI + CloudLinux release perimeter.
+
+    The old one-time funnel publisher cannot prove safe ownership of a shared
+    Saeit-staging directory from the public WSGI file alone.  Missing or
+    unreadable perimeter code and failed inventories always block publication.
+    """
+    contract_file = Path(__file__).with_name("mpw_store_payment_copy_safe_release_20261106.py")
+    if contract_file.is_symlink() or not contract_file.is_file():
+        fail("ISOLATION_CONTRACT_UNAVAILABLE")
+    try:
+        spec = importlib.util.spec_from_file_location("mpw_store_perimeter", contract_file)
+        if spec is None or spec.loader is None:
+            fail("ISOLATION_CONTRACT_UNAVAILABLE")
+        contract = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(contract)
+        contract.verify_live_passenger_mapping()
+        contract.verify_cloudlinux_source_isolation()
+    except Exception as exc:
+        fail("ISOLATION_NOT_VERIFIED:" + type(exc).__name__)
+
+
 def staged(stage):
     if stage.is_symlink() or not stage.is_dir() or stage.resolve() != stage:
         fail("UNSAFE_STAGE")
@@ -80,6 +102,7 @@ def staged(stage):
 
 def state(stage):
     guard_host()
+    require_isolated_source()
     code = staged(stage)
     guest = owned_file(GUEST)
     settings = owned_file(SETTINGS)

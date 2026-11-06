@@ -22,6 +22,10 @@ CUTOFF = NOW - timedelta(days=30)
 BOT = re.compile(r"bot|spider|crawl|monitor|uptime|headless|curl|wget|python-requests|postman|github-actions|go-http-client", re.I)
 APACHE = re.compile(r'^(\S+)\s+\S+\s+\S+\s+\[([^\]]+)\]\s+"(GET|POST|HEAD)\s+(\S+)\s+HTTP/[^"]+"\s+(\d{3})\s+.*?"[^"]*"\s+"([^"]*)"')
 ARCHIVE_NAME = re.compile(r"^(?:www\.)?mojplaywin\.com(?:[-_.].*)?(?:\.gz|\.log|_log)$", re.I)
+CANONICAL_CHECKOUT = re.compile(r"\A/commerce/book/[1-9][0-9]*/\Z")
+LEGACY_CHECKOUT = re.compile(r"\A/store/product/[1-9][0-9]*/checkout/\Z")
+CANONICAL_SKU = re.compile(r"\A/commerce/book/(72|225|779|879)/\Z")
+LEGACY_SKU = re.compile(r"\A/store/product/(72|225|779|879)/checkout/\Z")
 
 
 def output(label, value):
@@ -267,6 +271,19 @@ def route_bucket(page):
             return prefix.strip("/")
     return "other"
 
+
+def checkout_family(page):
+    """Separate valid current purchase URLs from retired checkout URLs.
+
+    Do not treat a redirect as a paid order. This only labels public log paths.
+    The legacy route_bucket() name remains compatible with older CI contracts.
+    """
+    if CANONICAL_CHECKOUT.fullmatch(page):
+        return "canonical_checkout"
+    if LEGACY_CHECKOUT.fullmatch(page):
+        return "legacy_checkout"
+    return None
+
 def recent_cpanel_visitors():
     """Legacy cPanel API has no equivalent UAPI; do not echo its raw PII."""
     result = {"source": "cpanel_Stats_lastvisitors", "available": False,
@@ -293,7 +310,9 @@ def visitor_logs():
               "within_30d": 0, "likely_human_page_hits": 0,
               "likely_bot_page_hits": 0, "approx_distinct_ips": 0,
               "store_page_hits": 0, "product_page_hits": 0,
-              "checkout_page_hits": 0, "revenue_hub_hits": 0,
+              "store_landing_hits": 0, "checkout_page_hits": 0,
+              "canonical_checkout_hits": 0, "legacy_checkout_hits": 0,
+              "revenue_hub_hits": 0,
               "revenue_offer_hits": 0, "contact_page_hits": 0,
               "page_4xx": 0, "page_5xx": 0,
               "earliest_utc": None, "latest_utc": None,
@@ -319,6 +338,8 @@ def visitor_logs():
     errors_by_day = Counter()
     checkout_responses_by_day = Counter()
     allowed_sku_checkout_by_day = Counter()
+    canonical_sku_by_day = Counter()
+    legacy_sku_by_day = Counter()
     login_errors_by_day = Counter()
     first = last = None
     for p in files:
@@ -349,19 +370,24 @@ def visitor_logs():
                         report["likely_bot_page_hits"] += 1
                         continue
                     report["likely_human_page_hits"] += 1
-                    current_bucket = route_bucket(page)
-                    if current_bucket in ("product_checkout", "trx_invoice", "trx_other"):
+                    family = checkout_family(page)
+                    current_bucket = family or route_bucket(page)
+                    if current_bucket in ("canonical_checkout", "legacy_checkout", "trx_invoice", "trx_other"):
                         checkout_responses_by_day[at.date().isoformat() + ":" + current_bucket + ":" + status] += 1
-                    known = re.fullmatch(r"/(?:store/product/(72|225|779|879)/checkout|commerce/book/(72|225|779|879))/", page)
-                    if known:
-                        allowed_sku_checkout_by_day[at.date().isoformat() + ":sku_" + (known.group(1) or known.group(2)) + ":" + status] += 1
+                    canonical_sku = CANONICAL_SKU.fullmatch(page)
+                    legacy_sku = LEGACY_SKU.fullmatch(page)
+                    if canonical_sku or legacy_sku:
+                        sku = (canonical_sku or legacy_sku).group(1)
+                        key = at.date().isoformat() + ":sku_" + sku + ":" + status
+                        allowed_sku_checkout_by_day[key] += 1
+                        (canonical_sku_by_day if canonical_sku else legacy_sku_by_day)[key] += 1
                     if status.startswith(("4", "5")):
-                        errors_by_bucket[route_bucket(page) + ":" + status] += 1
+                        errors_by_bucket[current_bucket + ":" + status] += 1
                         errors_by_day[at.date().isoformat() + ":" + status[0] + "xx"] += 1
                         if status == "403" and page.startswith("/accounts/"):
                             login_errors_by_day[at.date().isoformat() + ":" + route_bucket(page)] += 1
                     unique.add(ip)
-                    bucket = route_bucket(page)
+                    bucket = current_bucket
                     if bucket == "revenue_hub":
                         report["revenue_hub_hits"] += 1
                     elif bucket == "revenue_offer":
@@ -370,10 +396,13 @@ def visitor_logs():
                         report["contact_page_hits"] += 1
                     if page.startswith("/store/") or page == "/store/":
                         report["store_page_hits"] += 1
+                    if page in ("/store", "/store/"):
+                        report["store_landing_hits"] += 1
                     if page.startswith("/store/product/") and not page.endswith("/checkout/"):
                         report["product_page_hits"] += 1
-                    if page.endswith("/checkout/"):
+                    if family:
                         report["checkout_page_hits"] += 1
+                        report[family + "_hits"] += 1
                     if status.startswith("4"):
                         report["page_4xx"] += 1
                     if status.startswith("5"):
@@ -388,14 +417,20 @@ def visitor_logs():
     output("MPW_VISITOR_LOGS", report)
     output("MPW_ERROR_BUCKETS", {"source": "same_archived_access_logs",
                                 "codes_by_route": dict(errors_by_bucket.most_common(30)),
+                                "checkout_routes_split": True,
                                 "no_url_or_ip_disclosed": True})
     output("MPW_ERROR_DAYS", {"day_and_status_class": dict(sorted(errors_by_day.items())),
                               "source": "same_archived_access_logs"})
     output("MPW_CHECKOUT_STATUS_BY_DAY", {"day_route_http_status": dict(sorted(checkout_responses_by_day.items())),
                                           "source": "same_archived_access_logs", "no_url_or_ip_disclosed": True,
-                                          "limitations": "Archive may lag; filtered user agents are not verified people."})
+                                          "limitations": "Canonical /commerce/book/ and legacy /store/product/.../checkout/ are separate; archive may lag; redirects are not proof of invoices or payments; filtered user agents are not verified people."})
     output("MPW_ALLOWED_SKU_CHECKOUT_BY_DAY", {"day_sku_http_status": dict(sorted(allowed_sku_checkout_by_day.items())),
-                                            "source": "same_archived_access_logs", "no_customer_info_disclosed": True})
+                                            "source": "same_archived_access_logs", "no_customer_info_disclosed": True,
+                                            "mixed_canonical_and_legacy": True})
+    output("MPW_CANONICAL_SKU_CHECKOUT_BY_DAY", {"day_sku_http_status": dict(sorted(canonical_sku_by_day.items())),
+                                                "source": "same_archived_access_logs", "no_customer_info_disclosed": True})
+    output("MPW_LEGACY_SKU_CHECKOUT_BY_DAY", {"day_sku_http_status": dict(sorted(legacy_sku_by_day.items())),
+                                             "source": "same_archived_access_logs", "no_customer_info_disclosed": True})
     output("MPW_ACCOUNT_403_DAYS", {"day_and_route": dict(sorted(login_errors_by_day.items())),
                                    "source": "same_archived_access_logs"})
 

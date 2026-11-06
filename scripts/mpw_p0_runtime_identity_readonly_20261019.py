@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MojPlayWin-only read-only actual runtime source/worker evidence inventory.
+"""MojPlayWin-only read-only configured runtime wiring inventory.
 
 No site writes, secret output, database reads or exposure of other domain paths.
 A scheduled Cron entry proves configuration, not a successfully running worker.
@@ -101,11 +101,18 @@ def inspect_runtime(root=ROOT, app=APP, private=PRIVATE, cron_text=None, now=Non
     robots_b = _report(evo / "extended_robots_status_20261018.json")
     heartbeat = _report(private / "v91_verified_main_port_20261018" /
                         "operator_state" / "heartbeat.json")
-    connected = bool(wsgi_targets_app and passenger_root)
+    # These are static file references only. Neither a WSGI string literal
+    # nor an .htaccess directive identifies the currently serving worker,
+    # imported Django module, database, or other tenants of this source tree.
+    wiring_observed = bool(wsgi_targets_app and passenger_root)
     return {
         "tenant": TENANT, "domain": DOMAIN, "captured_utc": now.isoformat(),
-        "runtime_identity": "Saeit-staging" if connected else "unverified",
-        "runtime_identity_verified": connected,
+        "runtime_identity": "unverified",
+        "runtime_identity_verified": False,
+        "configured_source_reference_verified": wiring_observed,
+        "effective_public_worker_verified": False,
+        "database_identity_verified": False,
+        "production_source_isolation_verified": False,
         "passenger_wiring_verified": bool(wsgi_targets_app),
         "passenger_root_verified": bool(passenger_root),
         "wsgi_sha256": hashlib.sha256(raw).hexdigest() if raw else None,
@@ -118,13 +125,15 @@ def inspect_runtime(root=ROOT, app=APP, private=PRIVATE, cron_text=None, now=Non
         "site_roles_report_age_seconds": _age_seconds(roles, "observed_utc", now),
         "five_robots_report_age_seconds": _age_seconds(robots_a, "observed_utc", now),
         "six_robots_report_age_seconds": _age_seconds(robots_b, "observed_utc", now),
-        "Bazei_runtime_connected": False if connected else None,
+        "Bazei_runtime_connected": False if wiring_observed else None,
         "site_writes": 0, "other_sites_examined": False,
-        "status": "runtime_identity_observed" if connected else "runtime_identity_unverified",
+        "status": "static_wiring_only" if wiring_observed else "runtime_identity_unverified",
     }
 
 if __name__ == "__main__":
     result = inspect_runtime()
     print("MPW_SITE_ONLY_RUNTIME_IDENTITY=" + json.dumps(result, sort_keys=True))
-    if not result.get("runtime_identity_verified"):
+    # Exit zero means the configured source reference was observed, never
+    # that a release gate or active-worker identity was verified.
+    if not result.get("configured_source_reference_verified"):
         raise SystemExit(2)

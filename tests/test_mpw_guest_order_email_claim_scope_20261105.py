@@ -36,7 +36,13 @@ class TestSourceContract(unittest.TestCase):
         guest = (ROOT / "services/mpw_trx_guest_commerce.py").read_text("utf-8")
         recovery = (ROOT / "services/mpw_trx_email_recovery.py").read_text("utf-8")
         accepted = '("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email")'
-        self.assertEqual(guest.count(accepted), 3)  # common check covers authenticated orders too
+        # All three guest entry points now share one canonical validator.
+        self.assertEqual(guest.count(accepted), 1)
+        for name in ("_new_user", "_bind_guest_email"):
+            tree = ast.parse(guest)
+            fn = next(node for node in tree.body
+                      if isinstance(node, ast.FunctionDef) and node.name == name)
+            self.assertIn("_required_checkout_email(request)", ast.get_source_segment(guest, fn))
         self.assertEqual(recovery.count(accepted), 1)
 
     def test_public_routes_still_recovery_gated(self):
@@ -49,7 +55,9 @@ class TestSourceContract(unittest.TestCase):
 
     def test_email_dispatch_remains_approval_gated(self):
         source = (ROOT / "services/mpw_trx_email_recovery.py").read_text("utf-8")
-        self.assertIn('if getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is not True:', source)
+        self.assertIn('getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True', source)
+        self.assertIn('if not _recovery_active():', source)
+        self.assertEqual(source.count('or not _recovery_active()'), 3)
 
 
 class FakeSignal:

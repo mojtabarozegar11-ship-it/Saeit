@@ -182,7 +182,8 @@ class RecoveryIsolationTests(unittest.TestCase):
         self.assertFalse(module._allowed(req))
         self.assertEqual(GuestRecoveryRate.objects.count(), 1)
 
-    @override_settings(MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
+    @override_settings(MPW_GUEST_RECOVERY_ENABLED=True,
+                       MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
     def test_approved_request_still_does_not_send_for_unknown_email(self):
         module.bound_checkout(self._request(), self._start, self._identity,
                               self._install, (72,), {})
@@ -215,14 +216,21 @@ class RecoveryIsolationTests(unittest.TestCase):
             _meta=SimpleNamespace(fields=[fake_field, state_field]),
             objects=MagicMock(),
         )
-        fulfillment.objects.filter.return_value.count.return_value = 1
+        rows = fulfillment.objects.filter.return_value.values_list
+        rows.return_value = [(1, "ready")]
         fake_items = MagicMock()
         fake_items.objects.filter.return_value.count.return_value = 2
         with patch.object(module.apps, "get_model", return_value=fulfillment), \
              patch.object(module, "OrderItem", fake_items):
             self.assertFalse(module._ready(SimpleNamespace(pk=123)))
-            fulfillment.objects.filter.return_value.count.return_value = 2
+            rows.return_value = [(1, "ready"), (2, "READY")]
             self.assertTrue(module._ready(SimpleNamespace(pk=123)))
+            rows.return_value = [(1, "ready"), (1, "ready")]
+            self.assertFalse(module._ready(SimpleNamespace(pk=123)))
+            rows.return_value = [(1, "ready"), (2, "pending")]
+            self.assertFalse(module._ready(SimpleNamespace(pk=123)))
+            rows.return_value = [(1, "ready"), (2, "ready"), (2, "ready")]
+            self.assertFalse(module._ready(SimpleNamespace(pk=123)))
 
     def test_prune_removes_no_persistent_order_claims(self):
         module.bound_checkout(self._request(), self._start, self._identity,
@@ -255,6 +263,8 @@ class RecoveryIsolationTests(unittest.TestCase):
         self.assertIs(routes["commerce/trx-easy/recover/"], module.recovery_request)
         self.assertIs(names["_start_order"], handler)
 
+    @override_settings(MPW_GUEST_RECOVERY_ENABLED=True,
+                       MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
     def test_positive_delegation_uses_existing_download_checks(self):
         module.bound_checkout(self._request(), self._start, self._identity,
                               self._install, (72,), {})
@@ -284,6 +294,8 @@ class RecoveryIsolationTests(unittest.TestCase):
         self.assertEqual(called, [(self.user.pk, intent.pk)])
         self.assertIn("no-store", res["Cache-Control"])
 
+    @override_settings(MPW_GUEST_RECOVERY_ENABLED=True,
+                       MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
     def test_missing_private_download_handler_denies_recovery(self):
         from types import ModuleType
         from django.core import signing
@@ -302,6 +314,8 @@ class RecoveryIsolationTests(unittest.TestCase):
             with self.assertRaises(Http404):
                 module.recovery_download(req, intent.pk)
 
+    @override_settings(MPW_GUEST_RECOVERY_ENABLED=True,
+                       MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
     def test_claim_does_not_grant_download_for_other_email(self):
         module.bound_checkout(self._request(), self._start, self._identity,
                               self._install, (72,), {})

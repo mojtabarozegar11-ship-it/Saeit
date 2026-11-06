@@ -29,7 +29,13 @@ class MojPlayWinRuntimeProofTests(unittest.TestCase):
 
     def test_pinned_identity_and_tenant_only(self):
         result = self.inspect()
-        self.assertTrue(result["runtime_identity_verified"])
+        self.assertTrue(result["configured_source_reference_verified"])
+        self.assertFalse(result["runtime_identity_verified"])
+        self.assertEqual(result["runtime_identity"], "unverified")
+        self.assertEqual(result["status"], "static_wiring_only")
+        self.assertFalse(result["effective_public_worker_verified"])
+        self.assertFalse(result["database_identity_verified"])
+        self.assertFalse(result["production_source_isolation_verified"])
         self.assertEqual(result["domain"], "mojplaywin.com")
         self.assertEqual(result["tenant"], "mojplaywin-main")
         self.assertTrue(result["cron_markers_unique"])
@@ -41,6 +47,7 @@ class MojPlayWinRuntimeProofTests(unittest.TestCase):
         (self.root / "passenger_wsgi.py").write_text("APP='/other/site'")
         result = self.inspect()
         self.assertFalse(result["runtime_identity_verified"])
+        self.assertFalse(result["configured_source_reference_verified"])
         self.assertEqual(result["runtime_identity"], "unverified")
 
     def test_module_imports_are_not_functional_proof(self):

@@ -22,6 +22,7 @@ SALT = "mpw.trx.guest.owner.v1"
 COOKIE_AGE = 30 * 86400
 COOKIE_PATH = "/commerce/trx-easy/"
 MAX_COOKIE = 512
+INVOICE_LOCATION = re.compile(r"\A/commerce/trx-easy/invoice/[1-9][0-9]*/\Z")
 
 
 def _host_ok(request):
@@ -40,7 +41,11 @@ def _read_user(request):
             return None
         from django.contrib.auth import get_user_model
         user = get_user_model().objects.filter(pk=user_id, is_active=True).first()
-        if user is None or user.has_usable_password():
+        # A signed guest cookie must never become a staff/admin login, even if
+        # a guest principal is later misconfigured in the auth database.
+        if (user is None or user.has_usable_password()
+                or getattr(user, "is_staff", False)
+                or getattr(user, "is_superuser", False)):
             return None
         username = str(getattr(user, get_user_model().USERNAME_FIELD, ""))
         if not username.startswith("mpwguest_"):
@@ -95,16 +100,7 @@ def _new_user(request):
     # The guest principal is the durable owner of the order.  Persist the
     # address submitted by the checkout form before invoice binding; otherwise
     # record_invoice() correctly refuses to create an unowned delivery record.
-    submitted_email = ""
-    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
-        raw = request.POST.get(key) if hasattr(request, "POST") else None
-        if raw is not None:
-            submitted_email = str(raw).strip().lower()
-            break
-    if not submitted_email:
-        raise Http404("Email address required")
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", submitted_email):
-        raise Http404("Valid email address required")
+    submitted_email = _required_checkout_email(request)
 
     _rate_limit(request)
     Model = get_user_model()
@@ -125,12 +121,18 @@ def _new_user(request):
                 user.set_unusable_password()
                 if hasattr(user, "is_active"):
                     user.is_active = True
+                # Never inherit a customized user model's privileged defaults.
+                for privileged_flag in ("is_staff", "is_superuser"):
+                    if hasattr(user, privileged_flag):
+                        setattr(user, privileged_flag, False)
                 user.save(force_insert=True)
         except IntegrityError:
             user = Model.objects.filter(**query).first()
             if user is None:
                 raise
-    if not getattr(user, "is_active", True) or user.has_usable_password():
+    if (not getattr(user, "is_active", True) or user.has_usable_password()
+            or getattr(user, "is_staff", False)
+            or getattr(user, "is_superuser", False)):
         raise Http404("Guest identity conflict")
     if hasattr(user, "email"):
         existing_email = str(getattr(user, "email", "") or "").strip().lower()
@@ -147,14 +149,7 @@ def _new_user(request):
 
 def _bind_guest_email(request, user):
     """Bind a submitted address only to this existing guest principal."""
-    submitted_email = ""
-    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
-        raw = request.POST.get(key) if hasattr(request, "POST") else None
-        if raw is not None:
-            submitted_email = str(raw).strip().lower()
-            break
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", submitted_email):
-        raise Http404("Valid email address required")
+    submitted_email = _required_checkout_email(request)
     existing_email = str(getattr(user, "email", "") or "").strip().lower()
     if existing_email and existing_email != submitted_email:
         raise Http404("Guest email identity mismatch")
@@ -201,7 +196,12 @@ def _identity(request, *, create=False):
     token = None
     if user is None and create:
         user, token = _new_user(request)
-    elif user is not None and create and str(getattr(user, "username", "")).startswith("mpwguest_"):
+    elif user is not None and create:
+        # A retained guest cookie must not become a way around the same
+        # per-IP invoice-creation throttle applied to first-time guests.
+        _rate_limit(request)
+        # _read_user already checked the signed guest identity.  A custom
+        # Django user model may use email, not username, as USERNAME_FIELD.
         user = _bind_guest_email(request, user)
     if user is None:
         raise Http404("Guest purchase session missing or expired")
@@ -224,23 +224,47 @@ def _install_cookie(response, token):
 
 def _dispatch(request, view, args, kwargs, *, create=False):
     if create:
-        from django.conf import settings
-        # Capturing immutable checkout ownership is independent of opening
-        # public recovery routes or approving outbound recovery mail.
-        if (getattr(settings, "MPW_GUEST_EMAIL_CLAIM_CAPTURE_ENABLED", False) is True
-                or getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True):
-            from services.mpw_trx_email_recovery import bound_checkout
-            response = bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
-            if 200 <= getattr(response, "status_code", 500) < 400:
-                _count_checkout_event(request, "order_start_accepted", args, kwargs)
-            return response
-    user, token = _identity(request, create=create)
-    request.user = user
-    response = view(request, *args, **kwargs)
-    response = _install_cookie(response, token)
-    if create and 200 <= getattr(response, "status_code", 500) < 400:
-        _count_checkout_event(request, "order_start_accepted", args, kwargs)
+        # This follows the POST/CSRF decorators; only anonymous aggregate
+        # counters are recorded. No email, IP, invoice or browser ID is stored.
+        _count_checkout_event(request, "order_start_attempt", args, kwargs)
+    try:
+        if create:
+            from django.conf import settings
+            # Capturing immutable checkout ownership is independent of opening
+            # public recovery routes or approving outbound recovery mail.
+            if (getattr(settings, "MPW_GUEST_EMAIL_CLAIM_CAPTURE_ENABLED", False) is True
+                    or getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True):
+                from services.mpw_trx_email_recovery import bound_checkout
+                response = bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
+            else:
+                user, token = _identity(request, create=True)
+                request.user = user
+                response = _install_cookie(view(request, *args, **kwargs), token)
+        else:
+            user, token = _identity(request, create=False)
+            request.user = user
+            response = _install_cookie(view(request, *args, **kwargs), token)
+    except Exception:
+        if create:
+            _count_checkout_event(request, "order_start_exception", args, kwargs)
+        raise
+    if create:
+        stage = ("order_start_accepted" if _is_invoice_redirect(response)
+                 else "order_start_not_invoiced")
+        _count_checkout_event(request, stage, args, kwargs)
     return response
+
+
+def _is_invoice_redirect(response):
+    """Only an issued invoice counts as an accepted checkout.
+
+    Validation pages (HTTP 200) and redirects back to the store (HTTP 302)
+    are not new invoices.  No payment or buyer details are inspected here.
+    """
+    location = response.get("Location", "")
+    return (getattr(response, "status_code", None) in (302, 303)
+            and isinstance(location, str)
+            and INVOICE_LOCATION.fullmatch(location) is not None)
 
 
 def _count_checkout_event(request, stage, args=(), kwargs=None):
