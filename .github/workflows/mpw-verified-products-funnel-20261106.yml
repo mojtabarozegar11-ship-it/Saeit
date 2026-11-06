@@ -1,0 +1,107 @@
+name: MPW one-off verified products conversion release
+
+on:
+  push:
+    branches: [fix/mpw-verified-store-funnel-20261106]
+    paths:
+      - .github/workflows/mpw-verified-products-funnel-20261106.yml
+
+permissions: {contents: read}
+concurrency:
+  group: mpw-verified-products-funnel-20261106
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mpw-verified-store-funnel-20261106'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate fail-closed conversion release
+        run: |
+          python3 -m py_compile scripts/mpw_verified_products_guarded_release_20261106.py
+          python3 scripts/mpw_verified_products_guarded_release_20261106.py selftest
+      - name: Set up fingerprint-pinned one-shot VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-verified-products-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 30s ssh -i "$d/vps.key" -p 22 -o UserKnownHostsFile="$d/vps.known" -o StrictHostKeyChecking=yes -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Verify exact live source and publish one guarded HTML file
+        id: publication
+        run: |
+          set -euo pipefail
+          payload="$(base64 -w0 scripts/mpw_verified_products_guarded_release_20261106.py)"
+          config="$RUNNER_TEMP/mpw-verified-products-ssh/config"
+          timeout 60s ssh -T -F "$config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))' preflight"
+          timeout 60s ssh -T -F "$config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))' publish '$GITHUB_RUN_ID'"
+      - name: Read-only public check of improved live funnel
+        run: |
+          python3 - <<'PY'
+          import urllib.request
+          base='https://mojplaywin.com'
+          with urllib.request.urlopen(base+'/mpw-editorial/revenue/index.html?verified-store-release=20261106', timeout=25) as response:
+              assert response.status == 200
+              text=response.read(250000).decode('utf-8','replace')
+          assert text.count('class="mpw-live-store-offers"') == 1
+          assert text.count('class="mpw-direct-free-tool"') == 12
+          assert 'pages.<p class="mpw-free-tool-entry"' not in text
+          assert 'Emailed receipts and cross-device recovery are not currently available.' in text
+          for product in (72,225,879):
+              assert text.count(f'href="/commerce/book/{product}/"') == 1,product
+              with urllib.request.urlopen(base+f'/commerce/book/{product}/',timeout=25) as response:
+                  checkout=response.read(100000).decode('utf8','replace')
+                  assert response.status == 200 and 'name="email" type="email"' in checkout,product
+          print('MPW_VERIFIED_PRODUCTS_AND_12_TOOLS_PUBLIC=PASS')
+          PY
+      - name: Roll back only our HTML edit if live verification fails
+        if: failure() && steps.publication.outcome == 'success'
+        run: |
+          payload="$(base64 -w0 scripts/mpw_verified_products_guarded_release_20261106.py)"
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-verified-products-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))' rollback '$GITHUB_RUN_ID'"
+      - name: Remove runner-only relay credentials
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-verified-products-ssh"
+          if test -d "$d"; then
+            rm -f -- "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+            rmdir -- "$d"
+          fi
