@@ -27,7 +27,7 @@ jobs:
           ssh-keygen -y -P "" -f "$d/key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
-          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 python3 -c '
+          payload="$(base64 -w0 <<'PY'
           import fcntl,glob,os,sqlite3,subprocess,time
           root=os.path.expanduser("~/factory-runtime")
           backups=os.path.join(root,"operations","backups")
@@ -49,7 +49,6 @@ jobs:
           for path in glob.glob(os.path.join(backups,"master-before-*.sqlite3")):
               if os.path.islink(path) or not os.path.isfile(path) or os.path.getmtime(path)<now-3600:
                   continue
-              result=None
               try:
                   con=sqlite3.connect("file:"+path+"?mode=ro",uri=True,timeout=5)
                   result=con.execute("PRAGMA quick_check").fetchone()[0]
@@ -74,8 +73,10 @@ jobs:
               os.unlink(stage)
               removed.append((stage,size))
               print("FACTORY_STAGING_BUNDLE_REMOVED=bundle.tar bytes="+str(size))
-          free=os.statvfs(root).f_bavail*os.statvfs(root).f_frsize
+          stat=os.statvfs(root)
           print("FACTORY_RECLAIMED_BYTES="+str(sum(size for _,size in removed)))
-          print("FACTORY_DISK_AVAILABLE_BYTES="+str(free))
+          print("FACTORY_DISK_AVAILABLE_BYTES="+str(stat.f_bavail*stat.f_frsize))
           print("FACTORY_RECLAIM_COMPLETE=failed_activation_residue_only")
-          '
+          PY
+          )"
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))'"
