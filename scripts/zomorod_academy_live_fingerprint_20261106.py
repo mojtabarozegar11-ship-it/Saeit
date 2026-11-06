@@ -118,6 +118,12 @@ def main() -> None:
             if len(parts) == 3 and any(x in parts[2].lower() for x in ('python', 'passenger')):
                 print('ACADEMY_USER_PROCESS_META=pid:' + parts[0] + ' age_seconds:' + parts[1] +
                       ' kind:' + ('passenger' if 'passenger' in parts[2].lower() else 'python'))
+                try:
+                    cwd = (Path('/proc') / parts[0] / 'cwd').resolve(strict=True)
+                    print('ACADEMY_USER_PROCESS_CWD=pid:' + parts[0] + ' app_relative:' +
+                          (str(cwd.relative_to(HOME)) if cwd.is_relative_to(HOME) else 'OUTSIDE_USER_HOME'))
+                except Exception:
+                    print('ACADEMY_USER_PROCESS_CWD=pid:' + parts[0] + ' status:UNAVAILABLE')
     except Exception:
         print('ACADEMY_USER_PROCESS_META=unavailable')
     # CloudLinux's own user-scoped read-only selector inventory, if installed.
@@ -126,6 +132,16 @@ def main() -> None:
                            capture_output=True, text=True, timeout=12, check=False)
         data = json.loads(p.stdout) if p.returncode == 0 else {}
         print('ACADEMY_SELECTOR_INVENTORY_AVAILABLE=' + str(bool(data)).lower())
+        if isinstance(data, dict):
+            for candidate in ('applications', 'apps', 'data'):
+                value = data.get(candidate)
+                if isinstance(value, dict):
+                    print('ACADEMY_SELECTOR_SECTION=' + candidate + ' count=' + str(len(value)))
+                    for app_root in list(value)[:20]:
+                        if isinstance(app_root, str) and len(app_root) < 120:
+                            print('ACADEMY_SELECTOR_SECTION_KEY=' + candidate + ' root=' + app_root)
+                elif isinstance(value, list):
+                    print('ACADEMY_SELECTOR_SECTION=' + candidate + ' count=' + str(len(value)))
         def walk(value):
             if isinstance(value, dict):
                 if 'app_root' in value:
