@@ -39,6 +39,8 @@ jobs:
           sections["/services/"]=sections["/company/"]
           agri="<section class='zm-editorial' id='zm-editorial-20261016' aria-label='آموزش تخصصی کشاورزی'><style>.zm-editorial{margin:32px auto;max-width:1180px;padding:22px;background:#252b19;color:#f4f0df;border:5px double #e2c373;direction:rtl}.zm-editorial h2,.zm-editorial h3{color:#f5d991}.zm-editorial .zm-ed-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px}.zm-editorial article{border:2px solid #e2c373;padding:18px;background:#303822}.zm-editorial p{line-height:2}.zm-editorial a{color:#f8d98b}</style><h2>دانش کاربردی کشاورزی و تولید</h2><div class='zm-ed-grid'><article><h3>برنامه‌ریزی تولید</h3><p>برای هر قطعه یا واحد تولیدی، محدودیت‌های آب، زمین، نیروی انسانی، هزینه نهاده‌ها، کیفیت محصول و نیاز بازار را در یک جدول تصمیم ثبت کنید. سودآوری را در سناریوهای مختلف قیمت و عملکرد مقایسه کنید؛ سناریوی خوش‌بینانه به‌تنهایی برای سرمایه‌گذاری کافی نیست.</p></article><article><h3>پایش و کنترل کیفیت</h3><p>ثبت داده خاک و آب، سلامت نهاده، تغییرات دما و کیفیت محصول زمینه تصمیم علمی را فراهم می‌کند. زمان نمونه‌برداری، ابزار اندازه‌گیری و منشأ هر داده باید مشخص باشد تا تحلیل بعدی بازتولیدپذیر بماند.</p></article><article><h3>مسیر یادگیری</h3><p>در هر حوزه کشاورزی، ابتدا سؤال را دقیق تعریف کنید، شواهد معتبر محلی را بررسی و سپس گزینه‌ها را با معیارهای هزینه، کیفیت، ریسک و پایداری مقایسه کنید. توصیه تخصصی بدون اطلاعات واقعی محل، قابل تعمیم قطعی نیست.</p><a href='/zm-specialist-library-2026.html'>مطالعه راهنمای جامع ←</a></article></div></section>"
           sections["/agriculture/"]=agri
+          weather_tool="<section class='zm-editorial' id='zm-editorial-weather-tool-20261106' aria-label='ابزار تصمیم‌یار ریسک آبیاری'><h2>تصمیم‌یار سریع ریسک آبیاری</h2><p>این ابزار بر پایه داده‌ای که شما وارد می‌کنید یک امتیاز اولیه می‌دهد؛ پیش‌بینی زنده هواشناسی یا توصیه قطعی نیست.</p><form id='zm-weather-risk-form'><label>دمای روز (°C) <input name='temp' type='number' step='0.1' required></label><label>بارش ۲۴ ساعت اخیر (mm) <input name='rain' type='number' min='0' step='0.1' required></label><label>رطوبت نسبی (%) <input name='humidity' type='number' min='0' max='100' required></label><label>باد (km/h) <input name='wind' type='number' min='0' step='0.1' required></label><button type='submit'>محاسبه ریسک</button></form><p id='zm-weather-risk-result' role='status' aria-live='polite'>مقادیر را وارد کنید.</p></section>"
+          sections["/weather/"]=weather_tool
           guide_paths=sorted(Path("public/agriculture").glob("*/index.html"))
           assert len(guide_paths)==14
           for page in guide_paths:
@@ -85,6 +87,19 @@ jobs:
               holder.innerHTML=html;
               holder.setAttribute("data-zomorod-inpage-editorial","20261016");
               root.appendChild(holder);
+              if(path==="/weather/"){
+                var form=document.getElementById("zm-weather-risk-form"),out=document.getElementById("zm-weather-risk-result");
+                if(form&&out) form.addEventListener("submit",function(ev){
+                  ev.preventDefault();
+                  var d=Object.fromEntries(new FormData(form).entries()),t=Number(d.temp),r=Number(d.rain),h=Number(d.humidity),w=Number(d.wind),score=0;
+                  if(t>32)score+=2; else if(t>27)score+=1;
+                  if(r<2)score+=2; else if(r<8)score+=1;
+                  if(h<35)score+=2; else if(h<55)score+=1;
+                  if(w>25)score+=2; else if(w>15)score+=1;
+                  var level=score>=6?"ریسک بالا":score>=3?"ریسک متوسط":"ریسک پایین";
+                  out.textContent=level+" — امتیاز "+score+"/8. پیش از آبیاری، رطوبت واقعی خاک و وضعیت محصول را کنترل کنید.";
+                });
+              }
             }catch(e){/* never interrupt existing site functionality */}
           }
           if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",inject,{once:true});
