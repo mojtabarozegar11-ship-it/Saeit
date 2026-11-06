@@ -54,11 +54,13 @@ def verify_customer_revenue(evidence: CustomerRevenueEvidence) -> VerifiedRevenu
     }
     if any(not isinstance(value, str) or not value.strip() for value in required.values()):
         raise RevenueEvidenceError("required_settlement_evidence_missing")
-    if evidence.amount <= Decimal("0"):
-        raise RevenueEvidenceError("settled_amount_must_be_positive")
-    if evidence.currency.strip().upper() != evidence.currency.strip():
+    if not isinstance(evidence.amount, Decimal):
+        raise RevenueEvidenceError("settled_amount_must_be_decimal")
+    if not evidence.amount.is_finite() or evidence.amount <= Decimal("0"):
+        raise RevenueEvidenceError("settled_amount_must_be_finite_positive")
+    if not isinstance(evidence.currency, str) or evidence.currency.strip().upper() != evidence.currency.strip():
         raise RevenueEvidenceError("currency_must_be_canonical_uppercase")
-    if evidence.settled_at.tzinfo is None:
+    if not isinstance(evidence.settled_at, datetime) or evidence.settled_at.tzinfo is None:
         raise RevenueEvidenceError("settled_at_must_be_timezone_aware")
     if not evidence.independently_reconciled:
         raise RevenueEvidenceError("independent_reconciliation_required")
