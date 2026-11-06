@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from core.trading_lab import TradingLab
+from core.trading_lab import RiskPolicy, TradingLab
 
 
 class FakeBroker:
@@ -65,6 +65,15 @@ def test_open_position_limit_and_close_updates_pnl():
     assert agent.daily_pnl_by_date["2026-11-06"] == 12.5
     assert lab.leaderboard()[0]["trades"] == 1
     assert lab.leaderboard()[0]["pnl"] == 12.5
+
+
+def test_rejects_invalid_risk_policy():
+    with pytest.raises(ValueError, match="risk_ratios"):
+        RiskPolicy(risk_per_trade=float("nan"))
+    with pytest.raises(ValueError, match="max_open_positions"):
+        RiskPolicy(max_open_positions_per_agent=0)
+    with pytest.raises(ValueError, match="min_reward_risk"):
+        RiskPolicy(min_reward_risk=0)
 
 
 def test_rejects_invalid_order_inputs():
