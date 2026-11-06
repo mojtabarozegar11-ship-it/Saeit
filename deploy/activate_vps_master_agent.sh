@@ -58,6 +58,9 @@ if available < required:
 print("MASTER_CAPACITY_PREFLIGHT_OK", flush=True)
 PY
 }
+# Resolve config.settings relative to the live Django app before importing it.
+# This read-only directory change precedes every backup or cron mutation.
+cd "$app"
 master_capacity_preflight
 install -d -m 700 "$master" "$private" "$ops/backups"
 exec 8>"$master/activation.lock"
