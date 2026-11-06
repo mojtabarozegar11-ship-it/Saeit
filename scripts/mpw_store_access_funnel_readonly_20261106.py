@@ -318,6 +318,37 @@ def _passenger_stderr_probe():
             'raw_lines_disclosed': 0, 'read_only': True}
 
 
+def _module_inventory():
+    """Check the static existence of the module missing in Passenger tracebacks."""
+    rows = {}
+    for label, root in (('staging_app', ACCOUNT / 'Saeit-staging'),
+                        ('public_app', ACCOUNT / 'mojplaywin.com')):
+        module = root / 'core/zomorod_public_views.py'
+        urls = root / 'config/urls.py'
+        def safe_content(path):
+            if path.is_symlink() or not path.is_file():
+                return None
+            actual = path.resolve(strict=True)
+            if not actual.is_relative_to(root):
+                return None
+            stat = actual.stat()
+            if stat.st_uid != os.geteuid() or not 0 < stat.st_size <= 128_000:
+                return None
+            return actual.read_bytes()
+        try:
+            module_data = safe_content(module)
+            urls_data = safe_content(urls)
+            rows[label] = {
+                'missing_module_file_present': module_data is not None,
+                'urls_file_present': urls_data is not None,
+                'urls_import_reference': (b'core.zomorod_public_views' in urls_data
+                                          if urls_data is not None else None),
+            }
+        except (OSError, RuntimeError, ValueError):
+            rows[label] = {'probe_unavailable': True}
+    return {'files': rows, 'read_only': True}
+
+
 def _audit():
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=LOOKBACK_DAYS)
@@ -390,6 +421,7 @@ def _audit():
                   for day, values in sorted(day_counts.items())},
         'awstats': _awstats_monthly(),
         'passenger_stderr': _passenger_stderr_probe(),
+        'module_inventory': _module_inventory(),
         'uniques_unavailable': True,
         'bot_classification': 'heuristic_only',
         'orders_are_not_payments': True,
