@@ -7,6 +7,8 @@ credentials, logs, email addresses, tickets or request text are printed.
 from __future__ import annotations
 
 import hashlib
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 import os
 import re
 import shutil
@@ -14,7 +16,7 @@ import sqlite3
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 
 HOME = Path('/home/zomorod2')
@@ -131,11 +133,119 @@ def inspect_customer_inbox() -> None:
             emit('CUSTOMER_ZOMOROD_SERVICE_INQUIRIES', int(service or 0))
 
 
+def inspect_traffic() -> None:
+    """Aggregate limited recent web-log requests, without publishing log rows.
+
+    Results are *HTTP request counts*, never unique visitors, people or leads.
+    We inspect only conventional site-specific cPanel log locations and at most
+    the tail of each readable file. Unavailable logs are not a zero-traffic claim.
+    """
+    paths = [
+        HOME / 'access-logs/zomorodmelal.ir-ssl_log',
+        HOME / 'access-logs/zomorodmelal.ir',
+        HOME / 'logs/zomorodmelal.ir-ssl_log',
+        HOME / 'logs/zomorodmelal.ir',
+        HOME / 'logs/zomorodmelal.ir-ssl_log.1',
+        Path('/usr/local/apache/domlogs/zomorod2/zomorodmelal.ir-ssl_log'),
+        Path('/usr/local/apache/domlogs/zomorod2/zomorodmelal.ir'),
+    ]
+    candidates = []
+    seen = set()
+    for path in paths:
+        try:
+            if not path.is_file() or not os.access(path, os.R_OK):
+                continue
+            status = path.stat()
+            identity = (status.st_dev, status.st_ino)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            candidates.append((path, status))
+        except OSError:
+            continue
+    emit('TRAFFIC_READABLE_SITE_LOGS', len(candidates))
+    if not candidates:
+        emit('TRAFFIC_COUNT_UNAVAILABLE', True)
+        return
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    matched = Counter()
+    lines = 0
+    parsed = 0
+    recent = 0
+    total_bytes = 0
+    truncated = False
+    pattern = re.compile(
+        rb'^\S+\s+\S+\s+\S+\s+\[([^\]]+)\]\s+"(GET|POST|HEAD)\s+(\S+)\s+HTTP/[^\"]+"\s+(\d{3})\b')
+    limit = 6 * 1024 * 1024
+    for path, metadata in candidates[:5]:
+        try:
+            with path.open('rb') as stream:
+                if metadata.st_size > limit:
+                    truncated = True
+                    stream.seek(-limit, os.SEEK_END)
+                    stream.readline()  # Skip the incomplete first log row.
+                tail = stream.read(limit)
+        except (OSError, PermissionError):
+            continue
+        total_bytes += len(tail)
+        for line in tail.splitlines():
+            lines += 1
+            match = pattern.match(line)
+            if not match:
+                continue
+            parsed += 1
+            try:
+                stamp = datetime.strptime(match.group(1).decode('ascii'), '%d/%b/%Y:%H:%M:%S %z')
+            except (ValueError, UnicodeDecodeError):
+                continue
+            if stamp.astimezone(timezone.utc) < cutoff:
+                continue
+            recent += 1
+            method = match.group(2).decode('ascii')
+            target = match.group(3).decode('utf-8', 'replace')
+            status = int(match.group(4))
+            endpoint = urlsplit(target).path
+            endpoint = {
+                '/ask-master/': '/ask-master/index.php',
+                '/agriculture': '/agriculture/',
+                '/services': '/services/',
+            }.get(endpoint, endpoint)
+            routes = {
+                '/': 'HOME',
+                '/agriculture/': 'AGRICULTURE',
+                '/services/': 'SERVICES',
+                '/ask-master/index.php': 'FORM',
+                '/ask-master/status.php': 'STATUS',
+            }
+            route = routes.get(endpoint)
+            if route is None:
+                continue
+            matched[route + '_REQUESTS'] += 1
+            if method == 'GET' and status == 200:
+                matched[route + '_GET_200'] += 1
+            if method == 'POST':
+                matched[route + '_POST_TOTAL'] += 1
+                if status >= 400:
+                    matched[route + '_POST_ERROR'] += 1
+            if status >= 500:
+                matched[route + '_HTTP_5XX'] += 1
+    emit('TRAFFIC_SAMPLE_BYTES', total_bytes)
+    emit('TRAFFIC_SAMPLE_TRUNCATED', truncated)
+    emit('TRAFFIC_LOG_ROWS_INSPECTED', lines)
+    emit('TRAFFIC_LOG_ROWS_PARSED', parsed)
+    emit('TRAFFIC_LOG_ROWS_LAST_24H', recent)
+    for route in ('HOME', 'AGRICULTURE', 'SERVICES', 'FORM', 'STATUS'):
+        for suffix in ('REQUESTS', 'GET_200', 'POST_TOTAL', 'POST_ERROR', 'HTTP_5XX'):
+            emit('TRAFFIC_' + route + '_' + suffix, matched[route + '_' + suffix])
+    emit('TRAFFIC_COUNTS_ARE_REQUESTS_NOT_PEOPLE', True)
+
+
 def main() -> None:
     ensure_site_user()
     source_audit()
     inspect_management()
     inspect_customer_inbox()
+    inspect_traffic()
 
 
 def selftest() -> None:
