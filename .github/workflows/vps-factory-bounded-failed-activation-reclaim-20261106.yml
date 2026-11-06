@@ -125,4 +125,120 @@ jobs:
               "root_total_bytes": disk.f_blocks * disk.f_frsize,
               "map": inventory, "deletion_performed": False,
               "cron_modified": False}, sort_keys=True), flush=True)
+
+          # Second-stage metadata-only probe of large unknown home directories.
+          # No names, file contents or user data are emitted.
+          targets = {"9824c5f31b", "c3ecb80208", "98da9d80b7",
+                     "9e7b2a0270", "78d56a99bd", "03c268f48a",
+                     "a252595d47", "69be648c02"}
+          def hash_name(name):
+              return hashlib.sha256(name.encode()).hexdigest()[:10]
+          def suffix_label(name):
+              tail = name.rsplit(".", 1)
+              if len(tail) == 2 and 1 <= len(tail[1]) <= 8 and tail[1].isalnum():
+                  return "." + tail[1].lower()
+              return "(none)"
+          def header_kind(path):
+              try:
+                  with path.open("rb") as stream:
+                      first = stream.read(512)
+                  if first.startswith(b"SQLite format 3"):
+                      return "sqlite3"
+                  if first.startswith(b"PK" + bytes([3, 4])):
+                      return "zip"
+                  if first.startswith(bytes([31, 139])):
+                      return "gzip"
+                  if first.startswith(b"%PDF"):
+                      return "pdf"
+                  if first.startswith(bytes([127]) + b"ELF"):
+                      return "executable"
+                  if len(first) > 262 and first[257:262] == b"ustar":
+                      return "tar"
+                  if first and sum(32 <= b <= 126 or b in (9, 10, 13) for b in first) / len(first) > 0.90:
+                      return "text"
+                  return "other"
+              except (OSError, ValueError):
+                  return "unreadable"
+          process_dirs = []
+          for process in Path("/proc").iterdir():
+              if not process.name.isdigit():
+                  continue
+              try:
+                  cwd = os.readlink(process / "cwd")
+                  process_dirs.append(cwd)
+              except OSError:
+                  continue
+          probe = []
+          for candidate in Path("/home/githubops").iterdir():
+              name_hash = hash_name(candidate.name)
+              if name_hash not in targets or candidate.is_symlink() or not candidate.is_dir():
+                  continue
+              if candidate.stat().st_uid != os.geteuid():
+                  continue
+              items, file_count, dir_count, sample_truncated = [], 0, 0, False
+              for index, entry in enumerate(candidate.iterdir()):
+                  if index >= 4000:
+                      sample_truncated = True
+                      break
+                  try:
+                      info = entry.lstat()
+                  except OSError:
+                      continue
+                  if stat.S_ISREG(info.st_mode):
+                      file_count += 1
+                      items.append((info.st_size, entry, info))
+                  elif stat.S_ISDIR(info.st_mode):
+                      dir_count += 1
+              items.sort(key=lambda item: -item[0])
+              largest = []
+              now_probe = time.time()
+              for size, entry, info in items[:14]:
+                  largest.append({"name_hash": hash_name(entry.name),
+                                  "suffix": suffix_label(entry.name),
+                                  "bytes": size, "links": info.st_nlink,
+                                  "age_days": round(max(0, now_probe-info.st_mtime)/86400, 2),
+                                  "header": header_kind(entry)})
+              suffix_sizes = {}
+              for size, entry, _ in items:
+                  key = suffix_label(entry.name)
+                  record = suffix_sizes.setdefault(key, {"count": 0, "bytes": 0})
+                  record["count"] += 1
+                  record["bytes"] += size
+              root_value = str(candidate)
+              probe.append({"area_hash": name_hash,
+                            "root_mtime_age_days": round(max(0, now_probe-candidate.stat().st_mtime)/86400, 2),
+                            "direct_file_count": file_count, "direct_directory_count": dir_count,
+                            "sample_truncated": sample_truncated,
+                            "git_checkout": (candidate / ".git").exists(),
+                            "cron_referenced": root_value in cron.stdout,
+                            "process_cwd_inside": any(p == root_value or p.startswith(root_value + "/") for p in process_dirs),
+                            "file_suffix_totals": suffix_sizes,
+                            "largest_direct_files": largest})
+          print("VPS_UNCLASSIFIED_DIRECTORY_PROBE=" +
+                json.dumps({"schema": "vps.unclassified.metadata.v1",
+                            "read_only": True, "deletion_performed": False,
+                            "areas": probe}, sort_keys=True), flush=True)
+          operation_target = root / "operations"
+          if operation_target.is_dir() and not operation_target.is_symlink():
+              try:
+                  op = subprocess.run(["du", "-x", "-B1", "-d2", str(operation_target)],
+                                      capture_output=True, text=True, timeout=70)
+                  op_rows = []
+                  for line in op.stdout.splitlines():
+                      parts = line.split("\t", 1)
+                      if len(parts) != 2 or not parts[0].isdigit():
+                          continue
+                      relative = os.path.relpath(parts[1], str(operation_target))
+                      components = []
+                      for segment in relative.split(os.sep):
+                          if segment in (".", ""):
+                              continue
+                          components.append(segment if segment in allowed_names else "sha256_" + hash_name(segment))
+                      op_rows.append({"area": "/".join(components) if components else ".", "bytes": int(parts[0])})
+                  op_rows.sort(key=lambda item: -item["bytes"])
+                  print("VPS_OPERATIONS_SUBTREE=" + json.dumps({
+                      "state": "complete" if op.returncode == 0 else "partial",
+                      "rows": op_rows[:28], "deletion_performed": False}, sort_keys=True), flush=True)
+              except subprocess.TimeoutExpired:
+                  print("VPS_OPERATIONS_SUBTREE=timed_out", flush=True)
           PY
