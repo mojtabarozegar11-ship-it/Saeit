@@ -8,5 +8,5 @@ No visual design, database records, secrets, production settings, or application
 Direct owner-chat execution activation trigger: aa5ecc4f145ad5f1cffcabb08871f65b52ac1017
 
 
-Current Faremah release: b23854a1cff60b4d37b744d264406ba8f7326bd4
+Current Faremah release: 6d01112b3ddf755f21846b15a9e0f33d4f97e361
 Public target: /faremah/
