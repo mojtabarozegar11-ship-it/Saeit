@@ -1,0 +1,25 @@
+{
+  "commercial_release_allowed": false,
+  "customer_acceptance": false,
+  "externally_signed": false,
+  "independently_reviewed": false,
+  "manifest_reproducible": true,
+  "measurements": {
+    "artifact_sha256": "c3e5294f21761e898d3dfb0bfcc52900fc714b2f951cdca146006c1e7c0b0880",
+    "bytes": 44868,
+    "file_count": 9,
+    "manifest_sha256": "e7ada75c19cfd3627da80b0e22395a89d4760974ebf20a7996cd2d33bdd70601",
+    "source_sha256": "d57ce31548739e42b05813d7ddb428a04d6d4e058ecf9e0485e3cff7d84fc7c0",
+    "successful_tests": 47
+  },
+  "professional_quality_points": null,
+  "recipe": "farm_enterprise_economics",
+  "reproducible_zip": true,
+  "schema": "saeit.factory.f01-internal-reproducibility-evidence.v1",
+  "scope": "two_separate_local_private_manufacturing_runs",
+  "technical_candidate_criteria": [
+    "Q023",
+    "Q068"
+  ],
+  "zip_inventory_crc_and_source_digest_verified": true
+}
