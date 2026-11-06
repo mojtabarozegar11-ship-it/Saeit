@@ -135,3 +135,27 @@ def test_state_round_trip_and_atomic_tamper_rejection():
     closed_round_trip.restore_state(closed_state)
     assert closed_round_trip.export_state() == closed_state
     assert closed_round_trip.leaderboard()[0]["pnl"] == 7.5
+
+def test_restore_rejects_cross_agent_order_identity_collision():
+    lab = make_lab()
+    opened = lab.submit_demo_trade(lab.agents[0], "TEST", "BUY")
+    state = lab.export_state()
+    tampered = json.loads(json.dumps(state))
+    tampered["agents"][1]["experiences"].append({
+        "timestamp": "2026-11-06T00:00:00+00:00",
+        "agent_id": 2,
+        "account": "DEMO_A",
+        "symbol": "TEST",
+        "strategy": "mean_reversion",
+        "action": "DEMO_ORDER",
+        "hypothesis": "tampered",
+        "problem": "",
+        "proposed_solution": "",
+        "order_id": opened.order_id,
+        "pnl": 0.0,
+    })
+    restored = make_lab()
+    before = restored.export_state()
+    with pytest.raises(ValueError):
+        restored.restore_state(tampered)
+    assert restored.export_state() == before
