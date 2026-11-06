@@ -15,9 +15,7 @@ HOME = Path("/home/zomorod2")
 DOCROOT = HOME / "mojplaywin.com"
 APP_ROOT = HOME / "Saeit-staging"
 BACKUP_ROOT = HOME / ".mojplaywin-backups"
-FILES = (
-    Path("config/urls.py"),
-    Path("core/views.py"),
+SAMAN_TEMPLATES = (
     Path("templates/saman/index.html"),
     Path("templates/saman/learn.html"),
     Path("templates/saman/play.html"),
@@ -26,8 +24,12 @@ FILES = (
     Path("templates/saman/partners.html"),
     Path("templates/saman/about.html"),
 )
+FINANCE_TEMPLATE = Path("core/templates/core/financial_brand_page.html")
+FINANCE_SOURCE = Path("core/financial_brand_pages.py")
+FILES = (Path("config/urls.py"), Path("core/views.py"), *SAMAN_TEMPLATES, FINANCE_SOURCE, FINANCE_TEMPLATE)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from saman_patch import patch_urls, patch_views  # noqa: E402
+from financial_brand_patch import patch_financial_urls  # noqa: E402
 
 
 def safe_id(run_id):
@@ -114,7 +116,7 @@ def deploy(run_id, commit_sha):
         "about": "A broader home for curiosity.",
     }
     staged_templates = {}
-    for relative in FILES[2:]:
+    for relative in SAMAN_TEMPLATES:
         template_source = stage / relative
         if not template_source.is_file() or template_source.is_symlink():
             raise RuntimeError(f"Staged SAMAN page is missing or unsafe: {relative}")
@@ -132,7 +134,7 @@ def deploy(run_id, commit_sha):
             raise RuntimeError("SAMAN home content validation failed")
         staged_templates[relative] = html
 
-    template_dir = APP_ROOT / "templates" / "saman"
+    finance_source = stage / FINANCE_SOURCE\n    finance_template = stage / FINANCE_TEMPLATE\n    for staged in (finance_source, finance_template):\n        if not staged.is_file() or staged.is_symlink():\n            raise RuntimeError(f"Missing or unsafe finance deployment file: {staged}")\n    if "financial_brand_page" not in finance_source.read_text(encoding="utf-8") or "page_notice" not in finance_template.read_text(encoding="utf-8"):\n        raise RuntimeError("Finance source or template failed content validation")\n\n    template_dir = APP_ROOT / "templates" / "saman"
     if (APP_ROOT / "templates").is_symlink() or template_dir.is_symlink():
         raise RuntimeError("Refusing to write through a template symlink")
     template_directory_existed = template_dir.is_dir()
