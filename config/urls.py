@@ -104,6 +104,21 @@ urlpatterns = [
     path("api/", include("core.urls")),
 ]
 
+from functools import partial
+from core.financial_brand_pages import BRANDS, financial_brand_page
+
+# Prepend these distinct service routes so existing brand roots and app includes
+# continue to resolve normally while the new finance subpages take precedence.
+_finance_routes = []
+for _brand_slug, _fa, _en, _ar in BRANDS:
+    _finance_routes.extend([
+        path(f"{_brand_slug}/signals/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="signals"), name=f"finance_{_brand_slug}_signals"),
+        path(f"{_brand_slug}/store/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="store"), name=f"finance_{_brand_slug}_store"),
+        path(f"ar/{_brand_slug}/signals/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="signals"), name=f"finance_ar_{_brand_slug}_signals"),
+        path(f"ar/{_brand_slug}/store/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="store"), name=f"finance_ar_{_brand_slug}_store"),
+    ])
+urlpatterns = _finance_routes + urlpatterns
+
 from core.newsletter_views import newsletter_home, newsletter_archive, newsletter_detail
 urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("newsletter/archive/", newsletter_archive, name="newsletter_archive"), path("newsletter/<slug:slug>/", newsletter_detail, name="newsletter_detail")]
 
