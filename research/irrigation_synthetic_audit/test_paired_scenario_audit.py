@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from paired_scenario_audit import AuditError, FIELDS, analyze_family, load_records
+from research.irrigation_synthetic_audit.paired_scenario_audit import (AuditError, FIELDS, analyze_family, load_records)
 
 
 def rows_for_family(family):
