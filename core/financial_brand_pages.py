@@ -71,9 +71,12 @@ COPY = {
 def financial_brand_page(request, brand, locale, page_type):
     match = next((item for item in BRANDS if item[0] == brand), None)
     if locale == "host":
-        host = request.get_host().split(":")[0].lower()
-        locale = "fa" if host in {"zomorodmelal.ir", "www.zomorodmelal.ir"} else "en"
-    if match is None or locale not in COPY or page_type not in {"signals", "store"}:
+        forwarded = request.META.get("HTTP_X_FORWARDED_HOST") or request.META.get("HTTP_HOST") or ""
+        host = forwarded.split(",")[0].split(":")[0].strip().lower().removeprefix("www.")
+        locale = "fa" if "zomorodmelal.ir" in host else "en"
+    if locale not in COPY:
+        locale = "en"
+    if match is None or page_type not in {"signals", "store"}:
         from django.http import Http404
         raise Http404
     slug, fa_name, en_name, ar_name = match
