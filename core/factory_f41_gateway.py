@@ -109,6 +109,21 @@ def build_verified_order(payload):
     output = output_base / payload["order_id"]
     if output.is_symlink():
         raise ValueError("F41_MASTER_OUTPUT_SYMLINK")
+    # Existing outputs may be verified read-only (the builder's verify()
+    # never writes). A NEW F41 build is not admitted to the F01 production
+    # singleton on the real VPS or while any first-product state remains.
+    if not output.exists():
+        production_home = Path.home()
+        factory_private = production_home / "factory-runtime/private/autonomous-product-cycle"
+        line41_slot = factory_private / "quality-excellence/product-flow/active-slots/current.json"
+        if (production_home == Path("/home/githubops")
+                or os.getenv("SAEIT_ENV", "").lower() in ("production", "prod")
+                or line41_slot.exists() or line41_slot.is_symlink()
+                or (factory_private / ".f01-global-production-lane.json").exists()
+                or (factory_private / ".f01-global-production-lane.json").is_symlink()
+                or (factory_private / "production-state.json").exists()
+                or (factory_private / "production-state.json").is_symlink()):
+            raise ValueError("F41_GLOBAL_SINGLE_PRODUCT_LANE_NOT_ADMITTED")
     receipt = (builder.verify(file, output, assets) if output.exists()
                else builder.build(file, output, assets))
     expected = builder.manifest(request, builder.payload(request, assets))
