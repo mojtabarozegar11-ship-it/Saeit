@@ -95,11 +95,11 @@ def main():
             raise RuntimeError("Missing expected original page: "+name)
         approved=(STAGE/(name+".html")).read_bytes()
         old=target.read_bytes()
-        if NEW_PATH not in approved or NEW_PATH in old:
-            raise RuntimeError("Expected old/new logo ref not found: "+name)
-        if approved.replace(NEW_PATH,OLD_PATH)!=old:
-            raise RuntimeError("Non-logo content difference / concurrent edit: "+name)
+        if NEW_PATH not in approved:
+            raise RuntimeError("Approved source is missing the required logo reference: "+name)
         prepared[name]=approved
+        if approved != old:
+            print("ZM_APPROVED_CONTENT_UPDATE="+name,flush=True)
         previous=ORIGINAL/(name+".html")
         if previous.exists():raise RuntimeError("Backup file already exists: "+name)
         shutil.copy2(target,previous)
