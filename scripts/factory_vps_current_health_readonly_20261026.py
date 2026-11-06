@@ -188,6 +188,7 @@ def cron_production_channels(active):
         return None
     rules = {
         "autonomous_cycle": r"autonomous-product-runtime|factory_vps_product_cycle|SAEIT_AUTONOMOUS_PRODUCTS_V2|SAEIT_FACTORY_EVERY_MINUTE_V1",
+        "single_product_runner": r"single-product-runtime/run-single-product-cycle[.]sh|SAEIT_SINGLE_PRODUCT_FACTORY_V1",
         "forty_family": r"factory[-_]40|family[-_]master|build50",
         "science_stage_workers": r"stage[2-6]|research-navigator|agri200|qc1000",
         "unreviewed_leech": r"leech",
@@ -259,6 +260,14 @@ def inventory():
     sha = None
     if serial.is_file() and not serial.is_symlink() and serial.stat().st_size < 200000:
         sha = hashlib.sha256(serial.read_bytes()).hexdigest()
+    runner = BASE / "operations/single-product-runtime/run-single-product-cycle.sh"
+    runner_info = {"present": False, "sha256": None, "executable": False}
+    if runner.is_file() and not runner.is_symlink() and runner.stat().st_size < 100000:
+        runner_info = {
+            "present": True,
+            "sha256": hashlib.sha256(runner.read_bytes()).hexdigest(),
+            "executable": bool(runner.stat().st_mode & 0o111),
+        }
     state = PRIVATE / "production-instructions/stage-06/strict-serial-active-v1.json"
     state_summary = {"present": state.is_file() and not state.is_symlink()}
     if state_summary["present"]:
@@ -295,6 +304,10 @@ def inventory():
         "cron_active_count": len(active) if active is not None else None,
         "cron_marker_counts": ({tag: sum(tag in row for row in active)
                                 for tag in tags} if active is not None else None),
+        "single_product_cron_marker_count": (
+            sum("SAEIT_SINGLE_PRODUCT_FACTORY_V1" in row for row in active)
+            if active is not None else None),
+        "native_single_product_runner": runner_info,
         "leech_cron_like_count": (sum(bool(re.search("leech|WO-26102501", row, re.I))
                                       for row in active) if active is not None else None),
         "systemd_timers_readable": timers is not None,
