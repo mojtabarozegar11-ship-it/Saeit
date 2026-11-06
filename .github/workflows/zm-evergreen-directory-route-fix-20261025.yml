@@ -91,6 +91,7 @@ jobs:
                   raise
               assert target.read_bytes()==data
               print('ISOLATED_ZOMOROD_DIRECTORY_INDEX_CONFIG_INSTALLED')
+              with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf8') as out:out.write('created=true\\n')
           PY
       - name: Repair only four broken links in two isolated indexes
         id: patch
@@ -213,7 +214,7 @@ jobs:
           print('ZOMOROD_EVERGREEN_CANONICAL_AND_PROTECTED_SITES_VERIFIED')
           PY
       - name: Remove only own new htaccess if public verification failed
-        if: failure() && steps.install.outcome == 'success'
+        if: failure() && steps.install.outputs.created == 'true'
         shell: bash
         run: |
           if test -f "$RUNNER_TEMP/zm-evergreen-route-ssh/config";then
