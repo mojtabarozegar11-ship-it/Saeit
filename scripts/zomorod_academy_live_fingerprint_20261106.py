@@ -73,6 +73,7 @@ def main() -> None:
         print('LIVE_URL_TEXT_HAS=' + route + ' status=' + str(route in urls).lower())
     print('LIVE_URL_LINE_COUNT=' + str(len(urls.splitlines())))
     print('LIVE_URL_PATTERN_LIST_PRESENT=' + str(bool(re.search(r'urlpatterns\s*=', urls))).lower())
+    print('LIVE_URL_SHA256=' + hash_file(APP / 'config/urls.py'))
     for label, path in (
         ('APP_TEMPLATES', APP / 'templates'),
         ('CORE_TEMPLATES', APP / 'core/templates'),
@@ -87,6 +88,10 @@ def main() -> None:
             print('ACADEMY_LAYOUT_HTML_COUNT=' + label + ' count=' + str(sum(
                 item.is_file() and item.suffix == '.html' for item in path.iterdir()
             )))
+            print('ACADEMY_LAYOUT_HTML_NAMES=' + label + ' names=' + ','.join(sorted(
+                item.name for item in path.iterdir() if item.is_file() and
+                not item.is_symlink() and item.suffix == '.html'
+            )[:30]))
     print('LIVE_PASSENGER_WSGI_PRESENT=' + str((APP / 'passenger_wsgi.py').is_file()).lower())
     # Do not mutate the app, restart Passenger, inspect credentials, or touch DB.
 
