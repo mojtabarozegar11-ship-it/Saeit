@@ -59,6 +59,32 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only audit of live service request handlers
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/zm-evergreen-route-ssh/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,re
+          root=Path('/home/zomorod2/public_html/ask-master')
+          for name in ('index.php','status.php'):
+              p=root/name
+              if p.is_symlink() or not p.is_file():
+                  print('INQUIRY_HANDLER_MISSING_OR_UNSAFE='+name)
+                  continue
+              data=p.read_bytes()
+              low=data.lower()
+              checks={
+                  'csrf_field_or_check':b'csrf' in low,
+                  'session_or_token_compare':b'session' in low or b'hash_equals' in low,
+                  'email_validation':b'filter_var' in low or b'filter_validate_email' in low,
+                  'database_or_durable_storage':b'insert' in low or b'execute(' in low or b'prepare(' in low,
+                  'email_or_notification_path':b'mail(' in low or b'smtp' in low or b'notification' in low,
+                  'honeypot_or_anti_bot':b'website' in low or b'honeypot' in low,
+              }
+              print('HANDLER_AUDIT='+name+' bytes='+str(len(data))+' sha256='+hashlib.sha256(data).hexdigest())
+              print('HANDLER_CHECKS='+name+' '+','.join(k+':'+('yes' if v else 'no') for k,v in checks.items()))
+          PY
       - name: Add only release-local Passenger-off and DirectoryIndex configuration
         id: install
         shell: bash
