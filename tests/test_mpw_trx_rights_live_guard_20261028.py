@@ -118,7 +118,7 @@ class GuardTests(unittest.TestCase):
         original=fixture()["pages"]
         broken=original.replace(
             guard.PAGES_CHECKOUT_OLD,
-            "    if product is None: raise Http404\\n",
+            "    if product is None: raise Http404\n",
         )
         with self.assertRaisesRegex(
             RuntimeError,
