@@ -17,6 +17,8 @@ APP = pathlib.Path("/home/zomorod2/Saeit-staging")
 DOCROOT = pathlib.Path("/home/zomorod2/mojplaywin.com")
 PAGES = APP / "services" / "mpw_trx_public_pages.py"
 CATALOG = APP / "services" / "mpw_trx_public_catalog.py"
+WEB = APP / "services" / "mpw_trx_commercial_web.py"
+CONTEXT = APP / "services" / "mpw_trx_commercial_context.py"
 EXPECTED_USER = "zomorod2"
 MAX_BYTES = 2_000_000
 
@@ -34,6 +36,49 @@ CHECKOUT_NEW = (
 )
 
 
+def _called_names(node):
+    return sorted({n.func.id for n in ast.walk(node)
+                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)})
+
+
+def _if_shapes(function, focus):
+    if function is None:
+        return []
+    result = []
+    for statement in ast.walk(function):
+        if not isinstance(statement, ast.If):
+            continue
+        called = _called_names(statement.test)
+        if not set(focus).intersection(called):
+            continue
+        test = statement.test
+        clauses = test.values if isinstance(test, ast.BoolOp) else [test]
+        negated = sorted({clause.operand.func.id for clause in clauses
+                          if isinstance(clause, ast.UnaryOp)
+                          and isinstance(clause.op, ast.Not)
+                          and isinstance(clause.operand, ast.Call)
+                          and isinstance(clause.operand.func, ast.Name)})
+        returns_false = any(isinstance(n, ast.Return)
+                            and isinstance(n.value, ast.Constant)
+                            and n.value.value is False
+                            for n in statement.body)
+        returns_none = any(isinstance(n, ast.Return)
+                           and (n.value is None or isinstance(n.value, ast.Constant)
+                                and n.value.value is None)
+                           for n in statement.body)
+        raises = any(isinstance(n, ast.Raise) for n in statement.body)
+        result.append({"line": statement.lineno,
+                       "test_type": type(test).__name__,
+                       "or_condition": isinstance(test, ast.BoolOp)
+                                       and isinstance(test.op, ast.Or),
+                       "calls": sorted(set(called).intersection(focus)),
+                       "negated_calls": sorted(set(negated).intersection(focus)),
+                       "returns_false": returns_false,
+                       "returns_none": returns_none,
+                       "raises": raises})
+    return result[:12]
+
+
 def collect():
     if pwd.getpwuid(os.geteuid()).pw_name != EXPECTED_USER:
         raise RuntimeError("WRONG_HOST_USER")
@@ -43,6 +88,8 @@ def collect():
         raise RuntimeError("UNSAFE_OR_MISSING_PAGES_MODULE")
     if CATALOG.is_symlink() or not CATALOG.is_file():
         raise RuntimeError("UNSAFE_OR_MISSING_CATALOG_MODULE")
+    if any(p.is_symlink() or not p.is_file() for p in (WEB, CONTEXT)):
+        raise RuntimeError("UNSAFE_OR_MISSING_COMMERCIAL_MODULE")
     wsgi = DOCROOT / "passenger_wsgi.py"
     if wsgi.is_symlink() or not wsgi.is_file():
         raise RuntimeError("UNSAFE_OR_MISSING_WSGI")
@@ -64,6 +111,25 @@ def collect():
     if len(catalog_raw) != catalog_size:
         raise RuntimeError("CATALOG_CHANGED_DURING_READ")
     catalog_tree = ast.parse(catalog_raw.decode("utf-8"), filename="<live-mpw-catalog>")
+    commercial_trees = {}
+    commercial_digests = {}
+    for key, path in (("web", WEB), ("context", CONTEXT)):
+        stat_size = path.stat().st_size
+        if not 0 < stat_size <= MAX_BYTES:
+            raise RuntimeError("UNEXPECTED_COMMERCIAL_SIZE:" + key)
+        contents = path.read_bytes()
+        if len(contents) != stat_size:
+            raise RuntimeError("COMMERCIAL_CHANGED_DURING_READ:" + key)
+        commercial_trees[key] = ast.parse(contents.decode("utf-8"), filename="<live-mpw-"+key+">")
+        commercial_digests[key] = hashlib.sha256(contents).hexdigest()
+    context_fn = next((n for n in commercial_trees["context"].body
+                       if isinstance(n, ast.FunctionDef)
+                       and n.name == "rights_cleared_for_sale"), None)
+    web_fn = next((n for n in commercial_trees["web"].body
+                   if isinstance(n, ast.FunctionDef)
+                   and n.name == "_select_order"), None)
+    rights_fields = {n.value for n in ast.walk(context_fn)
+                     if isinstance(n, ast.Constant) and isinstance(n.value, str)} if context_fn else set()
     catalog_functions = {node.name: node for node in catalog_tree.body
                          if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
     catalog_helper = catalog_functions.get("public_trx_product")
@@ -176,7 +242,19 @@ def collect():
         "sellable_helper_imports": sellable_imports,
         "sellable_local_names": sellable_local_names,
         "sellable_guard_shape": sellable_guard_shape[:16],
+        "sellable_expected_guard_shape": _if_shapes(sellable_local, ("_eligible", "rights_cleared_for_sale")),
+        "catalog_public_product_gate_shape": _if_shapes(catalog_helper, ("sellable_trx_product",)),
         "public_product_return_calls": public_helper_return_calls[:16],
+        "context_sha256": commercial_digests["context"],
+        "web_sha256": commercial_digests["web"],
+        "rights_helper_local": context_fn is not None,
+        "rights_metadata_field_flags": {key: key in rights_fields for key in (
+            "rights_cleared", "publication_approved", "rights_asset_sha256",
+            "rights_document_sha256", "sha256")},
+        "web_select_order_present": web_fn is not None,
+        "web_select_order_has_transaction": bool(web_fn) and any(
+            isinstance(n, ast.With) for n in ast.walk(web_fn)),
+        "web_select_order_rights_guard": _if_shapes(web_fn, ("rights_cleared_for_sale",)),
         "catalog_helper_mentions_rights": "rights_cleared_for_sale" in catalog_names,
         "catalog_helper_mentions_eligible": "_eligible" in catalog_names,
         "import_old_count": source.count(IMPORT_OLD),
