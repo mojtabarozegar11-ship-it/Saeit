@@ -28,7 +28,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           payload="$(base64 -w0 <<'PY'
-          import fcntl,glob,os,sqlite3,subprocess,time
+          import fcntl,glob,os,sqlite3,subprocess,time,sys
           root=os.path.expanduser("~/factory-runtime")
           backups=os.path.join(root,"operations","backups")
           app=os.path.join(root,"django-app")
@@ -39,11 +39,6 @@ jobs:
               fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
           except BlockingIOError:
               raise SystemExit("FACTORY_RECLAIM_ABORT_ACTIVE_MASTER")
-          current=subprocess.run(["crontab","-l"],capture_output=True,text=True,check=False).stdout
-          tags=("SAEIT_MASTER_AGENT_V1","SAEIT_FACTORY_EVERY_MINUTE_V1","SAEIT_FACTORY_LIFECYCLE_12_V1")
-          kept=[line for line in current.splitlines() if not any(tag in line for tag in tags)]
-          subprocess.run(["crontab","-"],input=("\n".join(kept)+"\n"),text=True,check=True)
-          print("FACTORY_SCHEDULERS_PAUSED_FOR_BOUNDED_RECLAIM")
           now=time.time()
           removed=[]
           for path in glob.glob(os.path.join(backups,"master-before-*.sqlite3")):
@@ -58,25 +53,30 @@ jobs:
               if result!="ok":
                   size=os.path.getsize(path)
                   os.unlink(path)
-                  removed.append((path,size))
-                  print("FACTORY_INCOMPLETE_DB_REMOVED="+os.path.basename(path)+" bytes="+str(size))
+                  removed.append(size)
+                  print("FACTORY_INCOMPLETE_DB_REMOVED="+os.path.basename(path)+" bytes="+str(size),flush=True)
           for pattern in (os.path.join(app,"core","*.rollback.tmp"),os.path.join(app,"core","*.recovery.tmp")):
               for path in glob.glob(pattern):
                   if os.path.isfile(path) and not os.path.islink(path):
                       size=os.path.getsize(path)
                       os.unlink(path)
-                      removed.append((path,size))
-                      print("FACTORY_ROLLBACK_TEMP_REMOVED="+os.path.basename(path)+" bytes="+str(size))
+                      removed.append(size)
+                      print("FACTORY_ROLLBACK_TEMP_REMOVED="+os.path.basename(path)+" bytes="+str(size),flush=True)
           stage=os.path.join(root,"operations","master-activation-source","bundle.tar")
           if os.path.isfile(stage) and not os.path.islink(stage):
               size=os.path.getsize(stage)
               os.unlink(stage)
-              removed.append((stage,size))
-              print("FACTORY_STAGING_BUNDLE_REMOVED=bundle.tar bytes="+str(size))
+              removed.append(size)
+              print("FACTORY_STAGING_BUNDLE_REMOVED=bundle.tar bytes="+str(size),flush=True)
+          print("FACTORY_RECLAIMED_BYTES="+str(sum(removed)),flush=True)
+          current=subprocess.run(["crontab","-l"],capture_output=True,text=True,check=False).stdout
+          tags=("SAEIT_MASTER_AGENT_V1","SAEIT_FACTORY_EVERY_MINUTE_V1","SAEIT_FACTORY_LIFECYCLE_12_V1")
+          kept=[line for line in current.splitlines() if not any(tag in line for tag in tags)]
+          subprocess.run(["crontab","-"],input=("\n".join(kept)+"\n"),text=True,check=True)
+          print("FACTORY_SCHEDULERS_PAUSED_FOR_BOUNDED_RECLAIM",flush=True)
           stat=os.statvfs(root)
-          print("FACTORY_RECLAIMED_BYTES="+str(sum(size for _,size in removed)))
-          print("FACTORY_DISK_AVAILABLE_BYTES="+str(stat.f_bavail*stat.f_frsize))
-          print("FACTORY_RECLAIM_COMPLETE=failed_activation_residue_only")
+          print("FACTORY_DISK_AVAILABLE_BYTES="+str(stat.f_bavail*stat.f_frsize),flush=True)
+          print("FACTORY_RECLAIM_COMPLETE=failed_activation_residue_only",flush=True)
           PY
           )"
           ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))'"
