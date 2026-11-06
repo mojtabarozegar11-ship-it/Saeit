@@ -1,14 +1,17 @@
 """Operational fixes for commerce transactions and owner-only payment approval."""
 from decimal import Decimal
+import hashlib
+import hmac
+import json
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db import connection
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 
 from .approval import ApprovalService
-from .models import ApprovalRequest, KnowledgeArticle, Order, OrderItem, PaymentIntent, Product
+from .models import ApprovalRequest, KnowledgeArticle, LedgerEntry, Order, OrderItem, PaymentIntent, Product
 
 
 User = get_user_model()
@@ -98,3 +101,39 @@ class InternalCommerceSafetyTests(TransactionTestCase):
             format="json", secure=True,
         )
         self.assertEqual(response.status_code, 400)
+
+    @override_settings(PAYMENT_WEBHOOK_SECRET="integration-test-secret")
+    def test_webhook_amount_format_and_late_failure_cannot_reverse_payment(self):
+        order = Order.objects.create(customer=self.owner, total=Decimal("15.00"), currency="IRR")
+        intent = PaymentIntent.objects.create(
+            order=order, amount=Decimal("15.00"), currency="IRR",
+            provider="pay-test", idempotency_key="webhook-key", status="gateway_pending",
+        )
+
+        def webhook(event_id, event_type, amount=None):
+            payload = {
+                "event_type": event_type,
+                "payment_intent_id": intent.pk,
+                "provider_reference": "processor-receipt-123",
+            }
+            if amount is not None:
+                payload.update({"amount": amount, "currency": "IRR"})
+            raw = json.dumps(payload, sort_keys=True).encode("utf-8")
+            signature = hmac.new(b"integration-test-secret", raw, hashlib.sha256).hexdigest()
+            return self.client.post(
+                "/api/payment-webhooks/", raw, content_type="application/json",
+                HTTP_X_PAYMENT_PROVIDER="pay-test", HTTP_X_PAYMENT_EVENT_ID=event_id,
+                HTTP_X_PAYMENT_SIGNATURE=signature, secure=True,
+            )
+
+        success = webhook("evt-paid", "payment.succeeded", "15")
+        self.assertEqual(success.status_code, 200, success.data)
+        self.assertEqual(success.data["status"], "processed")
+        late_failure = webhook("evt-late-fail", "payment.failed")
+        self.assertEqual(late_failure.status_code, 200, late_failure.data)
+        self.assertEqual(late_failure.data["status"], "ignored")
+        intent.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(intent.status, "succeeded")
+        self.assertEqual(order.status, "paid")
+        self.assertEqual(LedgerEntry.objects.filter(order=order, entry_type="payment").count(), 1)
