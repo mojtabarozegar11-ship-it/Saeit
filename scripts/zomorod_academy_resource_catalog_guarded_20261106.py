@@ -23,7 +23,10 @@ HOME = Path("/home/zomorod2")
 APP = HOME / "Saeit"
 BACKUP_ROOT = HOME / ".backups/zomorod-academy-resources-20261106"
 FILES = {
-    "core/academy_views.py": "78932f8867fcc6366257a796775ab367fac6acb514eeda14a0f2f7becb3e27fc",
+    # Current host SHA independently re-measured by read-only run 42258608158:
+    # a concurrent publisher restored the previous views file after the first
+    # guarded academy login release. Only this exact baseline may be replaced.
+    "core/academy_views.py": "8e53348804828cb72a255efd517f206a12d8d1ded08a3f74a4a6c14174c5b3b0",
     "core/templates/core/academy.html": "358e34742f7b3177467c0c20b3e8dc9de17ef6dcef8aca10a5c1dd9fc8813d54",
 }
 VENV = HOME / "virtualenv/Saeit/3.10/bin/python"
