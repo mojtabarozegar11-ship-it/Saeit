@@ -259,6 +259,7 @@ jobs:
             echo "PROTECTED_ROUTE=/$route HTTP=$result"
             test "$result" = 200
           done
+          verified=0
           for route in blog/ weather/ store/ newsletter/ amozeshgah/ industry/ research/ knowledge/ company/; do
             file="$RUNNER_TEMP/zm-static-${route//\//_}.html"
             result="$(curl -L -sS --max-time 25 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}' "https://zomorodmelal.ir/$route")"
@@ -266,9 +267,13 @@ jobs:
             if grep -q 'data-zm-editorial-loader="yes"' "$file"; then
               grep -Fq 'src="/zm-inpage-editorial-2026.js?v=20261106"' "$file"
               echo "EDITORIAL_LOADER_ROUTE=/$route HTTP=200"
+              verified=$((verified+1))
             fi
           done
-          echo "JS_CONTENT_AVAILABLE_AND_OLD_ROUTES_OK=yes"
+          test "$verified" -ge 2
+          curl -fsSL --max-time 25 "https://zomorodmelal.ir/blog/" | grep -Fq 'data-zm-editorial-loader="yes"'
+          curl -fsSL --max-time 25 "https://zomorodmelal.ir/weather/" | grep -Fq 'data-zm-editorial-loader="yes"'
+          echo "STATIC_EDITORIAL_LOADER_ROUTES_VERIFIED=$verified"
       - name: Automatically restore exact modern.js and remove content on failure
         if: failure() && steps.install.outcome == 'success'
         run: |
@@ -279,7 +284,8 @@ jobs:
           import os,sys
           sha=sys.argv[1]
           home=Path.home()
-          modern=home/"public_html/static/site/modern.js"
+          root=home/"public_html"
+          modern=root/"static/site/modern.js"
           content=home/"public_html/zm-inpage-editorial-2026.js"
           backup_root=home/".backups"/"zomorod-live-inpage"/sha
           backup=backup_root/"modern.original.js"
