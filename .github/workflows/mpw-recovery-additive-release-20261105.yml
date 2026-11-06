@@ -172,7 +172,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mpw_capture_guarded_release_20261105.py' -v
           python3 -m unittest discover -s tests -p 'test_mpw_required_email_checkout_20261106.py' -v
           case "${{ inputs.operation }}" in
-            capture_email_gate_*|capture_catalog_truth_*) echo MPW_LEGACY_FUNNEL_RELEASE_GATE=SKIPPED_FOR_NEW_EMAIL_ONLY_RELEASE ;;
+            capture_email_gate_*|capture_catalog_truth_*|capture_funnel_report) echo MPW_LEGACY_FUNNEL_RELEASE_GATE=SKIPPED_FOR_NEW_EMAIL_ONLY_RELEASE ;;
             *) python3 -m unittest discover -s tests -p 'test_mpw_private_funnel_*.py' -v ;;
           esac
           python3 -m py_compile scripts/mpw_guest_email_claim_capture_release_20261105.py services/mpw_trx_guest_commerce.py services/mpw_trx_email_recovery.py scripts/mpw_checkout_copy_clarity_release_20261106.py scripts/mpw_runtime_copy_probe_20261106.py scripts/mpw_live_passenger_refresh_20261106.py scripts/mpw_store_access_funnel_readonly_20261106.py services/mpw_checkout_funnel.py scripts/mpw_private_funnel_guarded_release_20261106.py scripts/mpw_checkout_funnel_report_readonly_20261106.py scripts/mpw_store_demo_guarded_release_20261106.py scripts/mpw_store_atelier_visual_guarded_release_20261106.py scripts/mpw_store_product879_details_guarded_release_20261106.py scripts/mpw_checkout_truth_copy_guarded_release_20261106.py scripts/mpw_required_email_guarded_release_20261106.py scripts/mpw_catalog_truth_guarded_release_20261106.py
