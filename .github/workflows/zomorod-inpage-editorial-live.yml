@@ -234,10 +234,10 @@ jobs:
           os.replace(temp_page,page)
           if not loader_present:
               temp=modern.with_name("modern.zm-"+sha+".tmp")
-              temp.write_bytes(original+b"\\n"+loader)
+              temp.write_bytes(original+b"\n"+loader)
               os.chmod(temp,modern.stat().st_mode & 0o777)
               os.replace(temp,modern)
-          pattern=re.compile(r'<script\\b[^>]*data-zm-editorial-loader="yes"[^>]*></script>',re.I)
+          pattern=re.compile(r'<script\b[^>]*data-zm-editorial-loader="yes"[^>]*></script>',re.I)
           tag='<script defer data-zm-editorial-loader="yes" src="/zm-inpage-editorial-2026.js?v=20261106"></script>'
           for rel,target,raw,mode in available:
               text=raw.decode("utf-8")
