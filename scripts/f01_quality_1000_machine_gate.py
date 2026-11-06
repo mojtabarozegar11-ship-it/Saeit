@@ -35,8 +35,12 @@ def evaluate(package:Path,catalog_path:Path,evidence_root:Path)->dict:
     catalog=load_catalog(catalog_path); artifact=sha256(package); measured=[]; missing=[]; root=evidence_root.resolve()
     for criterion in catalog["criteria"]:
         cid=criterion["id"]; ep=root/criterion["required_evidence"]
-        try: ep.resolve().relative_to(root)
-        except ValueError: missing.append(cid); continue
+        try:
+            # A cyclic or unreadable evidence symlink must never abort scoring.
+            # The evidence itself is rejected separately by evidence_passes().
+            ep.resolve().relative_to(root)
+        except (ValueError, RuntimeError, OSError):
+            missing.append(cid); continue
         (measured if evidence_passes(ep,cid,artifact) else missing).append(cid)
     return {"schema":"saeit.factory.f01-quality-machine-evaluation.v1","product_id":PRODUCT,"artifact_sha256":artifact,"criterion_count":100,"machine_documentary_points":len(measured)*10,"machine_documentary_target":1000,"machine_documentary_gap":1000-len(measured)*10,"measured_criteria":measured,"missing_criteria":missing,"professional_quality_points":None,"professional_qc1000_certified":False,"independent_reviewer_authentication":False,"commercial_release_allowed":False,"reason":"INDEPENDENT_SPECIALIST_AND_RIGHTS_SIGNOFFS_REQUIRED"}
 def main()->int:
