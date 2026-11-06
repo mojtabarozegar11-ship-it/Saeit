@@ -10,6 +10,7 @@ import argparse
 from decimal import Decimal
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 import re
 import sys
@@ -61,6 +62,65 @@ def verify_target(app, document_root):
     return app
 
 
+def verify_live_passenger_mapping(app, payload=None):
+    """Before DB writes, prove Passenger serves this exact Django directory.
+
+    A WSGI file mentioning Saeit-staging is not sufficient: cPanel's live
+    UAPI inventory has previously reported a different MojPlayWin app root.
+    Never substitute an SSH staging folder for the production app/database.
+    """
+    if payload is None:
+        try:
+            command = subprocess.run(
+                ["uapi", "--output=json", "PassengerApps", "list_applications"],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                timeout=25, check=False,
+            )
+            if command.returncode != 0 or not 0 < len(command.stdout) <= 2_000_000:
+                raise RuntimeError("LIVE_PASSENGER_INVENTORY_UNAVAILABLE")
+            payload = json.loads(command.stdout)
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            raise RuntimeError("LIVE_PASSENGER_INVENTORY_UNAVAILABLE") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("result"), dict):
+        raise RuntimeError("LIVE_PASSENGER_INVENTORY_INVALID")
+    result = payload["result"]
+    if result.get("status") not in (1, True):
+        raise RuntimeError("LIVE_PASSENGER_INVENTORY_NOT_SUCCESSFUL")
+
+    def entries(node):
+        if isinstance(node, dict):
+            if "domain" in node and any(x in node for x in
+                                          ("app_root", "app_path", "application_root")):
+                yield node
+            for child in node.values():
+                yield from entries(child)
+        elif isinstance(node, list):
+            for child in node:
+                yield from entries(child)
+
+    # Only the main-domain root mapping can be an authority for this importer.
+    candidates = []
+    for entry in entries(result.get("data")):
+        if str(entry.get("domain") or "").lower().strip() != "mojplaywin.com":
+            continue
+        uri = str(entry.get("base_uri") or entry.get("app_uri")
+                  or entry.get("application_uri") or "/").strip()
+        if uri.rstrip("/") != "":
+            continue
+        raw_root = entry.get("app_root") or entry.get("app_path") or entry.get("application_root")
+        if not isinstance(raw_root, str) or not raw_root.strip():
+            raise RuntimeError("LIVE_PASSENGER_APP_ROOT_MISSING")
+        candidate = Path(raw_root.strip())
+        if not candidate.is_absolute():
+            candidate = Path.home() / candidate
+        if candidate.is_symlink():
+            raise RuntimeError("LIVE_PASSENGER_APP_ROOT_SYMLINK")
+        candidates.append(candidate.resolve())
+    if len(candidates) != 1 or candidates[0] != Path(app).resolve():
+        raise RuntimeError("LIVE_PASSENGER_MAPPING_DOES_NOT_MATCH_TARGET_APP")
+    return True
+
+
 def import_receipts(root, app, document_root, owner_username=None, *, apply=False,
                     sole_owner=False, recipe=None, digest=None):
     root = Path(root).expanduser()
@@ -91,6 +151,8 @@ def import_receipts(root, app, document_root, owner_username=None, *, apply=Fals
         owner = eligible.first()
     if owner is None:
         raise RuntimeError("IDENTIFIED_STORE_OWNER_NOT_PRESENT")
+    if apply:
+        verify_live_passenger_mapping(app)
     Product = apps.get_model("core", "Product")
     verifier = receiver_module()
     created, unchanged, examined = 0, 0, 0

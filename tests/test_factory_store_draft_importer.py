@@ -23,7 +23,8 @@ def module(name):
 
 @pytest.mark.django_db
 @override_settings(DEBUG=False)
-def test_unreviewed_receipt_can_only_enter_inactive_draft(django_user_model, tmp_path):
+def test_unreviewed_receipt_can_only_enter_inactive_draft(django_user_model, tmp_path,
+                                                         monkeypatch):
     receiver = module("store_receiver")
     importer = module("import_factory_store_drafts")
     owner = django_user_model.objects.create_superuser(
@@ -62,6 +63,9 @@ def test_unreviewed_receipt_can_only_enter_inactive_draft(django_user_model, tmp
     assert report["commercial_quality_approved"] is False
     assert Product.objects.count() == 0
 
+    # cPanel must separately attest that the live Passenger app is the same
+    # Django directory. Only the importer fixture bypasses the UAPI call.
+    monkeypatch.setattr(importer, "verify_live_passenger_mapping", lambda app: True)
     report = importer.import_receipts(
         root, app, docroot, "09175814408", apply=True, recipe=recipe, digest=digest
     )
@@ -130,3 +134,19 @@ def test_exact_selector_rejects_invalid_versions_and_links(tmp_path):
     poisoned.symlink_to(tmp_path / "outside")
     with pytest.raises(RuntimeError, match="SELECTED_PRIVATE_RECEIPT_NOT_FOUND"):
         importer.selected_receipt(root, "farm_enterprise_economics", "a" * 64)
+
+
+def test_live_passenger_mapping_blocks_wrong_django_database(tmp_path):
+    importer = module("import_factory_store_drafts")
+    app = tmp_path / "Saeit-staging"
+    wrong = tmp_path / "mojplaywin.com"
+    payload = {"result": {"status": 1, "data": [{
+        "domain": "mojplaywin.com", "base_uri": "/", "app_root": str(wrong)
+    }]}}
+    with pytest.raises(RuntimeError, match="LIVE_PASSENGER_MAPPING_DOES_NOT_MATCH_TARGET_APP"):
+        importer.verify_live_passenger_mapping(app, payload=payload)
+    payload["result"]["data"][0]["app_root"] = str(app)
+    assert importer.verify_live_passenger_mapping(app, payload=payload) is True
+    payload["result"]["data"].append(dict(payload["result"]["data"][0]))
+    with pytest.raises(RuntimeError, match="LIVE_PASSENGER_MAPPING_DOES_NOT_MATCH_TARGET_APP"):
+        importer.verify_live_passenger_mapping(app, payload=payload)

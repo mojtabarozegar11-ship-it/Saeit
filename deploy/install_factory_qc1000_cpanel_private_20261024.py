@@ -110,6 +110,8 @@ def verify_negative_controls(bin_dir):
         '"factory_commercial_release": False',
         '"active": False',
         'p.add_argument("--sha256", required=True',
+        "verify_live_passenger_mapping(app)",
+        "LIVE_PASSENGER_MAPPING_DOES_NOT_MATCH_TARGET_APP",
     )
     if (any(control not in importer for control in required_draft_controls)
             or '"approved_for_store"' in importer
