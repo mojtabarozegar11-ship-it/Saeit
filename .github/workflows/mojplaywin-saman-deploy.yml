@@ -202,7 +202,8 @@ jobs:
           for path, expected in routes.items():
               match = resolve(path)
               print("SAMAN_RUNTIME_ROUTE=" + path + " -> " + match.func.__name__)
-              assert match.func.__name__ == expected, path
+              resolved_view = match.func.func if hasattr(match.func, "func") else match.func
+              assert resolved_view.__name__ == expected, path
           import inspect
           from core.views import saman_page, saman_section_page
           print("SAMAN_ROOT_VIEW_SOURCE_BEGIN")
