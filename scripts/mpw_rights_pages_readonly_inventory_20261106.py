@@ -57,6 +57,11 @@ def collect():
     functions = {node.name: node for node in tree.body
                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
     checkout = functions.get("product_checkout")
+    public_product_imports = sorted({
+        node.module for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module
+        and any(alias.name == "public_trx_product" for alias in node.names)
+    })
     names = sorted({node.id for node in ast.walk(checkout)
                     if isinstance(node, ast.Name)})[:50] if checkout else []
     checks = []
@@ -66,8 +71,32 @@ def collect():
                 identifiers = {value.id for value in ast.walk(node.test)
                                if isinstance(value, ast.Name)}
                 if "product" in identifiers:
+                    product_is_none = (
+                        isinstance(node.test, ast.Compare)
+                        and isinstance(node.test.left, ast.Name)
+                        and node.test.left.id == "product"
+                        and len(node.test.ops) == 1
+                        and isinstance(node.test.ops[0], ast.Is)
+                        and len(node.test.comparators) == 1
+                        and isinstance(node.test.comparators[0], ast.Constant)
+                        and node.test.comparators[0].value is None
+                    )
+                    raises_404 = any(
+                        isinstance(value, ast.Raise)
+                        and (
+                            isinstance(value.exc, ast.Name)
+                            and value.exc.id == "Http404"
+                            or isinstance(value.exc, ast.Call)
+                            and isinstance(value.exc.func, ast.Name)
+                            and value.exc.func.id == "Http404"
+                        )
+                        for value in node.body
+                    )
                     checks.append({"line": node.lineno,
                                    "kind": type(node.test).__name__,
+                                   "line_span": node.end_lineno-node.lineno+1,
+                                   "exact_product_is_none": product_is_none,
+                                   "raises_http404": raises_404,
                                    "mentions_eligible": "_eligible" in identifiers,
                                    "mentions_rights": "rights_cleared_for_sale" in identifiers})
 
@@ -82,6 +111,7 @@ def collect():
         "checkout_new_count": source.count(CHECKOUT_NEW),
         "has_public_shop": "public_shop" in functions,
         "has_product_checkout": checkout is not None,
+        "public_product_imports": public_product_imports,
         "checkout_identifier_names": names,
         "checkout_product_if_structure": checks[:12],
     }
