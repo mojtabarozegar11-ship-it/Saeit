@@ -12,6 +12,9 @@ on:
       - .github/workflows/picm-text-image-scoped-deploy.yml
       - scripts/picm_text_image_release.py
       - tests/test_picm_text_image_release.py
+      - tests/test_picm_private_capacity_release.py
+      - scripts/picm_private_capacity_release.py
+      - .github/workflows/picm-private-capacity-scoped-release.yml
   pull_request:
     paths:
       - templates/picm/index.html
@@ -36,7 +39,7 @@ jobs:
       - name: Compile real implementation and test browser JavaScript
         run: |
           set -Eeuo pipefail
-          python -m py_compile scripts/picm_text_image_browser_proof.py scripts/picm_text_image_release.py tests/test_picm_text_image_ui.py tests/test_picm_text_image_release.py
+          python -m py_compile scripts/picm_private_capacity_release.py scripts/picm_text_image_browser_proof.py scripts/picm_text_image_release.py tests/test_picm_text_image_ui.py tests/test_picm_text_image_release.py tests/test_picm_private_capacity_release.py
           node --check templates/picm/text_image.js
           python - <<'PY'
           from pathlib import Path
@@ -45,7 +48,7 @@ jobs:
           assert 'id="mode-text_image"' in t
           assert 'id="text-image-options"' in t
           assert 'id="photo"' in t
-          assert '{{ picm_daily_limit }}' in t
+          assert '{{ picm_daily_limit }}' not in t
           print('PICM_TEXT_IMAGE_TEMPLATE_CONTRACT_VALID')
           PY
       - name: Install Django project and browser test packages

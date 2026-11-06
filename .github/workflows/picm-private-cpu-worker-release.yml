@@ -68,7 +68,7 @@ jobs:
           set -Eeuo pipefail
           python3 -m pip install --disable-pip-version-check pytest
           python3 -m py_compile ops/picm-vps/worker.py scripts/picm_private_worker_release.py
-          python3 -m pytest --noconftest -q tests/test_picm_worker_cpu.py
+          python3 -m pytest --noconftest -q tests/test_picm_worker_cpu.py tests/test_picm_private_worker_release.py
       - name: Deny rollout while an owner's PICM queued image job is active
         shell: bash
         run: |

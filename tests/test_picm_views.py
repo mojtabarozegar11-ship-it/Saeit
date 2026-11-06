@@ -111,12 +111,23 @@ class PICMTest(TestCase):
         state_req.user = self.user()
         self.assertEqual(json.loads(v.picm_status(state_req, ident).content)["state"], "running")
 
-    def test_quota_enforced(self):
-        for i in range(v.DAILY_QUOTA):
+    def test_no_daily_quota_but_eight_pending_jobs_max(self):
+        for i in range(8):
             self.assertEqual(self.post({"prompt": f"Botanical garden image {i}",
                                         "style": "cinematic", "steps": 1}).status_code, 202)
         self.assertEqual(self.post({"prompt": "One more landscape",
-                                    "style": "cinematic", "steps": 1}).status_code, 429)
+                                    "style": "cinematic", "steps": 1}).status_code, 503)
+        with v.locked() as root:
+            for job in list(v.job_records(root)):
+                job["state"] = "done"
+                v.save_job(root, job)
+        self.assertEqual(self.post({"prompt": "One more landscape",
+                                    "style": "cinematic", "steps": 1}).status_code, 202)
+
+    def test_storage_guard_blocks_new_jobs_without_deleting_history(self):
+        with patch.object(v, "storage_ready", return_value=False):
+            self.assertEqual(self.post({"prompt": "One botanical garden",
+                                        "style": "natural", "steps": 1}).status_code, 507)
 
 
 
@@ -177,11 +188,11 @@ class PICMPhotoReferenceTests(TestCase):
         anonymous=self.submit(user=None)
         self.assertEqual(anonymous.status_code,401)
 
-    def test_invalid_oversized_dimensions_and_quota(self):
+    def test_invalid_oversized_dimensions_and_unmetered_staging(self):
         self.assertEqual(self.submit(mode="image_edit").status_code,202)
         self.assertEqual(self.submit(mode="image_video").status_code,202)
         self.assertEqual(self.submit(mode="upscale_8k",prompt="").status_code,202)
-        self.assertEqual(self.submit().status_code,429)
+        self.assertEqual(self.submit().status_code,202)
         oversized=self.rf.post("/picm/api/reference/", data={
             "mode":"image_edit","prompt":"Make realistic","photo":self.photo(8193,1024)})
         oversized.user=SimpleNamespace(pk=101,is_authenticated=True)

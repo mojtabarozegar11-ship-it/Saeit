@@ -26,8 +26,8 @@ from .picm_access import owner_allowed, owner_id
 from .picm_storyboard import plan_story
 
 UUID_RE = re.compile(r"^[0-9a-f]{32}$")
-MAX_JOBS = 80
-DAILY_QUOTA = 2
+PICM_MIN_FREE_BYTES = 512 * 1024 * 1024
+PICM_MIN_FREE_INODES = 128
 MAX_IMAGE_BYTES = 2_000_000
 STYLE = {
     "cinematic": "cinematic soft lighting, striking composition",
@@ -44,6 +44,16 @@ def root_path():
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     root.chmod(0o700)
     return root
+
+
+def storage_ready(root):
+    """Unmetered owner requests, subject to real cPanel disk and inode availability."""
+    try:
+        stat = os.statvfs(root)
+        return (stat.f_bavail * stat.f_frsize >= PICM_MIN_FREE_BYTES
+                and stat.f_favail >= PICM_MIN_FREE_INODES)
+    except OSError:
+        return False
 
 
 @contextmanager
@@ -136,7 +146,6 @@ def picm_workbench(request):
         return HttpResponse(status=403)
     return render(request, "picm/index.html", {
         "picm_authenticated": True,
-        "picm_daily_limit": DAILY_QUOTA,
     })
 
 
@@ -162,13 +171,9 @@ def picm_submit(request):
     now = time.time()
     with locked() as root:
         records = list(job_records(root))
-        # No unlimited public CPU consumption; cap pending load and per-user use.
-        if len(records) >= MAX_JOBS:
-            return JsonResponse({"error": "studio_capacity_reached"}, status=503)
-        recent = [j for j in records if j.get("user_id") == request.user.pk
-                  and now - j.get("created", 0) < 86400]
-        if len(recent) >= DAILY_QUOTA:
-            return JsonResponse({"error": "daily_limit_reached"}, status=429)
+        # No owner daily/count quota; preserve free storage and bound simultaneous load.
+        if not storage_ready(root):
+            return JsonResponse({"error": "private_storage_full"}, status=507)
         pending = sum(j.get("state") in ("queued", "running") for j in records)
         if pending >= 8:
             return JsonResponse({"error": "queue_full"}, status=503)
@@ -443,6 +448,8 @@ def picm_reference_stage(request):
                 continue
             if data.get("user_id") == request.user.pk:
                 staged.append(data)
+        if not storage_ready(root):
+            return JsonResponse({"error": "private_storage_full"}, status=507)
         if mode == "story_video":
             # No daily or generation-count cap for private story drafts.
             # Bound actual private disk usage until a real GPU consumer exists.
@@ -456,8 +463,6 @@ def picm_reference_stage(request):
                     byte_count += img_file.stat().st_size
             if byte_count + len(raw) > PICM_STORY_STAGING_MAX_BYTES:
                 return JsonResponse({"error": "private_storage_full"}, status=507)
-        elif len(staged) >= 3:
-            return JsonResponse({"error": "photo_limit_reached"}, status=429)
         ident = uuid4().hex
         filename = root / (ident + ".input")
         fd, tempname = tempfile.mkstemp(dir=root, prefix=".picm-reference-", suffix=".tmp")

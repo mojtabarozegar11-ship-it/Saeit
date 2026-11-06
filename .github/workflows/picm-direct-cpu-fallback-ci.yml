@@ -6,6 +6,7 @@ on:
     paths:
       - ops/picm-vps/worker.py
       - tests/test_picm_worker_cpu.py
+      - tests/test_picm_private_worker_release.py
       - .github/workflows/picm-direct-cpu-fallback-ci.yml
   pull_request:
     paths:
@@ -31,8 +32,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check -r requirements.txt
-          python -m py_compile ops/picm-vps/worker.py tests/test_picm_worker_cpu.py
-          python -m pytest -q --noconftest tests/test_picm_worker_cpu.py
+          python -m py_compile ops/picm-vps/worker.py scripts/picm_private_worker_release.py tests/test_picm_worker_cpu.py tests/test_picm_private_worker_release.py
+          python -m pytest -q --noconftest tests/test_picm_worker_cpu.py tests/test_picm_private_worker_release.py
       - name: Assert no VPS, site, paid provider or download operations
         run: |
           python - <<'PY'
@@ -41,7 +42,7 @@ jobs:
           assert 'shell=True' not in p
           assert 'CPU_MODEL_SHA256' in p
           assert 'CPU_MIN_KIB' in p
-          assert 'FACTORY' in p and 'factory_ok()' in p
+          assert 'factory-runtime' not in p and 'picm_resource_ok()' in p
           assert 'start_comfy_if_needed()' in p
           assert 'render_direct_cpu(prompt, steps)' in p
           print('PICM_DIRECT_CPU_SAFETY_CONTRACT_OK')
