@@ -23,7 +23,7 @@ PUBLIC = Path("/home/zomorod2/mojplaywin.com")
 TARGET = APP / "core/templates/mojplaywin/store.html"
 RESTART = PUBLIC / "tmp/restart.txt"
 BACKUPS = Path("/home/zomorod2/.local/share/mpw-store-demo-releases")
-AFTER_SHA = "d5e0419ec6e48b2c9f85f20860a910fc43b069d14ffd86d6cb11e00a0d7f0cec"
+AFTER_SHA = "a848bd267fb0751931d121c82c84db8f79577e1f912f608109105cb51ac97b09"
 DEMO = ('<a class="mpw-product-demo" '
         'href="https://atelier-interior-kit-demo.mojtaba-rozegar11.chatgpt.site/" '
         'target="_blank" rel="noopener noreferrer">Open the live demo '
