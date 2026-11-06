@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from pathlib import Path
 
 HOME = Path('/home/zomorod2')
@@ -64,6 +65,29 @@ def main() -> None:
     ))
     print('ACADEMY_BASELINE_MATCHED=' + str(matches) + '/' + str(len(EXPECTED)))
     print('APP_VENV_PYTHON_PRESENT=' + str((HOME / 'virtualenv/Saeit/3.10/bin/python').is_file()).lower())
+    # Public route and layout inventory only; never output Python source text.
+    urls = (APP / 'config/urls.py').read_text(errors='replace')
+    route_names = ('accounts/login/', 'accounts/logout/', 'amozeshgah/',
+                   'education/', 'education_enroll', 'education_lesson')
+    for route in route_names:
+        print('LIVE_URL_TEXT_HAS=' + route + ' status=' + str(route in urls).lower())
+    print('LIVE_URL_LINE_COUNT=' + str(len(urls.splitlines())))
+    print('LIVE_URL_PATTERN_LIST_PRESENT=' + str(bool(re.search(r'urlpatterns\s*=', urls))).lower())
+    for label, path in (
+        ('APP_TEMPLATES', APP / 'templates'),
+        ('CORE_TEMPLATES', APP / 'core/templates'),
+        ('CORE_TEMPLATES_CORE', APP / 'core/templates/core'),
+        ('CORE_TEMPLATES_REGISTRATION', APP / 'core/templates/registration'),
+        ('PUBLIC_ACADEMY', WEB / 'amozeshgah'),
+        ('STAGING_ROOT', HOME / 'Saeit-staging-web'),
+    ):
+        kind = 'SYMLINK' if path.is_symlink() else 'DIR' if path.is_dir() else 'FILE' if path.is_file() else 'ABSENT'
+        print('ACADEMY_LAYOUT=' + label + ' status=' + kind)
+        if kind == 'DIR' and label in ('APP_TEMPLATES','CORE_TEMPLATES_CORE','CORE_TEMPLATES_REGISTRATION'):
+            print('ACADEMY_LAYOUT_HTML_COUNT=' + label + ' count=' + str(sum(
+                item.is_file() and item.suffix == '.html' for item in path.iterdir()
+            )))
+    print('LIVE_PASSENGER_WSGI_PRESENT=' + str((APP / 'passenger_wsgi.py').is_file()).lower())
     # Do not mutate the app, restart Passenger, inspect credentials, or touch DB.
 
 
