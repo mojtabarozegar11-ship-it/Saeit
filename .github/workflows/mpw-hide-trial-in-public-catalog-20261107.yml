@@ -1,0 +1,89 @@
+name: Hide retired MojPlayWin trial from database-driven TRX catalog
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-hide-trial-in-public-catalog-20261107.yml"]
+permissions: {contents: read}
+jobs:
+  hide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail; umask 077; d="$RUNNER_TEMP/r"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/v"; printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/h"; chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/v" >/dev/null; ssh-keygen -y -P "" -f "$d/h" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vk" 2>/dev/null; test "$(ssh-keygen -lf "$d/vk" -E sha256|awk '{print $2}'|sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/c" <<EOF
+          Host v
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/v
+            UserKnownHostsFile $d/vk
+          Host h
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/h
+            UserKnownHostsFile $d/hk
+            ProxyJump v
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            RequestTTY no
+          EOF
+          timeout 30s ssh -F "$d/c" v 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/hc" 2>/dev/null; test "$(ssh-keygen -lf "$d/hc" -E sha256|awk '{print $2}'|sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; mv "$d/hc" "$d/hk"
+      - name: Add explicit public-catalog retirement gate only
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/r/c" h "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,pwd,stat,json
+          from pathlib import Path
+          A=Path('/home/zomorod2/Saeit-staging'); W=A/'services/mpw_trx_public_catalog.py'; P=Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
+          if pwd.getpwuid(os.getuid()).pw_name!='zomorod2' or A.is_symlink() or W.is_symlink() or not W.is_file() or P.is_symlink() or not P.is_file() or "APP='/home/zomorod2/Saeit-staging'" not in P.read_text(errors='replace'): raise RuntimeError('UNTRUSTED_ROOT')
+          s=W.read_text(errors='replace')
+          marker='    if product.pk == 779: return False  # MPW_PUBLIC_TRIAL_RETIRED_20261107'
+          anchor='    if product is None:\n        return False\n'
+          if marker not in s:
+              if s.count(anchor)!=1: raise RuntimeError('CATALOG_ANCHOR_NOT_UNIQUE')
+              s=s.replace(anchor,anchor+marker+'\n',1)
+              compile(s,str(W),'exec')
+              tmp=W.with_name('.mpw-catalog-retire'); fd=os.open(str(tmp),os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,stat.S_IMODE(W.stat().st_mode))
+              try:
+                  with os.fdopen(fd,'w') as f: f.write(s); f.flush(); os.fsync(f.fileno())
+                  os.replace(tmp,W)
+              finally:
+                  if tmp.exists(): tmp.unlink()
+          for folder in (A/'tmp',P.parent/'tmp'):
+              folder.mkdir(mode=0o700,exist_ok=True); flag=folder/'restart.txt'; fd=os.open(str(flag),os.O_CREAT|os.O_APPEND|os.O_WRONLY|os.O_NOFOLLOW,0o600); os.close(fd); os.utime(flag,None)
+          os.chdir(A);sys.path.insert(0,str(A));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product,OrderItem
+          p=Product.objects.get(pk=779); n=OrderItem.objects.filter(product_id=779).count()
+          print('MPW_CATALOG_GATE='+json.dumps({'gate_installed':marker in s,'active':p.active,'orders':n,'database_rows_changed':0}))
+          if not p.active or n<1: raise RuntimeError('PRESERVATION_FAILED')
+          PY
+      - name: Verify live catalog and protected products
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request
+          req=urllib.request.Request('https://mojplaywin.com/commerce/trx-easy/',headers={'Cache-Control':'no-cache, no-store, max-age=0','User-Agent':'MPW-Catalog-Gate-779/1'})
+          with urllib.request.urlopen(req,timeout=25) as r: body=r.read(240000).decode('utf-8','replace')
+          if 'MojPlayWin Secure TRX Purchase' in body or '/store/product/779/' in body or '/commerce/book/779/' in body: raise RuntimeError('TRIAL_STILL_PUBLIC')
+          for path in ('/store/','/store/product/72/','/store/product/225/','/store/product/879/'):
+              req=urllib.request.Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache','User-Agent':'MPW-Catalog-Gate-779/1'})
+              with urllib.request.urlopen(req,timeout=25) as r:
+                  if r.status!=200: raise RuntimeError(path+' HTTP '+str(r.status))
+          print('MPW_PUBLIC_CATALOG=PASS');print('MPW_ORIGINAL_PRODUCTS=HEALTHY')
+          PY
+      - name: Clean relay
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/r"
