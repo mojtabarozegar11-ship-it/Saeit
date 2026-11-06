@@ -7,6 +7,11 @@ on:
         required: false
         type: boolean
         default: false
+      prune_retired_log:
+        description: 'CAUTION: Delete exact retired original log ONLY after fresh SHA256 verification of retained gzip archive; requires separate owner confirmation'
+        required: false
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -104,3 +109,42 @@ jobs:
           test "$(ssh-keygen -lf "$known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           timeout 180s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'python3 -B -' < scripts/vps_retired_log_preserving_archive_20261106.py
           echo "VPS_RETIRED_LOG_ARCHIVE_JOB=PASS"
+
+  prune_retired_log:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.prune_retired_log == true }}
+    needs: audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate guarded prune script syntax without server writes
+        run: |
+          set -euo pipefail
+          python3 -B -m py_compile scripts/vps_retired_log_verified_prune_20261106.py
+      - name: Delete only explicitly approved, hash-verified retired original log
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/retired-log-prune-$GITHUB_RUN_ID"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          known="$d/known"
+          for attempt in 1 2 3; do
+            if ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$known" 2>/dev/null && test -s "$known"; then
+              break
+            fi
+            sleep "$((attempt * 3))"
+          done
+          test -s "$known"
+          test "$(ssh-keygen -lf "$known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 180s ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known" -o ConnectTimeout=15 -o ConnectionAttempts=1 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 'python3 -B -' < scripts/vps_retired_log_preserving_archive_20261106.py
+          echo "VPS_RETIRED_LOG_PRUNE_JOB=PASS"
