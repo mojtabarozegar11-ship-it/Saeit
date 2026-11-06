@@ -12,6 +12,7 @@ on:
           - cpanel_version
           - passenger_inventory
           - mpw_guard_readonly
+          - cpanel_quota_readonly
           - cpanel_preflight
           - django_check
           - django_migrations
