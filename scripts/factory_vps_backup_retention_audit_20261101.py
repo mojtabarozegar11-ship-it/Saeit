@@ -248,6 +248,9 @@ def inventory_factory_operations(root: Path = FACTORY_OPERATIONS_ROOT) -> dict:
             break
         safe_folders = []
         for name in sorted(folders):
+            if time.monotonic() - started > ARCHIVE_SCAN_MAX_SECONDS:
+                truncated = True
+                break
             try:
                 info = os.lstat(here / name)
                 if stat.S_ISLNK(info.st_mode):
@@ -259,8 +262,11 @@ def inventory_factory_operations(root: Path = FACTORY_OPERATIONS_ROOT) -> dict:
             except OSError:
                 skipped += 1
         folders[:] = safe_folders
+        if truncated:
+            break
         for name in sorted(files):
-            if scanned >= ARCHIVE_SCAN_MAX_FILES:
+            if (scanned >= ARCHIVE_SCAN_MAX_FILES or
+                    time.monotonic() - started > ARCHIVE_SCAN_MAX_SECONDS):
                 truncated = True
                 break
             try:
