@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations) ;;
+  relay_preflight|cpanel_version|passenger_inventory|mpw_guard_readonly|cpanel_preflight|django_check|django_migrations) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -69,6 +69,19 @@ case "$operation" in
   passenger_inventory)
     timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' |
       python3 scripts/mojplaywin_cpanel_readonly_inventory.py
+    ;;
+  mpw_guard_readonly)
+    # Existing redacted audits execute from pinned source over the existing
+    # cPanel relay. No on-host script deployment or production mutation.
+    timeout 80s ssh -T -F "$work/config" saeit-cpanel \
+      'PYTHONDONTWRITEBYTECODE=1 python3 -B - inspect' \
+      < scripts/mpw_public_passenger_runtime_readonly_20261102.py
+    timeout 80s ssh -T -F "$work/config" saeit-cpanel \
+      'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
+      < scripts/mojplaywin_live_routing_fingerprint.py
+    timeout 80s ssh -T -F "$work/config" saeit-cpanel \
+      'PYTHONDONTWRITEBYTECODE=1 python3 -B -' \
+      < scripts/mojplaywin_rewrite_backup_readonly.py
     ;;
   cpanel_preflight)
     timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; else root=/home/zomorodm/repositories/Saeit; fi; bash "$root/scripts/cpanel_preflight.sh" "$root"'
