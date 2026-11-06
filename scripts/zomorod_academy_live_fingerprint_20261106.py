@@ -7,9 +7,11 @@ Never print source, credentials, environment values, or user/database data.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 
 HOME = Path('/home/zomorod2')
@@ -104,6 +106,40 @@ def main() -> None:
                 not item.is_symlink() and item.suffix == '.html'
             )[:30]))
     print('LIVE_PASSENGER_WSGI_PRESENT=' + str((APP / 'passenger_wsgi.py').is_file()).lower())
+    marker = APP / 'tmp/restart.txt'
+    if marker.is_file() and not marker.is_symlink():
+        print('ACADEMY_RESTART_MARKER_AGE_SECONDS=' + str(max(0, round(time.time()-marker.stat().st_mtime))))
+    # Process names and ages are safe metadata; never inspect argv or env.
+    try:
+        p = subprocess.run(['ps', '-u', 'zomorod2', '-o', 'pid=,etimes=,comm='],
+                           capture_output=True, text=True, timeout=8, check=False)
+        for line in p.stdout.splitlines():
+            parts = line.split(None, 2)
+            if len(parts) == 3 and any(x in parts[2].lower() for x in ('python', 'passenger')):
+                print('ACADEMY_USER_PROCESS_META=pid:' + parts[0] + ' age_seconds:' + parts[1] +
+                      ' kind:' + ('passenger' if 'passenger' in parts[2].lower() else 'python'))
+    except Exception:
+        print('ACADEMY_USER_PROCESS_META=unavailable')
+    # CloudLinux's own user-scoped read-only selector inventory, if installed.
+    try:
+        p = subprocess.run(['cloudlinux-selector', 'get', '--json', '--interpreter', 'python'],
+                           capture_output=True, text=True, timeout=12, check=False)
+        data = json.loads(p.stdout) if p.returncode == 0 else {}
+        print('ACADEMY_SELECTOR_INVENTORY_AVAILABLE=' + str(bool(data)).lower())
+        def walk(value):
+            if isinstance(value, dict):
+                if 'app_root' in value:
+                    app = str(value.get('app_root', ''))
+                    if app.lower() in ('saeit', '/home/zomorod2/saeit'):
+                        print('ACADEMY_SELECTOR_APP_ROOT=' + app + ' uri=' +
+                              str(value.get('app_uri', ''))[:100] + ' status=' +
+                              str(value.get('status', 'unknown'))[:40])
+                for nested in value.values(): walk(nested)
+            elif isinstance(value, list):
+                for nested in value[:80]: walk(nested)
+        walk(data)
+    except Exception:
+        print('ACADEMY_SELECTOR_INVENTORY_AVAILABLE=false')
     # Read only table names through the existing Django database connection.
     # No ORM queries, user records, writes, migrations or model data are read.
     interpreter = HOME / 'virtualenv/Saeit/3.10/bin/python'
