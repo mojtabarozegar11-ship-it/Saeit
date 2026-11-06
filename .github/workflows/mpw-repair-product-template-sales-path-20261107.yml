@@ -1,0 +1,131 @@
+name: Repair MojPlayWin product template and verify sales paths
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-repair-product-template-sales-path-20261107.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mpw-repair-product-template-sales-path
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish pinned relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail; umask 077; d="$RUNNER_TEMP/r"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/v"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/h"
+          chmod 600 "$d/"*; ssh-keygen -y -P "" -f "$d/v" >/dev/null; ssh-keygen -y -P "" -f "$d/h" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vk" 2>/dev/null; test "$(ssh-keygen -lf "$d/vk" -E sha256|awk '{print $2}'|sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/c" <<EOF
+          Host v
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/v
+            UserKnownHostsFile $d/vk
+          Host h
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/h
+            UserKnownHostsFile $d/hk
+            ProxyJump v
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            RequestTTY no
+          EOF
+          timeout 30s ssh -F "$d/c" v 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/hc" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/hc" -E sha256|awk '{print $2}'|sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; mv "$d/hc" "$d/hk"
+      - name: Add missing Django if-block with backup and atomic write
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/r/c" h "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,hashlib,json,stat
+          from pathlib import Path
+          A=Path('/home/zomorod2/Saeit-staging')
+          W=Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
+          T=A/'core/templates/brands/mojplaywin/product.html'
+          BACKUP=Path('/home/zomorod2/.mpw-product-template-repair-20261107')
+          if os.geteuid()==0 or A.is_symlink() or W.is_symlink() or not W.is_file() or T.is_symlink() or not T.is_file() or "APP='/home/zomorod2/Saeit-staging'" not in W.read_text(errors='replace'):
+              raise RuntimeError('UNTRUSTED_LIVE_TARGET')
+          raw=T.read_text('utf8')
+          expected_first='<p>This is a one-page USD 0.03 digital PDF trial.'
+          expected_third='{% elif product.pk == 879 %}'
+          if not raw.startswith(expected_first) or expected_third not in raw.splitlines()[:5]:
+              raise RuntimeError('LIVE_TEMPLATE_DRIFT_REFUSED')
+          marker='{% if product.pk == 779 %}'
+          if not raw.startswith(marker):
+              BACKUP.mkdir(mode=0o700,exist_ok=False)
+              original=raw.encode('utf8')
+              (BACKUP/'product.html.before').write_bytes(original)
+              (BACKUP/'manifest.json').write_text(json.dumps({'sha_before':hashlib.sha256(original).hexdigest(),'scope':'single_template_missing_if_block'}),encoding='utf8')
+              new=marker+'\n'+raw
+              tmp=T.with_name('.mpw-product-template-repair')
+              fd=os.open(str(tmp),os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,stat.S_IMODE(T.stat().st_mode))
+              try:
+                  with os.fdopen(fd,'w',encoding='utf8') as f: f.write(new); f.flush(); os.fsync(f.fileno())
+                  os.replace(tmp,T)
+              finally:
+                  if tmp.exists(): tmp.unlink()
+          for folder in (A/'tmp',W.parent/'tmp'):
+              folder.mkdir(mode=0o700,exist_ok=True); flag=folder/'restart.txt'
+              fd=os.open(str(flag),os.O_CREAT|os.O_APPEND|os.O_WRONLY|os.O_NOFOLLOW,0o600); os.close(fd); os.utime(flag,None)
+          os.chdir(A);sys.path.insert(0,str(A));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.template.loader import get_template
+          get_template('brands/mojplaywin/product.html')
+          print('MPW_TEMPLATE_REPAIR=PASS')
+          PY
+      - name: Verify all product pages and checkout pages
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json
+          checks={}
+          for path in ('/store/','/store/product/72/','/store/product/225/','/store/product/879/',
+                       '/commerce/trx-easy/','/commerce/book/72/','/commerce/book/225/','/commerce/book/879/'):
+              req=urllib.request.Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache, no-store, max-age=0','User-Agent':'MPW-Sales-Repair/1'})
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      checks[path]={'status':r.status,'length':len(r.read(300000))}
+              except urllib.error.HTTPError as e:
+                  checks[path]={'status':e.code}
+          print('MPW_SALES_SMOKE='+json.dumps(checks,sort_keys=True))
+          bad=[p for p,v in checks.items() if v.get('status')!=200]
+          if bad: raise RuntimeError('SALES_PATHS_FAILED:'+','.join(bad))
+          PY
+      - name: Verify Django route responses and protected database state
+        run: |
+          set -euo pipefail
+          timeout 100s ssh -T -F "$RUNNER_TEMP/r/c" h "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,json
+          from pathlib import Path
+          A=Path('/home/zomorod2/Saeit-staging');os.chdir(A);sys.path.insert(0,str(A));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.test import Client
+          from core.models import Product,OrderItem
+          from django.template.loader import get_template
+          get_template('brands/mojplaywin/product.html')
+          client=Client(raise_request_exception=False)
+          result={}
+          for pk in (72,225,879):
+              result[str(pk)]={'detail':client.get('/store/product/%s/'%pk,secure=True,HTTP_HOST='mojplaywin.com').status_code,
+                               'checkout':client.get('/commerce/book/%s/'%pk,secure=True,HTTP_HOST='mojplaywin.com').status_code}
+          p=Product.objects.get(pk=779);orders=OrderItem.objects.filter(product_id=779).count()
+          print('MPW_DJANGO_SALES='+json.dumps(result,sort_keys=True))
+          print('MPW_PROTECTED_779='+json.dumps({'active':p.active,'orders':orders,'article_published':getattr(p.knowledge_article,'published',None),'database_rows_deleted':0}))
+          if any(v['detail']!=200 or v['checkout'] not in (200,302) for v in result.values()): raise RuntimeError('DJANGO_SALES_ROUTES_FAILED')
+          if not p.active or orders<1: raise RuntimeError('PROTECTED_ORDER_STATE_FAILED')
+          PY
+      - name: Clean relay keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/r"
