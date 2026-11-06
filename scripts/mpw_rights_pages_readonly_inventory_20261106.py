@@ -16,6 +16,7 @@ import pwd
 APP = pathlib.Path("/home/zomorod2/Saeit-staging")
 DOCROOT = pathlib.Path("/home/zomorod2/mojplaywin.com")
 PAGES = APP / "services" / "mpw_trx_public_pages.py"
+CATALOG = APP / "services" / "mpw_trx_public_catalog.py"
 EXPECTED_USER = "zomorod2"
 MAX_BYTES = 2_000_000
 
@@ -40,6 +41,8 @@ def collect():
         raise RuntimeError("UNSAFE_ROOT_OR_PARENT")
     if PAGES.is_symlink() or not PAGES.is_file():
         raise RuntimeError("UNSAFE_OR_MISSING_PAGES_MODULE")
+    if CATALOG.is_symlink() or not CATALOG.is_file():
+        raise RuntimeError("UNSAFE_OR_MISSING_CATALOG_MODULE")
     wsgi = DOCROOT / "passenger_wsgi.py"
     if wsgi.is_symlink() or not wsgi.is_file():
         raise RuntimeError("UNSAFE_OR_MISSING_WSGI")
@@ -54,6 +57,20 @@ def collect():
         raise RuntimeError("PAGES_CHANGED_DURING_READ")
     source = raw.decode("utf-8")
     tree = ast.parse(source, filename="<live-mpw-pages>")
+    catalog_size = CATALOG.stat().st_size
+    if not 0 < catalog_size <= MAX_BYTES:
+        raise RuntimeError("UNEXPECTED_CATALOG_SIZE")
+    catalog_raw = CATALOG.read_bytes()
+    if len(catalog_raw) != catalog_size:
+        raise RuntimeError("CATALOG_CHANGED_DURING_READ")
+    catalog_tree = ast.parse(catalog_raw.decode("utf-8"), filename="<live-mpw-catalog>")
+    catalog_functions = {node.name: node for node in catalog_tree.body
+                         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    catalog_helper = catalog_functions.get("public_trx_product")
+    catalog_names = sorted({
+        node.id for node in ast.walk(catalog_helper)
+        if isinstance(node, ast.Name)
+    })[:45] if catalog_helper else []
     functions = {node.name: node for node in tree.body
                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
     checkout = functions.get("product_checkout")
@@ -110,6 +127,11 @@ def collect():
         "no_source_or_customer_data": True,
         "pages_sha256": hashlib.sha256(raw).hexdigest(),
         "pages_size": size,
+        "catalog_sha256": hashlib.sha256(catalog_raw).hexdigest(),
+        "catalog_has_product_helper": catalog_helper is not None,
+        "catalog_product_helper_names": catalog_names,
+        "catalog_helper_mentions_rights": "rights_cleared_for_sale" in catalog_names,
+        "catalog_helper_mentions_eligible": "_eligible" in catalog_names,
         "import_old_count": source.count(IMPORT_OLD),
         "import_new_count": source.count(IMPORT_NEW),
         "checkout_old_count": source.count(CHECKOUT_OLD),
