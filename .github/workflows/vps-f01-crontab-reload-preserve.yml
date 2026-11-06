@@ -56,6 +56,21 @@ jobs:
           marker = 'SAEIT_SINGLE_PRODUCT_FACTORY_V1'
           exact = ('* * * * * /usr/bin/timeout 55s ' + str(runner) +
                    ' >> /home/githubops/factory-runtime/operations/single-product-cycle.log 2>&1 # ' + marker)
+          matched = [r for r in rules if marker in r]
+          if len(matched) == 1 and matched[0] != exact:
+              # Never reveal the owner's private crontab command or its arguments.
+              print('F01_CRON_ENTRY_DIAGNOSTIC_PREFIX_ONE_MINUTE=' + str(
+                  matched[0].startswith('* * * * * ')).lower())
+              print('F01_CRON_ENTRY_DIAGNOSTIC_TIMEOUT_55=' + str(
+                  '/usr/bin/timeout 55s ' in matched[0]).lower())
+              print('F01_CRON_ENTRY_DIAGNOSTIC_PINNED_RUNNER_PATH=' + str(
+                  str(runner) in matched[0]).lower())
+              print('F01_CRON_ENTRY_DIAGNOSTIC_EXPECTED_LOG=' + str(
+                  '/home/githubops/factory-runtime/operations/single-product-cycle.log' in matched[0]).lower())
+              print('F01_CRON_ENTRY_DIAGNOSTIC_ENDS_MARKER=' + str(
+                  matched[0].endswith('# ' + marker)).lower())
+              print('F01_CRON_ENTRY_DIAGNOSTIC_LENGTH=' + str(len(matched[0])))
+              print('F01_CRON_ENTRY_DIAGNOSTIC_EXPECTED_LENGTH=' + str(len(exact)))
           if len([r for r in rules if marker in r]) != 1 or exact not in rules:
               raise SystemExit('F01_CRON_RELOAD_ABORT_SCHEDULE_DIFFERENT')
           active = subprocess.run(['systemctl', 'is-active', 'cron.service'],
