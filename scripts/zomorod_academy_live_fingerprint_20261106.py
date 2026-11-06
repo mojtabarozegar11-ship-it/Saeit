@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import subprocess
 from pathlib import Path
 
 HOME = Path('/home/zomorod2')
@@ -93,6 +94,38 @@ def main() -> None:
                 not item.is_symlink() and item.suffix == '.html'
             )[:30]))
     print('LIVE_PASSENGER_WSGI_PRESENT=' + str((APP / 'passenger_wsgi.py').is_file()).lower())
+    # Read only table names through the existing Django database connection.
+    # No ORM queries, user records, writes, migrations or model data are read.
+    interpreter = HOME / 'virtualenv/Saeit/3.10/bin/python'
+    if interpreter.is_file():
+        probe = '''
+import os
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+import django
+django.setup()
+from django.db import connection
+with connection.cursor():
+    tables = set(connection.introspection.table_names())
+for suffix in ("track", "course", "lesson", "enrollment", "progress",
+               "bookmark", "assessment", "certificate"):
+    name = "core_education" + suffix
+    print("ACADEMY_DB_TABLE=" + name + " exists=" + str(name in tables).lower())
+'''
+        try:
+            result = subprocess.run(
+                [str(interpreter), '-B', '-c', probe], cwd=APP,
+                env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'},
+                capture_output=True, text=True, timeout=35, check=False,
+            )
+            if result.returncode:
+                print('ACADEMY_DB_SCHEMA_INSPECTION=UNAVAILABLE')
+            else:
+                print('ACADEMY_DB_SCHEMA_INSPECTION=SUCCESS')
+                for line in result.stdout.splitlines():
+                    if line.startswith('ACADEMY_DB_TABLE='):
+                        print(line)
+        except Exception:
+            print('ACADEMY_DB_SCHEMA_INSPECTION=UNAVAILABLE')
     # Do not mutate the app, restart Passenger, inspect credentials, or touch DB.
 
 
