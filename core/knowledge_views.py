@@ -25,7 +25,17 @@ def knowledge_book_detail(request, slug):
     if not book:
         raise Http404
     related = KnowledgeBook.objects.filter(plan=book.plan).exclude(pk=book.pk).order_by("id")[:6]
-    context = {"book": book, "related": related, "meta": _meta(book.objective), "free": bool(book.plan and book.plan.public_free)}
+    # Public roadmap records may be viewed before publication, but their draft
+    # body must never leave the owner-controlled editorial workflow.
+    published = book.status == "published"
+    context = {
+        "book": book,
+        "related": related,
+        "meta": _meta(book.objective),
+        "free": bool(book.plan and book.plan.public_free),
+        "public_content": book.content if published else "",
+        "published": published,
+    }
     return render(request, "core/knowledge_book_detail.html", context)
 
 
