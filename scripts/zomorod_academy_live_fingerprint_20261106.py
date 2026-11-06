@@ -65,6 +65,14 @@ def main() -> None:
         'UNSAFE'
     ))
     print('ACADEMY_BASELINE_MATCHED=' + str(matches) + '/' + str(len(EXPECTED)))
+    # Release diagnostic: hashes alone identify unexpected concurrent writes.
+    # No Python source, credentials, customer rows or environment are printed.
+    for name in ('core/academy_views.py', 'core/templates/core/academy.html'):
+        path = APP / name
+        if path.is_file() and not path.is_symlink():
+            print('LIVE_ACADEMY_FILE_SHA256=' + name + ' sha=' + hash_file(path))
+        else:
+            print('LIVE_ACADEMY_FILE_SHA256=' + name + ' status=ABSENT_OR_UNSAFE')
     print('APP_VENV_PYTHON_PRESENT=' + str((HOME / 'virtualenv/Saeit/3.10/bin/python').is_file()).lower())
     # Public route and layout inventory only; never output Python source text.
     urls = (APP / 'config/urls.py').read_text(errors='replace')
