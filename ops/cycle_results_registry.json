@@ -29,7 +29,7 @@
     },
     "02": {
       "automation_id": "6adde91161708191b6e89b01870a092b",
-      "sequence": 0,
+      "sequence": 1,
       "legacy_report_last_verified": null,
       "primary_output": "accepted publication-ready book"
     },
@@ -158,6 +158,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42263164434",
       "acceptance_result": "Read-only cPanel inventory workflow completed successfully; user-supplied gate findings remain false: isolation and recoverable backups; no P0 closure or deployment",
       "impact": "Release HOLD linked to exact workflow and delegated to cycle 03; no accepted product or collected revenue"
+    },
+    {
+      "registry_id": "R02-0001",
+      "cycle_id": "02",
+      "run_id": "B01-20261106T235220+0330-turn11",
+      "deliverable_key": "C113-source-integrity-private-review-91ab4d43",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514",
+      "acceptance_result": "One unverified source attribution explicitly flagged in C113 DOCX and matching 608-page PDF; SHA readback of both private Library files succeeded; not author approved",
+      "impact": "Removed misleading implied citation verification; no approved book, live SKU or revenue"
     }
   ],
   "report_reservations": [],
