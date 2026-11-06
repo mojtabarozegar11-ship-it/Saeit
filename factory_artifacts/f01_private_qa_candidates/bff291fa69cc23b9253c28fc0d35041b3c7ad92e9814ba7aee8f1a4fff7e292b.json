@@ -1,0 +1,14 @@
+{
+  "schema": "saeit.f01.private-qa-transport.v1",
+  "recipe": "farm_enterprise_economics",
+  "archive_filename": "farm_enterprise_economics-internal-qa.zip",
+  "archive_sha256": "bff291fa69cc23b9253c28fc0d35041b3c7ad92e9814ba7aee8f1a4fff7e292b",
+  "archive_size_bytes": 44622,
+  "archive_git_blob_sha": "f48408d9e3b100dcb367480ff460e201319893f8",
+  "linked_source_commit": "7defe0fd2624887cf23e28529848b5daaff29c36",
+  "purpose": "isolated byte-verified transport candidate, not a production release",
+  "external_quality_verified": false,
+  "independent_signatures_verified": false,
+  "customer_acceptance_receipt_verified": false,
+  "production_activation_authorized": false
+}
