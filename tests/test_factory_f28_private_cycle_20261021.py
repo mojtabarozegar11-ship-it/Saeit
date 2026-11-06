@@ -39,7 +39,7 @@ class F28PrivateCycleTests(unittest.TestCase):
         self.assertGreaterEqual(receipt["technical_tests"], 10)
         self.assertEqual(receipt["independent_black_box_checks"]["customer_scenarios_verified"], 2)
         self.assertTrue(receipt["independent_black_box_checks"]["customer_cli_from_extracted_zip"])
-        self.assertFalse(receipt["independent_professional_quality_1000_passed"])
+        self.assertFalse(receipt["commercial_readiness_verified"])
         self.assertFalse(receipt["commercial_release_authorized"])
         stock = self.private / "private-stock" / "greenhouse_crop_margin"
         archive = stock / "greenhouse_crop_margin-internal-qa.zip"

@@ -73,8 +73,17 @@ def main():
         raise RuntimeError("No approved private staging")
     if any(p.is_symlink() or not p.is_file() for p in PROTECTED):
         raise RuntimeError("Original protected source missing or symlinked")
-    if ASSET.exists() or ASSET.is_symlink():
-        raise RuntimeError("Target transparent asset already exists; no overwrite permitted")
+    if ASSET.is_symlink():
+        raise RuntimeError("Target transparent asset is a symlink; refusing overwrite")
+    previous_asset=ORIGINAL/"logo.png"
+    if ASSET.exists():
+        if previous_asset.exists():
+            if previous_asset.read_bytes()!=ASSET.read_bytes():
+                raise RuntimeError("Original transparent asset backup mismatch")
+        else:
+            shutil.copy2(ASSET, previous_asset)
+            if previous_asset.read_bytes()!=ASSET.read_bytes():
+                raise RuntimeError("Original transparent asset backup validation failed")
     logo=STAGE/"logo.png"
     png=logo.read_bytes()
     if not png.startswith(b"\x89PNG\r\n\x1a\n") or b"tRNS" not in png or len(png)<4000:
@@ -86,11 +95,11 @@ def main():
             raise RuntimeError("Missing expected original page: "+name)
         approved=(STAGE/(name+".html")).read_bytes()
         old=target.read_bytes()
-        if NEW_PATH not in approved or NEW_PATH in old:
-            raise RuntimeError("Expected old/new logo ref not found: "+name)
-        if approved.replace(NEW_PATH,OLD_PATH)!=old:
-            raise RuntimeError("Non-logo content difference / concurrent edit: "+name)
+        if NEW_PATH not in approved:
+            raise RuntimeError("Approved source is missing the required logo reference: "+name)
         prepared[name]=approved
+        if approved != old:
+            print("ZM_APPROVED_CONTENT_UPDATE="+name,flush=True)
         previous=ORIGINAL/(name+".html")
         if previous.exists():raise RuntimeError("Backup file already exists: "+name)
         shutil.copy2(target,previous)
@@ -135,7 +144,10 @@ def main():
             except Exception as exc:
                 print("ZM_LOGO_ROLLBACK_MANUAL_CHECK="+name+" "+type(exc).__name__,flush=True)
         if uploaded and ASSET.is_file() and not ASSET.is_symlink() and ASSET.read_bytes()==png:
-            ASSET.unlink()
+            if previous_asset.is_file():
+                atomic_copy(previous_asset, ASSET)
+            else:
+                ASSET.unlink()
         print("ZM_LOGO_RELEASE=rolled_back_after_failed_verification",flush=True)
         raise
 

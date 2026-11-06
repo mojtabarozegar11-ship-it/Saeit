@@ -2,8 +2,10 @@
 import importlib.util
 import json
 import sqlite3
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 MODULE = Path(__file__).resolve().parents[1] / "scripts" / "factory_vps_backup_retention_audit_20261101.py"
@@ -39,6 +41,36 @@ class FactoryBackupAuditTests(unittest.TestCase):
         self.assertTrue(report["records"][0]["quick_check_ok"])
         self.assertFalse(report["records"][0]["approved_for_deletion"])
         self.assertTrue(report["deletion_gate"].startswith("BLOCKED_"))
+
+    def test_total_budget_marks_unchecked_as_unknown_and_never_delete(self):
+        path = self.make_database("master-before-20261027T000000Z.sqlite3")
+        before = (path.read_bytes(), path.stat().st_mtime_ns)
+        with mock.patch.object(audit_module, "MAX_TOTAL_VERIFICATION_SECONDS", 0):
+            report = audit_module.audit(self.root)
+        row = report["records"][0]
+        self.assertEqual(report["verification_skipped_budget_count"], 1)
+        self.assertEqual(row["check_result"], "global_verification_budget_exhausted")
+        self.assertFalse(row["quick_check_ok"])
+        self.assertFalse(row["approved_for_deletion"])
+        self.assertFalse(report["offsite_functional_restore_verified"])
+        self.assertEqual(before, (path.read_bytes(), path.stat().st_mtime_ns))
+
+    def test_verification_checks_newest_snapshot_before_older_backups(self):
+        older = self.make_database("master-before-20261025T000000Z.sqlite3")
+        newer = self.make_database("master-before-20261027T000000Z.sqlite3")
+        import os
+        import time
+        now = time.time() - 120
+        os.utime(older, (now - 20, now - 20))
+        os.utime(newer, (now - 10, now - 10))
+        checked = []
+        def fake_check(path, seconds):
+            checked.append(path.name)
+            return True, "quick_check_ok"
+        with mock.patch.object(audit_module, "check_database", side_effect=fake_check):
+            report = audit_module.audit(self.root)
+        self.assertEqual(checked, [newer.name, older.name])
+        self.assertEqual(report["verified_exact_master_count"], 2)
 
     def test_corrupt_file_never_approved(self):
         path = self.root / "master-before-20261026T000000Z.sqlite3"
@@ -124,6 +156,20 @@ class FactoryBackupAuditTests(unittest.TestCase):
         self.assertEqual(result, "quick_check_timed_out")
         self.assertEqual(before, (path.read_bytes(), path.stat().st_mtime_ns))
 
+    def test_blocked_sqlite_io_child_is_killed_at_wall_clock_timeout(self):
+        path = self.make_database("master-before-20261027T151515Z.sqlite3")
+        before = (path.read_bytes(), path.stat().st_mtime_ns)
+        with mock.patch.object(
+            audit_module.subprocess, "run",
+            side_effect=subprocess.TimeoutExpired(cmd="read_only_sqlite", timeout=0.01),
+        ) as run:
+            healthy, reason = audit_module.check_database(path, seconds=0.01)
+        self.assertFalse(healthy)
+        self.assertEqual(reason, "quick_check_timed_out")
+        self.assertEqual(run.call_args.kwargs["timeout"], 0.01)
+        self.assertEqual(run.call_args.args[0][1:3], ["-B", "-c"])
+        self.assertEqual(before, (path.read_bytes(), path.stat().st_mtime_ns))
+
     def test_wal_or_journal_sidecar_blocks_snapshot_verification(self):
         path = self.make_database("master-before-20261027T121212Z.sqlite3")
         wal = Path(str(path) + "-wal")
@@ -151,6 +197,105 @@ class FactoryBackupAuditTests(unittest.TestCase):
         self.assertNotIn("path_relative", encoded)
         self.assertEqual(len(public["backup_root_sha256_prefix"]), 16)
         self.assertEqual(public["records"][0]["filename"], path.name)
+
+
+    def test_factory_operations_inventory_is_read_only_and_redacted(self):
+        operations = Path(self.tmp.name) / "operations"
+        backups = operations / "backups"
+        archives = operations / "archives"
+        backups.mkdir(parents=True)
+        archives.mkdir()
+        archived = archives / "historic-complete.log"
+        archived.write_bytes(b"archived")
+        small = backups / "older-build.tmp"
+        small.write_bytes(b"x" * 40)
+        before = (archived.read_bytes(), archived.stat().st_mtime_ns)
+        result = audit_module.inventory_factory_operations(operations)
+        self.assertTrue(result["root_present"])
+        self.assertTrue(result["read_only"])
+        self.assertEqual(result["files_changed_or_deleted"], 0)
+        self.assertEqual(result["files_scanned"], 2)
+        self.assertEqual(result["bytes_total"], 48)
+        self.assertEqual(result["by_area"]["archives"]["bytes"], 8)
+        self.assertEqual(result["by_extension"][".tmp"]["files"], 1)
+        self.assertEqual(before, (archived.read_bytes(), archived.stat().st_mtime_ns))
+        self.assertNotIn("historic-complete.log", json.dumps(result))
+
+
+    def test_factory_operations_deadline_is_enforced_inside_file_loop(self):
+        operations = Path(self.tmp.name) / "operations"
+        operations.mkdir()
+        for index in range(6):
+            (operations / f"candidate-{index}.log").write_bytes(b"item")
+        ticks = iter([0, 0, 0, 51])
+        with mock.patch.object(
+            audit_module.time, "monotonic",
+            side_effect=lambda: next(ticks, 51),
+        ):
+            report = audit_module.inventory_factory_operations(operations)
+        self.assertTrue(report["scan_truncated"])
+        self.assertLess(report["files_scanned"], 6)
+        self.assertEqual(report["files_changed_or_deleted"], 0)
+
+    def test_factory_operations_inventory_rejects_symlink_root(self):
+        operations = Path(self.tmp.name) / "operations"
+        operations.mkdir()
+        linked = Path(self.tmp.name) / "operations-link"
+        linked.symlink_to(operations, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "UNSAFE"):
+            audit_module.inventory_factory_operations(linked)
+
+
+    def test_finished_products_inventory_preserves_saleable_archives(self):
+        finished = Path(self.tmp.name) / "finished"
+        package_dir = finished / "volume-one" / "release"
+        package_dir.mkdir(parents=True)
+        package = package_dir / "product.zip"
+        package.write_bytes(b"PK\x03\x04" + b"original-product" * 50)
+        manifest = package_dir / "manifest.json"
+        manifest.write_bytes(b'{"product":"protected"}')
+        before = [(p.read_bytes(), p.stat().st_mtime_ns)
+                  for p in (package, manifest)]
+        report = audit_module.inventory_factory_finished(finished)
+        after = [(p.read_bytes(), p.stat().st_mtime_ns)
+                 for p in (package, manifest)]
+        self.assertEqual(before, after)
+        self.assertTrue(report["protected_saleable_inventory"])
+        self.assertFalse(report["deletion_allowed"])
+        self.assertTrue(report["read_only"])
+        self.assertEqual(report["files_changed_or_deleted"], 0)
+        self.assertEqual(report["product_zip_count"], 1)
+        self.assertEqual(report["product_zip_headers_ok"], 1)
+        self.assertFalse(report["full_zip_integrity_verified"])
+        self.assertEqual(report["product_zip_bytes"], package.stat().st_size)
+        self.assertNotIn("volume-one", json.dumps(report))
+
+    def test_finished_inventory_skips_symlink_and_blocks_symlink_root(self):
+        finished = Path(self.tmp.name) / "finished"
+        finished.mkdir()
+        source = finished / "product.zip"
+        source.write_bytes(b"PK\x03\x04valid")
+        (finished / "symlink-product.zip").symlink_to(source)
+        report = audit_module.inventory_factory_finished(finished)
+        self.assertEqual(report["files_scanned"], 1)
+        self.assertEqual(report["symlinks_skipped"], 1)
+        link = Path(self.tmp.name) / "finished-link"
+        link.symlink_to(finished, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "UNSAFE"):
+            audit_module.inventory_factory_finished(link)
+
+    def test_finished_inventory_deadline_is_bounded(self):
+        finished = Path(self.tmp.name) / "finished"
+        finished.mkdir()
+        for n in range(5):
+            (finished / f"{n}.dat").write_bytes(b"x")
+        ticks = iter([0, 0, 0, 21])
+        with mock.patch.object(audit_module.time, "monotonic",
+                               side_effect=lambda: next(ticks, 21)):
+            result = audit_module.inventory_factory_finished(finished)
+        self.assertTrue(result["scan_truncated"])
+        self.assertLess(result["files_scanned"], 5)
+        self.assertFalse(result["deletion_allowed"])
 
 
 if __name__ == "__main__":

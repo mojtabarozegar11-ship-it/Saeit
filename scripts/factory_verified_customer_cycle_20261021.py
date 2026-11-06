@@ -3,7 +3,7 @@
 
 Executes the tests FROM the exact shipped ZIP in a clean temporary directory.
 Blocks any missing, unsafe, corrupted or non-running artifact. This does NOT
-grant 1000-point professional clearance, usage rights or commercial release.
+grant usage rights, legal clearance or commercial release.
 Python 3.8+, stdlib only.
 """
 import hashlib
@@ -19,17 +19,18 @@ import sys
 import tempfile
 import zipfile
 
-SCHEMA = "zomorodmelal.factory.customer-extracted-acceptance.v1"
+SCHEMA = "zomorodmelal.factory.customer-extracted-acceptance.v2"
 RECIPE = re.compile(r"^[a-z][a-z0-9_]{1,65}$")
 HASH = re.compile(r"^[0-9a-f]{64}$")
 MAX_PACKAGE_BYTES = 25 * 1024 * 1024
 MAX_UNPACKED_BYTES = 40 * 1024 * 1024
 MAX_MEMBERS = 256
-QUALITY_WEIGHTS = {
-    "functional_accuracy": 250, "professional_domain_review": 200,
-    "security_privacy_integrity": 150, "resilience_failure_modes": 100,
-    "usability_accessibility": 100, "performance_resources": 75,
-    "packaging_manual_delivery": 75, "rights_and_provenance": 50,
+RELEASE_READINESS = {
+    "security_and_privacy": "not_yet_reviewed",
+    "legal_rights_and_attribution": "not_yet_verified",
+    "claims_and_user_documentation": "not_yet_reviewed",
+    "storefront_and_delivery": "not_yet_verified",
+    "owner_exact_version_publication": "not_authorized",
 }
 RUNNER = r"""
 import json,sys,unittest
@@ -174,12 +175,13 @@ def inspect_product(folder, recipe, *, timeout=90):
             "customer_archive_tests_run": counts["tests_run"],
             "original_manufacturer_tests_run": measurements["tests_run"],
             "independent_business_domain_oracle": False,
-            "professional_quality_1000_approved": False,
+            "objective_customer_package_accepted": True,
+            "commercial_publication_approved": False,
             "public_listing_enabled": False, "commerce_enabled": False}
 
 
 def persist_pending(private_root, receipt):
-    """Durably bind actual technical evidence and an UNSCORED professional gate."""
+    """Durably bind technical evidence to unscored, objective release checks."""
     root = Path(private_root)
     require(not root.is_symlink() and root.is_dir(), "INVALID_PRIVATE_ROOT")
     recipe = receipt["recipe"]
@@ -189,21 +191,18 @@ def persist_pending(private_root, receipt):
     from_file = root / "digital-products" / recipe / (recipe + "-internal-qa.zip")
     require(from_file.is_file() and checksum(from_file) == receipt["artifact_sha256"],
             "PRODUCT_CHANGED_AFTER_CUSTOMER_QA")
-    target = root / "customer-extracted-acceptance" / recipe / sha / "technical-receipt.json"
+    target = root / "customer-extracted-acceptance" / recipe / sha / "technical-receipt-v2.json"
     target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     require(not target.parent.is_symlink() and not target.is_symlink(), "UNSAFE_RECEIPT_TARGET")
-    quality = root / "quality-excellence" / "customer-extracted-review" / recipe / sha / "pending.json"
+    quality = root / "quality-excellence" / "customer-extracted-review" / recipe / sha / "readiness-v2.json"
     quality.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     require(not quality.parent.is_symlink() and not quality.is_symlink(), "UNSAFE_QUALITY_TARGET")
     ticket = {"schema": SCHEMA, "recipe": recipe,
               "source_sha256": sha, "artifact_sha256": receipt["artifact_sha256"],
-              "technical_customer_qa": "passed", "professional_quality_1000_approved": False,
-              "verified_total_score": None, "open_defects_may_remain": True,
-              "rubric_maximum": 1000,
-              "rubric": {key: {"maximum": value, "verified_score": None}
-                        for key, value in QUALITY_WEIGHTS.items()},
-              "expert_signature_verified": False, "owner_publication_approval": False,
-              "status": "PENDING_INDEPENDENT_PROFESSIONAL_QUALITY_AND_DELIVERY",
+              "technical_customer_qa": "passed", "objective_customer_package_accepted": True,
+              "release_readiness": RELEASE_READINESS,
+              "owner_publication_approval": False,
+              "status": "PRIVATE_TECHNICAL_ACCEPTED_AWAITING_RELEASE_READINESS",
               "commercial_release": False}
     for path, payload in ((target, receipt), (quality, ticket)):
         raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, indent=2) + "\n"
@@ -259,8 +258,8 @@ def inspect_product_scheduled(private_root, recipe, *, now=None, max_age_seconds
     source_sha = manifest.get("source_sha256")
     require(isinstance(source_sha, str) and HASH.fullmatch(source_sha),
             "INVALID_MANUFACTURING_SOURCE_SHA")
-    proof = root / "customer-extracted-acceptance" / recipe / source_sha / "technical-receipt.json"
-    quality = root / "quality-excellence" / "customer-extracted-review" / recipe / source_sha / "pending.json"
+    proof = root / "customer-extracted-acceptance" / recipe / source_sha / "technical-receipt-v2.json"
+    quality = root / "quality-excellence" / "customer-extracted-review" / recipe / source_sha / "readiness-v2.json"
     checkpoint = root / "customer-qa-cadence" / (recipe + ".json")
     implementation_sha = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     expected = {
@@ -289,15 +288,16 @@ def inspect_product_scheduled(private_root, recipe, *, now=None, max_age_seconds
                           and saved.get("source_sha256") == source_sha
                           and saved.get("artifact_sha256") == actual_artifact_sha
                           and saved.get("customer_zip_extract_test") == "passed"
-                          and saved.get("professional_quality_1000_approved") is False
+                          and saved.get("objective_customer_package_accepted") is True
+                          and saved.get("commercial_publication_approved") is False
                           and saved.get("public_listing_enabled") is False
                           and saved.get("commerce_enabled") is False
                           and ticket.get("technical_customer_qa") == "passed"
                           and ticket.get("source_sha256") == source_sha
                           and ticket.get("artifact_sha256") == actual_artifact_sha
-                          and ticket.get("professional_quality_1000_approved") is False
+                          and ticket.get("objective_customer_package_accepted") is True
                           and ticket.get("commercial_release") is False
-                          and ticket.get("verified_total_score") is None
+                          and ticket.get("release_readiness") == RELEASE_READINESS
                           and ticket.get("owner_publication_approval") is False)
             if recent and legitimate:
                 return saved, False

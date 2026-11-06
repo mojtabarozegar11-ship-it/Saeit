@@ -1,0 +1,23 @@
+{% load static %}
+<!doctype html>
+<html lang="{{ locale }}" dir="{{ page_direction }}">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="{{ page_intro }}">
+<title>{{ brand_name }} | {{ page_title }}</title>
+<style>
+:root{--ink:{{ page_palette.1 }};--gold:{{ page_palette.2 }};--paper:#f4f0e7;--white:#fffdf8}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:#17211e;font-family:Inter,"Noto Sans Arabic","Noto Sans",Arial,sans-serif}
+a{color:inherit}.shell{max-width:1180px;margin:auto;padding:24px 30px}.nav{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #d9d2c4;padding:12px 0 20px}.brand{font-weight:800;letter-spacing:.13em;color:var(--ink)}.nav a{font-size:.92rem;text-decoration:none}
+.hero{position:relative;overflow:hidden;border-radius:28px;margin:36px 0;background:linear-gradient(125deg,var(--ink),#101b1d);color:white;padding:clamp(38px,8vw,92px);min-height:390px;display:flex;align-items:center}.hero:after{content:"";position:absolute;inset:auto -4% -55% auto;width:min(62vw,650px);aspect-ratio:1;border:1px solid #ffffff38;border-radius:50%;box-shadow:0 0 0 36px #ffffff0c,0 0 0 80px #ffffff09}
+.copy{position:relative;z-index:1;max-width:700px}.eyebrow{color:var(--gold);letter-spacing:.14em;text-transform:uppercase;font-size:.8rem;font-weight:700}.hero h1{font-family:Georgia,"Noto Serif Arabic",serif;font-size:clamp(2.4rem,5.8vw,5.3rem);line-height:1.08;margin:20px 0}.hero p{font-size:1.12rem;line-height:1.9;max-width:620px;color:#f2eee6}
+.cards{display:grid;grid-template-columns:1.1fr .9fr;gap:22px;margin:24px 0 60px}.card{background:var(--white);border:1px solid #e6dfd2;border-radius:22px;padding:30px;box-shadow:0 14px 40px #312b1908}.card h2{margin:0 0 14px;color:var(--ink);font:700 1.35rem Georgia,serif}.card p{line-height:1.9;margin:0}.notice{border-inline-start:4px solid var(--gold);background:#f5edda;padding:18px 20px;border-radius:4px 14px 14px 4px;line-height:1.85}
+.button{display:inline-block;margin-top:22px;background:var(--ink);color:white;text-decoration:none;padding:14px 22px;border-radius:999px;font-weight:700}.foot{border-top:1px solid #d9d2c4;padding:22px 0;color:#595a54;font-size:.86rem;line-height:1.8}
+@media(max-width:700px){.shell{padding:15px}.hero{padding:32px 25px;min-height:350px;margin:22px 0;border-radius:21px}.cards{grid-template-columns:1fr}.nav{align-items:flex-start;gap:12px}.hero h1{font-size:2.8rem}}
+</style>
+</head><body><main class="shell">
+<nav class="nav"><a class="brand" href="/">{{ brand_name }} · {{ copy.pill }}</a><a href="{{ shop_url }}">{{ copy.cta }} ↗</a></nav>
+<section class="hero"><div class="copy"><span class="eyebrow">{{ brand_name }} · {% if page_type == "signals" %}{{ copy.pill }}{% else %}Digital collection{% endif %}</span><h1>{{ page_title }}</h1><p>{{ page_intro }}</p></div></section>
+<section class="cards"><article class="card"><h2>{% if page_type == "signals" %}{{ brand_name }} · Market desk{% else %}{{ brand_name }} · Digital collection{% endif %}</h2><p>{{ page_intro }}</p><a class="button" href="{{ shop_url }}">{{ copy.cta }} ↗</a></article><aside class="notice">{{ page_notice }}</aside></section>
+<footer class="foot">{{ copy.disclaimer }}<br>© {{ brand_name }} · MojPlayWin / Zomorod Melal</footer>
+</main></body></html>

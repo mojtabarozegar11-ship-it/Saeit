@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Import verified private cPanel factory receipts as INACTIVE Django draft products.
+"""Import ONE verified private factory receipt as an INACTIVE Django draft.
 
-The importer is strictly opt-in and idempotent. It never makes products
-purchasable, publishes knowledge, creates orders, changes payments or touches
-an existing non-factory product. Reject wrong storefront/owner identity.
+Technical acceptance lets an owner prepare a private listing. It is NOT a
+commercial-quality approval. Only the separately guarded publisher may
+authorize a public listing. This importer never publishes, creates orders,
+changes payments or modifies non-factory products.
 """
 import argparse
 from decimal import Decimal
 import importlib.util
 import json
-import os
+import subprocess
 from pathlib import Path
 import re
 import sys
@@ -28,28 +29,30 @@ def receiver_module():
     return module
 
 
-def catalog_receipts(root, *, max_count=20):
-    receipts = root / "receipts"
-    if not receipts.is_dir():
-        return []
-    candidate = []
-    for folder in sorted(receipts.iterdir()):
-        if not folder.is_dir() or folder.is_symlink() or not NAME.fullmatch(folder.name):
-            continue
-        for item in sorted(folder.glob("*.json")):
-            if item.is_symlink() or not HEX.fullmatch(item.stem):
-                continue
-            candidate.append((folder.name, item.stem))
-            if len(candidate) >= max_count:
-                return candidate
-    return candidate
+def selected_receipt(root, recipe, digest):
+    """Require a conscious, exact-version selection; never import a backlog."""
+    if not isinstance(recipe, str) or not NAME.fullmatch(recipe):
+        raise RuntimeError("EXACT_FACTORY_RECIPE_REQUIRED")
+    if not isinstance(digest, str) or not HEX.fullmatch(digest):
+        raise RuntimeError("EXACT_FACTORY_SHA256_REQUIRED")
+    directory = root / "receipts" / recipe
+    receipt = directory / (digest + ".json")
+    if directory.is_symlink() or not directory.is_dir() or receipt.is_symlink() or not receipt.is_file():
+        raise RuntimeError("SELECTED_PRIVATE_RECEIPT_NOT_FOUND")
+    return recipe, digest
 
 
 def verify_target(app, document_root):
-    app = Path(app).expanduser().resolve()
-    document_root = Path(document_root).expanduser().resolve()
+    app = Path(app).expanduser()
+    document_root = Path(document_root).expanduser()
+    if app.is_symlink() or document_root.is_symlink():
+        raise RuntimeError("STOREFRONT_PATH_SYMLINK_REJECTED")
+    app = app.resolve()
+    document_root = document_root.resolve()
     if not app.is_dir() or not (app / "manage.py").is_file():
         raise RuntimeError("DJANGO_APP_NOT_VERIFIED")
+    if document_root.name != "mojplaywin.com":
+        raise RuntimeError("UNVERIFIED_MOJPLAYWIN_DOCROOT")
     wsgi = document_root / "passenger_wsgi.py"
     if not wsgi.is_file() or wsgi.is_symlink():
         raise RuntimeError("STOREFRONT_PASSENGER_NOT_VERIFIED")
@@ -59,13 +62,77 @@ def verify_target(app, document_root):
     return app
 
 
-def import_receipts(root, app, document_root, owner_username=None, *, apply=False, sole_owner=False):
-    root = Path(root).expanduser().resolve()
+def verify_live_passenger_mapping(app, payload=None):
+    """Before DB writes, prove Passenger serves this exact Django directory.
+
+    A WSGI file mentioning Saeit-staging is not sufficient: cPanel's live
+    UAPI inventory has previously reported a different MojPlayWin app root.
+    Never substitute an SSH staging folder for the production app/database.
+    """
+    if payload is None:
+        try:
+            command = subprocess.run(
+                ["uapi", "--output=json", "PassengerApps", "list_applications"],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                timeout=25, check=False,
+            )
+            if command.returncode != 0 or not 0 < len(command.stdout) <= 2_000_000:
+                raise RuntimeError("LIVE_PASSENGER_INVENTORY_UNAVAILABLE")
+            payload = json.loads(command.stdout)
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            raise RuntimeError("LIVE_PASSENGER_INVENTORY_UNAVAILABLE") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("result"), dict):
+        raise RuntimeError("LIVE_PASSENGER_INVENTORY_INVALID")
+    result = payload["result"]
+    if result.get("status") not in (1, True):
+        raise RuntimeError("LIVE_PASSENGER_INVENTORY_NOT_SUCCESSFUL")
+
+    def entries(node):
+        if isinstance(node, dict):
+            if "domain" in node and any(x in node for x in
+                                          ("app_root", "app_path", "application_root")):
+                yield node
+            for child in node.values():
+                yield from entries(child)
+        elif isinstance(node, list):
+            for child in node:
+                yield from entries(child)
+
+    # Only the main-domain root mapping can be an authority for this importer.
+    candidates = []
+    for entry in entries(result.get("data")):
+        if str(entry.get("domain") or "").lower().strip() != "mojplaywin.com":
+            continue
+        uri = str(entry.get("base_uri") or entry.get("app_uri")
+                  or entry.get("application_uri") or "/").strip()
+        if uri.rstrip("/") != "":
+            continue
+        raw_root = entry.get("app_root") or entry.get("app_path") or entry.get("application_root")
+        if not isinstance(raw_root, str) or not raw_root.strip():
+            raise RuntimeError("LIVE_PASSENGER_APP_ROOT_MISSING")
+        candidate = Path(raw_root.strip())
+        if not candidate.is_absolute():
+            candidate = Path.home() / candidate
+        if candidate.is_symlink():
+            raise RuntimeError("LIVE_PASSENGER_APP_ROOT_SYMLINK")
+        candidates.append(candidate.resolve())
+    if len(candidates) != 1 or candidates[0] != Path(app).resolve():
+        raise RuntimeError("LIVE_PASSENGER_MAPPING_DOES_NOT_MATCH_TARGET_APP")
+    return True
+
+
+def import_receipts(root, app, document_root, owner_username=None, *, apply=False,
+                    sole_owner=False, recipe=None, digest=None):
+    root = Path(root).expanduser()
+    if root.is_symlink():
+        raise RuntimeError("PRIVATE_INBOX_SYMLINK_REJECTED")
+    root = root.resolve()
     app = verify_target(app, document_root)
     if not root.is_dir() or root.is_symlink():
         raise RuntimeError("PRIVATE_INBOX_NOT_VERIFIED")
     if not owner_username and not sole_owner:
         raise RuntimeError("OWNER_IDENTITY_REQUIRED")
+    recipe, digest = selected_receipt(root, recipe, digest)
     import django
     from django.conf import settings
     django.setup()
@@ -84,34 +151,16 @@ def import_receipts(root, app, document_root, owner_username=None, *, apply=Fals
         owner = eligible.first()
     if owner is None:
         raise RuntimeError("IDENTIFIED_STORE_OWNER_NOT_PRESENT")
+    if apply:
+        verify_live_passenger_mapping(app)
     Product = apps.get_model("core", "Product")
     verifier = receiver_module()
-    quality_path = Path(__file__).resolve().with_name(
-        "factory_commercial_quality_release_guard_v1.py"
-    )
-    if quality_path.is_symlink() or not quality_path.is_file():
-        raise RuntimeError("STORE_FINAL_QUALITY_REVIEW_GUARD_MISSING")
-    quality_spec = importlib.util.spec_from_file_location(
-        "factory_store_final_quality_guard", str(quality_path)
-    )
-    if quality_spec is None or quality_spec.loader is None:
-        raise RuntimeError("STORE_FINAL_QUALITY_REVIEW_GUARD_UNAVAILABLE")
-    quality_guard = importlib.util.module_from_spec(quality_spec)
-    quality_spec.loader.exec_module(quality_guard)
     created, unchanged, examined = 0, 0, 0
-    for recipe, digest in catalog_receipts(root):
+    for recipe, digest in [(recipe, digest)]:
         if not verifier.status(root, recipe, digest):
             raise RuntimeError("STOREFRONT_RECEIPT_INTEGRITY_FAILED")
         manifest_path = root / "packages" / recipe / (digest + ".json")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        package_path = root / "packages" / recipe / (digest + ".zip")
-        clearance = quality_guard.require_quality_clearance(
-            root, recipe, digest, manifest, package_path
-        )
-        if (clearance.get("status") != "VERIFIED_SIGNED_PREMIUM_1000"
-                or clearance.get("1000_quality_verified") is not True
-                or clearance.get("chatgpt_final_review") != "CHATGPT_FINAL_REVIEW_VERIFIED"):
-            raise RuntimeError("STORE_BLOCKED_UNTIL_CHATGPT_AND_QC1000_APPROVE")
         title = str(manifest.get("name") or "").strip()
         if not title or len(title) > 300:
             raise RuntimeError("PRODUCT_TITLE_INVALID")
@@ -121,6 +170,11 @@ def import_receipts(root, app, document_root, owner_username=None, *, apply=Fals
         # Portable JSONField lookup in modern Django/MySQL and supported SQLite.
         already = Product.objects.filter(metadata__factory_bridge_sha256=digest).first()
         if already:
+            existing_meta = already.metadata if isinstance(already.metadata, dict) else {}
+            if (existing_meta.get("factory_origin") != "saeit_vps"
+                    or existing_meta.get("factory_recipe") != recipe
+                    or already.owner_id != owner.pk):
+                raise RuntimeError("FACTORY_SHA_ALREADY_OWNED_BY_DIFFERENT_PRODUCT")
             unchanged += 1
             continue
         if not apply:
@@ -130,6 +184,11 @@ def import_receipts(root, app, document_root, owner_username=None, *, apply=Fals
                 metadata__factory_bridge_sha256=digest
             ).first()
             if already:
+                existing_meta = already.metadata if isinstance(already.metadata, dict) else {}
+                if (existing_meta.get("factory_origin") != "saeit_vps"
+                        or existing_meta.get("factory_recipe") != recipe
+                        or already.owner_id != owner.pk):
+                    raise RuntimeError("FACTORY_SHA_ALREADY_OWNED_BY_DIFFERENT_PRODUCT")
                 unchanged += 1
                 continue
             metadata = {
@@ -140,16 +199,13 @@ def import_receipts(root, app, document_root, owner_username=None, *, apply=Fals
                 "factory_storefront": "mojplaywin",
                 "factory_status": "needs_editorial_pricing_and_owner_approval",
                 "factory_software_qa": "passed",
-                "factory_quality_1000_verified": True,
-                "factory_chatgpt_final_review": "approved_for_store",
-                "factory_chatgpt_reviewer": "ChatGPT (Codex)",
-                "factory_chatgpt_review_receipt": (
-                    "quality-clearance/" + recipe + "/" + digest
-                    + "/chatgpt-final-review.json"
-                ),
+                "factory_software_qa_scope": "private_archive_integrity_only",
+                "factory_objective_release_readiness": "pending",
+                "factory_chatgpt_final_review": "pending_independent_review",
                 "factory_factual_and_market_qa": "pending",
                 "factory_license_review": "pending",
                 "factory_publication_permission": False,
+                "factory_commercial_release": False,
                 "factory_inbox_relative_ref": "packages/" + recipe + "/" + digest + ".zip",
                 "manual_price_required": True,
                 "source_type": "offline_software_package",
@@ -166,7 +222,8 @@ def import_receipts(root, app, document_root, owner_username=None, *, apply=Fals
             obj.save()
             created += 1
     return {"examined": examined, "created": created, "already_present": unchanged,
-            "dry_run": not apply, "publications": 0}
+            "dry_run": not apply, "publications": 0,
+            "commercial_quality_approved": False}
 
 
 def main(argv=None):
@@ -176,12 +233,15 @@ def main(argv=None):
     p.add_argument("--document-root", required=True)
     p.add_argument("--owner-username")
     p.add_argument("--sole-active-superuser", action="store_true")
+    p.add_argument("--recipe", required=True, help="One exact, private factory recipe")
+    p.add_argument("--sha256", required=True, help="Exact SHA-256 of its private ZIP")
     p.add_argument("--apply", action="store_true")
     options = p.parse_args(argv)
     result = import_receipts(
         options.inbox, options.app, options.document_root,
         options.owner_username, apply=options.apply,
-        sole_owner=options.sole_active_superuser
+        sole_owner=options.sole_active_superuser,
+        recipe=options.recipe, digest=options.sha256
     )
     for key, value in result.items():
         print("STORE_DRAFT_" + key.upper() + "=" + str(value))

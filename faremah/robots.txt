@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /faremah/
+Sitemap: https://zomorodmelal.ir/faremah/sitemap.xml

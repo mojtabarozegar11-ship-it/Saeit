@@ -169,7 +169,7 @@ def evaluate(data):
             "provided_enterprises": len(recorded),
             "complete_for_portfolio": len(recorded) == len(results),
             # Never present partial observations as the whole portfolio's usage.
-            "portfolio_total": (money(sum(recorded, Decimal(0)))
+            "portfolio_total": (format(sum(recorded, Decimal(0)).normalize(), "f")
                                 if len(recorded) == len(results) else None),
         }
     scenarios = []
@@ -192,7 +192,7 @@ def evaluate(data):
                     "modeled_operating_profit": money(profit),
                 })
     return {
-        "version": "1.2",
+        "version": "1.4",
         "currency": currency,
         "accounting_scope": "contribution_profit_before_depreciation_financing_tax",
         "input_values_independently_validated": False,

@@ -48,7 +48,7 @@ class FactoryWarehouseTests(unittest.TestCase):
         recipe="farm_enterprise_economics"
         self.manufacture(recipe)
         manifest=json.loads((self.private/"digital-products"/recipe/"manufacturing_manifest.json").read_text())
-        path=self.private/"customer-extracted-acceptance"/recipe/manifest["source_sha256"]/"technical-receipt.json"
+        path=self.private/"customer-extracted-acceptance"/recipe/manifest["source_sha256"]/"technical-receipt-v2.json"
         evidence=json.loads(path.read_text())
         evidence["artifact_sha256"]="0"*64
         path.write_text(json.dumps(evidence))

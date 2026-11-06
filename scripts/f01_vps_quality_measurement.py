@@ -24,10 +24,11 @@ def main() -> int:
     if private.is_symlink() or not private.is_dir():
         raise RuntimeError("F01_PRIVATE_ROOT_MISSING_OR_UNSAFE")
     artifact=safe_latest(private/"digital-products"/"farm_enterprise_economics")
-    evidence=private/"quality-excellence"/"f01-qc1000"/"evidence"
+    quality_root=private/"quality-excellence"/"f01-qc1000"
+    evidence=quality_root
     result=evaluate(artifact,a.catalog,evidence)
-    result.update({"run_id":a.run_id,"artifact_path":str(artifact),"evidence_root":str(evidence)})
-    out=private/"quality-excellence"/"f01-qc1000"/("evaluation-"+a.run_id+".json")
+    result.update({"run_id":a.run_id,"artifact_path":str(artifact),"evidence_root":str(evidence/"evidence")})
+    out=quality_root/("evaluation-"+a.run_id+".json")
     out.parent.mkdir(parents=True,exist_ok=True)
     os.chmod(out.parent,0o700)
     out.write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")

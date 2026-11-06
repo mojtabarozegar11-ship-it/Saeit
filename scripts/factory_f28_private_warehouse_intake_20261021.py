@@ -18,11 +18,7 @@ import tempfile
 import time
 
 RECIPE = "greenhouse_crop_margin"
-SCHEMA = "zomorodmelal.factory.f28-central-private-intake.v1"
-WEIGHTS = {"functional_accuracy": 250, "professional_domain_review": 200,
-           "security_privacy_integrity": 150, "resilience_failure_modes": 100,
-           "usability_accessibility": 100, "performance_resources": 75,
-           "packaging_manual_delivery": 75, "rights_and_provenance": 50}
+SCHEMA = "zomorodmelal.factory.f28-central-private-intake.v2"
 
 
 def require(condition, code):
@@ -115,7 +111,7 @@ def accept(candidate, factory_root, warehouse_module):
             and receipt.get("recipe") == RECIPE
             and receipt.get("status") == "private_technical_candidate_verified"
             and receipt.get("commercial_release_authorized") is False
-            and receipt.get("independent_professional_quality_1000_passed") is False
+            and receipt.get("commercial_readiness_verified") is False
             and receipt.get("public_listing_enabled") is False
             and type(tests) is int and tests >= 10
             and isinstance(checks, dict)
@@ -133,7 +129,6 @@ def accept(candidate, factory_root, warehouse_module):
             and manifest["qa_measurements"].get("successful_tests") == tests
             and sha(artifact) == receipt.get("artifact_sha256"),
             "F28_INTAKE_SOURCE_OR_ARTIFACT_MISMATCH")
-    require(sum(WEIGHTS.values()) == 1000, "F28_INTAKE_INVALID_QUALITY_RUBRIC")
     module = load_warehouse(Path(warehouse_module))
     customer = load_customer(Path(__file__).resolve().with_name(
         "factory_verified_customer_cycle_20261021.py"))
@@ -163,13 +158,13 @@ def accept(candidate, factory_root, warehouse_module):
             version_hash = buyer_qa["source_sha256"]
             for origin, destination in (
                 (isolated / "customer-extracted-acceptance" / RECIPE
-                    / version_hash / "technical-receipt.json",
+                    / version_hash / "technical-receipt-v2.json",
                  factory_root / "customer-extracted-acceptance" / RECIPE
-                    / version_hash / "technical-receipt.json"),
+                    / version_hash / "technical-receipt-v2.json"),
                 (isolated / "quality-excellence" / "customer-extracted-review"
-                    / RECIPE / version_hash / "pending.json",
+                    / RECIPE / version_hash / "readiness-v2.json",
                  factory_root / "quality-excellence" / "customer-extracted-review"
-                    / RECIPE / version_hash / "pending.json"),
+                    / RECIPE / version_hash / "readiness-v2.json"),
             ):
                 make_private(destination.parent)
                 stable_ticket(module, destination, json_file(origin))
@@ -205,19 +200,16 @@ def accept(candidate, factory_root, warehouse_module):
                   "manufacturing_manifest_sha256": sha(manifest_file),
                   "technical_tests_passed": tests,
                   "independent_customer_blackbox_scenarios_passed": 2,
-                  "quality_standard": "1000_points_strict",
-                  "rubric_maximum": 1000,
-                  "rubric": {key: {"maximum": value, "verified_score": None}
-                            for key, value in WEIGHTS.items()},
-                  "verified_total_score": None,
-                  "professional_reviewer_evidence": None,
-                  "professional_quality_1000_approved": False,
+                  "quality_policy": "objective_customer_acceptance_v1",
+                  "security_privacy_reviewed": False,
+                  "legal_distribution_rights_verified": False,
+                  "storefront_delivery_verified": False,
                   "owner_release_approval": False,
                   "status": "awaiting_independent_professional_and_rights_review",
                   "delivery_verified_by_customer": False,
                   "commerce_enabled": False, "public_listing_enabled": False}
         review = (factory_root / "quality-excellence" / "private-intake-review"
-                  / RECIPE / receipt["source_sha256"] / "pending.json")
+                  / RECIPE / receipt["source_sha256"] / "readiness-v2.json")
         make_private(review.parent)
         stable_ticket(module, review, ticket)
         output = {"schema": SCHEMA, "family_id": "F28", "recipe": RECIPE,
@@ -226,7 +218,7 @@ def accept(candidate, factory_root, warehouse_module):
                   "stock_version_verified": True,
                   "warehouse_versions_verified": len(inventory),
                   "quality_ticket_created_or_confirmed": True,
-                  "professional_quality_1000_approved": False,
+                  "commercial_readiness_verified": False,
                   "commerce_enabled": False, "public_listing_enabled": False}
         module.write_json_atomic(candidate / "private-central-intake-receipt.json", output)
         return output

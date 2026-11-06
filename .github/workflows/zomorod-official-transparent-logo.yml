@@ -1,8 +1,8 @@
-name: Publish approved transparent company emblem only on Zomorod main site
+name: Publish approved transparent company emblem only on Zomorod main site\n# SEO_STATIC_RELEASE_TRIGGER=20261106\n# SEO_STATIC_RELEASE_TRIGGER_FINAL=20261106
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/zomorod-official-transparent-logo.yml"]
+    paths: [".github/workflows/zomorod-official-transparent-logo.yml", "content/zomorod-new-home/index.html", "content/zomorod-nova-pages/*.html"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -86,7 +86,9 @@ jobs:
           mkdir -m 700 "$root/staging"
           mkdir -m 700 "$root/original"
           test -s "$HOME/public_html/static/site/company/company-logo.png"
-          test ! -e "$HOME/public_html/static/site/company/company-logo-transparent.png"
+          if [ -e "$HOME/public_html/static/site/company/company-logo-transparent.png" ]; then
+            cp -p "$HOME/public_html/static/site/company/company-logo-transparent.png" "$root/original/logo.png"
+          fi
           echo "ZM_LOGO_PRIVATE_BACKUP_PATH=created"
           REMOTE
       - name: Transfer exact GitHub-approved image and eight templates to protected staging only

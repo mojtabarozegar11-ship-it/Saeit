@@ -53,11 +53,11 @@ class PrivateCentralIntakeTest(unittest.TestCase):
             lock.assert_called_once()
             pause.assert_not_called()
 
-    def test_real_build_stocked_immutable_and_1000_held(self):
+    def test_real_build_stocked_immutable_while_commercial_readiness_held(self):
         receipt = self.run_intake()
         self.assertEqual(receipt["action"], "stocked")
         self.assertTrue(receipt["stock_version_verified"])
-        self.assertFalse(receipt["professional_quality_1000_approved"])
+        self.assertFalse(receipt["commercial_readiness_verified"])
         self.assertFalse(receipt["public_listing_enabled"])
         version = (self.factory / "production-warehouse" / "finished"
                    / intake.RECIPE / receipt["source_sha256"])
@@ -66,11 +66,10 @@ class PrivateCentralIntakeTest(unittest.TestCase):
         self.assertFalse(manifest["commercial_release"])
         self.assertEqual(manifest["site_transfer_state"], "not_transferred")
         review = (self.factory / "quality-excellence" / "private-intake-review"
-                  / intake.RECIPE / receipt["source_sha256"] / "pending.json")
+                  / intake.RECIPE / receipt["source_sha256"] / "readiness-v2.json")
         doc = json.loads(review.read_text())
-        self.assertEqual(doc["rubric_maximum"], 1000)
-        self.assertIsNone(doc["verified_total_score"])
-        self.assertTrue(all(v["verified_score"] is None for v in doc["rubric"].values()))
+        self.assertEqual(doc["quality_policy"],"objective_customer_acceptance_v1")
+        self.assertFalse(doc["legal_distribution_rights_verified"])
         register = json.loads((self.factory / "production-warehouse" / "stock-register.json").read_text())
         self.assertEqual(register["finished_goods_versions"], 1)
 
@@ -89,7 +88,7 @@ class PrivateCentralIntakeTest(unittest.TestCase):
     def test_fake_professional_approval_is_rejected(self):
         path = self.candidate / "private-cycle-receipt.json"
         doc = json.loads(path.read_text())
-        doc["independent_professional_quality_1000_passed"] = True
+        doc["commercial_readiness_verified"] = True
         path.write_text(json.dumps(doc))
         with self.assertRaisesRegex(RuntimeError, "EVIDENCE_MISSING"):
             self.run_intake()

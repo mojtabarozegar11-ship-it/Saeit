@@ -1,0 +1,90 @@
+name: Factory line 41 independent post-deploy readback
+on:
+  push:
+    branches: [factory/rebuild-line41-nonblocking-20261106]
+    paths:
+      - .github/workflows/factory-line41-postdeploy-readonly-20261106.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-line41-independent-readback
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read independent VPS factory progression and publication guard
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/line41-readback"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          expected="$(sha256sum scripts/factory_vps_product_cycle.py | awk '{print $1}')"
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no githubops@178.239.147.150 "LINE41_EXPECTED_SHA256='$expected' python3 -B -" <<'PY'
+          import hashlib,json,os,re,subprocess,time
+          from pathlib import Path
+          home=Path.home()/"factory-runtime"
+          root=home/"private/autonomous-product-cycle"
+          runner=home/"operations/single-product-runtime/scripts/factory_vps_product_cycle.py"
+          def load(path):
+              if path.is_symlink() or not path.is_file() or path.stat().st_size>2_000_000:
+                  raise RuntimeError("UNSAFE_OR_MISSING_FACTORY_RECEIPT")
+              obj=json.loads(path.read_text(encoding="utf8"))
+              if not isinstance(obj,dict): raise RuntimeError("INVALID_FACTORY_STATE")
+              return obj
+          expected=os.environ["LINE41_EXPECTED_SHA256"]
+          assert re.fullmatch(r"[0-9a-f]{64}",expected)
+          assert runner.is_file() and not runner.is_symlink()
+          assert hashlib.sha256(runner.read_bytes()).hexdigest()==expected
+          cron=subprocess.check_output(["crontab","-l"],text=True,timeout=7)
+          assert sum("SAEIT_SINGLE_PRODUCT_FACTORY_V1" in line and not line.lstrip().startswith("#") for line in cron.splitlines())==1
+          state=load(root/"production-state.json")
+          slots=load(root/"quality-excellence/product-flow/active-slots/current.json")
+          health=load(root/"production-health.json")
+          assert state.get("objective_quality_gates")=="technical_archive_tests_and_release_readiness_separate"
+          assert state.get("publishable_product_count")==0
+          assert state.get("commercial_quality_review_completed") is False
+          assert state.get("store_distribution_state")=="not_connected"
+          assert slots.get("commercial_release") is False
+          assert len(slots.get("active",[]))<=1
+          technical=slots.get("technical_exited",{})
+          assert isinstance(technical,dict)
+          assert isinstance(slots.get("waiting"),list)
+          assert health.get("cycle_status") in ("ok","needs_rework")
+          from datetime import datetime,timezone
+          cycle_at=datetime.fromisoformat(health["last_cycle_finished_at_utc"].replace("Z","+00:00"))
+          freshness=(datetime.now(timezone.utc)-cycle_at).total_seconds()
+          assert -10<=freshness<=180, "VPS_FACTORY_CYCLE_STALE"
+          print("LINE41_INDEPENDENT_READBACK="+json.dumps({
+              "installed_code_sha256_verified":True,
+              "technical_completions":len(technical),
+              "active":len(slots["active"]),
+              "waiting":len(slots["waiting"]),
+              "registered_recipes":state.get("registered_recipe_count"),
+              "last_cycle_freshness_seconds":int(freshness),
+              "last_cycle_status":health["cycle_status"],
+              "new_distinct_products_total":health.get("new_distinct_product_ids_total"),
+              "updated_versions_total":health.get("updated_existing_product_versions_total"),
+              "free_bytes_at_last_admission":state.get("manufacturing_free_bytes_at_admission"),
+              "disk_hold":state.get("manufacturing_disk_hold"),
+              "publication_and_payments_enabled":False,
+              "read_only":True,"server_written_bytes":0,
+          },sort_keys=True))
+          assert len(technical)>=1, "NO_REAL_PRIVATE_TECHNICAL_COMPLETION"
+          PY

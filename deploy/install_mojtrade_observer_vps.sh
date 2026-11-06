@@ -103,6 +103,34 @@ changed_cron=1
 crontab "$candidate_cron"
 test "$(crontab -l | grep -c "$tag" || true)" -eq 1
 mv -f -- "$candidate" "$private/validated-payload.json"
+payload_sha="$(sha256sum "$private/validated-payload.json" | awk '{print $1}')"
+receipt="$private/activation-receipt.json"
+receipt_tmp="$private/.activation-receipt-$stamp.tmp"
+"$python_bin" - "$receipt_tmp" "$stamp" "$expected_sha" "$payload_sha" "$operations" "$private" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+destination = Path(sys.argv[1])
+stamp, source_sha, payload_sha, operations, private = sys.argv[2:]
+receipt = {
+    "schema": "mojtrade.vps-observer-activation-receipt.v1",
+    "installed_at": stamp,
+    "source_sha256": source_sha,
+    "payload_sha256": payload_sha,
+    "operations_dir": operations,
+    "private_dir": private,
+    "runtime": "githubops",
+    "execution": "disabled",
+    "orders": 0,
+    "publication_enabled": False,
+    "delivery_enabled": False,
+}
+destination.write_text(json.dumps(receipt, separators=(",", ":")) + "\n", encoding="utf-8")
+os.chmod(destination, 0o600)
+PY
+mv -f -- "$receipt_tmp" "$receipt"
 trap - EXIT
 echo MOJTRADE_OBSERVER_PRIVATE_OUTPUT_VERIFIED
 echo MOJTRADE_OBSERVER_HOURLY_SCHEDULE_VERIFIED

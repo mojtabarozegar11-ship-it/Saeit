@@ -122,13 +122,17 @@ class ObserverTests(unittest.TestCase):
 
     def test_fallback_tracks_real_provider_and_never_fabricates_on_total_outage(self):
         with patch.object(observer, "_fetch_candles", side_effect=observer.MarketDataError("coinbase_http_403")):
-            with patch.object(observer, "_fetch_kraken_candles", return_value=sample(self.now)):
-                result = observer._observed_signal("BTC-USD", self.now)
-                self.assertEqual(result["data_source"], observer.KRAKEN_SOURCE)
-                self.assertEqual(result["stance"], "watch_buy")
-            with patch.object(observer, "_fetch_kraken_candles", side_effect=observer.MarketDataError("kraken_network_timeout")):
-                with self.assertRaisesRegex(observer.MarketDataError, "coinbase_http_403;kraken_network_timeout"):
-                    observer._observed_signal("BTC-USD", self.now)
+            with patch.object(observer, "_fetch_kraken_candles", side_effect=observer.MarketDataError("kraken_http_403")):
+                with patch.object(observer, "_fetch_bitfinex_candles", return_value=sample(self.now)):
+                    result = observer._observed_signal("BTC-USD", self.now)
+                    self.assertEqual(result["data_source"], observer.BITFINEX_SOURCE)
+                    self.assertEqual(result["stance"], "watch_buy")
+                with patch.object(observer, "_fetch_bitfinex_candles", side_effect=observer.MarketDataError("bitfinex_network_timeout")):
+                    with self.assertRaisesRegex(
+                        observer.MarketDataError,
+                        "coinbase_http_403;kraken_http_403;bitfinex_network_timeout",
+                    ):
+                        observer._observed_signal("BTC-USD", self.now)
 
 
 if __name__ == "__main__":

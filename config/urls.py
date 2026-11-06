@@ -21,12 +21,14 @@ from core.academy_views import (
 from core.services_views import services
 from core.zomorod_public_views import agriculture_index, agriculture_guide, zomorod_hero_image
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
+from core.faremah_views import faremah_home
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
 
 urlpatterns = [
     path("", services, name="home"),
     path("authors/mojtaba-rozegar/", persian_author_profile, name="mojtaba_roozegar_author_profile"),
     path("ghanadi/", TemplateView.as_view(template_name="core/ghanadi.html"), name="ghanadi"),
+    path("faremah/", faremah_home, name="faremah_home"),
     path("agriculture/", agriculture_index, name="agriculture"),
     path("agriculture/assets/zomorod-olive-v1/<str:filename>.webp", zomorod_hero_image, name="agriculture_hero_asset"),
     path("agriculture/<slug:slug>/", agriculture_guide, name="agriculture_guide"),
@@ -101,6 +103,21 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("core.urls")),
 ]
+
+from functools import partial
+from core.financial_brand_pages import BRANDS, financial_brand_page
+
+# Prepend these distinct service routes so existing brand roots and app includes
+# continue to resolve normally while the new finance subpages take precedence.
+_finance_routes = []
+for _brand_slug, _fa, _en, _ar in BRANDS:
+    _finance_routes.extend([
+        path(f"{_brand_slug}/market-signals/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="signals"), name=f"finance_{_brand_slug}_signals"),
+        path(f"{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="host", page_type="store"), name=f"finance_{_brand_slug}_store"),
+        path(f"ar/{_brand_slug}/market-signals/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="signals"), name=f"finance_ar_{_brand_slug}_signals"),
+        path(f"ar/{_brand_slug}/digital-products/", partial(financial_brand_page, brand=_brand_slug, locale="ar", page_type="store"), name=f"finance_ar_{_brand_slug}_store"),
+    ])
+urlpatterns = _finance_routes + urlpatterns
 
 from core.newsletter_views import newsletter_home, newsletter_archive, newsletter_detail
 urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("newsletter/archive/", newsletter_archive, name="newsletter_archive"), path("newsletter/<slug:slug>/", newsletter_detail, name="newsletter_detail")]

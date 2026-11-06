@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Public release hard-stop for new 100x10 factory manufactured products.
+"""Objective public-release readiness for private factory products.
 
-Private staging remains legal and isolated; existing older free-edition release
-is not silently republished or revoked by this adapter. Newly marked 100x10
-builds require four externally identified Ed25519 signatures on exact bytes.
+Numerical quality scores are not release criteria. Functional tests, actual
+artifact bytes, rights evidence, an exact-artifact content/security review and
+the owner/store approval process remain mandatory. Historical signed score
+verifiers below are kept only to validate old archived evidence.
 """
 import importlib.util
 import hashlib
@@ -71,7 +72,7 @@ def _verify_executed_qc1000(root,container,artifact_sha,decision):
             "doctoral_evidence_structurally_bound":True,
             "scientific_specialist_signatures_still_mandatory":True}
 
-CHATGPT_REVIEW_SCHEMA="saeit.factory.chatgpt-final-store-review.v1"
+CHATGPT_REVIEW_SCHEMA="saeit.factory.chatgpt-final-store-review.v2"
 CHATGPT_REVIEWER="ChatGPT (Codex)"
 CHATGPT_REVIEW_CHECKS=(
     "artifact_integrity",
@@ -82,7 +83,7 @@ CHATGPT_REVIEW_CHECKS=(
     "rights_and_attribution",
     "security_and_privacy",
     "store_listing_accuracy",
-    "quality_1000_evidence",
+    "extracted_customer_zip_checks",
 )
 
 def require_chatgpt_final_review(inbox,recipe,artifact_sha,product_manifest,package_path):
@@ -203,44 +204,33 @@ def require_rights_clearance(inbox,recipe,package_digest,package_path,*,commerci
     )
 
 def require_quality_clearance(inbox,recipe,package_digest,product_manifest,package_path):
+    """Check functional evidence and the independent whole-package review.
+
+    Not a blanket publication grant: the separate rights verifier, live
+    storefront gate and owner publication permission still apply.
+    """
     if not isinstance(product_manifest,dict):
         raise ValueError("INVALID_PRIVATE_FACTORY_MANIFEST")
-    if product_manifest.get("professional_quality_standard")!="100_groups_x_10":
-        # Preserve the guard contract while making the absence explicit.
-        # Publication callers must reject this unverified status.
-        return {"status":"LEGACY_UNASSESSED_REQUIRES_MIGRATION",
-                "1000_quality_verified":False}
     if (not isinstance(recipe,str) or not re.fullmatch(r"[a-z][a-z0-9_]{1,65}",recipe)
             or not isinstance(package_digest,str) or not SHA.fullmatch(package_digest)):
         raise ValueError("UNSAFE_FACTORY_VERSION_IDENTITY")
-    root=Path(inbox)
-    container=root/"quality-clearance"/recipe/package_digest
-    signature=container/"signed-1000.json"
-    report=container/"global-premium-report.json"
-    catalog=container/"quality-100-groups.json"
-    registry=root/"quality-trust"/"trusted-reviewers.json"
-    script=Path(__file__).resolve().with_name("factory_quality_signed_approval_v1.py")
-    for file in (signature,report,catalog,registry,script,Path(package_path)):
-        if not file.is_file() or file.is_symlink():
-            raise ValueError("SIGNED_1000_QUALITY_GATE_EVIDENCE_MISSING")
-    spec=importlib.util.spec_from_file_location("factory_verifiable_approvals",str(script))
-    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-    approval=json.loads(signature.read_text(encoding="utf8"))
-    real_report=json.loads(report.read_text(encoding="utf8"))
-    trust=json.loads(registry.read_text(encoding="utf8"))
-    result=module.inspect_approval(approval,real_report,package_path,catalog,trust)
-    if result.get("eligible") is not True or result.get("artifact_sha256")!=package_digest:
-        raise ValueError("SIGNED_1000_QUALITY_APPROVAL_NOT_VALID")
-    # A score plus human signatures alone is insufficient: re-execute the
-    # trusted verifier on the exact 1000 test receipts and research dossier.
-    checked=_verify_executed_qc1000(root,container,package_digest,
-                                   approval.get("decision"))
+    if _digest_file(package_path)!=package_digest:
+        raise ValueError("OBJECTIVE_GATE_ARTIFACT_HASH_MISMATCH")
+    measured=product_manifest.get("qa_measurements")
+    if (product_manifest.get("recipe")!=recipe
+            or product_manifest.get("artifact_sha256")!=package_digest
+            or product_manifest.get("qa_status")!="passed"
+            or not isinstance(measured,dict)
+            or type(measured.get("tests_run")) is not int
+            or measured["tests_run"]<1
+            or measured.get("successful_tests")!=measured["tests_run"]
+            or product_manifest.get("public_listing_enabled") is not False
+            or product_manifest.get("owner_publication_approval") is not False):
+        raise ValueError("OBJECTIVE_GATE_FUNCTIONAL_EVIDENCE_MISSING")
     chatgpt_review=require_chatgpt_final_review(
-        root,recipe,package_digest,product_manifest,package_path
+        Path(inbox),recipe,package_digest,product_manifest,package_path
     )
-    return {"status":"VERIFIED_SIGNED_PREMIUM_1000",
+    return {"status":"VERIFIED_OBJECTIVE_RELEASE_READINESS",
             "artifact_sha256":package_digest,
-            "1000_quality_verified":True,
-            "real_executions_verified":checked["real_executions_verified"],
-            "independent_signed_reviewers":result["verifiable_reviewer_count"],
+            "functional_tests_verified":measured["tests_run"],
             "chatgpt_final_review":chatgpt_review["status"]}

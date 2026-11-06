@@ -1,0 +1,54 @@
+name: Repair VPS line 41 nonblocking manufacturing
+on:
+  push:
+    branches: [factory/rebuild-line41-nonblocking-20261106]
+    paths:
+      - .github/workflows/factory-line41-nonblocking-deploy-20261106.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-line41-nonblocking-production
+  cancel-in-progress: false
+jobs:
+  verify_and_deploy:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact private production code and non-publication invariant
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_line41_nonblocking_20261106.sh
+          python3 -m unittest tests.test_factory_vps_product_cycle tests.test_factory_product_rework tests.test_factory_vps_current_health_readonly -q
+      - name: Stage and execute the bounded VPS repair
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/line41-reviewed-repair"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 -o ForwardAgent=no)
+          stage="$(ssh "${ssh_opts[@]}" githubops@178.239.147.150 'set -eu; umask 077; test "$(id -un)" = githubops; mktemp -d "$HOME/factory-runtime/operations/.line41-stage.XXXXXXXX"')"
+          [[ "$stage" =~ ^/home/githubops/factory-runtime/operations/\.line41-stage\.[A-Za-z0-9]{8}$ ]] || { echo LINE41_STAGE_PATH_INVALID; exit 1; }
+          tar -cf - \
+            deploy/install_factory_line41_nonblocking_20261106.sh \
+            scripts/factory_vps_product_cycle.py \
+            product_recipes/water_budget_economics \
+            product_recipes/greenhouse_crop_margin \
+            | ssh "${ssh_opts[@]}" githubops@178.239.147.150 "tar -xf - -C '$stage'"
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 "bash '$stage/deploy/install_factory_line41_nonblocking_20261106.sh'"
+          echo LINE41_VPS_REPAIR_RECEIPT_FROM_LIVE_RUNTIME=PASS

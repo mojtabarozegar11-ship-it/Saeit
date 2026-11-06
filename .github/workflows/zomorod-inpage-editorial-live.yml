@@ -87,6 +87,10 @@ jobs:
               holder.innerHTML=html;
               holder.setAttribute("data-zomorod-inpage-editorial","20261016");
               root.appendChild(holder);
+              if(path==="/services/"){
+                var requestHub=document.getElementById("zm-services-action-hub-20261106");
+                if(requestHub&&!document.getElementById("company-request")) requestHub.id="company-request";
+              }
               if(path==="/weather/"){
                 var form=document.getElementById("zm-weather-risk-form"),out=document.getElementById("zm-weather-risk-result");
                 if(form&&out) form.addEventListener("submit",function(ev){
@@ -256,7 +260,7 @@ jobs:
               os.chmod(temp,modern.stat().st_mode & 0o777)
               os.replace(temp,modern)
           pattern=re.compile(r'<script\b[^>]*data-zm-editorial-loader="yes"[^>]*></script>',re.I)
-          tag='<script defer data-zm-editorial-loader="yes" src="/zm-inpage-editorial-2026.js?v=20261106"></script>'
+          tag='<script defer data-zm-editorial-loader="yes" src="/zm-inpage-editorial-2026.js?v=20261106-r2"></script>'
           for rel,target,raw,mode in available:
               text=raw.decode("utf-8")
               text=pattern.sub("",text)
@@ -289,7 +293,7 @@ jobs:
             result="$(curl -L -sS --max-time 25 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}' "https://zomorodmelal.ir/$route")"
             test "$result" = 200
             if grep -q 'data-zm-editorial-loader="yes"' "$file"; then
-              grep -Fq 'src="/zm-inpage-editorial-2026.js?v=20261106"' "$file"
+              grep -Fq 'src="/zm-inpage-editorial-2026.js?v=20261106-r2"' "$file"
               echo "EDITORIAL_LOADER_ROUTE=/$route HTTP=200"
               verified=$((verified+1))
             fi

@@ -1,4 +1,5 @@
 name: Deploy SAMAN to MojPlayWin
+# Finance page deployment: 34 English + 34 Arabic routes (live prefix /ar/).
 
 on:
   push:
@@ -7,6 +8,9 @@ on:
       - ".github/workflows/mojplaywin-saman-deploy.yml"
       - "scripts/deploy_mojplaywin_saman.py"
       - "scripts/saman_patch.py"
+      - "scripts/financial_brand_patch.py"
+      - "core/financial_brand_pages.py"
+      - "core/templates/core/financial_brand_page.html"
       - "templates/saman/**"
 
 permissions:
@@ -25,7 +29,7 @@ jobs:
 
       - name: Validate SAMAN page and installer
         run: |
-          python3 -m py_compile scripts/deploy_mojplaywin_saman.py
+          python3 -m py_compile scripts/deploy_mojplaywin_saman.py scripts/financial_brand_patch.py core/financial_brand_pages.py
           python3 - <<'PY'
           from pathlib import Path
           html = Path("templates/saman/index.html").read_text(encoding="utf-8")
@@ -136,7 +140,7 @@ jobs:
           timeout 20s ssh -F "$WORK/config" saeit-host "grep -nE 'RewriteCond|RewriteRule|Passenger' /home/zomorod2/mojplaywin.com/.htaccess || true"
 
       - name: Package SAMAN deployment files
-        run: tar -cf "$RUNNER_TEMP/saman.tar" scripts/deploy_mojplaywin_saman.py scripts/saman_patch.py templates/saman/index.html templates/saman/learn.html templates/saman/play.html templates/saman/products.html templates/saman/membership.html templates/saman/partners.html templates/saman/about.html
+        run: tar -cf "$RUNNER_TEMP/saman.tar" scripts/deploy_mojplaywin_saman.py scripts/saman_patch.py scripts/financial_brand_patch.py core/financial_brand_pages.py core/templates/core/financial_brand_page.html templates/saman/index.html templates/saman/learn.html templates/saman/play.html templates/saman/products.html templates/saman/membership.html templates/saman/partners.html templates/saman/about.html
 
       - name: Upload and unpack deployment package
         shell: bash
@@ -155,6 +159,16 @@ jobs:
           WORK="$RUNNER_TEMP/mojplaywin-ssh"
           timeout 60s ssh -F "$WORK/config" saeit-host \
             "python3 /home/zomorod2/.mojplaywin-saman-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_saman.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
+
+      - name: Restart active Passenger application
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 45s ssh -F "$WORK/config" saeit-host 'set -eu; selector_bin="$(command -v cloudlinux-selector || true)"; test -n "$selector_bin" || selector_bin=/usr/sbin/cloudlinux-selector; "$selector_bin" restart --json --interpreter python --user zomorod2 --app-root Saeit-staging >/dev/null || "$selector_bin" restart --json --interpreter python --user zomorod2 --app-root Saeit >/dev/null; mkdir -p /home/zomorod2/mojplaywin.com/tmp /home/zomorod2/Saeit-staging/tmp; touch /home/zomorod2/mojplaywin.com/tmp/restart.txt /home/zomorod2/Saeit-staging/tmp/restart.txt /home/zomorod2/mojplaywin.com/passenger_wsgi.py; if command -v passenger-config >/dev/null 2>&1; then passenger-config restart-app /home/zomorod2/mojplaywin.com >/dev/null; fi'
+          echo "PASSENGER_SELECTOR_RESTART=success"
+          echo "PASSENGER_WORKER_RESTART=attempted"
+          sleep 8
 
       - name: Verify Django runtime route
         id: route_check
@@ -191,10 +205,16 @@ jobs:
               "/saman/partners-saman/": "saman_section_page",
               "/saman/about-saman/": "saman_section_page",
           }
+          from core.financial_brand_pages import BRANDS
+          for slug, fa_name, en_name, ar_name in BRANDS:
+              for kind in ("market-signals", "digital-products"):
+                  routes[f"/{slug}/{kind}/"] = "financial_brand_page"
+                  routes[f"/ar/{slug}/{kind}/"] = "financial_brand_page"
           for path, expected in routes.items():
               match = resolve(path)
-              print("SAMAN_RUNTIME_ROUTE=" + path + " -> " + match.func.__name__)
-              assert match.func.__name__ == expected, path
+              print("SAMAN_RUNTIME_ROUTE=" + path + " -> " + (match.func.func if hasattr(match.func, "func") else match.func).__name__)
+              resolved_view = match.func.func if hasattr(match.func, "func") else match.func
+              assert resolved_view.__name__ == expected, path
           import inspect
           from core.views import saman_page, saman_section_page
           print("SAMAN_ROOT_VIEW_SOURCE_BEGIN")
@@ -291,8 +311,30 @@ jobs:
             echo "Verified https://mojplaywin.com$route"
           done
 
+      - name: Verify all 102 finance pages
+        id: finance_check
+        shell: bash
+        run: |
+          set -euo pipefail
+          slugs=(saman zahra zhila marzieh maryam marjan faremah farnaz taniya raham mojtaba mohammad mostafa 17 21 206 108)
+          count=0
+          for slug in "${slugs[@]}"; do
+            for kind in market-signals digital-products; do
+              for url in "https://zomorodmelal.ir/$slug/$kind/" "https://mojplaywin.com/$slug/$kind/" "https://mojplaywin.com/ar/$slug/$kind/"; do
+                body="$RUNNER_TEMP/finance-page.html"
+                status="$(curl --retry 2 --retry-delay 2 -sS -o "$body" -w '%{http_code}' "$url")"
+                [[ "$status" == "200" ]] || { echo "Finance page failed: $url HTTP $status"; exit 1; }
+                grep -Eq '<title>.*</title>' "$body" || { echo "Missing page title: $url"; exit 1; }
+                grep -Eq '© .* · MojPlayWin / Zomorod Melal' "$body" || { echo "Missing branded footer: $url"; exit 1; }
+                count=$((count+1))
+              done
+            done
+          done
+          [[ "$count" -eq 102 ]]
+          echo "VERIFIED_FINANCE_PAGES=$count"
+
       - name: Roll back failed live check
-        if: failure() && steps.deploy.outcome == 'success' && (steps.route_check.outcome == 'failure' || steps.smoke.outcome == 'failure')
+        if: failure() && steps.deploy.outcome == 'success' && (steps.route_check.outcome == 'failure' || steps.smoke.outcome == 'failure' || steps.finance_check.outcome == 'failure')
         shell: bash
         run: |
           WORK="$RUNNER_TEMP/mojplaywin-ssh"

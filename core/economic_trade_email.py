@@ -70,9 +70,16 @@ def queue_trade_email(*, recipient, subject, body, trade_context=None):
     return outbox
 
 
+@transaction.atomic
 def send_queued_trade_email(outbox_id):
-    """Send only when the explicit runtime gate is enabled and mailbox is active."""
-    outbox = TradeEmailOutbox.objects.select_related("mailbox").get(pk=outbox_id)
+    """Send one queued message under a row lock; never send a terminal item."""
+    outbox = (
+        TradeEmailOutbox.objects.select_for_update()
+        .select_related("mailbox")
+        .get(pk=outbox_id)
+    )
+    if outbox.status != "queued":
+        raise RuntimeError(f"Trade email is not queued (status={outbox.status}).")
     if not getattr(settings, "TRADE_EMAIL_ENABLED", False):
         raise RuntimeError("TRADE_EMAIL_ENABLED is false; real sending is disabled.")
     if not outbox.mailbox.active or not outbox.mailbox.allow_outbound:

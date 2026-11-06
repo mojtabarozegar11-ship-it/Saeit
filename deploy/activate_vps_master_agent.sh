@@ -50,6 +50,7 @@ db_bytes = source.stat().st_size
 fs = os.statvfs(ops)
 available = fs.f_bavail * fs.f_frsize
 total = fs.f_blocks * fs.f_frsize
+# Keep room for live writes, SQLite backup journals, cron and rollback.
 reserve = max(2 * 1024**3, (total * 5 + 99) // 100)
 required = db_bytes + reserve
 print("MASTER_CAPACITY_AVAILABLE_BYTES=" + str(available), flush=True)
