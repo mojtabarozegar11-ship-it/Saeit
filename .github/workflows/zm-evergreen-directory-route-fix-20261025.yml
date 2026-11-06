@@ -67,6 +67,8 @@ jobs:
           from pathlib import Path
           import hashlib,re
           root=Path('/home/zomorod2/public_html/ask-master')
+          if root.is_dir() and not root.is_symlink():
+              print('HANDLER_FILES='+','.join(sorted(p.name for p in root.iterdir() if p.is_file())))
           for name in ('index.php','status.php'):
               p=root/name
               if p.is_symlink() or not p.is_file():
