@@ -1,0 +1,119 @@
+name: MPW guarded 340 topic-to-revenue conversion release
+
+on:
+  push:
+    branches: [fix/mpw-topic-conversion-20261106]
+    paths:
+      - scripts/mpw_topic_conversion_guarded_release_20261106.py
+      - .github/workflows/mpw-topic-conversion-20261106.yml
+
+permissions: {contents: read}
+concurrency:
+  group: mpw-topic-php-one-off-conversion
+  cancel-in-progress: false
+
+jobs:
+  guarded-publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mpw-topic-conversion-20261106'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate fail-closed source transformation
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_topic_conversion_guarded_release_20261106.py
+          python3 scripts/mpw_topic_conversion_guarded_release_20261106.py selftest
+      - name: Configure fingerprint-pinned VPS to cPanel SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-topic-conversion-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 30s ssh -i "$d/vps.key" -p 22 -o UserKnownHostsFile="$d/vps.known" -o StrictHostKeyChecking=yes -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Preflight and publish only current production topic PHP
+        id: published
+        run: |
+          set -euo pipefail
+          payload="$(base64 -w0 scripts/mpw_topic_conversion_guarded_release_20261106.py)"
+          config="$RUNNER_TEMP/mpw-topic-conversion-ssh/config"
+          timeout 65s ssh -T -F "$config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))' preflight"
+          timeout 65s ssh -T -F "$config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))' publish '$GITHUB_RUN_ID'"
+      - name: Verify real topic pages, tools, inquiry GET, and store GET
+        run: |
+          python3 - <<'PY'
+          import time,urllib.request
+          root='https://mojplaywin.com'
+          def get(path):
+              req=urllib.request.Request(root+path,headers={'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=26) as resp:
+                  assert resp.status==200,path
+                  return resp.read(220000).decode('utf-8','replace')
+          samples=('0001','0170','0340')
+          for attempt in range(9):
+              try:
+                  for topic in samples:
+                      page=get('/topics/?id='+topic+'&release-check='+str(attempt))
+                      assert page.count('data-mpw-topic-earning-path="20261106"')==1,topic
+                      assert '<meta name="robots" content="noindex,follow">' in page,topic
+                      assert '/mpw-editorial/revenue/index.html' in page,topic
+                      assert '/mpw-editorial/revenue/inquiry.php?service=general' in page,topic
+                  break
+              except Exception:
+                  if attempt==8:raise
+                  time.sleep(4)
+          for path,needle in (('/mpw-editorial/revenue/index.html','12'),
+                              ('/mpw-editorial/revenue/inquiry.php?service=general','name="csrf"'),
+                              ('/store/','mpw-products')):
+              assert needle in get(path),path
+          print('MPW_340_TOPIC_REVENUE_LINKS_AND_STORE=PASS')
+          PY
+      - name: Restore precisely one topic PHP when verification fails
+        if: failure() && steps.published.outcome == 'success'
+        run: |
+          payload="$(base64 -w0 scripts/mpw_topic_conversion_guarded_release_20261106.py)"
+          timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-topic-conversion-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))' rollback '$GITHUB_RUN_ID'"
+      - name: Remove temporary SSH relay credentials
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-topic-conversion-ssh"
+          if test -d "$d"; then
+            rm -f -- "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+            rmdir -- "$d"
+          fi
