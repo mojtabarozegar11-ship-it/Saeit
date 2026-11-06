@@ -70,6 +70,87 @@ class EducationPlatformTests(TestCase):
     def test_dashboard_requires_login(self):
         response = self.client.get("/education/dashboard/")
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/accounts/login/?next=/education/dashboard/")
+        login_page = self.client.get(response.url)
+        self.assertEqual(login_page.status_code, 200)
+        self.assertContains(login_page, 'name="csrfmiddlewaretoken"')
+        self.assertContains(login_page, 'name="next" value="/education/dashboard/"')
+        self.assertContains(login_page, 'name="robots" content="noindex,nofollow"')
+
+    def test_login_allows_existing_student_and_rejects_external_next(self):
+        get_user_model().objects.create_user(username="student", password="a-complex-unique-password")
+        response = self.client.post("/accounts/login/", {
+            "username": "student", "password": "a-complex-unique-password",
+            "next": "/amozeshgah/dashboard/",
+        })
+        self.assertRedirects(response, "/amozeshgah/dashboard/")
+        self.client.logout()
+        response = self.client.post("/accounts/login/", {
+            "username": "student", "password": "a-complex-unique-password",
+            "next": "https://untrusted.example/steal",
+        })
+        self.assertRedirects(response, "/amozeshgah/dashboard/")
+
+    def test_logout_requires_post_and_clears_session(self):
+        user = get_user_model().objects.create_user(username="logout-student", password="a-complex-unique-password")
+        self.client.force_login(user)
+        self.assertEqual(self.client.get("/accounts/logout/").status_code, 405)
+        response = self.client.post("/accounts/logout/")
+        self.assertRedirects(response, "/amozeshgah/")
+        self.assertRedirects(
+            self.client.get("/amozeshgah/dashboard/"),
+            "/accounts/login/?next=/amozeshgah/dashboard/", fetch_redirect_response=False,
+        )
+
+    def test_completed_student_can_revisit_lessons_without_completion_button(self):
+        user = get_user_model().objects.create_user(username="finished-student", password="a-complex-unique-password")
+        EducationEnrollment.objects.create(course=self.course, user=user, status="completed")
+        lesson = EducationLesson.objects.create(
+            course=self.course, title="مرور پس از پایان دوره", active=True,
+        )
+        self.client.force_login(user)
+        response = self.client.get(f"/amozeshgah/course/test-course/lesson/{lesson.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "تکمیل این درس")
+
+    def test_public_preview_is_accessible_without_an_account(self):
+        preview = EducationLesson.objects.create(
+            course=self.course, title="نمونه درس رایگان", content="محتوای قابل مشاهده",
+            is_free_preview=True, active=True,
+        )
+        response = self.client.get(f"/amozeshgah/course/test-course/lesson/{preview.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "محتوای قابل مشاهده")
+        self.assertEqual(EducationProgress.objects.count(), 0)
+
+    def test_non_preview_lesson_is_blocked_for_guest(self):
+        lesson = EducationLesson.objects.create(
+            course=self.course, title="درس مخصوص اعضا", content="متن غیرعمومی",
+            is_free_preview=False, active=True,
+        )
+        response = self.client.get(f"/amozeshgah/course/test-course/lesson/{lesson.pk}/")
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("متن غیرعمومی", response.content.decode("utf-8"))
+
+    def test_authenticated_course_without_lessons_does_not_crash(self):
+        user = get_user_model().objects.create_user(username="new-student", password="a-complex-unique-password")
+        self.client.force_login(user)
+        response = self.client.get("/amozeshgah/course/test-course/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_guest_sees_login_instead_of_broken_enrollment_post(self):
+        response = self.client.get("/amozeshgah/course/test-course/")
+        self.assertContains(response, "/accounts/login/?next=/amozeshgah/course/test-course/")
+        self.assertNotContains(response, 'action="/amozeshgah/course/test-course/enroll/"')
+
+    def test_html_enrollment_returns_to_course_without_exposing_json(self):
+        user = get_user_model().objects.create_user(username="html-learner", password="a-complex-unique-password")
+        self.client.force_login(user)
+        response = self.client.post("/amozeshgah/course/test-course/enroll/", {"response_format": "html"})
+        self.assertRedirects(response, "/amozeshgah/course/test-course/")
+        self.assertTrue(EducationEnrollment.objects.filter(user=user, course=self.course).exists())
+        page = self.client.get("/amozeshgah/course/test-course/")
+        self.assertContains(page, "ادامه یادگیری در پنل من")
 
     def test_free_enrollment_and_progress(self):
         user = get_user_model().objects.create_user(username="learner", password="pass")

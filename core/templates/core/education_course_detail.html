@@ -10,7 +10,11 @@
   <h1>{{ course.title }}</h1>
   <p>{{ course.summary }}</p>
   <div class="education-course-meta"><b>{% if course.is_free %}رایگان{% else %}{{ course.price }} {{ course.currency }}{% endif %}</b><span>نسخه {{ course.version }}</span></div>
-  {% if course.is_free %}<form method="post" action="{% url 'education_enroll' course.slug %}">{% csrf_token %}<button class="education-primary" type="submit">{% if enrollment %}ادامه یادگیری{% else %}شروع رایگان دوره{% endif %}</button></form>{% elif course.product and course.product.active %}<a class="education-primary" href="/store/">خرید و ورود به فروشگاه ↗</a>{% endif %}
+  {% if course.is_free %}
+    {% if enrollment %}<a class="education-primary" href="{% url 'education_dashboard' %}">ادامه یادگیری در پنل من</a>
+    {% elif user.is_authenticated %}<form method="post" action="{% url 'education_enroll' course.slug %}">{% csrf_token %}<input type="hidden" name="response_format" value="html"><button class="education-primary" type="submit">شروع رایگان دوره</button></form>
+    {% else %}<a class="education-primary" href="{% url 'login' %}?next={% url 'education_course_detail' course.slug %}">ورود برای ثبت‌نام رایگان دوره</a>{% endif %}
+  {% elif course.product and course.product.active %}<a class="education-primary" href="/store/">خرید و ورود به فروشگاه ↗</a>{% endif %}
 </section>
 <section class="education-course-body">
   <article><span>SYLLABUS</span><h2>سرفصل دوره</h2>{% for item in course.syllabus %}<div class="education-syllabus-item"><b>{{ forloop.counter|stringformat:'02d' }}</b><span>{{ item }}</span></div>{% empty %}<p>سرفصل این دوره هنوز برای انتشار تکمیل نشده است.</p>{% endfor %}</article>
