@@ -1,13 +1,39 @@
-# Farm Enterprise Economics Toolkit — Edition 1.2
+# Farm Enterprise Economics Toolkit — Edition 1.3 (offline browser + Python)
 
-A working, offline agricultural enterprise calculator written in Python 3.8+.
+A working, offline agricultural enterprise calculator for a modern browser or Python 3.8+.
 It estimates contribution margin, annual operating result, break-even sales
 quantity, nine price/quantity sensitivity cases for each enterprise, and
 optional land/water resource-efficiency calculations.
 All numerical assumptions are entered by the user. No external data feeds,
 API keys, payment accounts or network connections are required.
 
-## Getting started
+## Getting started — no software installation
+
+1. Extract the product ZIP into a folder on your own device. **Keep the HTML and two JavaScript files together.**
+2. Open `offline_calculator.html` in a modern browser (Chrome, Edge, Firefox or Safari with BigInt support).
+3. Replace every **illustrative** input with your own measurements and prices. Add other farm activities if required.
+4. Select **Calculate results**. Inspect the portfolio, per-activity break-even thresholds, resource indicators and nine scenarios per activity.
+5. Use **Save inputs as JSON**, **Save full report as JSON**, **Save scenarios as CSV** or **Print / save as PDF** as needed.
+
+This interface runs locally, with no network requests, account, analytics, cookies,
+external scripts, price feeds or cloud storage. It does not save your data unless
+you choose a download. Input JSON can be imported from your computer and is
+checked before replacing the current form. Treat exported files as sensitive
+business data; store them privately. A very small negative profit can display
+as `-0.00` due to two-decimal monetary rounding.
+
+The browser uses exact rational arithmetic internally, with decimal input
+limited to 30 fractional places and without scientific `e` notation. This
+matches the Python money and break-even outputs for supported inputs; use the
+Python engine for other numeric notation. Do not mix long-period investments,
+annual budgets and monthly prices: all input amounts must describe the same
+accounting period and currency. If the exact break-even unit count exceeds the
+safe JavaScript integer range it is exported as decimal **text**, not rounded.
+When editing or importing JSON, quote fractional and large numbers as strings,
+such as `"unit_price": "1234.567"`: browsers cannot preserve every decimal
+digit of arbitrary unquoted JSON numbers. The bundled example uses this format.
+
+## Alternative — Python command line
 
 1. Install Python 3.8 or later (no third-party packages).
 2. Copy example_inputs.json and replace ALL illustrative values with your own.
@@ -126,11 +152,26 @@ Input numbers in the supplied example are synthetic and are **not** claims
 about agriculture in any particular country or market. The tool does not
 pretend to use scientific sources or current prices.
 
+## Further reading (optional, online)
+
+- Penn State Extension, *Budgeting for Agricultural Decision Making*:
+  https://extension.psu.edu/budgeting-for-agricultural-decision-making
+- Penn State Extension, *Product Pricing: What Do I Charge?*:
+  https://extension.psu.edu/product-pricing-what-do-i-charge
+
+These explain agricultural enterprise budgeting and break-even concepts.
+They are reference reading, **not** sources of the synthetic sample values or
+an endorsement or independent review of this product.
+
 ## Verification and support
 
-To run the included automated tests:
+To run the included automated tests (Python only, no Node needed):
 
-   python -m unittest -v test_calculator.py
+   python -m unittest discover -v -p 'test_*.py'
+
+The independent browser-versus-Python arithmetic comparison is an additional
+source-repository CI check, intentionally separate from the buyer ZIP so
+extracted private packages remain testable on a machine without Node.js.
 
 No telemetry is collected; all inputs and outputs remain on the device.
 The software rejects negative quantities/costs, non-finite numeric values,
