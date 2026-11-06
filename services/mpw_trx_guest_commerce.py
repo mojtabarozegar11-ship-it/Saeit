@@ -278,7 +278,8 @@ def _checkout_page(request, product_id, pages_namespace):
         raise Http404
     try:
         _commercial_db(settings, connection)
-        _configured_receiver()
+        receiver = _configured_receiver()
+        require_active_merchant_wallet(settings, receiver)
     except Exception as exc:
         from services.mpw_trx_walletless_core import PaymentHold
         if isinstance(exc, PaymentHold):
