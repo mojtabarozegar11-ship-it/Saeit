@@ -2,8 +2,10 @@
 
 import ast
 from decimal import Decimal, InvalidOperation
+import json
 from pathlib import Path
 from types import SimpleNamespace
+import tempfile
 import unittest
 
 
@@ -20,19 +22,33 @@ def extract_class():
         "Decimal": Decimal, "InvalidOperation": InvalidOperation,
         "timezone": SimpleNamespace(now=lambda: None),
         "os": SimpleNamespace(environ={"MOJ_FACTORY_SINGLE_ACTIVE_RUN_ID": "run-3"}),
+        "json": json, "Path": Path,
     }
     exec(compile(ast.Module(body=[cls], type_ignores=[]), str(path), "exec"), namespace)
     return namespace["FactoryWorkerCompatibility"], namespace["FactoryWorkerCompatibilityError"]
 
 
 class FactoryWorkerCompatibilityTests(unittest.TestCase):
+    def _native_slot(self, worker, active=None):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        slot = Path(directory.name) / "current.json"
+        slot.write_text(json.dumps({
+            "schema": "saeit.factory.product-slots.v1",
+            "active": [{"recipe": "farm_enterprise_economics"}] if active is None else active,
+        }), encoding="utf-8")
+        worker.NATIVE_SLOT_PATH = slot
+        return slot
+
     def test_only_existing_validation_is_accepted(self):
         worker, error = extract_class()
+        self._native_slot(worker)
         base = dict(
             status="queued", capability_code="product_validation",
             attempt_count=0, max_attempts=3, next_retry_at=None,
             factory_run_id=2, product_id=3, environment="production",
             factory_run=SimpleNamespace(status="active", product_id=3, environment="production", run_id="run-3"),
+            product=SimpleNamespace(metadata={"recipe": "farm_enterprise_economics"}),
         )
         worker._preflight(SimpleNamespace(**base, action_type="product_validation"))
         binding = worker._preflight.__globals__["os"].environ
@@ -50,6 +66,36 @@ class FactoryWorkerCompatibilityTests(unittest.TestCase):
                 status="active", product_id=4, environment="production", run_id="run-3")},
                 action_type="product_validation"))
 
+    def test_binding_rejects_legacy_product_without_proven_recipe(self):
+        worker, error = extract_class()
+        self._native_slot(worker)
+        task = SimpleNamespace(
+            status="queued", action_type="product_validation",
+            capability_code="product_validation", attempt_count=0, max_attempts=3,
+            next_retry_at=None, factory_run_id=2, product_id=3,
+            environment="production", factory_run=SimpleNamespace(
+                status="active", product_id=3, environment="production", run_id="run-3"
+            ), product=SimpleNamespace(metadata={"title": "farm_enterprise_economics"}),
+        )
+        with self.assertRaisesRegex(error, "not proven"):
+            worker._preflight(task)
+        task.product.metadata = {"factory": {"recipe": "farm_enterprise_economics"}}
+        worker._preflight(task)
+
+    def test_binding_rejects_unsafe_or_multiple_native_slots(self):
+        worker, error = extract_class()
+        slot = self._native_slot(worker, active=[
+            {"recipe": "farm_enterprise_economics"}, {"recipe": "another_product"}
+        ])
+        task = SimpleNamespace(product=SimpleNamespace(
+            metadata={"recipe": "farm_enterprise_economics"}
+        ))
+        with self.assertRaisesRegex(error, "does not match"):
+            worker._verify_native_product_binding(task)
+        slot.unlink()
+        with self.assertRaisesRegex(error, "missing or unsafe"):
+            worker._verify_native_product_binding(task)
+
     def test_cost_must_really_be_zero(self):
         worker, error = extract_class()
         self.assertEqual(worker._normalize_result({"verified_effect": True})[1], Decimal("0"))
@@ -64,6 +110,7 @@ class FactoryWorkerCompatibilityTests(unittest.TestCase):
         self.assertIn("with transaction.atomic():", source)
         self.assertIn("self.runtime.complete(", source)
         self.assertNotIn("WorkerRunner(", source)
+        self.assertIn("self._verify_native_product_binding(task)", source)
 
     def test_entrypoint_never_consumes_oldest_queued_unscoped(self):
         source = (ROOT / "core/management/commands/factory_product_step.py").read_text(encoding="utf-8")
