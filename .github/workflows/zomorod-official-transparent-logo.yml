@@ -1,4 +1,4 @@
-name: Publish approved transparent company emblem only on Zomorod main site
+name: Publish approved transparent company emblem only on Zomorod main site\n# SEO_STATIC_RELEASE_TRIGGER=20261106
 on:
   push:
     branches: [main]
