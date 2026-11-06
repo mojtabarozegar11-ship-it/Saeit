@@ -71,10 +71,10 @@ case "$operation" in
       python3 scripts/mojplaywin_cpanel_readonly_inventory.py
     ;;
   cpanel_quota_readonly)
-    # Official UAPI account statistics, redacted on the GitHub runner.
+    # UAPI Quota.get_quota_info verified on the live account, redacted on the GitHub runner.
     # Neither a per-file inventory nor a backup; zero cPanel writes.
     timeout 60s ssh -T -F "$work/config" saeit-cpanel \
-      'uapi --output=json StatsBar get_stats "display=diskusage|mysqldiskusage|fileusage"' |
+      'uapi --output=json Quota get_quota_info' |
       python3 -B scripts/mpw_cpanel_quota_readonly.py
     ;;
   mpw_guard_readonly)
