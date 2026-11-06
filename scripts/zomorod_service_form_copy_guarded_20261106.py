@@ -61,8 +61,6 @@ def transform(source: bytes) -> bytes:
         count = value.count(old)
         if count not in ((1, 2) if old.startswith('پرسش از مسترایجنت') else (1,)):
             raise RuntimeError('FORM_COPY_UNEXPECTED_ANCHOR:' + old[:25] + ':' + str(count))
-        if new in value:
-            raise RuntimeError('FORM_COPY_ALREADY_PATCHED')
         value = value.replace(old, new)
     return value.encode('utf-8')
 
