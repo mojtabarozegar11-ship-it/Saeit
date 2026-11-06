@@ -54,6 +54,7 @@ EXCEPTION_RE = re.compile(
     r'PaymentHold|ValidationError|AssertionError|PermissionError|'
     r'TimeoutError|ConnectionError|OSError):')
 TARGET_ERROR_ROUTE = '/commerce/trx-easy/start/779/'
+PUBLIC_PRODUCT_IDS = frozenset((72, 225, 879, 779))
 FRAME_RE = re.compile(
     r'^\s*File "/home/zomorod2/(?:Saeit-staging|mojplaywin\.com)/'
     r'((?:config|services|core|mpw_commerce|scripts)/'
@@ -113,6 +114,18 @@ def _public_error_bucket(stamp, stage, path, code, automated):
     public_product = int(path.rstrip('/').rsplit('/', 1)[-1]) if matched else 0
     return (stamp.date().isoformat(), stage, code, public_product,
             'suspected_bot' if automated else 'unclassified_browser')
+
+
+def _public_product_for_stage(stage, path):
+    """Never treat invoice or download IDs as product IDs."""
+    pattern = {'product_detail_get': DETAIL_RE,
+               'checkout_get': CHECKOUT_RE,
+               'order_post': START_RE}.get(stage)
+    match = pattern.fullmatch(path) if pattern is not None else None
+    if not match:
+        return None
+    product_id = int(path.rstrip('/').rsplit('/', 1)[-1])
+    return product_id if product_id in PUBLIC_PRODUCT_IDS else None
 
 
 def _logs():
@@ -409,6 +422,7 @@ def _audit():
     cutoff = now - timedelta(days=LOOKBACK_DAYS)
     totals = Counter()
     day_counts = defaultdict(Counter)
+    products = defaultdict(Counter)
     server_errors = Counter()
     raw_files = _logs()
     archived_files = _archives() if not raw_files else []
@@ -445,6 +459,9 @@ def _audit():
                     key = group + ':' + stage + ':' + status_class
                     totals[key] += 1
                     day_counts[stamp.date().isoformat()][key] += 1
+                    public_product = _public_product_for_stage(stage, req_path)
+                    if public_product is not None:
+                        products[str(public_product)][group + ':' + stage + ':' + status_class] += 1
                     error_bucket = _public_error_bucket(
                         stamp, stage, req_path, code, automated)
                     if error_bucket:
@@ -465,6 +482,10 @@ def _audit():
         'scanned_lines': min(scanned_lines, MAX_LINES),
         'scanned_bytes': min(scanned_bytes, MAX_LOG_BYTES),
         'totals': dict(sorted(totals.items())),
+        'public_product_funnel_requests': {
+            product: dict(sorted(values.items()))
+            for product, values in sorted(products.items(), key=lambda item: int(item[0]))
+        },
         'server_errors': [
             {'utc_day': day, 'stage': stage, 'http_status': status,
              'public_product_id': product_id, 'agent_class': agent_class,
@@ -503,6 +524,10 @@ def _selftest():
     assert _category('POST', '/commerce/trx-easy/start/72/') == 'order_post'
     assert _category('GET', '/commerce/trx-easy/invoice/12/') == 'invoice_get'
     assert _category('GET', '/admin/') is None
+    assert _public_product_for_stage('product_detail_get', '/store/product/72/') == 72
+    assert _public_product_for_stage('order_post', '/commerce/trx-easy/start/779/') == 779
+    assert _public_product_for_stage('invoice_get', '/commerce/trx-easy/invoice/72/') is None
+    assert _public_product_for_stage('order_post', '/commerce/trx-easy/start/999/') is None
     assert _public_error_bucket(parsed[0], 'order_post',
                                 '/commerce/trx-easy/start/72/?token=hidden', 500,
                                 False) is None
