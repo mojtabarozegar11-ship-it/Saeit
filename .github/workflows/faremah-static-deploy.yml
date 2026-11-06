@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "faremah/**"
+      - "core/faremah_views.py"
       - ".github/workflows/faremah-static-deploy.yml"
   workflow_dispatch:
 
@@ -30,6 +31,8 @@ jobs:
           grep -Fq 'فره‌ماه' faremah/index.html
           grep -Fq 'مرکز لیزر و زیبایی' faremah/index.html
           grep -Fq 'action="/ask-master/index.php?service=1"' faremah/index.html
+          test -s core/faremah_views.py
+          python3 -m py_compile core/faremah_views.py
           echo "FAREMAH_PACKAGE=verified"
 
       - name: Prepare pinned VPS to cPanel relay
@@ -115,4 +118,31 @@ jobs:
           printf '%s\n' "$sha" > "$target/.faremah-deployed-sha"
           test -s "$target/index.html"
           echo "FAREMAH_STATIC_DEPLOY=PASS target=$target sha=$sha"
+          REMOTE
+
+      - name: Publish Faremah canonical route fix only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/faremah-relay"
+          sha="$GITHUB_SHA"
+          app="$HOME/Saeit"
+          scp -F "$d/config" core/faremah_views.py "saeit-cpanel:/home/zomorod2/.faremah-view-$sha"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$sha" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          app="$HOME/Saeit"
+          source="$HOME/.faremah-view-$sha"
+          target="$app/core/faremah_views.py"
+          test -d "$app"
+          test -f "$source"
+          test -f "$target"
+          cp -p -- "$target" "$target.bak.$sha"
+          install -m 0644 -- "$source" "$target"
+          rm -f -- "$source"
+          if test -d "$app/tmp"; then
+            touch "$app/tmp/restart.txt"
+          fi
+          python3 -m py_compile "$target"
+          echo "FAREMAH_ROUTE_DEPLOY=PASS target=$target sha=$sha"
           REMOTE
