@@ -205,7 +205,7 @@ jobs:
           }
           from core.financial_brand_pages import BRANDS
           for slug, fa_name, en_name, ar_name in BRANDS:
-              for kind in ("market-signals", "digital-store"):
+              for kind in ("market-signals", "digital-products"):
                   routes[f"/{slug}/{kind}/"] = "financial_brand_page"
                   routes[f"/ar/{slug}/{kind}/"] = "financial_brand_page"
           for path, expected in routes.items():
