@@ -76,11 +76,16 @@ class TestGuardedCaptureRelease(unittest.TestCase):
             self.assertEqual((self.app / release.PATHS[name]).read_bytes(), self.old[name])
         self.assertEqual(len(restarts), 2)
 
-    def test_staged_source_sha_pins_match_branch_files(self):
-        for key in ("recovery", "guest"):
-            with self.subTest(key=key):
-                self.assertEqual(release.checksum((ROOT / release.PATHS[key]).read_bytes()),
-                                 release.AFTER[key])
+    def test_capture_fingerprint_and_next_one_file_upgrade_chain(self):
+        self.assertEqual(release.checksum((ROOT / release.PATHS["recovery"]).read_bytes()),
+                         release.AFTER["recovery"])
+        next_script = ROOT / "scripts/mpw_required_email_guarded_release_20261106.py"
+        spec = importlib.util.spec_from_file_location("mpw_next_email_release", next_script)
+        next_release = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(next_release)
+        self.assertEqual(release.AFTER["guest"], next_release.BEFORE)
+        self.assertEqual(next_release.digest((ROOT / release.PATHS["guest"]).read_bytes()),
+                         next_release.AFTER)
 
 
 if __name__ == "__main__":
