@@ -66,7 +66,11 @@ jobs:
           ssh -T -F "$RUNNER_TEMP/zm-evergreen-route-ssh/config" saeit-cpanel python3 - <<'PY'
           from pathlib import Path
           import hashlib,re
-          root=Path('/home/zomorod2/public_html/ask-master')
+          site=Path('/home/zomorod2/public_html')
+          for rel in ('knowledge/index.html','knowledge.html','studio/index.html','taniya/index.php','taniya/index.html','guides/agriculture/index.php','guides/agriculture/index.html'):
+              p=site/rel
+              print('LIVE_ROUTE_FILE='+rel+' exists='+str(p.is_file())+' bytes='+(str(p.stat().st_size) if p.is_file() else '0'))
+          root=site/'ask-master'
           if root.is_dir() and not root.is_symlink():
               print('HANDLER_FILES='+','.join(sorted(p.name for p in root.iterdir() if p.is_file())))
           for name in ('index.php','status.php'):
