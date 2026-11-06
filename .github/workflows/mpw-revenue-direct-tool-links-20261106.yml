@@ -1,4 +1,5 @@
 name: MPW one-time direct browser-tool links guarded release
+# The second invocation includes the corrected no-ID preflight path.
 
 on:
   push:
