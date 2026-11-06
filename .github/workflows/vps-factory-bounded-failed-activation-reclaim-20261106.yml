@@ -1,4 +1,4 @@
-name: VPS factory bounded failed-activation space reclaim
+name: VPS factory failed-activation residue inventory (read-only)
 on:
   workflow_dispatch:
 permissions:
@@ -7,19 +7,19 @@ concurrency:
   group: saeit-vps-factory-bounded-space-reclaim
   cancel-in-progress: false
 jobs:
-  reclaim:
+  inspect:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 6
     steps:
-      - name: Reclaim only failed activation residue
+      - name: Inventory old reclaim candidates without deletion or cron changes
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          d="$RUNNER_TEMP/factory-reclaim"
+          d="$RUNNER_TEMP/factory-reclaim-readonly"
           install -d -m 700 "$d"
           trap 'rm -rf -- "$d"' EXIT
           printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/key"
@@ -27,56 +27,45 @@ jobs:
           ssh-keygen -y -P "" -f "$d/key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
-          payload="$(base64 -w0 <<'PY'
-          import fcntl,glob,os,sqlite3,subprocess,time,sys
-          root=os.path.expanduser("~/factory-runtime")
-          backups=os.path.join(root,"operations","backups")
-          app=os.path.join(root,"django-app")
-          lock=os.path.join(root,"operations","master-agent","activation.lock")
-          assert os.path.isdir(root) and not os.path.islink(root)
-          fd=os.open(lock,os.O_CREAT|os.O_RDWR,0o600)
-          try:
-              fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
-          except BlockingIOError:
-              raise SystemExit("FACTORY_RECLAIM_ABORT_ACTIVE_MASTER")
-          now=time.time()
-          removed=[]
-          for path in glob.glob(os.path.join(backups,"master-before-*.sqlite3")):
-              if os.path.islink(path) or not os.path.isfile(path) or os.path.getmtime(path)<now-3600:
+          ssh -T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12 githubops@178.239.147.150 'python3 -B -' <<'PY'
+          import os, re, stat, subprocess, time
+          from pathlib import Path
+
+          root = Path("/home/githubops/factory-runtime")
+          backups = root / "operations" / "backups"
+          if root.is_symlink() or not root.is_dir() or backups.is_symlink() or not backups.is_dir():
+              raise SystemExit("FACTORY_INVENTORY_UNSAFE_OR_MISSING_ROOT")
+          if root.stat().st_uid != os.geteuid() or backups.stat().st_uid != os.geteuid():
+              raise SystemExit("FACTORY_INVENTORY_OWNERSHIP_MISMATCH")
+          fs = os.statvfs(root)
+          before = fs.f_bavail * fs.f_frsize
+          pattern = re.compile(r"master-before-[0-9]{8}T[0-9]{6}Z\.sqlite3\Z")
+          count = total = recent = 0
+          now = time.time()
+          for path in backups.iterdir():
+              item = path.lstat()
+              if not stat.S_ISREG(item.st_mode) or item.st_uid != os.geteuid():
                   continue
-              try:
-                  con=sqlite3.connect("file:"+path+"?mode=ro",uri=True,timeout=5)
-                  result=con.execute("PRAGMA quick_check").fetchone()[0]
-                  con.close()
-              except Exception:
-                  result="invalid_or_incomplete"
-              if result!="ok":
-                  size=os.path.getsize(path)
-                  os.unlink(path)
-                  removed.append(size)
-                  print("FACTORY_INCOMPLETE_DB_REMOVED="+os.path.basename(path)+" bytes="+str(size),flush=True)
-          for pattern in (os.path.join(app,"core","*.rollback.tmp"),os.path.join(app,"core","*.recovery.tmp")):
-              for path in glob.glob(pattern):
-                  if os.path.isfile(path) and not os.path.islink(path):
-                      size=os.path.getsize(path)
-                      os.unlink(path)
-                      removed.append(size)
-                      print("FACTORY_ROLLBACK_TEMP_REMOVED="+os.path.basename(path)+" bytes="+str(size),flush=True)
-          stage=os.path.join(root,"operations","master-activation-source","bundle.tar")
-          if os.path.isfile(stage) and not os.path.islink(stage):
-              size=os.path.getsize(stage)
-              os.unlink(stage)
-              removed.append(size)
-              print("FACTORY_STAGING_BUNDLE_REMOVED=bundle.tar bytes="+str(size),flush=True)
-          print("FACTORY_RECLAIMED_BYTES="+str(sum(removed)),flush=True)
-          current=subprocess.run(["crontab","-l"],capture_output=True,text=True,check=False).stdout
-          tags=("SAEIT_MASTER_AGENT_V1","SAEIT_FACTORY_EVERY_MINUTE_V1","SAEIT_FACTORY_LIFECYCLE_12_V1")
-          kept=[line for line in current.splitlines() if not any(tag in line for tag in tags)]
-          subprocess.run(["crontab","-"],input=("\n".join(kept)+"\n"),text=True,check=True)
-          print("FACTORY_SCHEDULERS_PAUSED_FOR_BOUNDED_RECLAIM",flush=True)
-          stat=os.statvfs(root)
-          print("FACTORY_DISK_AVAILABLE_BYTES="+str(stat.f_bavail*stat.f_frsize),flush=True)
-          print("FACTORY_RECLAIM_COMPLETE=failed_activation_residue_only",flush=True)
+              if not pattern.fullmatch(path.name):
+                  continue
+              count += 1
+              total += item.st_size
+              if now - item.st_mtime <= 3600:
+                  recent += 1
+          cron = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=8)
+          if cron.returncode not in (0, 1):
+              raise SystemExit("FACTORY_CRON_READ_FAILED")
+          tagged = sum("SAEIT_MASTER_AGENT_V1" in line for line in cron.stdout.splitlines())
+          after_fs = os.statvfs(root)
+          after = after_fs.f_bavail * after_fs.f_frsize
+          print("FACTORY_LEGACY_RECLAIM_MODE=READ_ONLY", flush=True)
+          print("FACTORY_BACKUP_SNAPSHOT_COUNT=" + str(count), flush=True)
+          print("FACTORY_BACKUP_SNAPSHOT_BYTES=" + str(total), flush=True)
+          print("FACTORY_BACKUP_RECENT_COUNT=" + str(recent), flush=True)
+          print("FACTORY_CRON_MASTER_TAGGED_COUNT=" + str(tagged), flush=True)
+          print("FACTORY_DISK_FREE_BEFORE_BYTES=" + str(before), flush=True)
+          print("FACTORY_DISK_FREE_AFTER_BYTES=" + str(after), flush=True)
+          print("FACTORY_DELETION_ATTEMPTED=false", flush=True)
+          print("FACTORY_CRONTAB_MODIFIED=false", flush=True)
+          print("FACTORY_BACKUP_RESTORE_EVIDENCE_VERIFIED=false", flush=True)
           PY
-          )"
-          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))'"
