@@ -1,4 +1,4 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.core.management import call_command
 from django.db.models import F
 from core.autonomous_brain import AutonomousBrain
@@ -13,6 +13,8 @@ class Command(BaseCommand):
         parser.add_argument("--max-steps", type=int, default=20)
 
     def handle(self,*args,**opts):
+        if opts["max_steps"] <= 0:
+            raise CommandError("max-steps must be positive")
         brain=AutonomousBrain()
         gateway = build_economic_gateway()
         supported = frozenset(
@@ -24,7 +26,7 @@ class Command(BaseCommand):
             self.stdout.write("AUTO_BLOCKED_NO_REGISTERED_TOOLS")
             return
         runner = None
-        requested_steps=max(1, opts["max_steps"])
+        requested_steps=opts["max_steps"]
         steps=min(20, requested_steps)
         if requested_steps>steps:
             self.stdout.write(f"AUTO_SERIAL_STEP_CAP requested={requested_steps} applied={steps}")

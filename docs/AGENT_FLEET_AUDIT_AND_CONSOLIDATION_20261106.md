@@ -18,6 +18,31 @@ There are multiple task ledgers. `AgentTask` is not the complete activity
 history for the knowledge, newsletter, company-activity, factory and external
 workers. Do not mass-retire identities for lack of one ledger's receipts.
 
+## Read-only production evidence already available
+
+The separately executed VPS workflow
+[`42198456618`](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42198456618)
+completed at approximately 09:54 UTC on 2026-11-06. It inspected the scoped
+VPS Django database **without changing it**. It found:
+
+- 20 registered active Django agent identities and 240 open tasks.
+- 145 queued factory research/validation tasks and 95 blocked research tasks.
+  Of the queued tasks, 33 research tasks reference an active run with no
+  Django Product; 112 validation tasks reference active runs whose Products
+  are inactive. Three queued research tasks had exhausted attempt budgets.
+- Four legacy newsletter identities were preliminary *review candidates*;
+  their successors' live coverage and external integrations were not proven.
+- In the trailing 30 days, 5,502 `income_profit_optimize` tasks were marked
+  completed, nearly all recording internal catalog baselines. In this *scoped
+  database*, active Django Products, Orders, payment events and settlement
+  candidates all counted zero. This does not characterize separately hosted
+  MojPlayWin orders or the independent factory's private product ledger.
+
+Do not bulk-execute the 145 tasks: active `FactoryRun` flags did **not** prove
+one authorized native active product. Binding, recipe and single-product
+checks are mandatory. The historical profit-baseline count is not 5,502
+independent gains and does not certify customer revenue.
+
 ## Findings and implemented controls
 
 1. **Authorization mismatch:** a running low-risk research task could invoke a
@@ -30,7 +55,8 @@ workers. Do not mass-retire identities for lack of one ledger's receipts.
 2. **Unobservable queue health:** the existing legacy consolidation preview
    proves only a limited set of dependencies. The new read-only
    `audit_agent_fleet` command exposes inactive pending work, known-executor
-   mismatches, stale running tasks, recent Django task/newsletter receipts,
+   mismatches, stale running tasks, queued tasks older than a day, exhausted
+   retry budgets, repeated internal profit baselines, recent receipts,
    exact mission/capability overlap and conservative retirement candidates;
    it cannot certify live cron or cash. Even an exact role overlap is a
    **review candidate**, not permission to remove an external integration.

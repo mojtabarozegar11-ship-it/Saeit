@@ -227,3 +227,44 @@ def test_worker_reports_unknown_only_queue_without_executing():
     assert unsupported.attempt_count == 0
     assert unsupported.status == "queued"
     assert "BLOCKED_UNSUPPORTED" in output.getvalue()
+
+
+@pytest.mark.django_db
+def test_drain_continues_after_one_failure_and_reports_it_at_end():
+    agent = Agent.objects.create(
+        code="economic-master-agent", name="Master", mission="Bounded work", active=True,
+    )
+    first, second = AgentTask.objects.bulk_create([
+        AgentTask(agent=agent, action_type="income_market_research",
+                  capability_code="income_market_research", status="queued")
+        for _ in range(2)
+    ])
+    attempts = []
+
+    def execute(task_id):
+        attempts.append(task_id)
+        if task_id == first.pk:
+            AgentTask.objects.filter(pk=task_id).update(status="failed")
+            raise RuntimeError("isolated task failure")
+        AgentTask.objects.filter(pk=task_id).update(status="completed")
+        return SimpleNamespace(pk=task_id, status="completed", output_data={"verified_effect": True})
+
+    gateway = SimpleNamespace(describe=lambda: {"income_market_research": {"enabled": True}})
+    output = StringIO()
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway), patch(
+                   "core.management.commands.run_economic_worker.WorkerRunner"
+               ) as runner:
+        runner.return_value.run.side_effect = execute
+        with pytest.raises(CommandError, match="1 task\\(s\\) failed"):
+            call_command("run_economic_worker", drain=True, stdout=output)
+
+    assert attempts == [first.pk, second.pk]
+    assert "DRAIN_SUMMARY completed=1 limit=20 failed=1 attempted=2" in output.getvalue()
+    assert AgentTask.objects.get(pk=second.pk).status == "completed"
+
+
+@pytest.mark.parametrize("steps", [0, -1, -20])
+def test_autonomous_master_loop_never_executes_with_nonpositive_steps(steps):
+    with pytest.raises(CommandError, match="max-steps must be positive"):
+        call_command("autonomous_master_loop", max_steps=steps)

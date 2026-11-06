@@ -40,6 +40,7 @@ class Command(BaseCommand):
 
         recent_cutoff = timezone.now() - timedelta(days=days)
         stale_cutoff = timezone.now() - timedelta(seconds=stale_after)
+        stalled_cutoff = timezone.now() - timedelta(hours=24)
         gateway = build_economic_gateway()
         registered = {
             code for code, info in gateway.describe().items() if info["enabled"]
@@ -53,7 +54,17 @@ class Command(BaseCommand):
             )
             pending = tasks.filter(status__in=("queued", "running", "blocked")).count()
             stale = tasks.filter(status="running", updated_at__lte=stale_cutoff).count()
+            stalled_queued = tasks.filter(
+                status="queued", created_at__lte=stalled_cutoff,
+            ).count()
+            exhausted_queued = tasks.filter(
+                status="queued", attempt_count__gte=F("max_attempts"),
+            ).count()
             recent = tasks.filter(status="completed", updated_at__gte=recent_cutoff).count()
+            repetitive_profit_baselines = tasks.filter(
+                status="completed", action_type="income_profit_optimize",
+                updated_at__gte=recent_cutoff,
+            ).count()
             recent_newsletters = agent.newsletter_stories.filter(
                 status="published", published_at__gte=recent_cutoff,
             ).count()
@@ -79,6 +90,12 @@ class Command(BaseCommand):
                 findings.append("queued_task_not_supported_by_known_executor")
             if stale:
                 findings.append("stale_running_tasks")
+            if stalled_queued:
+                findings.append("queued_tasks_older_than_24h")
+            if exhausted_queued:
+                findings.append("queued_tasks_with_exhausted_attempt_budget")
+            if repetitive_profit_baselines > max(3, days):
+                findings.append("repeated_internal_profit_baselines_not_revenue")
             if agent.active and not recent and not recent_newsletters:
                 findings.append("no_recent_django_task_or_newsletter_receipt")
             legacy = assess_agent(agent)["decision"] if agent.code in LEGACY_AGENT_CODES else None
@@ -100,6 +117,9 @@ class Command(BaseCommand):
                     "completed_recent": recent,
                     "published_newsletters_recent": recent_newsletters,
                     "stale_running": stale,
+                    "queued_older_than_24h": stalled_queued,
+                    "queued_retry_budget_exhausted": exhausted_queued,
+                    "internal_profit_baselines_recent": repetitive_profit_baselines,
                     "queued_without_known_handler": unsupported,
                 },
                 "legacy_consolidation_decision": legacy,
@@ -136,6 +156,9 @@ class Command(BaseCommand):
                 "agents_active": sum(row["active"] for row in agents),
                 "agents_with_findings": sum(bool(row["findings"]) for row in agents),
                 "stale_running_tasks": sum(row["tasks"]["stale_running"] for row in agents),
+                "queued_older_than_24h": sum(row["tasks"]["queued_older_than_24h"] for row in agents),
+                "queued_retry_budget_exhausted": sum(row["tasks"]["queued_retry_budget_exhausted"] for row in agents),
+                "internal_profit_baselines_recent": sum(row["tasks"]["internal_profit_baselines_recent"] for row in agents),
                 "unsupported_known_queue_tasks": sum(
                     row["tasks"]["queued_without_known_handler"] or 0 for row in agents
                 ),

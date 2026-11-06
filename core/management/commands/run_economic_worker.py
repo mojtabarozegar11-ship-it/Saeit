@@ -29,6 +29,7 @@ class Command(BaseCommand):
         limit = self.MAX_DRAIN_TASKS if options["drain"] else requested_limit
         executed = 0
         attempted_ids = []
+        failed_ids = []
         gateway = build_economic_gateway()
         supported = frozenset(
             code for code, spec in gateway.describe().items()
@@ -76,7 +77,20 @@ class Command(BaseCommand):
             try:
                 completed = runner.run(task.pk)
             except Exception as exc:
-                raise CommandError(f"Task {task.pk} execution failed: {exc}") from exc
+                # A bad task must not starve the rest of an explicitly bounded
+                # drain. The runner has already recorded failure/retry state;
+                # attempted_ids prevents retrying it in this invocation.
+                failed_ids.append(task.pk)
+                self.stdout.write(
+                    f"EXECUTION_FAILED task={task.pk} requires_review=true "
+                    f"error_type={type(exc).__name__}"
+                )
+                if options["task_id"] is not None:
+                    raise CommandError(
+                        f"Task {task.pk} execution failed ({type(exc).__name__}); "
+                        "inspect the private task audit"
+                    ) from exc
+                continue
             if completed.status != "completed":
                 raise CommandError(f"Task {task.pk} was not completed; status={completed.status}")
             executed += 1
@@ -86,4 +100,12 @@ class Command(BaseCommand):
                 f"internal_effect_verified={int(verified_effect)} revenue_not_assessed=true"
             ))
         if options["drain"]:
-            self.stdout.write(f"DRAIN_SUMMARY completed={executed} limit={self.MAX_DRAIN_TASKS}")
+            self.stdout.write(
+                f"DRAIN_SUMMARY completed={executed} limit={self.MAX_DRAIN_TASKS} "
+                f"failed={len(failed_ids)} attempted={len(attempted_ids)}"
+            )
+        if failed_ids:
+            raise CommandError(
+                f"Economic worker finished remaining eligible work but {len(failed_ids)} "
+                f"task(s) failed: {failed_ids[:20]}"
+            )
