@@ -69,7 +69,7 @@ def test_economic_worker_bounded_drain_never_repeats_a_task(drain, expected):
         executed_ids.append(task_id)
         AgentTask.objects.filter(pk=task_id).update(status="completed")
         return SimpleNamespace(pk=task_id, status="completed",
-                               output_data={"action_performed": "verified_action"})
+                               output_data={"action_performed": "verified_action", "verified_effect": True})
 
     gateway = SimpleNamespace(describe=lambda: {"income_market_research": {}})
     with patch("core.management.commands.run_economic_worker.build_economic_gateway",
@@ -89,6 +89,75 @@ def test_economic_worker_bounded_drain_never_repeats_a_task(drain, expected):
         assert "DRAIN_SUMMARY completed=20 limit=20" in output.getvalue()
     else:
         assert "DRAIN_SUMMARY" not in output.getvalue()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("bad_output", [{"verified_effect": False}, None, "not-a-dict"])
+def test_isolated_drain_pauses_on_unverified_result(bad_output):
+    agent = Agent.objects.create(
+        code="economic-master-agent", name="Master", mission="No false progress", active=True,
+    )
+    grant(agent)
+    tasks = [AgentTask.objects.create(
+        agent=agent, action_type="income_market_research",
+        capability_code="income_market_research", status="queued",
+    ) for _ in range(3)]
+
+    def unverified(task_id):
+        AgentTask.objects.filter(pk=task_id).update(status="completed")
+        return SimpleNamespace(pk=task_id, status="completed", output_data=bad_output)
+
+    gateway = SimpleNamespace(describe=lambda: {"income_market_research": {"enabled": True}})
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway), patch(
+                   "core.management.commands.run_economic_worker.WorkerRunner"
+               ) as runner:
+        runner.return_value.run.side_effect = unverified
+        output = StringIO()
+        call_command("run_economic_worker", "--drain", stdout=output)
+
+    runner.return_value.run.assert_called_once_with(tasks[0].pk)
+    assert AgentTask.objects.filter(agent=agent, status="queued").count() == 2
+    assert "DRAIN_PAUSED_UNVERIFIED" in output.getvalue()
+    assert "DRAIN_SUMMARY completed=1 limit=20 failed=0 attempted=1" in output.getvalue()
+
+
+@pytest.mark.django_db
+def test_isolated_drain_stops_at_external_acquisition_boundary():
+    agent = Agent.objects.create(
+        code="economic-master-agent", name="Master", mission="Private growth only", active=True,
+    )
+    grant(agent, "income_growth_experiment")
+    grant(agent, "income_market_research")
+    first = AgentTask.objects.create(
+        agent=agent, action_type="income_growth_experiment",
+        capability_code="income_growth_experiment", status="queued",
+    )
+    second = AgentTask.objects.create(
+        agent=agent, action_type="income_market_research",
+        capability_code="income_market_research", status="queued",
+    )
+
+    def complete(task_id):
+        AgentTask.objects.filter(pk=task_id).update(status="completed")
+        return SimpleNamespace(pk=task_id, status="completed", output_data={"verified_effect": True})
+
+    gateway = SimpleNamespace(describe=lambda: {
+        "income_growth_experiment": {"enabled": True},
+        "income_market_research": {"enabled": True},
+    })
+    with patch("core.management.commands.run_economic_worker.build_economic_gateway",
+               return_value=gateway), patch(
+                   "core.management.commands.run_economic_worker.WorkerRunner"
+               ) as runner:
+        runner.return_value.run.side_effect = complete
+        output = StringIO()
+        call_command("run_economic_worker", "--drain", stdout=output)
+
+    runner.return_value.run.assert_called_once_with(first.pk)
+    second.refresh_from_db()
+    assert second.status == "queued"
+    assert "DRAIN_EXTERNAL_BOUNDARY" in output.getvalue()
 
 
 def test_mvp_builder_writes_private_verified_customer_workbook(tmp_path):
