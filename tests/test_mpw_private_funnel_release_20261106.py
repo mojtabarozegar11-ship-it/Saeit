@@ -49,6 +49,7 @@ class ReleaseChecks(unittest.TestCase):
             patch.object(release, "METRICS_AFTER", release.sha(
                 (ROOT / "services/mpw_checkout_funnel.py").read_bytes())),
             patch.object(release, "guard_host", lambda: None),
+            patch.object(release, "require_isolated_source", lambda: None),
             patch.object(release, "ready_storage", lambda: None),
         )
         for p in self.patches:
@@ -105,6 +106,16 @@ class ReleaseChecks(unittest.TestCase):
                 release.publish(self.stage, "42120000003")
         self.assertEqual((self.guest.read_bytes(), self.settings.read_bytes()), before)
         self.assertFalse(self.metrics.exists())
+
+    def test_shared_source_isolation_gate_prevents_all_mutation(self):
+        before = self.guest.read_bytes(), self.settings.read_bytes()
+        with patch.object(release, "require_isolated_source",
+                          side_effect=RuntimeError("ISOLATION_NOT_VERIFIED")):
+            with self.assertRaisesRegex(RuntimeError, "ISOLATION_NOT_VERIFIED"):
+                release.publish(self.stage, "42120000004")
+        self.assertEqual((self.guest.read_bytes(), self.settings.read_bytes()), before)
+        self.assertFalse(self.metrics.exists())
+        self.assertFalse((self.root / "backups").exists())
 
 
 if __name__ == "__main__":
