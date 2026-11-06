@@ -76,6 +76,35 @@ function store_inquiry(array $record): string {
   } finally {if (is_resource($fh)) fclose($fh);if (file_exists($tmp)) @unlink($tmp);}
   return $id;
 }
+/* Record one anonymous completed-submission event server-side after secure storage.
+   The browser must not be able to create an inquiry_submitted event by loading a pixel. */
+function record_inquiry_metric(string $slug): void {
+  $parent='/home/zomorod2/.private_mojplaywin_main_agents';
+  $dir=$parent.'/revenue-metrics';
+  if (!is_dir($parent) || is_link($parent)) throw new RuntimeException('Private metrics parent unavailable.');
+  if (!is_dir($dir) && !@mkdir($dir,0700)) throw new RuntimeException('Private metrics storage unavailable.');
+  if (!is_dir($dir) || is_link($dir)) throw new RuntimeException('Unsafe metrics storage.');
+  $file=$dir.'/'.gmdate('Y-m').'.json';
+  if (is_link($file)) throw new RuntimeException('Unsafe metrics file.');
+  $handle=@fopen($file,'c+');
+  if (!$handle) throw new RuntimeException('Cannot open metric counter.');
+  @chmod($file,0600);
+  try {
+    if (!flock($handle,LOCK_EX)) throw new RuntimeException('Metric lock unavailable.');
+    $previous=stream_get_contents($handle);
+    if ($previous===false) throw new RuntimeException('Cannot read metric counter.');
+    $counts=$previous!==''?json_decode($previous,true,512,JSON_THROW_ON_ERROR):[];
+    if (!is_array($counts)) throw new RuntimeException('Unexpected metric counter.');
+    $key=$slug.':inquiry_submitted';
+    $counts[$key]=min(2147483647,max(0,(int)($counts[$key]??0))+1);
+    $encoded=json_encode($counts,JSON_THROW_ON_ERROR);
+    rewind($handle);
+    if (!ftruncate($handle,0) || fwrite($handle,$encoded)!==strlen($encoded) || !fflush($handle)) {
+      throw new RuntimeException('Metric counter write failed.');
+    }
+    flock($handle,LOCK_UN);
+  } finally {fclose($handle);}
+}
 if (!extension_loaded('mbstring') || !extension_loaded('openssl')) {
   http_response_code(503);echo '<h1>Inquiry temporarily unavailable</h1><p>Please email support@mojplaywin.com.</p>';exit;
 }
@@ -90,7 +119,7 @@ $_SESSION['mpw_inquiry_token']=$token;
 $errors=[];$sent=false;$reference='';
 $data=['name'=>'','email'=>'','company'=>'','website'=>'','details'=>'','timeline'=>''];
 if ($_SERVER['REQUEST_METHOD']==='POST') {
-  if (strlen((string)($_SERVER['CONTENT_LENGTH']??''))>6 && (int)($_SERVER['CONTENT_LENGTH']??0)>12000) $errors[]='Request is too large.';
+  if ((int)($_SERVER['CONTENT_LENGTH']??0)>12000) $errors[]='Request is too large.';
   if (!hash_equals($token,(string)($_POST['csrf']??''))) $errors[]='The form expired. Refresh and try again.';
   if (!empty($_POST['fax_number'])) $errors[]='Submission rejected.';
   foreach ($data as $field=>$unused) $data[$field]=clean($_POST[$field]??'', $field==='details'?2000:($field==='email'?254:($field==='website'?300:120)));
@@ -104,6 +133,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
     try {
       $record=['created_at'=>gmdate('c'),'service'=>$slug,'name'=>$data['name'],'email'=>$data['email'],'company'=>$data['company'],'website'=>$data['website'],'details'=>$data['details'],'timeline'=>$data['timeline'],'consent'=>true,'source'=>'first_party_mpw_revenue'];
       $reference=store_inquiry($record);
+      try {record_inquiry_metric($slug);} catch (Throwable $ignored) {error_log('MPW_INQUIRY_COUNTER_UNAVAILABLE');}
       $_SESSION['last_mpw_inquiry']=time();
       $_SESSION['mpw_inquiry_token']=bin2hex(random_bytes(24));
       $token=$_SESSION['mpw_inquiry_token'];
@@ -128,7 +158,6 @@ $fallback='mailto:support@mojplaywin.com?subject='.$subject;
 </style></head><body><header><a class="brand" href="/">MojPlayWin</a><nav aria-label="Service navigation"><a href="/mpw-editorial/revenue/index.html">All offers</a><a href="/privacy/">Privacy</a></nav></header><main id="main"><div class="inquiry-wrap"><p class="eyebrow">Commercial inquiry · No payment</p><h1><?=h($title)?></h1><p>Describe the result you need. This first-party form records your inquiry securely and provides a reference even if email delivery is delayed. No payment, binding order or contract is created.</p>
 <?php if($sent): ?>
 <section class="inquiry-status" role="status"><h2>Inquiry received</h2><p>Private record reference: <strong><?=h($reference)?></strong></p><p>Keep this reference for follow-up. A response time or availability is not guaranteed.</p></section>
-<img width="1" height="1" alt="" src="/mpw-editorial/revenue/metrics.php?slug=<?=h($slug)?>&amp;event=inquiry_submitted">
 <?php else: ?>
 <?php if($errors): ?><div class="inquiry-error" role="alert"><h2>Please correct the request</h2><ul><?php foreach($errors as $msg): ?><li><?=h($msg)?></li><?php endforeach;?></ul></div><?php endif;?>
 <form class="inquiry-form" method="post" action="/mpw-editorial/revenue/inquiry.php" accept-charset="UTF-8">

@@ -1,0 +1,126 @@
+name: MPW guarded server-side commercial inquiry metrics repair
+
+on:
+  push:
+    branches: [fix/mpw-inquiry-server-side-metrics-20261106]
+    paths:
+      - scripts/mpw_inquiry_metric_guarded_release_20261106.py
+      - mpw_revenue_20261020/earn/inquiry.php
+      - mpw_revenue_20261020/earn/metrics.php
+      - .github/workflows/mpw-inquiry-server-metrics-20261106.yml
+
+permissions: {contents: read}
+concurrency:
+  group: mpw-inquiry-server-metrics-one-off
+  cancel-in-progress: false
+
+jobs:
+  guarded-release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mpw-inquiry-server-side-metrics-20261106'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Review exact PHP checksums and guard behavior
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_inquiry_metric_guarded_release_20261106.py
+          python3 scripts/mpw_inquiry_metric_guarded_release_20261106.py selftest
+          python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('guard','scripts/mpw_inquiry_metric_guarded_release_20261106.py')
+          guard=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(guard)
+          guard.validate_candidate({p:Path('mpw_revenue_20261020/earn/'+p).read_bytes() for p in guard.FILES})
+          print('REVIEWED_SERVER_SIDE_COUNTER_PHP=PASS')
+          PY
+      - name: Configure pinned VPS and cPanel SSH relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-inquiry-counter-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 30s ssh -i "$d/vps.key" -p 22 -o UserKnownHostsFile="$d/vps.known" -o StrictHostKeyChecking=yes -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Lint and atomically publish two reviewed PHP sources
+        id: published
+        run: |
+          set -euo pipefail
+          files="$(python3 - <<'PY'
+          import base64,json
+          from pathlib import Path
+          names=('inquiry.php','metrics.php')
+          print(json.dumps({p:base64.b64encode(Path('mpw_revenue_20261020/earn/'+p).read_bytes()).decode() for p in names}))
+          PY
+          )"
+          script="$(base64 -w0 scripts/mpw_inquiry_metric_guarded_release_20261106.py)"
+          cfg="$RUNNER_TEMP/mpw-inquiry-counter-ssh/config"
+          printf '%s' "$files" | timeout 75s ssh -T -F "$cfg" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$script\"))' preflight"
+          printf '%s' "$files" | timeout 75s ssh -T -F "$cfg" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$script\"))' publish '$GITHUB_RUN_ID'"
+      - name: Verify unchanged live guest inquiry and store GET
+        run: |
+          python3 - <<'PY'
+          import urllib.request
+          root='https://mojplaywin.com'
+          for path in ('/mpw-editorial/revenue/inquiry.php?service=general',
+                       '/mpw-editorial/revenue/inquiry.php?service=website-doctor'):
+              with urllib.request.urlopen(root+path,timeout=26) as response:
+                  page=response.read(30000).decode('utf8','replace')
+                  assert response.status==200
+                  assert 'name="csrf"' in page and 'name="consent"' in page
+                  assert 'method="post"' in page.lower()
+          with urllib.request.urlopen(root+'/mpw-editorial/revenue/metrics.php',timeout=26) as response:
+              assert response.status==200 and response.headers.get('Content-Type','').startswith('image/gif')
+          with urllib.request.urlopen(root+'/store/',timeout=26) as response:
+              assert response.status==200 and b'mpw-products' in response.read(100000)
+          print('MPW_INQUIRY_SERVER_METRICS_PUBLIC_GET_ONLY=PASS')
+          PY
+      - name: Restore both sources if public verification fails
+        if: failure() && steps.published.outcome == 'success'
+        run: |
+          script="$(base64 -w0 scripts/mpw_inquiry_metric_guarded_release_20261106.py)"
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-inquiry-counter-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$script\"))' rollback '$GITHUB_RUN_ID'"
+      - name: Remove ephemeral SSH credentials
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-inquiry-counter-ssh"
+          if test -d "$d"; then
+            rm -f -- "$d/vps.key" "$d/host.key" "$d/vps.known" "$d/host.known" "$d/config"
+            rmdir -- "$d"
+          fi
