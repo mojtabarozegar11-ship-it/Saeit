@@ -11,10 +11,10 @@ import subprocess
 from pathlib import Path
 
 from django.db import transaction
-from django.utils import timezone
 
 from command_center.models import MpwRecord, TENANT
 from .models import ApprovalRequest, AuditLog
+from .chat_operation_security import is_authorized_chat_operator
 from .newsletter_models import NewsletterSubmission
 
 
@@ -49,15 +49,7 @@ def _run_readonly(action: str) -> dict:
     return {"returncode": result.returncode, "stdout": output, "stderr": error}
 
 
-@transaction.atomic
-def execute_approved_chat_operation(approval: ApprovalRequest) -> dict:
-    if approval.status != "approved":
-        raise ValueError("approval_not_approved")
-    if approval.target_type != "ChatOperation":
-        raise ValueError("not_chat_operation")
-    if _audit_exists(approval.pk):
-        return {"status": "already_executed", "approval_id": approval.pk}
-
+def _perform_chat_action(approval: ApprovalRequest) -> tuple[str, dict, dict]:
     data = json.loads(approval.reason)
     action = data["action"]
     params = data.get("parameters") or {}
@@ -132,14 +124,79 @@ def execute_approved_chat_operation(approval: ApprovalRequest) -> dict:
                   "stderr": (result_proc.stderr or "")[-4000:]}
     else:
         raise ValueError("unsupported_chat_operation")
+    if isinstance(result, dict) and result.get("returncode", 0) != 0:
+        raise RuntimeError("chat_operation_command_failed")
+    return action, data, result
 
-    AuditLog.objects.create(
-        actor_type="owner_approved_chat",
-        actor_id=str(approval.requested_by_id),
-        action="chat_operation_executed",
-        target_type="ApprovalRequest",
-        target_id=str(approval.pk),
-        after_state={"operation_id": data["operation_id"], "action": action, "result": result},
-        trace_id="chat-operation-" + data["operation_id"],
-    )
-    return {"status": "executed", "approval_id": approval.pk, "action": action, "result": result}
+
+def execute_approved_chat_operation(approval: ApprovalRequest) -> dict:
+    """Claim exactly one execution attempt before any external side effect.
+
+    A crash or timeout after claiming remains closed to automatic retries;
+    staff must reconcile the outcome explicitly before any new request.
+    """
+    with transaction.atomic():
+        locked = (
+            ApprovalRequest.objects.select_for_update()
+            .select_related("requested_by")
+            .get(pk=approval.pk)
+        )
+        if locked.target_type != "ChatOperation":
+            raise ValueError("not_chat_operation")
+        if not is_authorized_chat_operator(locked.requested_by):
+            raise PermissionError("chat_operation_requires_active_superuser")
+        if locked.status in {"executing", "executed", "execution_failed"}:
+            return {
+                "status": (
+                    "already_executed" if locked.status == "executed"
+                    else "execution_in_progress" if locked.status == "executing"
+                    else "manual_reconciliation_required"
+                ),
+                "approval_id": locked.pk,
+            }
+        if locked.status != "approved":
+            raise ValueError("approval_not_approved")
+        if _audit_exists(locked.pk):
+            locked.status = "executed"
+            locked.save(update_fields=["status", "updated_at"])
+            return {"status": "already_executed", "approval_id": locked.pk}
+        locked.status = "executing"
+        locked.save(update_fields=["status", "updated_at"])
+
+    try:
+        action, data, result = _perform_chat_action(locked)
+    except Exception as exc:
+        # The side effect may have completed before an exception was raised.
+        # Never retry this approval automatically, even when its outcome is unknown.
+        with transaction.atomic():
+            ApprovalRequest.objects.filter(pk=locked.pk, status="executing").update(
+                status="execution_failed",
+                decision_note="manual_reconciliation_required:" + type(exc).__name__,
+            )
+            AuditLog.objects.create(
+                actor_type="owner_approved_chat",
+                actor_id=str(locked.requested_by_id),
+                action="chat_operation_execution_failed",
+                target_type="ApprovalRequest",
+                target_id=str(locked.pk),
+                after_state={"error_type": type(exc).__name__, "requires_reconciliation": True},
+                trace_id="chat-operation-failed-" + str(locked.pk),
+            )
+        raise
+
+    with transaction.atomic():
+        updated = ApprovalRequest.objects.filter(pk=locked.pk, status="executing").update(
+            status="executed", decision_note="execution_completed"
+        )
+        if updated != 1:
+            raise RuntimeError("chat_operation_claim_lost")
+        AuditLog.objects.create(
+            actor_type="owner_approved_chat",
+            actor_id=str(locked.requested_by_id),
+            action="chat_operation_executed",
+            target_type="ApprovalRequest",
+            target_id=str(locked.pk),
+            after_state={"operation_id": data["operation_id"], "action": action, "result": result},
+            trace_id="chat-operation-" + data["operation_id"],
+        )
+    return {"status": "executed", "approval_id": locked.pk, "action": action, "result": result}

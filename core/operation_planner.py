@@ -43,7 +43,10 @@ def plan_chat_operation(text: str) -> ChatOperation | None:
     if any(word in low for word in ("فهرست passenger", "passenger inventory", "مسیرهای passenger")):
         return ChatOperation(operation_id, "cpanel.passenger_inventory", "cPanel", {}, "medium")
 
-    if any(word in low for word in ("انتشار نسخه", "deploy release", "انتشار سایت", "deploy سایت")):
+    # Deployment is critical. Never interpret a question or a quoted mention
+    # of "انتشار سایت" as authority to deploy production.
+    deploy_command = r"(?:انتشار نسخه|deploy release|انتشار سایت|deploy سایت)\s+(?:را\s+)?(?:انجام بده|اجرا کن|اکنون|الان|now)"
+    if re.fullmatch(deploy_command, low.strip(" \t\r\n.!؟،")):
         return ChatOperation(operation_id, "cpanel.deploy_release", "cPanel", {}, "critical")
 
     if any(word in low for word in ("صفحه جدید", "صفحه تازه", "صفحه اضافه", "create page", "add page")):

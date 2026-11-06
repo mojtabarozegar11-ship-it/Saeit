@@ -4,6 +4,7 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
 from .approval import ApprovalService
+from .chat_operation_security import is_authorized_chat_operator
 from .task_runtime import TaskExecutionError, TaskRuntime
 
 
@@ -553,6 +554,11 @@ class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"], url_path="decide")
     def decide(self, request, pk=None):
         approval = self.get_object()
+        if approval.target_type == "ChatOperation" and not is_authorized_chat_operator(request.user):
+            return Response(
+                {"detail": "Only an active superuser can approve chat operations."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if approval.requested_by_id != request.user.pk:
             return Response(
                 {"detail": "Only the designated owner can decide this approval."},
