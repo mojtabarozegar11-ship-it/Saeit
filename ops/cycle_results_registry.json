@@ -23,7 +23,7 @@
   "cycles": {
     "01": {
       "automation_id": "6adcb348d5388191b11dfcde9edb8ee3",
-      "sequence": 0,
+      "sequence": 1,
       "legacy_report_last_verified": null,
       "primary_output": "validated manuscript"
     },
@@ -138,6 +138,16 @@
       "acceptance_result": "C01 coordination baseline recorded; no product or revenue acceptance",
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
       "impact": "Replaced obsolete 20-day milestones with C01-C50 owner and gate registry; no revenue"
+    },
+    {
+      "registry_id": "R01-0001",
+      "cycle_id": "01",
+      "run_id": "r01-20261106-211610-commit-d1e53bbd",
+      "deliverable_key": "irrigation-pytest-collection-import",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/d1e53bbd818d75b4bc23ef2f54634614c0333383",
+      "acceptance_result": "Exact CI logs 42242506241 and 42242506224 identify missing module during pytest collection; repository-qualified import patched; post-fix CI not yet confirmed",
+      "impact": "Source-level collection blocker addressed, manuscript acceptance and revenue unverified"
     }
   ],
   "report_reservations": [],
