@@ -1,0 +1,156 @@
+name: Guarded live Zomorod farm economics calculator
+on:
+  push:
+    branches: [audit/live-sites-subsites-20261105]
+    paths:
+      - scripts/zomorod_farm_margin_calculator_guarded_20261106.py
+      - .github/workflows/zomorod-farm-margin-calculator-guarded-20261106.yml
+permissions:
+  contents: read
+concurrency:
+  group: zm-farm-margin-live-20261106
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check mathematical behavior, invalid inputs and source safety
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_farm_margin_calculator_guarded_20261106.py
+          python3 scripts/zomorod_farm_margin_calculator_guarded_20261106.py selftest
+      - name: Authenticate pinned cPanel identity using direct or VPS fallback
+        id: link
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zm-farm-margin-ssh"
+          install -d -m 700 "$d"
+          export SSH_DIR="$d"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          source=Path('.github/workflows/mpw-guest-checkout-live-release.yml').read_text()
+          dest=Path(os.environ['SSH_DIR'])
+          for label,filename in [('vps.known','vps.known'),('host.candidate','host.known')]:
+              suffix=f'> "$d/{label}"'
+              matches=[line.strip() for line in source.splitlines() if line.strip().startswith("printf '%s\\n' '") and line.strip().endswith(suffix)]
+              if len(matches)!=1:raise SystemExit('PINNED_HOST_KEY_MISSING:'+label)
+              (dest/filename).write_text(matches[0].split("printf '%s\\n' '",1)[1].rsplit("' >",1)[0]+'\n')
+          for key,filename in [('VPS_KEY','vps.key'),('HOST_KEY','host.key')]:
+              value=os.environ.get(key,'')
+              if not value:raise SystemExit('SSH_IDENTITY_MISSING:'+key)
+              file=dest/filename
+              file.write_text(value.replace('\r\n','\n').replace('\r','').replace('\\n','\n').rstrip()+'\n')
+              file.chmod(0o600)
+          PY
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}')" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 20
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          host=''
+          if timeout 40s ssh -T -F "$d/config" saeit-cpanel-direct 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/.htaccess' >/dev/null 2>&1; then
+            host=saeit-cpanel-direct
+          elif timeout 45s ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/public_html/.htaccess' >/dev/null 2>&1; then
+            host=saeit-cpanel
+          else
+            exit 1
+          fi
+          echo "command_host=$host" >> "$GITHUB_OUTPUT"
+          echo 'FARM_MARGIN_AUTHENTICATED=1'
+      - name: Validate byte-exact predecessor and inspect one planned HTML insertion
+        env:
+          HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 70s ssh -T -F "$RUNNER_TEMP/zm-farm-margin-ssh/config" "$HOST" 'python3 - preview' < scripts/zomorod_farm_margin_calculator_guarded_20261106.py
+      - name: Back up exact services HTML and publish browser-only calculator
+        id: publish
+        env:
+          HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$GITHUB_RUN_ID" in ''|*[!0-9]*) exit 1 ;; esac
+          timeout 75s ssh -T -F "$RUNNER_TEMP/zm-farm-margin-ssh/config" "$HOST" "python3 - publish '$GITHUB_RUN_ID'" < scripts/zomorod_farm_margin_calculator_guarded_20261106.py
+      - name: Verify exact origin and live functional component with read-only GET
+        env:
+          HOST: ${{ steps.link.outputs.command_host }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          timeout 75s ssh -T -F "$RUNNER_TEMP/zm-farm-margin-ssh/config" "$HOST" "python3 - verify '$GITHUB_RUN_ID'" < scripts/zomorod_farm_margin_calculator_guarded_20261106.py
+          python3 - <<'PY'
+          import os,time
+          from urllib.request import Request,urlopen
+          root='https://zomorodmelal.ir/services/'
+          run_id=os.environ['RUN_ID']
+          for attempt in range(6):
+              try:
+                  req=Request(root+'?zm_farm_margin='+run_id+'-'+str(attempt),headers={'Cache-Control':'no-cache','User-Agent':'Zomorod-FarmMargin-Origin-Check/1.0'})
+                  with urlopen(req,timeout=27) as response:
+                      html=response.read(120000).decode('utf-8','replace')
+                      if response.status!=200:raise RuntimeError('PUBLIC_SERVICES_HTTP_NOT_200')
+                  for marker in ['id="zm-farm-margin-calculator-20261106"',
+                      'id="zm-margin-form"','id="zm-margin-output"','id="zm-margin-run"',
+                      'name="variable"','name="fixed"','name="yield"',
+                      'addEventListener(\'click\'','href="/ask-master/index.php?service=1"',
+                      'zm-service-deliverables-20261106']:
+                      if marker not in html:raise RuntimeError('FARM_MARGIN_MISSING_LIVE_MARKER:'+marker)
+                  if '<form id="zm-margin-form"' in html or 'fetch(' in html:
+                      raise RuntimeError('FARM_MARGIN_UNEXPECTED_NETWORK_FORM')
+                  print('PUBLIC_FARM_MARGIN_CALCULATOR_VERIFIED=1')
+                  break
+              except Exception:
+                  if attempt==5:raise
+                  time.sleep(4)
+          PY
+      - name: Restore exact prior HTML if public verification fails
+        if: failure() && steps.publish.outcome == 'success'
+        env:
+          HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 75s ssh -T -F "$RUNNER_TEMP/zm-farm-margin-ssh/config" "$HOST" "python3 - rollback '$GITHUB_RUN_ID'" < scripts/zomorod_farm_margin_calculator_guarded_20261106.py
