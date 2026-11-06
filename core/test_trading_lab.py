@@ -207,3 +207,24 @@ def test_restore_reconciles_daily_pnl_to_close_timestamps():
     with pytest.raises(ValueError, match="state_daily_pnl_reconciliation_invalid"):
         restored.restore_state(tampered)
     assert restored.export_state() == before
+
+def test_execution_metrics_separate_demo_outcomes_from_revenue():
+    lab = make_lab()
+    agent = lab.agents[0]
+    opened = lab.submit_demo_trade(agent, "TEST", "BUY")
+    rejected = lab.submit_demo_trade(agent, "TEST", "BUY")
+    lab.close_demo_trade(
+        agent,
+        opened.order_id,
+        12.5,
+        datetime(2026, 11, 6, 14, tzinfo=timezone.utc),
+    )
+    metrics = lab.execution_metrics()
+    assert metrics["orders_submitted"] == 1
+    assert metrics["orders_rejected"] == 1
+    assert metrics["trades_closed"] == 1
+    assert metrics["open_positions"] == 0
+    assert metrics["trading_pnl"] == 12.5
+    assert metrics["customer_revenue_verified"] is False
+    assert metrics["revenue_evidence"] == "NOT_APPLICABLE_TO_DEMO_TRADING"
+    assert rejected.action == "DEMO_REJECTED"
