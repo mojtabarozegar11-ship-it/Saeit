@@ -246,5 +246,57 @@ class FactoryBackupAuditTests(unittest.TestCase):
             audit_module.inventory_factory_operations(linked)
 
 
+    def test_finished_products_inventory_preserves_saleable_archives(self):
+        finished = Path(self.tmp.name) / "finished"
+        package_dir = finished / "volume-one" / "release"
+        package_dir.mkdir(parents=True)
+        package = package_dir / "product.zip"
+        package.write_bytes(b"PK\x03\x04" + b"original-product" * 50)
+        manifest = package_dir / "manifest.json"
+        manifest.write_bytes(b'{"product":"protected"}')
+        before = [(p.read_bytes(), p.stat().st_mtime_ns)
+                  for p in (package, manifest)]
+        report = audit_module.inventory_factory_finished(finished)
+        after = [(p.read_bytes(), p.stat().st_mtime_ns)
+                 for p in (package, manifest)]
+        self.assertEqual(before, after)
+        self.assertTrue(report["protected_saleable_inventory"])
+        self.assertFalse(report["deletion_allowed"])
+        self.assertTrue(report["read_only"])
+        self.assertEqual(report["files_changed_or_deleted"], 0)
+        self.assertEqual(report["product_zip_count"], 1)
+        self.assertEqual(report["product_zip_headers_ok"], 1)
+        self.assertFalse(report["full_zip_integrity_verified"])
+        self.assertEqual(report["product_zip_bytes"], package.stat().st_size)
+        self.assertNotIn("volume-one", json.dumps(report))
+
+    def test_finished_inventory_skips_symlink_and_blocks_symlink_root(self):
+        finished = Path(self.tmp.name) / "finished"
+        finished.mkdir()
+        source = finished / "product.zip"
+        source.write_bytes(b"PK\x03\x04valid")
+        (finished / "symlink-product.zip").symlink_to(source)
+        report = audit_module.inventory_factory_finished(finished)
+        self.assertEqual(report["files_scanned"], 1)
+        self.assertEqual(report["symlinks_skipped"], 1)
+        link = Path(self.tmp.name) / "finished-link"
+        link.symlink_to(finished, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "UNSAFE"):
+            audit_module.inventory_factory_finished(link)
+
+    def test_finished_inventory_deadline_is_bounded(self):
+        finished = Path(self.tmp.name) / "finished"
+        finished.mkdir()
+        for n in range(5):
+            (finished / f"{n}.dat").write_bytes(b"x")
+        ticks = iter([0, 0, 0, 21])
+        with mock.patch.object(audit_module.time, "monotonic",
+                               side_effect=lambda: next(ticks, 21)):
+            result = audit_module.inventory_factory_finished(finished)
+        self.assertTrue(result["scan_truncated"])
+        self.assertLess(result["files_scanned"], 5)
+        self.assertFalse(result["deletion_allowed"])
+
+
 if __name__ == "__main__":
     unittest.main()
