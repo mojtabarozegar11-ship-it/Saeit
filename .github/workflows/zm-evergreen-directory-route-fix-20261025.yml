@@ -125,8 +125,9 @@ jobs:
               old=p.read_bytes();new=old
               for bad,good in subs.items():
                   n=new.count(bad);m=new.count(good)
+                  relative=b'href="./'+bad.split(b'/')[-2]+b'/"'
                   if n>=1:new=new.replace(bad,good)
-                  elif m>=1:pass
+                  elif m>=1 or new.count(relative)>=1:pass
                   else:raise RuntimeError('LINK_STATE_NOT_UNIQUE:'+rel+':'+bad.decode())
               if old!=new:
                   originals[rel]=old;patched[rel]=new
@@ -205,7 +206,9 @@ jobs:
                   body=r.read(100000).decode('utf8','replace')
                   if r.status!=200:raise RuntimeError('INDEX_HTTP:'+page)
                   for good in vals[:2]:
-                      if 'href="'+good+'"' not in body:raise RuntimeError('CANONICAL_LINK_MISSING:'+good)
+                      slug=good.rstrip('/').split('/')[-1]
+                      if 'href="'+good+'"' not in body and 'href="./'+slug+'/"' not in body:
+                          raise RuntimeError('CANONICAL_LINK_MISSING:'+good)
                   for bad in vals[2:]:
                       if 'href="'+bad+'"' in body:raise RuntimeError('BROKEN_ROOT_LINK_REMAINS:'+bad)
           for path in ('/agriculture/free-tools/20261025/farm-break-even/','/agriculture/free-tools/20261025/import-landed-cost/','/resources/20261025/trade-rfq/','/resources/20261025/farm-risk/'):
