@@ -175,6 +175,20 @@ def collect():
         if isinstance(node, ast.Return) and isinstance(node.value, ast.Call)
         and isinstance(node.value.func, ast.Name)
     }) if catalog_helper else []
+    public_helper_conditional_returns = []
+    if catalog_helper:
+        for node in ast.walk(catalog_helper):
+            if not isinstance(node, ast.Return) or not isinstance(node.value, ast.IfExp):
+                continue
+            expr = node.value
+            public_helper_conditional_returns.append({
+                "line": node.lineno,
+                "test_calls_sellable": "sellable_trx_product" in _called_names(expr.test),
+                "true_returns_product": isinstance(expr.body, ast.Name)
+                                        and expr.body.id == "product",
+                "false_returns_none": isinstance(expr.orelse, ast.Constant)
+                                      and expr.orelse.value is None,
+            })
     catalog_names = sorted({
         node.id for node in ast.walk(catalog_helper)
         if isinstance(node, ast.Name)
@@ -194,6 +208,13 @@ def collect():
     })[:40] if public_helper else []
     names = sorted({node.id for node in ast.walk(checkout)
                     if isinstance(node, ast.Name)})[:50] if checkout else []
+    checkout_product_assigns_from_helper = bool(checkout) and any(
+        isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "product" for t in node.targets)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id == "public_trx_product"
+        for node in ast.walk(checkout))
     checks = []
     if checkout:
         for node in ast.walk(checkout):
@@ -245,6 +266,8 @@ def collect():
         "sellable_expected_guard_shape": _if_shapes(sellable_local, ("_eligible", "rights_cleared_for_sale")),
         "catalog_public_product_gate_shape": _if_shapes(catalog_helper, ("sellable_trx_product",)),
         "public_product_return_calls": public_helper_return_calls[:16],
+        "public_product_conditional_returns": public_helper_conditional_returns[:8],
+        "checkout_product_assigns_from_helper": checkout_product_assigns_from_helper,
         "context_sha256": commercial_digests["context"],
         "web_sha256": commercial_digests["web"],
         "rights_helper_local": context_fn is not None,
