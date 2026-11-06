@@ -112,14 +112,15 @@ import os
 import sys
 from pathlib import Path
 
-destination, stamp, source_sha, payload_sha, operations, private = map(Path, sys.argv[1:])
+destination = Path(sys.argv[1])
+stamp, source_sha, payload_sha, operations, private = sys.argv[2:]
 receipt = {
     "schema": "mojtrade.vps-observer-activation-receipt.v1",
-    "installed_at": stamp.name,
-    "source_sha256": source_sha.name,
-    "payload_sha256": payload_sha.name,
-    "operations_dir": operations.name,
-    "private_dir": private.name,
+    "installed_at": stamp,
+    "source_sha256": source_sha,
+    "payload_sha256": payload_sha,
+    "operations_dir": operations,
+    "private_dir": private,
     "runtime": "githubops",
     "execution": "disabled",
     "orders": 0,
