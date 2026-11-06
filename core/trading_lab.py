@@ -16,7 +16,7 @@ AGENT_COUNT = 50
 ACCOUNT_NAMES = ("DEMO_A", "DEMO_B")
 STRATEGIES = ("trend", "mean_reversion", "breakout", "momentum", "volatility")
 ALLOWED_SIDES = frozenset({"BUY", "SELL"})
-STATE_SCHEMA = "saeit.trading_lab.state.v2"
+STATE_SCHEMA = "saeit.trading_lab.state.v3"
 TRADING_MODE = "DEMO"
 LIVE_TRADING_ENABLED = False
 KILL_SWITCH = True
@@ -65,6 +65,7 @@ class Experience:
     proposed_solution: str = ""
     order_id: str = ""
     pnl: float = 0.0
+    closed_at: str = ""
 
 
 @dataclass
@@ -209,11 +210,16 @@ class TradingLab:
         if order_id not in agent.open_order_ids:
             raise ValueError("demo_order_not_open")
         # Validate and account for P&L before mutating the open-position set.
-        agent.record_closed_pnl(pnl, closed_at)
+        moment = closed_at or datetime.now(timezone.utc)
+        if moment.tzinfo is None:
+            raise ValueError("closed_at_must_be_timezone_aware")
+        moment = moment.astimezone(timezone.utc)
+        agent.record_closed_pnl(pnl, moment)
         agent.open_order_ids.remove(order_id)
         exp = Experience(
             self._now(), agent.agent_id, agent.account, "", agent.strategy,
             "DEMO_CLOSE", "closed demo trade", order_id=order_id, pnl=pnl,
+            closed_at=moment.isoformat(),
         )
         agent.experiences.append(exp)
         return exp
@@ -333,6 +339,23 @@ class TradingLab:
                 experiences.append(experience)
             submitted_items = [item for item in experiences if item.action == "DEMO_ORDER"]
             closed_items = [item for item in experiences if item.action == "DEMO_CLOSE"]
+            closed_daily = {}
+            for item in closed_items:
+                if not isinstance(item.closed_at, str) or not item.closed_at:
+                    raise ValueError("state_close_timestamp_missing")
+                try:
+                    closed_moment = datetime.fromisoformat(item.closed_at)
+                except ValueError as exc:
+                    raise ValueError("state_close_timestamp_invalid") from exc
+                if closed_moment.tzinfo is None:
+                    raise ValueError("state_close_timestamp_invalid")
+                day = closed_moment.astimezone(timezone.utc).date().isoformat()
+                closed_daily[day] = closed_daily.get(day, 0.0) + item.pnl
+            if set(daily) != set(closed_daily) or any(
+                not math.isclose(float(daily[day]), float(value), rel_tol=1e-9, abs_tol=1e-9)
+                for day, value in closed_daily.items()
+            ):
+                raise ValueError("state_daily_pnl_reconciliation_invalid")
             submitted_ids = [item.order_id for item in submitted_items]
             closed_ids = [item.order_id for item in closed_items]
             if (any(not isinstance(order_id, str) or not order_id.strip()
