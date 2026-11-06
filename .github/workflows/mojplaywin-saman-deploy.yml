@@ -201,7 +201,7 @@ jobs:
                   routes[f"/ar/{slug}/{kind}/"] = "financial_brand_page"
           for path, expected in routes.items():
               match = resolve(path)
-              print("SAMAN_RUNTIME_ROUTE=" + path + " -> " + match.func.__name__)
+              print("SAMAN_RUNTIME_ROUTE=" + path + " -> " + (match.func.func if hasattr(match.func, "func") else match.func).__name__)
               resolved_view = match.func.func if hasattr(match.func, "func") else match.func
               assert resolved_view.__name__ == expected, path
           import inspect
