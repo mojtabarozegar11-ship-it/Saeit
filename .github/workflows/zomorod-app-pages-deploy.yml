@@ -36,7 +36,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: zomorod-django-pages
+  group: zomorod-site-deploy
   cancel-in-progress: false
 jobs:
   publish:
