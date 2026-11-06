@@ -5,7 +5,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 from command_center.views import dashboard as staff_dashboard
 
-from core.views import home, platform_page, taniya_studio
+from core.views import home, platform_page
 from core.mojplaywin_views import venture
 from core.commerce_views import store_home, auctions_home
 from core.crown_checkout import crown_cosmetic_checkout
