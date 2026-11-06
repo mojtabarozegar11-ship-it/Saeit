@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Install two already-existing Django agent commands on the verified cPanel app.
+"""Install two existing commands or apply one pinned, reversible status repair.
 
 No database changes, task execution, paid API calls or publication. Never
-overwrite an existing, divergent command; rollback only files created here.
+overwrite an unrecognized command; rollback only files modified here.
 """
 
 import argparse
+import hashlib
 import importlib.util
 import os
 from pathlib import Path
@@ -18,6 +19,9 @@ COMMANDS = (
     "company_activity_agent_cycle",
     "knowledge_agent_cycle",
 )
+# The exact original knowledge_agent_cycle.py installed by run 42131439177.
+# No other existing file is eligible for a replacement.
+LEGACY_KNOWLEDGE_STATUS_SHA256 = "f842b109874a5a3b606003b62a6a5e459f39fb93b50352ed70e7c5dfe6b3b9d6"
 REQUIRED_MODELS = (
     ("core.company_activity_models", "CompanyActivityAgentPlan"),
     ("core.company_activity_models", "CompanyActivityReport"),
@@ -96,6 +100,7 @@ def install(app, stage, python, run_id):
         raise RuntimeError("AGENT_COMMAND_TARGET_DIRECTORY_UNSAFE")
 
     to_install = []
+    to_upgrade = []
     for command in COMMANDS:
         name = command + ".py"
         source = stage / "core" / "management" / "commands" / name
@@ -103,11 +108,15 @@ def install(app, stage, python, run_id):
         if target.exists() or target.is_symlink():
             require_regular(target)
             if source.read_bytes() != target.read_bytes():
-                raise RuntimeError("AGENT_COMMAND_EXISTING_DIFFERENT:" + name)
+                if (command != "knowledge_agent_cycle" or
+                        hashlib.sha256(target.read_bytes()).hexdigest() != LEGACY_KNOWLEDGE_STATUS_SHA256):
+                    raise RuntimeError("AGENT_COMMAND_EXISTING_DIFFERENT:" + name)
+                to_upgrade.append((source, target))
             continue
         to_install.append((source, target))
 
     inserted = {}
+    upgraded = {}
     try:
         for source, target in to_install:
             temp = target.with_name("." + target.name + "." + run_id + ".incoming")
@@ -125,6 +134,27 @@ def install(app, stage, python, run_id):
                 if temp.exists() and not temp.is_symlink():
                     temp.unlink()
 
+        for source, target in to_upgrade:
+            temp = target.with_name("." + target.name + "." + run_id + ".incoming")
+            backup = target.with_name("." + target.name + "." + run_id + ".rollback")
+            if temp.exists() or temp.is_symlink() or backup.exists() or backup.is_symlink():
+                raise RuntimeError("AGENT_COMMAND_REPAIR_PATH_OCCUPIED")
+            # The hardlink preserves the exact old inode for atomic rollback.
+            os.link(target, backup, follow_symlinks=False)
+            upgraded[target] = backup
+            if hashlib.sha256(backup.read_bytes()).hexdigest() != LEGACY_KNOWLEDGE_STATUS_SHA256:
+                raise RuntimeError("AGENT_COMMAND_REPAIR_SOURCE_CHANGED")
+            fd = os.open(temp, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o644)
+            try:
+                with os.fdopen(fd, "wb") as output:
+                    output.write(source.read_bytes())
+                    output.flush()
+                    os.fsync(output.fileno())
+                os.replace(temp, target)
+            finally:
+                if temp.exists() and not temp.is_symlink():
+                    temp.unlink()
+
         proc = subprocess.run(
             [str(python), "manage.py", "help", "--commands"],
             check=True, capture_output=True, text=True, cwd=app,
@@ -133,11 +163,17 @@ def install(app, stage, python, run_id):
         if not set(COMMANDS).issubset(registered):
             raise RuntimeError("AGENT_COMMAND_NOT_REGISTERED_AFTER_INSTALL")
         subprocess.run([str(python), "manage.py", "check"], check=True, cwd=app)
+        for backup in upgraded.values():
+            backup.unlink()
         print("CPANEL_AGENT_COMMAND_INSTALL=verified")
         print("CPANEL_AGENT_COMMAND_NEW_FILES=" + str(len(inserted)))
+        print("CPANEL_AGENT_COMMAND_PINNED_STATUS_REPAIRS=" + str(len(upgraded)))
         print("CPANEL_AGENT_TASKS_EXECUTED=0")
         print("CPANEL_AGENT_EXTERNAL_MESSAGES_SENT=0")
     except Exception:
+        for target, backup in upgraded.items():
+            if backup.exists() and not backup.is_symlink():
+                os.replace(backup, target)
         for target, inode in inserted.items():
             if not target.is_symlink() and target.exists() and target.stat().st_ino == inode:
                 target.unlink()

@@ -1,5 +1,7 @@
 from datetime import timedelta
+from io import StringIO
 
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
@@ -38,3 +40,24 @@ class KnowledgeAgentSchedulerTests(TestCase):
         seed_library()
         book = KnowledgeBook.objects.get(code="food-agriculture")
         self.assertEqual(book.outline, DEFAULT_OUTLINE)
+
+    def test_command_reports_existing_queued_run_instead_of_false_completion(self):
+        output = StringIO()
+        call_command("knowledge_agent_cycle", stdout=output)
+        self.assertIn("KNOWLEDGE_AGENT: queued run=", output.getvalue())
+
+        output = StringIO()
+        call_command("knowledge_agent_cycle", stdout=output)
+        self.assertIn("KNOWLEDGE_AGENT: awaiting_execution queued=1 running=0", output.getvalue())
+        self.assertNotIn("library complete", output.getvalue())
+        self.assertEqual(KnowledgeAgentRun.objects.count(), 1)
+
+    def test_command_reports_inactive_plan_without_false_completion(self):
+        plan = KnowledgeAgentPlan.objects.create(
+            code="knowledge-content-director", title="Paused", mission="paused", goal="paused",
+            active=False,
+        )
+        output = StringIO()
+        call_command("knowledge_agent_cycle", stdout=output)
+        self.assertIn("KNOWLEDGE_AGENT: inactive", output.getvalue())
+        self.assertEqual(KnowledgeAgentRun.objects.filter(plan=plan).count(), 0)
