@@ -215,14 +215,21 @@ class RecoveryIsolationTests(unittest.TestCase):
             _meta=SimpleNamespace(fields=[fake_field, state_field]),
             objects=MagicMock(),
         )
-        fulfillment.objects.filter.return_value.count.return_value = 1
+        rows = fulfillment.objects.filter.return_value.values_list
+        rows.return_value = [(1, "ready")]
         fake_items = MagicMock()
         fake_items.objects.filter.return_value.count.return_value = 2
         with patch.object(module.apps, "get_model", return_value=fulfillment), \
              patch.object(module, "OrderItem", fake_items):
             self.assertFalse(module._ready(SimpleNamespace(pk=123)))
-            fulfillment.objects.filter.return_value.count.return_value = 2
+            rows.return_value = [(1, "ready"), (2, "READY")]
             self.assertTrue(module._ready(SimpleNamespace(pk=123)))
+            rows.return_value = [(1, "ready"), (1, "ready")]
+            self.assertFalse(module._ready(SimpleNamespace(pk=123)))
+            rows.return_value = [(1, "ready"), (2, "pending")]
+            self.assertFalse(module._ready(SimpleNamespace(pk=123)))
+            rows.return_value = [(1, "ready"), (2, "ready"), (2, "ready")]
+            self.assertFalse(module._ready(SimpleNamespace(pk=123)))
 
     def test_prune_removes_no_persistent_order_claims(self):
         module.bound_checkout(self._request(), self._start, self._identity,

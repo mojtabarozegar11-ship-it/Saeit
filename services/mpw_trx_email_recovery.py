@@ -154,9 +154,19 @@ def _ready(order):
     count = OrderItem.objects.filter(order_id=order.pk).count()
     if count < 1:
         return False
-    return Fulfillment.objects.filter(
-        item__order_id=order.pk, status__iexact="ready"
-    ).count() == count
+    # A raw row count can be fooled by duplicate fulfillment records for one
+    # item while another item is missing.  Require exactly one ready row for
+    # each distinct order item.  The relation filter prevents foreign items.
+    seen = set()
+    for item_id, status in Fulfillment.objects.filter(
+            item__order_id=order.pk).values_list("item_id", "status"):
+        if (type(item_id) is not int or item_id <= 0 or item_id in seen
+                or str(status).casefold() != "ready"):
+            return False
+        seen.add(item_id)
+        if len(seen) > count:
+            return False
+    return len(seen) == count
 
 
 def _eligible_orders(email_digest):
