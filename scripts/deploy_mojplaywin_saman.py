@@ -141,7 +141,8 @@ def deploy(run_id, commit_sha):
             raise RuntimeError(f"Missing or unsafe finance deployment file: {staged}")
     if "financial_brand_page" not in finance_source.read_text(encoding="utf-8") or "page_notice" not in finance_template.read_text(encoding="utf-8"):
         raise RuntimeError("Finance source or template failed content validation")
-\n    template_dir = APP_ROOT / "templates" / "saman"
+
+    template_dir = APP_ROOT / "templates" / "saman"
     if (APP_ROOT / "templates").is_symlink() or template_dir.is_symlink():
         raise RuntimeError("Refusing to write through a template symlink")
     template_directory_existed = template_dir.is_dir()
