@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from core.autonomous_brain import AutonomousBrain
-from core.models import Agent, AgentTask
+from core.models import Agent, AgentCapability, AgentTask
 
 
 def test_market_research_and_scoring_are_verified_before_offer_design():
@@ -49,6 +49,11 @@ class VerifiedEconomicCycleTests(TestCase):
             mission="Test-only economic cycle",
             active=True,
         )
+        for code in ("master_self_improvement", "income_market_research"):
+            capability = AgentCapability.objects.create(
+                code=code, name=code, risk_level="low", active=True,
+            )
+            capability.agents.add(self.agent)
 
     def add_task(self, capability, created_at, *, market_validation=False, inventory=False):
         output = {"verified_effect": True}
@@ -143,6 +148,73 @@ class VerifiedEconomicCycleTests(TestCase):
                 call_command("autonomous_master_loop", "--max-steps", "20", stdout=output)
             self.assertEqual(worker.return_value.run.call_count, 1)
         self.assertIn("AUTO_UNVERIFIED_STOP", output.getvalue())
+
+    def test_master_loop_skips_revoked_grant_and_advances_eligible_task(self):
+        revoked = AgentTask.objects.create(
+            agent=self.agent, action_type="income_offer_design",
+            capability_code="income_offer_design", status="queued",
+        )
+        eligible = AgentTask.objects.create(
+            agent=self.agent, action_type="income_market_research",
+            capability_code="income_market_research", status="queued",
+        )
+        output = StringIO()
+        completed = SimpleNamespace(
+            pk=eligible.pk, action_type="income_market_research", status="completed",
+            output_data={"verified_effect": False}, refresh_from_db=lambda: None,
+        )
+        gateway = SimpleNamespace(describe=lambda: {
+            "income_offer_design": {"enabled": True},
+            "income_market_research": {"enabled": True},
+        })
+        with patch("core.management.commands.autonomous_master_loop.WorkerRunner") as worker:
+            worker.return_value.run.return_value = completed
+            with patch("core.management.commands.autonomous_master_loop.build_economic_gateway", return_value=gateway):
+                call_command("autonomous_master_loop", "--max-steps", "2", stdout=output)
+            worker.return_value.run.assert_called_once_with(eligible.pk)
+        revoked.refresh_from_db()
+        self.assertEqual(revoked.status, "queued")
+        self.assertEqual(revoked.attempt_count, 0)
+
+    def test_online_cycle_marks_revoked_queued_task_as_blocked_not_live(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_offer_design",
+            capability_code="income_offer_design", status="queued",
+        )
+        output = StringIO()
+        call_command("online_income_cycle", stdout=output)
+        self.assertIn(f"BRAIN_BLOCKED_UNROUTABLE task={task.pk}", output.getvalue())
+        self.assertNotIn("BRAIN_CONTINUE", output.getvalue())
+
+    def test_online_cycle_reports_exhausted_queue_without_resetting_attempts(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_market_research",
+            capability_code="income_market_research", status="queued",
+            attempt_count=3, max_attempts=3,
+        )
+        output = StringIO()
+        call_command("online_income_cycle", stdout=output)
+        task.refresh_from_db()
+        self.assertEqual(task.attempt_count, 3)
+        self.assertEqual(task.status, "queued")
+        self.assertIn("BRAIN_BLOCKED_RETRY_EXHAUSTED", output.getvalue())
+
+    def test_master_loop_does_not_copy_handler_error_secrets_to_logs_or_task(self):
+        task = AgentTask.objects.create(
+            agent=self.agent, action_type="income_market_research",
+            capability_code="income_market_research", status="queued",
+        )
+        output = StringIO()
+        gateway = SimpleNamespace(describe=lambda: {"income_market_research": {"enabled": True}})
+        with patch("core.management.commands.autonomous_master_loop.build_economic_gateway", return_value=gateway), patch(
+            "core.management.commands.autonomous_master_loop.WorkerRunner"
+        ) as worker:
+            worker.return_value.run.side_effect = RuntimeError("no designed offer secret=PRIVATE-MARKER")
+            call_command("autonomous_master_loop", "--max-steps", "1", stdout=output)
+        task.refresh_from_db()
+        self.assertIn("AUTO_REPLAN", output.getvalue())
+        self.assertNotIn("PRIVATE-MARKER", output.getvalue())
+        self.assertNotIn("PRIVATE-MARKER", str(task.output_data))
 
     def test_master_loop_never_dispatches_queued_task_for_inactive_agent(self):
         self.agent.active = False

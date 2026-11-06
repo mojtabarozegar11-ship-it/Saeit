@@ -48,6 +48,21 @@ class Command(BaseCommand):
                         f"capability={unsupported.capability_code} requires_review=true"
                     )
                     return
+                unresolved = AgentTask.objects.filter(
+                    agent__code="economic-master-agent", agent__active=True,
+                    status="queued",
+                ).first()
+                if unresolved:
+                    condition = (
+                        "AUTO_BLOCKED_RETRY_EXHAUSTED"
+                        if unresolved.attempt_count >= unresolved.max_attempts
+                        else "AUTO_BLOCKED_CAPABILITY_OR_POLICY"
+                    )
+                    self.stdout.write(
+                        f"{condition} task={unresolved.pk} "
+                        "requires_review=true"
+                    )
+                    return
                 self.stdout.write("AUTONOMOUS_IDLE"); return
             try:
                 if runner is None:
@@ -60,7 +75,10 @@ class Command(BaseCommand):
                 ))
             except Exception as exc:
                 prereq=brain.prerequisite_from_error(exc)
-                self.stdout.write(f"AUTO_REPLAN failed_task={active.pk} reason={exc} prerequisite={prereq or 'unknown'}")
+                self.stdout.write(
+                    f"AUTO_REPLAN failed_task={active.pk} error_type={type(exc).__name__} "
+                    f"prerequisite={prereq or 'unknown'}"
+                )
                 if not prereq:
                     return
                 # Failed task is already safely requeued by WorkerRunner when retries remain.
@@ -68,7 +86,8 @@ class Command(BaseCommand):
                 active.refresh_from_db()
                 if active.status=="queued":
                     active.status="cancelled"
-                    active.output_data={**(active.output_data or {}),"replanned_to":prereq,"blocker":str(exc)[:1000]}
+                    active.output_data={**(active.output_data or {}),"replanned_to":prereq,
+                                        "blocker_type":type(exc).__name__}
                     active.save(update_fields=["status","output_data","updated_at"])
                 agent=active.agent
                 cap=agent.capabilities.filter(code=prereq,active=True).first()
@@ -76,7 +95,7 @@ class Command(BaseCommand):
                     self.stdout.write(f"AUTO_BLOCKED missing_capability={prereq}"); return
                 AgentTask.objects.create(agent=agent,action_type=prereq,capability_code=prereq,
                     risk_snapshot=cap.risk_level,input_data={"objective":agent.mission,"replanned_from":active.pk,
-                    "reason":str(exc)[:1000]},status="queued")
+                    "reason_code":type(exc).__name__},status="queued")
                 continue
 
             # Stop when progress reaches an external-world boundary rather than
@@ -95,6 +114,9 @@ class Command(BaseCommand):
     def _next_eligible_task(supported):
         return AgentTask.objects.filter(
             agent__code="economic-master-agent", agent__active=True, status="queued",
+            attempt_count__lt=F("max_attempts"),
             capability_code__in=supported,
             action_type=F("capability_code"),
+            agent__capabilities__code=F("capability_code"),
+            agent__capabilities__active=True,
         ).order_by("created_at", "pk").first()

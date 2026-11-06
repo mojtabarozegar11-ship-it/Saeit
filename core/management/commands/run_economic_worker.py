@@ -45,8 +45,11 @@ class Command(BaseCommand):
                     agent__code="economic-master-agent",
                     agent__active=True,
                     status="queued",
+                    attempt_count__lt=F("max_attempts"),
                     capability_code__in=supported,
                     action_type=F("capability_code"),
+                    agent__capabilities__code=F("capability_code"),
+                    agent__capabilities__active=True,
                 )
                 .exclude(pk__in=attempted_ids)
             )
@@ -68,7 +71,22 @@ class Command(BaseCommand):
                             f"capability={unknown.capability_code} requires_review=true"
                         )
                     else:
-                        self.stdout.write("IDLE: no queued economic task.")
+                        unresolved = AgentTask.objects.filter(
+                            agent__code="economic-master-agent",
+                            agent__active=True, status="queued",
+                        ).first()
+                        if unresolved:
+                            condition = (
+                                "BLOCKED_RETRY_EXHAUSTED"
+                                if unresolved.attempt_count >= unresolved.max_attempts
+                                else "BLOCKED_CAPABILITY_OR_POLICY"
+                            )
+                            self.stdout.write(
+                                f"{condition}: task={unresolved.pk} "
+                                "requires_review=true"
+                            )
+                        else:
+                            self.stdout.write("IDLE: no queued economic task.")
                 break
             attempted_ids.append(task.pk)
             if runner is None:

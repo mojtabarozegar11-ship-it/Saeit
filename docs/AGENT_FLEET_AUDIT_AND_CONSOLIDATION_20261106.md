@@ -69,6 +69,20 @@ independent gains and does not certify customer revenue.
    economic handlers, and factory-specific handlers stay outside its normal
    worker selector. Do not merge their deployment paths or grant financial
    authority through a tool name change.
+5. **Revoked-grant queue starvation:** economic dispatch now requires a
+   currently active `AgentCapability` on the assigned agent, in addition to
+   an exact task action/capability match and a registered tool. Tasks without
+   this grant remain queued, preserve attempt counts, and are reported as
+   requiring policy review; they do not block later authorized tasks.
+   `online_income_cycle` no longer calls an unroutable queued task ongoing
+   productive work. Exhausted task retry budgets are also excluded from
+   dispatch and reported for review instead of attempted every cycle. This
+   does not silently regrant a revoked capability or reset retry budgets.
+6. **Single-task failure starvation:** bounded `--drain` processing can advance
+   to later eligible tasks after a failed task, without retrying an ID twice
+   in the same invocation. Failures remain visible via nonzero exit status;
+   handler error text is not printed in shared logs. Master-loop replanning
+   also records a safe error type instead of persisting raw exception text.
 
 ## Safe operational sequence (no automatic external writes)
 
@@ -92,5 +106,5 @@ independent gains and does not certify customer revenue.
 
 Focused Django tests cover cross-capability denials, revoked/inactive agent
 checks, explicit adapter aliases, risk-policy drift, stale execution identity,
-worker lifecycle and audit read-only behavior. Tests exercise isolated
+worker lifecycle, revoked-grant queue behavior, and audit read-only behavior. Tests exercise isolated
 databases only. They do not establish production readiness or authorize deploy.

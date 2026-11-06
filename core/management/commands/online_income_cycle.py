@@ -2,6 +2,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from core.autonomous_brain import AutonomousBrain
 from core.models import Agent, AgentTask
+from core.economic_tool_pack import build_economic_gateway
 from core.task_runtime import TaskExecutionError, TaskRuntime
 
 MASTER_AGENT_CODE = "economic-master-agent"
@@ -24,6 +25,27 @@ class Command(BaseCommand):
 
         queued = AgentTask.objects.filter(agent=agent, status="queued").order_by("created_at").first()
         if queued:
+            if queued.attempt_count >= queued.max_attempts:
+                self.stdout.write(
+                    f"BRAIN_BLOCKED_RETRY_EXHAUSTED task={queued.pk} requires_review=true"
+                )
+                return
+            registered = build_economic_gateway().describe()
+            capability = agent.capabilities.filter(
+                code=queued.capability_code, active=True,
+            ).exists()
+            supported = (
+                queued.action_type == queued.capability_code
+                and queued.capability_code in registered
+                and registered[queued.capability_code]["enabled"]
+                and (queued.action_type.startswith("income_")
+                     or queued.action_type == "master_self_improvement")
+            )
+            if not supported or not capability:
+                self.stdout.write(
+                    f"BRAIN_BLOCKED_UNROUTABLE task={queued.pk} requires_review=true"
+                )
+                return
             self.stdout.write(
                 f"BRAIN_CONTINUE task={queued.pk} action={queued.action_type} status={queued.status}"
             )
