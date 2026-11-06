@@ -300,6 +300,7 @@ jobs:
           done
 
       - name: Verify all 102 finance pages
+        id: finance_check
         shell: bash
         run: |
           set -euo pipefail
@@ -321,7 +322,7 @@ jobs:
           echo "VERIFIED_FINANCE_PAGES=$count"
 
       - name: Roll back failed live check
-        if: failure() && steps.deploy.outcome == 'success' && (steps.route_check.outcome == 'failure' || steps.smoke.outcome == 'failure')
+        if: failure() && steps.deploy.outcome == 'success' && (steps.route_check.outcome == 'failure' || steps.smoke.outcome == 'failure' || steps.finance_check.outcome == 'failure')
         shell: bash
         run: |
           WORK="$RUNNER_TEMP/mojplaywin-ssh"
