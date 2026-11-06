@@ -22,7 +22,7 @@ class ChatOperationSecurityTests(TestCase):
         self.owner = User.objects.create_superuser(username="superowner", password="safe-pass-123", email="owner@example.org")
 
     def _approval(self, user, status="approved"):
-        operation = plan_chat_operation("deploy release")
+        operation = plan_chat_operation("deploy release now")
         return ApprovalRequest.objects.create(
             action_type="chat:" + operation.action,
             target_type="ChatOperation",
@@ -38,6 +38,8 @@ class ChatOperationSecurityTests(TestCase):
             with self.subTest(text=example):
                 self.assertIsNone(plan_chat_operation(example))
         self.assertEqual(plan_chat_operation("انتشار سایت را اجرا کن").action, "cpanel.deploy_release")
+        self.assertIsNone(plan_chat_operation("انتشار سایت"))
+        self.assertIsNone(plan_chat_operation("deploy release"))
 
     def test_normal_and_staff_chat_cannot_create_executable_approvals(self):
         for user in (self.customer, self.staff):
