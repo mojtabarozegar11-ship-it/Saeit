@@ -3,6 +3,7 @@
 {% block meta_description %}مرکز آموزش Zomorodmelal؛ از ابتدایی تا کنکور و دانشگاه، دوره‌های فنی و مهارتی و آموزش‌های تخصصی کشاورزی، صنعت، هوش مصنوعی و کسب‌وکار.{% endblock %}
 {% block body_class %}page-academy education-page{% endblock %}
 {% block content %}
+{% if catalog_temporarily_unavailable %}<p role="status" aria-live="polite">فهرست دوره‌های آموزشی موقتاً در دسترس نیست؛ مسیرهای راهنمای آموزشی همچنان قابل مشاهده‌اند. اطلاعات دوره‌ها حذف نشده‌اند.</p>{% endif %}
 <section class="education-hero">
   <div class="education-hero-copy">
     <span class="education-kicker">EDUCATION · KNOWLEDGE · SKILLS · CAREER</span>

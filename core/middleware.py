@@ -17,6 +17,13 @@ class RequestAuditMiddleware:
         request.trace_id = trace_id
         response = self.get_response(request)
 
+        # Do not attempt an audit DB write for a degraded public GET/HEAD,
+        # including a deliberately static HTTP 200 fallback during schema loss.
+        # Mutating and ordinary requests retain normal audit behavior.
+        if (request.method in ("GET", "HEAD")
+                and response.get("X-ZM-Data-Status") == "temporarily-unavailable"):
+            return response
+
         user = getattr(request, "user", None)
         if user is not None and user.is_authenticated:
             try:
