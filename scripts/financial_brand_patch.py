@@ -4,7 +4,21 @@ import ast
 
 def patch_financial_urls(source):
     if "_finance_routes" in source:
-        return source
+        # Migrate a previously installed finance block in place. This keeps
+        # repeated deployments safe while correcting an older store segment.
+        return source.replace(
+            'path(f"{_brand_slug}/store/",',
+            'path(f"{_brand_slug}/digital-products/",',
+        ).replace(
+            'path(f"{_brand_slug}/digital-store/",',
+            'path(f"{_brand_slug}/digital-products/",',
+        ).replace(
+            'path(f"ar/{_brand_slug}/store/",',
+            'path(f"ar/{_brand_slug}/digital-products/",',
+        ).replace(
+            'path(f"ar/{_brand_slug}/digital-store/",',
+            'path(f"ar/{_brand_slug}/digital-products/",',
+        )
     imports = ""
     if "from functools import partial" not in source:
         imports += "from functools import partial\n"
