@@ -1,0 +1,68 @@
+name: Living Cities account API — MariaDB 11.8 compatibility
+on:
+  pull_request:
+    paths:
+      - "apps/living_cities/**"
+      - "core/tests/test_living_cities_account_integration.py"
+      - ".github/workflows/living-cities-mariadb-11-8-ci.yml"
+permissions:
+  contents: read
+concurrency:
+  group: living-cities-mariadb-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  game-mariadb:
+    # Disposable GitHub runner database only. Never connect to VPS/cPanel.
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mariadb:
+        image: mariadb:11.8.9
+        env:
+          MARIADB_DATABASE: living_cities_ci
+          MARIADB_ROOT_PASSWORD: ephemeral-ci-root-not-a-secret
+          MARIADB_ROOT_HOST: "%"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping --silent -h 127.0.0.1 -uroot -pephemeral-ci-root-not-a-secret"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    env:
+      DATABASE_URL: mysql://root:ephemeral-ci-root-not-a-secret@127.0.0.1:3306/living_cities_ci
+      SECRET_KEY: living-cities-ephemeral-ci-secret-20261102-with-high-entropy-placeholder-not-for-production
+      DEBUG: "False"
+      ALLOWED_HOSTS: mojplaywin.com,zomorodmelal.ir,testserver
+      DJANGO_SETTINGS_MODULE: config.settings
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install native MariaDB bindings and project dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libmariadb-dev pkg-config
+          python -m pip install -r requirements.txt 'mysqlclient==2.3.0'
+          python -c 'import MySQLdb; import django; print("MARIADB_NATIVE_DRIVER=PASS DJANGO="+django.get_version())'
+      - name: Validate schema against real MariaDB 11.8 engine
+        run: |
+          set -euo pipefail
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput
+          python manage.py showmigrations living_cities
+          echo LC_MARIADB_11_8_SCHEMA=PASS
+      - name: Exercise CSRF, user ownership, idempotency and login throttling on MariaDB
+        run: |
+          set -euo pipefail
+          python -m pytest -q core/tests/test_living_cities_account_integration.py
+          echo LC_MARIADB_11_8_ACCOUNT_API=PASS
