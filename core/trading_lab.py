@@ -16,6 +16,7 @@ AGENT_COUNT = 50
 ACCOUNT_NAMES = ("DEMO_A", "DEMO_B")
 STRATEGIES = ("trend", "mean_reversion", "breakout", "momentum", "volatility")
 ALLOWED_SIDES = frozenset({"BUY", "SELL"})
+STATE_SCHEMA = "saeit.trading_lab.state.v1"
 
 
 class DemoBroker(Protocol):
@@ -224,6 +225,7 @@ class TradingLab:
     def export_state(self) -> dict:
         """Return JSON-serializable state for an external durable store."""
         return {
+            "schema": STATE_SCHEMA,
             "mode": "DEMO_ONLY",
             "agents": [
                 {
@@ -237,3 +239,67 @@ class TradingLab:
                 for agent in self.agents
             ],
         }
+
+    def restore_state(self, state: dict) -> None:
+        """Restore a previously exported state atomically after validation."""
+        if not isinstance(state, dict) or state.get("schema") != STATE_SCHEMA:
+            raise ValueError("state_schema_rejected")
+        if state.get("mode") != "DEMO_ONLY":
+            raise ValueError("state_mode_rejected")
+        raw_agents = state.get("agents")
+        if not isinstance(raw_agents, list) or len(raw_agents) != AGENT_COUNT:
+            raise ValueError("state_agent_count_invalid")
+        by_id = {agent.agent_id: agent for agent in self.agents}
+        staged = []
+        seen = set()
+        for raw in raw_agents:
+            if not isinstance(raw, dict) or type(raw.get("agent_id")) is not int:
+                raise ValueError("state_agent_invalid")
+            agent_id = raw["agent_id"]
+            if agent_id in seen or agent_id not in by_id:
+                raise ValueError("state_agent_identity_invalid")
+            seen.add(agent_id)
+            agent = by_id[agent_id]
+            if raw.get("account") != agent.account or raw.get("strategy") != agent.strategy:
+                raise ValueError("state_agent_assignment_changed")
+            peak = raw.get("peak_equity")
+            if not isinstance(peak, (int, float)) or not math.isfinite(float(peak)) or peak < 0:
+                raise ValueError("state_peak_equity_invalid")
+            open_ids = raw.get("open_order_ids")
+            if (not isinstance(open_ids, list) or
+                    any(not isinstance(order_id, str) or not order_id.strip() for order_id in open_ids) or
+                    len(set(open_ids)) != len(open_ids)):
+                raise ValueError("state_open_orders_invalid")
+            daily = raw.get("daily_pnl_by_date")
+            if not isinstance(daily, dict) or any(
+                not isinstance(day, str) or not isinstance(value, (int, float)) or not math.isfinite(float(value))
+                for day, value in daily.items()
+            ):
+                raise ValueError("state_daily_pnl_invalid")
+            raw_experiences = raw.get("experiences")
+            if not isinstance(raw_experiences, list):
+                raise ValueError("state_experiences_invalid")
+            experiences = []
+            for item in raw_experiences:
+                if not isinstance(item, dict):
+                    raise ValueError("state_experience_invalid")
+                try:
+                    experience = Experience(**item)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("state_experience_invalid") from exc
+                if (experience.agent_id != agent_id or experience.account != agent.account or
+                        not math.isfinite(experience.pnl)):
+                    raise ValueError("state_experience_identity_invalid")
+                experiences.append(experience)
+            submitted = {item.order_id for item in experiences if item.action == "DEMO_ORDER"}
+            closed = {item.order_id for item in experiences if item.action == "DEMO_CLOSE"}
+            if not set(open_ids).issubset(submitted) or set(open_ids) & closed:
+                raise ValueError("state_open_order_reconciliation_invalid")
+            staged.append((agent, list(open_ids), float(peak), dict(daily), experiences))
+        if seen != set(by_id):
+            raise ValueError("state_agent_identity_incomplete")
+        for agent, open_ids, peak, daily, experiences in staged:
+            agent.open_order_ids = open_ids
+            agent.peak_equity = peak
+            agent.daily_pnl_by_date = daily
+            agent.experiences = experiences
