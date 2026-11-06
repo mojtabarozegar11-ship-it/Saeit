@@ -5,6 +5,7 @@ on:
     branches: [audit/mpw-topic-reader-20261106]
     paths:
       - scripts/mpw_topic_reader_diagnostics_20261106.py
+      - scripts/mpw_revenue_counts_readonly_20261106.py
       - .github/workflows/mpw-topic-reader-diagnostics-20261106.yml
 
 permissions: {contents: read}
@@ -78,6 +79,12 @@ jobs:
         run: |
           set -euo pipefail
           payload="$(base64 -w0 scripts/mpw_topic_reader_diagnostics_20261106.py)"
+          timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-topic-readonly-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))'"
+      - name: Count only anonymized revenue events and encrypted-record filenames
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_revenue_counts_readonly_20261106.py
+          payload="$(base64 -w0 scripts/mpw_revenue_counts_readonly_20261106.py)"
           timeout 60s ssh -T -F "$RUNNER_TEMP/mpw-topic-readonly-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$payload\"))'"
       - name: Remove temporary SSH credentials
         if: always()
