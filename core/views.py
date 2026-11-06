@@ -4,7 +4,7 @@ from .company_content_models import CompanyContentLink
 from django.db import connection
 from django.db.utils import DatabaseError
 from django.http import Http404
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
 from rest_framework.response import Response
 from rest_framework.status import HTTP_503_SERVICE_UNAVAILABLE
@@ -88,7 +88,9 @@ class HealthView(APIView):
 
 @never_cache
 def taniya_studio(request):
-    return render(request, "taniya_studio/index.html")
+    if request.get_host().split(":")[0].lower() in {"mojplaywin.com", "www.mojplaywin.com"}:
+        return render(request, "taniya_studio/index.html")
+    return redirect("https://mojplaywin.com/taniya/")
 
 
 def platform_page(request, section):
