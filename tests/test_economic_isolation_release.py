@@ -53,12 +53,16 @@ class EconomicIsolationReleaseTests(unittest.TestCase):
         self.assertIn("trap restore_all EXIT", SCRIPT)
 
     def test_full_disk_fails_before_cron_pause_or_source_replacement(self):
-        preflight = SCRIPT.index("MASTER_DISK_PREFLIGHT_BLOCKED")
+        preflight = SCRIPT.index("master_capacity_preflight\n")
+        first_activation_directory = SCRIPT.index('install -d -m 700 "$master"')
         cron_pause = SCRIPT.index('crontab "$paused"')
         deployment = SCRIPT.index('sources_mutated=1')
+        self.assertLess(preflight, first_activation_directory)
         self.assertLess(preflight, cron_pause)
         self.assertLess(preflight, deployment)
-        self.assertIn('needed = source.stat().st_size + max(512 * 1024 * 1024', SCRIPT)
+        self.assertIn("reserve = max(2 * 1024**3, (total * 5 + 99) // 100)", SCRIPT)
+        self.assertIn("required = db_bytes + reserve", SCRIPT)
+        self.assertIn("MASTER_CAPACITY_ABORT_INSUFFICIENT_FREE_SPACE", SCRIPT)
 
     def test_failure_restores_cron_even_if_source_rollback_fails(self):
         self.assertIn('rollback_sources || rollback_failed=1', SCRIPT)
