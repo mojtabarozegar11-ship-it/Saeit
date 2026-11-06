@@ -6,18 +6,10 @@ on:
   push:
     branches: [main]
     paths: [.github/workflows/vps-factory-production-continuity.yml]
-  workflow_dispatch:
-    inputs:
-      recovery_authorized:
-        description: Owner has authorized a one-time factory loop recovery
-        required: true
-        type: boolean
-        default: false
-      offhost_backup_verified:
-        description: Restorable off-host backup was independently verified
-        required: true
-        type: boolean
-        default: false
+  workflow_dispatch: {}
+  pull_request:
+    branches: [main]
+    paths: [.github/workflows/vps-factory-production-continuity.yml, .github/workflows/vps-factory-persistence.yml]
 permissions:
   contents: read
 concurrency:
@@ -208,309 +200,371 @@ jobs:
           REMOTE
 
   ensure:
-    if: github.event_name != 'push' || (!contains(github.event.head_commit.message, '[factory-readonly-audit-20261029]') && !contains(github.event.head_commit.message, '[factory-pause-low-disk-loop-20261029]'))
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name != 'pull_request' || (github.event.pull_request.number == 1872 && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
-      - name: Ensure one running factory loop and report actual production progress
+      - name: Observe existing independent VPS factory loop (read only)
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          trap 'rc=$?; echo "LOCAL_FAILURE line=$LINENO exit=$rc"; exit "$rc"' ERR
           umask 077
           test -n "$VPS_KEY"
-          echo VPS_KEY_PRESENT
-          d="$RUNNER_TEMP/vps-factory"; mkdir -p "$d"
+          d="$RUNNER_TEMP/factory-continuity-readonly"
+          mkdir -p "$d"
           printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
           chmod 600 "$d/key"
           ssh-keygen -y -P "" -f "$d/key" >/dev/null
-          chmod 600 "$d/key"
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          echo VPS_HOSTKEY_VERIFIED
           ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 githubops@178.239.147.150 'bash -se' <<'REMOTE'
           set -euo pipefail
-          trap 'rc=$?; echo "REMOTE_FAILURE line=$LINENO exit=$rc"; exit "$rc"' ERR
           base="$HOME/factory-runtime"
-          ops="$base/operations"
-          script="$ops/vps-only-loop.sh"
-          pidfile="$ops/vps-only-loop.pid"
-          log="$ops/vps-only-factory.log"
+          script="$base/operations/vps-only-loop.sh"
+          pidfile="$base/operations/vps-only-loop.pid"
+          log="$base/operations/vps-only-factory.log"
           test -x "$script"
+          echo FACTORY_CONTINUITY_MODE=READ_ONLY
+          free_bytes="$(df -B1 --output=avail "$base" | awk 'NR==2 {print $1}')"
+          echo "FACTORY_DISK_FREE_BYTES=$free_bytes"
+          status=NOT_VERIFIED_RUNNING
+          if test -f "$pidfile" && test ! -L "$pidfile"; then
+            pid="$(tr -d '\n' < "$pidfile")"
+            if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+              if [[ "$(stat -c %u "/proc/$pid" 2>/dev/null)" == "$(id -u)" ]] && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -Fq -- "$script"; then
+                status=VERIFIED_RUNNING
+              fi
+            fi
+          fi
+          echo "FACTORY_LOOP_STATUS=$status"
+          if test -f "$log" && test ! -L "$log"; then
+            echo "FACTORY_LOOP_LOG_AGE_SECONDS=$(( $(date +%s) - $(stat -c %Y "$log") ))"
+            echo "FACTORY_TICK_FAILURES_LAST_500=$(tail -n 500 "$log" | grep -c -F 'TICK_EXIT_FAILURE' || true)"
+            echo "FACTORY_SQLITE_LOCKS_LAST_500=$(tail -n 500 "$log" | grep -c -F 'database is locked' || true)"
+          else
+            echo FACTORY_LOOP_LOG_STATUS=ABSENT_OR_UNSAFE
+          fi
+          # Verify local boot/cron ownership without printing any crontab contents.
+          watchdog="$base/operations/ensure-vps-only-loop.sh"
+          watchdog_script=NOT_VERIFIED
+          if test -x "$watchdog" && test ! -L "$watchdog"; then
+            watchdog_script=VERIFIED
+          fi
+          daemon_active=NO
+          if systemctl is-active --quiet cron 2>/dev/null || systemctl is-active --quiet crond 2>/dev/null; then
+            daemon_active=YES
+          fi
+          daemon_enabled=NO
+          if systemctl is-enabled --quiet cron 2>/dev/null || systemctl is-enabled --quiet crond 2>/dev/null; then
+            daemon_enabled=YES
+          fi
+          cron_entries="$(crontab -l 2>/dev/null || true)"
+          expected_reboot='@reboot /bin/bash /home/githubops/factory-runtime/operations/ensure-vps-only-loop.sh >> /home/githubops/factory-runtime/operations/vps-only-watchdog.log 2>&1 # SAEIT_FACTORY_AUTOSTART'
+          expected_five='*/5 * * * * /bin/bash /home/githubops/factory-runtime/operations/ensure-vps-only-loop.sh >> /home/githubops/factory-runtime/operations/vps-only-watchdog.log 2>&1 # SAEIT_FACTORY_AUTOSTART'
+          reboot_count="$(printf '%s\n' "$cron_entries" | grep -Fxc -- "$expected_reboot" || true)"
+          five_count="$(printf '%s\n' "$cron_entries" | grep -Fxc -- "$expected_five" || true)"
+          echo "FACTORY_LOCAL_WATCHDOG_SCRIPT=$watchdog_script"
+          echo "FACTORY_LOCAL_CRON_DAEMON_ACTIVE=$daemon_active"
+          echo "FACTORY_LOCAL_CRON_DAEMON_ENABLED=$daemon_enabled"
+          echo "FACTORY_LOCAL_CRON_REBOOT_RULE_COUNT=$reboot_count"
+          echo "FACTORY_LOCAL_CRON_FIVE_MIN_RULE_COUNT=$five_count"
+          watchdog_configuration=HOLD
+          if [[ "$watchdog_script" == VERIFIED && "$daemon_active" == YES && "$daemon_enabled" == YES && "$reboot_count" == 1 && "$five_count" == 1 ]]; then
+            watchdog_configuration=CONFIGURATION_VERIFIED_ONLY
+          fi
+          echo "FACTORY_VPS_LOCAL_AUTONOMY=$watchdog_configuration"
+          # Privilege-aware inventory. Only aggregate counts; never dump crontabs, process arguments or file contents.
+          python3 - "$base" <<'LANE_AUDIT'
+          import ast
+          import pathlib
+          import re
+          import subprocess
+          import sys
+          pattern = re.compile(r"(?:line[-_]?41|agri[-_]?200|factory|master[-_]?agent|opportunity[-_]?discovery|intake[-_]?discovered|autonomous[-_]?product)", re.I)
+          def run(argv, timeout=10):
+              try:
+                  p = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                     text=True, errors="replace", timeout=timeout, check=False)
+                  return p.stdout if p.returncode == 0 else None
+              except (OSError, subprocess.TimeoutExpired):
+                  return None
+          def cron_matches(text):
+              return sum(bool(pattern.search(line)) for line in (text or "").splitlines()
+                         if line.strip() and not line.lstrip().startswith("#"))
+          local = run(["crontab", "-l"])
+          root = run(["sudo", "-n", "crontab", "-l", "-u", "root"])
+          print("FACTORY_PRODUCER_USER_CRON_PROBE=" + ("AVAILABLE" if local is not None else "UNAVAILABLE"))
+          print("FACTORY_PRODUCER_USER_CRON_CANDIDATE_LINES=" + (str(cron_matches(local)) if local is not None else "UNKNOWN"))
+          print("FACTORY_PRODUCER_ROOT_CRON_PROBE=" + ("AVAILABLE" if root is not None else "UNAVAILABLE"))
+          print("FACTORY_PRODUCER_ROOT_CRON_CANDIDATE_LINES=" + (str(cron_matches(root)) if root is not None else "UNKNOWN"))
+          cron_d = pathlib.Path("/etc/cron.d")
+          scanned = 0
+          matched = 0
+          skipped = 0
+          try:
+              entries = list(cron_d.iterdir())[:200]
+          except OSError:
+              entries = []
+              skipped += 1
+          for path in entries:
+              try:
+                  st = path.lstat()
+                  if not path.is_file() or path.is_symlink() or st.st_size > 1048576:
+                      skipped += 1
+                      continue
+                  matched += cron_matches(path.read_text(encoding="utf-8", errors="replace"))
+                  scanned += 1
+              except OSError:
+                  skipped += 1
+          print("FACTORY_PRODUCER_SYSTEM_CROND_FILES_SCANNED=" + str(scanned))
+          print("FACTORY_PRODUCER_SYSTEM_CROND_CANDIDATE_LINES=" + str(matched))
+          print("FACTORY_PRODUCER_SYSTEM_CROND_SKIPPED=" + str(skipped))
+          installed = run(["systemctl", "list-unit-files", "--type=service,timer", "--no-legend", "--no-pager"], 12)
+          running = run(["systemctl", "list-units", "--all", "--type=service,timer", "--no-legend", "--no-pager"], 12)
+          print("FACTORY_PRODUCER_SYSTEMD_UNIT_FILES_CANDIDATES=" + (str(cron_matches(installed)) if installed is not None else "UNKNOWN"))
+          print("FACTORY_PRODUCER_SYSTEMD_UNIT_ROWS_CANDIDATES=" + (str(cron_matches(running)) if running is not None else "UNKNOWN"))
+          cmd = pathlib.Path(sys.argv[1]) / "django-app/core/management/commands/factory_staging_tick.py"
+          try:
+              info = cmd.lstat()
+              if not cmd.is_file() or cmd.is_symlink() or info.st_size > 524288:
+                  raise ValueError("unsafe")
+              tree = ast.parse(cmd.read_text(encoding="utf-8"))
+              called = [node.args[0].value for node in ast.walk(tree)
+                        if isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Name) and node.func.id == "call_command"
+                        and node.args and isinstance(node.args[0], ast.Constant)
+                        and isinstance(node.args[0].value, str)]
+              print("FACTORY_STAGING_SOURCE_AUDIT=AST_PARSED")
+              for name in ("opportunity_discovery_tick", "intake_discovered_opportunities",
+                           "autonomous_master_loop"):
+                  print("FACTORY_STAGING_CALLS_" + name.upper() + "=" + str(called.count(name)))
+          except (OSError, SyntaxError, UnicodeError, ValueError):
+              print("FACTORY_STAGING_SOURCE_AUDIT=UNAVAILABLE")
+          print("FACTORY_CROSS_LANE_SINGLETON_PROVEN=NO")
+          LANE_AUDIT
+          # Inspect the distinct historical Line41 product slot without reading its private payloads.
+          python3 - "$base" <<'LINE41_AUDIT'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          import time
+          base = Path(sys.argv[1])
+          private = base / "private" / "autonomous-product-cycle"
+          slot = private / "quality-excellence/product-flow/active-slots/current.json"
+          def private_json(path, size_limit):
+              try:
+                  if any(p.is_symlink() for p in (path, *path.parents)):
+                      return None, "SYMLINK_UNSAFE"
+                  if not path.is_file():
+                      return None, "MISSING"
+                  st = path.stat()
+                  if st.st_size > size_limit or not (st.st_mode & 0o170000) == 0o100000:
+                      return None, "SIZE_OR_TYPE_UNSAFE"
+                  val = json.loads(path.read_text(encoding="utf-8"))
+                  return (val, "PRESENT") if isinstance(val, dict) else (None, "INVALID_JSON_SCHEMA")
+              except (OSError, ValueError, UnicodeError):
+                  return None, "UNREADABLE"
+          state, status = private_json(slot, 2000000)
+          print("FACTORY_LINE41_SLOT_FILE_STATUS=" + status)
+          if state is not None:
+              active = state.get("active")
+              waiting = state.get("waiting")
+              schema = state.get("schema")
+              if (schema == "saeit.factory.product-slots.v1" and isinstance(active, list)
+                      and isinstance(waiting, list) and all(isinstance(v, dict) for v in active)):
+                  recipes = [v.get("recipe") for v in active]
+                  print("FACTORY_LINE41_SLOT_SCHEMA_VALID=YES")
+                  print("FACTORY_LINE41_SLOT_ACTIVE_COUNT=" + str(len(active)))
+                  print("FACTORY_LINE41_SLOT_WAITING_COUNT=" + str(len(waiting)))
+                  print("FACTORY_LINE41_SLOT_CANONICAL_RECIPE_ACTIVE=" +
+                        str("farm_enterprise_economics" in recipes).upper())
+                  print("FACTORY_LINE41_SLOT_ACTIVE_RECIPES_UNIQUE=" +
+                        str(len(set(map(str, recipes))) == len(recipes)).upper())
+                  print("FACTORY_LINE41_SLOT_MODIFIED_AGE_SECONDS=" +
+                        str(max(0, int(time.time() - slot.stat().st_mtime))))
+              else:
+                  print("FACTORY_LINE41_SLOT_SCHEMA_VALID=NO")
+          singleton = private / ".f01-global-production-lane.json"
+          lock, lock_status = private_json(singleton, 4096)
+          print("FACTORY_LINE41_GLOBAL_LANE_STATE_FILE=" + lock_status)
+          if lock is not None and lock.get("schema") == "saeit.factory.global-single-production-lane.v1":
+              owner = lock.get("owner")
+              print("FACTORY_LINE41_GLOBAL_LANE_RECORDED_OWNER=" +
+                    (owner if owner in ("line41", "agri200") else "NONE_OR_UNKNOWN"))
+          # Existence is only a prerequisite, never a cryptographic QC/receipt check.
+          recipe = "farm_enterprise_economics"
+          manifest = private / "digital-products" / recipe / "manufacturing_manifest.json"
+          clearance = private / "quality-excellence" / "signed-clearances" / recipe / "current.json"
+          artifact = private / "digital-products" / recipe / (recipe + "-internal-qa.zip")
+          for label, path in (("MANIFEST", manifest), ("CLEARANCE", clearance), ("ARTIFACT", artifact)):
+              try:
+                  safe = path.is_file() and not any(p.is_symlink() for p in (path, *path.parents))
+              except OSError:
+                  safe = False
+              print("FACTORY_LINE41_CANONICAL_" + label + "_FILE_PRESENT=" + str(safe).upper())
+          for label, directory in (("REVIEWER", Path("/etc/saeit/factory-quality-reviewer-public-keys")),
+                                   ("RECEIVER", Path("/etc/saeit/hourly-cycle-receiver-public-keys"))):
+              try:
+                  st = directory.lstat()
+                  valid = directory.is_dir() and not directory.is_symlink() and st.st_uid == 0 and not st.st_mode & 0o022
+              except OSError:
+                  valid = False
+              print("FACTORY_LINE41_" + label + "_TRUST_DIR_PROTECTED=" + str(valid).upper())
+          print("FACTORY_LINE41_QC1000_AND_RECEIVER_ACCEPTANCE_VERIFIED=NO")
+          LINE41_AUDIT
+          # Verify the exact private Line41 package without extracting or publishing it.
+          python3 - "$base" <<'LINE41_PACKAGE_AUDIT'
+          import hashlib
+          import json
+          from pathlib import Path, PurePosixPath
+          import re
+          import stat
+          import sys
+          import zipfile
+          base = Path(sys.argv[1])
+          recipe = "farm_enterprise_economics"
+          product = base / "private/autonomous-product-cycle/digital-products" / recipe
+          manifest_path = product / "manufacturing_manifest.json"
+          artifact_path = product / (recipe + "-internal-qa.zip")
+          def safe_file(path, limit):
+              try:
+                  if any(p.is_symlink() for p in (path, *path.parents)):
+                      return False
+                  st = path.stat()
+                  return stat.S_ISREG(st.st_mode) and 0 < st.st_size <= limit
+              except OSError:
+                  return False
+          if not safe_file(manifest_path, 2097152):
+              print("FACTORY_LINE41_PACKAGE_MANIFEST_STATUS=UNAVAILABLE")
+              raise SystemExit(0)
+          try:
+              manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          except (OSError, ValueError, UnicodeError):
+              manifest = None
+          if not isinstance(manifest, dict):
+              print("FACTORY_LINE41_PACKAGE_MANIFEST_STATUS=INVALID")
+              raise SystemExit(0)
+          print("FACTORY_LINE41_PACKAGE_MANIFEST_STATUS=PARSED")
+          print("FACTORY_LINE41_PACKAGE_RECIPE_MATCH=" + str(manifest.get("recipe") == recipe).upper())
+          print("FACTORY_LINE41_PACKAGE_SCHEMA_V2=" + str(manifest.get("schema_version") == 2).upper())
+          print("FACTORY_LINE41_PACKAGE_TECHNICAL_QA_STATUS=" +
+                (manifest.get("qa_status") if manifest.get("qa_status") in ("passed", "failed", "pending") else "OTHER_OR_MISSING"))
+          measure = manifest.get("qa_measurements")
+          tests = measure.get("successful_tests") if isinstance(measure, dict) else None
+          print("FACTORY_LINE41_PACKAGE_RECORDED_SUCCESSFUL_TESTS=" +
+                (str(tests) if type(tests) is int and 0 <= tests <= 100000 else "UNKNOWN"))
+          grade = manifest.get("professional_quality_score")
+          print("FACTORY_LINE41_PACKAGE_PROFESSIONAL_GRADE=" +
+                (str(grade) if type(grade) is int and 0 <= grade <= 1000 else "NOT_VERIFIED"))
+          print("FACTORY_LINE41_PACKAGE_RECORDED_PROFESSIONAL_APPROVED=" +
+                str(manifest.get("professional_quality_approved") is True).upper())
+          print("FACTORY_LINE41_PACKAGE_RECORDED_PUBLIC_LISTING=" +
+                str(manifest.get("public_listing_enabled") is True).upper())
+          if not safe_file(artifact_path, 268435456):
+              print("FACTORY_LINE41_PACKAGE_ARTIFACT_HASH=UNAVAILABLE_OR_OVER_LIMIT")
+              raise SystemExit(0)
+          h = hashlib.sha256()
+          with artifact_path.open("rb") as stream:
+              for chunk in iter(lambda: stream.read(1048576), b""):
+                  h.update(chunk)
+          expected = manifest.get("artifact_sha256")
+          good_sha = isinstance(expected, str) and bool(re.fullmatch(r"[a-f0-9]{64}", expected))
+          print("FACTORY_LINE41_PACKAGE_ARTIFACT_SHA256_MATCH=" +
+                str(good_sha and h.hexdigest() == expected).upper())
+          print("FACTORY_LINE41_PACKAGE_ARTIFACT_BYTES=" + str(artifact_path.stat().st_size))
+          try:
+              with zipfile.ZipFile(artifact_path) as archive:
+                  members = archive.infolist()
+                  names = [m.filename for m in members]
+                  unpacked = sum(m.file_size for m in members)
+                  unsafe = sum(bool(n.startswith("/") or ".." in PurePosixPath(n).parts or "\\" in n)
+                               for n in names)
+                  print("FACTORY_LINE41_PACKAGE_ZIP_MEMBER_COUNT=" + str(len(members)))
+                  print("FACTORY_LINE41_PACKAGE_ZIP_UNPACKED_BYTES=" + str(unpacked))
+                  print("FACTORY_LINE41_PACKAGE_ZIP_DUPLICATE_NAMES=" + str(len(names) - len(set(names))))
+                  print("FACTORY_LINE41_PACKAGE_ZIP_UNSAFE_PATHS=" + str(unsafe))
+                  if len(members) <= 1000 and unpacked <= 67108864 and unsafe == 0:
+                      print("FACTORY_LINE41_PACKAGE_ZIP_CRC=" +
+                            ("PASS" if archive.testzip() is None else "FAIL"))
+                  else:
+                      print("FACTORY_LINE41_PACKAGE_ZIP_CRC=NOT_RUN_SAFETY_LIMIT")
+          except (OSError, ValueError, zipfile.BadZipFile, RuntimeError):
+              print("FACTORY_LINE41_PACKAGE_ZIP_CRC=INVALID_ARCHIVE")
+          print("FACTORY_LINE41_PACKAGE_COMMERCIAL_RELEASE_AUTHORIZED=NO")
+          LINE41_PACKAGE_AUDIT
           cd "$base/django-app"
-          "$base/.venv/bin/python" - <<'PATCH'
-          from pathlib import Path
-          import ast, os
-          path = Path("core/management/commands/factory_staging_tick.py")
-          if not path.is_file() or path.is_symlink():
-              raise SystemExit("FACTORY_DIAGNOSTIC_SOURCE_UNSAFE")
-          source = path.read_text(encoding="utf-8")
-          old = '                self.stderr.write(f"FACTORY_RUN_ERROR run={run.run_id} type={type(exc).__name__}")'
-          new = '                frames = ">".join(f"{Path(frame.filename).name}:{frame.lineno}:{frame.name}" for frame in __import__("traceback").extract_tb(exc.__traceback__))[-400:]\n                self.stderr.write(f"FACTORY_RUN_ERROR run={run.run_id} type={type(exc).__name__} frames={frames}")'
-          if old in source:
-              updated = source.replace(old, new, 1)
-              ast.parse(updated, filename=str(path))
-              backup = path.with_name(path.name + ".pre-frame-diagnostic")
-              if not backup.exists():
-                  backup.write_text(source, encoding="utf-8")
-                  os.chmod(backup, path.stat().st_mode & 0o777)
-              temp = path.with_name(path.name + ".diagnostic-tmp")
-              temp.write_text(updated, encoding="utf-8")
-              os.chmod(temp, path.stat().st_mode & 0o777)
-              os.replace(temp, path)
-              print("FACTORY_BOUNDED_FRAME_DIAGNOSTIC_INSTALLED")
-          elif 'FACTORY_RUN_ERROR run={run.run_id} type={type(exc).__name__} frames={frames}' in source:
-              print("FACTORY_BOUNDED_FRAME_DIAGNOSTIC_ALREADY_INSTALLED")
-          else:
-              raise SystemExit("FACTORY_DIAGNOSTIC_SOURCE_MISMATCH")
-          PATCH
-          "$base/.venv/bin/python" - <<'FIX'
-          from pathlib import Path
-          import ast, os
-          path = Path("core/management/commands/factory_staging_tick.py")
-          if not path.is_file() or path.is_symlink():
-              raise SystemExit("FACTORY_FIX_SOURCE_UNSAFE")
-          source = path.read_text(encoding="utf-8")
-          lines = source.splitlines(keepends=True)
-          remove = {"factory=True,", "run_id=run.run_id,", "goal=run.goal,"}
-          counts = {target: sum(line.strip() == target for line in lines) for target in remove}
-          if all(counts[target] == 1 for target in remove):
-              updated = "".join(line for line in lines if line.strip() not in remove)
-          elif all(counts[target] == 0 for target in remove):
-              updated = source
-              print("FACTORY_UNSUPPORTED_CALL_OPTIONS_ALREADY_REMOVED")
-          else:
-              raise SystemExit("FACTORY_FIX_CALLSITE_MISMATCH")
-          updated = updated.replace("Path(frame.filename).name", "frame.filename.rsplit('/', 1)[-1]")
-          ast.parse(updated, filename=str(path))
-          backup = path.with_name(path.name + ".pre-vps-options-fix")
-          if not backup.exists():
-              backup.write_text(source, encoding="utf-8")
-              os.chmod(backup, path.stat().st_mode & 0o777)
-          temp = path.with_name(path.name + ".fix-tmp")
-          temp.write_text(updated, encoding="utf-8")
-          os.chmod(temp, path.stat().st_mode & 0o777)
-          os.replace(temp, path)
-          print("FACTORY_UNSUPPORTED_CALL_OPTIONS_FIXED")
-          print("FACTORY_FRAME_LOGGER_FIXED")
-
-          FIX
-          # Trigger immediate post-patch factory progress snapshot.
-          recovery_authorized='${{ inputs.recovery_authorized }}'
-          offhost_backup_verified='${{ inputs.offhost_backup_verified }}'
-          grep -q 'FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider' "$script"
-          echo VPS_FACTORY_PREFLIGHT_OK
-          report_database_state() {
-            echo FACTORY_READ_ONLY_QUEUE_DIAGNOSTICS
-            cd "$base/django-app"
-            export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
-            export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
-            "$base/.venv/bin/python" - <<'PY'
-          import json, os, re
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
+          "$base/.venv/bin/python" -B - <<'PY'
+          import os
           os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
           import django
           django.setup()
-          # Read-only SQLite contention diagnostics. Never print DATABASE_URL,
-          # credentials, the database name or private task payloads.
-          from django.conf import settings
-          from django.db import connection
-          from pathlib import Path
-          engine=settings.DATABASES["default"]["ENGINE"]
-          print("FACTORY_DB_ENGINE_KIND="+("sqlite" if engine.endswith("sqlite3") else "non_sqlite"))
-          if engine.endswith("sqlite3"):
-              timeout=settings.DATABASES["default"].get("OPTIONS",{}).get("timeout",5)
-              print("FACTORY_SQLITE_CONFIGURED_BUSY_TIMEOUT_SECONDS="+str(timeout))
-              with connection.cursor() as cursor:
-                  cursor.execute("PRAGMA journal_mode")
-                  print("FACTORY_SQLITE_JOURNAL_MODE="+str(cursor.fetchone()[0]))
-                  cursor.execute("PRAGMA busy_timeout")
-                  print("FACTORY_SQLITE_ACTUAL_BUSY_TIMEOUT_MS="+str(cursor.fetchone()[0]))
-              for name in ("core/management/commands/factory_staging_tick.py",
-                           "core/management/commands/seed_factory_agents.py"):
-                  file=Path(name)
-                  if file.is_file() and not file.is_symlink():
-                      rows=file.read_text(encoding="utf8").splitlines()
-                      points=[i for i,row in enumerate(rows)
-                              if "seed_factory_agents" in row or "atomic" in row
-                              or "transaction" in row or "retry" in row.lower()]
-                      print("FACTORY_SOURCE_SIGNALS="+file.name+":"+
-                            ",".join(str(i+1)+":"+rows[i].strip()[:120] for i in points[:20]))
-          # Bounded private-runtime control-flow inspection; credentials and payloads excluded.
-          for file_name, low, high in (
-              ("core/management/commands/factory_staging_tick.py", 15, 180),
-              ("core/management/commands/seed_factory_agents.py", 32, 68),
-          ):
-              file = Path(file_name)
-              if file.is_file() and not file.is_symlink():
-                  for line_no, line in enumerate(file.read_text(encoding="utf-8").splitlines(), 1):
-                      if low <= line_no <= high:
-                          if re.search(r"(?i)(password|secret|token|api_key|private_key)", line):
-                              continue
-                          print(f"FACTORY_CODE_WINDOW {file.name}:{line_no}:{line[:150]}")
-          import inspect
-          from django.core.management import call_command
-          try:
-              from core.management.commands.autonomous_master_loop import Command as MasterCommand
-              signature = inspect.signature(MasterCommand.handle)
-              accepted = sorted(name for name, param in signature.parameters.items()
-                                if name != "self" and param.kind not in
-                                (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD))
-              passed = {"factory", "run_id", "goal", "max_steps"}
-              print("FACTORY_MASTER_HANDLE_ACCEPTED_OPTIONS=" + ",".join(accepted))
-              print("FACTORY_MASTER_HANDLE_UNSUPPORTED_CALL_OPTIONS=" + ",".join(sorted(passed - set(accepted))))
-              print("FACTORY_MASTER_HANDLE_HAS_VAR_KW=" + str(any(
-                  param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values())).lower())
-              print("FACTORY_DJANGO_CALL_COMMAND_SIGNATURE=" + str(inspect.signature(call_command)))
-              print("FACTORY_MASTER_HANDLE_SIGNATURE=" + str(signature))
-              method_lines, first_line = inspect.getsourcelines(MasterCommand.handle)
-              for offset, line in enumerate(method_lines[:180]):
-                  if re.search(r"(?i)(password|secret|token|api_key|private_key)", line):
-                      continue
-                  print(f"FACTORY_MASTER_HANDLE_CODE {first_line + offset}:{line.rstrip()[:180]}")
-          except Exception as exc:
-              print("FACTORY_MASTER_HANDLE_INSPECTION_ERROR=" + type(exc).__name__)
           from django.apps import apps
-          pattern = re.compile(r"(factory|task|queue|probe|opportun|evidence|research|workflow|schedule|job|run)", re.I)
-          for model in apps.get_app_config("core").get_models():
-              if pattern.search(model.__name__) or pattern.search(model._meta.db_table):
-                  try:
-                      print(f"FACTORY_MODEL_COUNT {model._meta.label}={model.objects.count()}")
-                  except Exception as exc:
-                      print(f"FACTORY_MODEL_COUNT_ERROR {model._meta.label}={type(exc).__name__}")
-          for model_name in ("FactoryRun", "Product", "AgentTask"):
-              model = apps.get_model("core", model_name)
-              safe_fields = [field.name for field in model._meta.concrete_fields
-                             if field.name in {"status", "state", "stage", "phase", "recipe", "product_code", "run_type"}]
-              print("FACTORY_SAFE_STATE_FIELDS " + model_name + "=" + ",".join(safe_fields))
-              for field_name in safe_fields:
-                  try:
-                      from django.db.models import Count
-                      rows = list(model.objects.values(field_name).annotate(n=Count("pk")).order_by(field_name)[:20])
-                      print("FACTORY_SAFE_STATE_COUNTS " + model_name + "." + field_name + "=" +
-                            json.dumps(rows, sort_keys=True, default=str))
-                  except Exception as exc:
-                      print("FACTORY_SAFE_STATE_COUNT_ERROR " + model_name + "." + field_name + "=" + type(exc).__name__)
-          path = os.path.join(os.path.dirname(os.path.dirname(__file__)) if "__file__" in globals() else ".", "var/factory/discovery/latest.json")
-          try:
-              with open(path, encoding="utf-8") as f:
-                  data = json.load(f)
-              print("FACTORY_DISCOVERY_KEYS=" + ",".join(sorted(k for k in data if isinstance(k, str))[:40]))
-              for key in ("status", "stage", "opportunity_count", "evidence_count", "pending_evidence_count", "waiting_for_evidence"):
-                  value = data.get(key)
-                  if isinstance(value, (str, int, float, bool)) or value is None:
-                      print(f"FACTORY_DISCOVERY_{key.upper()}={value}")
-          except FileNotFoundError:
-              print("FACTORY_DISCOVERY_FILE_MISSING")
-          except Exception as exc:
-              print(f"FACTORY_DISCOVERY_READ_ERROR={type(exc).__name__}")
+          Run = apps.get_model("core", "FactoryRun")
+          Product = apps.get_model("core", "Product")
+          Artifact = apps.get_model("core", "FactoryArtifact")
+          Manifest = apps.get_model("core", "FactoryReleaseManifest")
+          Task = apps.get_model("core", "AgentTask")
+          active_runs = Run.objects.filter(status="active")
+          linked_ids = active_runs.exclude(product_id__isnull=True).values_list("product_id", flat=True).distinct()
+          distinct = linked_ids.count()
+          factory_drafts = Product.objects.filter(pk__in=linked_ids, factory_managed=True, active=False).count()
+          published_factory_products = Product.objects.filter(factory_managed=True, active=True).count()
+          missing_product = active_runs.filter(product_id__isnull=True).count()
+          print("FACTORY_ACTIVE_RUN_RECORDS=" + str(active_runs.count()))
+          print("FACTORY_ACTIVE_RUN_DISTINCT_PRODUCT_IDS=" + str(distinct))
+          print("FACTORY_ACTIVE_RUN_MISSING_PRODUCT=" + str(missing_product))
+          print("FACTORY_ACTIVE_RUN_LINKED_FACTORY_DRAFTS=" + str(factory_drafts))
+          print("FACTORY_ACTIVE_RUN_LINKED_OTHER_PRODUCTS=" + str(distinct - factory_drafts))
+          print("FACTORY_MANAGED_PUBLISHED_PRODUCTS=" + str(published_factory_products))
+          print("FACTORY_ARTIFACT_ROWS=" + str(Artifact.objects.count()))
+          print("FACTORY_RELEASE_MANIFEST_ROWS=" + str(Manifest.objects.count()))
+          print("FACTORY_QUEUED_AGENT_TASKS=" + str(Task.objects.filter(status="queued").count()))
+          # Read-only candidate triage: aggregate evidence, never auto-select a SKU.
+          from collections import Counter
+          from django.db.models import Count, Q
+          from django.utils import timezone
+          source_counts = Counter()
+          for constraints in active_runs.values_list("constraints", flat=True).iterator(chunk_size=200):
+              stage = constraints.get("source_stage") if isinstance(constraints, dict) else None
+              source_counts["discovery" if stage == "opportunity_discovery" else "other" if stage else "none"] += 1
+          print("FACTORY_ACTIVE_RUN_SOURCE_DISCOVERY=" + str(source_counts["discovery"]))
+          print("FACTORY_ACTIVE_RUN_SOURCE_OTHER=" + str(source_counts["other"]))
+          print("FACTORY_ACTIVE_RUN_SOURCE_NONE=" + str(source_counts["none"]))
+          recent = timezone.now() - __import__("datetime").timedelta(hours=1)
+          print("FACTORY_ACTIVE_RUN_UPDATED_LAST_HOUR=" + str(active_runs.filter(updated_at__gte=recent).count()))
+          drafts = Product.objects.filter(pk__in=linked_ids, factory_managed=True, active=False)
+          print("FACTORY_DRAFTS_WITH_OWNER=" + str(drafts.filter(owner_id__isnull=False).count()))
+          print("FACTORY_DRAFTS_WITH_APPROVED_KNOWLEDGE_LINK=" + str(drafts.filter(knowledge_article_id__isnull=False).count()))
+          print("FACTORY_DRAFTS_WITH_POSITIVE_PRICE=" + str(drafts.filter(price__gt=0).count()))
+          metadata_pass = 0
+          metadata_pass_with_owner_and_knowledge = 0
+          for row in drafts.values("owner_id", "knowledge_article_id", "metadata").iterator(chunk_size=200):
+              md = row.get("metadata")
+              validation = md.get("validation") if isinstance(md, dict) else None
+              outcome = validation.get("outcome") if isinstance(validation, dict) else None
+              if isinstance(outcome, str) and outcome.upper() in {"PASS", "APPROVED"}:
+                  metadata_pass += 1
+                  if row["owner_id"] and row["knowledge_article_id"]:
+                      metadata_pass_with_owner_and_knowledge += 1
+          print("FACTORY_DRAFTS_METADATA_VALIDATION_PASS=" + str(metadata_pass))
+          print("FACTORY_DRAFTS_METADATA_PASS_WITH_OWNER_KNOWLEDGE=" + str(metadata_pass_with_owner_and_knowledge))
+          workload = (Task.objects.filter(factory_run__status="active", factory_run__product_id__isnull=False)
+                      .values("factory_run__product_id")
+                      .annotate(completed=Count("pk", filter=Q(status="completed")),
+                                queued=Count("pk", filter=Q(status="queued")))
+                      .order_by("-completed", "factory_run__product_id")[:5])
+          print("FACTORY_TOP_WORKLOAD_PRODUCT_IDS_AND_TASK_COUNTS=" +
+                ",".join(str(x["factory_run__product_id"]) + ":" + str(x["completed"]) + ":" + str(x["queued"]) for x in workload))
+          print("FACTORY_TOP_WORKLOAD_IS_NOT_QUALITY_RANKING=true")
+          one_sku = distinct == 1 and factory_drafts == 1 and missing_product == 0 and published_factory_products == 0
+          print("FACTORY_GLOBAL_SINGLE_SKU_EVIDENCE=" + ("CANDIDATE_ONLY" if one_sku else "HOLD"))
+          print("FACTORY_PRODUCTION_RELEASE_AUTHORIZED=NO")
           PY
-          }
-          pid_is_factory() {
-            [[ "$1" =~ ^[0-9]+$ ]] &&
-              kill -0 "$1" 2>/dev/null &&
-              [[ "$(stat -c %u "/proc/$1" 2>/dev/null)" == "$(id -u)" ]] &&
-              tr '\0' ' ' < "/proc/$1/cmdline" | grep -Fq -- "$script"
-          }
-          normalize_existing_pidfile() {
-            local raw original tmp
-            raw="$(cat "$pidfile" 2>/dev/null || true)"
-            original="$raw"
-            if [[ "$raw" == *'\n' ]]; then
-              raw="$(printf '%s' "$raw" | sed 's/\\n$//')"
-            fi
-            if pid_is_factory "$raw"; then
-              if [[ "$raw" != "$original" ]]; then
-                tmp="$pidfile.tmp.$BASHPID"
-                (umask 077; printf '%s\n' "$raw" > "$tmp")
-                mv -f -- "$tmp" "$pidfile"
-                echo FACTORY_PIDFILE_LITERAL_BACKSLASH_N_REPAIRED
-              fi
-              current_pid="$raw"
-              return 0
-            fi
-            current_pid=""
-            return 1
-          }
-          report_factory() {
-            local fpid="$1"
-            echo FACTORY_LOOP_ALIVE
-            echo "FACTORY_PID=$fpid"
-            ps -p "$fpid" -o etime=,args= | sed 's/^/FACTORY_PROCESS=/'
-            if command -v pstree >/dev/null 2>&1; then pstree -ap "$fpid" | head -n 30 | sed 's/^/FACTORY_PROCESS_TREE=/'; else ps -o pid,ppid,stat,etime,args --ppid "$fpid" | sed 's/^/FACTORY_PROCESS_CHILD=/'; fi
-            grep -nE 'trap|while|manage.py|factory_staging_tick|sleep|flock|wait|kill|exec' "$script" | head -n 60 | sed 's/^/FACTORY_LOOP_CONTROL_SOURCE=/'
-            if test -f "$log"; then
-              printf 'FACTORY_LOG_MTIME=%s\\n' "$(stat -c %y "$log")"
-              echo FACTORY_RECENT_ACTIVITY
-              tail -n 35 "$log" || true
-              # Read-only post-repair checks: bounded real loop evidence, not PID-only health.
-              printf 'FACTORY_AGENT_SEED_NO_WRITE_LAST_500=%s\n' "$(tail -n 500 "$log" | grep -c -F 'FACTORY_AGENT_SEED_HEALTHY_NO_WRITE' || true)"
-              printf 'FACTORY_AGENT_SEED_REFRESH_LAST_500=%s\n' "$(tail -n 500 "$log" | grep -c -F 'FACTORY_AGENT_SEED_REFRESHED' || true)"
-              printf 'FACTORY_SQLITE_LOCK_ERRORS_LAST_500=%s\n' "$(tail -n 500 "$log" | grep -c -F 'database is locked' || true)"
-              printf 'FACTORY_TICK_FAILURES_LAST_500=%s\n' "$(tail -n 500 "$log" | grep -c -F 'TICK_EXIT_FAILURE' || true)"
-            else
-              echo FACTORY_LOG_MISSING
-            fi
-            report_database_state
-          }
-          exec 9>"$ops/vps-only-launch-v2.lock"
-          if ! flock -n 9; then
-            echo FACTORY_LAUNCH_LOCK_BUSY
-            normalize_existing_pidfile || true
-            if pid_is_factory "$current_pid"; then
-              report_factory "$current_pid"
-              exit 0
-            fi
-            if [[ "$current_pid" =~ ^[0-9]+$ ]] && kill -0 "$current_pid" 2>/dev/null; then
-              echo FACTORY_PID_NOT_VERIFIED
-              ps -p "$current_pid" -o args= || true
-              exit 1
-            fi
-            echo FACTORY_LOCK_BUSY_NO_VERIFIED_PID
-            ps -eo pid,ppid,args | grep -F 'vps-only-loop' | grep -v grep || true
-            exit 1
-          fi
-          normalize_existing_pidfile || true
-          if pid_is_factory "$current_pid"; then
-            report_factory "$current_pid"
-          elif [[ "$current_pid" =~ ^[0-9]+$ ]] && kill -0 "$current_pid" 2>/dev/null; then
-            echo FACTORY_PID_NOT_VERIFIED
-            ps -p "$current_pid" -o args= || true
-            exit 1
-          else
-            if [[ "$recovery_authorized" != "true" || "$offhost_backup_verified" != "true" ]]; then
-              echo FACTORY_AUTOSTART_BLOCKED_RECOVERY_GATE
-              exit 0
-            fi
-            cd "$base/django-app"
-            export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
-            export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
-            db_bytes="$("$base/.venv/bin/python" -B -c 'import os; os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings"); import django; django.setup(); from django.conf import settings; from pathlib import Path; db=settings.DATABASES["default"]; assert db["ENGINE"].endswith("sqlite3"), "RECOVERY_DB_BACKEND_UNSUPPORTED"; source=Path(db["NAME"]); assert source.is_file() and not source.is_symlink() and not any(parent.is_symlink() for parent in source.parents), "RECOVERY_DB_PATH_UNSAFE"; print(source.stat().st_size)')"
-            [[ "$db_bytes" =~ ^[0-9]+$ ]]
-            free_bytes="$(df -B1 --output=avail "$base" | awk 'NR==2 {print $1}')"
-            [[ "$free_bytes" =~ ^[0-9]+$ ]]
-            required_bytes="$((5*1024*1024*1024 + db_bytes + 128*1024*1024))"
-            echo "FACTORY_RECOVERY_FREE_BYTES=$free_bytes"
-            echo "FACTORY_RECOVERY_DB_BYTES=$db_bytes"
-            echo "FACTORY_RECOVERY_REQUIRED_BYTES=$required_bytes"
-            if (( free_bytes < required_bytes )); then
-              echo FACTORY_AUTOSTART_BLOCKED_CAPACITY
-              exit 1
-            fi
-            nohup "$script" 9>&- </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
-            printf '%s\n' "$!" > "$pidfile"
-            sleep 3
-            current_pid="$(cat "$pidfile")"
-            kill -0 "$current_pid"
-            if ! pid_is_factory "$current_pid"; then
-              echo FACTORY_START_NOT_VERIFIED
-              ps -p "$current_pid" -o args= || true
-              exit 1
-            fi
-            echo FACTORY_LOOP_RECOVERED
-            report_factory "$current_pid"
-          fi
           REMOTE
 
 # Operator-requested safe continuity verification on 2026-10-14; VPS-local watchdog remains authoritative.
