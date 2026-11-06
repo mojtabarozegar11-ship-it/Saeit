@@ -40,7 +40,7 @@ jobs:
           agri="<section class='zm-editorial' id='zm-editorial-20261016' aria-label='آموزش تخصصی کشاورزی'><style>.zm-editorial{margin:32px auto;max-width:1180px;padding:22px;background:#252b19;color:#f4f0df;border:5px double #e2c373;direction:rtl}.zm-editorial h2,.zm-editorial h3{color:#f5d991}.zm-editorial .zm-ed-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px}.zm-editorial article{border:2px solid #e2c373;padding:18px;background:#303822}.zm-editorial p{line-height:2}.zm-editorial a{color:#f8d98b}</style><h2>دانش کاربردی کشاورزی و تولید</h2><div class='zm-ed-grid'><article><h3>برنامه‌ریزی تولید</h3><p>برای هر قطعه یا واحد تولیدی، محدودیت‌های آب، زمین، نیروی انسانی، هزینه نهاده‌ها، کیفیت محصول و نیاز بازار را در یک جدول تصمیم ثبت کنید. سودآوری را در سناریوهای مختلف قیمت و عملکرد مقایسه کنید؛ سناریوی خوش‌بینانه به‌تنهایی برای سرمایه‌گذاری کافی نیست.</p></article><article><h3>پایش و کنترل کیفیت</h3><p>ثبت داده خاک و آب، سلامت نهاده، تغییرات دما و کیفیت محصول زمینه تصمیم علمی را فراهم می‌کند. زمان نمونه‌برداری، ابزار اندازه‌گیری و منشأ هر داده باید مشخص باشد تا تحلیل بعدی بازتولیدپذیر بماند.</p></article><article><h3>مسیر یادگیری</h3><p>در هر حوزه کشاورزی، ابتدا سؤال را دقیق تعریف کنید، شواهد معتبر محلی را بررسی و سپس گزینه‌ها را با معیارهای هزینه، کیفیت، ریسک و پایداری مقایسه کنید. توصیه تخصصی بدون اطلاعات واقعی محل، قابل تعمیم قطعی نیست.</p><a href='/zm-specialist-library-2026.html'>مطالعه راهنمای جامع ←</a></article></div></section>"
           sections["/agriculture/"]=agri
           guide_paths=sorted(Path("public/agriculture").glob("*/index.html"))
-          assert len(guide_paths)==13
+          assert len(guide_paths)==14
           for page in guide_paths:
               slug=page.parent.name
               content=page.read_text(encoding="utf-8")
@@ -94,6 +94,9 @@ jobs:
           Path("zm-inpage-editorial-2026.js").write_text(code,encoding="utf-8")
           loader=''';\n/* ZM_INPAGE_EDITORIAL_LOADER_20261016 additive / independent of master agents */\n(function(){try{if(location.hostname!=="zomorodmelal.ir"&&location.hostname!=="www.zomorodmelal.ir")return;var t=document.createElement("script");t.src="/zm-inpage-editorial-2026.js?v=20261016";t.async=true;t.setAttribute("data-zm-editorial","yes");(document.head||document.documentElement).appendChild(t)}catch(e){}})();\n'''
           Path("zm-modern-loader.txt").write_text(loader,encoding="utf-8")
+          static_routes=["blog/index.html","weather/index.html","store/index.html","newsletter/index.html","amozeshgah/index.html","academy/index.html","education/index.html","industry/index.html","research/index.html","knowledge/index.html","market/index.html","economy/index.html","studio/index.html","agents/index.html","company/index.html","services/index.html","agriculture/index.html"]
+          static_routes.extend(str(p.relative_to(Path("public"))) for p in sorted(Path("public/agriculture").glob("*/index.html")))
+          Path("zm-static-routes.txt").write_text("\\n".join(static_routes)+"\\n",encoding="utf-8")
           print("SITE_PAGES_WITH_EDITORIAL="+str(len(sections)))
           print("STANDALONE_MODULES="+str(16*3))
           PY
@@ -159,7 +162,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-root"
-          tar -czf - zm-inpage-editorial-2026.js zm-modern-loader.txt | ssh -F "$d/config" saeit-cpanel "mkdir -p /home/zomorod2/.zm-stage-$GITHUB_SHA && tar -xzf - -C /home/zomorod2/.zm-stage-$GITHUB_SHA"
+          tar -czf - zm-inpage-editorial-2026.js zm-modern-loader.txt zm-static-routes.txt | ssh -F "$d/config" saeit-cpanel "mkdir -p /home/zomorod2/.zm-stage-$GITHUB_SHA && tar -xzf - -C /home/zomorod2/.zm-stage-$GITHUB_SHA"
       - name: Back up original JS and append isolated loader
         id: install
         shell: bash
@@ -169,7 +172,7 @@ jobs:
           public_sha="$(cat "$RUNNER_TEMP/public-sha")"
           ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" "$public_sha" <<'PY'
           from pathlib import Path
-          import hashlib,os,sys
+          import hashlib,json,os,sys
           sha,expected=sys.argv[1:]
           home=Path.home()
           root=home/"public_html"
@@ -186,31 +189,8 @@ jobs:
           loader=(stage/"zm-modern-loader.txt").read_bytes()
           content=(stage/"zm-inpage-editorial-2026.js").read_bytes()
           assert b"zm-editorial-20261016" in content and len(content)>40000
-          assert not backup.exists()
-          backup.mkdir(parents=True)
-          (backup/"modern.original.js").write_bytes(original)
-          assert (backup/"modern.original.js").read_bytes()==original
-          temp_page=page.with_suffix(".js.tmp")
-          temp_page.write_bytes(content)
-          os.chmod(temp_page,0o644)
-          os.replace(temp_page,page)
-          temp=modern.with_name("modern.zm-"+sha+".tmp")
-          temp.write_bytes(original+b"\n"+loader)
-          os.chmod(temp,modern.stat().st_mode & 0o777)
-          os.replace(temp,modern)
-
-          # The public routes below are served from static index.html files and do not load modern.js.
-          route_files=[
-              "blog/index.html","weather/index.html","store/index.html",
-              "newsletter/index.html","amozeshgah/index.html","academy/index.html",
-              "education/index.html","industry/index.html","research/index.html",
-              "knowledge/index.html","market/index.html","economy/index.html",
-              "studio/index.html","agents/index.html","company/index.html",
-              "services/index.html","agriculture/index.html",
-          ]
+          route_files=(stage/"zm-static-routes.txt").read_text(encoding="utf-8").splitlines()
           required={"blog/index.html","weather/index.html"}
-          for p in sorted((Path("public/agriculture")).glob("*/index.html")):
-              route_files.append(str(p.relative_to(Path("public"))))
           available=[]
           for rel in route_files:
               target=root/rel
@@ -224,6 +204,9 @@ jobs:
               assert b'data-zm-editorial-loader="yes"' not in raw, "Editorial loader already present: "+rel
               available.append((rel,target,raw,target.stat().st_mode & 0o777))
           assert required.issubset({x[0] for x in available})
+          assert not backup.exists()
+          backup.mkdir(parents=True)
+          (backup/"modern.original.js").write_bytes(original)
           static_backup=backup/"static-pages"
           static_backup.mkdir(parents=True)
           modes={}
@@ -232,16 +215,25 @@ jobs:
               saved.parent.mkdir(parents=True,exist_ok=True)
               saved.write_bytes(raw)
               modes[rel]=mode
+          (backup/"static-pages.json").write_text(json.dumps(modes,ensure_ascii=False),encoding="utf-8")
+          (backup/"install-started").write_text(sha,encoding="ascii")
+          temp_page=page.with_suffix(".js.tmp")
+          temp_page.write_bytes(content)
+          os.chmod(temp_page,0o644)
+          os.replace(temp_page,page)
+          temp=modern.with_name("modern.zm-"+sha+".tmp")
+          temp.write_bytes(original+b"\\n"+loader)
+          os.chmod(temp,modern.stat().st_mode & 0o777)
+          os.replace(temp,modern)
+          for rel,target,raw,mode in available:
               text=raw.decode("utf-8")
               tag='<script defer data-zm-editorial-loader="yes" src="/zm-inpage-editorial-2026.js?v=20261106"></script>'
               idx=text.lower().rfind("</body>")
-              assert idx>=0
-              new_text=text[:idx]+tag+text[idx:]
+              updated=text[:idx]+tag+text[idx:]
               temp_html=target.with_name(target.name+".zm-"+sha+".tmp")
-              temp_html.write_text(new_text,encoding="utf-8")
+              temp_html.write_text(updated,encoding="utf-8")
               os.chmod(temp_html,mode)
               os.replace(temp_html,target)
-          (backup/"static-pages.json").write_text(__import__("json").dumps(modes,ensure_ascii=False),encoding="utf-8")
           print("JS_ORIGINAL_PRESERVED=yes")
           print("NEW_IN_PAGE_EDITORIAL_INSTALLED=yes")
           print("STATIC_HTML_PAGES_CONNECTED="+str(len(available)))
@@ -275,7 +267,7 @@ jobs:
           curl -fsSL --max-time 25 "https://zomorodmelal.ir/weather/" | grep -Fq 'data-zm-editorial-loader="yes"'
           echo "STATIC_EDITORIAL_LOADER_ROUTES_VERIFIED=$verified"
       - name: Automatically restore exact modern.js and remove content on failure
-        if: failure() && steps.install.outcome == 'success'
+        if: failure()
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-root"
@@ -310,6 +302,9 @@ jobs:
           if content.is_file() and b"zm-editorial-20261016" in content.read_bytes():
               target=home/".backups"/"zomorod-live-inpage"/sha/"editorial.unpublished.js"
               content.rename(target)
+          if not backup_root.joinpath("install-started").is_file():
+              print("NO_REMOTE_CHANGES_TO_ROLL_BACK=yes")
+              raise SystemExit(0)
           print("SHARED_SCRIPT_ORIGINAL_RESTORED=yes")
           PY
       - name: Remove temporary SSH keys
