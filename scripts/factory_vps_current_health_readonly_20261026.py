@@ -478,3 +478,70 @@ def inventory():
 
 if __name__ == "__main__":
     print("FACTORY_OWNER_VPS_READONLY=" + json.dumps(inventory(), sort_keys=True))
+
+
+# The disk-pressure extension is observational only and never modifies the VPS.
+# It runs on request from the read-only workflow, with bounded subprocess time.
+_DISK_LABELS = frozenset({
+    "factory-runtime", "archives", "backup", "backups", "logs", "cache",
+    "tmp", "data", ".cache", ".npm", ".local", "projects", "workspaces",
+    "snapshots", ".config", ".pm2", ".docker", "venv", "virtualenv",
+})
+
+
+def _safe_child_label(path):
+    name = path.name
+    if name in _DISK_LABELS:
+        return name
+    return "other-" + hashlib.sha256(name.encode("utf8")).hexdigest()[:8]
+
+
+def _du_largest_direct_children(directory, timeout_seconds):
+    """Read-only bounded du, never emitting arbitrary paths or filenames."""
+    if directory.is_symlink() or not directory.is_dir():
+        return {"state": "unavailable"}
+    try:
+        run = subprocess.run(
+            ["nice", "-n", "15", "du", "-x", "-B1", "--max-depth=1",
+             str(directory)],
+            capture_output=True, text=True, timeout=timeout_seconds,
+            check=False)
+    except subprocess.TimeoutExpired:
+        return {"state": "timed_out", "timeout_seconds": timeout_seconds}
+    except OSError:
+        return {"state": "unavailable"}
+    top = []
+    for row in run.stdout.splitlines():
+        if "\t" not in row:
+            continue
+        size, raw_path = row.split("\t", 1)
+        if not size.isdecimal():
+            continue
+        path = Path(raw_path)
+        if path == directory or path.parent != directory:
+            continue
+        top.append({"label": _safe_child_label(path), "bytes": int(size)})
+    top.sort(key=lambda row: row["bytes"], reverse=True)
+    return {"state": "complete" if run.returncode == 0 else "partial",
+            "largest_direct_children": top[:15],
+            "returned_child_count": len(top)}
+
+
+def disk_pressure_map():
+    """Bounded aggregate diagnostics; root or symlink surprises fail closed."""
+    if os.geteuid() == 0 or BASE.is_symlink() or not BASE.is_dir():
+        return {"state": "unsafe"}
+    st = os.statvfs(BASE)
+    return {
+        "schema": "saeit.vps.disk-pressure-map.readonly.v1",
+        "read_only": True, "server_written_bytes": 0,
+        "filesystem_inode_total": st.f_files,
+        "filesystem_inode_free": st.f_ffree,
+        "home": _du_largest_direct_children(Path("/home/githubops"), 20),
+        "factory": _du_largest_direct_children(BASE, 15),
+        "system_logs": _du_largest_direct_children(Path("/var/log"), 8),
+    }
+
+
+if __name__ == "__main__":
+    print("VPS_DISK_PRESSURE_READONLY=" + json.dumps(disk_pressure_map(), sort_keys=True))
