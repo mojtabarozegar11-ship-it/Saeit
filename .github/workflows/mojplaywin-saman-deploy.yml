@@ -319,7 +319,7 @@ jobs:
           count=0
           for slug in "${slugs[@]}"; do
             for kind in market-signals digital-products; do
-              for url in "https://zomorodmelal.ir/$slug/$kind/" "https://mojplaywin.com/$slug/$kind/" "https://mojplaywin.com/ar/$slug/$kind/"; do
+              for url in "https://zomorodmelal.ir/$slug/$kind/" "https://mojplaywin.com/$slug/$kind/" "https://mojplaywin.com/arabic/$slug/$kind/"; do
                 body="$RUNNER_TEMP/finance-page.html"
                 status="$(curl --retry 2 --retry-delay 2 -sS -o "$body" -w '%{http_code}' "$url")"
                 [[ "$status" == "200" ]] || { echo "Finance page failed: $url HTTP $status"; exit 1; }
