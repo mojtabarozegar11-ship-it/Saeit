@@ -1,4 +1,5 @@
 name: Deploy SAMAN to MojPlayWin
+# Finance page deployment: 34 English + 34 Arabic routes.
 
 on:
   push:
