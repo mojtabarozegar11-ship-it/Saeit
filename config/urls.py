@@ -5,7 +5,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 from command_center.views import dashboard as staff_dashboard
 
-from core.views import home, platform_page
+from core.views import home, platform_page, taniya_studio
 from core.mojplaywin_views import venture
 from core.commerce_views import store_home, auctions_home
 from core.crown_checkout import crown_cosmetic_checkout
@@ -49,7 +49,7 @@ urlpatterns = [
     path("market/", lambda request: platform_page(request, "market"), name="market"),
     path("economy/", lambda request: platform_page(request, "economy"), name="economy"),
     path("studio/", lambda request: platform_page(request, "studio"), name="studio"),
-    path("taniya/", RedirectView.as_view(url="https://mojplaywin.com/taniya/", permanent=False), name="taniya_studio"),
+    path("taniya/", taniya_studio, name="taniya_studio"),
     path("agents/", lambda request: platform_page(request, "agents"), name="agents"),
     path("search/", site_search, name="site_search"),
     path("robots.txt", robots_txt, name="robots_txt"),
