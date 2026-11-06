@@ -48,7 +48,7 @@ section{margin-top:24px;scroll-margin-top:92px}
 {% for component in components %}<article class="card" data-component="{{ component }}"><div class="label">{{ component }}</div><span class="state unknown">نامشخص</span><p><small>اتصال داده برقرار نیست</small></p></article>{% endfor %}
 </div></section>
 <section class="card"><h2>{% if lang == "fa" %}پیشرفت تأییدشده{% else %}Verified Progress{% endif %}</h2><div id="workstreams"><p>تا اتصال معیارهای واقعی، درصدی نمایش داده نمی‌شود.</p></div></section>
-<section class="card"><h2>{% if lang == "fa" %}فرماندهی مستر ایجنت{% else %}Master Agent Control{% endif %}</h2><p>چت عملیاتی هنوز متصل نشده است. اجرای دستور از این صفحه عمداً غیرفعال است تا دستوری بدون احراز هویت، مجوز و ثبت ممیزی اجرا نشود.</p></section>
+<section class="card"><h2>{% if lang == "fa" %}فرماندهی مستر ایجنت{% else %}Master Agent Control{% endif %}</h2><p>چت عملیاتی متصل است: پیام‌های صریح درباره ایجاد یا ویرایش سایت و عملیات cPanel به درخواست تأییددار تبدیل می‌شوند؛ اجرای تغییر فقط پس از تأیید مالک، در worker محدود و با ثبت ممیزی انجام می‌شود.</p></section>
 <script>
 const endpoint="{% url 'command_center_overview_api' %}";
 const managementReportEndpoint="{% url 'command_center_management_report_api' %}";

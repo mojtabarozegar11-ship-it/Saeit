@@ -30,6 +30,41 @@ class MasterAgentChat:
 
         ChatMessage.objects.create(session=session, role="user", content=text)
 
+        # Ordinary chat can now produce a bounded operation request. The chat
+        # never executes it directly: it creates an owner approval record.
+        from .operation_planner import approval_reason, plan_chat_operation
+        from .models import ApprovalRequest
+
+        operation = plan_chat_operation(text)
+        if operation is not None:
+            approval = ApprovalRequest.objects.create(
+                action_type="chat:" + operation.action,
+                target_type="ChatOperation",
+                target_id=operation.operation_id,
+                reason=approval_reason(operation),
+                risk=operation.risk,
+                status="pending",
+                requested_by=session.user,
+            )
+            reply = (
+                "درخواست عملیاتی ثبت شد و هنوز اجرا نشده است. "
+                f"شماره تأیید: {approval.pk} | عملیات: {operation.action} | "
+                "پس از تأیید مالک، worker سایت آن را فقط در محدوده مجاز اجرا و نتیجه را ثبت می‌کند."
+            )
+            ChatMessage.objects.create(
+                session=session,
+                role="assistant",
+                content=reply,
+                metadata={
+                    "agent": "master_agent",
+                    "capability_pack": "1.0.0",
+                    "operation_id": operation.operation_id,
+                    "approval_id": approval.pk,
+                    "execution": "approval_required",
+                },
+            )
+            return reply
+
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             reply = (
