@@ -27,7 +27,9 @@ DOMAIN = "mojplaywin.com"
 MAX_LOG_BYTES = 64 * 1024 * 1024
 MAX_ARCHIVE_COMPRESSED_BYTES = 16 * 1024 * 1024
 MAX_LINES = 600_000
-MAX_STDERR_BYTES = 1024 * 1024
+# Inspect more historical Passenger errors while still emitting only safe
+# counts and module names. Never print the captured log text.
+MAX_STDERR_BYTES = 8 * 1024 * 1024
 LOOKBACK_DAYS = 7
 MONTHS = {v: i for i, v in enumerate(
     ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), 1)}
