@@ -4,6 +4,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 MODULE = Path(__file__).resolve().parents[1] / "scripts" / "factory_vps_backup_retention_audit_20261101.py"
@@ -39,6 +40,36 @@ class FactoryBackupAuditTests(unittest.TestCase):
         self.assertTrue(report["records"][0]["quick_check_ok"])
         self.assertFalse(report["records"][0]["approved_for_deletion"])
         self.assertTrue(report["deletion_gate"].startswith("BLOCKED_"))
+
+    def test_total_budget_marks_unchecked_as_unknown_and_never_delete(self):
+        path = self.make_database("master-before-20261027T000000Z.sqlite3")
+        before = (path.read_bytes(), path.stat().st_mtime_ns)
+        with mock.patch.object(audit_module, "MAX_TOTAL_VERIFICATION_SECONDS", 0):
+            report = audit_module.audit(self.root)
+        row = report["records"][0]
+        self.assertEqual(report["verification_skipped_budget_count"], 1)
+        self.assertEqual(row["check_result"], "global_verification_budget_exhausted")
+        self.assertFalse(row["quick_check_ok"])
+        self.assertFalse(row["approved_for_deletion"])
+        self.assertFalse(report["offsite_functional_restore_verified"])
+        self.assertEqual(before, (path.read_bytes(), path.stat().st_mtime_ns))
+
+    def test_verification_checks_newest_snapshot_before_older_backups(self):
+        older = self.make_database("master-before-20261025T000000Z.sqlite3")
+        newer = self.make_database("master-before-20261027T000000Z.sqlite3")
+        import os
+        import time
+        now = time.time() - 120
+        os.utime(older, (now - 20, now - 20))
+        os.utime(newer, (now - 10, now - 10))
+        checked = []
+        def fake_check(path, seconds):
+            checked.append(path.name)
+            return True, "quick_check_ok"
+        with mock.patch.object(audit_module, "check_database", side_effect=fake_check):
+            report = audit_module.audit(self.root)
+        self.assertEqual(checked, [newer.name, older.name])
+        self.assertEqual(report["verified_exact_master_count"], 2)
 
     def test_corrupt_file_never_approved(self):
         path = self.root / "master-before-20261026T000000Z.sqlite3"
