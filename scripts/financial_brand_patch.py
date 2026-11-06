@@ -7,6 +7,12 @@ def patch_financial_urls(source):
         # Migrate a previously installed finance block in place. This keeps
         # repeated deployments safe while correcting an older store segment.
         return source.replace(
+            'path(f"arabic/{_brand_slug}/market-signals/",',
+            'path(f"ar/{_brand_slug}/market-signals/",',
+        ).replace(
+            'path(f"arabic/{_brand_slug}/digital-products/",',
+            'path(f"ar/{_brand_slug}/digital-products/",',
+        ).replace(
             'path(f"ar/{_brand_slug}/market-signals/",',
             'path(f"ar/{_brand_slug}/market-signals/",',
         ).replace(
