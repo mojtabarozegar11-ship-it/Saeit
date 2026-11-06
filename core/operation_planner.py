@@ -27,7 +27,7 @@ def _path(text: str) -> str | None:
 
 
 def _quoted(text: str) -> str | None:
-    match = re.search(r"[«"“](.{1,240}?)[»"”]", text)
+    match = re.search(r'[«"“](.{1,240}?)[»"”]', text)
     return match.group(1).strip() if match else None
 
 
