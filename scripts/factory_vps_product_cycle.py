@@ -269,7 +269,9 @@ def _cleanup_completed_product_extras(root, recipe):
     """
     import shutil
     root = Path(root)
-    if root.is_symlink():
+    if (not isinstance(recipe, str) or not PRODUCT_SLUG.fullmatch(recipe)):
+        raise RuntimeError("PRODUCT_CLEANUP_INVALID_RECIPE")
+    if root.is_symlink() or not root.is_dir():
         raise RuntimeError("PRODUCT_CLEANUP_ROOT_UNSAFE")
     targets = [
         root / "generated-product-recipes" / recipe,
@@ -285,13 +287,27 @@ def _cleanup_completed_product_extras(root, recipe):
             raise RuntimeError("PRODUCT_CLEANUP_REVISION_ROOT_UNSAFE")
         targets.extend(p for p in revisions.iterdir()
                        if p.name.startswith(recipe + "-") and p.is_dir())
+
+    # Check *every* component of *every* target before deleting the first one.
+    # Checking target.is_symlink() alone misses `root/research-dossiers` as a
+    # link to an unrelated directory containing a same-named recipe. It also
+    # risks partial cleanup if a later target is malformed.
     for target in targets:
-        if target.is_symlink():
-            raise RuntimeError("PRODUCT_CLEANUP_SYMLINK_BLOCKED")
+        try:
+            components = target.relative_to(root).parts
+        except ValueError as exc:
+            raise RuntimeError("PRODUCT_CLEANUP_OUTSIDE_ROOT") from exc
+        current = root
+        for component in components:
+            current = current / component
+            if current.is_symlink():
+                raise RuntimeError("PRODUCT_CLEANUP_SYMLINK_BLOCKED")
+            if current.exists() and not current.is_dir():
+                raise RuntimeError("PRODUCT_CLEANUP_NON_DIRECTORY_BLOCKED")
+
+    for target in targets:
         if target.is_dir():
             shutil.rmtree(target)
-        elif target.exists():
-            raise RuntimeError("PRODUCT_CLEANUP_NON_DIRECTORY_BLOCKED")
 
 
 def _has_unreleased_line41_slot(root):
