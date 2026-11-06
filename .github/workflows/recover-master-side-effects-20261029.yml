@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/recover-master-side-effects-20261029.yml"
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
