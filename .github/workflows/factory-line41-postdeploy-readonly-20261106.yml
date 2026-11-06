@@ -57,8 +57,7 @@ jobs:
           state=load(root/"production-state.json")
           slots=load(root/"quality-excellence/product-flow/active-slots/current.json")
           health=load(root/"production-health.json")
-          assert state.get("quality_1000_blocks_manufacturing") is False
-          assert state.get("quality_1000_or_expert_review_bypassed_for_commercial_release") is False
+          assert state.get("objective_quality_gates")=="technical_archive_tests_and_release_readiness_separate"
           assert state.get("publishable_product_count")==0
           assert state.get("commercial_quality_review_completed") is False
           assert state.get("store_distribution_state")=="not_connected"

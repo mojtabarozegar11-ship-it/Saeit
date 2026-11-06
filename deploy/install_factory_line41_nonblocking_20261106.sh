@@ -123,13 +123,12 @@ state=json.loads(Path(sys.argv[1]).read_text(encoding="utf8"))
 slots=json.loads(Path(sys.argv[2]).read_text(encoding="utf8"))
 assert state.get("build_policy")=="line_41_single_active_product_technical_completion_then_next"
 assert state.get("active_product_slot_capacity")==1
-assert state.get("quality_1000_blocks_manufacturing") is False
-assert state.get("quality_1000_or_expert_review_bypassed_for_commercial_release") is False
+assert state.get("objective_quality_gates")=="technical_archive_tests_and_release_readiness_separate"
 assert state.get("commercial_quality_review_completed") is False
 assert state.get("publishable_product_count")==0
 assert state.get("store_distribution_state")=="not_connected"
 assert slots.get("commercial_release") is False
-assert slots.get("quality_1000_is_nonblocking_improvement_target") is True
+assert slots.get("quality_policy")=="objective_customer_acceptance_v1"
 assert len(slots.get("active",[]))<=1
 print("LINE41_VPS_PRIVATE_BUILD_RECEIPT=PASS")
 print("LINE41_NEW_ARTIFACTS="+str(state.get("new_or_updated_product_count")))

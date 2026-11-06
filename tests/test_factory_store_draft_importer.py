@@ -75,7 +75,7 @@ def test_unreviewed_receipt_can_only_enter_inactive_draft(django_user_model, tmp
     assert product.price == 0
     assert product.metadata["factory_publication_permission"] is False
     assert product.metadata["factory_commercial_release"] is False
-    assert product.metadata["factory_quality_1000_verified"] is False
+    assert product.metadata["factory_objective_release_readiness"] == "pending"
     assert product.metadata["factory_chatgpt_final_review"] == "pending_independent_review"
     assert product.metadata["factory_software_qa_scope"] == "private_archive_integrity_only"
 

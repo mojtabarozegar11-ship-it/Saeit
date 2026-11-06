@@ -136,6 +136,10 @@ def verify_negative_controls(bin_dir):
 
 
 def install(staging, expected):
+    # Retired by the owner's 2026-11-06 decision. Historical source and
+    # receipts are kept for audit, but this installer may never reinstate
+    # the numerical score release hook on the live cPanel publisher.
+    raise RuntimeError("RETIRED_NUMERIC_QC_INSTALLER_USE_OBJECTIVE_POLICY_DEPLOYMENT")
     if os.getuid() == 0:
         raise RuntimeError("QC1000_ROOT_INSTALL_FORBIDDEN")
     if (TARGET.is_symlink() or not TARGET.is_dir()

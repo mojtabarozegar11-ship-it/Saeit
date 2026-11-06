@@ -93,9 +93,9 @@ def verify_sources(inbox, docroot):
     clearance=quality.require_quality_clearance(
         inbox,RECIPE,digest,source_manifest,package
     )
-    if (clearance.get("status")!="VERIFIED_SIGNED_PREMIUM_1000"
-            or clearance.get("1000_quality_verified") is not True):
-        raise ValueError("QC1000_REQUIRED_FOR_FACTORY_EXIT")
+    if (clearance.get("status")!="VERIFIED_OBJECTIVE_RELEASE_READINESS"
+            or clearance.get("chatgpt_final_review")!="CHATGPT_FINAL_REVIEW_VERIFIED"):
+        raise ValueError("OBJECTIVE_RELEASE_READINESS_REQUIRED")
     body = release.read_text(encoding="utf-8")
     if TITLE not in body or digest not in body or "Free Toolkit" not in body:
         raise ValueError("PUBLIC_FREE_TOOLKIT_CONTENT_NOT_VERIFIED")

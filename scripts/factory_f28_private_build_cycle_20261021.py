@@ -2,7 +2,7 @@
 """F28 private build -> independent customer smoke -> mechanical repair -> recheck.
 
 Only source-controlled inputs are executed. Technical status is never a signed
-agronomic review, quality 1000 clearance, listing, or permission to sell.
+agronomic review, commercial release readiness, listing, or permission to sell.
 """
 import argparse
 from decimal import Decimal, InvalidOperation
@@ -196,7 +196,7 @@ def build_cycle(source, maker_file, out, *, revision="local"):
         except (ValueError, OSError):
             corruption_detected = True
     common = {"schema":SCHEMA,"recipe":RECIPE,"source_commit":revision,
-              "independent_professional_quality_1000_passed":False,
+              "commercial_readiness_verified":False,
               "commercial_release_authorized":False,"public_listing_enabled":False}
     try:
         maker.manufacture(RECIPE, source.parent, out / "private-stock")

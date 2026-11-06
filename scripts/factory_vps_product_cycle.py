@@ -80,16 +80,19 @@ def _verified_technical_exit(root, recipe, source_sha):
     """Release the *manufacturing slot*, never a product for public sale.
 
     A completed build must have matching current source, archive bytes and an
-    independently executed customer-ZIP receipt. Quality 1000 is an optional
-    improvement target, not a condition for beginning the next private build.
+    independently executed customer-ZIP receipt. A numerical grade is never
+    a condition for manufacturing or for freeing the one-product slot.
     """
     if not isinstance(source_sha, str) or not HEX_SHA256.fullmatch(source_sha):
         return None
     manifest_path = root / "digital-products" / recipe / "manufacturing_manifest.json"
     archive_path = root / "digital-products" / recipe / (recipe + "-internal-qa.zip")
     manifest = _read_private_json(manifest_path)
-    receipt_path = (root / "customer-extracted-acceptance" / recipe / source_sha
-                    / "technical-receipt.json")
+    receipt_dir = root / "customer-extracted-acceptance" / recipe / source_sha
+    receipt_path = receipt_dir / "technical-receipt-v2.json"
+    if not receipt_path.exists():
+        # Immutable legacy acceptance files remain valid for historical ZIPs.
+        receipt_path = receipt_dir / "technical-receipt.json"
     receipt = _read_private_json(receipt_path)
     if (not manifest or not receipt or archive_path.is_symlink()
             or not archive_path.is_file()):
@@ -116,14 +119,20 @@ def _verified_technical_exit(root, recipe, source_sha):
     except OSError:
         return None
     if (digest.hexdigest() != artifact_sha
-            or receipt.get("schema") != "zomorodmelal.factory.customer-extracted-acceptance.v1"
+            or receipt.get("schema") not in (
+                "zomorodmelal.factory.customer-extracted-acceptance.v1",
+                "zomorodmelal.factory.customer-extracted-acceptance.v2")
             or receipt.get("recipe") != recipe
             or receipt.get("source_sha256") != source_sha
             or receipt.get("artifact_sha256") != artifact_sha
             or receipt.get("customer_zip_extract_test") != "passed"
             or receipt.get("customer_archive_tests_run") != measured["tests_run"]
             or receipt.get("original_manufacturer_tests_run") != measured["tests_run"]
-            or receipt.get("professional_quality_1000_approved") is not False
+            or (receipt.get("schema", "").endswith(".v1")
+                and receipt.get("professional_quality_1000_approved") is not False)
+            or (receipt.get("schema", "").endswith(".v2")
+                and (receipt.get("objective_customer_package_accepted") is not True
+                     or receipt.get("commercial_publication_approved") is not False))
             or receipt.get("public_listing_enabled") is not False
             or receipt.get("commerce_enabled") is not False):
         return None
@@ -234,7 +243,8 @@ def _maintain_product_slots(root, recipe_names, source_hashes):
              "unavailable_recipe_count": len(unavailable_queue),
              "exit_rule": "exact-source-archive-and-extracted-customer-tests-private-only",
              "cleanup_rule": "no_deletion_of_product_or_rework_evidence",
-             "commercial_release": False, "quality_1000_is_nonblocking_improvement_target": True}
+             "commercial_release": False,
+             "quality_policy": "objective_customer_acceptance_v1"}
     _write_private_json(state_path, state)
     return [item["recipe"] for item in active]
 
@@ -597,8 +607,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "private_technical_completion_count": len((_read_private_json(
                 root / "quality-excellence" / "product-flow" / "active-slots" / "current.json")
                 or {}).get("technical_exited", {})),
-            "quality_1000_blocks_manufacturing": False,
-            "quality_1000_or_expert_review_bypassed_for_commercial_release": False,
+            "objective_quality_gates": "technical_archive_tests_and_release_readiness_separate",
             "manufacturing_disk_hold": storage_hold,
             "manufacturing_free_bytes_at_admission": free_bytes,
             "manufacturing_minimum_free_bytes": MIN_FREE_MANUFACTURING_BYTES,
@@ -633,7 +642,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "exact_sha_cached_customer_checks_passed": cached_customer_checks,
             "real_customer_zip_technical_receipts": customer_acceptances,
             "mechanical_customer_zip_repairs_verified": customer_repairs,
-            "professional_quality_1000_customer_checks_cannot_approve": True,
+            "customer_zip_tests_cannot_authorize_commercial_publication": True,
             "artifact_qa_passed": bool(produced) and not failures and not admission_failures and all(
                 p["qa_status"] == "passed" for p in produced),
             "quality_failures_this_cycle": [

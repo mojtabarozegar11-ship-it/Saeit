@@ -200,7 +200,7 @@ def import_receipts(root, app, document_root, owner_username=None, *, apply=Fals
                 "factory_status": "needs_editorial_pricing_and_owner_approval",
                 "factory_software_qa": "passed",
                 "factory_software_qa_scope": "private_archive_integrity_only",
-                "factory_quality_1000_verified": False,
+                "factory_objective_release_readiness": "pending",
                 "factory_chatgpt_final_review": "pending_independent_review",
                 "factory_factual_and_market_qa": "pending",
                 "factory_license_review": "pending",

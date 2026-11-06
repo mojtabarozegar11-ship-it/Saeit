@@ -83,7 +83,7 @@ jobs:
                   state=json.loads(marker.read_text(encoding="utf8"))
                   if ("fresh_extracted_customer_checks_passed" in state
                           and "exact_sha_cached_customer_checks_passed" in state
-                          and state.get("professional_quality_1000_customer_checks_cannot_approve") is True):
+                          and state.get("customer_zip_tests_cannot_authorize_commercial_publication") is True):
                       print("FACTORY_QA_CADENCE_STATE=PASS",flush=True)
                       print("FACTORY_QA_FRESH="+str(state["fresh_extracted_customer_checks_passed"]),flush=True)
                       print("FACTORY_QA_HASH_CACHED="+str(state["exact_sha_cached_customer_checks_passed"]),flush=True)
