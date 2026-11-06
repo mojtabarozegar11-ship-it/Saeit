@@ -1,0 +1,131 @@
+name: VPS F01 remove redundant outer Cron flock (manual one-time repair)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saeit-vps-f01-double-flock-once
+  cancel-in-progress: false
+
+jobs:
+  repair-original-cron-line:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Remove only second acquisition of the F01 worker's existing flock
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          keydir="$RUNNER_TEMP/saeit-f01-double-flock-repair"
+          install -d -m 700 "$keydir"
+          trap 'rm -rf -- "$keydir"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$keydir/key"
+          chmod 600 "$keydir/key"
+          ssh-keygen -y -P '' -f "$keydir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$keydir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$keydir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -T -i "$keydir/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$keydir/known" -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 githubops@178.239.147.150 'python3 -B -' <<'REMOTE'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import pwd
+          import subprocess
+
+          if os.geteuid() == 0 or pwd.getpwuid(os.geteuid()).pw_name != 'githubops':
+              raise SystemExit('F01_DOUBLE_FLOCK_FIX_ABORT_WRONG_USER')
+          base = Path('/home/githubops/factory-runtime')
+          private = base / 'private/autonomous-product-cycle'
+          runner = base / 'operations/single-product-runtime/run-single-product-cycle.sh'
+          slot = private / 'quality-excellence/product-flow/active-slots/current.json'
+          state = private / 'production-state.json'
+          lock = private / '.single-product-cycle.lock'
+          log = base / 'operations/single-product-cycle.log'
+          backup = base / 'operations/backups/f01-cron-before-double-flock-20261106.txt'
+          expected_sha = '546895c9d04d21360132394335f08851ab0ed2e5603e3d47e8a7d2471ed1e0d9'
+          marker = 'SAEIT_SINGLE_PRODUCT_FACTORY_V1'
+
+          def fail(reason):
+              raise SystemExit('F01_DOUBLE_FLOCK_FIX_ABORT_' + reason)
+
+          def safe_doc(path):
+              if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000:
+                  fail('UNSAFE_STATE')
+              return json.loads(path.read_text(encoding='utf-8'))
+
+          if (base.is_symlink() or private.is_symlink() or
+                  not runner.is_file() or runner.is_symlink() or not os.access(runner, os.X_OK)):
+              fail('UNSAFE_FACTORY')
+          if hashlib.sha256(runner.read_bytes()).hexdigest() != expected_sha:
+              fail('RUNNER_CHANGED')
+          current_slot = safe_doc(slot)
+          if (current_slot.get('schema') != 'saeit.factory.product-slots.v1'
+                  or len(current_slot.get('active', [])) != 1
+                  or current_slot['active'][0].get('recipe') != 'farm_enterprise_economics'):
+              fail('NOT_SINGLE_ACTIVE_F01')
+          production_state = safe_doc(state)
+          if (production_state.get('active_product_slot_recipes') != ['farm_enterprise_economics']
+                  or production_state.get('publishable_product_count') != 0
+                  or production_state.get('commercial_quality_review_completed') is not False):
+              fail('PUBLICATION_GATE_CHANGED')
+          if not lock.is_file() or lock.is_symlink() or log.is_symlink():
+              fail('UNSAFE_LOCK_OR_LOG')
+          cron = subprocess.run(['systemctl', 'is-active', 'cron.service'],
+                                capture_output=True, text=True, timeout=7, check=False)
+          if cron.returncode or cron.stdout.strip() != 'active':
+              fail('CRON_SERVICE_NOT_ACTIVE')
+          old_line = ('* * * * * /usr/bin/flock -n ' + str(lock) +
+                      ' /usr/bin/timeout 55s ' + str(runner) +
+                      ' >> ' + str(log) + ' 2>&1 # ' + marker)
+          new_line = ('* * * * * /usr/bin/timeout 55s ' + str(runner) +
+                      ' >> ' + str(log) + ' 2>&1 # ' + marker)
+          read = lambda: subprocess.run(['crontab', '-l'], text=True,
+                                         capture_output=True, timeout=7, check=False)
+          before = read()
+          if before.returncode or not before.stdout.endswith('\n'):
+              fail('CRONTAB_UNREADABLE')
+          rows = before.stdout.splitlines(keepends=True)
+          active = [line for line in rows if line.strip() and not line.lstrip().startswith('#')]
+          if (len(active) != 9 or sum(marker in line for line in active) != 1
+                  or sum(line.rstrip('\n') == old_line for line in rows) != 1
+                  or new_line in before.stdout):
+              fail('CRON_LINE_NOT_EXACT_PINNED_OR_CHANGED')
+          if backup.exists() or backup.is_symlink() or not backup.parent.is_dir():
+              fail('BACKUP_TARGET_UNSAFE')
+          if read().stdout != before.stdout:
+              fail('CONCURRENT_CRON_CHANGE')
+          # A small permission-restricted rollback copy is retained on the VPS.
+          fd = os.open(str(backup), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+              handle.write(before.stdout)
+          new_cron = ''.join(new_line + '\n' if line == old_line + '\n'
+                             else line for line in rows)
+          if new_cron == before.stdout or len(new_cron.splitlines()) != len(rows):
+              fail('CRON_REWRITE_INVARIANT_FAILED')
+          written = subprocess.run(['crontab', '-'], input=new_cron, text=True,
+                                   capture_output=True, timeout=12, check=False)
+          if written.returncode:
+              fail('CRON_INSTALL_FAILED_BACKUP_RETAINED')
+          after = read()
+          if after.returncode or after.stdout != new_cron:
+              restored = subprocess.run(['crontab', '-'], input=before.stdout,
+                                        text=True, capture_output=True, timeout=12,
+                                        check=False)
+              if restored.returncode or read().stdout != before.stdout:
+                  fail('VERIFY_FAILED_MANUAL_RECOVERY_NEEDED')
+              fail('VERIFY_FAILED_ORIGINAL_RESTORED')
+          print('F01_DOUBLE_FLOCK_FIX_PRESERVED_OTHER_CRON_JOBS=8')
+          print('F01_DOUBLE_FLOCK_FIX_SINGLE_ACTIVE_PRODUCT=PASS')
+          print('F01_DOUBLE_FLOCK_FIX_INTERNAL_RUNNER_LOCK_PRESERVED=PASS')
+          print('F01_DOUBLE_FLOCK_FIX_REDUNDANT_OUTER_LOCK_REMOVED=PASS')
+          print('F01_DOUBLE_FLOCK_FIX_ORIGINAL_CRONTAB_BACKUP=RETAINED_PRIVATE')
+          print('F01_DOUBLE_FLOCK_FIX_COMMERCIAL_PUBLICATION=LOCKED')
+          REMOTE
