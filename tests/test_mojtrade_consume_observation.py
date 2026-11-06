@@ -22,22 +22,14 @@ def payload(now, expires_delta=timedelta(minutes=30)):
         "expires_at": (now + expires_delta).isoformat(),
         "signals": [
             {
-                "id": "btc-1",
-                "market": "crypto",
-                "symbol": "BTC/USD",
-                "timeframe": "1h",
-                "stance": "watch_buy",
-                "observed_at": generated.isoformat(),
+                "id": "btc-1", "market": "crypto", "symbol": "BTC/USD", "timeframe": "1h",
+                "stance": "watch_buy", "observed_at": generated.isoformat(),
                 "method": "sma20-sma50-momentum10-v1-closed-1h",
                 "data_source": "coinbase-exchange-public-candles",
             },
             {
-                "id": "eth-1",
-                "market": "crypto",
-                "symbol": "ETH/USD",
-                "timeframe": "1h",
-                "stance": "neutral",
-                "observed_at": generated.isoformat(),
+                "id": "eth-1", "market": "crypto", "symbol": "ETH/USD", "timeframe": "1h",
+                "stance": "neutral", "observed_at": generated.isoformat(),
                 "method": "sma20-sma50-momentum10-v1-closed-1h",
                 "data_source": "kraken-spot-public-ohlc",
             },
@@ -90,6 +82,19 @@ class ObservationConsumerTests(unittest.TestCase):
             os.chmod(source, 0o644)
             with self.assertRaises(consumer.ObservationError):
                 consumer.read_observation(source, self.now)
+
+    def test_rejects_missing_signal_identity_or_method(self):
+        for field in ("id", "method"):
+            with tempfile.TemporaryDirectory() as root:
+                private = Path(root) / "private"
+                private.mkdir(mode=0o700)
+                source = private / "observation.json"
+                item = payload(self.now)
+                item["signals"][0].pop(field)
+                source.write_text(json.dumps(item), encoding="utf-8")
+                os.chmod(source, 0o600)
+                with self.assertRaises(consumer.ObservationError):
+                    consumer.read_observation(source, self.now)
 
     def test_private_report_write_is_atomic_and_mode_600(self):
         with tempfile.TemporaryDirectory() as root:

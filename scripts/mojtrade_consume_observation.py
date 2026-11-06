@@ -41,6 +41,12 @@ def _timestamp(value: object, field: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+def _required_text(value: object, field: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ObservationError(f"{field}_missing_or_invalid")
+    return value.strip()
+
+
 def read_observation(path: Path, now: datetime | None = None) -> dict:
     if not path.is_absolute() or path.is_symlink():
         raise ObservationError("observation_path_must_be_private_absolute_file")
@@ -74,20 +80,22 @@ def read_observation(path: Path, now: datetime | None = None) -> dict:
             raise ObservationError("observation_symbol_order_invalid")
         if signal.get("market") != "crypto" or signal.get("timeframe") != "1h":
             raise ObservationError("observation_market_metadata_invalid")
-        if signal.get("stance") not in ALLOWED_STANCES:
+        stance = signal.get("stance")
+        if stance not in ALLOWED_STANCES:
             raise ObservationError("observation_stance_invalid")
-        if signal.get("data_source") not in ALLOWED_SOURCES:
+        source = signal.get("data_source")
+        if source not in ALLOWED_SOURCES:
             raise ObservationError("observation_provider_invalid")
         observed_at = _timestamp(signal.get("observed_at"), "observed_at")
         if observed_at > now or observed_at > expires_at:
             raise ObservationError("observation_signal_time_invalid")
         normalized.append({
-            "id": signal.get("id"),
+            "id": _required_text(signal.get("id"), "signal_id"),
             "symbol": expected_symbol,
-            "stance": signal["stance"],
+            "stance": stance,
             "observed_at": observed_at.isoformat(),
-            "data_source": signal["data_source"],
-            "method": signal.get("method"),
+            "data_source": source,
+            "method": _required_text(signal.get("method"), "signal_method"),
         })
     return {
         "schema_version": 1,
