@@ -107,6 +107,112 @@ print("AGENT_FLEET_DATABASE_PREVIEW=" +
       json.dumps({"summary": summary, "agents": rows}, sort_keys=True, separators=(",", ":")))
 PY
 
+# Distinguish internally completed economic tasks from customer-facing output.
+# Only aggregate known status/action/evidence markers; never emit task inputs,
+# receipts, customer identifiers or amounts. This does not reconcile payments.
+"$python_bin" - <<'PY'
+import collections
+import hashlib
+import json
+from datetime import timedelta
+from pathlib import Path
+
+import django
+django.setup()
+
+from django.db import connection
+from django.utils import timezone
+from core.models import AgentTask, Order, LedgerEntry, Product
+
+now = timezone.now()
+windows = {"day": now - timedelta(days=1),
+           "week": now - timedelta(days=7),
+           "month": now - timedelta(days=30)}
+tasks = AgentTask.objects.filter(agent__code="economic-master-agent")
+counts = {key: collections.Counter() for key in windows}
+evidence_kinds = collections.Counter()
+outputs = collections.Counter()
+latest_completion = None
+for task in tasks.filter(updated_at__gte=windows["month"]).only(
+    "status", "action_type", "updated_at", "output_data"
+).iterator(chunk_size=200):
+    action = task.action_type if task.action_type in {
+        "income_market_research", "income_opportunity_score", "income_offer_design",
+        "income_mvp_build", "income_growth_experiment", "income_revenue_verify",
+        "income_profit_optimize", "master_self_improvement",
+    } else "other"
+    for label, cutoff in windows.items():
+        if task.updated_at >= cutoff:
+            counts[label][(task.status, action)] += 1
+    if task.status != "completed":
+        continue
+    if latest_completion is None or task.updated_at > latest_completion:
+        latest_completion = task.updated_at
+    data = task.output_data if isinstance(task.output_data, dict) else {}
+    outputs["completed"] += 1
+    if data.get("verified_effect") is True:
+        outputs["internally_marked_verified_effect"] += 1
+    if data.get("verified_revenue") is not None:
+        outputs["non_null_revenue_claims_without_provider_check"] += 1
+    validation = data.get("market_validation")
+    if isinstance(validation, dict) and validation.get("status") == "independently_verified":
+        outputs["internally_tagged_market_validation"] += 1
+    evidence = data.get("evidence")
+    kind = evidence.get("kind") if isinstance(evidence, dict) else None
+    if kind in {"database_measurement", "product_inventory", "product_record",
+                "mvp_asset", "growth_experiment", "internal_ledger_inventory",
+                "profit_baseline", "production_gate"}:
+        evidence_kinds[kind] += 1
+    elif kind:
+        evidence_kinds["other"] += 1
+    else:
+        evidence_kinds["none"] += 1
+
+tables = set(connection.introspection.table_names())
+def safe_count(model, filter_kwargs=None):
+    if model._meta.db_table not in tables:
+        return None
+    qs = model.objects
+    return qs.filter(**filter_kwargs).count() if filter_kwargs else qs.count()
+
+app = Path.home() / "factory-runtime/django-app/core"
+installed_source = {}
+for label, name in (("economic_brain", "autonomous_brain.py"),
+                    ("economic_tools", "economic_tool_pack.py")):
+    path = app / name
+    if path.is_file() and not path.is_symlink() and path.stat().st_size < 200000:
+        data = path.read_bytes()
+        installed_source[label] = {
+            "state": "present", "sha256_prefix": hashlib.sha256(data).hexdigest()[:16],
+            "contains_external_demand_guard": b"await_external_market_evidence" in data,
+            "contains_unreconciled_revenue_guard": b"external_settlement_evidence_required" in data,
+        }
+    else:
+        installed_source[label] = {"state": "unavailable_or_unsafe"}
+
+print("AGENT_FLEET_ECONOMIC_OUTCOME_EVIDENCE=" + json.dumps({
+    "schema": "saeit.agent.economic-outcome.v1", "read_only": True,
+    "counts": {label: [
+        {"status": status, "action": action, "count": value}
+        for (status, action), value in sorted(groups.items())
+    ] for label, groups in counts.items()},
+    "last_completed_age_hours": (
+        int((now - latest_completion).total_seconds() // 3600)
+        if latest_completion else None
+    ),
+    "completion_evidence_kinds": dict(sorted(evidence_kinds.items())),
+    "output_flags": dict(sorted(outputs.items())),
+    "active_django_products": safe_count(Product, {"active": True}),
+    "orders_total": safe_count(Order),
+    "paid_or_completed_orders": safe_count(Order, {"status__in": ("paid", "completed")}),
+    "ledger_payment_events": safe_count(LedgerEntry, {"entry_type": "payment"}),
+    "ledger_settlement_candidates": safe_count(LedgerEntry, {"entry_type": "settlement"}),
+    "provider_settlement_reconciliation_performed_by_audit": False,
+    "installed_source": installed_source,
+    "task_mutations": 0, "external_messages_sent": 0,
+}, sort_keys=True, separators=(",", ":")))
+PY
+
 # Inspect only the two previously observed factory backlog owners. Do not
 # read task payloads or change their states; this identifies missing dispatch
 # routes without pretending that a DB row is an operating agent.
