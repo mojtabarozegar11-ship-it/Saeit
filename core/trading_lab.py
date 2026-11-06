@@ -240,6 +240,22 @@ class TradingLab:
             })
         return sorted(rows, key=lambda row: (row["pnl"], row["win_rate"]), reverse=True)
 
+    def execution_metrics(self) -> dict:
+        """Return auditable demo outcomes; these are not customer revenue."""
+        events = [item for agent in self.agents for item in agent.experiences]
+        orders = [item for item in events if item.action == "DEMO_ORDER"]
+        rejected = [item for item in events if item.action == "DEMO_REJECTED"]
+        closed = [item for item in events if item.action == "DEMO_CLOSE"]
+        return {
+            "orders_submitted": len(orders),
+            "orders_rejected": len(rejected),
+            "trades_closed": len(closed),
+            "open_positions": sum(len(agent.open_order_ids) for agent in self.agents),
+            "trading_pnl": sum(item.pnl for item in closed),
+            "customer_revenue_verified": False,
+            "revenue_evidence": "NOT_APPLICABLE_TO_DEMO_TRADING",
+        }
+
     def snapshot(self) -> dict:
         return {
             "mode": "DEMO_ONLY", "agents": AGENT_COUNT,
@@ -250,6 +266,7 @@ class TradingLab:
                 "kill_switch": self.kill_switch,
                 "customer_revenue_ledger": "SEPARATE_NOT_PRESENT",
             },
+            "execution_metrics": self.execution_metrics(),
             "leaderboard": self.leaderboard(),
         }
 
