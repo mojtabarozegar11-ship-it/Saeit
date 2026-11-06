@@ -196,6 +196,40 @@ def cron_production_channels(active):
     return {k: sum(bool(re.search(regex, row, re.I)) for row in active)
             for k, regex in rules.items()}
 
+
+def native_single_product_log_diagnostic(base):
+    """Bounded, redacted evidence about a stalled cron; never emit log text."""
+    log = Path(base) / "operations/single-product-cycle.log"
+    if log.is_symlink():
+        return {"state": "unsafe_symlink"}
+    if not log.is_file():
+        return {"state": "missing"}
+    try:
+        stat = log.stat()
+        with log.open("rb") as stream:
+            stream.seek(max(0, stat.st_size - 32768))
+            tail = stream.read(32768).decode("utf-8", errors="replace")
+        groups = {
+            "python_traceback": r"Traceback \(most recent call last\)",
+            "module_not_found": r"ModuleNotFoundError|ImportError",
+            "file_missing": r"No such file or directory|FileNotFoundError",
+            "permission_denied": r"Permission denied|PermissionError",
+            "database_locked": r"database is locked|OperationalError",
+            "timeout_or_killed": r"timed out|Terminated|Killed",
+            "shell_failure": r"command not found|syntax error|unbound variable",
+        }
+        return {
+            "state": "readable", "bytes": stat.st_size,
+            "modified_utc": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+            "tail_error_group_counts": {
+                name: len(re.findall(pattern, tail, re.I))
+                for name, pattern in groups.items()
+            },
+            "tail_line_count": len(tail.splitlines()),
+        }
+    except OSError:
+        return {"state": "unreadable"}
+
 def inventory():
     if os.geteuid() == 0 or any(p.is_symlink() or not p.is_dir()
                                 for p in (BASE, PRIVATE, OPS, ORDERS)):
@@ -308,6 +342,11 @@ def inventory():
             sum("SAEIT_SINGLE_PRODUCT_FACTORY_V1" in row for row in active)
             if active is not None else None),
         "native_single_product_runner": runner_info,
+        "native_single_product_log": native_single_product_log_diagnostic(BASE),
+        "cron_service_state": (
+            (lambda value: value if value in ("active\n", "inactive\n", "failed\n")
+             else "unknown")(command(["systemctl", "is-active", "cron.service"]))
+        ).strip(),
         "leech_cron_like_count": (sum(bool(re.search("leech|WO-26102501", row, re.I))
                                       for row in active) if active is not None else None),
         "systemd_timers_readable": timers is not None,
