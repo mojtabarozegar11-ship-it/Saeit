@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -129,6 +130,26 @@ def restart() -> None:
     if marker.is_symlink() or marker.parent.is_symlink() or not marker.parent.is_dir():
         raise RuntimeError("ACADEMY_PASSENGER_RESTART_UNSAFE")
     marker.touch()
+    # A plain marker did not reload the public worker during the previous
+    # guarded release. Use CloudLinux's documented user-scoped restart for
+    # exactly this registered application; never stop or restart other apps.
+    try:
+        r = subprocess.run(
+            ["cloudlinux-selector", "restart", "--json", "--interpreter", "python",
+             "--app-root", "Saeit"],
+            capture_output=True, text=True, timeout=50, check=False,
+        )
+    except Exception as exc:
+        raise RuntimeError("ACADEMY_SELECTOR_RESTART_UNAVAILABLE") from exc
+    if r.returncode:
+        raise RuntimeError("ACADEMY_SELECTOR_RESTART_COMMAND_FAILED")
+    try:
+        response = json.loads(r.stdout)
+    except Exception as exc:
+        raise RuntimeError("ACADEMY_SELECTOR_RESTART_UNPARSABLE") from exc
+    if isinstance(response, dict) and response.get("result") not in (None, "success", True):
+        raise RuntimeError("ACADEMY_SELECTOR_RESTART_REJECTED")
+    print("ACADEMY_CLOUDLINUX_TARGETED_RESTART=yes")
 
 
 def check_django() -> None:
