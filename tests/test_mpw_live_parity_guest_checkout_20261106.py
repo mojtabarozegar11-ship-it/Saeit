@@ -26,7 +26,7 @@ class GuestLiveParityContracts(unittest.TestCase):
 
     def test_only_an_invoice_redirect_counts_as_accepted_checkout(self):
         self.assertIn("def _is_invoice_redirect(response):", GUEST)
-        self.assertIn("getattr(response, "status_code", None) in (302, 303)", GUEST)
+        self.assertIn('getattr(response, "status_code", None) in (302, 303)', GUEST)
         self.assertIn("INVOICE_LOCATION.fullmatch(location) is not None", GUEST)
         self.assertNotIn(
             'if create and 200 <= getattr(response, "status_code", 500) < 400:',
