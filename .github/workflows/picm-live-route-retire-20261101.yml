@@ -1,0 +1,335 @@
+name: Owner-approved retire 13 live PICM URL routes with automatic rollback
+on:
+  pull_request:
+    types: [opened]
+    branches: [ops/picm-private-retirement-inventory-20261101]
+    paths:
+      - ".github/workflows/picm-live-route-retire-20261101.yml"
+permissions:
+  contents: read
+concurrency:
+  group: picm-live-route-retire-20261101
+  cancel-in-progress: false
+jobs:
+  inventory:
+    if: github.event.action == 'opened' && github.actor == 'mojtabarozegar11-ship-it' && github.head_ref == 'ops/picm-live-route-retire-20261101' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'ops/picm-private-retirement-inventory-20261101'
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify immutable PR head checkout
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          echo "IMMUTABLE_HEAD_CHECKOUT=verified"
+      - name: Set up pinned GitHub to VPS to cPanel relay
+        id: link
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          # This public host key was collected through the pinned relay and fingerprint-verified.
+          printf '%s\n' '178.239.147.150 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJgT6PLND+DAA2JFptwG3gddczxCq19hWDragqn9oOZl1T6JpUTTptwKtAxALH6onbD/NIt1Kqg7QhJp5RHFek06mDPps5vO5okRf0q6uq7iGLJCd4zJHCIq1vmppLm1I1KmKvkmuG9VXxv07siYAUNlaZChhTXju9EzpmP6mAwkkiF76Q4/GCay545j7P4FmMezY7nqMAKvSgvU47/zA7w43WxtGjfmneAI0GBydwy22931IYkfjRr3dtDrfreJqhFQMdHDN7TOqlCFf0/F8Ri7VGOKLhwoZd1rTnK6MJcdSlNeXfNFOxaEw3Vt0MBSi4y9ahnjvRCsaUbDfUKbaGOhtepT/V/jrLsGOsrfgWaKoPaaq5TeP86FxH3oxB40QqHBUiIzPdvDqS3sirBLT0TsQ4/502IhymU/FX7dAMVyD+xYHGDKXeuqNH1wp+KJULvatTzOi41P28YDtZKsgRLKI7SY+AIYf+KCTTbYkt960bftKrSRmBWXl7XO/nzHU=' > "$d/vps.known"
+          vps_fp_output="$(ssh-keygen -lf "$d/vps.known" -E sha256 2>/dev/null || true)"
+          vps_observed="$(printf '%s\n' "$vps_fp_output" | awk '{print $2}' | sort -u)"
+          if test -z "$vps_observed"; then
+            echo "VPS_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$vps_observed" != "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+            echo "VPS_HOST_KEY=MISMATCH"
+            echo "VPS_HOST_KEY_OBSERVED=$vps_observed"
+            exit 1
+          fi
+          echo "VPS_HOST_KEY=verified"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            ControlMaster auto
+            ControlPath $d/cpanel.sock
+            ControlPersist 300
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+            ControlMaster auto
+            ControlPath $d/direct.sock
+            ControlPersist 300
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          # 30GB hosting public key; verify fingerprint before any authentication.
+          printf '%s\n' '[178.239.147.125]:1396 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9vaKJLZ+5IhpcoTWOpsR9jauZVBqxOUpBHXS7Rh/Ia' > "$d/host.candidate"
+          fingerprint_output="$(ssh-keygen -lf "$d/host.candidate" -E sha256 2>/dev/null || true)"
+          observed="$(printf '%s\n' "$fingerprint_output" | awk '{print $2}' | sort -u)"
+          if test -z "$observed"; then
+            echo "CPANEL_KEYSCAN=INVALID"
+            exit 1
+          fi
+          if test "$observed" != "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+            echo "CPANEL_HOST_KEY=MISMATCH"
+            echo "CPANEL_HOST_KEY_OBSERVED=$observed"
+            exit 1
+          fi
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CPANEL_HOST_KEY=verified"
+          echo "PINNED_PRIVATE_RELAY=verified"
+          # The VPS port-22 ingress intermittently rejects its SSH banner. Do not
+          # consume a separate fragile VPS connection just to preflight it.
+          # A single successful, pinned two-hop identity test proves both hops
+          # and keeps the authenticated cPanel control session for subsequent steps.
+          session_ready=0
+          for attempt in 1 2 3 4 5; do
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=25 -o ConnectionAttempts=1 saeit-cpanel 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging && test -d /home/zomorod2/mojplaywin.com' >/dev/null; then
+              session_ready=1
+              echo "PINNED_30GB_RELAY_AUTHENTICATED_ON_ATTEMPT=$attempt"
+              break
+            fi
+            echo "PINNED_30GB_RELAY_RETRY_ATTEMPT=$attempt"
+            if test "$attempt" -lt 5; then sleep 12; fi
+          done
+          if test "$session_ready" = 1; then
+            command_host=saeit-cpanel
+            echo 'PINNED_SESSION=AUTHENTICATED_VIA_VPS'
+          else
+            echo 'PINNED_30GB_RELAY_UNAVAILABLE'
+            # Emergency fallback is the same fingerprint-pinned cPanel host and
+            # same private user; no host-key bypass or public ingress endpoint.
+            if timeout 55s ssh -F "$d/config" -o ConnectTimeout=20 -o ConnectionAttempts=1 saeit-cpanel-direct 'test "$(id -un)" = "zomorod2" && test -d /home/zomorod2/Saeit-staging && test -d /home/zomorod2/mojplaywin.com' >/dev/null; then
+              command_host=saeit-cpanel-direct
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=AUTHENTICATED'
+            else
+              echo 'PINNED_DIRECT_CPANEL_FALLBACK=UNAVAILABLE'
+              exit 1
+            fi
+          fi
+          printf 'command_host=%s\n' "$command_host" >> "$GITHUB_OUTPUT"
+      - name: Owner-bound code-only PICM live URL removal with health and automatic rollback
+        shell: bash
+        timeout-minutes: 13
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          COMMAND_HOST="${{ steps.link.outputs.command_host }}"
+          for route in / /store/ /taniya/ /commerce/trx-easy/purchases/; do
+            status="$(curl --silent --show-error --max-time 18 --connect-timeout 8 --output /dev/null --write-out '%{http_code}' -H 'Cache-Control: no-cache' "https://mojplaywin.com${route}?picm_retirement_probe=before")"
+            [[ "$status" =~ ^[234][0-9][0-9]$ ]] || { echo "PRE_SITE_HEALTH_FAILED=$route:$status"; exit 1; }
+            printf '%s %s\n' "$route" "$status" >> "$RUNNER_TEMP/picm-baseline-statuses"
+          done
+          echo 'NON_PICM_PUBLIC_BASELINE=PASS'
+          probe64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import os, re, ast, hashlib, shutil, subprocess, tempfile, stat
+          home=Path.home()
+          stage=home/"Saeit-staging"
+          site=home/"mojplaywin.com"
+          conf=stage/"config/urls.py"
+          expected="20a497210ce9f8a488bea8693b5624e3110728fc5d37cdb166f246c265229c09"
+          expected_candidate="5c2ced82baabd7f1951876511ef46813e93fafb158bb62ac3301b4876ebdc786"
+          recovery=home/".picm-live-route-rollback-20261101"
+          if os.geteuid()==0 or home!=Path("/home/zomorod2"):
+              raise SystemExit("WRONG_CPANEL_IDENTITY")
+          if any(p.is_symlink() for p in (stage,site,conf,stage/"config")):
+              raise SystemExit("UNSAFE_SYMLINK_ROOT")
+          if not conf.is_file() or conf.stat().st_uid!=os.geteuid() or not site.is_dir() or not stage.is_dir():
+              raise SystemExit("UNSAFE_CANDIDATE_ROOT")
+          if "APP='/home/zomorod2/Saeit-staging'" not in (site/"passenger_wsgi.py").read_text(encoding="utf-8"):
+              raise SystemExit("PASSENGER_APP_ROOT_CHANGED")
+          if "PassengerAppRoot /home/zomorod2/mojplaywin.com" not in (site/".htaccess").read_text(encoding="utf-8"):
+              raise SystemExit("PASSENGER_DOMAIN_ROOT_CHANGED")
+          old_bytes=conf.read_bytes()
+          oldsha=hashlib.sha256(old_bytes).hexdigest()
+          if oldsha!=expected:
+              raise SystemExit("URL_SHA_CHANGED_NO_CHANGE")
+          if recovery.exists() or recovery.is_symlink():
+              raise SystemExit("EXISTING_ROLLBACK_DIR_REQUIRES_REVIEW")
+          original=old_bytes.decode("utf-8")
+          lines=original.splitlines(keepends=True)
+          def idx(marker):
+              matches=[i for i,x in enumerate(lines) if x.startswith(marker)]
+              if len(matches)!=1:
+                  raise RuntimeError("URL_MARKER_NOT_UNIQUE")
+              return matches[0]
+          a=idx("# SAEIT_PICM_V1_OWNER_SCOPED_ROUTES")
+          b=idx("# Crown Defender V120 read-only account fleet.")
+          m=idx("# MOJPLAYWIN_PRIVATE_MEDIA_OWNER_V1")
+          if not (0<a<b<m) or b-a>60 or not lines[m+1].startswith("from core.private_media_library import private_media_library") or 'path("picm/media/"' not in lines[m+2]:
+              raise SystemExit("PICM_URL_BOUNDS_CHANGED")
+          new="".join(lines[:a]+lines[b:m]+lines[m+3:])
+          if new.lower().count("picm")!=0 or hashlib.sha256(new.encode()).hexdigest()!=expected_candidate:
+              raise SystemExit("PICM_PATCH_OUTPUT_MISMATCH")
+          def paths(tree):
+              out=[]
+              for n in ast.walk(tree):
+                  if isinstance(n,ast.Call) and isinstance(n.func,ast.Name) and n.func.id in ("path","mpw_commerce_path","_mpw_ayaar_path") and n.args and isinstance(n.args[0],ast.Constant) and isinstance(n.args[0].value,str):
+                      out.append(n.args[0].value)
+              return out
+          before=paths(ast.parse(original))
+          after=paths(ast.parse(new))
+          if after!=[p for p in before if not p.startswith("picm/")] or len(before)-len(after)!=13 or len(after)!=115:
+              raise SystemExit("UNRELATED_ROUTE_CHANGED")
+          py=home/"virtualenv/Saeit-staging/3.11/bin/python"
+          manage=stage/"manage.py"
+          if not py.is_file() or not manage.is_file():
+              raise SystemExit("NO_DJANGO_CHECK_RUNTIME")
+          def djcheck():
+              try:
+                  r=subprocess.run([str(py),str(manage),"check"],cwd=str(stage),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=100,check=False)
+                  return r.returncode
+              except (OSError,subprocess.TimeoutExpired):
+                  return 99
+          if djcheck()!=0:
+              raise SystemExit("PREEXISTING_DJANGO_CHECK_FAILURE_NO_CHANGE")
+          print("PICM_LIVE_PRECHECK=PASS",flush=True)
+          os.mkdir(recovery,0o700)
+          backup=recovery/"config_urls.py.original"
+          shutil.copy2(conf,backup)
+          os.chmod(backup,0o600)
+          if hashlib.sha256(backup.read_bytes()).hexdigest()!=expected:
+              raise SystemExit("ROLLBACK_COPY_MISMATCH")
+          mode=stat.S_IMODE(conf.stat().st_mode)
+          def atomic_bytes(data):
+              fd,tmp=tempfile.mkstemp(prefix=".picm-url-atomic-",dir=str(conf.parent))
+              try:
+                  with os.fdopen(fd,"wb") as out:
+                      out.write(data)
+                      out.flush()
+                      os.fsync(out.fileno())
+                  os.chmod(tmp,mode)
+                  os.replace(tmp,conf)
+              finally:
+                  if os.path.lexists(tmp):
+                      os.unlink(tmp)
+          try:
+              atomic_bytes(new.encode("utf-8"))
+              if hashlib.sha256(conf.read_bytes()).hexdigest()!=expected_candidate:
+                  raise RuntimeError("WRITE_DIGEST_MISMATCH")
+              if djcheck()!=0:
+                  raise RuntimeError("POST_DJANGO_CHECK_FAILURE")
+              print("PICM_LIVE_URL_ROUTES_REMOVED=13",flush=True)
+              print("PICM_LIVE_UNRELATED_ROUTES_PRESERVED=115",flush=True)
+              print("PICM_LIVE_ROLLBACK_SNAPSHOT=VERIFIED_LOCAL_PRIVATE",flush=True)
+              restart=site/"tmp/restart.txt"
+              if not restart.parent.is_dir() or restart.parent.is_symlink():
+                  raise RuntimeError("NO_SAFE_PASSENGER_RESTART_DIR")
+              restart.touch()
+              print("PICM_PASSENGER_RESTART_REQUESTED=true")
+          except BaseException:
+              atomic_bytes(backup.read_bytes())
+              restart=site/"tmp/restart.txt"
+              if restart.parent.is_dir() and not restart.parent.is_symlink():
+                  restart.touch()
+              print("PICM_AUTOMATIC_ROLLBACK=PERFORMED",flush=True)
+              raise
+          PY
+          )"
+          rollback64="$(base64 -w0 <<'PY'
+          from pathlib import Path
+          import os,hashlib,tempfile,stat
+          home=Path.home()
+          conf=home/"Saeit-staging/config/urls.py"
+          rec=home/".picm-live-route-rollback-20261101/config_urls.py.original"
+          site=home/"mojplaywin.com"
+          old="20a497210ce9f8a488bea8693b5624e3110728fc5d37cdb166f246c265229c09"
+          candidate="5c2ced82baabd7f1951876511ef46813e93fafb158bb62ac3301b4876ebdc786"
+          if os.geteuid()==0 or home!=Path("/home/zomorod2") or not rec.is_file() or rec.is_symlink() or not conf.is_file() or conf.is_symlink():
+              raise SystemExit("ROLLBACK_ROOT_UNSAFE")
+          src=rec.read_bytes()
+          if hashlib.sha256(src).hexdigest()!=old:
+              raise SystemExit("ROLLBACK_SOURCE_HASH_MISMATCH")
+          current=hashlib.sha256(conf.read_bytes()).hexdigest()
+          if current==old:
+              print("PICM_ROUTE_ALREADY_ROLLED_BACK=true")
+          elif current==candidate:
+              fd,tmp=tempfile.mkstemp(prefix=".picm-rollback-atomic-",dir=str(conf.parent))
+              with os.fdopen(fd,"wb") as out:
+                  out.write(src)
+                  out.flush()
+                  os.fsync(out.fileno())
+              os.chmod(tmp,stat.S_IMODE(conf.stat().st_mode))
+              os.replace(tmp,conf)
+              print("PICM_ROUTE_ROLLED_BACK=true")
+          else:
+              raise SystemExit("REFUSE_ROLLBACK_UNKNOWN_LIVE_HASH")
+          restart=site/"tmp/restart.txt"
+          if restart.parent.is_dir() and not restart.parent.is_symlink():
+              restart.touch()
+          PY
+          )"
+          call="import base64,sys;exec(base64.b64decode(sys.argv[1]))"
+          NEED_ROLLBACK=1
+          on_exit() {
+            rc=$?
+            if test "$NEED_ROLLBACK" = 1; then
+              echo 'POST_APPLY_NOT_CERTIFIED_ATTEMPTING_ROLLBACK'
+              timeout 120s ssh -T -F "$d/config" "$COMMAND_HOST" "python3 -c '$call' '$rollback64'" || echo 'ROLLBACK_ATTEMPT_FAILED_MANUAL_RECOVERY_REQUIRED'
+            fi
+            exit "$rc"
+          }
+          trap on_exit EXIT
+          timeout 240s ssh -T -F "$d/config" "$COMMAND_HOST" "python3 -c '$call' '$probe64'"
+          sleep 9
+          while read -r route baseline; do
+            status="$(curl --silent --show-error --max-time 18 --connect-timeout 8 --output /dev/null --write-out '%{http_code}' -H 'Cache-Control: no-cache' "https://mojplaywin.com${route}?picm_retirement_probe=after")"
+            test "$status" = "$baseline" || { echo "POST_SITE_HEALTH_REGRESSION=$route:before_$baseline:after_$status"; exit 1; }
+          done < "$RUNNER_TEMP/picm-baseline-statuses"
+          echo 'NON_PICM_PUBLIC_STATUS_UNCHANGED=true'
+          private_status=000
+          for attempt in 1 2 3; do
+            private_status="$(curl --silent --show-error --max-time 18 --connect-timeout 8 --output /dev/null --write-out '%{http_code}' -H 'Cache-Control: no-cache' "https://mojplaywin.com/picm/?picm_retirement_probe=removed_$attempt")"
+            if test "$private_status" = 404; then break; fi
+            sleep 7
+          done
+          test "$private_status" = 404 || { echo "PICM_PUBLIC_ROUTE_NOT_404=$private_status"; exit 1; }
+          NEED_ROLLBACK=0
+          echo 'PICM_PUBLIC_ROUTE_HTTP_404=VERIFIED'
+          echo 'FACTORY_COMMERCE_DATABASE_UNTOUCHED=true'
+          echo 'PICM_LIVE_ROUTE_RETIREMENT=COMPLETE'
+      - name: Clean ephemeral SSH key material
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/picm-retirement-inventory"
+          test ! -d "$d" || find "$d" -maxdepth 1 -type f -name '*.key' -delete
+          echo 'EPHEMERAL_SSH_IDENTITIES_REMOVED=true'
