@@ -2,7 +2,7 @@ name: Publish approved transparent company emblem only on Zomorod main site
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/zomorod-official-transparent-logo.yml"]
+    paths: [".github/workflows/zomorod-official-transparent-logo.yml", "content/zomorod-new-home/index.html", "content/zomorod-nova-pages/*.html"]
   workflow_dispatch:
 permissions:
   contents: read
