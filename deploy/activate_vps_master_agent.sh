@@ -24,6 +24,42 @@ fi
 for module in core/management/commands/seed_online_income_agents.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/worker_runner.py core/tool_gateway.py core/task_runtime.py core/autonomous_brain.py core/master_agent_capability_pack.py; do
   test -s "$app/$module" || { echo "MASTER_REQUIRED_MODULE_MISSING"; exit 1; }
 done
+# Capacity must be checked before creating the activation directory, lock,
+# SQLite snapshot or cron backup. Preserve the stronger already-merged main
+# safety reserve when this isolated economic runner is later integrated.
+cd "$app"
+master_capacity_preflight() {
+  SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings \
+    MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0 \
+    "$py" -B - "$ops" <<'PY'
+import os
+import sys
+from pathlib import Path
+from django.conf import settings
+
+ops = Path(sys.argv[1])
+database = settings.DATABASES["default"]
+if "sqlite3" not in database["ENGINE"]:
+    raise SystemExit("MASTER_CAPACITY_ABORT_UNEXPECTED_DB_ENGINE")
+source = Path(database["NAME"])
+if source.is_symlink() or not source.is_file():
+    raise SystemExit("MASTER_CAPACITY_ABORT_UNSAFE_DB_PATH")
+if ops.is_symlink() or not ops.is_dir():
+    raise SystemExit("MASTER_CAPACITY_ABORT_UNSAFE_BACKUP_PARENT")
+db_bytes = source.stat().st_size
+fs = os.statvfs(ops)
+available = fs.f_bavail * fs.f_frsize
+total = fs.f_blocks * fs.f_frsize
+reserve = max(2 * 1024**3, (total * 5 + 99) // 100)
+required = db_bytes + reserve
+print("MASTER_CAPACITY_AVAILABLE_BYTES=" + str(available), flush=True)
+print("MASTER_CAPACITY_REQUIRED_BYTES=" + str(required), flush=True)
+if available < required:
+    raise SystemExit("MASTER_CAPACITY_ABORT_INSUFFICIENT_FREE_SPACE")
+print("MASTER_CAPACITY_PREFLIGHT_OK", flush=True)
+PY
+}
+master_capacity_preflight
 install -d -m 700 "$master" "$private" "$ops/backups"
 exec 8>"$master/activation.lock"
 flock -w 20 8
@@ -52,26 +88,6 @@ for func, parameters in required.items():
     assert all(parameter in actual for parameter in parameters), "MASTER_SHARED_RUNTIME_ABI_UNSUPPORTED"
 assert callable(WorkerRunner.run) and callable(ToolGateway.invoke)
 print("MASTER_FACTORY_SHARED_ABI_PRESERVED_PREFLIGHT")
-PY
-# Previous production activations exhausted the VPS filesystem while taking
-# the SQLite snapshot. Reject low headroom before touching cron or sources.
-"$py" - <<'PY'
-import shutil
-from pathlib import Path
-from django.conf import settings
-
-db = settings.DATABASES["default"]
-assert "sqlite3" in db["ENGINE"], "MASTER_DB_BACKEND_UNEXPECTED"
-configured = Path(db["NAME"])
-assert not configured.is_symlink(), "MASTER_DB_SYMLINK_UNSAFE"
-source = configured.resolve(strict=True)
-assert source.is_file(), "MASTER_DB_MISSING"
-free = shutil.disk_usage(source.parent).free
-needed = source.stat().st_size + max(512 * 1024 * 1024, source.stat().st_size // 10)
-if free < needed:
-    print(f"MASTER_DISK_PREFLIGHT_BLOCKED free_bytes={free} required_bytes={needed}")
-    raise SystemExit(72)
-print(f"MASTER_DISK_PREFLIGHT_OK free_bytes={free} required_bytes={needed}")
 PY
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 modules=(
