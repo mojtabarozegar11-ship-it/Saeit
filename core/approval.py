@@ -20,10 +20,10 @@ class ApprovalService:
             raise ValueError("Approval decision must be a boolean")
         if actor_type == "owner" and actor_id is not None and approval.requested_by_id != actor_id:
             raise ValueError("Only the designated owner can make this approval decision")
-        if approval.target_type == "ChatOperation":
+        if approval.target_type in {"ChatOperation", "PaymentIntent"}:
             operator = get_user_model().objects.filter(pk=actor_id).first() if actor_id is not None else None
             if not is_authorized_chat_operator(operator) or approval.requested_by_id != actor_id:
-                raise ValueError("Chat operations require an active superuser owner")
+                raise ValueError("Critical operations require an active superuser owner")
 
         approval.status = "approved" if approved else "rejected"
         approval.decision_note = str(note or "")[:5000]
