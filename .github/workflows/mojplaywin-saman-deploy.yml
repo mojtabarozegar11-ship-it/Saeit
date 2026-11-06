@@ -160,6 +160,14 @@ jobs:
           timeout 60s ssh -F "$WORK/config" saeit-host \
             "python3 /home/zomorod2/.mojplaywin-saman-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_saman.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
 
+      - name: Restart active Passenger application
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 45s ssh -F "$WORK/config" saeit-host 'selector restart --json --interpreter python --user zomorod2 --app-root Saeit-staging >/dev/null || selector restart --json --interpreter python --user zomorod2 --app-root Saeit >/dev/null'
+          echo "PASSENGER_SELECTOR_RESTART=success"
+
       - name: Verify Django runtime route
         id: route_check
         shell: bash
