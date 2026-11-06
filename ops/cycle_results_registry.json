@@ -47,7 +47,7 @@
     },
     "05": {
       "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
-      "sequence": 6,
+      "sequence": 7,
       "legacy_report_last_verified": 57,
       "primary_output": "accepted operational business gate",
       "legacy_source_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725",
@@ -128,6 +128,16 @@
       "acceptance_result": "20-day milestone and gate ownership baseline recorded in shared coordination ledger; no operational gate accepted",
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
       "impact": "Cross-cycle deadline, owner and stage separation recorded; no product acceptance or revenue"
+    },
+    {
+      "registry_id": "R05-0007",
+      "cycle_id": "05",
+      "run_id": "ZM50-C05-20261106T170454Z",
+      "deliverable_key": "50cycle-mission-baseline",
+      "stage": "code",
+      "acceptance_result": "C01 coordination baseline recorded; no product or revenue acceptance",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "impact": "Replaced obsolete 20-day milestones with C01-C50 owner and gate registry; no revenue"
     }
   ],
   "report_reservations": [],
@@ -224,6 +234,74 @@
         "no financial transactions or public releases without specific authorization"
       ]
     },
-    "status": "baseline_registered_not_operational_acceptance"
+    "status": "superseded_by_ZM-50CYCLE-DELIVERY-20261106"
+  },
+  "mission_50cycle_20261106": {
+    "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
+    "supersedes": "ZM-20DAY-COMMERCIAL-MISSION-20261106",
+    "cycle_owner": "05",
+    "counter": 1,
+    "max_runs": 50,
+    "runs": [
+      {
+        "slot": "C01",
+        "run_id": "ZM50-C05-20261106T170454Z",
+        "stage": "baseline",
+        "accepted_deliverables": 0
+      }
+    ],
+    "owners": {
+      "01": {
+        "deliverable": "scientific manuscript",
+        "priority": "P1",
+        "gate": "rights/scientific acceptance",
+        "acceptance": "independently accepted publication-ready manuscript"
+      },
+      "02": {
+        "deliverable": "finished written product",
+        "priority": "P1",
+        "gate": "rights, final files, automated delivery",
+        "acceptance": "rights-cleared final product package"
+      },
+      "03": {
+        "deliverable": "guest checkout/store and single-product factory",
+        "priority": "P0",
+        "gate": "legal merchant, server-side payment proof, backup and rollback",
+        "acceptance": "independent end-to-end delivery evidence; factory remains HOLD"
+      },
+      "04": {
+        "deliverable": "Moj Coin",
+        "priority": "P1",
+        "gate": "security, playable build, minors safety, release approval",
+        "acceptance": "independently playable accepted build"
+      },
+      "05": {
+        "deliverable": "business command, accounting, agents, MOJ7-MOJ38 technical packages",
+        "priority": "P0",
+        "gate": "DB identity, MFA, backup restore, deduplicated receipts, no unapproved on-chain activity",
+        "acceptance": "verified operations and independently reconciled real revenue"
+      }
+    },
+    "stages": [
+      "code",
+      "deployment",
+      "accepted",
+      "order",
+      "payment_confirmed",
+      "delivered",
+      "revenue_settled",
+      "cost",
+      "profit"
+    ],
+    "deadlines": {
+      "P0": "C05",
+      "P1": "C20",
+      "integration": "C35",
+      "e2e": "C45",
+      "final": "C50"
+    },
+    "policy": "No public release, payment, message about project 39, Remote Desktop Commander, or factory startup without required authorization. A scheduled run does not equal acceptance.",
+    "financial_evidence": "unknown",
+    "accepted_outputs": 0
   }
 }
