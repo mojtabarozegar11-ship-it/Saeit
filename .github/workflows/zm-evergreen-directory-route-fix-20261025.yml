@@ -125,8 +125,8 @@ jobs:
               old=p.read_bytes();new=old
               for bad,good in subs.items():
                   n=new.count(bad);m=new.count(good)
-                  if n==1 and m==0:new=new.replace(bad,good,1)
-                  elif n==0 and m==1:pass
+                  if n>=1 and m==0:new=new.replace(bad,good)
+                  elif n==0 and m>=1:pass
                   else:raise RuntimeError('LINK_STATE_NOT_UNIQUE:'+rel+':'+bad.decode())
               if old!=new:
                   originals[rel]=old;patched[rel]=new
