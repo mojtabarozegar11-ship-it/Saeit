@@ -15,8 +15,18 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+EXPECTED_SYMBOLS = ("BTC/USD", "ETH/USD")
+ALLOWED_STANCES = frozenset({"watch_buy", "watch_sell", "neutral"})
+ALLOWED_SOURCES = frozenset({
+    "coinbase-exchange-public-candles",
+    "kraken-spot-public-ohlc",
+    "bitfinex-public-candles",
+})
+
+
 class ProductArtifactError(ValueError):
     """Raised when a research report is not eligible for packaging."""
+
 
 def _aware(value: object, field: str) -> datetime:
     if not isinstance(value, str):
@@ -28,6 +38,7 @@ def _aware(value: object, field: str) -> datetime:
     if dt.tzinfo is None:
         raise ProductArtifactError(f"{field}_must_be_timezone_aware")
     return dt.astimezone(timezone.utc)
+
 
 def build_artifact(report_path: Path, now: datetime | None = None) -> dict:
     if not report_path.is_absolute() or report_path.is_symlink():
@@ -52,21 +63,35 @@ def build_artifact(report_path: Path, now: datetime | None = None) -> dict:
     generated_at = _aware(report.get("generated_at"), "generated_at")
     expires_at = _aware(report.get("observation_expires_at"), "observation_expires_at")
     current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    if expires_at <= current:
-        raise ProductArtifactError("report_expired")
+    if expires_at <= current or generated_at > current or expires_at <= generated_at:
+        raise ProductArtifactError("report_time_window_invalid")
     signals = report.get("signals")
-    if not isinstance(signals, list) or not signals:
-        raise ProductArtifactError("report_signals_missing")
+    if not isinstance(signals, list) or len(signals) != len(EXPECTED_SYMBOLS):
+        raise ProductArtifactError("report_signal_count_invalid")
     normalized = []
-    for signal in signals:
-        if not isinstance(signal, dict) or not signal.get("symbol") or not signal.get("stance"):
+    for signal, expected_symbol in zip(signals, EXPECTED_SYMBOLS):
+        if not isinstance(signal, dict):
             raise ProductArtifactError("report_signal_invalid")
+        if signal.get("symbol") != expected_symbol:
+            raise ProductArtifactError("report_symbol_order_invalid")
+        stance = signal.get("stance")
+        source = signal.get("data_source")
+        observed_at = _aware(signal.get("observed_at"), "observed_at")
+        if stance not in ALLOWED_STANCES:
+            raise ProductArtifactError("report_stance_invalid")
+        if source not in ALLOWED_SOURCES:
+            raise ProductArtifactError("report_provider_invalid")
+        if observed_at > current or observed_at > expires_at:
+            raise ProductArtifactError("report_signal_time_invalid")
+        method = signal.get("method")
+        if not isinstance(method, str) or not method.strip():
+            raise ProductArtifactError("report_method_missing")
         normalized.append({
-            "symbol": signal["symbol"],
-            "stance": signal["stance"],
-            "observed_at": signal.get("observed_at"),
-            "data_source": signal.get("data_source"),
-            "method": signal.get("method"),
+            "symbol": expected_symbol,
+            "stance": stance,
+            "observed_at": observed_at.isoformat(),
+            "data_source": source,
+            "method": method.strip(),
         })
     report_hash = hashlib.sha256(raw).hexdigest()
     return {
@@ -92,6 +117,7 @@ def build_artifact(report_path: Path, now: datetime | None = None) -> dict:
         ],
     }
 
+
 def write_private(artifact: dict, destination: Path) -> None:
     if not destination.is_absolute() or destination.is_symlink():
         raise ProductArtifactError("artifact_destination_must_be_private_absolute_file")
@@ -112,6 +138,7 @@ def write_private(artifact: dict, destination: Path) -> None:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Package MojTrade research evidence privately")
     parser.add_argument("--input", required=True, type=Path)
@@ -124,6 +151,7 @@ def main() -> int:
         parser.exit(2, f"MOJTRADE_ARTIFACT_REJECTED: {exc}\n")
     print("MOJTRADE_RESEARCH_ARTIFACT_WRITTEN: orders=0; delivery=disabled; revenue=unverified")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
