@@ -172,7 +172,7 @@ jobs:
           public_sha="$(cat "$RUNNER_TEMP/public-sha")"
           ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" "$public_sha" <<'PY'
           from pathlib import Path
-          import hashlib,json,os,sys
+          import hashlib,json,os,re,sys
           sha,expected=sys.argv[1:]
           home=Path.home()
           root=home/"public_html"
@@ -184,11 +184,19 @@ jobs:
           assert modern.stat().st_uid==os.getuid()
           original=modern.read_bytes()
           assert len(original)>2500 and hashlib.sha256(original).hexdigest()==expected, "Public JS changed or mismatched"
-          assert b"ZM_INPAGE_EDITORIAL_LOADER_20261016" not in original
-          assert not page.exists() and not page.is_symlink()
           loader=(stage/"zm-modern-loader.txt").read_bytes()
           content=(stage/"zm-inpage-editorial-2026.js").read_bytes()
           assert b"zm-editorial-20261016" in content and len(content)>40000
+          if page.exists():
+              assert page.is_file() and not page.is_symlink() and page.stat().st_uid==os.getuid()
+              prior_module=page.read_bytes()
+              assert b"zm-editorial-20261016" in prior_module
+          else:
+              prior_module=None
+          loader_present=b"ZM_INPAGE_EDITORIAL_LOADER_20261016" in original
+          if loader_present:
+              assert b"/zm-inpage-editorial-2026.js" in original
+
           route_files=(stage/"zm-static-routes.txt").read_text(encoding="utf-8").splitlines()
           required={"blog/index.html","weather/index.html"}
           available=[]
@@ -201,12 +209,13 @@ jobs:
               assert target.stat().st_uid==os.getuid(), "Unexpected page owner: "+rel
               raw=target.read_bytes()
               assert len(raw)>1500 and b"</body>" in raw.lower(), "Unexpected static page shape: "+rel
-              assert b'data-zm-editorial-loader="yes"' not in raw, "Editorial loader already present: "+rel
               available.append((rel,target,raw,target.stat().st_mode & 0o777))
           assert required.issubset({x[0] for x in available})
           assert not backup.exists()
           backup.mkdir(parents=True)
           (backup/"modern.original.js").write_bytes(original)
+          if prior_module is not None:
+              (backup/"editorial.original.js").write_bytes(prior_module)
           static_backup=backup/"static-pages"
           static_backup.mkdir(parents=True)
           modes={}
@@ -216,18 +225,23 @@ jobs:
               saved.write_bytes(raw)
               modes[rel]=mode
           (backup/"static-pages.json").write_text(json.dumps(modes,ensure_ascii=False),encoding="utf-8")
+          (backup/"module-existed").write_text("yes" if prior_module is not None else "no",encoding="ascii")
           (backup/"install-started").write_text(sha,encoding="ascii")
+
           temp_page=page.with_suffix(".js.tmp")
           temp_page.write_bytes(content)
           os.chmod(temp_page,0o644)
           os.replace(temp_page,page)
-          temp=modern.with_name("modern.zm-"+sha+".tmp")
-          temp.write_bytes(original+b"\n"+loader)
-          os.chmod(temp,modern.stat().st_mode & 0o777)
-          os.replace(temp,modern)
+          if not loader_present:
+              temp=modern.with_name("modern.zm-"+sha+".tmp")
+              temp.write_bytes(original+b"\\n"+loader)
+              os.chmod(temp,modern.stat().st_mode & 0o777)
+              os.replace(temp,modern)
+          pattern=re.compile(r'<script\\b[^>]*data-zm-editorial-loader="yes"[^>]*></script>',re.I)
+          tag='<script defer data-zm-editorial-loader="yes" src="/zm-inpage-editorial-2026.js?v=20261106"></script>'
           for rel,target,raw,mode in available:
               text=raw.decode("utf-8")
-              tag='<script defer data-zm-editorial-loader="yes" src="/zm-inpage-editorial-2026.js?v=20261106"></script>'
+              text=pattern.sub("",text)
               idx=text.lower().rfind("</body>")
               updated=text[:idx]+tag+text[idx:]
               temp_html=target.with_name(target.name+".zm-"+sha+".tmp")
@@ -235,7 +249,7 @@ jobs:
               os.chmod(temp_html,mode)
               os.replace(temp_html,target)
           print("JS_ORIGINAL_PRESERVED=yes")
-          print("NEW_IN_PAGE_EDITORIAL_INSTALLED=yes")
+          print("EXISTING_MODULE_UPDATED="+str(prior_module is not None))
           print("STATIC_HTML_PAGES_CONNECTED="+str(len(available)))
           PY
       - name: Verify shared script plus content on public site and old pages remain online
@@ -273,18 +287,34 @@ jobs:
           d="$RUNNER_TEMP/zomorod-root"
           ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
           from pathlib import Path
-          import os,sys
+          import json,os,sys
           sha=sys.argv[1]
           home=Path.home()
           root=home/"public_html"
           modern=root/"static/site/modern.js"
-          content=home/"public_html/zm-inpage-editorial-2026.js"
+          content=root/"zm-inpage-editorial-2026.js"
           backup_root=home/".backups"/"zomorod-live-inpage"/sha
-          backup=backup_root/"modern.original.js"
-          static_backup=backup_root/"static-pages"
+          if not backup_root.joinpath("install-started").is_file():
+              print("NO_REMOTE_CHANGES_TO_ROLL_BACK=yes")
+              raise SystemExit(0)
+          modern_backup=backup_root/"modern.original.js"
+          module_backup=backup_root/"editorial.original.js"
+          if modern.is_file() and modern_backup.is_file():
+              temp=modern.with_name("modern.zm-rollback-"+sha+".tmp")
+              temp.write_bytes(modern_backup.read_bytes())
+              os.chmod(temp,modern.stat().st_mode & 0o777)
+              os.replace(temp,modern)
+          if module_backup.is_file():
+              temp=content.with_name("editorial.zm-rollback-"+sha+".tmp")
+              temp.write_bytes(module_backup.read_bytes())
+              os.chmod(temp,0o644)
+              os.replace(temp,content)
+          elif content.is_file() and b"zm-editorial-20261016" in content.read_bytes():
+              target=backup_root/"editorial.unpublished.js"
+              content.replace(target)
           manifest=backup_root/"static-pages.json"
+          static_backup=backup_root/"static-pages"
           if manifest.is_file():
-              import json
               modes=json.loads(manifest.read_text(encoding="utf-8"))
               for rel,mode in modes.items():
                   target=root/rel
@@ -294,18 +324,7 @@ jobs:
                       temp.write_bytes(saved.read_bytes())
                       os.chmod(temp,mode)
                       os.replace(temp,target)
-          if modern.is_file() and backup.is_file() and b"ZM_INPAGE_EDITORIAL_LOADER_20261016" in modern.read_bytes():
-              temp=modern.with_name("modern.zm-rollback-"+sha+".tmp")
-              temp.write_bytes(backup.read_bytes())
-              os.chmod(temp,modern.stat().st_mode & 0o777)
-              os.replace(temp,modern)
-          if content.is_file() and b"zm-editorial-20261016" in content.read_bytes():
-              target=home/".backups"/"zomorod-live-inpage"/sha/"editorial.unpublished.js"
-              content.rename(target)
-          if not backup_root.joinpath("install-started").is_file():
-              print("NO_REMOTE_CHANGES_TO_ROLL_BACK=yes")
-              raise SystemExit(0)
-          print("SHARED_SCRIPT_ORIGINAL_RESTORED=yes")
+          print("SHARED_SCRIPT_MODULE_AND_STATIC_PAGES_RESTORED=yes")
           PY
       - name: Remove temporary SSH keys
         if: always()
