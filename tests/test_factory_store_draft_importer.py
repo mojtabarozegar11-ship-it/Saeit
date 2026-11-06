@@ -1,4 +1,4 @@
-"""End-to-end verified private receipt -> inactive Django product draft tests."""
+"""Exact private receipt -> inactive draft, without inventing 1000 clearance."""
 import hashlib
 import importlib.util
 import json
@@ -23,7 +23,7 @@ def module(name):
 
 @pytest.mark.django_db
 @override_settings(DEBUG=False)
-def test_unreviewed_receipt_cannot_enter_store_as_a_draft(django_user_model, tmp_path):
+def test_unreviewed_receipt_can_only_enter_inactive_draft(django_user_model, tmp_path):
     receiver = module("store_receiver")
     importer = module("import_factory_store_drafts")
     owner = django_user_model.objects.create_superuser(
@@ -52,12 +52,43 @@ def test_unreviewed_receipt_cannot_enter_store_as_a_draft(django_user_model, tmp
     }), encoding="utf-8")
     receiver.finalize(root, recipe, digest)
 
-    with pytest.raises(RuntimeError, match="STORE_BLOCKED_UNTIL_CHATGPT_AND_QC1000_APPROVE"):
+    with pytest.raises(RuntimeError, match="EXACT_FACTORY_RECIPE_REQUIRED"):
         importer.import_receipts(root, app, docroot, "09175814408")
-    with pytest.raises(RuntimeError, match="STORE_BLOCKED_UNTIL_CHATGPT_AND_QC1000_APPROVE"):
-        importer.import_receipts(root, app, docroot, "09175814408", apply=True)
+    report = importer.import_receipts(
+        root, app, docroot, "09175814408", recipe=recipe, digest=digest
+    )
+    assert report["examined"] == 1
+    assert report["created"] == 0
+    assert report["commercial_quality_approved"] is False
     assert Product.objects.count() == 0
+
+    report = importer.import_receipts(
+        root, app, docroot, "09175814408", apply=True, recipe=recipe, digest=digest
+    )
+    assert report["created"] == 1
+    product = Product.objects.get()
+    assert product.active is False
+    assert product.price == 0
+    assert product.metadata["factory_publication_permission"] is False
+    assert product.metadata["factory_commercial_release"] is False
+    assert product.metadata["factory_quality_1000_verified"] is False
+    assert product.metadata["factory_chatgpt_final_review"] == "pending_independent_review"
+    assert product.metadata["factory_software_qa_scope"] == "private_archive_integrity_only"
+
+    repeat = importer.import_receipts(
+        root, app, docroot, "09175814408", apply=True, recipe=recipe, digest=digest
+    )
+    assert repeat["created"] == 0
+    assert repeat["already_present"] == 1
+    assert Product.objects.count() == 1
     assert Product.objects.filter(active=True).count() == 0
+
+    with pytest.raises(RuntimeError, match="SELECTED_PRIVATE_RECEIPT_NOT_FOUND"):
+        importer.import_receipts(
+            root, app, docroot, "09175814408", apply=True,
+            recipe=recipe, digest="f" * 64
+        )
+    assert Product.objects.count() == 1
 
 
 @pytest.mark.django_db
@@ -76,6 +107,26 @@ def test_rejects_unverified_owner_and_wrong_docroot(django_user_model, tmp_path)
     with pytest.raises(RuntimeError, match="STOREFRONT_TARGET_MISMATCH"):
         importer.import_receipts(inbox, app, docroot, "09175814408", apply=True)
     (docroot / "passenger_wsgi.py").write_text("Saeit-staging")
+    receipt_dir = inbox / "receipts" / "farm_enterprise_economics"
+    receipt_dir.mkdir(parents=True)
+    (receipt_dir / ("a" * 64 + ".json")).write_text("{}")
     with pytest.raises(RuntimeError, match="IDENTIFIED_STORE_OWNER_NOT_PRESENT"):
-        importer.import_receipts(inbox, app, docroot, "09175814408", apply=True)
+        importer.import_receipts(inbox, app, docroot, "09175814408", apply=True,
+                                 recipe="farm_enterprise_economics", digest="a" * 64)
     assert Product.objects.count() == 0
+
+
+def test_exact_selector_rejects_invalid_versions_and_links(tmp_path):
+    importer = module("import_factory_store_drafts")
+    root = tmp_path / "private"
+    (root / "receipts" / "farm_enterprise_economics").mkdir(parents=True)
+    with pytest.raises(RuntimeError, match="EXACT_FACTORY_SHA256_REQUIRED"):
+        importer.selected_receipt(root, "farm_enterprise_economics", "not-a-hash")
+    with pytest.raises(RuntimeError, match="EXACT_FACTORY_RECIPE_REQUIRED"):
+        importer.selected_receipt(root, "../other", "a" * 64)
+    with pytest.raises(RuntimeError, match="SELECTED_PRIVATE_RECEIPT_NOT_FOUND"):
+        importer.selected_receipt(root, "farm_enterprise_economics", "a" * 64)
+    poisoned = root / "receipts" / "farm_enterprise_economics" / ("a" * 64 + ".json")
+    poisoned.symlink_to(tmp_path / "outside")
+    with pytest.raises(RuntimeError, match="SELECTED_PRIVATE_RECEIPT_NOT_FOUND"):
+        importer.selected_receipt(root, "farm_enterprise_economics", "a" * 64)

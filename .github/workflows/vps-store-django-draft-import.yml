@@ -1,9 +1,11 @@
-name: Factory Private Products to MojPlayWin Django Drafts
+name: Factory Exact Private Draft Preflight (No DB Write)
 on:
-  push:
-    branches: [main]
-    paths: [.github/workflows/vps-store-django-draft-import.yml]
   workflow_dispatch:
+    inputs:
+      sha256:
+        description: Exact SHA-256 for one farm_enterprise_economics private artifact
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -104,36 +106,39 @@ jobs:
           command -v python3 >/dev/null && python3 --version
           df -h "$HOME" | tail -n 1 | awk '{print "CPANEL_DISK_FREE=" $4}'
           REMOTE
-      - name: Install guarded MojPlayWin Django draft importer
+      - name: Stage isolated importer; leave existing production importer untouched
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/factory-store-preflight"
-          scp -F "$d/config" scripts/import_factory_store_drafts.py saeit-cpanel:/home/zomorod2/.saeit-factory-inbox/bin/import_factory_store_drafts.py.tmp
+          scp -F "$d/config" scripts/import_factory_store_drafts.py saeit-cpanel:/home/zomorod2/.saeit-factory-inbox/bin/import_factory_exact_draft_preflight.py.tmp
           ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
           set -euo pipefail
           umask 077
           root="$HOME/.saeit-factory-inbox"
-          script="$root/bin/import_factory_store_drafts.py"
+          script="$root/bin/import_factory_exact_draft_preflight.py"
           tmp="$script.tmp"
           test -s "$tmp"
           python3 -m py_compile "$tmp"
           chmod 600 "$tmp"
           mv -f "$tmp" "$script"
-          echo DJANGO_FACTORY_DRAFT_IMPORTER_INSTALLED
+          echo DJANGO_FACTORY_EXACT_DRAFT_PREFLIGHT_SCRIPT_STAGED
           REMOTE
-      - name: Register one QA-verified factory asset as inactive MojPlayWin draft
+      - name: Dry-run one exact inactive draft without changing the store database
+        env:
+          SELECTED_SHA256: ${{ inputs.sha256 }}
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$SELECTED_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo INVALID_EXACT_ARTIFACT_SHA256; exit 1; }
           d="$RUNNER_TEMP/factory-store-preflight"
-          ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          ssh -F "$d/config" saeit-cpanel "FACTORY_SELECTED_SHA256='$SELECTED_SHA256' bash -se" <<'REMOTE'
           set -euo pipefail
           umask 077
           app="$HOME/Saeit-staging"
           root="$HOME/.saeit-factory-inbox"
           docroot="$HOME/mojplaywin.com"
-          script="$root/bin/import_factory_store_drafts.py"
+          script="$root/bin/import_factory_exact_draft_preflight.py"
           cd "$app"
           selected=""
           for python in /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python /home/zomorod2/virtualenv/Saeit-staging/3.10/bin/python /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorod2/virtualenv/mojplaywin.com/3.11/bin/python "$app/.venv/bin/python"; do
@@ -144,33 +149,9 @@ jobs:
           done
           test -n "$selected" || { echo STORE_DJANGO_RUNTIME_MISSING; exit 1; }
           export DJANGO_SETTINGS_MODULE=config.settings PYTHONPATH="$app"
-          "$selected" "$script" --inbox "$root" --app "$app" --document-root "$docroot" --sole-active-superuser
-          "$selected" "$script" --inbox "$root" --app "$app" --document-root "$docroot" --sole-active-superuser --apply
-          "$selected" "$script" --inbox "$root" --app "$app" --document-root "$docroot" --sole-active-superuser --apply
-          "$selected" - <<'PY'
-          import django
-          django.setup()
-          from django.apps import apps
-          P=apps.get_model("core","Product")
-          print("STORE_DJANGO_AFTER_TOTAL="+str(P.objects.count()))
-          print("STORE_DJANGO_AFTER_ACTIVE="+str(P.objects.filter(active=True).count()))
-          count=P.objects.filter(metadata__factory_origin="saeit_vps",active=False).count()
-          print("STORE_DJANGO_FACTORY_INACTIVE="+str(count))
-          assert count >= 1
-          PY
-          command -v crontab >/dev/null
-          ops="$root/bin"
-          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-          crontab -l > "$ops/cron-before-product-import-$stamp.txt" 2>/dev/null || : > "$ops/cron-before-product-import-$stamp.txt"
-          chmod 600 "$ops/cron-before-product-import-$stamp.txt"
-          grep -v SAEIT_FACTORY_PRODUCT_DRAFT_IMPORT "$ops/cron-before-product-import-$stamp.txt" > "$ops/draft-cron.tmp" || true
-          printf '%s\n' "47 * * * * /usr/bin/flock -n $ops/draft-import.lock /bin/bash -c 'cd $app && DJANGO_SETTINGS_MODULE=config.settings PYTHONPATH=$app $selected $script --inbox $root --app $app --document-root $docroot --sole-active-superuser --apply' >> $root/draft-import.log 2>&1 # SAEIT_FACTORY_PRODUCT_DRAFT_IMPORT" >> "$ops/draft-cron.tmp"
-          chmod 600 "$ops/draft-cron.tmp"
-          crontab "$ops/draft-cron.tmp"
-          rm -f "$ops/draft-cron.tmp"
-          test "$(crontab -l | grep -c SAEIT_FACTORY_PRODUCT_DRAFT_IMPORT)" = 1
-          echo MOJPLAYWIN_PRIVATE_FACTORY_DRAFT_IMPORT_SCHEDULED
-          echo MOJPLAYWIN_STORE_PRODUCTS_REMAIN_INACTIVE_UNTIL_OWNER_APPROVAL
+          "$selected" "$script" --inbox "$root" --app "$app" --document-root "$docroot" --sole-active-superuser --recipe farm_enterprise_economics --sha256 "$FACTORY_SELECTED_SHA256"
+          echo EXACT_DRAFT_PREFLIGHT_ONLY_NO_DATABASE_WRITES
+          echo NO_STORE_PUBLICATION_NO_CRON_CHANGES_NO_PAYMENT_CHANGES
           REMOTE
       - name: Clean temporary SSH keys
         if: always()
