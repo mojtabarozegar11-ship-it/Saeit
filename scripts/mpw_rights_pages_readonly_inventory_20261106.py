@@ -67,6 +67,16 @@ def collect():
     catalog_functions = {node.name: node for node in catalog_tree.body
                          if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
     catalog_helper = catalog_functions.get("public_trx_product")
+    sellable_local = catalog_functions.get("sellable_trx_product")
+    sellable_imports = sorted({
+        node.module for node in ast.walk(catalog_tree)
+        if isinstance(node, ast.ImportFrom) and node.module
+        and any(alias.name == "sellable_trx_product" for alias in node.names)
+    })
+    sellable_local_names = sorted({
+        node.id for node in ast.walk(sellable_local)
+        if isinstance(node, ast.Name)
+    })[:45] if sellable_local else []
     catalog_names = sorted({
         node.id for node in ast.walk(catalog_helper)
         if isinstance(node, ast.Name)
@@ -130,6 +140,9 @@ def collect():
         "catalog_sha256": hashlib.sha256(catalog_raw).hexdigest(),
         "catalog_has_product_helper": catalog_helper is not None,
         "catalog_product_helper_names": catalog_names,
+        "sellable_helper_is_local": sellable_local is not None,
+        "sellable_helper_imports": sellable_imports,
+        "sellable_local_names": sellable_local_names,
         "catalog_helper_mentions_rights": "rights_cleared_for_sale" in catalog_names,
         "catalog_helper_mentions_eligible": "_eligible" in catalog_names,
         "import_old_count": source.count(IMPORT_OLD),
