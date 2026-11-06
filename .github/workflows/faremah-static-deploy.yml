@@ -146,3 +146,5 @@ jobs:
           python3 -m py_compile "$target"
           echo "FAREMAH_ROUTE_DEPLOY=PASS target=$target sha=$sha"
           REMOTE
+
+# Final live-sync verification trigger for Faremah
