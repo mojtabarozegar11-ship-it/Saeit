@@ -58,10 +58,15 @@ def collect():
                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
     checkout = functions.get("product_checkout")
     public_product_imports = sorted({
-        node.module for node in tree.body
+        node.module for node in ast.walk(tree)
         if isinstance(node, ast.ImportFrom) and node.module
         and any(alias.name == "public_trx_product" for alias in node.names)
     })
+    public_helper = functions.get("public_trx_product")
+    helper_calls = sorted({
+        node.func.id for node in ast.walk(public_helper)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    })[:40] if public_helper else []
     names = sorted({node.id for node in ast.walk(checkout)
                     if isinstance(node, ast.Name)})[:50] if checkout else []
     checks = []
@@ -111,7 +116,9 @@ def collect():
         "checkout_new_count": source.count(CHECKOUT_NEW),
         "has_public_shop": "public_shop" in functions,
         "has_product_checkout": checkout is not None,
+        "public_product_is_local_helper": public_helper is not None,
         "public_product_imports": public_product_imports,
+        "public_product_local_helper_calls": helper_calls,
         "checkout_identifier_names": names,
         "checkout_product_if_structure": checks[:12],
     }
