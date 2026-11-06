@@ -96,7 +96,7 @@ jobs:
           Path("zm-modern-loader.txt").write_text(loader,encoding="utf-8")
           static_routes=["blog/index.html","weather/index.html","store/index.html","newsletter/index.html","amozeshgah/index.html","academy/index.html","education/index.html","industry/index.html","research/index.html","knowledge/index.html","market/index.html","economy/index.html","studio/index.html","agents/index.html","company/index.html","services/index.html","agriculture/index.html"]
           static_routes.extend(str(p.relative_to(Path("public"))) for p in sorted(Path("public/agriculture").glob("*/index.html")))
-          Path("zm-static-routes.txt").write_text("\\n".join(static_routes)+"\\n",encoding="utf-8")
+          Path("zm-static-routes.txt").write_text("\n".join(static_routes)+"\n",encoding="utf-8")
           print("SITE_PAGES_WITH_EDITORIAL="+str(len(sections)))
           print("STANDALONE_MODULES="+str(16*3))
           PY
@@ -222,7 +222,7 @@ jobs:
           os.chmod(temp_page,0o644)
           os.replace(temp_page,page)
           temp=modern.with_name("modern.zm-"+sha+".tmp")
-          temp.write_bytes(original+b"\\n"+loader)
+          temp.write_bytes(original+b"\n"+loader)
           os.chmod(temp,modern.stat().st_mode & 0o777)
           os.replace(temp,modern)
           for rel,target,raw,mode in available:
