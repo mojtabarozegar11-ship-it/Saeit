@@ -878,6 +878,8 @@ jobs:
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${REQUESTED_ACTION:-preview}" == "apply" ]]; then
             [[ "${CONFIRM_DISPOSABLE_ONLY:-false}" == "true" ]] || { echo "STALE_CLEANUP_BLOCKED_EXPLICIT_CONFIRMATION_REQUIRED"; exit 8; }
             mode=apply
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${{ github.event.head_commit.message }}" == "ops: execute bounded stale cleanup" ]]; then
+            mode=apply
           fi
           echo "STALE_CLEANUP_MODE=$mode"
           d="$RUNNER_TEMP/zomorod-baseline-inventory"
