@@ -47,7 +47,7 @@
     },
     "05": {
       "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
-      "sequence": 5,
+      "sequence": 6,
       "legacy_report_last_verified": 57,
       "primary_output": "accepted operational business gate",
       "legacy_source_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725",
@@ -118,6 +118,16 @@
       "acceptance_result": "All five automation update calls succeeded; re-peek confirmed all five enabled, all task scopes present, all schedule strings unchanged; sixth automation rejected by plan limit 5",
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-6650052845",
       "impact": "Six owner-mandated operational domains now explicitly assigned across five existing hourly automations; no delivery or revenue evidence"
+    },
+    {
+      "registry_id": "R05-0006",
+      "cycle_id": "05",
+      "run_id": "ZM20DAY-20261106T110852Z-C05",
+      "deliverable_key": "20day-mission-gate-baseline",
+      "stage": "code",
+      "acceptance_result": "20-day milestone and gate ownership baseline recorded in shared coordination ledger; no operational gate accepted",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "impact": "Cross-cycle deadline, owner and stage separation recorded; no product acceptance or revenue"
     }
   ],
   "report_reservations": [],
@@ -144,5 +154,76 @@
     "source_issue_comment": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725#issuecomment-6650052845",
     "schedules_changed": false,
     "disabled_automations": 0
+  },
+  "mission_20day_20261106": {
+    "mission_id": "ZM-20DAY-COMMERCIAL-MISSION-20261106",
+    "start_date": "2026-11-06",
+    "deadline": "2026-11-26",
+    "milestones": [
+      {
+        "day": 3,
+        "date": "2026-11-08",
+        "acceptance": "Baseline, evidence-backed ownership and P0/backup/license gates; unresolved gates explicitly HOLD"
+      },
+      {
+        "day": 7,
+        "date": "2026-11-12",
+        "acceptance": "Verified fixes and legally saleable product packages; no publication without approval"
+      },
+      {
+        "day": 14,
+        "date": "2026-11-19",
+        "acceptance": "Exact-version integrated acceptance with independent evidence; reconcile real orders and settlement"
+      },
+      {
+        "day": 20,
+        "date": "2026-11-26",
+        "acceptance": "Only approved accepted outputs released; report independent sales and profit evidence or unknown"
+      }
+    ],
+    "owners": {
+      "01": {
+        "output": "scientific manuscript",
+        "gate": "scientific/rights acceptance"
+      },
+      "02": {
+        "output": "written product",
+        "gate": "rights and finished delivery package"
+      },
+      "03": {
+        "output": "store/guest checkout and one-product factory",
+        "gate": "legal payment acceptance, server-side payment confirmation, backup/rollback; factory HOLD"
+      },
+      "04": {
+        "output": "Moj Coin",
+        "gate": "playability, security, minors' safety and approved release"
+      },
+      "05": {
+        "output": "commerce, accounting, governance and token technical packages",
+        "gate": "P0 security, DB identity, independent acceptance and no unapproved chain deployment"
+      }
+    },
+    "measurement_contract": {
+      "stages": [
+        "code",
+        "deployment",
+        "accepted",
+        "order",
+        "payment_confirmed",
+        "delivered",
+        "revenue_settled",
+        "cost",
+        "profit"
+      ],
+      "default": "unknown_unless_independently_verified",
+      "dedupe": "one deliverable owner and unique evidence; financial truth requires private independent ledger",
+      "restrictions": [
+        "no project39 correspondence",
+        "no Remote Desktop Commander",
+        "no factory startup",
+        "no financial transactions or public releases without specific authorization"
+      ]
+    },
+    "status": "baseline_registered_not_operational_acceptance"
   }
 }
