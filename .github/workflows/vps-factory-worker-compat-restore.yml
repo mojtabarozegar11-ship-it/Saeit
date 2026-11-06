@@ -64,7 +64,9 @@ jobs:
           original_command_sha = '16db26a1add66cd4cb9e96c8f992441d15e4324f6ffbb763189a0be923032978'
           pinned_worker_sha = '3b890e7f2d9f383130a4aa711f6b251ee124a7a903ebdd2a29acf3278368bbee'
           pinned_runtime_sha = '9cebdf4a60162b6b9c7b1a36364baa9748395ce42e8e0f86bacfaa82a422731b'
-          previous_compat_sha = '509b403c552a4a6ed0789196754d78812cf0d7d37044e904f4af302ce137a008'
+          # Exact version installed by the preceding ABI repair, including
+          # its explicit operator-side FactoryRun binding guard.
+          previous_compat_sha = '750ab4ccb644b756c0a533745405b884b95f2e20ef331fc53241b51a7549573e'
 
           def digest(data):
               return hashlib.sha256(data).hexdigest()
