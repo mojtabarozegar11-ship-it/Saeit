@@ -21,8 +21,12 @@ from core.models import Agent, AgentTask
 
 EXECUTOR_SCOPES = {
     "economic-master-agent": lambda code: code.startswith("income_") or code == "master_self_improvement",
-    "moj_1ro_1": lambda code: code in {"factory_native_review", "factory_f41_private_build"},
 }
+
+# The F41/factory identity is executed by the native factory gateway, not the
+# economic gateway used in this report. Never infer its handler availability
+# from an unrelated registry; only native runtime evidence can assess it.
+NATIVE_FACTORY_IDENTITIES = {"moj_1ro_1"}
 
 
 class Command(BaseCommand):
@@ -79,6 +83,12 @@ class Command(BaseCommand):
                     capability_code__in=known_handlers,
                     action_type=F("capability_code"),
                 ).count()
+            if agent.code in NATIVE_FACTORY_IDENTITIES:
+                coverage = "separate_factory_runtime_not_attested"
+            elif known_scope:
+                coverage = "partial_known_scope"
+            else:
+                coverage = "not_assessed_other_runtime"
             findings = []
             if not agent.active and pending:
                 findings.append("inactive_agent_has_pending_tasks")
@@ -107,7 +117,7 @@ class Command(BaseCommand):
                 "active": agent.active,
                 "capabilities": active_caps,
                 "known_registered_handlers": known_handlers,
-                "handler_coverage": "partial_known_scope" if known_scope else "not_assessed_other_runtime",
+                "handler_coverage": coverage,
                 "tasks": {
                     "pending": pending,
                     "queued": tasks.filter(status="queued").count(),

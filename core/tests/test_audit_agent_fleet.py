@@ -92,3 +92,27 @@ def test_fleet_audit_identifies_repeated_internal_baselines_without_claiming_sal
     master = next(row for row in report["agents"] if row["code"] == "economic-master-agent")
     assert "repeated_internal_profit_baselines_not_revenue" in master["findings"]
     assert report["verified_revenue_attested"] is False
+
+
+@pytest.mark.django_db
+def test_factory_native_identity_is_not_misdiagnosed_using_economic_registry():
+    factory = Agent.objects.create(
+        code="moj_1ro_1", name="F41 factory", mission="Private factory", active=True,
+    )
+    capability = AgentCapability.objects.create(
+        code="factory_native_review", name="Factory native review", active=True,
+    )
+    capability.agents.add(factory)
+    AgentTask.objects.create(
+        agent=factory, action_type="factory_native_review",
+        capability_code="factory_native_review", status="queued",
+    )
+    output = StringIO()
+    call_command("audit_agent_fleet", stdout=output)
+    report = json.loads(output.getvalue())
+    row = next(item for item in report["agents"] if item["code"] == "moj_1ro_1")
+    assert row["handler_coverage"] == "separate_factory_runtime_not_attested"
+    assert row["tasks"]["queued_without_known_handler"] is None
+    assert "no_registered_handler_for_known_executor" not in row["findings"]
+    assert "queued_task_not_supported_by_known_executor" not in row["findings"]
+    assert report["summary"]["unsupported_known_queue_tasks"] == 0
