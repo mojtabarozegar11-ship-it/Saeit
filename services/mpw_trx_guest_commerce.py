@@ -96,7 +96,7 @@ def _new_user(request):
     # address submitted by the checkout form before invoice binding; otherwise
     # record_invoice() correctly refuses to create an unowned delivery record.
     submitted_email = ""
-    for key in ("email", "buyer_email", "customer_email", "purchaser_email"):
+    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
         raw = request.POST.get(key) if hasattr(request, "POST") else None
         if raw is not None:
             submitted_email = str(raw).strip().lower()
@@ -148,7 +148,7 @@ def _new_user(request):
 def _bind_guest_email(request, user):
     """Bind a submitted address only to this existing guest principal."""
     submitted_email = ""
-    for key in ("email", "buyer_email", "customer_email", "purchaser_email"):
+    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
         raw = request.POST.get(key) if hasattr(request, "POST") else None
         if raw is not None:
             submitted_email = str(raw).strip().lower()
@@ -164,11 +164,38 @@ def _bind_guest_email(request, user):
     return user
 
 
+def _required_checkout_email(request):
+    """Every invoice POST, including signed-in checkout, must carry one valid email."""
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    values = []
+    for key in ("email", "buyer_email", "customer_email", "purchase_email", "purchaser_email"):
+        for raw in request.POST.getlist(key):
+            address = str(raw).strip().casefold()
+            if not address:
+                continue
+            if len(address) > 254:
+                raise Http404("Valid purchase email required")
+            try:
+                validate_email(address)
+            except ValidationError as exc:
+                raise Http404("Valid purchase email required") from exc
+            values.append(address)
+    if not values or any(value != values[0] for value in values):
+        raise Http404("Missing or conflicting purchase email")
+    return values[0]
+
+
 def _identity(request, *, create=False):
     if not _host_ok(request):
         raise Http404
+    # A browser's required HTML field cannot protect direct POST requests.
+    checkout_email = _required_checkout_email(request) if create else None
     current = getattr(request, "user", None)
     if current is not None and getattr(current, "is_authenticated", False):
+        if create and str(getattr(current, "email", "") or "").strip().casefold() != checkout_email:
+            raise Http404("Account email must match purchase email")
         return current, None
     user = _read_user(request)
     token = None
@@ -198,13 +225,32 @@ def _install_cookie(response, token):
 def _dispatch(request, view, args, kwargs, *, create=False):
     if create:
         from django.conf import settings
-        if getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True:
+        # Capturing immutable checkout ownership is independent of opening
+        # public recovery routes or approving outbound recovery mail.
+        if (getattr(settings, "MPW_GUEST_EMAIL_CLAIM_CAPTURE_ENABLED", False) is True
+                or getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True):
             from services.mpw_trx_email_recovery import bound_checkout
-            return bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
+            response = bound_checkout(request, view, _identity, _install_cookie, args, kwargs)
+            if 200 <= getattr(response, "status_code", 500) < 400:
+                _count_checkout_event(request, "order_start_accepted", args, kwargs)
+            return response
     user, token = _identity(request, create=create)
     request.user = user
     response = view(request, *args, **kwargs)
-    return _install_cookie(response, token)
+    response = _install_cookie(response, token)
+    if create and 200 <= getattr(response, "status_code", 500) < 400:
+        _count_checkout_event(request, "order_start_accepted", args, kwargs)
+    return response
+
+
+def _count_checkout_event(request, stage, args=(), kwargs=None):
+    """Never change the outcome of any purchase/receipt handler."""
+    try:
+        from services.mpw_checkout_funnel import record
+        product_id = (kwargs or {}).get("product_id", args[0] if args else 0)
+        record(request, stage, product_id)
+    except Exception:
+        pass
 
 
 def _checkout_page(request, product_id, pages_namespace):
@@ -242,6 +288,7 @@ def _checkout_page(request, product_id, pages_namespace):
         "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
         "script-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
     response["X-Robots-Tag"] = "noindex, nofollow"
+    _count_checkout_event(request, "checkout_view", (product_id,))
     return response
 
 
@@ -322,7 +369,12 @@ def patch_commercial(namespace):
 
         def make_view(view, make_claim, view_name):
             def wrapped(request, *args, **kwargs):
-                return _dispatch(request, view, args, kwargs, create=make_claim)
+                response = _dispatch(request, view, args, kwargs, create=make_claim)
+                if view_name in ("show_invoice", "download_paid") and \
+                        getattr(response, "status_code", 500) == 200:
+                    event = "invoice_view" if view_name == "show_invoice" else "paid_download"
+                    _count_checkout_event(request, event)
+                return response
             wrapped.__name__ = view_name
             return never_cache(csrf_protect(method_decorator(wrapped)) if csrf
                                else method_decorator(wrapped))
