@@ -9,6 +9,7 @@ payment operations.
 """
 from __future__ import annotations
 
+import ast
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 import gzip
@@ -349,6 +350,60 @@ def _module_inventory():
     return {'files': rows, 'read_only': True}
 
 
+def _commerce_handler_structure():
+    """Review live handler structure without showing source or configuration data."""
+    root = ACCOUNT / 'Saeit-staging'
+    targets = (
+        ('commercial_web', 'services/mpw_trx_commercial_web.py',
+         ('_start_order', '_configured_receiver')),
+        ('commercial_intent', 'services/mpw_walletless_commercial_intent.py',
+         ('_commercial_db',)),
+        ('buyer_orders', 'mpw_commerce/buyer_orders.py', ('_eligible',)),
+    )
+    result = {}
+    for label, rel, wanted in targets:
+        p = root / rel
+        try:
+            if p.is_symlink() or not p.is_file():
+                result[label] = {'present': False}
+                continue
+            actual = p.resolve(strict=True)
+            info = actual.stat()
+            if (not actual.is_relative_to(root) or info.st_uid != os.geteuid()
+                    or not 0 < info.st_size <= 180_000):
+                result[label] = {'safe_read_unavailable': True}
+                continue
+            parsed = ast.parse(actual.read_text('utf-8'))
+            handlers = {}
+            for node in parsed.body:
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name not in wanted:
+                    continue
+                calls = set()
+                handled = set()
+                for descendant in ast.walk(node):
+                    if isinstance(descendant, ast.Call):
+                        name = (descendant.func.id if isinstance(descendant.func, ast.Name)
+                                else descendant.func.attr if isinstance(descendant.func, ast.Attribute)
+                                else None)
+                        if name and name.isidentifier():
+                            calls.add(name)
+                    elif isinstance(descendant, ast.ExceptHandler) and descendant.type is not None:
+                        exc = descendant.type
+                        if isinstance(exc, ast.Name):
+                            handled.add(exc.id)
+                        elif isinstance(exc, ast.Attribute):
+                            handled.add(exc.attr)
+                handlers[node.name] = {'first_line': node.lineno,
+                                       'last_line': node.end_lineno,
+                                       'calls': sorted(calls)[:45],
+                                       'caught_exceptions': sorted(handled)[:20]}
+            result[label] = {'present': True, 'syntax_valid': True,
+                             'handlers': handlers}
+        except (OSError, UnicodeError, SyntaxError, ValueError, RuntimeError):
+            result[label] = {'safe_inspection_unavailable': True}
+    return {'read_only': True, 'raw_source_disclosed': False, 'files': result}
+
+
 def _audit():
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=LOOKBACK_DAYS)
@@ -422,6 +477,7 @@ def _audit():
         'awstats': _awstats_monthly(),
         'passenger_stderr': _passenger_stderr_probe(),
         'module_inventory': _module_inventory(),
+        'commercial_handler_structure': _commerce_handler_structure(),
         'uniques_unavailable': True,
         'bot_classification': 'heuristic_only',
         'orders_are_not_payments': True,
@@ -472,6 +528,7 @@ def _selftest():
     ])
     assert sample['top_app_frames'][0]['module'] == 'services/checkout.py'
     assert sample['missing_import_modules'] == {'safe_module': 1}
+    assert isinstance(_commerce_handler_structure(), dict)
     print('MPW_ACCESS_FUNNEL_SELFTEST=PASS')
 
 
