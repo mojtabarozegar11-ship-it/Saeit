@@ -1,0 +1,110 @@
+name: MPW Living Cities 50 release offhost public game backup and restore proof
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/mpw-living-cities-50-public-backup-20261102.yml'
+      - 'scripts/mpw_living_cities_50_private_stage.py'
+permissions: {contents: read}
+concurrency: {group: mpw-living-cities-50-public-backup, cancel-in-progress: false}
+jobs:
+  backup-and-restore:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Open existing pinned and verified VPS cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Verify precise public-game source boundaries before backup
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 60s ssh -T -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          h=Path("/home/zomorod2")
+          game=h/"mojplaywin.com/living-cities"
+          assert game.is_dir() and not game.is_symlink()
+          assert (game/"LC-OWNER.txt").read_text().strip()=="MPW-LIVING-CITIES-GLOBAL-20-LANG-eca666cbb730a6fcf70d284328893a78ad966881"
+          paths=list(game.rglob("*"))
+          assert 10<len(paths)<3000
+          assert all(not x.is_symlink() and (x.is_file() or x.is_dir()) for x in paths)
+          assert (game/"play/index.html").is_file()
+          assert (game/"static/living_cities/app.mjs").is_file()
+          print("MPW_OLD_PUBLIC_GAME_BACKUP_BOUNDARY=PASS")
+          print("MPW_OLD_PUBLIC_GAME_PATHS="+str(len(paths)))
+          PY
+      - name: Create unique offhost snapshot of only existing public game directory
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          backup="$HOME/.private/living-cities-transport/mpw-public-eca666-pre-50-20261102.tgz"
+          timeout 45s ssh -T -F "$d/config" vps 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          dir="$HOME/.private/living-cities-transport"
+          test -d "$dir" && test ! -L "$dir"
+          test ! -L "$dir/mpw-public-eca666-pre-50-20261102.tgz"
+          test ! -L "$dir/mpw-public-eca666-pre-50-20261102.pending"
+          REMOTE
+          if timeout 35s ssh -T -F "$d/config" vps 'test -s "$HOME/.private/living-cities-transport/mpw-public-eca666-pre-50-20261102.tgz"'; then
+            echo MPW_EXISTING_OFFHOST_PUBLIC_BACKUP_PRESENT=PASS
+          else
+            timeout 140s ssh -T -F "$d/config" host 'tar --sort=name --owner=0 --group=0 --numeric-owner -czf - -C "$HOME/mojplaywin.com" living-cities' |
+              timeout 140s ssh -T -F "$d/config" vps 'umask 077; cat > "$HOME/.private/living-cities-transport/mpw-public-eca666-pre-50-20261102.pending"'
+            timeout 45s ssh -T -F "$d/config" vps 'mv -T "$HOME/.private/living-cities-transport/mpw-public-eca666-pre-50-20261102.pending" "$HOME/.private/living-cities-transport/mpw-public-eca666-pre-50-20261102.tgz"'
+            echo MPW_PUBLIC_GAME_OFFHOST_BACKUP_CREATED=PASS
+          fi
+      - name: Restore into disposable private VPS directory and verify, never alter public game
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          timeout 120s ssh -T -F "$d/config" vps 'python3 -' <<'PY'
+          import hashlib,shutil,tarfile,tempfile
+          from pathlib import Path
+          root=Path.home()/".private/living-cities-transport"
+          backup=root/"mpw-public-eca666-pre-50-20261102.tgz"
+          assert backup.is_file() and not backup.is_symlink()
+          assert 1000<backup.stat().st_size<12000000
+          scratch=Path(tempfile.mkdtemp(prefix="mpw-50-restore-",dir=root))
+          try:
+              with tarfile.open(backup,mode="r:gz") as tar:
+                  items=tar.getmembers()
+                  assert 10<len(items)<3000
+                  for m in items:
+                      p=Path(m.name)
+                      assert not p.is_absolute() and ".." not in p.parts
+                      assert p.parts[0]=="living-cities"
+                      assert m.isfile() or m.isdir()
+                      dest=scratch/p
+                      if m.isdir():
+                          dest.mkdir(parents=True,exist_ok=True)
+                      else:
+                          dest.parent.mkdir(parents=True,exist_ok=True)
+                          with tar.extractfile(m) as src, dest.open("xb") as out:
+                              shutil.copyfileobj(src,out)
+              game=scratch/"living-cities"
+              marker=game/"LC-OWNER.txt"
+              assert marker.read_text().strip()=="MPW-LIVING-CITIES-GLOBAL-20-LANG-eca666cbb730a6fcf70d284328893a78ad966881"
+              assert (game/"play/index.html").is_file()
+              assert (game/"static/living_cities/tycoon-panel.mjs").is_file()
+              print("MPW_OLD_PUBLIC_GAME_OFFHOST_RESTORE=PASS")
+              print("MPW_OLD_PUBLIC_BACKUP_SHA256="+hashlib.sha256(backup.read_bytes()).hexdigest())
+              print("MPW_RESTORED_PATH_COUNT="+str(len(items)))
+          finally:
+              assert scratch.parent==root and scratch.name.startswith("mpw-50-restore-")
+              shutil.rmtree(scratch)
+          PY
+          timeout 45s ssh -T -F "$d/config" host 'test "$(cat "$HOME/mojplaywin.com/living-cities/LC-OWNER.txt")" = "MPW-LIVING-CITIES-GLOBAL-20-LANG-eca666cbb730a6fcf70d284328893a78ad966881"'
+          echo MPW_LIVE_GAME_NOT_MODIFIED_BY_BACKUP=PASS
+          echo MPW_ACCOUNT_DB_BACKUP_NOT_PART_OF_STATIC_SCOPE=true
+      - name: Erase runner connection material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/farm-v4-ssh"
