@@ -47,6 +47,15 @@ class StorefrontTruth(unittest.TestCase):
         self.assertEqual(self.links.count("/commerce/trx-easy/purchases/"), 1)
         self.assertNotIn("arrive by email", self.source)
 
+    def test_three_plain_language_steps_never_promise_email_fulfillment(self):
+        self.assertIn('<ol class="mpw-checkout-steps" aria-label="Three steps to purchase">', self.source)
+        for step in ("1. Enter your email", "2. Pay the TRX invoice",
+                     "3. Download in this browser"):
+            self.assertEqual(self.source.count(step), 1)
+        self.assertIn("After blockchain confirmation", self.source)
+        self.assertIn("same browser to retrieve your file", self.source)
+        self.assertNotIn("download link arrives by email", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()

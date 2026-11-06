@@ -63,6 +63,10 @@ class StoreMobileCheckoutTests(unittest.TestCase):
         self.assertIn("a valid purchase email must be entered", self.source)
         self.assertIn("Email receipts and recovery on another device are not yet available", self.source)
 
+    def test_checkout_guide_is_single_column_on_mobile(self):
+        self.assertIn(".mpw-checkout-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))", self.source)
+        self.assertIn("@media(max-width:650px){.mpw-checkout-steps{grid-template-columns:1fr}}", self.source)
+
 
 if __name__ == "__main__":
     unittest.main()
