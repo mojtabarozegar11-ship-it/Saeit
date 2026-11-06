@@ -88,10 +88,12 @@ def trusted_dir(path):
 
 
 def validate_passenger_mapping(payload):
-    """Require one exact main-domain Passenger mapping to this app root.
+    """Require the registered Passenger root to be the public site root.
 
-    A similarly named folder or a Passenger app on an unrelated sub-URI
-    cannot authorize a production storefront edit.
+    Registration and the WSGI-imported Django source are distinct identities:
+    the public Passenger app may import the Saeit-staging code through its
+    passenger_wsgi.py. A similarly named folder or unrelated sub-URI cannot
+    authorize a storefront edit. Static WSGI content is checked separately.
     """
     if not isinstance(payload, dict):
         fail("PASSENGER_INVENTORY_INVALID")
@@ -122,8 +124,8 @@ def validate_passenger_mapping(payload):
                 walk(child)
 
     walk(result)
-    if mappings != {str(ROOT)}:
-        fail("PASSENGER_EFFECTIVE_ROOT_NOT_VERIFIED")
+    if mappings != {str(SITE)}:
+        fail("PASSENGER_PUBLIC_REGISTRATION_NOT_VERIFIED")
 
 
 def verify_live_passenger_mapping():

@@ -20,7 +20,7 @@ def baseline():
 
 
 class StorePaymentCopySafety(unittest.TestCase):
-    def inventory(self, app_root="/home/zomorod2/Saeit-staging", base_uri="/", status=1):
+    def inventory(self, app_root="/home/zomorod2/mojplaywin.com", base_uri="/", status=1):
         return {"result": {"status": status, "data": {"applications": [
             {"domain": "mojplaywin.com", "app_root": app_root,
              "base_uri": base_uri},
@@ -28,17 +28,18 @@ class StorePaymentCopySafety(unittest.TestCase):
              "base_uri": "/"},
         ]}}}
 
-    def test_exact_main_passenger_root_is_required_before_publish(self):
+    def test_public_registration_root_not_wsgi_source_is_required(self):
         release.validate_passenger_mapping(self.inventory())
-        release.validate_passenger_mapping(self.inventory(app_root="Saeit-staging"))
+        release.validate_passenger_mapping(self.inventory(app_root="mojplaywin.com"))
         for rejected in (
+                self.inventory(app_root="/home/zomorod2/Saeit-staging"),
                 self.inventory(app_root="/home/zomorod2/unrelated-app"),
                 self.inventory(base_uri="/unrelated-subsite/"),
-                self.inventory(app_root="../Saeit-staging"),
+                self.inventory(app_root="../mojplaywin.com"),
                 self.inventory(status=0),
                 {"result": {"status": 1, "data": {"applications": []}}},
                 {"result": {"status": 1, "data": {"applications": [
-                    {"domain": "mojplaywin.com", "app_root": "/home/zomorod2/Saeit-staging", "base_uri": "/"},
+                    {"domain": "mojplaywin.com", "app_root": "/home/zomorod2/mojplaywin.com", "base_uri": "/"},
                     {"domain": "mojplaywin.com", "app_root": "/home/zomorod2/other", "base_uri": "/"},
                 ]}}},
         ):
