@@ -1,0 +1,176 @@
+/* MOJ1 reward-sum escrow: disposable LOCAL TRON TVM only, synthetic accounts and test token. */
+const Reward = artifacts.require('MojRewardClaimsSumGuarded');
+const Token = artifacts.require('MojRewardTestToken');
+const Governance = artifacts.require('MojPilotGovernance');
+const DelayedGovernance = artifacts.require('MojGovernanceGuardedClockHarness');
+
+contract('MOJ1 domain-bound Merkle-sum reward liabilities', accounts => {
+  const unit = 10n ** 18n;
+  const amount = n => (BigInt(n) * unit).toString();
+  const uint = n => BigInt(n).toString(16).padStart(64, '0');
+  const manifest = '0x' + 'ab'.repeat(32);
+  const proof = (epoch, index, account, value, hashes = [], sums = [], counts = []) =>
+    [epoch, index, account, value, hashes, sums, counts];
+
+  function publishData(epoch, root, budget, count, digest = manifest) {
+    const selector = tronWeb.sha3('publishEpoch(uint256,bytes32,uint256,uint256,bytes32)').slice(2, 10);
+    return '0x' + selector + uint(epoch) + root.replace(/^0x/, '').padStart(64, '0') +
+      uint(budget) + uint(count) + digest.slice(2);
+  }
+
+  async function expectRevert(promise) {
+    const txid = await promise;
+    const receipt = await tronWeb.trx.getTransactionInfo(txid);
+    assert.equal(receipt?.receipt?.result, 'REVERT', 'actual TVM revert required');
+  }
+
+  async function governed(gov, escrow, data, nonce) {
+    await gov.approve(escrow.address, data, nonce, {from: accounts[0]});
+    await gov.approve(escrow.address, data, nonce, {from: accounts[1]});
+    const txid = await gov.execute(escrow.address, data, nonce, {from: accounts[2]});
+    const info = await tronWeb.trx.getTransactionInfo(txid);
+    assert.equal(info?.receipt?.result, 'SUCCESS');
+  }
+
+  async function setup() {
+    const gov = await Governance.new([accounts[0], accounts[1], accounts[2]]);
+    const token = await Token.new();
+    const escrow = await Reward.new(token.address, gov.address);
+    await token.transfer(escrow.address, amount(50), {from: accounts[0]});
+    return {gov, token, escrow};
+  }
+
+  it('pays one proven leaf exactly, rejects forged amounts and replay, and settles fully', async () => {
+    const {gov, token, escrow} = await setup();
+    const recipient = accounts[7];
+    const root = await escrow.claimLeaf(7, 0, recipient, amount(10));
+    await expectRevert(escrow.publishEpoch(7, root, amount(10), 1, manifest, {from: accounts[0]}));
+    await governed(gov, escrow, publishData(7, root, amount(10), 1), 0);
+    assert.equal((await escrow.outstandingCommitments()).toString(), amount(10));
+    assert.equal(await escrow.verifyClaim(proof(7, 0, recipient, amount(10))), true);
+    assert.equal(await escrow.verifyClaim(proof(7, 0, recipient, amount(9))), false);
+    await expectRevert(escrow.claim(proof(7, 0, accounts[8], amount(10)), {from: accounts[9]}));
+    await escrow.claim(proof(7, 0, recipient, amount(10)), {from: accounts[9]});
+    assert.equal((await token.balanceOf(recipient)).toString(), amount(10));
+    assert.equal((await escrow.outstandingCommitments()).toString(), '0');
+    assert.equal((await escrow.availableToCommit()).toString(), amount(40));
+    await expectRevert(escrow.claim(proof(7, 0, recipient, amount(10)), {from: accounts[9]}));
+  });
+
+  it('cryptographically binds a two-leaf root to the exact total and keeps unpaid claims reserved', async () => {
+    const {gov, token, escrow} = await setup();
+    const a = await escrow.claimLeaf(12, 0, accounts[6], amount(10));
+    const b = await escrow.claimLeaf(12, 1, accounts[7], amount(5));
+    const node = await escrow.combineNodes(a, amount(10), 1, b, amount(5), 1);
+    const root = node[0];
+    assert.equal(BigInt(node[1].toString()), 15n * unit);
+    assert.equal(node[2].toString(), '2');
+    await governed(gov, escrow, publishData(12, root, amount(15), 2), 0);
+
+    assert.equal(await escrow.verifyClaim(proof(12, 0, accounts[6], amount(10), [b], [amount(5)], [1])), true);
+    assert.equal(await escrow.verifyClaim(proof(12, 0, accounts[6], amount(10), [b], [amount(4)], [1])), false);
+    assert.equal(await escrow.verifyClaim(proof(12, 0, accounts[6], amount(10), [b], [amount(5)], [2])), false);
+    await expectRevert(escrow.claim(proof(12, 0, accounts[6], amount(10), [b], [amount(4)], [1]), {from: accounts[8]}));
+
+    await escrow.claim(proof(12, 0, accounts[6], amount(10), [b], [amount(5)], [1]), {from: accounts[8]});
+    assert.equal((await escrow.outstandingCommitments()).toString(), amount(5));
+    assert.equal((await escrow.availableToCommit()).toString(), amount(35));
+    assert.equal((await token.balanceOf(escrow.address)).toString(), amount(40));
+    await escrow.claim(proof(12, 1, accounts[7], amount(5), [a], [amount(10)], [1]), {from: accounts[8]});
+    assert.equal((await escrow.outstandingCommitments()).toString(), '0');
+    assert.equal((await token.balanceOf(escrow.address)).toString(), amount(35));
+    assert.equal((await escrow.epochs(12)).claimCount.toString(), '2');
+  });
+
+  it('does not confiscate unclaimed entitlements even when a malicious root repeats a wallet', async () => {
+    const {gov, token, escrow} = await setup();
+    const a = await escrow.claimLeaf(21, 0, accounts[6], amount(10));
+    const b = await escrow.claimLeaf(21, 1, accounts[6], amount(5));
+    const root = (await escrow.combineNodes(a, amount(10), 1, b, amount(5), 1))[0];
+    await governed(gov, escrow, publishData(21, root, amount(15), 2), 0);
+    await escrow.claim(proof(21, 0, accounts[6], amount(10), [b], [amount(5)], [1]), {from: accounts[9]});
+    await expectRevert(escrow.claim(proof(21, 1, accounts[6], amount(5), [a], [amount(10)], [1]), {from: accounts[9]}));
+    assert.equal((await escrow.outstandingCommitments()).toString(), amount(5));
+    assert.equal((await escrow.availableToCommit()).toString(), amount(35));
+    assert.equal((await token.balanceOf(escrow.address)).toString(), amount(40));
+  });
+
+  it('rejects a proof replayed against another contract address and another epoch', async () => {
+    const {gov, token, escrow} = await setup();
+    const other = await Reward.new(token.address, gov.address);
+    await token.transfer(other.address, amount(10), {from: accounts[0]});
+    const root = await escrow.claimLeaf(33, 0, accounts[6], amount(5));
+    await governed(gov, escrow, publishData(33, root, amount(5), 1), 0);
+    await governed(gov, other, publishData(33, root, amount(5), 1), 1);
+    await governed(gov, escrow, publishData(34, root, amount(5), 1), 2);
+    assert.equal(await other.verifyClaim(proof(33, 0, accounts[6], amount(5))), false);
+    assert.equal(await escrow.verifyClaim(proof(34, 0, accounts[6], amount(5))), false);
+    assert.equal((await escrow.outstandingCommitments()).toString(), amount(10));
+    await escrow.claim(proof(33, 0, accounts[6], amount(5)), {from: accounts[9]});
+    assert.equal((await token.balanceOf(accounts[6])).toString(), amount(5));
+  });
+
+  it('accepts the canonical offline sum-tree builder output byte-for-byte on a real local TVM', async () => {
+    const {gov, token, escrow} = await setup();
+    const {buildSyntheticSumGuardProposal} = await import('../../scripts/reward-sum-guard-offline.mjs');
+    const chainId = (await escrow.chainId()).toString();
+    const output = buildSyntheticSumGuardProposal({
+      mode: 'SYNTHETIC_LOCAL_TEST_ONLY', reviewStatus: 'UNREVIEWED',
+      domain: {chainId, contractAddress: escrow.address, epoch: '53'},
+      budgetUnits: amount(15), fundedAvailableUnits: amount(50),
+      rows: [
+        {index: '1', account: accounts[7], amountUnits: amount(5), evidenceRef: 'TEST-TVMMATCH-002'},
+        {index: '0', account: accounts[6], amountUnits: amount(10), evidenceRef: 'TEST-TVMMATCH-001'}
+      ]
+    });
+    assert.equal(output.publicationAuthorized, false);
+    assert.equal(output.sourceLedgerVerified, false);
+    assert.equal(output.leafCount, '2');
+    for (const c of output.claims) {
+      assert.equal(await escrow.claimLeaf(53, c.index, c.account, c.amountUnits), c.leaf);
+    }
+    await governed(gov, escrow, publishData(53, output.root, output.budgetUnits, output.leafCount, output.manifestDigest), 0);
+    assert.equal((await escrow.epochs(53)).manifestDigest.toLowerCase(), output.manifestDigest);
+    for (const c of output.claims) {
+      const request = proof(53, c.index, c.account, c.amountUnits, c.proof.hashes, c.proof.sums, c.proof.counts);
+      assert.equal(await escrow.verifyClaim(request), true);
+      await escrow.claim(request, {from: accounts[9]});
+    }
+    assert.equal((await token.balanceOf(accounts[6])).toString(), amount(10));
+    assert.equal((await token.balanceOf(accounts[7])).toString(), amount(5));
+    assert.equal((await escrow.outstandingCommitments()).toString(), '0');
+  });
+
+  it('only publishes an epoch after two distinct owners and the 48-hour governance delay', async () => {
+    const initialTime = 1_800_000_000;
+    const delay = 48 * 60 * 60;
+    const gov = await DelayedGovernance.new([accounts[0], accounts[1], accounts[2]], initialTime);
+    const token = await Token.new();
+    const escrow = await Reward.new(token.address, gov.address);
+    await token.transfer(escrow.address, amount(50), {from: accounts[0]});
+    const leaf = await escrow.claimLeaf(81, 0, accounts[7], amount(10));
+    const data = publishData(81, leaf, amount(10), 1);
+    const forged = publishData(81, leaf, amount(11), 1);
+
+    await expectRevert(escrow.publishEpoch(81, leaf, amount(10), 1, manifest, {from: accounts[0]}));
+    await expectRevert(gov.approve(escrow.address, data, 0, {from: accounts[8]}));
+    await gov.approve(escrow.address, data, 0, {from: accounts[0]});
+    await expectRevert(gov.approve(escrow.address, data, 0, {from: accounts[0]}));
+    await expectRevert(gov.execute(escrow.address, data, 0, {from: accounts[2]}));
+    await gov.approve(escrow.address, data, 0, {from: accounts[1]});
+    await expectRevert(gov.execute(escrow.address, forged, 0, {from: accounts[2]}));
+    await expectRevert(gov.execute(escrow.address, data, 0, {from: accounts[2]}));
+    await gov.setTestClock(initialTime + delay - 1);
+    await expectRevert(gov.execute(escrow.address, data, 0, {from: accounts[0]}));
+    assert.equal((await escrow.epochs(81)).published, false);
+    await gov.setTestClock(initialTime + delay);
+    await gov.execute(escrow.address, data, 0, {from: accounts[2]});
+    assert.equal((await escrow.epochs(81)).published, true);
+    assert.equal((await escrow.outstandingCommitments()).toString(), amount(10));
+    assert.equal((await gov.nonce()).toString(), '1');
+    await expectRevert(gov.execute(escrow.address, data, 0, {from: accounts[0]}));
+    await escrow.claim(proof(81, 0, accounts[7], amount(10)), {from: accounts[9]});
+    assert.equal((await token.balanceOf(accounts[7])).toString(), amount(10));
+    assert.equal((await escrow.outstandingCommitments()).toString(), '0');
+  });
+});
