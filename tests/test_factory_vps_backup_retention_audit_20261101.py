@@ -199,5 +199,36 @@ class FactoryBackupAuditTests(unittest.TestCase):
         self.assertEqual(public["records"][0]["filename"], path.name)
 
 
+    def test_factory_operations_inventory_is_read_only_and_redacted(self):
+        operations = Path(self.tmp.name) / "operations"
+        backups = operations / "backups"
+        archives = operations / "archives"
+        backups.mkdir(parents=True)
+        archives.mkdir()
+        archived = archives / "historic-complete.log"
+        archived.write_bytes(b"archived")
+        small = backups / "older-build.tmp"
+        small.write_bytes(b"x" * 40)
+        before = (archived.read_bytes(), archived.stat().st_mtime_ns)
+        result = audit_module.inventory_factory_operations(operations)
+        self.assertTrue(result["root_present"])
+        self.assertTrue(result["read_only"])
+        self.assertEqual(result["files_changed_or_deleted"], 0)
+        self.assertEqual(result["files_scanned"], 2)
+        self.assertEqual(result["bytes_total"], 48)
+        self.assertEqual(result["by_area"]["archives"]["bytes"], 8)
+        self.assertEqual(result["by_extension"][".tmp"]["files"], 1)
+        self.assertEqual(before, (archived.read_bytes(), archived.stat().st_mtime_ns))
+        self.assertNotIn("historic-complete.log", json.dumps(result))
+
+    def test_factory_operations_inventory_rejects_symlink_root(self):
+        operations = Path(self.tmp.name) / "operations"
+        operations.mkdir()
+        linked = Path(self.tmp.name) / "operations-link"
+        linked.symlink_to(operations, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "UNSAFE"):
+            audit_module.inventory_factory_operations(linked)
+
+
 if __name__ == "__main__":
     unittest.main()
