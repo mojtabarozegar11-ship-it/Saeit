@@ -151,6 +151,50 @@ def cycle_error_buckets(private):
         return {"state": "unreadable"}
 
 
+def quality_return_scope(private):
+    """Separate current F01 rework from unrelated historical quality returns."""
+    path = Path(private) / "production-state.json"
+    if not path.exists() and not path.is_symlink():
+        return {"state": "absent"}
+    try:
+        data = safe_json(path, 2_000_000)
+        active = data.get("active_product_slot_recipes")
+        section = data.get("quality_returns_to_production")
+        candidates = data.get("quality_return_build_candidates")
+        if (not isinstance(active, list) or not isinstance(section, dict)
+                or not isinstance(section.get("orders"), list)
+                or not isinstance(candidates, list)
+                or any(not isinstance(x, str) or not RECIPE.fullmatch(x) for x in active)):
+            return {"state": "invalid"}
+        active_names = set(active)
+        orders = section["orders"]
+        if any(not isinstance(x, dict) or not isinstance(x.get("recipe"), str)
+               for x in orders):
+            return {"state": "invalid"}
+        active_orders = sum(x["recipe"] in active_names for x in orders)
+        statuses = collections.Counter()
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            if candidate.get("recipe") not in active_names:
+                continue
+            status = candidate.get("status")
+            statuses[status if status in (
+                "source_repair_still_required", "awaiting_independent_reinspection")
+                else "other"] += 1
+        return {
+            "state": "valid",
+            "total_open_quality_returns": len(orders),
+            "active_product_count": len(active_names),
+            "active_product_quality_returns": active_orders,
+            "other_product_quality_returns": len(orders) - active_orders,
+            "active_product_build_candidate_status_counts": dict(statuses),
+            "invalid_order_count": section.get("invalid_orders"),
+        }
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {"state": "unreadable"}
+
+
 def production_heartbeat(private):
     """Return only a schema-checked subset of real cycle counters and timestamps."""
     path = private / "production-health.json"
@@ -427,6 +471,7 @@ def inventory():
         "line41": line41_diagnostic(PRIVATE),
         "production_heartbeat": production_heartbeat(PRIVATE),
         "cycle_error_buckets": cycle_error_buckets(PRIVATE),
+        "quality_return_scope": quality_return_scope(PRIVATE),
         "cron_production_channels": cron_production_channels(active),
     }
 
