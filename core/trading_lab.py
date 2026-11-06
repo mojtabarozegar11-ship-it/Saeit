@@ -252,6 +252,7 @@ class TradingLab:
         by_id = {agent.agent_id: agent for agent in self.agents}
         staged = []
         seen = set()
+        all_order_ids = set()
         for raw in raw_agents:
             if not isinstance(raw, dict) or type(raw.get("agent_id")) is not int:
                 raise ValueError("state_agent_invalid")
@@ -291,10 +292,21 @@ class TradingLab:
                         not math.isfinite(experience.pnl)):
                     raise ValueError("state_experience_identity_invalid")
                 experiences.append(experience)
-            submitted = {item.order_id for item in experiences if item.action == "DEMO_ORDER"}
-            closed = {item.order_id for item in experiences if item.action == "DEMO_CLOSE"}
+            submitted_items = [item for item in experiences if item.action == "DEMO_ORDER"]
+            closed_items = [item for item in experiences if item.action == "DEMO_CLOSE"]
+            journal_order_ids = [item.order_id for item in submitted_items + closed_items]
+            if (any(not isinstance(order_id, str) or not order_id.strip() for order_id in journal_order_ids)
+                    or len(set(journal_order_ids)) != len(journal_order_ids)):
+                raise ValueError("state_order_journal_invalid")
+            submitted = {item.order_id for item in submitted_items}
+            closed = {item.order_id for item in closed_items}
+            if closed - submitted:
+                raise ValueError("state_close_without_order_invalid")
             if not set(open_ids).issubset(submitted) or set(open_ids) & closed:
                 raise ValueError("state_open_order_reconciliation_invalid")
+            if all_order_ids & set(journal_order_ids):
+                raise ValueError("state_order_identity_collision")
+            all_order_ids.update(journal_order_ids)
             staged.append((agent, list(open_ids), float(peak), dict(daily), experiences))
         if seen != set(by_id):
             raise ValueError("state_agent_identity_incomplete")
