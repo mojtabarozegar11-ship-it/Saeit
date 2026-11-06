@@ -26,6 +26,7 @@ class SitemapRegressionTests(TestCase):
             "/studio/",
             "/agriculture/genetics/",
             "/ghanadi/",
+            "/ghanadi/cafe-shiraz/",
         ):
             with self.subTest(path=path):
                 self.assertIn(f"https://zomorodmelal.ir{path}", locations)
