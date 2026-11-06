@@ -109,6 +109,52 @@ class EconomicsTests(unittest.TestCase):
         self.assertEqual(result["portfolio"]["operating_profit"], "2400.00")
         self.assertEqual(len(result["scenario_results"]), 18)
 
+    def test_resource_intensity_is_computed_from_actual_user_inputs(self):
+        crop = dict(self.example["enterprises"][0],
+                    land_area_hectares="2.5", irrigation_water_m3="500")
+        row = enterprise(crop)
+        self.assertEqual(row["units_sold_per_hectare"], "400.0000")
+        self.assertEqual(row["operating_profit_per_hectare"], "1000.00")
+        self.assertEqual(row["units_sold_per_irrigation_m3"], "2.0000")
+        self.assertEqual(row["operating_profit_per_irrigation_m3"], "5.00")
+        result = evaluate({"currency": "USD", "enterprises": [crop]})
+        self.assertEqual(result["resource_coverage"]["land_area_hectares"]["portfolio_total"], "2.50")
+        self.assertEqual(result["resource_coverage"]["irrigation_water_m3"]["portfolio_total"], "500.00")
+
+    def test_partial_resource_records_do_not_misrepresent_portfolio_totals(self):
+        first = dict(self.example["enterprises"][0],
+                     name="Irrigated", land_area_hectares="1", irrigation_water_m3=0)
+        second = dict(self.example["enterprises"][0], name="Unknown resources")
+        data = {"currency": "USD", "enterprises": [first, second]}
+        result = evaluate(data)
+        water = result["resource_coverage"]["irrigation_water_m3"]
+        self.assertEqual(water["provided_enterprises"], 1)
+        self.assertFalse(water["complete_for_portfolio"])
+        self.assertIsNone(water["portfolio_total"])
+        self.assertIsNone(result["results"][0]["operating_profit_per_irrigation_m3"])
+        self.assertIsNone(result["results"][1]["operating_profit_per_hectare"])
+        self.assertEqual(result["portfolio"]["operating_profit"], "5000.00")
+
+    def test_resource_inputs_reject_zero_area_negative_and_nonfinite_values(self):
+        source = self.example["enterprises"][0]
+        for field, value in (("land_area_hectares", 0),
+                             ("land_area_hectares", -1),
+                             ("irrigation_water_m3", -1),
+                             ("irrigation_water_m3", "NaN"),
+                             ("land_area_hectares", None)):
+            with self.subTest(field=field, value=value):
+                with self.assertRaises(ValueError):
+                    enterprise(dict(source, **{field: value}))
+
+    def test_high_unit_currency_resource_ratios_do_not_overflow(self):
+        row = {"name": "High-unit case", "units_sold": "1e20",
+               "unit_price": "1e20", "variable_cost_per_unit": 1,
+               "allocated_fixed_cost": 1, "land_area_hectares": "1e-20",
+               "irrigation_water_m3": "1e-20"}
+        result = enterprise(row)
+        self.assertTrue(result["operating_profit_per_hectare"].endswith(".00"))
+        self.assertTrue(result["operating_profit_per_irrigation_m3"].endswith(".00"))
+
     def test_rejects_invalid_inputs(self):
         bad = dict(self.example)
         bad["enterprises"] = [dict(self.example["enterprises"][0], units_sold=-1)]
