@@ -1,0 +1,143 @@
+name: Guarded live academy resource cards
+on:
+  push:
+    branches: [audit/live-sites-subsites-20261105]
+    paths:
+      - scripts/zomorod_academy_resource_catalog_guarded_20261106.py
+      - .github/workflows/zomorod-academy-resource-cards-live-20261106.yml
+permissions:
+  contents: read
+concurrency:
+  group: zm-academy-resource-20261106
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Package reviewed academy source and template
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, os, py_compile
+          from pathlib import Path
+          names=('core/academy_views.py', 'core/templates/core/academy.html')
+          pack={name:base64.b64encode(Path(name).read_bytes()).decode('ascii') for name in names}
+          source=Path('scripts/zomorod_academy_resource_catalog_guarded_20261106.py').read_text()
+          marker='PACKED_FILES = None  # Replaced with the exact reviewed academy resource source on runner.'
+          if source.count(marker)!=1: raise SystemExit('RESOURCE_PACKAGE_MARKER_CHANGED')
+          result=Path(os.environ['RUNNER_TEMP'])/'zm-academy-resources.py'
+          result.write_text(source.replace(marker, 'PACKED_FILES = '+repr(pack)))
+          py_compile.compile(str(result),doraise=True)
+          PY
+          python3 "$RUNNER_TEMP/zm-academy-resources.py" selftest "$GITHUB_RUN_ID"
+      - name: Authenticate pinned VPS and cPanel transport
+        id: link
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zm-academy-resources-ssh"
+          install -d -m 700 "$d"
+          export SSH_DIR="$d"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          source=Path('.github/workflows/mpw-guest-checkout-live-release.yml').read_text()
+          directory=Path(os.environ['SSH_DIR'])
+          for source_name,dest_name in [('vps.known','vps.known'),('host.candidate','host.known')]:
+              suffix=f'> "$d/{source_name}"'
+              lines=[line.strip() for line in source.splitlines() if line.strip().startswith("printf '%s\\n' '") and line.strip().endswith(suffix)]
+              if len(lines)!=1: raise SystemExit('PINNED_HOST_KEY_MISSING:'+source_name)
+              value=lines[0].split("printf '%s\\n' '",1)[1].rsplit("' >",1)[0]
+              (directory/dest_name).write_text(value+'\n')
+          for key,dest in [('VPS_KEY','vps.key'),('HOST_KEY','host.key')]:
+              value=os.environ.get(key,'')
+              if not value: raise SystemExit('SSH_IDENTITY_MISSING:'+key)
+              path=directory/dest
+              path.write_text(value.replace('\r\n','\n').replace('\r','').replace('\\n','\n').rstrip()+'\n')
+              path.chmod(0o600)
+          PY
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}')" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host saeit-cpanel-direct
+            HostName 178.239.147.125
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump none
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 20
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          host=''
+          if timeout 40s ssh -T -F "$d/config" saeit-cpanel-direct 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/Saeit/manage.py' >/dev/null 2>&1; then
+            host=saeit-cpanel-direct
+          elif timeout 45s ssh -T -F "$d/config" saeit-cpanel 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/Saeit/manage.py' >/dev/null 2>&1; then
+            host=saeit-cpanel
+          else
+            echo 'PINNED_CPANEL_ROUTE_UNAVAILABLE' >&2
+            exit 1
+          fi
+          echo "command_host=$host" >> "$GITHUB_OUTPUT"
+          echo 'ACADEMY_RESOURCE_CPANEL_AUTHENTICATED=yes'
+      - name: Require exact deployed fingerprints
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 75s ssh -T -F "$RUNNER_TEMP/zm-academy-resources-ssh/config" "$COMMAND_HOST" "PYTHONDONTWRITEBYTECODE=1 python3 - preview '$GITHUB_RUN_ID'" < "$RUNNER_TEMP/zm-academy-resources.py"
+      - name: Back up and atomically publish two academy files
+        id: release
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          timeout 100s ssh -T -F "$RUNNER_TEMP/zm-academy-resources-ssh/config" "$COMMAND_HOST" "PYTHONDONTWRITEBYTECODE=1 python3 - publish '$GITHUB_RUN_ID'" < "$RUNNER_TEMP/zm-academy-resources.py"
+      - name: Verify Django and live public resource links
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          timeout 145s ssh -T -F "$RUNNER_TEMP/zm-academy-resources-ssh/config" "$COMMAND_HOST" "PYTHONDONTWRITEBYTECODE=1 python3 - verify '$GITHUB_RUN_ID'" < "$RUNNER_TEMP/zm-academy-resources.py"
+          echo 'ACADEMY_RESOURCE_RELEASE_COMPLETE=yes'
+      - name: Restore originals on failed release
+        if: failure() && steps.link.outcome == 'success'
+        env:
+          COMMAND_HOST: ${{ steps.link.outputs.command_host }}
+        run: |
+          set -euo pipefail
+          case "$COMMAND_HOST" in saeit-cpanel|saeit-cpanel-direct) ;; *) exit 1 ;; esac
+          timeout 100s ssh -T -F "$RUNNER_TEMP/zm-academy-resources-ssh/config" "$COMMAND_HOST" "PYTHONDONTWRITEBYTECODE=1 python3 - rollback '$GITHUB_RUN_ID'" < "$RUNNER_TEMP/zm-academy-resources.py"
