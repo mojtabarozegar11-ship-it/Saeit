@@ -253,6 +253,39 @@ def cron_recent_journal_diagnostic():
             re.IGNORECASE)) for row in rows),
     }
 
+
+def single_product_cron_wrapper_diagnostic(active):
+    """Classify extra scheduler guards; never output cron source or arguments."""
+    if active is None:
+        return {"state": "unavailable"}
+    rows = [r for r in active if "SAEIT_SINGLE_PRODUCT_FACTORY_V1" in r]
+    if len(rows) != 1:
+        return {"state": "missing_or_duplicate", "count": len(rows)}
+    line = rows[0]
+    runner = "/home/githubops/factory-runtime/operations/single-product-runtime/run-single-product-cycle.sh"
+    timer = "/usr/bin/timeout 55s "
+    log = "/home/githubops/factory-runtime/operations/single-product-cycle.log"
+    start = line.find(timer)
+    runner_at = line.find(runner)
+    log_at = line.find(log)
+    segment_lengths = (
+        [start, runner_at - (start + len(timer)),
+         log_at - (runner_at + len(runner)),
+         len(line) - (log_at + len(log))]
+        if start >= 0 and runner_at > start and log_at > runner_at else None
+    )
+    return {
+        "state": "classified" if segment_lengths is not None else "unrecognized",
+        "segment_lengths": segment_lengths,
+        "extra_shell_and_count": line.count("&&"),
+        "extra_shell_or_count": line.count("||"),
+        "contains_test_guard": bool(re.search(r"\btest\b|\[.*\]", line)),
+        "contains_flock": "flock" in line,
+        "contains_shell_wrapper": "bash -c" in line or "sh -c" in line,
+        "contains_paused_or_hold_guard": bool(re.search(r"PAUSE|HOLD|DISABLE|STOP", line, re.I)),
+        "ends_expected_marker": line.endswith("# SAEIT_SINGLE_PRODUCT_FACTORY_V1"),
+    }
+
 def inventory():
     if os.geteuid() == 0 or any(p.is_symlink() or not p.is_dir()
                                 for p in (BASE, PRIVATE, OPS, ORDERS)):
@@ -367,6 +400,7 @@ def inventory():
         "native_single_product_runner": runner_info,
         "native_single_product_log": native_single_product_log_diagnostic(BASE),
         "cron_recent_journal": cron_recent_journal_diagnostic(),
+        "single_product_cron_wrapper": single_product_cron_wrapper_diagnostic(active),
         "cron_service_state": (
             (lambda value: value if value in ("active\n", "inactive\n", "failed\n")
              else "unknown")(command(["systemctl", "is-active", "cron.service"]))
