@@ -52,17 +52,21 @@ def summarize(uapi):
     if result.get("status") not in (1, True):
         raise RuntimeError("UAPI_PASSENGER_FAILED")
     matches = []
+    non_root_kinds = {}
+    all_domain_mappings = 0
     for entry in app_records(result.get("data")):
         if str(entry.get("domain") or "").lower().strip() != "mojplaywin.com":
             continue
+        all_domain_mappings += 1
         uri = str(entry.get("base_uri") or entry.get("app_uri")
                   or entry.get("application_uri") or "/").strip()
-        if uri.rstrip("/") != "":
-            continue
         kind, path = classify_root(
             entry.get("app_root") or entry.get("app_path")
             or entry.get("application_root")
         )
+        if uri.rstrip("/") != "":
+            non_root_kinds[kind] = non_root_kinds.get(kind, 0) + 1
+            continue
         matches.append((kind, path))
     matched = matches[0] if len(matches) == 1 else ("missing_or_ambiguous", None)
     kind, root = matched
@@ -76,7 +80,9 @@ def summarize(uapi):
     return {
         "schema": "saeit.factory.live-storefront-runtime-readonly.v1",
         "read_only": True,
+        "passenger_main_domain_mapping_count_all_uris": all_domain_mappings,
         "passenger_main_domain_root_mappings": len(matches),
+        "passenger_main_domain_nonroot_mapping_root_kinds": non_root_kinds,
         "passenger_root_kind": kind,
         "mapped_app_has_manage_py": bool(root and (root / "manage.py").is_file()),
         "mapped_app_has_django_settings": bool(root and (root / "config/settings.py").is_file()),
