@@ -134,7 +134,14 @@ def deploy(run_id, commit_sha):
             raise RuntimeError("SAMAN home content validation failed")
         staged_templates[relative] = html
 
-    finance_source = stage / FINANCE_SOURCE\n    finance_template = stage / FINANCE_TEMPLATE\n    for staged in (finance_source, finance_template):\n        if not staged.is_file() or staged.is_symlink():\n            raise RuntimeError(f"Missing or unsafe finance deployment file: {staged}")\n    if "financial_brand_page" not in finance_source.read_text(encoding="utf-8") or "page_notice" not in finance_template.read_text(encoding="utf-8"):\n        raise RuntimeError("Finance source or template failed content validation")\n\n    template_dir = APP_ROOT / "templates" / "saman"
+    finance_source = stage / FINANCE_SOURCE
+    finance_template = stage / FINANCE_TEMPLATE
+    for staged in (finance_source, finance_template):
+        if not staged.is_file() or staged.is_symlink():
+            raise RuntimeError(f"Missing or unsafe finance deployment file: {staged}")
+    if "financial_brand_page" not in finance_source.read_text(encoding="utf-8") or "page_notice" not in finance_template.read_text(encoding="utf-8"):
+        raise RuntimeError("Finance source or template failed content validation")
+\n    template_dir = APP_ROOT / "templates" / "saman"
     if (APP_ROOT / "templates").is_symlink() or template_dir.is_symlink():
         raise RuntimeError("Refusing to write through a template symlink")
     template_directory_existed = template_dir.is_dir()
@@ -146,8 +153,10 @@ def deploy(run_id, commit_sha):
     url_target = APP_ROOT / FILES[0]
     view_target = APP_ROOT / FILES[1]
     patched = {
-        FILES[0]: patch_urls(url_target.read_text(encoding="utf-8")),
+        FILES[0]: patch_financial_urls(patch_urls(url_target.read_text(encoding="utf-8"))),
         FILES[1]: patch_views(view_target.read_text(encoding="utf-8")),
+        FINANCE_SOURCE: finance_source.read_text(encoding="utf-8"),
+        FINANCE_TEMPLATE: finance_template.read_text(encoding="utf-8"),
         **staged_templates,
     }
     ast.parse(patched[FILES[0]], filename=str(FILES[0]))
