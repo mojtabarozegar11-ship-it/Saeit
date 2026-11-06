@@ -9,6 +9,10 @@
 - No API credentials, broker adapter, order endpoint, payment, wallet access or executable trade action exists in this module.
 - Fails without replacing the last good payload if the provider is unavailable; downstream feeds have an expiry guard and must not quietly publish stale data.
 
+## Read-only consumption path
+
+`scripts/mojtrade_consume_observation.py` is the downstream research consumer. It reads the private observation, rejects expired/future payloads, validates the schema, provider, symbols, timeframe and research stance, and atomically writes a private report. The report explicitly contains `action=research_only`, `execution=disabled` and `orders=0`. It never places orders, contacts a broker, sends email or changes the source observation.
+
 ## Independent VPS execution path
 
 1. Provision a dedicated unprivileged service account and a *private* directory (permissions 0700) outside any site document root, e.g. `/var/lib/mojtrade/private`.
