@@ -230,6 +230,29 @@ def native_single_product_log_diagnostic(base):
     except OSError:
         return {"state": "unreadable"}
 
+
+def cron_recent_journal_diagnostic():
+    """Aggregate the last ten minutes of cron's own journal; never print commands."""
+    journal = command(["journalctl", "-t", "CRON", "--since", "10 minutes ago",
+                       "--no-pager", "--output=cat"])
+    if journal is None:
+        return {"state": "unavailable"}
+    if "No journal files were found" in journal or "No entries" in journal:
+        return {"state": "empty_or_unavailable"}
+    rows = journal.splitlines()[-3000:]
+    return {
+        "state": "readable",
+        "recent_entry_count": len(rows),
+        "githubops_job_count": sum("(githubops) CMD" in row for row in rows),
+        "single_product_job_count": sum(
+            "(githubops) CMD" in row and "single-product-runtime/" in row
+            for row in rows
+        ),
+        "cron_job_error_count": sum(bool(re.search(
+            r"BAD FILE MODE|BAD USERNAME|ERROR|RELOAD|No MTA installed", row,
+            re.IGNORECASE)) for row in rows),
+    }
+
 def inventory():
     if os.geteuid() == 0 or any(p.is_symlink() or not p.is_dir()
                                 for p in (BASE, PRIVATE, OPS, ORDERS)):
@@ -343,6 +366,7 @@ def inventory():
             if active is not None else None),
         "native_single_product_runner": runner_info,
         "native_single_product_log": native_single_product_log_diagnostic(BASE),
+        "cron_recent_journal": cron_recent_journal_diagnostic(),
         "cron_service_state": (
             (lambda value: value if value in ("active\n", "inactive\n", "failed\n")
              else "unknown")(command(["systemctl", "is-active", "cron.service"]))
