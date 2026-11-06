@@ -20,6 +20,10 @@ In `_identity`, after `_read_user` returns a signed guest principal, call `_bind
 
 In `_dispatch`, count `order_start_accepted` only when the response is HTTP 302/303 and its Location exactly matches `/commerce/trx-easy/invoice/<positive integer>/`. Validation pages, store redirects, and unrelated successful responses must not increment the accepted-order metric.
 
+### 5. Merchant activation consistency
+
+`require_active_merchant_wallet` must reject any readiness report where `merchant_checkout_enabled` is not exactly true. A report with `WALLET_ACTIVE_REVIEW_REQUIRED` or false checkout enablement must keep new invoice issuance closed, even when RPC reachability and wallet activity flags are positive. The public catalog and direct product page must show the same paused state.
+
 ### 4. Email alias consistency
 
 Use `request.POST.getlist()` for all supported aliases in guest binding and validate one normalized email consistently. Ignore blank legacy aliases, reject invalid values, and reject conflicting nonblank aliases.
