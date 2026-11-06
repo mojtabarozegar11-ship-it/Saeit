@@ -75,18 +75,92 @@ jobs:
           if not (release/'index.html').is_file() or any(not (release/name/'index.html').is_file() for name in names):
               raise RuntimeError('RELEASE_FILES_MISSING')
           target=release/'.htaccess'
-          if target.exists() or target.is_symlink():
-              raise RuntimeError('RELEASE_HTACCESS_ALREADY_PRESENT_NO_OVERWRITE')
           data=b'DirectoryIndex index.html\nOptions -Indexes\n'
-          fd=os.open(str(target),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o644)
-          try:
-              with os.fdopen(fd,'wb') as f:
-                  f.write(data);f.flush();os.fsync(f.fileno())
-          except BaseException:
-              target.unlink(missing_ok=True)
-              raise
-          assert target.read_bytes()==data
-          print('ISOLATED_ZOMOROD_DIRECTORY_INDEX_CONFIG_INSTALLED')
+          if target.is_symlink(): raise RuntimeError('UNTRUSTED_RELEASE_HTACCESS')
+          if target.exists():
+              if not target.is_file() or target.read_bytes()!=data:
+                  raise RuntimeError('RELEASE_HTACCESS_UNEXPECTED_CONTENT')
+              print('ISOLATED_ZOMOROD_DIRECTORY_INDEX_CONFIG_ALREADY_VERIFIED')
+          else:
+              fd=os.open(str(target),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o644)
+              try:
+                  with os.fdopen(fd,'wb') as f:
+                      f.write(data);f.flush();os.fsync(f.fileno())
+              except BaseException:
+                  target.unlink(missing_ok=True)
+                  raise
+              assert target.read_bytes()==data
+              print('ISOLATED_ZOMOROD_DIRECTORY_INDEX_CONFIG_INSTALLED')
+          PY
+      - name: Repair only four broken links in two isolated indexes
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/zm-evergreen-route-ssh/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,stat,sys,tempfile
+          run=sys.argv[1]
+          root=Path('/home/zomorod2/public_html').resolve(strict=True)
+          specs={
+            'agriculture/free-tools/20261025/index.html':{
+              b'href="/farm-break-even/"':b'href="/agriculture/free-tools/20261025/farm-break-even/"',
+              b'href="/import-landed-cost/"':b'href="/agriculture/free-tools/20261025/import-landed-cost/"',
+            },
+            'resources/20261025/index.html':{
+              b'href="/trade-rfq/"':b'href="/resources/20261025/trade-rfq/"',
+              b'href="/farm-risk/"':b'href="/resources/20261025/farm-risk/"',
+            },
+          }
+          backup=Path.home()/'.backups'/'zm-evergreen-link-repair'/run
+          backup.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+          if backup.parent.is_symlink() or backup.exists(): raise RuntimeError('BACKUP_PATH_UNSAFE_OR_EXISTS')
+          originals={}; patched={}; manifest={}
+          for rel,subs in specs.items():
+              p=root/rel
+              if p.is_symlink() or not p.is_file(): raise RuntimeError('UNSAFE_OR_MISSING_PAGE:'+rel)
+              resolved=p.resolve(strict=True)
+              if root not in resolved.parents: raise RuntimeError('PAGE_ESCAPES_DOCUMENT_ROOT:'+rel)
+              old=p.read_bytes();new=old
+              for bad,good in subs.items():
+                  n=new.count(bad);m=new.count(good)
+                  if n==1 and m==0:new=new.replace(bad,good,1)
+                  elif n==0 and m==1:pass
+                  else:raise RuntimeError('LINK_STATE_NOT_UNIQUE:'+rel+':'+bad.decode())
+              if old!=new:
+                  originals[rel]=old;patched[rel]=new
+                  manifest[rel]={'backup':str(len(manifest))+'.original','before':hashlib.sha256(old).hexdigest(),'after':hashlib.sha256(new).hexdigest()}
+          if not patched: print('NO_LINK_CHANGES_NEEDED')
+          else:
+              backup.mkdir(mode=0o700)
+              for rel,old in originals.items():
+                  name=manifest[rel]['backup'];q=backup/name
+                  fd=os.open(str(q),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+                  with os.fdopen(fd,'wb') as f:f.write(old);f.flush();os.fsync(f.fileno())
+              meta={'pages':manifest,'run':run}
+              (backup/'manifest.json').write_text(json.dumps(meta,sort_keys=True),encoding='utf8')
+              (backup/'manifest.json').chmod(0o600)
+              done=[]
+              try:
+                  for rel,new in patched.items():
+                      p=root/rel;mode=stat.S_IMODE(p.stat().st_mode)
+                      fd,tmp=tempfile.mkstemp(prefix='.zm-link-fix-',dir=str(p.parent))
+                      try:
+                          with os.fdopen(fd,'wb') as f:f.write(new);f.flush();os.fsync(f.fileno())
+                          os.chmod(tmp,mode);os.replace(tmp,p)
+                      finally:
+                          if os.path.exists(tmp):os.unlink(tmp)
+                      if p.read_bytes()!=new:raise RuntimeError('PATCH_READBACK_MISMATCH:'+rel)
+                      done.append(rel)
+              except BaseException:
+                  for rel in reversed(done):
+                      p=root/rel;q=backup/manifest[rel]['backup']
+                      if hashlib.sha256(p.read_bytes()).hexdigest()!=manifest[rel]['after']:
+                          raise RuntimeError('ROLLBACK_REFUSED_PAGE_DRIFT:'+rel)
+                      p.write_bytes(q.read_bytes())
+                  raise
+              print('FOUR_BROKEN_LINKS_PATCHED=4')
+              print('BACKUP_MANIFEST='+str(backup/'manifest.json'))
           PY
       - name: Verify seven canonical slash URLs and unchanged protected pages
         shell: bash
@@ -113,6 +187,28 @@ jobs:
                       'https://mojplaywin.com/store/product/72/','https://mojplaywin.com/store/product/225/',
                       'https://mojplaywin.com/store/product/879/','https://zomorodmelal.ir/'):
               with urllib.request.urlopen(url,timeout=20) as r:assert r.status==200,url
+          # Confirm corrected anchors in public index pages and all four destinations resolve.
+          checks={
+              'https://zomorodmelal.ir/agriculture/free-tools/20261025/':(
+                  '/agriculture/free-tools/20261025/farm-break-even/',
+                  '/agriculture/free-tools/20261025/import-landed-cost/',
+                  '/farm-break-even/','/import-landed-cost/'),
+              'https://zomorodmelal.ir/resources/20261025/':(
+                  '/resources/20261025/trade-rfq/',
+                  '/resources/20261025/farm-risk/',
+                  '/trade-rfq/','/farm-risk/'),
+          }
+          for page,vals in checks.items():
+              with urllib.request.urlopen(page+'?commercial_link_check='+str(time.time_ns()),timeout=18) as r:
+                  body=r.read(100000).decode('utf8','replace')
+                  if r.status!=200:raise RuntimeError('INDEX_HTTP:'+page)
+                  for good in vals[:2]:
+                      if 'href="'+good+'"' not in body:raise RuntimeError('CANONICAL_LINK_MISSING:'+good)
+                  for bad in vals[2:]:
+                      if 'href="'+bad+'"' in body:raise RuntimeError('BROKEN_ROOT_LINK_REMAINS:'+bad)
+          for path in ('/agriculture/free-tools/20261025/farm-break-even/','/agriculture/free-tools/20261025/import-landed-cost/','/resources/20261025/trade-rfq/','/resources/20261025/farm-risk/'):
+              with urllib.request.urlopen('https://zomorodmelal.ir'+path,timeout=18) as r:assert r.status==200,path
+          print('ZOMOROD_INTERNAL_COMMERCIAL_RESOURCE_LINKS_VERIFIED=4')
           print('ZOMOROD_EVERGREEN_CANONICAL_AND_PROTECTED_SITES_VERIFIED')
           PY
       - name: Remove only own new htaccess if public verification failed
@@ -130,6 +226,33 @@ jobs:
           print('ONLY_NEW_RELEASE_HTACCESS_ROLLED_BACK')
           PY
           fi
+      - name: Roll back the two index pages if public verification fails
+        if: failure() && steps.patch.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/zm-evergreen-route-ssh/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,stat,tempfile,sys
+          run=sys.argv[1]
+          root=Path('/home/zomorod2/public_html').resolve(strict=True)
+          backup=Path.home()/'.backups'/'zm-evergreen-link-repair'/run
+          meta=json.loads((backup/'manifest.json').read_text(encoding='utf8'))
+          for rel,info in meta['pages'].items():
+              p=root/rel;q=backup/info['backup']
+              if p.is_symlink() or not p.is_file() or hashlib.sha256(p.read_bytes()).hexdigest()!=info['after']:
+                  raise RuntimeError('ROLLBACK_REFUSED_PAGE_DRIFT:'+rel)
+              old=q.read_bytes()
+              if hashlib.sha256(old).hexdigest()!=info['before']:raise RuntimeError('BACKUP_HASH_MISMATCH:'+rel)
+              fd,tmp=tempfile.mkstemp(prefix='.zm-link-rollback-',dir=str(p.parent))
+              try:
+                  with os.fdopen(fd,'wb') as f:f.write(old);f.flush();os.fsync(f.fileno())
+                  os.chmod(tmp,stat.S_IMODE(p.stat().st_mode));os.replace(tmp,p)
+              finally:
+                  if os.path.exists(tmp):os.unlink(tmp)
+              if hashlib.sha256(p.read_bytes()).hexdigest()!=info['before']:raise RuntimeError('ROLLBACK_READBACK_MISMATCH:'+rel)
+          print('ONLY_INDEX_LINK_CHANGES_ROLLED_BACK')
+          PY
       - name: Remove temporary SSH keys
         if: always()
         shell: bash
