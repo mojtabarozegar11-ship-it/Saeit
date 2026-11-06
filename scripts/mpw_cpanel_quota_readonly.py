@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Redact the cPanel account-level StatsBar quota response.
+"""Redact the cPanel account-level Quota.get_quota_info response.
 
 The script runs on the ephemeral GitHub runner, never on cPanel, and does not
 read environment variables, secrets, customer data, or application databases.
@@ -10,8 +10,18 @@ import re
 import sys
 
 
-ALLOWED_IDS = {"diskusage", "mysqldiskusage", "fileusage"}
-METRIC_KEYS = ("usage", "maximum", "normalized", "percent", "percentused", "used", "limit")
+QUOTA_KEYS = (
+    "megabyte_limit",
+    "megabytes_used",
+    "megabytes_remain",
+    "under_megabyte_limit",
+    "under_backup_threshold",
+    "under_quota_overall",
+    "backup_warning_threshold_pct",
+    "inodes_used",
+    "inode_limit",
+    "under_inode_limit",
+)
 SAFE_TEXT = re.compile(r"^[A-Za-z0-9 .,%/+-]{1,64}$")
 
 
@@ -40,30 +50,24 @@ def main():
         print("MPW_QUOTA_ERROR=api_failed", file=sys.stderr)
         return 1
     raw = payload.get("data")
-    rows = raw if isinstance(raw, list) else []
-    if isinstance(raw, dict):
-        rows = [v for v in raw.values() if isinstance(v, dict)]
     metrics = {}
-    for row in rows:
-        if not isinstance(row, dict) or row.get("id") not in ALLOWED_IDS:
-            continue
-        metric = {}
-        for key in METRIC_KEYS:
-            if key in row:
-                value = safe_scalar(row[key])
-                if value is not None:
-                    metric[key] = value
-        metrics[row["id"]] = metric
+    if isinstance(raw, dict):
+        for key in QUOTA_KEYS:
+            value = safe_scalar(raw.get(key))
+            if value is not None:
+                metrics[key] = value
     summary = {
         "api_success": payload.get("status") in (1, True),
         "metrics": metrics,
-        "requested": sorted(ALLOWED_IDS),
+        "requested": "Quota.get_quota_info",
         "full_backup_verified": False,
         "production_isolation_proven": False,
     }
     print("MPW_CPANEL_QUOTA_READONLY=" + json.dumps(summary, sort_keys=True))
-    if not summary["api_success"] or "diskusage" not in metrics:
-        print("MPW_QUOTA_ERROR=missing_disk_usage", file=sys.stderr)
+    if not summary["api_success"] or not all(
+        field in metrics for field in ("megabyte_limit", "megabytes_used", "megabytes_remain")
+    ):
+        print("MPW_QUOTA_ERROR=missing_quota_values", file=sys.stderr)
         return 1
     return 0
 
