@@ -1,0 +1,241 @@
+name: Zomorod site-only exact-target preview quarantine and duplicate archive cleanup
+on:
+  push:
+    branches: [cleanup/zm-exact-old-preview-quarantine-20261101]
+    paths: [".github/workflows/zm-host-prune-exact-approved-20261101.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zm-host-preview-cleanup-exact-20261101
+  cancel-in-progress: false
+jobs:
+  quarantine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Require unchanged public website health before changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in https://zomorodmelal.ir/ https://zomorodmelal.ir/agents/; do
+            status="$(curl -sS --max-time 22 -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "BEFORE_HEALTH=$status"
+            test "$status" = 200
+          done
+      - name: Quarantine only six proven unreferenced old previews; remove exact archive duplicate
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import hashlib, json, os, stat, shutil, time
+          from pathlib import Path
+          h=Path.home()
+          assert h==Path("/home/zomorod2"), "wrong cPanel user"
+          web=h/"public_html"
+          backups=h/".backups"
+          staging=h/"Saeit-staging/zomorod_json_admin_stage/backups/pre-unique-pages-20261006-054119.tar.gz"
+          canonical=h/"Saeit/backups/pre-unique-pages-20261006-054119.tar.gz"
+          dest=backups/"zomorod-quarantined-old-previews-20261101"
+          expected={
+              "__zm_nova_preview_20261017":(2,"2bbda898abc3dc58ecfd"),
+              "__zm_orbital_v5_preview_20261018":(2,"5ec4f2e0ff4142e57586"),
+              "__zm_orbital_v5_review_20261018":(2,"1d65efddb8064d8f817b"),
+              "__zm_orbital_v6_preview_20261018":(4,"d114c3485a037030ad29"),
+              "__zm_orbital_v7_preview_20261018":(21,"d114c3485a037030ad29"),
+              "__zm_orbital_v8_preview_20261018":(2,""),
+          }
+          assert web.is_dir() and not web.is_symlink()
+          assert backups.is_dir() and not backups.is_symlink()
+          assert not dest.exists() and not dest.is_symlink(), "quarantine already exists"
+          index=web/"index.html"
+          assert index.is_file() and not index.is_symlink()
+          mainhash=hashlib.sha256(index.read_bytes()).hexdigest()
+          def tracked_files(root):
+              found=[]
+              for directory,dirs,files in os.walk(root,followlinks=False):
+                  d=Path(directory)
+                  for sub in dirs:
+                      assert not (d/sub).is_symlink(),"symlink within candidate"
+                  for name in files:
+                      p=d/name
+                      assert p.is_file() and not p.is_symlink(),"nonregular candidate"
+                      found.append(p)
+              return found
+          manifest=[]
+          for name,(count,digest) in expected.items():
+              p=web/name
+              assert p.is_dir() and not p.is_symlink(), "unexpected old preview"
+              files=tracked_files(p)
+              assert len(files)==count,(name,len(files))
+              idx=p/"index.html"
+              observed=hashlib.sha256(idx.read_bytes()).hexdigest()[:20] if idx.is_file() and not idx.is_symlink() else ""
+              assert observed==digest,(name,"changed since audit")
+              manifest.append({"name":name,"files":count,"bytes":sum(f.stat().st_size for f in files),
+                               "index_sha256_prefix":observed})
+          # Recheck active documentation at the instant before changing public URLs.
+          scanned=0
+          for directory,dirs,files in os.walk(web,followlinks=False):
+              d=Path(directory)
+              depth=len(d.relative_to(web).parts)
+              dirs[:]=[x for x in sorted(dirs) if not x.startswith("__zm_") and
+                       not (d/x).is_symlink()] if depth<4 else []
+              for filename in files:
+                  p=d/filename
+                  if p.is_symlink() or p.suffix.lower() not in (".html",".htm",".js",".css",".xml",".json") and filename!=".htaccess":
+                      continue
+                  if p.stat().st_size>4*1048576:
+                      continue
+                  scanned+=1
+                  assert scanned<=9000,"reference scan cap exceeded"
+                  data=p.read_bytes()
+                  for name in expected:
+                      assert name.encode("utf-8") not in data,("still referenced",name)
+          # Remove only one exact duplicate of a canonical independent copy.
+          assert staging.is_file() and canonical.is_file()
+          assert not staging.is_symlink() and not canonical.is_symlink()
+          assert staging.stat().st_size==canonical.stat().st_size
+          def hashfile(p):
+              h=hashlib.sha256()
+              with p.open("rb") as fh:
+                  for chunk in iter(lambda:fh.read(1048576),b""):
+                      h.update(chunk)
+              return h.hexdigest()
+          staged_digest=hashfile(staging)
+          assert staged_digest==hashfile(canonical)
+          assert staged_digest.startswith("8287730697dbf79c"),"archive differs from audited bytes"
+          staging_bytes=staging.stat().st_size
+          moved=[]
+          removed_duplicate=False
+          try:
+              dest.mkdir(mode=0o700)
+              for name in expected:
+                  os.rename(web/name,dest/name)
+                  moved.append(name)
+              staging.unlink()
+              removed_duplicate=True
+              record={"purpose":"recoverable old preview removal","when_utc":int(time.time()),
+                      "preserved_canonical_archive":str(canonical),
+                      "duplicate_archive_sha256":staged_digest,
+                      "removed_duplicate_bytes":staging_bytes,
+                      "previous_live_index_sha256":mainhash,"previews":manifest}
+              (dest/"manifest.json").write_text(json.dumps(record,sort_keys=True,indent=2))
+              os.chmod(dest/"manifest.json",0o600)
+              assert hashlib.sha256(index.read_bytes()).hexdigest()==mainhash
+              for name,(count,digest) in expected.items():
+                  assert not (web/name).exists()
+                  assert len(tracked_files(dest/name))==count
+              assert canonical.is_file() and hashfile(canonical)==staged_digest
+              print("PRIVATE_QUARANTINE="+str(dest))
+              print("REMOVED_FROM_PUBLIC_PATH="+str(len(expected)))
+              print("RECOVERABLE_PREVIEW_BYTES="+str(sum(x["bytes"] for x in manifest)))
+              print("REDUNDANT_ARCHIVE_BYTES_FREED="+str(staging_bytes))
+              print("MAIN_HOME_SHA256_UNCHANGED=yes")
+          except BaseException:
+              for name in reversed(moved):
+                  if (dest/name).exists() and not (web/name).exists():
+                      os.rename(dest/name,web/name)
+              if removed_duplicate and not staging.exists() and hashfile(canonical)==staged_digest:
+                  shutil.copy2(canonical,staging)
+              raise
+          PY
+          REMOTE
+      - name: Verify public pages and revert quarantine on health failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          healthy=1
+          for url in https://zomorodmelal.ir/ https://zomorodmelal.ir/agents/; do
+            status="$(curl -sS --max-time 22 -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "AFTER_HEALTH=$status"
+            if test "$status" != 200; then healthy=0; fi
+          done
+          if test "$healthy" = 1; then
+            echo "PUBLIC_SITE_HEALTH=preserved"
+            exit 0
+          fi
+          echo "PUBLIC_SITE_HEALTH=FAILED_ROLLING_BACK"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -B - <<'PY'
+          import json, os, shutil, hashlib
+          from pathlib import Path
+          h=Path.home()
+          assert h==Path("/home/zomorod2")
+          root=h/".backups/zomorod-quarantined-old-previews-20261101"
+          web=h/"public_html"
+          assert root.is_dir() and not root.is_symlink()
+          record=json.loads((root/"manifest.json").read_text())
+          for item in record["previews"]:
+              name=item["name"]
+              assert name.startswith("__zm_") and ("preview" in name or "review" in name)
+              assert not (web/name).exists()
+              os.rename(root/name,web/name)
+              print("RESTORED_PREVIEW="+name)
+          canonical=h/"Saeit/backups/pre-unique-pages-20261006-054119.tar.gz"
+          staging=h/"Saeit-staging/zomorod_json_admin_stage/backups/pre-unique-pages-20261006-054119.tar.gz"
+          if not staging.exists() and canonical.is_file() and not canonical.is_symlink():
+              shutil.copy2(canonical,staging)
+              print("RESTORED_STAGING_DUPLICATE=yes")
+          PY
+          REMOTE
+          exit 1
+      - name: Clear SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+
+# Exact-target user-authorized site-only housekeeping: recoverable previews and verified archive duplicate.
