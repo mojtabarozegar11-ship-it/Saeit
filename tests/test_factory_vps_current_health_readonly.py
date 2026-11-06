@@ -101,6 +101,36 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
         rows = ["23 * * * * /bin/bash /private/worker.sh # SAEIT_AUTONOMOUS_PRODUCTS_V2"]
         self.assertEqual(audit.cron_production_channels(rows)["autonomous_cycle"], 1)
 
+    def test_single_product_runner_cron_is_counted_separately(self):
+        rows = ["* * * * * /private/single-product-runtime/run-single-product-cycle.sh "
+                "# SAEIT_SINGLE_PRODUCT_FACTORY_V1"]
+        groups = audit.cron_production_channels(rows)
+        self.assertEqual(groups["single_product_runner"], 1)
+        self.assertNotIn("/private/", json.dumps(groups))
+
+    def test_single_product_runner_report_does_not_invoke_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "factory-runtime"
+            private = base / "private/autonomous-product-cycle"
+            ops = base / "operations/production-instructions"
+            orders = private / "production-instructions/orders"
+            runner = base / "operations/single-product-runtime/run-single-product-cycle.sh"
+            runner.parent.mkdir(parents=True)
+            runner.write_text("#!/bin/sh\nexit 41\n", encoding="utf8")
+            ops.mkdir(parents=True)
+            orders.mkdir(parents=True)
+            with patch.object(audit, "BASE", base), patch.object(audit, "PRIVATE", private), \
+                 patch.object(audit, "OPS", ops), patch.object(audit, "ORDERS", orders), \
+                 patch.object(audit.os, "geteuid", return_value=1000), \
+                 patch.object(audit, "command", return_value=(
+                     "* * * * * /private/single-product-runtime/run-single-product-cycle.sh "
+                     "# SAEIT_SINGLE_PRODUCT_FACTORY_V1")):
+                result = audit.inventory()
+            self.assertEqual(result["single_product_cron_marker_count"], 1)
+            self.assertTrue(result["native_single_product_runner"]["present"])
+            self.assertEqual(result["native_single_product_runner"]["executable"], False)
+            self.assertEqual(result["server_written_bytes"], 0)
+
     def test_heartbeat_real_counter_only_and_no_server_write(self):
         with tempfile.TemporaryDirectory() as tmp:
             private = Path(tmp)
