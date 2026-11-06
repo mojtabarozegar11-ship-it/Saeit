@@ -160,6 +160,19 @@ class ReadOnlyFactoryHealthTests(unittest.TestCase):
         self.assertEqual(result["single_product_job_count"], 1)
         self.assertNotIn("do-not-print", json.dumps(result))
 
+    def test_cron_wrapper_classifier_reports_guards_without_sensitive_path(self):
+        runner = ("/home/githubops/factory-runtime/operations/"
+                  "single-product-runtime/run-single-product-cycle.sh")
+        log = "/home/githubops/factory-runtime/operations/single-product-cycle.log"
+        secret = "secret-private-guard"
+        row = ("* * * * * test -f /" + secret + " && /usr/bin/timeout 55s "
+               + runner + " >> " + log + " 2>&1 # SAEIT_SINGLE_PRODUCT_FACTORY_V1")
+        result = audit.single_product_cron_wrapper_diagnostic([row])
+        self.assertEqual(result["state"], "classified")
+        self.assertEqual(result["extra_shell_and_count"], 1)
+        self.assertTrue(result["contains_test_guard"])
+        self.assertNotIn(secret, json.dumps(result))
+
     def test_heartbeat_real_counter_only_and_no_server_write(self):
         with tempfile.TemporaryDirectory() as tmp:
             private = Path(tmp)
