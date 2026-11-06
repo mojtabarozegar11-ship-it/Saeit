@@ -29,7 +29,7 @@
     },
     "02": {
       "automation_id": "6adde91161708191b6e89b01870a092b",
-      "sequence": 1,
+      "sequence": 2,
       "legacy_report_last_verified": null,
       "primary_output": "accepted publication-ready book"
     },
@@ -178,6 +178,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42264835596",
       "acceptance_result": "CI and Django CI on exact corrected commit d1e53bbd succeeded; earlier CI 42242506241 failed on ModuleNotFoundError paired_scenario_audit during collection",
       "impact": "Import/collection regression closed at CI level; manuscript scientific acceptance and income not verified"
+    },
+    {
+      "registry_id": "R02-0002",
+      "cycle_id": "02",
+      "run_id": "automation-02-20261107T004419+0330-turn11",
+      "deliverable_key": "C113-regulatory-scope-clarification-private-docx-pdf",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514",
+      "acceptance_result": "Private DOCX/PDF uploaded and independently re-fetched; 608 PDF pages, zero blank; SHA256 DOCX b818060022deddc83b0cfaf5440c54dd4caaa09ad16f5cae92b40c7e7fa65307, PDF 8fce1dd7e72de114f1f9c3e097b9b57edf6d8aabab0dd81a3560c3fc4b66cd03; editorial review only",
+      "impact": "Corrected regulatory-scope teaching paragraph in C113; publication and revenue gates remain HOLD"
     }
   ],
   "report_reservations": [],
