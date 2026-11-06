@@ -53,6 +53,13 @@ EXCEPTION_RE = re.compile(
     r'PaymentHold|ValidationError|AssertionError|PermissionError|'
     r'TimeoutError|ConnectionError|OSError):')
 TARGET_ERROR_ROUTE = '/commerce/trx-easy/start/779/'
+FRAME_RE = re.compile(
+    r'^\s*File "/home/zomorod2/(?:Saeit-staging|mojplaywin\.com)/'
+    r'((?:config|services|core|mpw_commerce|scripts)/'
+    r'[A-Za-z_][A-Za-z0-9_./-]*\.py)", line ([1-9][0-9]{0,5}), '
+    r'in ([A-Za-z_][A-Za-z0-9_]*)')
+MISSING_IMPORT_RE = re.compile(
+    r"^ModuleNotFoundError: No module named '([A-Za-z_][A-Za-z0-9_.]{0,100})'$")
 
 
 def _parse(line: str):
@@ -238,9 +245,19 @@ def _stderr_counts(lines):
     target_counts = Counter()
     target_mentions = 0
     window = -1
+    last_app_frame = None
+    code_frames = Counter()
+    missing_imports = Counter()
     for index, raw in enumerate(lines):
         # Do not retain or include the original line in any output.
         line = raw.strip()
+        if line.startswith('Traceback (most recent call last):'):
+            last_app_frame = None
+        match_frame = FRAME_RE.match(raw)
+        if match_frame:
+            path, line_number, function = match_frame.groups()
+            if '..' not in path and len(path) <= 125:
+                last_app_frame = (path, int(line_number), function)
         if TARGET_ERROR_ROUTE in line:
             target_mentions += 1
             window = index + 200
@@ -248,11 +265,23 @@ def _stderr_counts(lines):
         if found:
             category = found.group(1)
             counts[category] += 1
+            if last_app_frame is not None:
+                code_frames[(category, *last_app_frame)] += 1
+            missing = MISSING_IMPORT_RE.fullmatch(line)
+            if missing:
+                missing_imports[missing.group(1)] += 1
             if index <= window:
                 target_counts[category] += 1
     return {'exception_classes': dict(sorted(counts.items())),
             'target_order_route_mentions': target_mentions,
-            'exception_classes_near_target': dict(sorted(target_counts.items()))}
+            'exception_classes_near_target': dict(sorted(target_counts.items())),
+            'top_app_frames': [
+                {'exception': exception, 'module': module, 'line': line_number,
+                 'function': function, 'occurrences': count}
+                for (exception, module, line_number, function), count
+                in code_frames.most_common(12)
+            ],
+            'missing_import_modules': dict(missing_imports.most_common(10))}
 
 
 def _passenger_stderr_probe():
@@ -403,6 +432,14 @@ def _selftest():
     assert probe['target_order_route_mentions'] == 1
     assert probe['exception_classes_near_target'] == {'OperationalError': 1}
     assert 'sensitive' not in repr(probe)
+    sample = _stderr_counts([
+        'Traceback (most recent call last):',
+        '  File "/home/zomorod2/mojplaywin.com/services/checkout.py", '
+        'line 42, in start',
+        "ModuleNotFoundError: No module named 'safe_module'",
+    ])
+    assert sample['top_app_frames'][0]['module'] == 'services/checkout.py'
+    assert sample['missing_import_modules'] == {'safe_module': 1}
     print('MPW_ACCESS_FUNNEL_SELFTEST=PASS')
 
 
