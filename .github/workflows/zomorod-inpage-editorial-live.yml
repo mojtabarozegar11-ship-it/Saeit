@@ -4,10 +4,12 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/zomorod-inpage-editorial-live.yml"
+      - "core/templates/core/includes/zomorod_editorial_20261016.html"
+      - "public/agriculture/**"
 permissions:
   contents: read
 concurrency:
-  group: zomorod-inpage-content
+  group: zomorod-site-deploy
   cancel-in-progress: false
 jobs:
   publish:
@@ -152,7 +154,7 @@ jobs:
           echo "CONFIRMED_PINNED_RELAY_READY=yes"
 
 
-      - name: Stage only editorial JavaScript and loader
+      - name: Stage editorial JavaScript and loader
         shell: bash
         run: |
           set -euo pipefail
@@ -196,8 +198,53 @@ jobs:
           temp.write_bytes(original+b"\n"+loader)
           os.chmod(temp,modern.stat().st_mode & 0o777)
           os.replace(temp,modern)
+
+          # The public routes below are served from static index.html files and do not load modern.js.
+          route_files=[
+              "blog/index.html","weather/index.html","store/index.html",
+              "newsletter/index.html","amozeshgah/index.html","academy/index.html",
+              "education/index.html","industry/index.html","research/index.html",
+              "knowledge/index.html","market/index.html","economy/index.html",
+              "studio/index.html","agents/index.html","company/index.html",
+              "services/index.html","agriculture/index.html",
+          ]
+          required={"blog/index.html","weather/index.html"}
+          for p in sorted((Path("public/agriculture")).glob("*/index.html")):
+              route_files.append(str(p.relative_to(Path("public"))))
+          available=[]
+          for rel in route_files:
+              target=root/rel
+              if not target.exists():
+                  if rel in required: raise RuntimeError("Required static page missing: "+rel)
+                  continue
+              assert target.is_file() and not target.is_symlink(), "Unsafe route target: "+rel
+              assert target.stat().st_uid==os.getuid(), "Unexpected page owner: "+rel
+              raw=target.read_bytes()
+              assert len(raw)>1500 and b"</body>" in raw.lower(), "Unexpected static page shape: "+rel
+              assert b'data-zm-editorial-loader="yes"' not in raw, "Editorial loader already present: "+rel
+              available.append((rel,target,raw,target.stat().st_mode & 0o777))
+          assert required.issubset({x[0] for x in available})
+          static_backup=backup/"static-pages"
+          static_backup.mkdir(parents=True)
+          modes={}
+          for rel,target,raw,mode in available:
+              saved=static_backup/rel
+              saved.parent.mkdir(parents=True,exist_ok=True)
+              saved.write_bytes(raw)
+              modes[rel]=mode
+              text=raw.decode("utf-8")
+              tag='<script defer data-zm-editorial-loader="yes" src="/zm-inpage-editorial-2026.js?v=20261106"></script>'
+              idx=text.lower().rfind("</body>")
+              assert idx>=0
+              new_text=text[:idx]+tag+text[idx:]
+              temp_html=target.with_name(target.name+".zm-"+sha+".tmp")
+              temp_html.write_text(new_text,encoding="utf-8")
+              os.chmod(temp_html,mode)
+              os.replace(temp_html,target)
+          (backup/"static-pages.json").write_text(__import__("json").dumps(modes,ensure_ascii=False),encoding="utf-8")
           print("JS_ORIGINAL_PRESERVED=yes")
           print("NEW_IN_PAGE_EDITORIAL_INSTALLED=yes")
+          print("STATIC_HTML_PAGES_CONNECTED="+str(len(available)))
           PY
       - name: Verify shared script plus content on public site and old pages remain online
         run: |
@@ -212,6 +259,15 @@ jobs:
             echo "PROTECTED_ROUTE=/$route HTTP=$result"
             test "$result" = 200
           done
+          for route in blog/ weather/ store/ newsletter/ amozeshgah/ industry/ research/ knowledge/ company/; do
+            file="$RUNNER_TEMP/zm-static-${route//\//_}.html"
+            result="$(curl -L -sS --max-time 25 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}' "https://zomorodmelal.ir/$route")"
+            test "$result" = 200
+            if grep -q 'data-zm-editorial-loader="yes"' "$file"; then
+              grep -Fq 'src="/zm-inpage-editorial-2026.js?v=20261106"' "$file"
+              echo "EDITORIAL_LOADER_ROUTE=/$route HTTP=200"
+            fi
+          done
           echo "JS_CONTENT_AVAILABLE_AND_OLD_ROUTES_OK=yes"
       - name: Automatically restore exact modern.js and remove content on failure
         if: failure() && steps.install.outcome == 'success'
@@ -225,7 +281,21 @@ jobs:
           home=Path.home()
           modern=home/"public_html/static/site/modern.js"
           content=home/"public_html/zm-inpage-editorial-2026.js"
-          backup=home/".backups"/"zomorod-live-inpage"/sha/"modern.original.js"
+          backup_root=home/".backups"/"zomorod-live-inpage"/sha
+          backup=backup_root/"modern.original.js"
+          static_backup=backup_root/"static-pages"
+          manifest=backup_root/"static-pages.json"
+          if manifest.is_file():
+              import json
+              modes=json.loads(manifest.read_text(encoding="utf-8"))
+              for rel,mode in modes.items():
+                  target=root/rel
+                  saved=static_backup/rel
+                  if target.is_file() and saved.is_file() and not target.is_symlink():
+                      temp=target.with_name(target.name+".zm-rollback-"+sha+".tmp")
+                      temp.write_bytes(saved.read_bytes())
+                      os.chmod(temp,mode)
+                      os.replace(temp,target)
           if modern.is_file() and backup.is_file() and b"ZM_INPAGE_EDITORIAL_LOADER_20261016" in modern.read_bytes():
               temp=modern.with_name("modern.zm-rollback-"+sha+".tmp")
               temp.write_bytes(backup.read_bytes())
