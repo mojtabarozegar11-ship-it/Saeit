@@ -19,14 +19,14 @@ import tempfile
 
 ROOT = Path('/home/zomorod2/Saeit-staging')
 PUBLIC = Path('/home/zomorod2/mojplaywin.com')
-SEARCH_ROOT = ROOT / 'mpw_commerce'
+SEARCH_ROOTS = tuple(ROOT / part for part in ('mpw_commerce', 'core', 'templates', 'services'))
 BACKUPS = Path('/home/zomorod2/.local/share/mpw-catalog-truth-20261106')
 OLD = b'Your TRX invoice, verified payment receipt and secure download arrive by email.'
 NEW = (b'Your TRX invoice opens in this browser. After confirmed TRX payment, '
        b'use My TRX purchases in this browser to access your download. '
        b'Emailed receipts and recovery on another device are not yet available.')
-MAX_FILES = 2500
-MAX_TOTAL = 10_000_000
+MAX_FILES = 5000
+MAX_TOTAL = 30_000_000
 MAX_FILE = 250_000
 
 
@@ -47,8 +47,11 @@ def trusted_dir(path):
 def guard():
     if pwd.getpwuid(os.geteuid()).pw_name != 'zomorod2':
         fail('WRONG_ACCOUNT')
-    for path in (ROOT, PUBLIC, SEARCH_ROOT, PUBLIC / 'tmp'):
+    for path in (ROOT, PUBLIC, PUBLIC / 'tmp'):
         trusted_dir(path)
+    for path in SEARCH_ROOTS:
+        if path.exists():
+            trusted_dir(path)
     wsgi = PUBLIC / 'passenger_wsgi.py'
     if wsgi.is_symlink() or not wsgi.is_file() or wsgi.stat().st_uid != os.geteuid():
         fail('INVALID_PASSENGER')
@@ -60,13 +63,14 @@ def guard():
 
 
 def safe_file(path):
+    root = next((root for root in SEARCH_ROOTS if path.is_relative_to(root)), None)
     if (path.is_symlink() or not path.is_file()
-            or not path.resolve().is_relative_to(SEARCH_ROOT)
+            or root is None or not path.resolve().is_relative_to(root)
             or path.stat().st_uid != os.geteuid()
             or path.stat().st_nlink != 1 or path.stat().st_size > MAX_FILE):
         fail('UNSAFE_TARGET')
     parent = path.parent
-    while parent != SEARCH_ROOT:
+    while parent != root:
         trusted_dir(parent)
         parent = parent.parent
     return path.read_bytes()
@@ -77,22 +81,25 @@ def locate():
     found = []
     total = 0
     count = 0
-    for path in SEARCH_ROOT.rglob('*'):
-        if path.is_symlink():
-            fail('SYMLINK_IN_APP')
-        if not path.is_file() or path.suffix not in ('.py', '.html'):
+    for root in SEARCH_ROOTS:
+        if not root.exists():
             continue
-        if any(part in ('migrations', '__pycache__', 'tests') for part in path.parts):
-            continue
-        count += 1
-        total += path.stat().st_size
-        if count > MAX_FILES or total > MAX_TOTAL:
-            fail('SEARCH_LIMIT')
-        if path.stat().st_size > MAX_FILE:
-            continue
-        data = safe_file(path)
-        if OLD in data or NEW in data:
-            found.append((path, data))
+        for path in root.rglob('*'):
+            if path.is_symlink():
+                fail('SYMLINK_IN_APP')
+            if not path.is_file() or path.suffix not in ('.py', '.html'):
+                continue
+            if any(part in ('migrations', '__pycache__', 'tests') for part in path.parts):
+                continue
+            count += 1
+            total += path.stat().st_size
+            if count > MAX_FILES or total > MAX_TOTAL:
+                fail('SEARCH_LIMIT')
+            if path.stat().st_size > MAX_FILE:
+                continue
+            data = safe_file(path)
+            if OLD in data or NEW in data:
+                found.append((path, data))
     if len(found) != 1:
         fail('UNIQUE_SOURCE_NOT_FOUND:' + str(len(found)))
     path, data = found[0]
