@@ -167,11 +167,11 @@ jobs:
           assert doc["technical_tests"]>=10
           assert hashlib.sha256(zipfile.read_bytes()).hexdigest()==doc["artifact_sha256"]
           assert doc["commercial_release_authorized"] is False
-          assert doc["independent_professional_quality_1000_passed"] is False
+          assert doc["commercial_readiness_verified"] is False
           assert not (private/"private-rework-order.json").exists()
           print("F28_VPS_REAL_CUSTOMER_ZIP_VERIFIED=PASS")
           print("F28_VPS_INDEPENDENT_TECHNICAL_BLACKBOX_SCENARIOS=2")
-          print("F28_VPS_1000_QUALITY_CLEARANCE=NOT_GRANTED")
+          print("F28_VPS_COMMERCIAL_READINESS=NOT_GRANTED")
           PYCHECK
           REMOTE
       - name: Stock hash-verified F28 ZIP in locked central private warehouse and create pending expert QA ticket
@@ -206,10 +206,10 @@ jobs:
           doc=json.loads(Path(sys.argv[1]).read_text())
           assert doc["stock_version_verified"] is True
           assert doc["quality_ticket_created_or_confirmed"] is True
-          assert doc["professional_quality_1000_approved"] is False
+          assert doc["commercial_readiness_verified"] is False
           assert doc["commerce_enabled"] is False and doc["public_listing_enabled"] is False
           print("F28_CENTRAL_PRIVATE_WAREHOUSE_STOCKED_OR_PRESENT=PASS")
-          print("F28_INDEPENDENT_QUALITY_1000_REVIEW=PENDING")
+          print("F28_OBJECTIVE_RELEASE_REVIEW=PENDING")
           print("F28_PUBLICATION=BLOCKED")
           PYVERIFY
           REMOTE
