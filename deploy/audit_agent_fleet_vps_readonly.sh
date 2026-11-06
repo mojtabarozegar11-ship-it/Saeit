@@ -877,6 +877,96 @@ print("AGENT_FLEET_FACTORY_STATIC_READINESS=" + json.dumps({
 },sort_keys=True,separators=(",",":")))
 PY
 
+# The one-product native line 41 uses a signed recipe slot on disk. Do not
+# mistake 443 old Django FactoryRun(status="active") records for its slot.
+# Count only exact, explicit recipe identity references in Django metadata;
+# titles or free-text goals must never authorize a binding.
+"$python_bin" - <<'PY'
+import collections
+import json
+from pathlib import Path
+
+import django
+django.setup()
+
+from core.models import AgentTask, FactoryRun
+
+recipe = "farm_enterprise_economics"
+slot = Path('/home/githubops/factory-runtime/private/autonomous-product-cycle/quality-excellence/product-flow/active-slots/current.json')
+native = {"state": "unavailable", "active_count": None, "active_recipe_matches": False,
+          "slot_schema_valid": False}
+if slot.is_symlink():
+    native["state"] = "unsafe_symlink"
+elif slot.is_file() and slot.stat().st_size < 2000000:
+    try:
+        data = json.loads(slot.read_text(encoding="utf-8"))
+        active = data.get("active") if isinstance(data, dict) else None
+        valid = (data.get("schema") == "saeit.factory.product-slots.v1"
+                 and isinstance(active, list)
+                 and all(isinstance(item, dict) and isinstance(item.get("recipe"), str)
+                         for item in active))
+        native = {"state": "valid" if valid else "invalid_schema",
+                  "active_count": len(active) if isinstance(active, list) else None,
+                  "active_recipe_matches": bool(valid and len(active) == 1
+                                                and active[0]["recipe"] == recipe),
+                  "slot_schema_valid": bool(valid)}
+    except (OSError, ValueError, UnicodeError):
+        native["state"] = "unreadable"
+
+def evidence_fields(meta):
+    if not isinstance(meta, dict):
+        return []
+    fields = [key for key in ("recipe", "recipe_slug", "product_slug", "product_code", "sku")
+              if meta.get(key) == recipe]
+    for container in ("factory", "production", "source_recipe"):
+        value = meta.get(container)
+        if isinstance(value, dict):
+            fields.extend(f"{container}.{key}" for key in ("recipe", "recipe_slug", "product_slug")
+                          if value.get(key) == recipe)
+        elif container == "source_recipe" and value == recipe:
+            fields.append(container)
+    return fields
+
+counts = collections.Counter()
+candidates = []
+for task in AgentTask.objects.filter(
+    status="queued", action_type="product_validation",
+    agent__code="factory-opportunity-validation-agent"
+).select_related("product", "factory_run").iterator(chunk_size=100):
+    if not task.product_id or not task.factory_run_id:
+        counts["missing_product_or_run"] += 1
+        continue
+    matches = evidence_fields(task.product.metadata)
+    if not matches:
+        counts["no_explicit_recipe_identity"] += 1
+        continue
+    for match in matches:
+        counts["exact_identity."+match] += 1
+    if (task.factory_run.status == "active"
+            and task.factory_run.product_id == task.product_id):
+        candidates.append((task.pk, task.product_id, task.factory_run.run_id))
+    else:
+        counts["identity_but_run_invalid"] += 1
+
+unique_runs = sorted({row[2] for row in candidates})
+binding_safe = bool(native["active_recipe_matches"] and len(unique_runs) == 1)
+print("AGENT_FLEET_SINGLE_PRODUCT_RECONCILIATION="+json.dumps({
+    "schema":"saeit.agent.native-django-factory-reconciliation.v1",
+    "read_only":True,"native":native,
+    "queued_validation_tasks_examined":sum(
+        1 for _ in AgentTask.objects.filter(
+            status="queued", action_type="product_validation",
+            agent__code="factory-opportunity-validation-agent").values_list("pk", flat=True).iterator()),
+    "identity_counts":dict(sorted(counts.items())),
+    "matching_task_count":len(candidates),"matching_distinct_run_count":len(unique_runs),
+    "single_run_identity_proven":binding_safe,
+    "candidate_run_id":unique_runs[0] if binding_safe else None,
+    "candidate_task_id":candidates[0][0] if binding_safe else None,
+    "factory_run_records_marked_active":FactoryRun.objects.filter(status="active").count(),
+    "run_bound":False,"tasks_executed":0,"db_writes":0,
+},sort_keys=True,separators=(",",":")))
+PY
+
 # Never print crontab commands, inline environment values, or process arguments.
 "$python_bin" - <<'PY'
 import hashlib
