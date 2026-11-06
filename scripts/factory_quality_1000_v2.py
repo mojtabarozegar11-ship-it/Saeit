@@ -55,9 +55,15 @@ DOMAIN_VETO={
  "real_world_performance_accessibility": "Q055",
  "security_ethics_regulatory_safety": "Q072",
  "legal_rights_and_provenance": "Q077",
- "distribution_support_reliability": "Q095",
+ "distribution_support_reliability": "Q085",
  "independent_adversarial_testing": "Q070",
 }
+# A domain-level blocker must never subtract documentary credit from a
+# different specialist domain. Q095 concerns conflicts of interest, whereas
+# Q085 measures the actual customer delivery and redownload path.
+for _dimension, _criterion in DOMAIN_VETO.items():
+    if _dimension not in CRITERIA[_criterion]["quality_dimensions"]:
+        raise RuntimeError("QUALITY_DOMAIN_VETO_CROSSES_SPECIALIST_BOUNDARY")
 PENDING={"P0_INDEPENDENT_ATTESTATION_NOT_AUTHENTICATED",
          "P0_WORLD_NUMBER_ONE_CLAIM_UNVERIFIED"}
 def file_matches(base,value):
