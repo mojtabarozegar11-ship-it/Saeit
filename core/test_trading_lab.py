@@ -67,6 +67,16 @@ def test_open_position_limit_and_close_updates_pnl():
     assert lab.leaderboard()[0]["pnl"] == 12.5
 
 
+def test_rejects_invalid_close_without_mutating_open_state():
+    lab = make_lab()
+    agent = lab.agents[0]
+    opened = lab.submit_demo_trade(agent, "TEST", "BUY")
+    with pytest.raises(ValueError, match="pnl_must_be_finite"):
+        lab.close_demo_trade(agent, opened.order_id, float("nan"))
+    assert agent.open_order_ids == [opened.order_id]
+    assert not [item for item in agent.experiences if item.action == "DEMO_CLOSE"]
+
+
 def test_rejects_invalid_risk_policy():
     with pytest.raises(ValueError, match="risk_ratios"):
         RiskPolicy(risk_per_trade=float("nan"))
