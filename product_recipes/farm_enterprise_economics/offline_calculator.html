@@ -29,6 +29,7 @@
     th,td{border-bottom:1px solid #d6e6dc;padding:.65rem;text-align:left;vertical-align:top}th{background:#eaf4ed}
     .scroll{overflow-x:auto}td{white-space:nowrap}td:first-child{white-space:normal}
     .small{font-size:.87rem}.hidden{display:none!important}
+    .cash-input{min-width:115px;max-width:155px;padding:.45rem;margin:0}.cash-month{font-weight:700;white-space:nowrap}
     @media print{header{padding:1rem;color:#113f32;background:white}.actions,.editor,.file-label{display:none!important}body{background:white}main{max-width:none}}
   </style>
   <script src="offline_engine.js" defer></script>
@@ -38,10 +39,10 @@
 <header>
   <div class="eyebrow">Private review edition · Works entirely offline</div>
   <h1>Farm Enterprise Economics</h1>
-  <p>Compare farm activities, calculate contribution and break-even thresholds, and explore price/volume changes using your own data. No account, network access or installation.</p>
+  <p>Compare farm activities, calculate contribution and break-even thresholds, explore price/volume changes and plan monthly liquidity using your own data. No account, network access or installation.</p>
 </header>
 <main>
-  <div class="notice" role="note"><strong>Illustrative numbers are not market quotations.</strong> Results exclude tax, borrowing, depreciation, investment cost, inventory and timing. This is a planning calculator, not a profit forecast or professional financial advice. <strong>Commercial release and license are pending review.</strong></div>
+  <div class="notice" role="note"><strong>Illustrative numbers are not market quotations.</strong> Enterprise profit excludes tax, borrowing, depreciation and investments. The optional 12-month cash plan models only cash movements you enter; it does not predict receipts or solve financing. This is not professional financial advice. <strong>Commercial release and license are pending review.</strong></div>
   <section class="panel editor" aria-labelledby="input-title">
     <h2 id="input-title">Your enterprise assumptions</h2>
     <div class="fields"><label>Currency or units (no conversion)<input id="currency" value="USD" maxlength="12" autocomplete="off" required></label></div>
@@ -56,6 +57,13 @@
     </div>
     <p class="hint">Files are read only on this device. No values are sent to a server. Your browser does not automatically save entries.</p>
   </section>
+  <section class="panel editor" aria-labelledby="cash-title">
+    <h2 id="cash-title">12-month cash-flow and liquidity plan</h2>
+    <p class="hint">Optional planning module. Enter actual expected cash receipts and payments by month, separately from the enterprise profit calculation. Each cash movement is entered once; all figures use the same currency as above. Zero is permitted. The model checks <em>month-end</em> cash only and cannot establish whether bills can be paid within the month.</p>
+    <div class="fields"><label>Opening available cash<input id="cash-opening" value="0" inputmode="decimal" maxlength="64" autocomplete="off" required></label></div>
+    <div class="scroll"><table><thead><tr><th>Month</th><th>Customer cash receipts</th><th>Operating cash payments</th><th>Asset purchases</th><th>Loan cash received</th><th>Loan principal + interest payments</th><th>Other cash payments</th></tr></thead><tbody id="cash-month-inputs"></tbody></table></div>
+    <p class="hint">Do not count a loan receipt as sales or a capital purchase as a production expense. Put cash taxes, owner drawings and other cash uses in the appropriate payment field once. Enter only amounts collected or paid that month, not invoices due later.</p>
+  </section>
   <div id="feedback" role="alert" aria-live="assertive"></div>
   <section class="panel hidden" id="report" aria-labelledby="report-title">
     <h2 id="report-title">Scenario results</h2>
@@ -69,9 +77,14 @@
     <h3>Sensitivity: volume ±20%, price ±10%</h3>
     <p class="hint">Each scenario keeps variable cost per sold unit, fees and fixed costs unchanged. These are illustrations, not probabilities.</p>
     <div class="scroll"><table><thead><tr><th>Enterprise</th><th>Volume multiplier</th><th>Price multiplier</th><th>Modeled profit</th></tr></thead><tbody id="scenarios"></tbody></table></div>
+    <h3>12-month liquidity and cash-shortfall warning</h3>
+    <p class="hint">Separate from modeled enterprise profit; does not infer collections or financing needs automatically. A negative month-end balance signals additional liquidity would be needed under these assumptions.</p>
+    <div class="kpis" id="cash-summary"></div>
+    <div class="scroll"><table><thead><tr><th>Month</th><th>Net cash movement</th><th>Closing cash</th></tr></thead><tbody id="cash-results"></tbody></table></div>
     <div class="actions">
       <button id="export-report" class="secondary" type="button">Save full report as JSON</button>
       <button id="export-csv" class="secondary" type="button">Save scenarios as CSV</button>
+      <button id="export-cashflow-csv" class="secondary" type="button">Save 12-month cash plan as CSV</button>
       <button id="print" class="secondary" type="button">Print / save as PDF</button>
     </div>
   </section>

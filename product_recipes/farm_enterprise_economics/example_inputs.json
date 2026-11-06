@@ -17,5 +17,22 @@
       "allocated_fixed_cost": "2400",
       "selling_fee_percent": "3"
     }
-  ]
+  ],
+  "cashflow_plan": {
+    "opening_cash": "1000.00",
+    "months": [
+      {"cash_receipts":"500.00","operating_payments":"800.00","asset_purchases":"300.00","loan_receipts":"0.00","loan_repayments":"0.00","other_payments":"0.00"},
+      {"cash_receipts":"200.00","operating_payments":"700.00","asset_purchases":"500.00","loan_receipts":"0.00","loan_repayments":"0.00","other_payments":"0.00"},
+      {"cash_receipts":"1500.00","operating_payments":"800.00","asset_purchases":"0.00","loan_receipts":"0.00","loan_repayments":"0.00","other_payments":"0.00"},
+      {"cash_receipts":"0.00","operating_payments":"0.00","asset_purchases":"0.00","loan_receipts":"0.00","loan_repayments":"0.00","other_payments":"0.00"},
+      {"cash_receipts":"0.00","operating_payments":"0.00","asset_purchases":"0.00","loan_receipts":"0.00","loan_repayments":"0.00","other_payments":"0.00"},
+      {"cash_receipts":"0.00","operating_payments":"0.00","asset_purchases":"0.00","loan_receipts":"0.00","loan_repayments":"0.00","other_payments":"0.00"},
+      {"cash_receipts":"0.00","operating_payments":"0.00","asset_purchases":"0.00","loan_receipts":"0.00","loan_repayments":"0.00","other_payments":"0.00"},
+      {"cash_receipts":"0.00","operating_payments":"0.00","asset_purchases":"0.00","loan_receipts":"0.00","loan_repayments":"0.00","other_payments":"0.00"},
+      {"cash_receipts":"0.00","operating_payments":"0.00","asset_purchases":"0.00","loan_receipts":"0.00","loan_repayments":"0.00","other_payments":"0.00"},
+      {"cash_receipts":"0.00","operating_payments":"0.00","asset_purchases":"0.00","loan_receipts":"0.00","loan_repayments":"0.00","other_payments":"0.00"},
+      {"cash_receipts":"0.00","operating_payments":"0.00","asset_purchases":"0.00","loan_receipts":"0.00","loan_repayments":"0.00","other_payments":"0.00"},
+      {"cash_receipts":"0.00","operating_payments":"0.00","asset_purchases":"0.00","loan_receipts":"0.00","loan_repayments":"0.00","other_payments":"0.00"}
+    ]
+  }
 }

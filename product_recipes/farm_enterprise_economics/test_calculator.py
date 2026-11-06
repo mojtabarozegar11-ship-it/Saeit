@@ -127,7 +127,63 @@ class EconomicsTests(unittest.TestCase):
         result = evaluate({"currency": "USD", "enterprises": [crop]})
         self.assertEqual(result["resource_coverage"]["land_area_hectares"]["portfolio_total"], "0.004")
         self.assertEqual(result["resource_coverage"]["irrigation_water_m3"]["portfolio_total"], "0.0005")
-        self.assertEqual(result["version"], "1.4")
+        self.assertEqual(result["version"], "2.0")
+
+    def test_twelve_month_cashflow_exposes_real_liquidity_gap(self):
+        sample = json.loads(Path(__file__).with_name("example_inputs.json").read_text(encoding="utf8"))
+        report = evaluate(sample)
+        cash = report["cashflow"]
+        self.assertEqual(len(cash["months"]), 12)
+        self.assertEqual([row["closing_cash_balance"] for row in cash["months"][:3]],
+                         ["400.00", "-600.00", "100.00"])
+        self.assertEqual(cash["minimum_month_end_cash"], "-600.00")
+        self.assertEqual(cash["additional_cash_needed_at_month_ends"], "600.00")
+        self.assertEqual(cash["first_negative_month"], 2)
+        self.assertEqual(cash["ending_cash"], "100.00")
+        self.assertEqual(cash["net_operating_cashflow_before_other_uses"], "-100.00")
+        self.assertEqual(report["portfolio"]["operating_profit"], evaluate({
+            "currency": sample["currency"], "enterprises": sample["enterprises"]})["portfolio"]["operating_profit"])
+
+    def test_cash_debt_proceeds_are_not_fictitious_sales(self):
+        data = dict(self.example)
+        month = {field: "0.00" for field in (
+            "cash_receipts", "operating_payments", "asset_purchases",
+            "loan_receipts", "loan_repayments", "other_payments")}
+        periods = [dict(month) for _ in range(12)]
+        periods[0].update(loan_receipts="1000.00", asset_purchases="900.00", loan_repayments="20.00")
+        data["cashflow_plan"] = {"opening_cash":"50.00", "months":periods}
+        report = evaluate(data)
+        self.assertEqual(report["cashflow"]["ending_cash"], "130.00")
+        self.assertEqual(report["cashflow"]["net_operating_cashflow_before_other_uses"], "0.00")
+        self.assertEqual(report["portfolio"]["sales_revenue"], "10000.00")
+
+    def test_minimum_month_end_does_not_incorrectly_include_opening_balance(self):
+        month = {field: "0.00" for field in (
+            "cash_receipts", "operating_payments", "asset_purchases",
+            "loan_receipts", "loan_repayments", "other_payments")}
+        months = [dict(month) for _ in range(12)]
+        months[0]["cash_receipts"] = "60.00"
+        report = evaluate(dict(self.example, cashflow_plan={
+            "opening_cash": "50.00", "months": months}))
+        self.assertEqual(report["cashflow"]["minimum_month_end_cash"], "110.00")
+        self.assertEqual(report["cashflow"]["additional_cash_needed_at_month_ends"], "0.00")
+
+    def test_cashflow_rejects_incomplete_unsafe_or_fractional_cent_inputs(self):
+        month = {field: "0" for field in (
+            "cash_receipts", "operating_payments", "asset_purchases",
+            "loan_receipts", "loan_repayments", "other_payments")}
+        valid = {"opening_cash":"0", "months":[dict(month) for _ in range(12)]}
+        for plan in (
+            {**valid,"months":valid["months"][:-1]},
+            {**valid,"opening_cash":"-1"},
+            {**valid,"opening_cash":"0.001"},
+            {**valid,"months":[{**month,"asset_purchases":"0.005"}] + valid["months"][1:]},
+            {**valid,"months":[{**month,"loan_receipts":"-1"}] + valid["months"][1:]},
+            {**valid,"months":[{**month,"cash_receipts":True}] + valid["months"][1:]},
+        ):
+            with self.subTest(plan=plan):
+                with self.assertRaises(ValueError):
+                    evaluate(dict(self.example,cashflow_plan=plan))
 
     def test_partial_resource_records_do_not_misrepresent_portfolio_totals(self):
         first = dict(self.example["enterprises"][0],
@@ -222,6 +278,41 @@ class EconomicsTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertEqual(json.loads(js.read_text(encoding="utf-8"))["portfolio"]["operating_profit"], "2500.00")
             self.assertEqual(len(csv.read_text(encoding="utf-8").splitlines()), 10)
+
+    def test_cashflow_csv_contains_twelve_reconciled_months(self):
+        import csv
+        data = json.loads(Path(__file__).with_name("example_inputs.json").read_text(encoding="utf8"))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "input.json"
+            output = root / "monthly.csv"
+            source.write_text(json.dumps(data), encoding="utf8")
+            process = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("calculator.py")),
+                 str(source), "--cashflow-csv-output", str(output)],
+                capture_output=True, text=True, timeout=15)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertTrue(output.read_text(encoding="utf8").startswith('"month","cash_receipts"'))
+            with output.open(encoding="utf8", newline="") as stream:
+                rows = list(csv.DictReader(stream))
+            self.assertEqual(len(rows), 12)
+            self.assertEqual(rows[1]["closing_cash_balance"], "-600.00")
+            self.assertEqual(rows[2]["closing_cash_balance"], "100.00")
+            self.assertEqual([row["month"] for row in rows], [str(n) for n in range(1, 13)])
+
+    def test_cashflow_csv_without_required_months_fails_without_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "input.json"
+            output = root / "monthly.csv"
+            source.write_text(json.dumps(self.example), encoding="utf8")
+            process = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("calculator.py")),
+                 str(source), "--cashflow-csv-output", str(output)],
+                capture_output=True, text=True, timeout=15)
+            self.assertEqual(process.returncode, 2)
+            self.assertIn("requires a cashflow_plan", process.stderr)
+            self.assertFalse(output.exists())
 
 
     def test_spreadsheet_formula_injection_is_rejected(self):

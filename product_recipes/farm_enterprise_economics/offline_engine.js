@@ -10,6 +10,8 @@
   const HUNDRED = { n: 100n, d: 1n };
   const MAX = { n: 100000000000000000000n, d: 1n };
   const LIMIT = 100;
+  const CASH_FIELDS = ['cash_receipts', 'operating_payments', 'asset_purchases',
+    'loan_receipts', 'loan_repayments', 'other_payments'];
 
   function gcd(a, b) {
     a = a < 0n ? -a : a;
@@ -157,6 +159,47 @@
     };
     return { result, numbers: { quantity, price, variable, fixed, fee, revenue, cost, profit, contribution, land, water } };
   }
+  function cashflowPlan(plan) {
+    if (!plan || typeof plan !== 'object' || Array.isArray(plan)) {
+      throw new Error('cashflow_plan must be an object');
+    }
+    const cents = (raw, name) => {
+      const value = decimal(raw, name);
+      if (mul(value, fraction(100n)).d !== 1n) {
+        throw new Error(name + ': at most two monetary decimal places');
+      }
+      return value;
+    };
+    const opening = cents(plan.opening_cash, 'cashflow.opening_cash');
+    if (!Array.isArray(plan.months) || plan.months.length !== 12) {
+      throw new Error('cashflow.months must contain exactly twelve months');
+    }
+    let balance = opening, minimum = null, firstNegative = null, operatingTotal = ZERO;
+    const months = plan.months.map((row, index) => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        throw new Error('cashflow month must be an object');
+      }
+      const values = {};
+      for (const field of CASH_FIELDS) values[field] = cents(row[field], 'cashflow.month_' + (index + 1) + '.' + field);
+      operatingTotal = add(operatingTotal, sub(values.cash_receipts, values.operating_payments));
+      const change = sub(add(values.cash_receipts, values.loan_receipts),
+        add(add(values.operating_payments, values.asset_purchases),
+          add(values.loan_repayments, values.other_payments)));
+      balance = add(balance, change);
+      if (minimum === null || cmp(balance, minimum) < 0) minimum = balance;
+      if (firstNegative === null && cmp(balance, ZERO) < 0) firstNegative = index + 1;
+      const rowOutput = { month: index + 1 };
+      for (const field of CASH_FIELDS) rowOutput[field] = format(values[field]);
+      rowOutput.net_cash_change = format(change);
+      rowOutput.closing_cash_balance = format(balance);
+      return rowOutput;
+    });
+    return { opening_cash: format(opening), ending_cash: format(balance),
+      minimum_month_end_cash: format(minimum),
+      additional_cash_needed_at_month_ends: format(cmp(minimum, ZERO) < 0 ? sub(ZERO, minimum) : ZERO),
+      first_negative_month: firstNegative,
+      net_operating_cashflow_before_other_uses: format(operatingTotal), months };
+  }
   function evaluate(data) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Input must be an object');
     const currency = String(data.currency || '').trim().toUpperCase();
@@ -199,7 +242,7 @@
         }
       }
     }
-    return { version: '1.4-browser', currency,
+    const report = { version: '2.0-browser', currency,
       accounting_scope: 'contribution_profit_before_depreciation_financing_tax',
       input_values_independently_validated: false,
       assumptions: [
@@ -207,14 +250,19 @@
         'Fixed costs are allocated per enterprise without double counting.',
         'This is scenario arithmetic, not a forecast or investment recommendation.',
         'Scenarios vary only units sold and price; fees and costs are held constant.',
-        'Tax, financing, capital expenditure, depreciation, working capital and seasons are excluded.',
+        'Enterprise profit excludes tax, financing, capital expenditure, depreciation and working capital.',
+        'Optional monthly cash flow is a separate user-entered cash timing plan.',
         'Resource intensity uses only reported values for the same accounting period.'
       ], results,
       portfolio: { sales_revenue: total('sales_revenue'), total_cost: total('total_cost'),
         operating_profit: total('operating_profit'), contribution_margin_total: total('contribution_margin_total') },
       resource_coverage: resources, scenario_results: scenario };
+    if (Object.prototype.hasOwnProperty.call(data, 'cashflow_plan')) {
+      report.cashflow = cashflowPlan(data.cashflow_plan);
+    }
+    return report;
   }
-  const API = Object.freeze({ evaluate, enterprise, decimal, format });
+  const API = Object.freeze({ evaluate, enterprise, cashflowPlan, decimal, format });
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   else root.FarmEconomics = API;
 })(typeof globalThis === 'undefined' ? this : globalThis);
