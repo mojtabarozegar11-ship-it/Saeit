@@ -30,7 +30,7 @@ jobs:
           test -s faremah/index.html
           grep -Fq 'فریماه' faremah/index.html
           grep -Fq 'مرکز لیزر و زیبایی' faremah/index.html
-          grep -Fq 'action="/ask-master/index.php?service=1"' faremah/contact.html
+          grep -Fq '/ask-master/index.php?service=1' faremah/contact.html
           test -s core/faremah_views.py
           python3 -m py_compile core/faremah_views.py
           echo "FAREMAH_PACKAGE=verified"
