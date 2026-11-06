@@ -16,7 +16,10 @@ AGENT_COUNT = 50
 ACCOUNT_NAMES = ("DEMO_A", "DEMO_B")
 STRATEGIES = ("trend", "mean_reversion", "breakout", "momentum", "volatility")
 ALLOWED_SIDES = frozenset({"BUY", "SELL"})
-STATE_SCHEMA = "saeit.trading_lab.state.v1"
+STATE_SCHEMA = "saeit.trading_lab.state.v2"
+TRADING_MODE = "DEMO"
+LIVE_TRADING_ENABLED = False
+KILL_SWITCH = True
 
 
 class DemoBroker(Protocol):
@@ -119,6 +122,9 @@ class TradingLab:
         if any(not getattr(b, "demo", False) for b in brokers.values()):
             raise RuntimeError("LIVE TRADING BLOCKED: every broker must be demo/paper")
         self.brokers = brokers
+        self.trading_mode = TRADING_MODE
+        self.live_trading_enabled = LIVE_TRADING_ENABLED
+        self.kill_switch = KILL_SWITCH
         self.agents = [
             TraderAgent(
                 i,
@@ -219,6 +225,12 @@ class TradingLab:
         return {
             "mode": "DEMO_ONLY", "agents": AGENT_COUNT,
             "allocation": {"DEMO_A": 25, "DEMO_B": 25},
+            "safety": {
+                "trading_mode": self.trading_mode,
+                "live_trading_enabled": self.live_trading_enabled,
+                "kill_switch": self.kill_switch,
+                "customer_revenue_ledger": "SEPARATE_NOT_PRESENT",
+            },
             "leaderboard": self.leaderboard(),
         }
 
@@ -227,6 +239,12 @@ class TradingLab:
         return {
             "schema": STATE_SCHEMA,
             "mode": "DEMO_ONLY",
+            "safety": {
+                "trading_mode": self.trading_mode,
+                "live_trading_enabled": self.live_trading_enabled,
+                "kill_switch": self.kill_switch,
+                "customer_revenue_ledger": "SEPARATE_NOT_PRESENT",
+            },
             "agents": [
                 {
                     "agent_id": agent.agent_id, "account": agent.account,
@@ -246,6 +264,14 @@ class TradingLab:
             raise ValueError("state_schema_rejected")
         if state.get("mode") != "DEMO_ONLY":
             raise ValueError("state_mode_rejected")
+        safety = state.get("safety")
+        if safety != {
+            "trading_mode": TRADING_MODE,
+            "live_trading_enabled": False,
+            "kill_switch": True,
+            "customer_revenue_ledger": "SEPARATE_NOT_PRESENT",
+        }:
+            raise ValueError("state_safety_policy_rejected")
         raw_agents = state.get("agents")
         if not isinstance(raw_agents, list) or len(raw_agents) != AGENT_COUNT:
             raise ValueError("state_agent_count_invalid")
