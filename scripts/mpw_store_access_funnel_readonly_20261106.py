@@ -3,7 +3,9 @@
 
 Only reads a bounded tail of the site's existing Apache/LiteSpeed log files.
 No raw IP, user agent, URL query, invoice ID, email or log line is printed or
-written. No HTTP requests, database connections, mail or payment operations.
+written. A small, separately bounded Passenger stderr probe reports only
+exception class counts. No HTTP requests, database connections, mail or
+payment operations.
 """
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ DOMAIN = "mojplaywin.com"
 MAX_LOG_BYTES = 64 * 1024 * 1024
 MAX_ARCHIVE_COMPRESSED_BYTES = 16 * 1024 * 1024
 MAX_LINES = 600_000
+MAX_STDERR_BYTES = 1024 * 1024
 LOOKBACK_DAYS = 7
 MONTHS = {v: i for i, v in enumerate(
     ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), 1)}
@@ -42,6 +45,14 @@ START_RE = re.compile(r'^/commerce/trx-easy/start/[1-9][0-9]*/?$')
 INVOICE_RE = re.compile(r'^/commerce/trx-easy/invoice/[1-9][0-9]*/?$')
 DOWNLOAD_RE = re.compile(r'^/commerce/trx-easy/download/[1-9][0-9]*/?$')
 AWSTATS_RE = re.compile(r'^awstats(0[1-9]|1[0-2])(20[0-9]{2})\.(?:www\.)?mojplaywin\.com\.txt$')
+EXCEPTION_RE = re.compile(
+    r'^(?:[A-Za-z_]\w*\.)*'
+    r'(OperationalError|IntegrityError|ProgrammingError|DatabaseError|'
+    r'DataError|InterfaceError|InternalError|ValueError|TypeError|'
+    r'AttributeError|KeyError|RuntimeError|ImportError|ModuleNotFoundError|'
+    r'PaymentHold|ValidationError|AssertionError|PermissionError|'
+    r'TimeoutError|ConnectionError|OSError):')
+TARGET_ERROR_ROUTE = '/commerce/trx-easy/start/779/'
 
 
 def _parse(line: str):
@@ -221,6 +232,63 @@ def _awstats_monthly():
     return {'available': bool(reports), 'monthly': reports}
 
 
+def _stderr_counts(lines):
+    """Read text internally; expose no message, request data or traceback."""
+    counts = Counter()
+    target_counts = Counter()
+    target_mentions = 0
+    window = -1
+    for index, raw in enumerate(lines):
+        # Do not retain or include the original line in any output.
+        line = raw.strip()
+        if TARGET_ERROR_ROUTE in line:
+            target_mentions += 1
+            window = index + 200
+        found = EXCEPTION_RE.match(line)
+        if found:
+            category = found.group(1)
+            counts[category] += 1
+            if index <= window:
+                target_counts[category] += 1
+    return {'exception_classes': dict(sorted(counts.items())),
+            'target_order_route_mentions': target_mentions,
+            'exception_classes_near_target': dict(sorted(target_counts.items()))}
+
+
+def _passenger_stderr_probe():
+    """Check cPanel's documented Python stderr.log, with bounded private reads."""
+    locations = (
+        ('staging_app', ACCOUNT / 'Saeit-staging/stderr.log'),
+        ('public_app', ACCOUNT / 'mojplaywin.com/stderr.log'),
+    )
+    found = {}
+    for label, path in locations:
+        try:
+            if path.is_symlink() or not path.is_file():
+                continue
+            actual = path.resolve(strict=True)
+            if not actual.is_relative_to(ACCOUNT):
+                continue
+            stat = actual.stat()
+            if stat.st_uid != os.geteuid() or stat.st_nlink != 1:
+                continue
+            with actual.open('rb') as stream:
+                if stat.st_size > MAX_STDERR_BYTES:
+                    stream.seek(-MAX_STDERR_BYTES, os.SEEK_END)
+                    stream.readline()  # discard any incomplete first line
+                contents = stream.read(MAX_STDERR_BYTES)
+            observations = _stderr_counts(contents.decode('utf-8', 'replace').splitlines())
+            found[label] = dict(observations,
+                                scanned_bytes=len(contents),
+                                tail_limited=stat.st_size > MAX_STDERR_BYTES,
+                                modified_utc_day=datetime.fromtimestamp(
+                                    stat.st_mtime, timezone.utc).date().isoformat())
+        except (OSError, ValueError, RuntimeError):
+            continue
+    return {'available': bool(found), 'files': found,
+            'raw_lines_disclosed': 0, 'read_only': True}
+
+
 def _audit():
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=LOOKBACK_DAYS)
@@ -292,6 +360,7 @@ def _audit():
         'daily': {day: dict(sorted(values.items()))
                   for day, values in sorted(day_counts.items())},
         'awstats': _awstats_monthly(),
+        'passenger_stderr': _passenger_stderr_probe(),
         'uniques_unavailable': True,
         'bot_classification': 'heuristic_only',
         'orders_are_not_payments': True,
@@ -326,6 +395,14 @@ def _selftest():
                                 '/commerce/trx-easy/invoice/800/', 500, False) is None
     assert AWSTATS_RE.fullmatch('awstats112026.mojplaywin.com.txt')
     assert not AWSTATS_RE.fullmatch('awstats112026.other-site.com.txt')
+    probe = _stderr_counts([
+        'Internal Server Error: /commerce/trx-easy/start/779/',
+        'Traceback (most recent call last):',
+        'django.db.utils.OperationalError: sensitive text must never surface',
+    ])
+    assert probe['target_order_route_mentions'] == 1
+    assert probe['exception_classes_near_target'] == {'OperationalError': 1}
+    assert 'sensitive' not in repr(probe)
     print('MPW_ACCESS_FUNNEL_SELFTEST=PASS')
 
 
