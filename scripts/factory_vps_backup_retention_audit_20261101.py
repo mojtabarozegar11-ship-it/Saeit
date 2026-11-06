@@ -211,6 +211,115 @@ def public_report(report: dict) -> dict:
     return out
 
 
+
+# This second inventory covers operational archives and disposable-looking files.
+# It deliberately excludes the active factory's private DB and cannot delete data.
+FACTORY_OPERATIONS_ROOT = Path("/home/githubops/factory-runtime/operations")
+ARCHIVE_SCAN_MAX_FILES = 50_000
+ARCHIVE_SCAN_MAX_SECONDS = 50
+ARCHIVE_SCAN_MAX_DEPTH = 10
+ARCHIVE_SUFFIXES = {".sqlite3", ".gz", ".log", ".json", ".zip", ".tar",
+                    ".tgz", ".tmp", ".bak", ".db", ".sqlite", ".old"}
+
+
+def inventory_factory_operations(root: Path = FACTORY_OPERATIONS_ROOT) -> dict:
+    root = Path(root)
+    if not root.exists():
+        return {"schema": "factory.vps.operations.inventory.v1",
+                "root_present": False, "read_only": True,
+                "files_changed_or_deleted": 0}
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("FACTORY_OPERATIONS_ROOT_UNSAFE")
+    base = root.resolve(strict=True)
+    device = os.lstat(base).st_dev
+    areas: dict[str, dict] = {}
+    extensions: dict[str, dict] = {}
+    largest: list[dict] = []
+    scanned = 0
+    skipped = 0
+    symlinks = 0
+    started = time.monotonic()
+    truncated = False
+    for directory, folders, files in os.walk(base, topdown=True, followlinks=False):
+        here = Path(directory)
+        depth = len(here.relative_to(base).parts)
+        if depth > ARCHIVE_SCAN_MAX_DEPTH or time.monotonic() - started > ARCHIVE_SCAN_MAX_SECONDS:
+            truncated = True
+            break
+        safe_folders = []
+        for name in sorted(folders):
+            if time.monotonic() - started > ARCHIVE_SCAN_MAX_SECONDS:
+                truncated = True
+                break
+            try:
+                info = os.lstat(here / name)
+                if stat.S_ISLNK(info.st_mode):
+                    symlinks += 1
+                elif stat.S_ISDIR(info.st_mode) and info.st_dev == device:
+                    safe_folders.append(name)
+                else:
+                    skipped += 1
+            except OSError:
+                skipped += 1
+        folders[:] = safe_folders
+        if truncated:
+            break
+        for name in sorted(files):
+            if (scanned >= ARCHIVE_SCAN_MAX_FILES or
+                    time.monotonic() - started > ARCHIVE_SCAN_MAX_SECONDS):
+                truncated = True
+                break
+            try:
+                path = here / name
+                info = os.lstat(path)
+                if stat.S_ISLNK(info.st_mode):
+                    symlinks += 1
+                    continue
+                if not stat.S_ISREG(info.st_mode) or info.st_dev != device:
+                    skipped += 1
+                    continue
+                scanned += 1
+                relative = path.relative_to(base)
+                first = relative.parts[0] if len(relative.parts) > 1 else "(top)"
+                area = first if first in {"backups", "archive", "archives",
+                                          "logs", "cache", "tmp"} else "other"
+                suffix = path.suffix.lower()
+                ext = suffix if suffix in ARCHIVE_SUFFIXES else "other"
+                for collection, key in ((areas, area), (extensions, ext)):
+                    bucket = collection.setdefault(key, {"files": 0, "bytes": 0})
+                    bucket["files"] += 1
+                    bucket["bytes"] += info.st_size
+                if ext != ".sqlite3" and info.st_size >= 1_000_000:
+                    largest.append({
+                        "path_sha256_prefix": hashlib.sha256(
+                            relative.as_posix().encode("utf-8")
+                        ).hexdigest()[:16],
+                        "area": area, "extension": ext,
+                        "bytes": info.st_size,
+                        "age_days": round(max(0, time.time() - info.st_mtime) / 86400, 2),
+                        "links": info.st_nlink,
+                        "potential_delete": False,
+                    })
+                    largest.sort(key=lambda item: -item["bytes"])
+                    del largest[15:]
+            except OSError:
+                skipped += 1
+        if truncated:
+            break
+    return {
+        "schema": "factory.vps.operations.inventory.v1",
+        "root_present": True, "read_only": True,
+        "files_changed_or_deleted": 0,
+        "offsite_functional_restore_verified": False,
+        "deletion_gate": "BLOCKED_PENDING_EVIDENCE",
+        "files_scanned": scanned, "entries_skipped": skipped,
+        "symlinks_skipped": symlinks, "scan_truncated": truncated,
+        "bytes_total": sum(item["bytes"] for item in areas.values()),
+        "by_area": areas, "by_extension": extensions,
+        "largest_non_sqlite": largest,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT,
@@ -218,6 +327,9 @@ def main() -> None:
     args = parser.parse_args()
     result = audit(args.root)
     print("FACTORY_BACKUP_AUDIT=" + json.dumps(public_report(result), sort_keys=True))
+    if args.root == DEFAULT_ROOT:
+        print("FACTORY_OPERATIONS_INVENTORY=" + json.dumps(
+            inventory_factory_operations(), sort_keys=True))
     if not result["sqlite_count"]:
         raise SystemExit("NO_SQLITE_BACKUPS_FOUND")
 
