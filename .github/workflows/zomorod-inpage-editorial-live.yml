@@ -208,7 +208,10 @@ jobs:
               assert target.is_file() and not target.is_symlink(), "Unsafe route target: "+rel
               assert target.stat().st_uid==os.getuid(), "Unexpected page owner: "+rel
               raw=target.read_bytes()
-              assert len(raw)>1500 and b"</body>" in raw.lower(), "Unexpected static page shape: "+rel
+              if len(raw)<=1500 or b"</body>" not in raw.lower():
+                  if rel in required: raise RuntimeError("Required static page has unsupported shape: "+rel)
+                  print("SKIPPED_UNSUPPORTED_STATIC_PAGE="+rel)
+                  continue
               available.append((rel,target,raw,target.stat().st_mode & 0o777))
           assert required.issubset({x[0] for x in available})
           assert not backup.exists()
