@@ -143,13 +143,13 @@ def run(operation: str, run_id: str = "") -> None:
 
     owner_guard()
     old = TARGET.read_bytes()
-    backup, marker = paths(run_id)
     if operation in ("preflight", "publish") and digest(old) != EXPECTED_SHA256:
         raise RuntimeError("Live revenue-hub version differs from independently observed source")
     if operation == "preflight":
         new = transform(old)
         print(f"MPW_DIRECT_TOOL_LINKS_PREFLIGHT=PASS old_sha256={digest(old)} new_sha256={digest(new)}")
         return
+    backup, marker = paths(run_id)
     if operation == "publish":
         new = transform(old)
         BACKUPS.mkdir(mode=0o700, parents=True, exist_ok=True)
