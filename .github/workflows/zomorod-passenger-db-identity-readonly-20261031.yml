@@ -3,10 +3,12 @@ on:
   pull_request:
     paths:
       - ".github/workflows/zomorod-passenger-db-identity-readonly-20261031.yml"
+      - "scripts/test_zomorod_passenger_db_probe_source_20261031.py"
   push:
     branches: [main]
     paths:
       - ".github/workflows/zomorod-passenger-db-identity-readonly-20261031.yml"
+      - "scripts/test_zomorod_passenger_db_probe_source_20261031.py"
 permissions:
   contents: read
 concurrency:
@@ -25,6 +27,7 @@ jobs:
           grep -Fq 'path("company/office/login/", RedirectView.as_view(url="/admin/login/?next=/staff/command-center/", permanent=False), name="company_office_login")' config/urls.py
           grep -Fq 'from django.views.generic import RedirectView' config/urls.py
           grep -Fq 'path("company/office/", RedirectView.as_view(url="/business/", permanent=False), name="company_office_fallback")' config/urls.py
+          python3 scripts/test_zomorod_passenger_db_probe_source_20261031.py
           echo "PASSENGER_DB_PROBE_SOURCE=verified"
   inspect:
     needs: validate
@@ -99,6 +102,41 @@ jobs:
           import sqlite3
           import sys
           from urllib.parse import quote
+          from collections import Counter
+
+          def secure_db_path(name, root):
+              """Reject symlinks in any component before opening SQLite."""
+              candidate = pathlib.Path(name)
+              if not candidate.is_absolute():
+                  candidate = root / candidate
+              lexical = pathlib.Path(os.path.abspath(str(candidate)))
+              if os.path.realpath(str(candidate)) != str(lexical):
+                  return None
+              return lexical
+
+          def is_passenger_candidate(cmdline):
+              # Titles are advisory and never sufficient for DB identity.
+              lower = cmdline.lower()
+              return b"passenger_wsgi.py" in lower or b"passenger apppreloader" in lower or b"passenger pythonapp" in lower
+
+          def database_url_category(blob):
+              # Never print, hash, or persist a process environment value.
+              matches = [
+                  entry.partition(b"=")[2]
+                  for entry in blob.split(b"\0")
+                  if entry.startswith(b"DATABASE_URL=")
+              ]
+              if not matches:
+                  return "absent"
+              if len(matches) != 1:
+                  return "ambiguous"
+              value = matches[0]
+              if not value:
+                  return "empty"
+              parts = value.split(b"://", 1)
+              if len(parts) != 2:
+                  return "unrecognized"
+              return "sqlite" if parts[0].lower() in (b"sqlite", b"sqlite3") else "other_scheme"
 
           app=pathlib.Path("/home/zomorod2/Saeit")
           if pathlib.Path.cwd().resolve()!=app:
@@ -124,16 +162,14 @@ jobs:
               print("PRODUCTION_PRIVATE_OFFICE_DEPLOY_ALLOWED=no")
               raise SystemExit(0)
 
-          path=pathlib.Path(name)
-          if not path.is_absolute():
-              path=app/path
-          path=path.resolve()
+          path=secure_db_path(name, app)
           stat=None
           try:
-              if path.is_file() and not path.is_symlink():
+              if path is not None and path.is_file() and not path.is_symlink():
                   stat=path.stat()
           except OSError:
               pass
+          print("PASSENGER_DB_PROBE_PATH_UNLINKED="+str(path is not None).lower())
           print("PASSENGER_DB_PROBE_FILE_PRESENT="+str(stat is not None).lower())
           print("PASSENGER_DB_PROBE_SIZE_NONZERO="+str(bool(stat and stat.st_size>0)).lower())
           tables=None
@@ -150,19 +186,38 @@ jobs:
                   pass
           print("PASSENGER_DB_PROBE_READONLY_TABLE_COUNT="+(str(tables) if tables is not None else "unavailable"))
 
-          # Process-file identity is only attested when an app-owned worker has
-          # an open FD to this same database inode. A configured path alone is
-          # insufficient; idle workers often leave no open SQLite descriptor.
-          worker_count=0
+          # /proc/environ exposes only the initial environment at exec time:
+          # absence does NOT rule out later .env loading by passenger_wsgi.py.
+          # A process title is only a candidate; attestation still requires an
+          # exact inode match from an open descriptor plus a readable DB.
+          app_cwd_count=0
+          passenger_count=0
+          env_categories=Counter()
           matching_fd=0
           for pid_dir in pathlib.Path("/proc").iterdir():
-              if not pid_dir.name.isdigit():continue
+              if not pid_dir.name.isdigit():
+                  continue
               try:
-                  if pid_dir.stat().st_uid!=os.getuid():continue
+                  if pid_dir.stat().st_uid!=os.getuid():
+                      continue
                   cwd=pathlib.Path(os.readlink(pid_dir/"cwd"))
-                  if cwd.resolve()!=app:continue
-                  worker_count+=1
-                  if stat is None:continue
+                  if cwd.resolve()!=app:
+                      continue
+                  app_cwd_count+=1
+                  with (pid_dir/"cmdline").open("rb") as cmd_file:
+                      cmdline=cmd_file.read(8192)
+                  if not is_passenger_candidate(cmdline):
+                      continue
+                  passenger_count+=1
+                  try:
+                      with (pid_dir/"environ").open("rb") as env_file:
+                          environment=env_file.read(262145)
+                      category="oversized" if len(environment)>262144 else database_url_category(environment)
+                  except (OSError,PermissionError):
+                      category="unreadable"
+                  env_categories[category]+=1
+                  if stat is None:
+                      continue
                   for fd in (pid_dir/"fd").iterdir():
                       try:
                           s=fd.stat()
@@ -172,7 +227,10 @@ jobs:
                           continue
               except (OSError,PermissionError):
                   continue
-          print("PASSENGER_DB_PROBE_APP_CWD_PROCESSES="+str(worker_count))
+          print("PASSENGER_DB_PROBE_APP_CWD_PROCESSES="+str(app_cwd_count))
+          print("PASSENGER_DB_PROBE_PASSENGER_CANDIDATES="+str(passenger_count))
+          for category in ("sqlite","other_scheme","unrecognized","empty","ambiguous","absent","unreadable","oversized"):
+              print("PASSENGER_DB_PROBE_INITIAL_DBURL_"+category.upper()+"="+str(env_categories[category]))
           print("PASSENGER_DB_PROBE_MATCHING_SQLITE_FD="+str(matching_fd))
           attested=bool(stat and stat.st_size>0 and tables is not None and matching_fd>0)
           print("PASSENGER_APP_DB_ATTESTED="+str(attested).lower())
