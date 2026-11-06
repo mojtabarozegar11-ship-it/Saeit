@@ -32,8 +32,12 @@ def evidence_passes(path:Path,cid:str,artifact:str)->bool:
     except (OSError,ValueError,UnicodeError): return False
     return isinstance(doc,dict) and doc.get("schema")==EVIDENCE_SCHEMA and doc.get("product_id")==PRODUCT and doc.get("criterion_id")==cid and doc.get("artifact_sha256")==artifact and doc.get("status")=="PASS"
 def evaluate(package:Path,catalog_path:Path,evidence_root:Path)->dict:
-    catalog=load_catalog(catalog_path); artifact=sha256(package); measured=[]; missing=[]; root=evidence_root.resolve()
+    catalog=load_catalog(catalog_path); artifact=sha256(package); measured=[]; missing=[]
+    try: root=evidence_root.resolve()
+    except (RuntimeError, OSError): root=None
     for criterion in catalog["criteria"]:
+        if root is None:
+            missing.append(criterion["id"]); continue
         cid=criterion["id"]; ep=root/criterion["required_evidence"]
         try:
             # A cyclic or unreadable evidence symlink must never abort scoring.
