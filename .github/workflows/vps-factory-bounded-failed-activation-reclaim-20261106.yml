@@ -372,4 +372,72 @@ jobs:
               "cross_area_exact_duplicates": duplicates,
               "hash_bytes_budget_remaining": byte_budget,
               "deletion_performed": False}, sort_keys=True), flush=True)
+
+          # Bounded recursive walk for nested archive contents; no writes.
+          recursive_areas, recursive_files = [], {}
+          for parent in Path("/home/githubops").iterdir():
+              tag = hash_name(parent.name)
+              if tag not in archive_parents or parent.is_symlink() or not parent.is_dir():
+                  continue
+              ar = parent / "archive"
+              if ar.is_symlink() or not ar.is_dir():
+                  continue
+              walked, files, dirs, kinds, truncated = 0, [], 0, {}, False
+              for entry in ar.rglob("*"):
+                  walked += 1
+                  if walked > 8000:
+                      truncated = True
+                      break
+                  try:
+                      info = entry.lstat()
+                  except OSError:
+                      continue
+                  if stat.S_ISDIR(info.st_mode):
+                      dirs += 1
+                  elif stat.S_ISREG(info.st_mode) and info.st_uid == os.geteuid():
+                      files.append((info.st_size, entry, info))
+                      k = suffix_label(entry.name)
+                      slot = kinds.setdefault(k, {"count": 0, "bytes": 0})
+                      slot["count"] += 1
+                      slot["bytes"] += info.st_size
+              files.sort(key=lambda item: -item[0])
+              recursive_files[tag] = files
+              recursive_areas.append({
+                  "parent_hash": tag, "walked": walked, "files": len(files),
+                  "dirs": dirs, "truncated": truncated, "suffix_totals": kinds,
+                  "largest": [{"relative_path_hash": hashlib.sha256(str(entry.relative_to(ar)).encode()).hexdigest()[:12],
+                               "bytes": size, "age_days": round(max(0,time.time()-info.st_mtime)/86400,2),
+                               "kind": header_kind(entry), "links": info.st_nlink}
+                              for size, entry, info in files[:18]]})
+          exact_matches, compare_budget = [], 8 * 1024**3
+          left = recursive_files.get("98da9d80b7", [])
+          right = recursive_files.get("03c268f48a", [])
+          right_by_size = {}
+          for size, path, info in right:
+              right_by_size.setdefault(size, []).append((path, info))
+          def read_digest(path):
+              digest = hashlib.sha256()
+              with path.open("rb") as source:
+                  for block in iter(lambda: source.read(4*1024**2), b""):
+                      digest.update(block)
+              return digest.digest()
+          for size, source, source_stat in left:
+              if size < 1048576 or size*2 > compare_budget:
+                  continue
+              for candidate, target_stat in right_by_size.get(size, []):
+                  if size*2 > compare_budget:
+                      break
+                  compare_budget -= size*2
+                  if read_digest(source) == read_digest(candidate):
+                      exact_matches.append({
+                          "bytes": size,
+                          "left_relative_hash": hashlib.sha256(str(source).encode()).hexdigest()[:12],
+                          "right_relative_hash": hashlib.sha256(str(candidate).encode()).hexdigest()[:12],
+                          "links": [source_stat.st_nlink,target_stat.st_nlink]})
+          print("VPS_ARCHIVE_RECURSIVE_DUPLICATE_AUDIT=" +
+                json.dumps({"schema": "vps.archive.recursive.readonly.v1",
+                            "areas": recursive_areas,
+                            "exact_matches": exact_matches,
+                            "comparison_budget_remaining": compare_budget,
+                            "deletion_performed": False}, sort_keys=True), flush=True)
           PY
