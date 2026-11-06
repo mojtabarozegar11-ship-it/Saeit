@@ -40,11 +40,12 @@ def evaluate(package: Path, catalog_path: Path, evidence_root: Path) -> dict:
         if ep.is_file() and not ep.is_symlink():
             try:
                 doc=json.loads(ep.read_text(encoding="utf-8"))
-                ok=(doc.get("schema")=="saeit.factory.f01-quality-evidence.v1"
-                    and doc.get("product_id")==PRODUCT
-                    and doc.get("criterion_id")==cid
-                    and doc.get("artifact_sha256")==artifact
-                    and doc.get("status")=="PASS")
+                if isinstance(doc, dict):
+                    ok=(doc.get("schema")=="saeit.factory.f01-quality-evidence.v1"
+                        and doc.get("product_id")==PRODUCT
+                        and doc.get("criterion_id")==cid
+                        and doc.get("artifact_sha256")==artifact
+                        and doc.get("status")=="PASS")
             except (OSError, ValueError, TypeError):
                 ok=False
         (measured if ok else missing).append(cid)

@@ -17,7 +17,7 @@
 ```bash
 python scripts/f01_quality_1000_machine_gate.py \
   --package path/to/F01.zip \
-  --catalog factory_config/f01_quality_100_groups.json \
+  --catalog factory_config/f01_quality_100_criteria.json \
   --evidence-root path/to/evidence \
   --output quality-result.json
 ```
