@@ -112,6 +112,14 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
 django.setup()
 from django.db import connection
+from django.template.loader import get_template
+from django.urls import resolve
+from pathlib import Path
+origin = Path(get_template("core/academy.html").origin.name).resolve()
+root = Path("/home/zomorod2/Saeit")
+print("ACADEMY_DJANGO_TEMPLATE_ORIGIN=" + (
+    str(origin.relative_to(root)) if origin.is_relative_to(root) else "OUTSIDE_APP_ROOT"))
+print("ACADEMY_DJANGO_RESOLVER_MODULE=" + resolve("/academy/").func.__module__)
 with connection.cursor():
     tables = set(connection.introspection.table_names())
 for suffix in ("track", "course", "lesson", "enrollment", "progress",
@@ -130,7 +138,8 @@ for suffix in ("track", "course", "lesson", "enrollment", "progress",
             else:
                 print('ACADEMY_DB_SCHEMA_INSPECTION=SUCCESS')
                 for line in result.stdout.splitlines():
-                    if line.startswith('ACADEMY_DB_TABLE='):
+                    if line.startswith(('ACADEMY_DB_TABLE=', 'ACADEMY_DJANGO_TEMPLATE_ORIGIN=',
+                                        'ACADEMY_DJANGO_RESOLVER_MODULE=')):
                         print(line)
         except Exception:
             print('ACADEMY_DB_SCHEMA_INSPECTION=UNAVAILABLE')
