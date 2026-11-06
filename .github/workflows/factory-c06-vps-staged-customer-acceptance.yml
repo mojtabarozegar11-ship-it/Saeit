@@ -1,0 +1,115 @@
+name: Factory C06 VPS Isolated Private Acceptance
+on:
+  pull_request:
+    paths:
+      - .github/workflows/factory-c06-vps-staged-customer-acceptance.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-c06-isolated-stage
+  cancel-in-progress: false
+jobs:
+  stage-on-vps:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/factory-c06-vps-private-staging-20261106'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prove local source and guard the archive before transfer
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('maker','scripts/factory_product_maker.py')
+          maker=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(maker)
+          src=Path('product_recipes/farm_enterprise_economics')
+          _,names=maker.inspect_recipe(src)
+          assert len(names)==8
+          assert maker.source_digest(src,names)=='83272f1244eb82ead82f9110c2cdd0fab31110ce7436aeadd2c70d90b28fc16b'
+          print('C06_LOCAL_CANDIDATE_PIN=PASS')
+          PY
+      - name: Manufacture candidate exclusively in isolated VPS path
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          STAGE_REV: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          [[ "$STAGE_REV" =~ ^[a-f0-9]{40}$ ]]
+          d="$(mktemp -d "$RUNNER_TEMP/c06-ssh.XXXXXXXX")"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          trap 'shred -u -- "$d/key" || true' EXIT
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2)
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 "bash -se -- $STAGE_REV" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          revision="$1"
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          test "$(id -un)" = githubops
+          base="$HOME/factory-runtime"
+          stage="$base/operations/f01-c06-private-stage-$revision"
+          test -d "$base/private/autonomous-product-cycle"
+          test -d "$base/operations/single-product-runtime/product_recipes/farm_enterprise_economics"
+          test ! -e "$stage" && test ! -L "$stage"
+          install -d -m 700 "$stage"
+          echo C06_ISOLATED_STAGE_ADMITTED=PASS
+          REMOTE
+          tar -cf - \
+            product_recipes/farm_enterprise_economics \
+            scripts/factory_product_maker.py \
+            scripts/factory_personal_owner_passport_policy_20261020.py \
+            scripts/factory_verified_customer_cycle_20261021.py | \
+            ssh "${ssh_opts[@]}" githubops@178.239.147.150 \
+              "tar -xf - -C \"\$HOME/factory-runtime/operations/f01-c06-private-stage-$STAGE_REV\""
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 "bash -se -- $STAGE_REV" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          revision="$1"
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+          base="$HOME/factory-runtime"
+          stage="$base/operations/f01-c06-private-stage-$revision"
+          py="$base/.venv/bin/python"
+          test -x "$py"
+          test -f "$stage/scripts/factory_product_maker.py"
+          "$py" -B "$stage/scripts/factory_product_maker.py" \
+            --recipes "$stage/product_recipes" \
+            --out "$stage/private-digital-products" \
+            --recipe farm_enterprise_economics >/dev/null
+          "$py" -B - "$stage" <<'PY'
+          import hashlib, importlib.util, json, pathlib, sys
+          stage=pathlib.Path(sys.argv[1]); recipe='farm_enterprise_economics'
+          path=stage/'private-digital-products'/recipe
+          manifest=json.loads((path/'manufacturing_manifest.json').read_text())
+          z=path/(recipe+'-internal-qa.zip')
+          assert manifest['source_sha256']=='83272f1244eb82ead82f9110c2cdd0fab31110ce7436aeadd2c70d90b28fc16b'
+          assert manifest['artifact_sha256']=='701883a172a7daf32cce5cab806cafceeea8e99139c1e34256ee2306c42409ed'
+          assert hashlib.sha256(z.read_bytes()).hexdigest()==manifest['artifact_sha256']
+          assert manifest['qa_measurements']['successful_tests']==19
+          assert manifest['professional_quality_approved'] is False
+          assert manifest['public_listing_enabled'] is False
+          spec=importlib.util.spec_from_file_location('customer',str(stage/'scripts/factory_verified_customer_cycle_20261021.py'))
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          result=module.inspect_product(path,recipe)
+          assert result['customer_archive_tests_run']==19
+          assert result['customer_zip_extract_test']=='passed'
+          assert result['commerce_enabled'] is False
+          print(json.dumps({'schema':'saeit.factory.c06.staging-receipt.v1',
+            'source_sha256':manifest['source_sha256'],
+            'archive_sha256':manifest['artifact_sha256'],
+            'original_tests':manifest['qa_measurements']['successful_tests'],
+            'customer_archive_tests':result['customer_archive_tests_run'],
+            'isolated_vps_stage':'passed','existing_runtime_modified':False,
+            'commercial_release':False},sort_keys=True))
+          PY
+          REMOTE
