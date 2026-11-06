@@ -30,5 +30,14 @@ fi
 "$PYTHON" manage.py migrate --noinput
 "$PYTHON" manage.py production_gate
 "$PYTHON" manage.py collectstatic --noinput
+
+# Keep approved ordinary-chat operations moving without exposing a shell endpoint.
+# The worker executes only the allowlisted operations in core/operation_executor.py.
+CHAT_CRON_MARK="SAEIT_CHAT_OPERATIONS_V1"
+CHAT_CRON_LINE="* * * * * $PYTHON $APPROOT/manage.py execute_chat_operations --limit 10 >/dev/null 2>&1 # $CHAT_CRON_MARK"
+CHAT_CRON_TMP="$(mktemp)"
+trap 'rm -f "$CHAT_CRON_TMP"' EXIT
+(crontab -l 2>/dev/null | grep -v "$CHAT_CRON_MARK" || true; printf '%s\n' "$CHAT_CRON_LINE") > "$CHAT_CRON_TMP"
+crontab "$CHAT_CRON_TMP"
 touch passenger_wsgi.py
 echo "Saeit Django deployment completed from $APPROOT."
