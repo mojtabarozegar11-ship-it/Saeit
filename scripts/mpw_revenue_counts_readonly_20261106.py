@@ -7,6 +7,7 @@ Only counts filenames and known anonymous aggregate metric counters.
 from __future__ import annotations
 
 from collections import Counter
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ import re
 import stat
 
 PRIVATE = Path('/home/zomorod2/.private_mojplaywin_main_agents')
+LIVE_REVENUE = Path('/home/zomorod2/mojplaywin.com/mpw-editorial/revenue')
 LEADS = PRIVATE / 'revenue-inquiries'
 METRICS = PRIVATE / 'revenue-metrics'
 SLUGS = ('website-doctor', 'landing-page-studio', 'ai-automation',
@@ -89,6 +91,21 @@ def main() -> None:
                       {slug + ':' + event for slug in SLUGS for event in EVENTS}))
     else:
         print('AGGREGATE_METRICS_DIR=ABSENT')
+    for filename in ('inquiry.php', 'metrics.php'):
+        path = LIVE_REVENUE / filename
+        if not path.is_file() or path.is_symlink() or path.stat().st_uid != os.geteuid():
+            raise RuntimeError('Live PHP route missing or unsafe: ' + filename)
+        blob = path.read_bytes()
+        if not 200 < len(blob) < 35000:
+            raise RuntimeError('Unexpected live PHP size')
+        print('REVENUE_PHP_FILE', filename, 'SHA256', hashlib.sha256(blob).hexdigest(),
+              'BYTES', len(blob))
+        if filename == 'inquiry.php':
+            print('INQUIRY_TRACKING_PIXEL', blob.count(b'event=inquiry_submitted'))
+            print('INQUIRY_LIMIT_GUARD_REPAIRED',
+                  b"if ((int)($_SERVER['CONTENT_LENGTH']??0)>12000)" in blob)
+        else:
+            print('PIXEL_GENERAL_ALLOWLIST', b"'general'" in blob)
     print('MPW_REVENUE_AGGREGATE_READ_ONLY=PASS')
 
 
