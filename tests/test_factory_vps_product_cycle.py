@@ -79,18 +79,115 @@ class FactoryVPSCycleTests(unittest.TestCase):
 
     def test_second_cycle_is_safe_and_idempotent(self):
         cycle.run_cycle(self.db, self.output, self.recipes)
+        second = cycle.run_cycle(self.db, self.output, self.recipes)
+        third = cycle.run_cycle(self.db, self.output, self.recipes)
         subsequent = cycle.run_cycle(self.db, self.output, self.recipes)
+        self.assertEqual(second["new_artifacts"], 1)
+        self.assertEqual(third["new_artifacts"], 1)
         self.assertEqual(subsequent["status"], "ok")
         self.assertEqual(subsequent["updated"], 0)
         self.assertEqual(subsequent["new_artifacts"],0)
         state=json.loads((self.output/"production-state.json").read_text(encoding="utf8"))
         self.assertEqual(state["new_or_updated_product_count"],0)
-        self.assertEqual(state["unchanged_product_rechecks"],1)
+        self.assertEqual(state["unchanged_product_rechecks"],0)
         self.assertEqual(state["truly_new_product_count"],0)
         self.assertEqual(state["updated_existing_product_count"],0)
+        self.assertEqual(state["private_technical_completion_count"],3)
+        self.assertFalse(state["quality_1000_blocks_manufacturing"])
+        self.assertEqual(state["publishable_product_count"],0)
         health=json.loads((self.output/"production-health.json").read_text())
-        self.assertEqual(health["new_distinct_product_ids_total"],1)
+        self.assertEqual(health["new_distinct_product_ids_total"],3)
         self.assertEqual(health["new_distinct_product_ids_this_cycle"],0)
+
+    def test_customer_qa_frees_private_slot_without_1000_clearance(self):
+        first = cycle.run_cycle(self.db,self.output,self.recipes)
+        self.assertEqual(first['manufactured'],1)
+        slots_file=self.output/'quality-excellence/product-flow/active-slots/current.json'
+        first_recipe=json.loads(slots_file.read_text())['active'][0]['recipe']
+        self.assertFalse((self.output/'quality-excellence/signed-clearances'/first_recipe/'current.json').exists())
+        second = cycle.run_cycle(self.db,self.output,self.recipes)
+        self.assertEqual(second['new_artifacts'],1)
+        slots=json.loads(slots_file.read_text())
+        self.assertIn(first_recipe,slots['technical_exited'])
+        self.assertNotEqual(slots['active'][0]['recipe'],first_recipe)
+        self.assertFalse(slots['commercial_release'])
+        self.assertTrue(slots['quality_1000_is_nonblocking_improvement_target'])
+        self.assertTrue((self.output/'digital-products'/first_recipe/(first_recipe+'-internal-qa.zip')).is_file())
+        self.assertTrue((self.output/'customer-extracted-acceptance'/first_recipe).is_dir())
+
+    def test_invalid_customer_receipt_does_not_free_slot(self):
+        cycle.run_cycle(self.db,self.output,self.recipes)
+        slots_file=self.output/'quality-excellence/product-flow/active-slots/current.json'
+        recipe=json.loads(slots_file.read_text())['active'][0]['recipe']
+        manifest=json.loads((self.output/'digital-products'/recipe/'manufacturing_manifest.json').read_text())
+        receipt=(self.output/'customer-extracted-acceptance'/recipe/
+                 manifest['source_sha256']/'technical-receipt.json')
+        doc=json.loads(receipt.read_text())
+        doc['customer_zip_extract_test']='failed'
+        receipt.write_text(json.dumps(doc))
+        self.assertIsNone(cycle._verified_technical_exit(
+            self.output,recipe,manifest['source_sha256']))
+        failed=cycle.run_cycle(self.db,self.output,self.recipes)
+        self.assertEqual(failed['status'],'needs_rework')
+        self.assertEqual(failed['manufactured'],0)
+        self.assertEqual(json.loads(slots_file.read_text())['active'][0]['recipe'],recipe)
+
+    def test_changed_source_reenters_line_after_private_completion(self):
+        for _ in range(4):
+            cycle.run_cycle(self.db,self.output,self.recipes)
+        slots_file=self.output/'quality-excellence/product-flow/active-slots/current.json'
+        slots=json.loads(slots_file.read_text())
+        self.assertEqual(len(slots['technical_exited']),3)
+        self.assertEqual(slots['active'],[])
+        changed=sorted(slots['technical_exited'])[0]
+        readme=self.recipes/changed/'README.md'
+        readme.write_text(readme.read_text()+'\nOwner-specified updated reference notes.\n')
+        outcome=cycle.run_cycle(self.db,self.output,self.recipes)
+        self.assertEqual(outcome['updated_existing_versions'],1)
+        self.assertEqual(outcome['new_distinct_products'],0)
+        current=json.loads(slots_file.read_text())
+        self.assertEqual(current['active'][0]['recipe'],changed)
+        self.assertFalse(current['commercial_release'])
+
+    def test_missing_queued_recipe_does_not_seize_the_only_slot(self):
+        slots_file=self.output/'quality-excellence/product-flow/active-slots/current.json'
+        slots_file.parent.mkdir(parents=True)
+        slots_file.write_text(json.dumps({
+            'schema':cycle.SLOT_SCHEMA,'active':[],
+            'waiting':['absent_legacy_source','water_budget_economics'],
+            'exited':{},'last_admitted_recipe':''}))
+        result=cycle.run_cycle(self.db,self.output,self.recipes)
+        self.assertEqual(result['manufactured'],1)
+        state=json.loads(slots_file.read_text())
+        self.assertEqual(state['unavailable_recipe_count'],1)
+        self.assertIn('absent_legacy_source',state['waiting'])
+        self.assertEqual(state['active'][0]['recipe'],'water_budget_economics')
+
+    def test_low_disk_is_a_real_nonpublishing_production_hold(self):
+        with mock.patch.object(cycle.shutil,'disk_usage',
+                               return_value=mock.Mock(free=256*1024*1024)):
+            result=cycle.run_cycle(self.db,self.output,self.recipes)
+        self.assertEqual(result['status'],'needs_rework')
+        self.assertEqual(result['manufactured'],0)
+        state=json.loads((self.output/'production-state.json').read_text())
+        self.assertTrue(state['manufacturing_disk_hold'])
+        self.assertEqual(state['publishable_product_count'],0)
+        self.assertFalse((self.output/'digital-products').exists())
+
+    def test_existing_private_generated_recipe_is_buildable_without_designer(self):
+        generated=self.output/'generated-product-recipes'/'compiled_sample'
+        generated.parent.mkdir(parents=True)
+        shutil.copytree(self.recipes/'farm_enterprise_economics',generated)
+        slots_file=self.output/'quality-excellence/product-flow/active-slots/current.json'
+        slots_file.parent.mkdir(parents=True)
+        slots_file.write_text(json.dumps({'schema':cycle.SLOT_SCHEMA,
+            'active':[],'waiting':['compiled_sample'],'exited':{},
+            'last_admitted_recipe':''}))
+        result=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=False)
+        self.assertEqual(result['manufactured'],1)
+        self.assertEqual(result['registered_recipes'],4)
+        state=json.loads(slots_file.read_text())
+        self.assertEqual(state['active'][0]['recipe'],'compiled_sample')
 
     def test_source_change_counts_update_not_new_product(self):
         cycle.run_cycle(self.db,self.output,self.recipes)
@@ -137,7 +234,7 @@ class FactoryCycleIsolationTests(unittest.TestCase):
             cycle.run_cycle(self.db, self.output, self.recipes, max_recipes=1)
             state = json.loads((self.output/'production-state.json').read_text())
             seen.extend(state['built_product_recipes'])
-        self.assertEqual(len(set(seen)),1)
+        self.assertEqual(len(set(seen)),3)
 
     def test_invalid_recipe_is_reported_without_stopping_good_products(self):
         (self.recipes/'broken_recipe').mkdir()
@@ -326,10 +423,11 @@ class ProductionContinuityTests(unittest.TestCase):
     def test_health_distinguishes_rechecks_from_new_products_and_tracks_recovery(self):
         cycle.run_cycle(self.db,self.output,self.recipes)
         cycle.run_cycle(self.db,self.output,self.recipes)
+        cycle.run_cycle(self.db,self.output,self.recipes)
         path=self.output/'production-health.json';data=json.loads(path.read_text())
-        self.assertEqual(data['completed_cycles'],2)
-        self.assertEqual(data['new_or_updated_artifacts_total'],1)
-        self.assertEqual(data['new_or_updated_artifacts_this_cycle'],0)
+        self.assertEqual(data['completed_cycles'],3)
+        self.assertEqual(data['new_or_updated_artifacts_total'],3)
+        self.assertEqual(data['new_or_updated_artifacts_this_cycle'],1)
         self.assertIsNotNone(data['last_healthy_cycle_at_utc'])
         cycle.run_cycle(self.home/'missing.db',self.output,self.recipes)
         data=json.loads(path.read_text());self.assertEqual(data['consecutive_degraded_cycles'],1)
@@ -404,11 +502,11 @@ class ProductionContinuityTests(unittest.TestCase):
         slots=json.loads((self.output/'quality-excellence/product-flow/active-slots/current.json').read_text())
         self.assertEqual(slots['line_id'],41)
         self.assertEqual(slots['capacity'],1)
-        self.assertEqual(len(slots['active']),1)
-        self.assertLessEqual(novel,1,json.dumps(actual_cycles,sort_keys=True))
+        self.assertLessEqual(len(slots['active']),1)
+        self.assertGreaterEqual(novel,1,json.dumps(actual_cycles,sort_keys=True))
         replay=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,
                                enable_design_intake=True,design_capacity=6)
-        self.assertEqual(replay['new_artifacts'],0)
+        self.assertLessEqual(replay['new_artifacts'],1)
         for receipt in (self.output/'engineering-intake').glob('*.json'):
             item=json.loads(receipt.read_text())
             if item.get('status')=='technical_prototype_built':
