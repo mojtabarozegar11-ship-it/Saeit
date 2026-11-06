@@ -16,7 +16,7 @@ import sqlite3
 import subprocess
 import sys
 from pathlib import Path
-from urllib.parse import quote, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 
 HOME = Path('/home/zomorod2')
@@ -133,6 +133,28 @@ def inspect_customer_inbox() -> None:
             emit('CUSTOMER_ZOMOROD_SERVICE_INQUIRIES', int(service or 0))
 
 
+def classify_agent(line: bytes) -> str:
+    """Classify only the User-Agent field; never output its original value.
+
+    Browser-like does NOT prove a person: automated clients spoof browsers.
+    Unknown preserves the inability to classify logs lacking combined fields.
+    """
+    # Apache combined logs have request, referrer, then user agent in quotes.
+    quoted = re.findall(rb'"([^"]*)"', line)
+    if len(quoted) < 3 or not quoted[2] or quoted[2] == b'-':
+        return 'UNKNOWN'
+    agent = quoted[2].decode('utf-8', 'replace').lower()
+    automated = ('bot', 'spider', 'crawler', 'crawl', 'headless', 'lighthouse',
+                 'curl/', 'python-', 'wget/', 'httpclient', 'uptime', 'monitor',
+                 'zomorod-', 'healthcheck', 'facebookexternalhit', 'telegrambot',
+                 'google-inspectiontool', 'bingpreview')
+    if any(value in agent for value in automated):
+        return 'AUTOMATED'
+    if any(value in agent for value in ('mozilla/5.0', 'chrome/', 'safari/', 'firefox/', 'edg/')):
+        return 'BROWSERLIKE'
+    return 'UNKNOWN'
+
+
 def inspect_traffic() -> None:
     """Aggregate limited recent web-log requests, without publishing log rows.
 
@@ -204,7 +226,8 @@ def inspect_traffic() -> None:
             method = match.group(2).decode('ascii')
             target = match.group(3).decode('utf-8', 'replace')
             status = int(match.group(4))
-            endpoint = urlsplit(target).path
+            url = urlsplit(target)
+            endpoint = url.path
             endpoint = {
                 '/ask-master/': '/ask-master/index.php',
                 '/agriculture': '/agriculture/',
@@ -223,6 +246,16 @@ def inspect_traffic() -> None:
             matched[route + '_REQUESTS'] += 1
             if method == 'GET' and status == 200:
                 matched[route + '_GET_200'] += 1
+                kind = classify_agent(line)
+                matched[route + '_GET200_' + kind] += 1
+                if route == 'FORM':
+                    # Only count one known hint. No query values are printed.
+                    hint = parse_qs(url.query, keep_blank_values=False).get('service')
+                    if hint == ['1']:
+                        matched['FORM_SPECIALIST_HINT_GET200'] += 1
+                        matched['FORM_SPECIALIST_HINT_' + kind] += 1
+                    else:
+                        matched['FORM_OTHER_GET200'] += 1
             if method == 'POST':
                 matched[route + '_POST_TOTAL'] += 1
                 if status >= 400:
@@ -237,7 +270,14 @@ def inspect_traffic() -> None:
     for route in ('HOME', 'AGRICULTURE', 'SERVICES', 'FORM', 'STATUS'):
         for suffix in ('REQUESTS', 'GET_200', 'POST_TOTAL', 'POST_ERROR', 'HTTP_5XX'):
             emit('TRAFFIC_' + route + '_' + suffix, matched[route + '_' + suffix])
+        for kind in ('BROWSERLIKE', 'AUTOMATED', 'UNKNOWN'):
+            emit('TRAFFIC_' + route + '_GET200_' + kind, matched[route + '_GET200_' + kind])
+    for key in ('FORM_SPECIALIST_HINT_GET200', 'FORM_OTHER_GET200',
+                'FORM_SPECIALIST_HINT_BROWSERLIKE', 'FORM_SPECIALIST_HINT_AUTOMATED',
+                'FORM_SPECIALIST_HINT_UNKNOWN'):
+        emit('TRAFFIC_' + key, matched[key])
     emit('TRAFFIC_COUNTS_ARE_REQUESTS_NOT_PEOPLE', True)
+    emit('TRAFFIC_BROWSERLIKE_IS_NOT_VERIFIED_HUMAN', True)
 
 
 def main() -> None:
@@ -253,6 +293,9 @@ def selftest() -> None:
     assert STATUS.parent == FORM.parent
     assert PUBLIC_INBOX.name == 'inquiries.php'
     assert SOURCE_POINTER.name.endswith('.path')
+    assert classify_agent(b'a - - [stamp] "GET / HTTP/1.1" 200 12 "-" "Mozilla/5.0"') == 'BROWSERLIKE'
+    assert classify_agent(b'a - - [stamp] "GET / HTTP/1.1" 200 12 "-" "Googlebot/2.1"') == 'AUTOMATED'
+    assert classify_agent(b'a - - [stamp] "GET / HTTP/1.1" 200 12') == 'UNKNOWN'
     emit('SERVICE_LIFECYCLE_READONLY_SELFTEST', True)
 
 
