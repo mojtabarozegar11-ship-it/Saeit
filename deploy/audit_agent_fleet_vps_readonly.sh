@@ -371,6 +371,95 @@ else:
     }, sort_keys=True, separators=(",", ":")))
 PY
 
+# Inspect a bounded set of installed Django and factory Python modules to find
+# any dedicated executor candidates; do not invoke tasks or scan private data.
+"$python_bin" - <<'PY'
+import hashlib
+import json
+from pathlib import Path
+
+import django
+django.setup()
+
+from django.apps import apps
+from django.core.management import get_commands
+
+app = Path.home() / "factory-runtime/django-app"
+roots = (
+    ("core_modules", app / "core"),
+    ("core_commands", app / "core/management/commands"),
+    ("project_scripts", app / "scripts"),
+    ("runtime_scripts", Path.home() / "factory-runtime/scripts"),
+)
+needles = {
+    "product_research": b"product_research",
+    "product_validation": b"product_validation",
+    "agent_task_model": b"AgentTask",
+    "worker_runner": b"WorkerRunner",
+    "task_runtime": b"TaskRuntime",
+}
+scanned = 0
+skipped = 0
+hits = []
+for label, root in roots:
+    if not root.is_dir() or root.is_symlink():
+        continue
+    for path in sorted(root.glob("*.py"))[:300]:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 350000:
+            skipped += 1
+            continue
+        scanned += 1
+        source = path.read_bytes()
+        flags = {key: value in source for key, value in needles.items()}
+        if flags["product_research"] or flags["product_validation"]:
+            hits.append({"root":label, "module":path.stem,
+                         "flags":flags,
+                         "sha256_prefix":hashlib.sha256(source).hexdigest()[:16]})
+
+run = apps.get_model("core", "FactoryRun")
+product = apps.get_model("core", "Product")
+task = apps.get_model("core", "AgentTask")
+run_fields = {field.name for field in run._meta.fields}
+task_fields = {field.name for field in task._meta.fields}
+active_runs = run.objects.filter(status="active")
+if "product" in run_fields:
+    active_run_product_status = {
+        "product_active":active_runs.filter(product__active=True).count(),
+        "product_inactive":active_runs.filter(product__active=False).count(),
+        "product_missing":active_runs.filter(product__isnull=True).count(),
+    }
+else:
+    active_run_product_status = {"unknown_missing_product_relation":active_runs.count()}
+
+commands = sorted(name for name in get_commands() if any(
+    term in name for term in ("factory", "product", "economic", "worker", "research", "validation")
+))
+model_source = app / "core/models.py"
+model_sha = None
+model_declares_run = None
+if model_source.is_file() and not model_source.is_symlink() and model_source.stat().st_size < 350000:
+    code = model_source.read_bytes()
+    model_sha = hashlib.sha256(code).hexdigest()[:16]
+    model_declares_run = b"class FactoryRun" in code
+
+print("AGENT_FLEET_INSTALLED_EXECUTOR_DISCOVERY="+json.dumps({
+    "schema":"saeit.agent.installed-executor-discovery.v1",
+    "read_only":True,
+    "source_scope":"direct Python modules only in known Django core and factory scripts",
+    "files_scanned":scanned,"files_skipped":skipped,
+    "candidate_source_count":len(hits),"candidate_sources":hits[:50],
+    "candidate_sources_truncated":len(hits)>50,
+    "installed_command_candidates":commands[:80],
+    "installed_commands_truncated":len(commands)>80,
+    "django_factory_run_model_present":True,
+    "django_task_has_factory_run_relation":"factory_run" in task_fields,
+    "active_runs_by_product_status":active_run_product_status,
+    "live_models_sha256_prefix":model_sha,
+    "live_models_declares_factory_run_class":model_declares_run,
+    "task_mutations":0,"service_mutations":0,
+},sort_keys=True,separators=(",",":")))
+PY
+
 # Distinguish a historical backlog from a live, executable queue. Installed
 # factory code can differ from the repository, so inspect bounded live evidence
 # without claiming a worker from a mere filename or process-name match.
