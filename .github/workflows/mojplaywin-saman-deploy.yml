@@ -197,7 +197,7 @@ jobs:
           }
           from core.financial_brand_pages import BRANDS
           for slug, fa_name, en_name, ar_name in BRANDS:
-              for kind in ("signals", "digital-store"):
+              for kind in ("market-signals", "digital-store"):
                   routes[f"/{slug}/{kind}/"] = "financial_brand_page"
                   routes[f"/ar/{slug}/{kind}/"] = "financial_brand_page"
           for path, expected in routes.items():
@@ -309,7 +309,7 @@ jobs:
           slugs=(saman zahra zhila marzieh maryam marjan faremah farnaz taniya raham mojtaba mohammad mostafa 17 21 206 108)
           count=0
           for slug in "${slugs[@]}"; do
-            for kind in signals digital-store; do
+            for kind in market-signals digital-store; do
               for url in "https://zomorodmelal.ir/$slug/$kind/" "https://mojplaywin.com/$slug/$kind/" "https://mojplaywin.com/ar/$slug/$kind/"; do
                 body="$RUNNER_TEMP/finance-page.html"
                 status="$(curl --retry 2 --retry-delay 2 -sS -o "$body" -w '%{http_code}' "$url")"
