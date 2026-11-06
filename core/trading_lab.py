@@ -138,10 +138,13 @@ class TradingLab:
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def record_problem(self, agent: TraderAgent, symbol: str, problem: str, solution: str) -> None:
+    def record_problem(
+        self, agent: TraderAgent, symbol: str, problem: str, solution: str,
+        action: str = "LEARN",
+    ) -> None:
         agent.experiences.append(Experience(
             timestamp=self._now(), agent_id=agent.agent_id, account=agent.account,
-            symbol=symbol, strategy=agent.strategy, action="LEARN",
+            symbol=symbol, strategy=agent.strategy, action=action,
             hypothesis="problem-solution iteration", problem=problem,
             proposed_solution=solution,
         ))
@@ -167,14 +170,22 @@ class TradingLab:
         equity, entry = float(broker.equity()), float(broker.quote(symbol.strip()))
         ok, reason = agent.allowed(equity)
         if not ok:
-            self.record_problem(agent, symbol.strip(), reason, "pause agent; review risk and market regime")
+            self.record_problem(
+                agent, symbol.strip(), reason,
+                "reject demo order; review risk and market regime",
+                action="DEMO_REJECTED",
+            )
             return agent.experiences[-1]
         rr = max(reward_risk, agent.policy.min_reward_risk)
         stop = entry * (1 - stop_pct if side == "BUY" else 1 + stop_pct)
         take = entry + (entry - stop) * rr if side == "BUY" else entry - (stop - entry) * rr
         qty = agent.size(equity, entry, stop)
         if qty <= 0 or not all(math.isfinite(value) and value > 0 for value in (stop, take)):
-            self.record_problem(agent, symbol.strip(), "invalid_position_size", "reject order and validate quote/stop")
+            self.record_problem(
+                agent, symbol.strip(), "invalid_position_size",
+                "reject demo order and validate quote/stop",
+                action="DEMO_REJECTED",
+            )
             return agent.experiences[-1]
         oid = broker.place_demo_order(symbol.strip(), side, qty, stop, take)
         if not isinstance(oid, str) or not oid.strip() or oid in agent.open_order_ids:
@@ -191,6 +202,8 @@ class TradingLab:
         self, agent: TraderAgent, order_id: str, pnl: float,
         closed_at: datetime | None = None,
     ) -> Experience:
+        if agent not in self.agents or agent.account not in self.brokers:
+            raise ValueError("agent_not_registered")
         if not isinstance(order_id, str) or not order_id.strip():
             raise ValueError("demo_order_id_required")
         if order_id not in agent.open_order_ids:
