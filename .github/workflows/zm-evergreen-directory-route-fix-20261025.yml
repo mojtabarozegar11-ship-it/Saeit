@@ -130,16 +130,17 @@ jobs:
               if old!=new:
                   originals[rel]=old;patched[rel]=new
                   manifest[rel]={'backup':str(len(manifest))+'.original','before':hashlib.sha256(old).hexdigest(),'after':hashlib.sha256(new).hexdigest()}
-          if not patched: print('NO_LINK_CHANGES_NEEDED')
+          backup.mkdir(mode=0o700)
+          for rel,old in originals.items():
+              name=manifest[rel]['backup'];q=backup/name
+              fd=os.open(str(q),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+              with os.fdopen(fd,'wb') as f:f.write(old);f.flush();os.fsync(f.fileno())
+          meta={'pages':manifest,'run':run}
+          (backup/'manifest.json').write_text(json.dumps(meta,sort_keys=True),encoding='utf8')
+          (backup/'manifest.json').chmod(0o600)
+          if not patched:
+              print('NO_LINK_CHANGES_NEEDED')
           else:
-              backup.mkdir(mode=0o700)
-              for rel,old in originals.items():
-                  name=manifest[rel]['backup'];q=backup/name
-                  fd=os.open(str(q),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
-                  with os.fdopen(fd,'wb') as f:f.write(old);f.flush();os.fsync(f.fileno())
-              meta={'pages':manifest,'run':run}
-              (backup/'manifest.json').write_text(json.dumps(meta,sort_keys=True),encoding='utf8')
-              (backup/'manifest.json').chmod(0o600)
               done=[]
               try:
                   for rel,new in patched.items():
@@ -148,10 +149,10 @@ jobs:
                       try:
                           with os.fdopen(fd,'wb') as f:f.write(new);f.flush();os.fsync(f.fileno())
                           os.chmod(tmp,mode);os.replace(tmp,p)
+                          done.append(rel)
                       finally:
                           if os.path.exists(tmp):os.unlink(tmp)
                       if p.read_bytes()!=new:raise RuntimeError('PATCH_READBACK_MISMATCH:'+rel)
-                      done.append(rel)
               except BaseException:
                   for rel in reversed(done):
                       p=root/rel;q=backup/manifest[rel]['backup']
