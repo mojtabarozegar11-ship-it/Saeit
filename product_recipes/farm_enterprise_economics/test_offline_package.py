@@ -19,6 +19,9 @@ class OfflineCustomerPackageTests(unittest.TestCase):
         self.assertIn('aria-live="assertive"', page)
         self.assertIn('src="offline_engine.js"', page)
         self.assertIn('src="offline_ui.js"', page)
+        self.assertIn('id="cash-month-inputs"', page)
+        self.assertIn('id="cash-results"', page)
+        self.assertIn('id="export-cashflow-csv"', page)
         self.assertNotIn('http://', page)
         self.assertNotIn('https://', page)
 

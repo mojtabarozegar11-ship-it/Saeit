@@ -88,6 +88,7 @@ class OfflineBrowserArithmeticParityTests(unittest.TestCase):
         self.assertEqual(actual["portfolio"], python["portfolio"])
         self.assertEqual(actual["resource_coverage"], python["resource_coverage"])
         self.assertEqual(actual["scenario_results"], python["scenario_results"])
+        self.assertEqual(actual.get("cashflow"), python.get("cashflow"))
         for browser_row, python_row in zip(actual["results"], python["results"]):
             for key, expected in python_row.items():
                 got = browser_row[key]
@@ -100,6 +101,27 @@ class OfflineBrowserArithmeticParityTests(unittest.TestCase):
 
     def test_illustrative_two_enterprise_example(self):
         self.assert_parity(json.loads((ROOT / "example_inputs.json").read_text()))
+
+    def test_twelve_month_cashflow_python_browser_match(self):
+        base = json.loads((ROOT / "example_inputs.json").read_text())
+        self.assert_parity(base)
+        for index in range(12):
+            cash = base["cashflow_plan"]["months"][index]
+            cash["cash_receipts"] = str(1000 + index * 13) + ".11"
+            cash["operating_payments"] = str(300 + index * 17) + ".07"
+            cash["loan_receipts"] = str(index * 20) + ".01"
+            cash["loan_repayments"] = str(index * 9) + ".06"
+        self.assert_parity(base)
+
+    def test_invalid_cashflow_is_rejected_in_both_runtimes(self):
+        base = json.loads((ROOT / "example_inputs.json").read_text())
+        for invalid in ("0.001", "-5", "NaN", None):
+            case = json.loads(json.dumps(base))
+            case["cashflow_plan"]["months"][0]["asset_purchases"] = invalid
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    evaluate(case)
+                self.assertFalse(browser_calculate(case)["ok"])
 
     def test_zero_fees_zero_water_and_nonpositive_contribution(self):
         self.assert_parity({"currency": "IRR", "enterprises": [

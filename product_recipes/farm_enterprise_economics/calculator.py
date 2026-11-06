@@ -60,6 +60,62 @@ def optional_resource(entry, field, *, positive=False):
     return amount
 
 
+CASH_FIELDS = (
+    "cash_receipts", "operating_payments", "asset_purchases",
+    "loan_receipts", "loan_repayments", "other_payments",
+)
+
+
+@bounded_model_precision
+def cashflow_plan(plan):
+    """Twelve independent monthly liquidity periods; never infer cash from profit.
+
+    Values are monetary cash movements supplied by the user, restricted to
+    exact hundredths so every displayed balance reconciles with shown rows.
+    This does not project profitability, taxation, debt balances or financing.
+    """
+    if not isinstance(plan, dict):
+        raise ValueError("cashflow_plan must be an object")
+    opening = decimal_number(plan.get("opening_cash"), "cashflow.opening_cash", min_value=0)
+    if opening != opening.quantize(Decimal("0.01")):
+        raise ValueError("cashflow.opening_cash: at most two monetary decimal places")
+    periods = plan.get("months")
+    if not isinstance(periods, list) or len(periods) != 12:
+        raise ValueError("cashflow.months must contain exactly twelve months")
+    balance = opening
+    minimum_balance = None
+    first_negative = None
+    output = []
+    operating_total = Decimal(0)
+    for index, raw in enumerate(periods, 1):
+        if not isinstance(raw, dict):
+            raise ValueError("cashflow month must be an object")
+        amounts = {}
+        for field in CASH_FIELDS:
+            value = decimal_number(raw.get(field), "cashflow.month_%s.%s" % (index, field), min_value=0)
+            if value != value.quantize(Decimal("0.01")):
+                raise ValueError("cashflow.month_%s.%s: at most two monetary decimal places" % (index, field))
+            amounts[field] = value
+        operating_total += amounts["cash_receipts"] - amounts["operating_payments"]
+        change = (amounts["cash_receipts"] + amounts["loan_receipts"]
+                  - amounts["operating_payments"] - amounts["asset_purchases"]
+                  - amounts["loan_repayments"] - amounts["other_payments"])
+        balance += change
+        minimum_balance = balance if minimum_balance is None else min(minimum_balance, balance)
+        if first_negative is None and balance < 0:
+            first_negative = index
+        output.append(dict(month=index, **{key: money(value) for key, value in amounts.items()},
+                           net_cash_change=money(change), closing_cash_balance=money(balance)))
+    return {
+        "opening_cash": money(opening), "ending_cash": money(balance),
+        "minimum_month_end_cash": money(minimum_balance),
+        "additional_cash_needed_at_month_ends": money(max(Decimal(0), -minimum_balance)),
+        "first_negative_month": first_negative,
+        "net_operating_cashflow_before_other_uses": money(operating_total),
+        "months": output,
+    }
+
+
 @bounded_model_precision
 def enterprise(entry):
     if not isinstance(entry, dict):
@@ -191,8 +247,8 @@ def evaluate(data):
                     "price_multiplier": str(price_factor),
                     "modeled_operating_profit": money(profit),
                 })
-    return {
-        "version": "1.4",
+    result = {
+        "version": "2.0",
         "currency": currency,
         "accounting_scope": "contribution_profit_before_depreciation_financing_tax",
         "input_values_independently_validated": False,
@@ -201,7 +257,8 @@ def evaluate(data):
             "Fixed costs are allocated per enterprise, not counted again in totals.",
             "This is a deterministic planning model, not a prediction of actual sales.",
             "Scenario changes affect only sold quantity and unit selling price.",
-            "Tax, financing, capital expenditure, depreciation, working capital, and seasonality are excluded.",
+            "Enterprise profit excludes tax, financing, capital expenditure, depreciation and working capital.",
+            "Optional monthly cash flow is separate from enterprise profit and uses only the user's cash timing inputs.",
             "Resource intensity uses only user-provided land and irrigation amounts for the same accounting period.",
             "A negative profit per unit of land or water is a loss rate, not a marginal productivity estimate.",
         ],
@@ -215,6 +272,9 @@ def evaluate(data):
         "resource_coverage": resource_coverage,
         "scenario_results": scenarios,
     }
+    if "cashflow_plan" in data:
+        result["cashflow"] = cashflow_plan(data["cashflow_plan"])
+    return result
 
 
 def main(argv=None):
@@ -222,6 +282,7 @@ def main(argv=None):
     ap.add_argument("input_json", help="Local input JSON with user-supplied assumptions")
     ap.add_argument("--json-output", help="Write results to a local JSON file")
     ap.add_argument("--csv-output", help="Write all scenario results to local CSV file")
+    ap.add_argument("--cashflow-csv-output", help="Write the twelve monthly cash balances to local CSV file")
     args = ap.parse_args(argv)
     source = Path(args.input_json)
     data = json.loads(source.read_text(encoding="utf-8"))
@@ -238,6 +299,14 @@ def main(argv=None):
             ], quoting=csv.QUOTE_ALL)
             writer.writeheader()
             writer.writerows(output["scenario_results"])
+    if args.cashflow_csv_output:
+        if "cashflow" not in output:
+            raise ValueError("--cashflow-csv-output requires a cashflow_plan with twelve months")
+        columns = ["month", *CASH_FIELDS, "net_cash_change", "closing_cash_balance"]
+        with Path(args.cashflow_csv_output).open("w", encoding="utf-8", newline="") as fp:
+            writer = csv.DictWriter(fp, fieldnames=columns, quoting=csv.QUOTE_ALL)
+            writer.writeheader()
+            writer.writerows(output["cashflow"]["months"])
     return 0
 
 

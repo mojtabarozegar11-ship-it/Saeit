@@ -1,9 +1,10 @@
-# Farm Enterprise Economics Toolkit — Edition 1.4 (offline browser + Python)
+# Farm Enterprise Economics Toolkit — Edition 2.0 (offline browser + Python)
 
 A working, offline agricultural enterprise calculator for a modern browser or Python 3.8+.
 It estimates contribution margin, annual operating result, break-even sales
 quantity, nine price/quantity sensitivity cases for each enterprise, and
-optional land/water resource-efficiency calculations.
+optional land/water resource-efficiency calculations and a separate twelve-month
+cash-flow budget showing liquidity shortages and end-of-month balances.
 All numerical assumptions are entered by the user. No external data feeds,
 API keys, payment accounts or network connections are required.
 
@@ -11,9 +12,10 @@ API keys, payment accounts or network connections are required.
 
 1. Extract the product ZIP into a folder on your own device. **Keep the HTML and two JavaScript files together.**
 2. Open `offline_calculator.html` in a modern browser (Chrome, Edge, Firefox or Safari with BigInt support).
-3. Replace every **illustrative** input with your own measurements and prices. Add other farm activities if required.
-4. Select **Calculate results**. Inspect the portfolio, per-activity break-even thresholds, resource indicators and nine scenarios per activity.
-5. Use **Save inputs as JSON**, **Save full report as JSON**, **Save scenarios as CSV** or **Print / save as PDF** as needed.
+3. Replace every **illustrative** enterprise input with your own measurements and prices. Add other farm activities if required.
+4. In the 12-month cash plan, enter opening cash and monthly receipts and payments in the same currency. Defaults of zero mean **no cash has been modeled**; they must not be interpreted as validated forecasts.
+5. Select **Calculate results**. Inspect the portfolio, break-even thresholds, scenarios, and **separate** month-end liquidity warnings.
+6. Use **Save inputs as JSON**, **Save full report as JSON**, **Save scenarios as CSV**, **Save 12-month cash plan as CSV** or **Print / save as PDF** as needed.
 
 This interface runs locally, with no network requests, account, analytics, cookies,
 external scripts, price feeds or cloud storage. It does not save your data unless
@@ -39,7 +41,7 @@ digit of arbitrary unquoted JSON numbers. The bundled example uses this format.
 2. Copy example_inputs.json and replace ALL illustrative values with your own.
 3. Run:
 
-   python calculator.py example_inputs.json --json-output results.json --csv-output scenarios.csv
+   python calculator.py example_inputs.json --json-output results.json --csv-output scenarios.csv --cashflow-csv-output monthly_cash.csv
 
 4. Review the outputs. Never treat scenarios as guaranteed forecasts.
 
@@ -86,6 +88,47 @@ they are physical quantities and are **never rounded to monetary cents**.
 Do not interpret profit per hectare/water as an estimate of marginal value,
 water-saving potential, hydrological impact, or recommended irrigation rates.
 
+## Twelve-month liquidity planner (Edition 2.0)
+
+The browser includes twelve editable monthly rows. The Python engine supports
+the same optional top-level JSON input:
+
+```json
+"cashflow_plan": {
+  "opening_cash": "1000.00",
+  "months": [
+    {"cash_receipts": "500.00", "operating_payments": "300.00",
+     "asset_purchases": "0.00", "loan_receipts": "0.00",
+     "loan_repayments": "0.00", "other_payments": "0.00"}
+  ]
+}
+```
+
+This is a *schema illustration only*: actual input requires **exactly twelve**
+month objects, one for each month, each containing all six fields. The example
+JSON shipped with the product contains the full twelve-month structure.
+
+- Cash receipts are actually received customer cash, not billed sales or harvest.
+- Operating payments are expenses actually paid, not accrual expense estimates.
+- Asset purchases are cash spent on capital assets; they are *not* also entered
+  as operating payments. Loan cash received is cash financing, *not* revenue.
+- Loan repayments include principal and interest **cash paid**; other payments
+  can include owner drawings and taxes, entered just once.
+- Monthly net change = cash receipts + loan receipts − operating payments −
+  asset purchases − loan repayments − other payments.
+- Month-end cash = opening cash plus cumulative monthly net changes.
+- The additional liquidity needed to avoid a **negative month-end balance** is
+  the absolute size of the lowest negative month-end cash position. This is not
+  a loan recommendation and does not model intra-month payment timing.
+
+Every monthly monetary input must be nonnegative, finite, at most 10^20, and
+expressible to at most two decimal places. The month-end balance **may be
+negative** to flag a shortfall. The planner is separate from the enterprise
+profit output; the two totals are intentionally not added together. Seasonal
+timing is entered by the customer rather than guessed by the software. This
+does not calculate opening receivables/payables, a balance sheet, loan amortization,
+depreciation, tax liability, interest accrual, NPV or a lender-approved plan.
+
 ## Formulas
 
 Revenue = units_sold * unit_price.
@@ -127,11 +170,13 @@ cost per sold unit, and fixed cost remain unchanged.
 
 ## Model boundaries
 
-This version intentionally excludes depreciation, borrowing costs, tax,
-working capital, capital investment, inflation, land appreciation, yield-risk
-distributions, cash flow timing, discounted valuation and financing structure.
-Consequently, results are **contribution accounting illustrations**, not full
-investment appraisal, tax accounting, or professional financial advice.
+The **enterprise-profit model** still excludes depreciation, borrowing costs,
+tax, working capital, capital investment, inflation, yield-risk distributions,
+discounted valuation and financing structure. The distinct monthly plan now
+handles **user-entered cash movements** only, including asset purchases and
+loan cash receipts/payments. Consequently, results are contribution accounting
+and month-end liquidity illustrations, not full investment appraisal, tax
+accounting, credit approval, or professional financial advice.
 
 Each numeric input must be finite, no longer than 64 characters, and have
 absolute magnitude no greater than 10^20; this prevents unbounded precision,
