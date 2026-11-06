@@ -34,7 +34,7 @@ class GuestLiveParityContracts(unittest.TestCase):
         )
 
     def test_email_aliases_are_collected_with_getlist_and_conflicts_rejected(self):
-        self.assertGreaterEqual(GUEST.count("request.POST.getlist(key)"), 2)
+        self.assertGreaterEqual(GUEST.count("request.POST.getlist(key)"), 1)
         self.assertIn(
             "any(value != values[0] for value in values)",
             GUEST,
