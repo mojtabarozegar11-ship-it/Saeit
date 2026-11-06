@@ -17,7 +17,9 @@ def safe_extract(archive: Path, target: Path) -> None:
         z.extractall(target)
 def main() -> int:
     if len(sys.argv) != 4: return 2
-    archive, evidence_root, run_id = map(Path, sys.argv[1:])
+    archive = Path(sys.argv[1])
+    evidence_root = Path(sys.argv[2])
+    run_id = sys.argv[3]
     artifact = digest(archive)
     evidence_root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="f01-live-") as raw:
