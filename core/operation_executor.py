@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from command_center.models import MpwRecord, TENANT
 from .models import ApprovalRequest, AuditLog
+from .newsletter_models import NewsletterSubmission
 
 
 def _root() -> Path:
@@ -64,31 +65,60 @@ def execute_approved_chat_operation(approval: ApprovalRequest) -> dict:
     result: dict
 
     if action == "site.create_draft_page":
-        if target != "mojplaywin":
-            raise ValueError("site_target_not_implemented")
         path = str(params["path"])
         title = str(params["title"])[:200]
-        key = "chat-" + data["operation_id"]
-        record = MpwRecord.objects.create(
-            tenant=TENANT, kind="content", key=key, page_path=path,
-            title=title, draft={"content": str(params.get("body", "")), "source": "staff_chat"},
-            state="draft",
-        )
-        result = {"record_id": record.pk, "state": record.state, "path": record.page_path}
-    elif action == "site.update_draft_page":
-        if target != "mojplaywin":
+        body = str(params.get("body", ""))[:4000]
+        if target == "mojplaywin":
+            key = "chat-" + data["operation_id"]
+            record = MpwRecord.objects.create(
+                tenant=TENANT, kind="content", key=key, page_path=path,
+                title=title, draft={"content": body, "source": "staff_chat"},
+                state="draft",
+            )
+            result = {"site": target, "record_id": record.pk, "state": record.state, "path": record.page_path}
+        elif target == "zomorodmelal":
+            if not path.startswith("/company/"):
+                raise ValueError("zomorod_target_must_be_company_path")
+            submission = NewsletterSubmission.objects.create(
+                subject=title,
+                body=body,
+                status="queued",
+                created_by=approval.requested_by,
+                company_target_paths=path,
+                company_activity_status="آینده",
+            )
+            result = {"site": target, "submission_id": submission.pk, "state": submission.status, "path": path}
+        else:
             raise ValueError("site_target_not_implemented")
-        record = MpwRecord.objects.filter(
-            tenant=TENANT, page_path=str(params["path"])
-        ).order_by("-updated_at").first()
-        if record is None:
-            raise ValueError("draft_page_not_found")
-        before = dict(record.draft)
-        record.draft = {**before, "chat_instruction": str(params["instruction"])}
-        record.revision += 1
-        record.state = "draft"
-        record.save(update_fields=["draft", "revision", "state", "updated_at"])
-        result = {"record_id": record.pk, "state": record.state, "revision": record.revision}
+    elif action == "site.update_draft_page":
+        path = str(params["path"])
+        instruction = str(params["instruction"])[:4000]
+        if target == "mojplaywin":
+            record = MpwRecord.objects.filter(
+                tenant=TENANT, page_path=path
+            ).order_by("-updated_at").first()
+            if record is None:
+                raise ValueError("draft_page_not_found")
+            before = dict(record.draft)
+            record.draft = {**before, "chat_instruction": instruction}
+            record.revision += 1
+            record.state = "draft"
+            record.save(update_fields=["draft", "revision", "state", "updated_at"])
+            result = {"site": target, "record_id": record.pk, "state": record.state, "revision": record.revision}
+        elif target == "zomorodmelal":
+            if not path.startswith("/company/"):
+                raise ValueError("zomorod_target_must_be_company_path")
+            submission = NewsletterSubmission.objects.create(
+                subject="ویرایش محتوای " + path,
+                body=instruction,
+                status="queued",
+                created_by=approval.requested_by,
+                company_target_paths=path,
+                company_activity_status="مطالعه",
+            )
+            result = {"site": target, "submission_id": submission.pk, "state": submission.status, "path": path}
+        else:
+            raise ValueError("site_target_not_implemented")
     elif action in {"cpanel.preflight", "cpanel.passenger_inventory"}:
         result = _run_readonly(action)
     elif action == "cpanel.deploy_release":
