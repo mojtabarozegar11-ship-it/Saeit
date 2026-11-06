@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|mpw_guard_readonly|cpanel_preflight|django_check|django_migrations) ;;
+  relay_preflight|cpanel_version|passenger_inventory|mpw_guard_readonly|cpanel_quota_readonly|cpanel_preflight|django_check|django_migrations) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -69,6 +69,13 @@ case "$operation" in
   passenger_inventory)
     timeout 60s ssh -T -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' |
       python3 scripts/mojplaywin_cpanel_readonly_inventory.py
+    ;;
+  cpanel_quota_readonly)
+    # Official UAPI account statistics, redacted on the GitHub runner.
+    # Neither a per-file inventory nor a backup; zero cPanel writes.
+    timeout 60s ssh -T -F "$work/config" saeit-cpanel \
+      'uapi --output=json StatsBar get_stats "display=diskusage|mysqldiskusage|fileusage"' |
+      python3 -B scripts/mpw_cpanel_quota_readonly.py
     ;;
   mpw_guard_readonly)
     # Existing redacted audits execute from pinned source over the existing
