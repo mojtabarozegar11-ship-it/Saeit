@@ -109,6 +109,14 @@ def main() -> None:
     marker = APP / 'tmp/restart.txt'
     if marker.is_file() and not marker.is_symlink():
         print('ACADEMY_RESTART_MARKER_AGE_SECONDS=' + str(max(0, round(time.time()-marker.stat().st_mtime))))
+    try:
+        dns = subprocess.run(['getent', 'ahostsv4', 'zomorodmelal.ir'],
+                             capture_output=True, text=True, timeout=12, check=False)
+        ip = sorted({line.split()[0] for line in dns.stdout.splitlines()
+                     if line.split() and re.fullmatch(r'[0-9.]+', line.split()[0])})
+        print('ACADEMY_PUBLIC_DNS_IPV4=' + (','.join(ip[:8]) if ip else 'UNAVAILABLE'))
+    except Exception:
+        print('ACADEMY_PUBLIC_DNS_IPV4=UNAVAILABLE')
     # Process names and ages are safe metadata; never inspect argv or env.
     try:
         p = subprocess.run(['ps', '-u', 'zomorod2', '-o', 'pid=,etimes=,comm='],
@@ -133,6 +141,7 @@ def main() -> None:
         data = json.loads(p.stdout) if p.returncode == 0 else {}
         print('ACADEMY_SELECTOR_INVENTORY_AVAILABLE=' + str(bool(data)).lower())
         if isinstance(data, dict):
+            print('ACADEMY_SELECTOR_TOP_LEVEL_KEYS=' + ','.join(sorted(str(x)[:40] for x in data)[:40]))
             for candidate in ('applications', 'apps', 'data'):
                 value = data.get(candidate)
                 if isinstance(value, dict):
@@ -156,6 +165,20 @@ def main() -> None:
         walk(data)
     except Exception:
         print('ACADEMY_SELECTOR_INVENTORY_AVAILABLE=false')
+    try:
+        scoped = subprocess.run(['cloudlinux-selector', 'get', '--json', '--interpreter',
+                                 'python', '--user', 'zomorod2'],
+                                capture_output=True, text=True, timeout=12, check=False)
+        data = json.loads(scoped.stdout) if scoped.returncode == 0 else {}
+        print('ACADEMY_SELECTOR_USER_SCOPED_AVAILABLE=' + str(bool(data)).lower())
+        if isinstance(data, dict):
+            print('ACADEMY_SELECTOR_USER_SCOPED_KEYS=' +
+                  ','.join(sorted(str(x)[:40] for x in data)[:40]))
+            apps = data.get('applications')
+            if isinstance(apps, dict):
+                print('ACADEMY_SELECTOR_USER_APP_ROOTS=' + ','.join(str(x)[:100] for x in list(apps)[:20]))
+    except Exception:
+        print('ACADEMY_SELECTOR_USER_SCOPED_AVAILABLE=false')
     # Read only table names through the existing Django database connection.
     # No ORM queries, user records, writes, migrations or model data are read.
     interpreter = HOME / 'virtualenv/Saeit/3.10/bin/python'
