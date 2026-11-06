@@ -184,10 +184,13 @@ class TradingLab:
         self, agent: TraderAgent, order_id: str, pnl: float,
         closed_at: datetime | None = None,
     ) -> Experience:
+        if not isinstance(order_id, str) or not order_id.strip():
+            raise ValueError("demo_order_id_required")
         if order_id not in agent.open_order_ids:
             raise ValueError("demo_order_not_open")
-        agent.open_order_ids.remove(order_id)
+        # Validate and account for P&L before mutating the open-position set.
         agent.record_closed_pnl(pnl, closed_at)
+        agent.open_order_ids.remove(order_id)
         exp = Experience(
             self._now(), agent.agent_id, agent.account, "", agent.strategy,
             "DEMO_CLOSE", "closed demo trade", order_id=order_id, pnl=pnl,
