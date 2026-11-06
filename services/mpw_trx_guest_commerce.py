@@ -197,6 +197,9 @@ def _identity(request, *, create=False):
     if user is None and create:
         user, token = _new_user(request)
     elif user is not None and create:
+        # A retained guest cookie must not become a way around the same
+        # per-IP invoice-creation throttle applied to first-time guests.
+        _rate_limit(request)
         # _read_user already checked the signed guest identity.  A custom
         # Django user model may use email, not username, as USERNAME_FIELD.
         user = _bind_guest_email(request, user)

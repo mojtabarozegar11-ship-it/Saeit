@@ -58,6 +58,7 @@ class CheckoutEmail(unittest.TestCase):
             "Http404": Http404, "_host_ok": lambda request: True,
             "_read_user": lambda request: None,
             "_new_user": lambda request: (SimpleNamespace(username="mpwguest_abc"), "guest-cookie"),
+            "_rate_limit": lambda request: None,
         }
         code = compile(ast.Module(body=selected, type_ignores=[]), str(SOURCE), "exec")
         exec(code, self.space)
@@ -116,6 +117,23 @@ class CheckoutEmail(unittest.TestCase):
         self.assertIsNone(token)
         with self.assertRaises(Http404):
             self.identity(self.request(email="different@example.org"), create=True)
+
+    def test_existing_signed_guest_cannot_bypass_creation_throttle(self):
+        guest = SimpleNamespace(email="buyer@example.org", save=lambda update_fields: None)
+        self.space["_read_user"] = lambda request: guest
+        attempts = []
+
+        def throttle(request):
+            attempts.append(request)
+            if len(attempts) > 1:
+                raise Http404("too many invoice starts")
+
+        self.space["_rate_limit"] = throttle
+        req = self.request(email="buyer@example.org")
+        self.assertIs(self.identity(req, create=True)[0], guest)
+        with self.assertRaises(Http404):
+            self.identity(req, create=True)
+        self.assertEqual(attempts, [req, req])
 
     def test_authenticated_account_email_is_still_required(self):
         account = SimpleNamespace(is_authenticated=True, email="member@example.org")

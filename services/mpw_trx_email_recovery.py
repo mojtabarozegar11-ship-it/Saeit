@@ -60,6 +60,12 @@ def _host(request):
     )
 
 
+def _recovery_active():
+    """Withdrawal of email approval revokes all recovery entry points."""
+    return (getattr(settings, "MPW_GUEST_RECOVERY_ENABLED", False) is True
+            and getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True)
+
+
 def _email(value):
     if not isinstance(value, str) or len(value) > 254 or "\n" in value or "\r" in value:
         raise ValueError("Invalid email")
@@ -249,7 +255,7 @@ def _issue(email, email_digest):
 def recovery_request(request):
     if not _host(request):
         raise Http404
-    if getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is not True:
+    if not _recovery_active():
         return _page("Email recovery is not yet available",
                      '<p>Do not make another payment. If you already paid, '
                      'contact <a href="mailto:support@mojplaywin.com">purchase support</a> '
@@ -295,7 +301,7 @@ def _consume(code):
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def recovery_verify(request):
-    if not _host(request):
+    if not _host(request) or not _recovery_active():
         raise Http404
     if request.method == "GET":
         return _page("Enter recovery code", _form(request, ROOT + "verify/",
@@ -333,7 +339,7 @@ def _scope(request):
 @never_cache
 @require_GET
 def recovery_orders(request):
-    if not _host(request):
+    if not _host(request) or not _recovery_active():
         raise Http404
     orders = _eligible_orders(_scope(request))
     if not orders:
@@ -349,7 +355,8 @@ def recovery_orders(request):
 @never_cache
 @require_GET
 def recovery_download(request, invoice_id):
-    if not _host(request) or type(invoice_id) is not int or invoice_id <= 0:
+    if (not _host(request) or not _recovery_active()
+            or type(invoice_id) is not int or invoice_id <= 0):
         raise Http404
     digest = _scope(request)
     intent = PaymentIntent.objects.select_related("order__customer").filter(pk=invoice_id).first()

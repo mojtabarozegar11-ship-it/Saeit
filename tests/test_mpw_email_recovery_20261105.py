@@ -182,7 +182,8 @@ class RecoveryIsolationTests(unittest.TestCase):
         self.assertFalse(module._allowed(req))
         self.assertEqual(GuestRecoveryRate.objects.count(), 1)
 
-    @override_settings(MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
+    @override_settings(MPW_GUEST_RECOVERY_ENABLED=True,
+                       MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
     def test_approved_request_still_does_not_send_for_unknown_email(self):
         module.bound_checkout(self._request(), self._start, self._identity,
                               self._install, (72,), {})
@@ -262,6 +263,8 @@ class RecoveryIsolationTests(unittest.TestCase):
         self.assertIs(routes["commerce/trx-easy/recover/"], module.recovery_request)
         self.assertIs(names["_start_order"], handler)
 
+    @override_settings(MPW_GUEST_RECOVERY_ENABLED=True,
+                       MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
     def test_positive_delegation_uses_existing_download_checks(self):
         module.bound_checkout(self._request(), self._start, self._identity,
                               self._install, (72,), {})
@@ -291,6 +294,8 @@ class RecoveryIsolationTests(unittest.TestCase):
         self.assertEqual(called, [(self.user.pk, intent.pk)])
         self.assertIn("no-store", res["Cache-Control"])
 
+    @override_settings(MPW_GUEST_RECOVERY_ENABLED=True,
+                       MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
     def test_missing_private_download_handler_denies_recovery(self):
         from types import ModuleType
         from django.core import signing
@@ -309,6 +314,8 @@ class RecoveryIsolationTests(unittest.TestCase):
             with self.assertRaises(Http404):
                 module.recovery_download(req, intent.pk)
 
+    @override_settings(MPW_GUEST_RECOVERY_ENABLED=True,
+                       MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
     def test_claim_does_not_grant_download_for_other_email(self):
         module.bound_checkout(self._request(), self._start, self._identity,
                               self._install, (72,), {})

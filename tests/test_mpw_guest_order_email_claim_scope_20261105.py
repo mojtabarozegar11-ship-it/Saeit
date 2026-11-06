@@ -55,7 +55,9 @@ class TestSourceContract(unittest.TestCase):
 
     def test_email_dispatch_remains_approval_gated(self):
         source = (ROOT / "services/mpw_trx_email_recovery.py").read_text("utf-8")
-        self.assertIn('if getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is not True:', source)
+        self.assertIn('getattr(settings, "MPW_GUEST_RECOVERY_EMAIL_APPROVED", False) is True', source)
+        self.assertIn('if not _recovery_active():', source)
+        self.assertEqual(source.count('or not _recovery_active()'), 3)
 
 
 class FakeSignal:
