@@ -34,8 +34,8 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          reviewed='7defe0fd2624887cf23e28529848b5daaff29c36'
-          expected_zip='bff291fa69cc23b9253c28fc0d35041b3c7ad92e9814ba7aee8f1a4fff7e292b'
+          reviewed='67e7346159398a0526a6d9adc6ad6b6252152f71'
+          expected_zip='c3e5294f21761e898d3dfb0bfcc52900fc714b2f951cdca146006c1e7c0b0880'
           test -n "$VPS_KEY"
           [[ "$RUN_NONCE" =~ ^[0-9]+$ ]]
           git cat-file -e "$reviewed^{commit}"
