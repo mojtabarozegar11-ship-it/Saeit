@@ -41,17 +41,19 @@ def academy(request):
     elif access == "paid":
         course_qs = course_qs.filter(is_free=False)
     courses = list(course_qs.order_by("track__sort_order", "title"))
+    # Each public resource below is an independently verified live destination.
+    # Do not represent a planned module or an unpublished paid course as a sale.
     resources = [
-        {"kind": "جزوه", "title": "کتابخانه جزوه‌های آموزشی", "text": "جزوه‌های سطح‌بندی‌شده، قابل مطالعه و قابل تکمیل برای هر مسیر.", "access": "رایگان محدود"},
-        {"kind": "دوره", "title": "دوره‌های جامع مهارتی", "text": "درس‌نامه، ویدئو، تمرین، پروژه، آزمون و گواهی در مسیرهای منتخب.", "access": "رایگان + پولی"},
-        {"kind": "آزمون", "title": "آزمون و ارزیابی", "text": "تمرین و سنجش مرحله‌ای برای شناسایی نقاط قوت و ضعف.", "access": "رایگان محدود"},
-        {"kind": "پروژه", "title": "یادگیری پروژه‌محور", "text": "تبدیل آموخته‌ها به خروجی واقعی و نمونه‌کار قابل ارائه.", "access": "دوره‌های ویژه"},
+        {"kind": "ابزار رایگان", "title": "محاسبه نقطه سربه‌سر مزرعه", "text": "بررسی عملی هزینه، درآمد و مقدار فروش لازم برای رسیدن به نقطه سربه‌سر.", "access": "فعال", "url": "/agriculture/free-tools/20261025/farm-break-even/", "action": "استفاده از ابزار"},
+        {"kind": "ابزار رایگان", "title": "برآورد هزینه واردات", "text": "محاسبه اقلام اصلی بهای تمام‌شده واردات برای تصمیم‌گیری بهتر.", "access": "فعال", "url": "/agriculture/free-tools/20261025/import-landed-cost/", "action": "استفاده از ابزار"},
+        {"kind": "راهنمای عملی", "title": "ارزیابی ریسک مزرعه", "text": "راهنمای ساختاریافته برای شناسایی و اولویت‌بندی ریسک‌های تولید.", "access": "منتشرشده", "url": "/resources/20261025/farm-risk/", "action": "مطالعه راهنما"},
+        {"kind": "خدمت تخصصی", "title": "درخواست تحلیل اقتصاد تولید", "text": "برای بررسی تخصصی پروژه، درخواست واقعی ثبت کنید و کد رهگیری دریافت کنید.", "access": "پذیرش درخواست", "url": "/ask-master/index.php?service=1", "action": "ثبت درخواست خدمت"},
     ]
     free_features = [
-        "مطالعه بخشی از جزوه‌ها و درس‌نامه‌ها",
-        "نمونه درس و تمرین محدود",
-        "آزمون‌های منتخب و ارزیابی پایه",
-        "مسیرهای پیشنهادی برای شروع یادگیری",
+        "محاسبه نقطه سربه‌سر و بررسی اقتصادی مزرعه",
+        "برآورد اولیه بهای تمام‌شده واردات",
+        "مطالعه راهنمای کاربردی ارزیابی ریسک مزرعه",
+        "دسترسی مستقیم به ابزارهای واقعی و بدون ثبت‌نام",
     ]
     paid_features = [
         "دوره کامل و فصل‌بندی‌شده",
@@ -66,6 +68,7 @@ def academy(request):
         "course_q": course_q, "track_key": track_key, "access": access,
         "free_features": free_features,
         "paid_features": paid_features,
+        "has_paid_courses": any(not course.is_free for course in courses),
     })
 
 
