@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from core.autonomous_brain import AutonomousBrain
 from core.models import Agent, AgentTask
-from core.economic_tool_pack import build_economic_gateway
+from core.economic_tool_pack import build_economic_master_gateway as build_economic_gateway
 from core.task_runtime import TaskExecutionError, TaskRuntime
 
 MASTER_AGENT_CODE = "economic-master-agent"

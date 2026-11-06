@@ -3,8 +3,8 @@ from django.core.management import call_command
 from django.db.models import F
 from core.autonomous_brain import AutonomousBrain
 from core.models import AgentTask
-from core.economic_tool_pack import build_economic_gateway
-from core.worker_runner import WorkerRunner
+from core.economic_tool_pack import build_economic_master_gateway as build_economic_gateway
+from core.economic_execution import EconomicWorkerRunner as WorkerRunner
 
 class Command(BaseCommand):
     help = "Autonomous observe-decide-execute-verify-replan loop."

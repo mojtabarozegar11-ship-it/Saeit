@@ -461,3 +461,20 @@ def build_economic_gateway():
         ToolSpec(code="income_profit_optimize", handler=profit_optimize, risk="medium"),
         ToolSpec(code="master_self_improvement", handler=master_self_improvement, risk="medium"),
     ])
+
+
+def build_economic_master_gateway():
+    """Never route the economic master through the factory's shared gateway."""
+    from .economic_execution import EconomicGateway
+
+    return EconomicGateway([
+        ("income_market_research", "medium", market_research),
+        ("income_inbound_lead_review", "low", inbound_lead_review),
+        ("income_opportunity_score", "medium", opportunity_score),
+        ("income_offer_design", "medium", offer_design),
+        ("income_mvp_build", "medium", mvp_build),
+        ("income_growth_experiment", "medium", growth_experiment),
+        ("income_revenue_verify", "medium", revenue_verify),
+        ("income_profit_optimize", "medium", profit_optimize),
+        ("master_self_improvement", "medium", master_self_improvement),
+    ])

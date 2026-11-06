@@ -43,6 +43,24 @@ one authorized native active product. Binding, recipe and single-product
 checks are mandatory. The historical profit-baseline count is not 5,502
 independent gains and does not certify customer revenue.
 
+The later read-only VPS audit
+[`42235124206`](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42235124206)
+identified **zero** `online_income_cycle` or `autonomous_master_loop` processes,
+no economic-worker user cron entry, four factory-related processes, and an
+installed native factory gateway ABI distinct from the source economic runner.
+It did not verify an operative bridge from the cPanel customer-inquiry database
+to the VPS Django database. These are activation blockers, not sales outcomes.
+
+## Agreed organization: four executive engines, five domains
+
+The owner-approved conceptual organization is one central commander and three
+specialized engines: evolution/repair, `MojTrade AI`, and content/product.
+Weather, news and market data are shared services, **not** automatically
+additional privileged agents. The five organizational domains are factory,
+Zomorod Melal, MojPlayWin, shared services and central command. This policy is
+not permission to automatically retire 20 existing Django identities or merge
+their incompatible financial/factory executors.
+
 ## Findings and implemented controls
 
 1. **Authorization mismatch:** a running low-risk research task could invoke a
@@ -95,6 +113,19 @@ independent gains and does not certify customer revenue.
    name, email, message or payment claim is copied into the task evidence;
    there is no outbound contact, public publication or payment. The record is
    an inquiry, **not** evidence of verified demand, a quote, a sale or cash.
+9. **Factory ABI-safe economic execution:** a dedicated
+   `EconomicGateway`/`EconomicWorkerRunner` binds every action to the one
+   economic master, its active capability, its execution identity and current
+   risk policy. It requires concrete internal evidence and rejects any nonzero
+   execution cost. The existing `build_economic_gateway` and shared factory
+   `ToolGateway`/`WorkerRunner` are left intact for factory native adapters.
+   The VPS master activation bundle no longer overwrites
+   `core/tool_gateway.py`, `core/worker_runner.py` or `core/task_runtime.py`,
+   and checks their hashes unchanged before finishing. A separate preflight
+   verifies the installed task lifecycle signature; failed initial cycle
+   restores prior modules and cron rather than claiming activation. This is
+   a deployment-safety improvement, not evidence that a live economic scheduler
+   has been installed or produces revenue.
 
 ## Safe operational sequence (no automatic external writes)
 

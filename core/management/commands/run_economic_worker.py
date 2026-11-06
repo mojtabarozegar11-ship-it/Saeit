@@ -1,9 +1,9 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import F
 
-from core.economic_tool_pack import build_economic_gateway
+from core.economic_tool_pack import build_economic_master_gateway as build_economic_gateway
 from core.models import AgentTask
-from core.worker_runner import WorkerRunner
+from core.economic_execution import EconomicWorkerRunner as WorkerRunner
 
 
 class Command(BaseCommand):
