@@ -1,5 +1,9 @@
 name: Factory one-time live storefront runtime identity (read-only)
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/factory-store-runtime-readonly-onepass-20261106.yml
   push:
     branches: [audit/factory-runtime-readonly-20261106]
     paths:
@@ -9,7 +13,7 @@ permissions:
   contents: read
 jobs:
   live_cpanel_identity:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == 'mojtabarozegar11-ship-it/Saeit')
     runs-on: ubuntu-24.04
     timeout-minutes: 7
     steps:
