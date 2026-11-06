@@ -805,6 +805,78 @@ print("AGENT_FLEET_FACTORY_BACKLOG_EXECUTION_EVIDENCE=" + json.dumps({
 }, sort_keys=True, separators=(",", ":")))
 PY
 
+# Estimate which historical factory tasks could pass the existing non-writing
+# identity/grant gates. This is a conservative preview, not an authorization
+# token and never claims, resumes, or executes a task.
+"$python_bin" - <<'PY'
+import collections
+import json
+
+import django
+django.setup()
+
+from django.conf import settings
+from django.utils import timezone
+from core.models import AgentCapability, AgentTask, AgentToolGrant, FactoryRun
+
+now = timezone.now()
+owners = ("factory-market-research-agent", "factory-opportunity-validation-agent")
+queued = AgentTask.objects.filter(status="queued", agent__code__in=owners).select_related(
+    "agent", "factory_run", "product"
+).order_by("pk")
+counts = collections.Counter()
+per_action = collections.Counter()
+scopes = collections.Counter()
+for task in queued.iterator(chunk_size=100):
+    per_action[task.action_type] += 1
+    reasons = []
+    if not task.agent.active:
+        reasons.append("inactive_agent")
+    if task.action_type != task.capability_code or not task.action_type.startswith("product_"):
+        reasons.append("capability_mismatch")
+    if not AgentCapability.objects.filter(
+        code=task.capability_code, active=True, agents__pk=task.agent_id
+    ).exists():
+        reasons.append("missing_active_capability")
+    if task.attempt_count >= task.max_attempts:
+        reasons.append("retry_exhausted")
+    if task.next_retry_at and task.next_retry_at > now:
+        reasons.append("retry_not_due")
+    if not task.factory_run_id or task.factory_run.status != "active":
+        reasons.append("missing_active_factory_run")
+    elif task.factory_run.product_id != task.product_id:
+        reasons.append("run_product_mismatch")
+    if task.product_id is None:
+        reasons.append("no_existing_product")
+    if task.environment != str(getattr(settings, "FACTORY_ENVIRONMENT", "development")):
+        reasons.append("environment_mismatch")
+    resource = f"product:{task.product_id}" if task.product_id else "product:new"
+    grants = AgentToolGrant.objects.filter(
+        agent_id=task.agent_id, capability_code=task.capability_code,
+        tool_code=task.action_type, environment=task.environment,
+        active=True, revoked_at__isnull=True, valid_until__gt=now,
+    ).values_list("resource_scope", flat=True)
+    if not any(scope == resource or (
+        scope.endswith(":*") and resource.startswith(scope[:-1])
+    ) for scope in grants):
+        reasons.append("no_valid_grant")
+    if not isinstance(task.prerequisite_snapshot, dict) or not task.prerequisite_snapshot.get("digest"):
+        reasons.append("missing_snapshot_digest")
+    if not reasons:
+        counts["passes_static_preflight_only"] += 1
+    for reason in reasons:
+        counts[reason] += 1
+    scopes["has_product" if task.product_id else "no_product"] += 1
+
+print("AGENT_FLEET_FACTORY_STATIC_READINESS=" + json.dumps({
+    "schema":"saeit.agent.factory-static-readiness.v1", "read_only":True,
+    "queued_total":sum(per_action.values()), "by_action":dict(sorted(per_action.items())),
+    "preflight_flags":dict(sorted(counts.items())), "product_links":dict(sorted(scopes.items())),
+    "active_factory_runs":FactoryRun.objects.filter(status="active").count(),
+    "tasks_claimed":0,"tasks_executed":0,"tasks_modified":0,
+},sort_keys=True,separators=(",",":")))
+PY
+
 # Never print crontab commands, inline environment values, or process arguments.
 "$python_bin" - <<'PY'
 import hashlib
