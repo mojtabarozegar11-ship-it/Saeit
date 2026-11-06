@@ -64,6 +64,7 @@ jobs:
           original_command_sha = '16db26a1add66cd4cb9e96c8f992441d15e4324f6ffbb763189a0be923032978'
           pinned_worker_sha = '3b890e7f2d9f383130a4aa711f6b251ee124a7a903ebdd2a29acf3278368bbee'
           pinned_runtime_sha = '9cebdf4a60162b6b9c7b1a36364baa9748395ce42e8e0f86bacfaa82a422731b'
+          previous_compat_sha = '509b403c552a4a6ed0789196754d78812cf0d7d37044e904f4af302ce137a008'
 
           def digest(data):
               return hashlib.sha256(data).hexdigest()
@@ -101,7 +102,9 @@ jobs:
           current_hash = digest(old_command.read_bytes())
           if current_hash not in {original_command_sha, digest(sources[command_rel])}:
               abort('FACTORY_ABI_REPAIR_COMMAND_CHANGED')
-          if (app/compat_rel).exists() and digest((app/compat_rel).read_bytes()) != digest(sources[compat_rel]):
+          if (app/compat_rel).exists() and digest((app/compat_rel).read_bytes()) not in {
+              previous_compat_sha, digest(sources[compat_rel])
+          }:
               abort('FACTORY_ABI_REPAIR_COMPAT_TARGET_CHANGED')
 
           # Preserve original bytes and allow a complete rollback if the live
