@@ -87,6 +87,10 @@ jobs:
               holder.innerHTML=html;
               holder.setAttribute("data-zomorod-inpage-editorial","20261016");
               root.appendChild(holder);
+              if(path==="/services/"){
+                var requestHub=document.getElementById("zm-services-action-hub-20261106");
+                if(requestHub&&!document.getElementById("company-request")) requestHub.id="company-request";
+              }
               if(path==="/weather/"){
                 var form=document.getElementById("zm-weather-risk-form"),out=document.getElementById("zm-weather-risk-result");
                 if(form&&out) form.addEventListener("submit",function(ev){
