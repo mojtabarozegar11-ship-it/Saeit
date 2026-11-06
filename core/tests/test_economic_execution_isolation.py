@@ -69,8 +69,11 @@ def test_economic_executor_refuses_factory_task_without_consuming_attempt():
 @pytest.mark.django_db
 def test_economic_executor_rejects_tool_risk_higher_than_task_snapshot():
     task = _task(risk="low")
+    gateway = build_economic_master_gateway()
+    _, handler = gateway._tools["income_market_research"]
+    gateway._tools["income_market_research"] = ("medium", handler)
     with pytest.raises(EconomicExecutionError, match="risk exceeds"):
-        EconomicWorkerRunner(build_economic_master_gateway()).run(task.pk)
+        EconomicWorkerRunner(gateway).run(task.pk)
     task.refresh_from_db()
     assert task.status == "queued" and task.attempt_count == 1
 

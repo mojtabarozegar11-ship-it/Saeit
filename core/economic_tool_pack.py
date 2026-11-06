@@ -468,9 +468,9 @@ def build_economic_master_gateway():
     from .economic_execution import EconomicGateway
 
     return EconomicGateway([
-        ("income_market_research", "medium", market_research),
+        ("income_market_research", "low", market_research),
         ("income_inbound_lead_review", "low", inbound_lead_review),
-        ("income_opportunity_score", "medium", opportunity_score),
+        ("income_opportunity_score", "low", opportunity_score),
         ("income_offer_design", "medium", offer_design),
         ("income_mvp_build", "medium", mvp_build),
         ("income_growth_experiment", "medium", growth_experiment),
