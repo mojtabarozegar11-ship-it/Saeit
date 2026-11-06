@@ -72,7 +72,7 @@ def _verify_executed_qc1000(root,container,artifact_sha,decision):
             "doctoral_evidence_structurally_bound":True,
             "scientific_specialist_signatures_still_mandatory":True}
 
-CHATGPT_REVIEW_SCHEMA="saeit.factory.chatgpt-final-store-review.v2"
+CHATGPT_REVIEW_SCHEMA="saeit.factory.chatgpt-final-store-review.v3"
 CHATGPT_REVIEWER="ChatGPT (Codex)"
 CHATGPT_REVIEW_CHECKS=(
     "artifact_integrity",
@@ -84,9 +84,134 @@ CHATGPT_REVIEW_CHECKS=(
     "security_and_privacy",
     "store_listing_accuracy",
     "extracted_customer_zip_checks",
+    "buyer_problem_and_deliverable_value",
+    "independent_customer_workflows",
+    "differentiation_from_free_alternatives",
+    "commercial_demand_and_price_fit",
+    "delivery_license_support_and_refund_terms",
 )
+VALUE_EVIDENCE_SCHEMA="saeit.factory.buyer-value-evidence.v1"
+REAL_BUYER_SIGNALS={"documented_customer_feedback","documented_customer_inquiry","documented_purchase"}
 
-def require_chatgpt_final_review(inbox,recipe,artifact_sha,product_manifest,package_path):
+
+def _substantive(value, minimum=35, maximum=4000):
+    return isinstance(value,str) and minimum<=len(value.strip())<=maximum
+
+
+def _safe_proof_file(container, filename, expected_sha):
+    if (not isinstance(filename,str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{2,120}",filename)
+            or not isinstance(expected_sha,str) or not SHA.fullmatch(expected_sha)):
+        raise ValueError("BUYER_VALUE_PROOF_PATH_INVALID")
+    path=container/"buyer-proof"/filename
+    if (path.is_symlink() or not path.is_file() or not 80<=path.stat().st_size<=2_000_000
+            or _digest_file(path)!=expected_sha):
+        raise ValueError("BUYER_VALUE_PROOF_NOT_VERIFIED")
+    return path
+
+
+def require_buyer_value_evidence(inbox,recipe,artifact_sha):
+    """Require version-bound commercial proof distinct from passing unit tests.
+
+    Structural checks are not a substitute for an actual, independent buyer
+    review. In particular, market research alone does not validate willingness
+    to pay; a paid offer requires a documentable buyer demand signal.
+    """
+    container=Path(inbox)/"quality-clearance"/recipe/artifact_sha
+    evidence_path=container/"buyer-value-evidence.json"
+    if (evidence_path.is_symlink() or not evidence_path.is_file()
+            or not 100<evidence_path.stat().st_size<=150_000):
+        raise ValueError("BUYER_VALUE_EVIDENCE_MISSING")
+    try:
+        evidence=json.loads(evidence_path.read_text(encoding="utf8"))
+    except (OSError,UnicodeError,ValueError) as exc:
+        raise ValueError("BUYER_VALUE_EVIDENCE_INVALID_JSON") from exc
+    if (not isinstance(evidence,dict)
+            or evidence.get("schema")!=VALUE_EVIDENCE_SCHEMA
+            or evidence.get("recipe")!=recipe
+            or evidence.get("artifact_sha256")!=artifact_sha
+            or any(not _substantive(evidence.get(key)) for key in
+                   ("target_buyer","customer_problem","measurable_buyer_outcome",
+                    "scope_limitations","why_customer_would_choose_this"))):
+        raise ValueError("BUYER_VALUE_CASE_NOT_SUBSTANTIATED")
+
+    alternatives=evidence.get("alternatives")
+    if not isinstance(alternatives,list) or not 2<=len(alternatives)<=8:
+        raise ValueError("BUYER_VALUE_ALTERNATIVES_MISSING")
+    names=set()
+    source_urls=set()
+    for alt in alternatives:
+        if (not isinstance(alt,dict) or not _substantive(alt.get("name"),4,160)
+                or not isinstance(alt.get("source_url"),str)
+                or not re.fullmatch(r"https://[^\s/]+/[^\s]*",alt["source_url"])
+                or not _substantive(alt.get("what_it_already_solves"))
+                or not _substantive(alt.get("our_verified_advantage"))):
+            raise ValueError("BUYER_VALUE_ALTERNATIVE_UNVERIFIED")
+        name=alt["name"].casefold().strip()
+        url=alt["source_url"].casefold().strip().rstrip("/")
+        if name in names or url in source_urls:
+            raise ValueError("BUYER_VALUE_ALTERNATIVES_DUPLICATED")
+        names.add(name)
+        source_urls.add(url)
+
+    cases=evidence.get("customer_workflows")
+    if not isinstance(cases,list) or not 2<=len(cases)<=12:
+        raise ValueError("BUYER_VALUE_WORKFLOWS_MISSING")
+    case_names=set()
+    files=set()
+    file_digests=set()
+    for case in cases:
+        if (not isinstance(case,dict) or not _substantive(case.get("buyer_task"))
+                or not _substantive(case.get("reproduction_steps"),50)
+                or not _substantive(case.get("observed_outcome"),35)
+                or not _substantive(case.get("decision_enabled"),35)):
+            raise ValueError("BUYER_VALUE_WORKFLOW_INCOMPLETE")
+        name=case["buyer_task"].casefold().strip()
+        filename=case.get("proof_filename")
+        if name in case_names or filename in files or case.get("proof_sha256") in file_digests:
+            raise ValueError("BUYER_VALUE_WORKFLOW_DUPLICATED")
+        _safe_proof_file(container,filename,case.get("proof_sha256"))
+        case_names.add(name)
+        files.add(filename)
+        file_digests.add(case["proof_sha256"])
+
+    offer=evidence.get("commercial_offer")
+    if (not isinstance(offer,dict) or offer.get("model") not in {"paid","free"}
+            or not isinstance(offer.get("currency"),str)
+            or not re.fullmatch(r"[A-Z]{3}",offer["currency"])
+            or type(offer.get("price_minor_units")) is not int
+            or not 0<=offer["price_minor_units"]<=10**11
+            or any(not _substantive(offer.get(key)) for key in
+                   ("price_justification","delivery_method","license_terms",
+                    "support_process","refund_or_remediation_policy"))):
+        raise ValueError("BUYER_VALUE_COMMERCIAL_OFFER_INCOMPLETE")
+    if (offer["model"]=="paid")!=(offer["price_minor_units"]>0):
+        raise ValueError("BUYER_VALUE_PRICE_AND_OFFER_MISMATCH")
+    signals=evidence.get("demand_signals")
+    if not isinstance(signals,list) or not 1<=len(signals)<=12:
+        raise ValueError("BUYER_VALUE_DEMAND_EVIDENCE_MISSING")
+    real_demand=False
+    for signal in signals:
+        if (not isinstance(signal,dict)
+                or signal.get("kind") not in REAL_BUYER_SIGNALS|{"public_market_research"}
+                or not _substantive(signal.get("finding"))
+                or not _substantive(signal.get("limitations"))):
+            raise ValueError("BUYER_VALUE_DEMAND_EVIDENCE_INVALID")
+        if signal["kind"] in REAL_BUYER_SIGNALS:
+            _safe_proof_file(container,signal.get("proof_filename"),signal.get("proof_sha256"))
+            real_demand=True
+        elif (not isinstance(signal.get("source_url"),str)
+              or not re.fullmatch(r"https://[^\s/]+/[^\s]*",signal["source_url"])):
+            raise ValueError("BUYER_VALUE_RESEARCH_SOURCE_MISSING")
+    if offer["model"]=="paid" and not real_demand:
+        raise ValueError("BUYER_VALUE_PAID_DEMAND_NOT_VALIDATED")
+    return {"status":"BUYER_VALUE_EVIDENCE_STRUCTURALLY_VERIFIED",
+            "artifact_sha256":artifact_sha,
+            "evidence_sha256":_digest_file(evidence_path),
+            "customer_workflows":len(case_names),
+            "real_buyer_demand_documented":real_demand}
+
+def require_chatgpt_final_review(inbox,recipe,artifact_sha,product_manifest,package_path,
+                                 buyer_value_evidence):
     """Require ChatGPT's substantive, exact-artifact review before store entry.
 
     The receipt is authored only after the assistant inspects every packaged
@@ -121,7 +246,8 @@ def require_chatgpt_final_review(inbox,recipe,artifact_sha,product_manifest,pack
             or review.get("decision")!="approved_for_store"
             or review.get("recipe")!=recipe
             or review.get("artifact_sha256")!=artifact_sha
-            or review.get("manifest_sha256")!=manifest_sha):
+            or review.get("manifest_sha256")!=manifest_sha
+            or review.get("buyer_value_evidence_sha256")!=buyer_value_evidence["evidence_sha256"]):
         raise ValueError("CHATGPT_FINAL_REVIEW_NOT_BOUND_TO_PRODUCT")
     stamp=review.get("reviewed_at_utc")
     if not isinstance(stamp,str):
@@ -227,10 +353,12 @@ def require_quality_clearance(inbox,recipe,package_digest,product_manifest,packa
             or product_manifest.get("public_listing_enabled") is not False
             or product_manifest.get("owner_publication_approval") is not False):
         raise ValueError("OBJECTIVE_GATE_FUNCTIONAL_EVIDENCE_MISSING")
+    buyer_value=require_buyer_value_evidence(Path(inbox),recipe,package_digest)
     chatgpt_review=require_chatgpt_final_review(
-        Path(inbox),recipe,package_digest,product_manifest,package_path
+        Path(inbox),recipe,package_digest,product_manifest,package_path,buyer_value
     )
     return {"status":"VERIFIED_OBJECTIVE_RELEASE_READINESS",
             "artifact_sha256":package_digest,
             "functional_tests_verified":measured["tests_run"],
+            "buyer_value_evidence":buyer_value["status"],
             "chatgpt_final_review":chatgpt_review["status"]}
