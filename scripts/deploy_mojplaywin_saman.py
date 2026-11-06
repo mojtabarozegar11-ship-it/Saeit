@@ -53,9 +53,14 @@ def atomic_write(path, content, mode):
 
 
 def restart_passenger():
-    restart = DOCROOT / "tmp" / "restart.txt"
-    restart.parent.mkdir(parents=True, exist_ok=True)
-    restart.touch()
+    # The verified Passenger wrapper loads Saeit-staging; restart both the
+    # document-root marker and the active application marker.
+    for restart in (DOCROOT / "tmp" / "restart.txt", APP_ROOT / "tmp" / "restart.txt"):
+        restart.parent.mkdir(parents=True, exist_ok=True)
+        restart.touch()
+    wrapper = DOCROOT / "passenger_wsgi.py"
+    if wrapper.is_file() and not wrapper.is_symlink():
+        wrapper.touch()
 
 
 def rollback(run_id):
