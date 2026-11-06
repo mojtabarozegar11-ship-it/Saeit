@@ -106,6 +106,25 @@ def main() -> None:
                 not item.is_symlink() and item.suffix == '.html'
             )[:30]))
     print('LIVE_PASSENGER_WSGI_PRESENT=' + str((APP / 'passenger_wsgi.py').is_file()).lower())
+    # Identify which known on-account deployment tree matches public behavior.
+    # Hash and route presence only; no source code, settings values or users.
+    for label, root in (('SAEIT', APP),
+                        ('STAGING_WEB', HOME / 'Saeit-staging-web'),
+                        ('PUBLIC_HTML', HOME / 'public_html')):
+        if root.is_symlink() or not root.is_dir():
+            print('ACADEMY_CANDIDATE_ROOT=' + label + ' status=ABSENT_OR_UNSAFE')
+            continue
+        print('ACADEMY_CANDIDATE_ROOT=' + label + ' status=DIR')
+        for name in ('manage.py', 'passenger_wsgi.py', 'config/urls.py',
+                     'core/academy_views.py', 'templates/core/academy.html',
+                     'core/templates/core/academy.html'):
+            path = root / name
+            if path.is_file() and not path.is_symlink():
+                line = 'ACADEMY_CANDIDATE_FILE=' + label + '/' + name + ' sha=' + hash_file(path)
+                if name == 'config/urls.py':
+                    route_data = path.read_text(errors='replace')
+                    line += ' has_login=' + str('accounts/login/' in route_data).lower()
+                print(line)
     marker = APP / 'tmp/restart.txt'
     if marker.is_file() and not marker.is_symlink():
         print('ACADEMY_RESTART_MARKER_AGE_SECONDS=' + str(max(0, round(time.time()-marker.stat().st_mtime))))
