@@ -1,0 +1,86 @@
+name: Factory C08 VPS Physical Precision Acceptance
+on:
+  pull_request:
+    paths:
+      - .github/workflows/factory-c08-vps-private-precision-acceptance.yml
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-c08-private-stage
+  cancel-in-progress: false
+jobs:
+  verify-private-vps-candidate:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/factory-c08-private-vps-stage-20261106'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Privately build and independently extract exact 1.4 customer product on VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          STAGE_REV: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          [[ "$STAGE_REV" =~ ^[a-f0-9]{40}$ ]]
+          d="$(mktemp -d "$RUNNER_TEMP/c08-ssh.XXXXXXXX")"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          trap 'shred -u -- "$d/key" || true' EXIT
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_opts=(-T -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 "bash -se -- $STAGE_REV" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          revision="$1"
+          [[ "$revision" =~ ^[a-f0-9]{40}$ ]]
+          base="$HOME/factory-runtime"
+          stage="$base/operations/f01-c08-private-stage-$revision"
+          test "$(id -un)" = githubops
+          test ! -e "$stage" && test ! -L "$stage"
+          test -d "$base/operations/single-product-runtime"
+          install -d -m 700 "$stage"
+          REMOTE
+          tar -cf - product_recipes/farm_enterprise_economics \
+            scripts/factory_product_maker.py \
+            scripts/factory_personal_owner_passport_policy_20261020.py \
+            scripts/factory_verified_customer_cycle_20261021.py | \
+            ssh "${ssh_opts[@]}" githubops@178.239.147.150 \
+              "tar -xf - -C \"\$HOME/factory-runtime/operations/f01-c08-private-stage-$STAGE_REV\""
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 "bash -se -- $STAGE_REV" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          revision="$1"
+          base="$HOME/factory-runtime"
+          stage="$base/operations/f01-c08-private-stage-$revision"
+          py="$base/.venv/bin/python"
+          "$py" -B "$stage/scripts/factory_product_maker.py" \
+            --recipes "$stage/product_recipes" --out "$stage/private-digital-products" \
+            --recipe farm_enterprise_economics >/dev/null
+          "$py" -B - "$stage" <<'PY'
+          import importlib.util,hashlib,json,pathlib,sys
+          stage=pathlib.Path(sys.argv[1]); name='farm_enterprise_economics'
+          root=stage/'private-digital-products'/name
+          manifest=json.loads((root/'manufacturing_manifest.json').read_text())
+          source='d75a687a0bb97529586b90dc91e4c75a5efa8e107f5a3110109159a78a87ff3b'
+          archive='04c0045d4610c2d15ef86146ec66d0baed5eebb475d57e8b6648152b56c7f335'
+          assert manifest['source_sha256']==source and manifest['artifact_sha256']==archive
+          assert manifest['qa_measurements']['successful_tests']==20
+          assert hashlib.sha256((root/(name+'-internal-qa.zip')).read_bytes()).hexdigest()==archive
+          assert manifest['professional_quality_approved'] is False and manifest['public_listing_enabled'] is False
+          spec=importlib.util.spec_from_file_location('customer',str(stage/'scripts/factory_verified_customer_cycle_20261021.py'))
+          customer=importlib.util.module_from_spec(spec);spec.loader.exec_module(customer)
+          receipt=customer.inspect_product(root,name)
+          assert receipt['customer_archive_tests_run']==20 and receipt['commerce_enabled'] is False
+          print(json.dumps({'schema':'saeit.factory.c08.vps-isolated.v1',
+            'source_sha256':source,'artifact_sha256':archive,
+            'factory_tests_passed':20,'customer_extracted_tests_passed':20,
+            'commercial_release':False,'native_runtime_changed':False},sort_keys=True))
+          PY
+          REMOTE
