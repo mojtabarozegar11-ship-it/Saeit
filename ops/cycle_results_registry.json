@@ -47,7 +47,7 @@
     },
     "05": {
       "automation_id": "6ae7471b3c5c8191b3020829e9c1877e",
-      "sequence": 7,
+      "sequence": 8,
       "legacy_report_last_verified": 57,
       "primary_output": "accepted operational business gate",
       "legacy_source_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1725",
@@ -148,6 +148,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/d1e53bbd818d75b4bc23ef2f54634614c0333383",
       "acceptance_result": "Exact CI logs 42242506241 and 42242506224 identify missing module during pytest collection; repository-qualified import patched; post-fix CI not yet confirmed",
       "impact": "Source-level collection blocker addressed, manuscript acceptance and revenue unverified"
+    },
+    {
+      "registry_id": "R05-0008",
+      "cycle_id": "05",
+      "run_id": "ZM50-C05-20261106T180501Z",
+      "deliverable_key": "production-release-hold-evidence-linkage-42263164434",
+      "stage": "blocked",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42263164434",
+      "acceptance_result": "Read-only cPanel inventory workflow completed successfully; user-supplied gate findings remain false: isolation and recoverable backups; no P0 closure or deployment",
+      "impact": "Release HOLD linked to exact workflow and delegated to cycle 03; no accepted product or collected revenue"
     }
   ],
   "report_reservations": [],
@@ -250,7 +260,7 @@
     "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
     "supersedes": "ZM-20DAY-COMMERCIAL-MISSION-20261106",
     "cycle_owner": "05",
-    "counter": 1,
+    "counter": 2,
     "max_runs": 50,
     "runs": [
       {
@@ -258,6 +268,21 @@
         "run_id": "ZM50-C05-20261106T170454Z",
         "stage": "baseline",
         "accepted_deliverables": 0
+      },
+      {
+        "slot": "C02",
+        "run_id": "ZM50-C05-20261106T180501Z",
+        "stage": "blocked",
+        "accepted_deliverables": 0,
+        "primary_gate": "production-isolation-and-restorable-backup",
+        "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/42263164434",
+        "workflow_run_id": 42263164434,
+        "production_isolation_proven": false,
+        "recoverable_backups_verified": false,
+        "release_permitted": false,
+        "owner": "03",
+        "oversight_owner": "05",
+        "next_acceptance": "Independent isolation proof and actual restore/rollback evidence; no deployment until both pass"
       }
     ],
     "owners": {
