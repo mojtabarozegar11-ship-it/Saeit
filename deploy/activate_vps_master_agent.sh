@@ -24,6 +24,41 @@ fi
 for module in core/management/commands/seed_online_income_agents.py core/management/commands/autonomous_master_loop.py core/management/commands/online_income_cycle.py core/worker_runner.py core/autonomous_brain.py core/master_agent_capability_pack.py; do
   test -s "$app/$module" || { echo "MASTER_REQUIRED_MODULE_MISSING"; exit 1; }
 done
+# A SQLite rollback snapshot needs at least the size of the live database on
+# the backup filesystem. Refuse activation BEFORE changing cron if insufficient.
+# No database rows are read, and this gate creates no files.
+master_capacity_preflight() {
+  SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings \
+    "$py" - "$ops" <<'PY'
+import os
+import sys
+from pathlib import Path
+from django.conf import settings
+
+ops = Path(sys.argv[1])
+database = settings.DATABASES["default"]
+if "sqlite3" not in database["ENGINE"]:
+    raise SystemExit("MASTER_CAPACITY_ABORT_UNEXPECTED_DB_ENGINE")
+source = Path(database["NAME"])
+if source.is_symlink() or not source.is_file():
+    raise SystemExit("MASTER_CAPACITY_ABORT_UNSAFE_DB_PATH")
+if ops.is_symlink() or not ops.is_dir():
+    raise SystemExit("MASTER_CAPACITY_ABORT_UNSAFE_BACKUP_PARENT")
+db_bytes = source.stat().st_size
+fs = os.statvfs(ops)
+available = fs.f_bavail * fs.f_frsize
+total = fs.f_blocks * fs.f_frsize
+# Keep room for live writes, SQLite backup journals, cron and rollback.
+reserve = max(2 * 1024**3, (total * 5 + 99) // 100)
+required = db_bytes + reserve
+print("MASTER_CAPACITY_AVAILABLE_BYTES=" + str(available), flush=True)
+print("MASTER_CAPACITY_REQUIRED_BYTES=" + str(required), flush=True)
+if available < required:
+    raise SystemExit("MASTER_CAPACITY_ABORT_INSUFFICIENT_FREE_SPACE")
+print("MASTER_CAPACITY_PREFLIGHT_OK", flush=True)
+PY
+}
+master_capacity_preflight
 install -d -m 700 "$master" "$private" "$ops/backups"
 exec 8>"$master/activation.lock"
 flock -w 20 8
