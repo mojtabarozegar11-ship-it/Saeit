@@ -44,10 +44,12 @@ class ManufacturerTests(unittest.TestCase):
         self.assertFalse(manifest["public_listing_enabled"])
         self.assertIsNone(manifest["price"])
         self.assertFalse(manifest["professional_quality_approved"])
-        self.assertIsNone(manifest["professional_quality_score"])
+        self.assertNotIn("professional_quality_score", manifest)
+        self.assertEqual(manifest["professional_quality_standard"], "objective_acceptance_v1")
         stop=json.loads((path.parent/"professional_quality_release_stop.json").read_text())
         self.assertFalse(stop["commercial_release_permitted_from_manufacturing"])
-        self.assertEqual(stop["quality_standard"],"100_independent_groups_x_10")
+        self.assertEqual(stop["quality_policy"],"objective_customer_acceptance_and_commercial_readiness_v1")
+        self.assertNotIn("requires_externally_signed_1000_quality_clearance", stop)
 
     def test_same_source_skips_repeat_generation(self):
         a = maker.manufacture("farm_enterprise_economics", self.recipes, self.output)
@@ -55,7 +57,7 @@ class ManufacturerTests(unittest.TestCase):
         self.assertTrue(a["changed"])
         self.assertFalse(b["changed"])
         self.assertEqual(a["private_artifact"], b["private_artifact"])
-        self.assertEqual(b["professional_quality_status"],"pending_independent_1000_quality_review")
+        self.assertEqual(b["professional_quality_status"],"technical_qa_passed_commercial_readiness_separate")
         self.assertTrue((Path(b["private_artifact"]).parent/"professional_quality_release_stop.json").is_file())
 
     def test_rejects_failing_test_without_replacing_package(self):

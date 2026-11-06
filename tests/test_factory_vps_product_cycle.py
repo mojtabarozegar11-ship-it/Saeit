@@ -93,13 +93,13 @@ class FactoryVPSCycleTests(unittest.TestCase):
         self.assertEqual(state["truly_new_product_count"],0)
         self.assertEqual(state["updated_existing_product_count"],0)
         self.assertEqual(state["private_technical_completion_count"],3)
-        self.assertFalse(state["quality_1000_blocks_manufacturing"])
+        self.assertEqual(state["objective_quality_gates"], "technical_archive_tests_and_release_readiness_separate")
         self.assertEqual(state["publishable_product_count"],0)
         health=json.loads((self.output/"production-health.json").read_text())
         self.assertEqual(health["new_distinct_product_ids_total"],3)
         self.assertEqual(health["new_distinct_product_ids_this_cycle"],0)
 
-    def test_customer_qa_frees_private_slot_without_1000_clearance(self):
+    def test_customer_qa_frees_private_slot_without_arbitrary_numeric_clearance(self):
         first = cycle.run_cycle(self.db,self.output,self.recipes)
         self.assertEqual(first['manufactured'],1)
         slots_file=self.output/'quality-excellence/product-flow/active-slots/current.json'
@@ -111,7 +111,7 @@ class FactoryVPSCycleTests(unittest.TestCase):
         self.assertIn(first_recipe,slots['technical_exited'])
         self.assertNotEqual(slots['active'][0]['recipe'],first_recipe)
         self.assertFalse(slots['commercial_release'])
-        self.assertTrue(slots['quality_1000_is_nonblocking_improvement_target'])
+        self.assertEqual(slots['quality_policy'],'objective_customer_acceptance_v1')
         self.assertTrue((self.output/'digital-products'/first_recipe/(first_recipe+'-internal-qa.zip')).is_file())
         self.assertTrue((self.output/'customer-extracted-acceptance'/first_recipe).is_dir())
 
@@ -121,7 +121,7 @@ class FactoryVPSCycleTests(unittest.TestCase):
         recipe=json.loads(slots_file.read_text())['active'][0]['recipe']
         manifest=json.loads((self.output/'digital-products'/recipe/'manufacturing_manifest.json').read_text())
         receipt=(self.output/'customer-extracted-acceptance'/recipe/
-                 manifest['source_sha256']/'technical-receipt.json')
+                 manifest['source_sha256']/'technical-receipt-v2.json')
         doc=json.loads(receipt.read_text())
         doc['customer_zip_extract_test']='failed'
         receipt.write_text(json.dumps(doc))

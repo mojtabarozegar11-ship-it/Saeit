@@ -195,18 +195,18 @@ def prepare_private_product(inbox, *, uncertified_preview=False, expected_sha256
         raise ValueError("BAD_SOURCE_PACKAGE")
     guardpath=Path(__file__).resolve().with_name("factory_commercial_quality_release_guard_v1.py")
     if guardpath.is_symlink() or not guardpath.is_file():
-        raise ValueError("SIGNED_1000_PUBLICATION_GUARD_UNAVAILABLE")
-    spec=importlib.util.spec_from_file_location("factory_1000_public_guard",str(guardpath))
+        raise ValueError("OBJECTIVE_PUBLICATION_GUARD_UNAVAILABLE")
+    spec=importlib.util.spec_from_file_location("factory_objective_public_guard",str(guardpath))
     guard=importlib.util.module_from_spec(spec)
     spec.loader.exec_module(guard)
     # Rights are required for every public distribution, including free previews.
-    # QC1000 remains a separate bar for the certified release path.
+    # A verified exact-version objective release review is required.
     guard.require_rights_clearance(inbox,RECIPE,digest,src)
     if not uncertified_preview:
         clearance=guard.require_quality_clearance(inbox,RECIPE,digest,data,src)
-        if (clearance.get("status")!="VERIFIED_SIGNED_PREMIUM_1000"
-                or clearance.get("1000_quality_verified") is not True):
-            raise ValueError("QC1000_REQUIRED_FOR_FACTORY_EXIT")
+        if (clearance.get("status")!="VERIFIED_OBJECTIVE_RELEASE_READINESS"
+                or clearance.get("chatgpt_final_review")!="CHATGPT_FINAL_REVIEW_VERIFIED"):
+            raise ValueError("OBJECTIVE_RELEASE_READINESS_REQUIRED")
     return digest, src
 
 

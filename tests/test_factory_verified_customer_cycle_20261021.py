@@ -1,4 +1,4 @@
-"""Full-package customer-side execution tests: not a professional score."""
+"""Full-package customer-side execution tests: no numerical grade."""
 import hashlib
 import json
 from pathlib import Path
@@ -27,19 +27,19 @@ class ExtractedCustomerQATests(unittest.TestCase):
     def product(self):
         return self.output / "digital-products" / self.recipe
 
-    def test_real_customer_extract_and_uncertified_1000_ticket(self):
+    def test_real_customer_extract_creates_objective_readiness_ticket(self):
         receipt = customer.inspect_product(self.product(), self.recipe)
         self.assertEqual(receipt["customer_zip_extract_test"], "passed")
         self.assertGreaterEqual(receipt["customer_archive_tests_run"], 1)
         customer.persist_pending(self.output, receipt)
         customer.persist_pending(self.output, receipt)
         ticket = self.output / "quality-excellence" / "customer-extracted-review" / self.recipe
-        ticket = ticket / receipt["source_sha256"] / "pending.json"
+        ticket = ticket / receipt["source_sha256"] / "readiness-v2.json"
         doc = json.loads(ticket.read_text())
-        self.assertEqual(doc["rubric_maximum"], 1000)
-        self.assertIsNone(doc["verified_total_score"])
+        self.assertTrue(doc["objective_customer_package_accepted"])
+        self.assertNotIn("rubric_maximum", doc)
         self.assertFalse(doc["commercial_release"])
-        self.assertTrue(all(x["verified_score"] is None for x in doc["rubric"].values()))
+        self.assertEqual(doc["release_readiness"]["legal_rights_and_attribution"],"not_yet_verified")
 
     def test_exact_hash_cadence_avoids_repeated_extraction_without_approving_sales(self):
         from unittest import mock
@@ -52,10 +52,10 @@ class ExtractedCustomerQATests(unittest.TestCase):
                 self.output, self.recipe, now=1005)
         self.assertFalse(fresh)
         self.assertEqual(same["artifact_sha256"], first["artifact_sha256"])
-        self.assertIs(same["professional_quality_1000_approved"], False)
+        self.assertIs(same["commercial_publication_approved"], False)
         ticket = self.output / "quality-excellence" / "customer-extracted-review"
-        ticket = ticket / self.recipe / first["source_sha256"] / "pending.json"
-        self.assertIsNone(json.loads(ticket.read_text())["verified_total_score"])
+        ticket = ticket / self.recipe / first["source_sha256"] / "readiness-v2.json"
+        self.assertFalse(json.loads(ticket.read_text())["commercial_release"])
 
     def test_cadence_expiry_or_manifest_change_reexecutes_full_zip_tests(self):
         from unittest import mock
