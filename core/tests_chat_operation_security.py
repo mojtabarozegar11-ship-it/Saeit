@@ -33,6 +33,12 @@ class ChatOperationSecurityTests(TestCase):
             requested_by=user,
         )
 
+    def test_deploy_mention_is_not_a_command(self):
+        for example in ("چطور انتشار سایت انجام می‌شود؟", "درباره انتشار سایت توضیح بده", "Why deploy release now?"):
+            with self.subTest(text=example):
+                self.assertIsNone(plan_chat_operation(example))
+        self.assertEqual(plan_chat_operation("انتشار سایت را اجرا کن").action, "cpanel.deploy_release")
+
     def test_normal_and_staff_chat_cannot_create_executable_approvals(self):
         for user in (self.customer, self.staff):
             with self.subTest(username=user.username):
