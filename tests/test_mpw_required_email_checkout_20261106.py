@@ -106,6 +106,17 @@ class CheckoutEmail(unittest.TestCase):
             email=" ", buyer_email="Buyer@Example.ORG"))
         self.assertEqual(address, "buyer@example.org")
 
+    def test_existing_signed_guest_uses_email_binding_without_username_attribute(self):
+        # Some Django AUTH_USER_MODEL implementations use email for login and
+        # intentionally have no `username` attribute.
+        guest = SimpleNamespace(email="buyer@example.org", save=lambda update_fields: None)
+        self.space["_read_user"] = lambda request: guest
+        user, token = self.identity(self.request(email="BUYER@example.org"), create=True)
+        self.assertIs(user, guest)
+        self.assertIsNone(token)
+        with self.assertRaises(Http404):
+            self.identity(self.request(email="different@example.org"), create=True)
+
     def test_authenticated_account_email_is_still_required(self):
         account = SimpleNamespace(is_authenticated=True, email="member@example.org")
         for fields in ({}, {"email": "other@example.org"}, {"email": "invalid"}):

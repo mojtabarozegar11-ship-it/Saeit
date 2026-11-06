@@ -41,7 +41,11 @@ def _read_user(request):
             return None
         from django.contrib.auth import get_user_model
         user = get_user_model().objects.filter(pk=user_id, is_active=True).first()
-        if user is None or user.has_usable_password():
+        # A signed guest cookie must never become a staff/admin login, even if
+        # a guest principal is later misconfigured in the auth database.
+        if (user is None or user.has_usable_password()
+                or getattr(user, "is_staff", False)
+                or getattr(user, "is_superuser", False)):
             return None
         username = str(getattr(user, get_user_model().USERNAME_FIELD, ""))
         if not username.startswith("mpwguest_"):
@@ -117,12 +121,18 @@ def _new_user(request):
                 user.set_unusable_password()
                 if hasattr(user, "is_active"):
                     user.is_active = True
+                # Never inherit a customized user model's privileged defaults.
+                for privileged_flag in ("is_staff", "is_superuser"):
+                    if hasattr(user, privileged_flag):
+                        setattr(user, privileged_flag, False)
                 user.save(force_insert=True)
         except IntegrityError:
             user = Model.objects.filter(**query).first()
             if user is None:
                 raise
-    if not getattr(user, "is_active", True) or user.has_usable_password():
+    if (not getattr(user, "is_active", True) or user.has_usable_password()
+            or getattr(user, "is_staff", False)
+            or getattr(user, "is_superuser", False)):
         raise Http404("Guest identity conflict")
     if hasattr(user, "email"):
         existing_email = str(getattr(user, "email", "") or "").strip().lower()
@@ -186,7 +196,9 @@ def _identity(request, *, create=False):
     token = None
     if user is None and create:
         user, token = _new_user(request)
-    elif user is not None and create and str(getattr(user, "username", "")).startswith("mpwguest_"):
+    elif user is not None and create:
+        # _read_user already checked the signed guest identity.  A custom
+        # Django user model may use email, not username, as USERNAME_FIELD.
         user = _bind_guest_email(request, user)
     if user is None:
         raise Http404("Guest purchase session missing or expired")
