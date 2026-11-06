@@ -506,10 +506,17 @@ def _du_largest_direct_children(directory, timeout_seconds):
              str(directory)],
             capture_output=True, text=True, timeout=timeout_seconds,
             check=False)
-    except subprocess.TimeoutExpired:
-        return {"state": "timed_out", "timeout_seconds": timeout_seconds}
+    except subprocess.TimeoutExpired as exc:
+        # GNU du may have already completed several children before timing out.
+        output = exc.stdout or b""
+        if isinstance(output, bytes):
+            output = output.decode("utf8", errors="replace")
+        run = subprocess.CompletedProcess([], 124, stdout=output)
+        timed_out = True
     except OSError:
         return {"state": "unavailable"}
+    else:
+        timed_out = False
     top = []
     for row in run.stdout.splitlines():
         if "\t" not in row:
@@ -522,7 +529,8 @@ def _du_largest_direct_children(directory, timeout_seconds):
             continue
         top.append({"label": _safe_child_label(path), "bytes": int(size)})
     top.sort(key=lambda row: row["bytes"], reverse=True)
-    return {"state": "complete" if run.returncode == 0 else "partial",
+    return {"state": ("partial_timeout" if timed_out else
+                      "complete" if run.returncode == 0 else "partial"),
             "largest_direct_children": top[:15],
             "returned_child_count": len(top)}
 
@@ -545,3 +553,51 @@ def disk_pressure_map():
 
 if __name__ == "__main__":
     print("VPS_DISK_PRESSURE_READONLY=" + json.dumps(disk_pressure_map(), sort_keys=True))
+
+
+def _large_files_bounded(root, max_seconds=8, max_entries=100000):
+    """Fast metadata-only sample, with no contents or raw filenames exposed."""
+    import time
+    deadline = time.monotonic() + max_seconds
+    stack = [(root, 0)]
+    seen, folders = 0, 0
+    top = []
+    while stack and seen < max_entries and time.monotonic() < deadline:
+        folder, depth = stack.pop()
+        if depth > 7:
+            continue
+        try:
+            with os.scandir(folder) as items:
+                rows = list(items)
+        except OSError:
+            continue
+        folders += 1
+        seen += len(rows)
+        next_dirs = []
+        for entry in rows:
+            try:
+                if entry.is_symlink():
+                    continue
+                if entry.is_dir(follow_symlinks=False) and depth < 7:
+                    next_dirs.append(Path(entry.path))
+                elif entry.is_file(follow_symlinks=False):
+                    size = entry.stat(follow_symlinks=False).st_size
+                    if size >= 128 * 2**20:
+                        rel = Path(entry.path).relative_to(root)
+                        top.append({"bytes": size,
+                                    "root_child": _safe_child_label(Path(rel.parts[0])),
+                                    "depth": len(rel.parts)})
+            except (OSError, ValueError):
+                continue
+        # Put factory-runtime first in depth-first traversal.
+        next_dirs.sort(key=lambda path: path.name == "factory-runtime")
+        stack.extend((p, depth + 1) for p in next_dirs)
+    top.sort(key=lambda row: row["bytes"], reverse=True)
+    return {"state": "complete" if not stack else "partial_bounded",
+            "entries_examined": seen, "directories_examined": folders,
+            "large_files_found": len(top), "largest_files": top[:20]}
+
+
+if __name__ == "__main__":
+    print("VPS_LARGE_FILE_SAMPLE_READONLY=" +
+          json.dumps(_large_files_bounded(Path("/home/githubops")), sort_keys=True))
