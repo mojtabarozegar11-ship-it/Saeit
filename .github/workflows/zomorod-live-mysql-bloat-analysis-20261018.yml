@@ -159,38 +159,6 @@ jobs:
           print("MYSQL_RETENTION_AUDIT_COMPLETE=yes")
           PY
           REMOTE
-      - name: Read-only stale evidence and orphan signals
-        shell: bash
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/zomorod-baseline-inventory"
-          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
-          set -euo pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
-          from pathlib import Path
-          import subprocess,tempfile,urllib.parse
-          home=Path.home(); envfile=home/"Saeit-staging/.env"
-          raw=next((line.split("=",1)[1].strip().strip("'") for line in envfile.read_text().splitlines() if line.startswith("DATABASE_URL=")),None)
-          parsed=urllib.parse.urlsplit(raw); db=parsed.path.strip("/")
-          opts={"user":urllib.parse.unquote(parsed.username or ""), "password":urllib.parse.unquote(parsed.password or ""), "host":parsed.hostname or "localhost", "port":str(parsed.port or 3306)}
-          with tempfile.TemporaryDirectory(prefix=".mysql-readonly-stale-",dir=str(home/".cagefs/tmp")) as tmp:
-              optfile=Path(tmp)/"client.cnf"
-              def esc(v): return '"' + str(v).replace("\\","\\\\").replace('"','\\"') + '"'
-              optfile.write_text("[client]\n"+"".join("{}={}\n".format(k,esc(v)) for k,v in opts.items())); optfile.chmod(0o600)
-              def q(sql): return subprocess.run(["mysql","--defaults-extra-file="+str(optfile),"--batch","--skip-column-names","--raw",db,"--execute",sql],capture_output=True,text=True,timeout=60,check=True).stdout.strip()
-              queries={
-                "EVIDENCE_VALID_UNTIL": "SELECT COUNT(*),SUM(status='stale'),SUM(valid_until IS NOT NULL AND valid_until < NOW()),MIN(valid_until),MAX(valid_until) FROM core_factoryevidence",
-                "EVIDENCE_ORPHAN_TASK": "SELECT COUNT(*) FROM core_factoryevidence e LEFT JOIN core_agenttask t ON t.id=e.task_id WHERE e.task_id IS NOT NULL AND t.id IS NULL",
-                "EVIDENCE_ORPHAN_RUN": "SELECT COUNT(*) FROM core_factoryevidence e LEFT JOIN core_factoryrun r ON r.id=e.run_id WHERE e.run_id IS NOT NULL AND r.id IS NULL",
-                "EVIDENCE_DUP_DIGEST_GROUPS": "SELECT COUNT(*) FROM (SELECT prerequisite_digest FROM core_factoryevidence WHERE prerequisite_digest IS NOT NULL AND prerequisite_digest<>'' GROUP BY prerequisite_digest HAVING COUNT(*)>1) x",
-                "EVIDENCE_DUP_DIGEST_ROWS": "SELECT COALESCE(SUM(n),0) FROM (SELECT COUNT(*) n FROM core_factoryevidence WHERE prerequisite_digest IS NOT NULL AND prerequisite_digest<>'' GROUP BY prerequisite_digest HAVING COUNT(*)>1) x",
-                "TASK_PAYLOAD_BYTES": "SELECT COUNT(*),COALESCE(SUM(OCTET_LENGTH(input_data)+OCTET_LENGTH(output_data)+OCTET_LENGTH(goal)+OCTET_LENGTH(prerequisite_snapshot)+OCTET_LENGTH(output_contract)),0),COALESCE(MAX(OCTET_LENGTH(input_data)+OCTET_LENGTH(output_data)+OCTET_LENGTH(goal)+OCTET_LENGTH(prerequisite_snapshot)+OCTET_LENGTH(output_contract)),0) FROM core_agenttask",
-                "REPORT_CONTENT_BYTES": "SELECT COUNT(*),COALESCE(SUM(OCTET_LENGTH(content)),0),COALESCE(MAX(OCTET_LENGTH(content)),0) FROM core_report"
-              }
-              for label,sql in queries.items(): print(label+"="+q(sql),flush=True)
-          print("MYSQL_STALE_ORPHAN_AUDIT_COMPLETE=yes")
-          PY
-          REMOTE
       - name: Delete SSH credentials
         if: always()
         shell: bash
