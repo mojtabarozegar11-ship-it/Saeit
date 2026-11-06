@@ -34,5 +34,17 @@ class F01QualityGateTests(unittest.TestCase):
         self.assertEqual(r["machine_documentary_gap"],0)
         self.assertFalse(r["professional_qc1000_certified"])
         self.assertFalse(r["commercial_release_allowed"])
+    def test_non_object_evidence_is_missing_without_aborting(self):
+        data=json.loads(self.catalog.read_text())
+        malformed=data["criteria"][0]
+        valid=data["criteria"][1]
+        path=self.evidence/malformed["required_evidence"]
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text("[]")
+        self.write_evidence([valid["id"]])
+        r=evaluate(self.package,self.catalog,self.evidence)
+        self.assertEqual(r["machine_documentary_points"],10)
+        self.assertIn(malformed["id"],r["missing_criteria"])
+        self.assertIn(valid["id"],r["measured_criteria"])
 
 if __name__=="__main__": unittest.main()
