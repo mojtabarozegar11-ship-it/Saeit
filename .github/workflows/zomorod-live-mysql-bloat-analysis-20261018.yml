@@ -113,3 +113,4 @@ jobs:
         if: always()
         shell: bash
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+# Continued read-only live storage audit; no write operations.
