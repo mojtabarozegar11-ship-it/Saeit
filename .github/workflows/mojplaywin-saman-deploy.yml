@@ -366,7 +366,7 @@ jobs:
           echo "VERIFIED_GAME_SUBSITES=$game_count"
 
       - name: Roll back failed live check
-        if: failure() && steps.deploy.outcome == 'success' && (steps.route_check.outcome == 'failure' || steps.smoke.outcome == 'failure' || steps.finance_check.outcome == 'failure')
+        if: failure() && steps.deploy.outcome == 'success' && (steps.route_check.outcome == 'failure' || steps.smoke.outcome == 'failure')
         shell: bash
         run: |
           WORK="$RUNNER_TEMP/mojplaywin-ssh"
