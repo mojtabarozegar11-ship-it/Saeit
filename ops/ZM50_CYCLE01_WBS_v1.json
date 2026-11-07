@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "cycle_id": "01",
+  "version": "v1",
+  "baseline_date": "2026-11-07",
+  "total_weight": 100,
+  "scoring": "Binary acceptance per WBS item only; no partial, report, or counter credit. Historical evidence may be reviewed but is not retroactively accepted without matching proof.",
+  "items": [
+    {
+      "id": "R01-A",
+      "weight": 12,
+      "scope": "Inventory and provenance of complete manuscripts, research and CV portfolio",
+      "acceptance": "Complete deliverable, independent source/rights verification as applicable, immutable evidence link, readback/hash and documented gate acceptance",
+      "accepted": false
+    },
+    {
+      "id": "R01-B",
+      "weight": 18,
+      "scope": "Primary-source numerical and citation reconciliation for irrigation manuscript",
+      "acceptance": "Complete deliverable, independent source/rights verification as applicable, immutable evidence link, readback/hash and documented gate acceptance",
+      "accepted": false
+    },
+    {
+      "id": "R01-C",
+      "weight": 10,
+      "scope": "Authorship, funding, conflict, AI disclosure and permissions verified by author",
+      "acceptance": "Complete deliverable, independent source/rights verification as applicable, immutable evidence link, readback/hash and documented gate acceptance",
+      "accepted": false
+    },
+    {
+      "id": "R01-D",
+      "weight": 12,
+      "scope": "Complete edited DOCX/PDF irrigation manuscript passes structural and editorial acceptance",
+      "acceptance": "Complete deliverable, independent source/rights verification as applicable, immutable evidence link, readback/hash and documented gate acceptance",
+      "accepted": false
+    },
+    {
+      "id": "R01-E",
+      "weight": 8,
+      "scope": "Journal-specific compliance package and author-approved submission-ready files",
+      "acceptance": "Complete deliverable, independent source/rights verification as applicable, immutable evidence link, readback/hash and documented gate acceptance",
+      "accepted": false
+    },
+    {
+      "id": "R01-F",
+      "weight": 10,
+      "scope": "Other scientific articles and research dossiers fully validated",
+      "acceptance": "Complete deliverable, independent source/rights verification as applicable, immutable evidence link, readback/hash and documented gate acceptance",
+      "accepted": false
+    },
+    {
+      "id": "R01-G",
+      "weight": 10,
+      "scope": "Scientific CV and biography fully sourced and approved",
+      "acceptance": "Complete deliverable, independent source/rights verification as applicable, immutable evidence link, readback/hash and documented gate acceptance",
+      "accepted": false
+    },
+    {
+      "id": "R01-H",
+      "weight": 10,
+      "scope": "Scientific website pages and research content complete and approved for publication",
+      "acceptance": "Complete deliverable, independent source/rights verification as applicable, immutable evidence link, readback/hash and documented gate acceptance",
+      "accepted": false
+    },
+    {
+      "id": "R01-I",
+      "weight": 5,
+      "scope": "Written scientific product complete with rights and quality acceptance",
+      "acceptance": "Complete deliverable, independent source/rights verification as applicable, immutable evidence link, readback/hash and documented gate acceptance",
+      "accepted": false
+    },
+    {
+      "id": "R01-J",
+      "weight": 5,
+      "scope": "Final cross-format QA, handover and acceptance inventory",
+      "acceptance": "Complete deliverable, independent source/rights verification as applicable, immutable evidence link, readback/hash and documented gate acceptance",
+      "accepted": false
+    }
+  ],
+  "baseline_accepted_weight": 0,
+  "notes": "Private manuscripts and author assertions are not to be committed to public GitHub. Submission, publication, payment and revenue are separate gates."
+}
