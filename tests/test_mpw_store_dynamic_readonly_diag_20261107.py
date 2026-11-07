@@ -8,6 +8,7 @@ from scripts.mpw_store_dynamic_readonly_diag_20261107 import (
     classify_frame,
     manifest_target_collected,
     manifest_summary,
+    static_root_matches_expected,
     safe_error,
 )
 
@@ -70,6 +71,17 @@ class SafeDiagnosticTests(unittest.TestCase):
             external.write_bytes(b"another-image")
             source.symlink_to(external)
             self.assertFalse(manifest_summary(root)["header_image_source_present"])
+
+    def test_effective_static_root_guard(self):
+        with tempfile.TemporaryDirectory() as root:
+            expected = Path(root) / "staticfiles"
+            expected.mkdir()
+            self.assertTrue(static_root_matches_expected(expected, root))
+            self.assertFalse(static_root_matches_expected(None, root))
+            self.assertFalse(static_root_matches_expected(Path(root) / "other", root))
+            link = Path(root) / "linked"
+            link.symlink_to(expected, target_is_directory=True)
+            self.assertFalse(static_root_matches_expected(link, root))
 
     def test_manifest_targets_distinguish_collected_hashes_from_originals(self):
         with tempfile.TemporaryDirectory() as root:
