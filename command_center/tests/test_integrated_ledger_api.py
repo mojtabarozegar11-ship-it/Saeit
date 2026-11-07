@@ -12,7 +12,7 @@ from django.urls import reverse
 
 from accounting.models import Account, JournalEntry, JournalLine
 from core.models import ApprovalRequest
-from command_center.models import ApprovalDecision, CommandRequest, LedgerAuditEvent, WorkItem, CycleIssue
+from command_center.models import ApprovalDecision, CommandRequest, LedgerAuditEvent, WorkItem, CycleIssue, CycleReport
 
 
 class _TabNestingParser(HTMLParser):
@@ -99,6 +99,19 @@ class IntegratedLedgerSafetyTests(TestCase):
         self.assertEqual(approval.status, "approved")
         self.assertEqual(self.api({"kind": "approval_request", "id": approval.pk,
                                    "action": "rejected"}).status_code, 409)
+
+    def test_staff_cannot_self_approve_sensitive_request(self):
+        approval = ApprovalRequest.objects.create(
+            action_type="system_change", target_type="agent", target_id="77",
+            reason="Staff request is not a grant", requested_by=self.staff, status="pending",
+        )
+        self.client.force_login(self.staff)
+        self.assertEqual(self.api({"kind": "approval_request", "id": approval.pk,
+                                   "action": "approved"}).status_code, 403)
+        self.assertEqual(self.api({"kind": "approval_request", "id": approval.pk,
+                                   "action": "rejected"}).status_code, 403)
+        approval.refresh_from_db()
+        self.assertEqual(approval.status, "pending")
 
     def test_pending_approvals_are_visible_and_ledger_integrity_is_real(self):
         approval = ApprovalRequest.objects.create(
@@ -189,3 +202,24 @@ class IntegratedLedgerSafetyTests(TestCase):
         self.assertIn("COMPLETION_WITHOUT_EVIDENCE", data["alerts"])
         self.assertEqual(CommandRequest.objects.count(), 0)
         self.assertEqual(LedgerAuditEvent.objects.count(), 0)
+
+    def test_per_project_twenty_report_shortfall_is_not_verified_completion(self):
+        CycleReport.objects.bulk_create([
+            CycleReport(domain="command", cycle="C01", project_key="management",
+                        project_name="management", action=f"Independent row {n}",
+                        action_key=f"evidence-key-{n}", result="Reported result", measure="1",
+                        next_action="Review proof", evidence=f"unverified claim {n}",
+                        owner="agent", action_date=date(2026, 11, 7), created_by=self.staff)
+            for n in range(20)
+        ])
+        output = StringIO()
+        call_command("audit_management_cycles", stdout=output)
+        data = json.loads(output.getvalue())["cycle_health"]
+        row = next(item for item in data["coverage"] if item["project"] == "management")
+        self.assertEqual(data["minimum_reports_per_cycle"], 20)
+        self.assertEqual(row["cycles_with_reports"], 1)
+        self.assertEqual(row["cycles_at_minimum_report_count"], 1)
+        self.assertEqual(row["reports_needed_for_minimum"], 49 * 20)
+        self.assertEqual(row["next_below_minimum"], "C02")
+        self.assertEqual(data["cycles_at_minimum_report_count"], 1)
+        self.assertIsNone(data["verified_completions"])

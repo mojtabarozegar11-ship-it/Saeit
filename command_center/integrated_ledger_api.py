@@ -23,6 +23,7 @@ PROJECTS = {
     "profile": "وب‌سایت و معرفی مجتبی روزگار",
 }
 CYCLES = {f"C{i:02d}" for i in range(1, 51)}
+MINIMUM_RECORDED_ACTIONS_PER_CYCLE = 20
 DOMAINS = {"command": "فرمان و چرخه‌ها", "virtual": "سایت‌ها و کسب‌وکار مجازی", "physical": "شرکت و کسب‌وکار فیزیکی"}
 
 def _text(value):
@@ -92,23 +93,37 @@ def _no_output_rows():
                 Q(resolution_reference="") | Q(resolution_reference__isnull=True))[:100]]
 
 def cycle_health():
-    """Read-only coverage and exceptions; reporting alone never means completion."""
+    """Read-only, per-project C01–C50 ledger gaps; reports are not proof."""
     rows = CycleReport.objects.values("project_key", "cycle").annotate(actions=Count("pk"))
-    by_project = {project: set() for project in PROJECTS}
+    by_project = {project: {} for project in PROJECTS}
     total_actions = 0
     for row in rows:
-        if row["project_key"] in by_project:
-            by_project[row["project_key"]].add(row["cycle"])
+        if row["project_key"] in by_project and row["cycle"] in CYCLES:
+            by_project[row["project_key"]][row["cycle"]] = row["actions"]
         total_actions += row["actions"]
     coverage = []
+    total_shortfall = 0
+    cycles_at_minimum = 0
     for key, name in PROJECTS.items():
         recorded = by_project[key]
-        remaining = sorted(CYCLES - recorded)
+        remaining = sorted(CYCLES - recorded.keys())
+        below_target = sorted(c for c in CYCLES if recorded.get(c, 0) < MINIMUM_RECORDED_ACTIONS_PER_CYCLE)
+        shortfall = sum(MINIMUM_RECORDED_ACTIONS_PER_CYCLE - min(recorded.get(c, 0), MINIMUM_RECORDED_ACTIONS_PER_CYCLE) for c in CYCLES)
+        at_minimum = len(CYCLES) - len(below_target)
+        total_shortfall += shortfall
+        cycles_at_minimum += at_minimum
         coverage.append({"project": key, "name": name, "cycles_with_reports": len(recorded),
                          "next_unreported": remaining[0] if remaining else None,
-                         "missing_cycles": len(remaining)})
+                         "missing_cycles": len(remaining),
+                         "cycles_at_minimum_report_count": at_minimum,
+                         "cycles_below_minimum_report_count": len(below_target),
+                         "next_below_minimum": below_target[0] if below_target else None,
+                         "reports_needed_for_minimum": shortfall})
     now = timezone.now()
     return {"coverage": coverage, "recorded_actions": total_actions,
+            "minimum_reports_per_cycle": MINIMUM_RECORDED_ACTIONS_PER_CYCLE,
+            "cycles_at_minimum_report_count": cycles_at_minimum,
+            "reports_needed_for_minimum": total_shortfall,
             "overdue_open_work": WorkItem.objects.filter(status__in=("open", "in_progress", "blocked"), due_at__lt=now).count(),
             "no_result_reference": WorkItem.objects.filter(status__in=("open", "in_progress", "blocked")).filter(
                 Q(resolution_reference="") | Q(resolution_reference__isnull=True)).count(),
@@ -116,7 +131,7 @@ def cycle_health():
                 Q(resolution_reference="") | Q(resolution_reference__isnull=True)).count(),
             "pending_owner_approval": ApprovalRequest.objects.filter(status="pending").count(),
             "verified_completions": None,
-            "note": "وجود گزارش فقط ثبت ادعاست؛ تکمیل واقعی بدون شاهد مستقل احراز نمی‌شود."}
+            "note": "رسیدن به ۲۰ گزارش در یک چرخه شرط شمارشی است، نه اثبات ۲۰ اقدام واقعی؛ تکمیل واقعی بدون شاهد مستقل احراز نمی‌شود."}
 
 def _auto_execute_command(request, domain, command_text):
     # Arbitrary natural language is NEVER an executable instruction. Only exact,
@@ -300,6 +315,8 @@ def integrated_ledger_api(request):
             return JsonResponse({"error": "درخواست قبلاً تعیین تکلیف شده است."}, status=409)
         if row.requested_by_id != request.user.pk:
             return JsonResponse({"error": "فقط مالک تعیین‌شدهٔ درخواست اجازهٔ تصمیم دارد."}, status=403)
+        if action in {"approved", "rejected"} and not request.user.is_superuser:
+            return JsonResponse({"error": "تصمیم حساس فقط با حساب مالک ارشد مجاز است."}, status=403)
         if action == "explanation":
             if not note:
                 return JsonResponse({"error": "توضیح خالی است."}, status=400)
