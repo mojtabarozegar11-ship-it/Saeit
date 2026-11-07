@@ -79,7 +79,7 @@ jobs:
           source=home/'.backups/zomorod-v12-contact/dcf6ce733aa95770954d6a6103730c1017089c6a/candidate/about/index.html'
           recovery=home/'.private/zm-about-v12-recovery-20261107'/runid
           sha=lambda b:hashlib.sha256(b).hexdigest()
-          before='af19a953022bb8bf52b7934e9cedba8d82d1be4fcfe9e390c51d3f746d4a5f6'
+          before='af19a953022bb8bf52b7934e9cedba8d82d1be4fcfe9e390c51d3f746d4a5f6e'
           historical='cd980f1497190cd86ec9fd09e4794a699563894c529358fef39d63810e3ef107'
           homepage='0c8a0a26780645281da8d19cbc9e5926886922dcd37d56d0a06952a627a76585'
           assert os.geteuid()!=0 and os.geteuid()==web.stat().st_uid
