@@ -498,6 +498,37 @@ def activate(run):
             if attempt < 6:
                 time.sleep(5)
         if last_status != 200:
+            # Emit a bounded local resolver diagnostic before rollback. This
+            # distinguishes missing Django registration from public Passenger
+            # routing/cache behavior without reading customer data.
+            diag = r'''
+import os
+os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+import django; django.setup()
+from django.urls import get_resolver
+target = "/commerce/trx-easy/recover/"
+hits = []
+def walk(patterns, prefix=""):
+    for p in patterns:
+        route = getattr(p, "pattern", None)
+        text = str(route) if route is not None else ""
+        full = prefix + text
+        if hasattr(p, "url_patterns"):
+            walk(p.url_patterns, full)
+        elif "recover" in full or "trx-easy" in full:
+            hits.append(full)
+walk(get_resolver().url_patterns)
+print("MPW_RECOVERY_LOCAL_RESOLVER=" + repr({"target": target, "hits": hits[:40]}))
+'''
+            try:
+                probe = subprocess.run([sys.executable, "-B", "-c", diag],
+                                       cwd=APP, capture_output=True, text=True,
+                                       timeout=30, env={**os.environ,
+                                       "DJANGO_SETTINGS_MODULE":"config.settings",
+                                       "PYTHONDONTWRITEBYTECODE":"1"})
+                print((probe.stdout or "").strip())
+            except Exception as exc:
+                print("MPW_RECOVERY_LOCAL_RESOLVER_ERROR=" + type(exc).__name__)
             fail("RECOVERY_ROUTE_NOT_READY:" + str(last_status))
     except BaseException:
         restore(folder, manifest, changed=["settings"])
