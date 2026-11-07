@@ -30,6 +30,7 @@ MAX_CANDLE_AGE_SECONDS = 3 * GRANULARITY
 METHOD = "sma20-sma50-momentum10-v1-closed-1h"
 SOURCE = "coinbase-exchange-public-candles"
 BINANCE_SOURCE = "binance-public-klines"
+BITSTAMP_SOURCE = "bitstamp-public-ohlc"
 KRAKEN_SOURCE = "kraken-spot-public-ohlc"
 BITFINEX_SOURCE = "bitfinex-public-candles"
 
@@ -69,6 +70,39 @@ def _fetch_candles(product: str) -> list:
     if not isinstance(result, list):
         raise MarketDataError("coinbase_invalid_response")
     return result
+
+
+def _fetch_bitstamp_candles(product: str) -> list:
+    pairs = {"BTC-USD": "btcusd", "ETH-USD": "ethusd"}
+    if product not in pairs:
+        raise MarketDataError("Unsupported market product")
+    result = _fetch_json(
+        f"https://www.bitstamp.net/api/v2/ohlc/{pairs[product]}/?step=3600&limit=120&exclude_current_candle=true",
+        "bitstamp",
+    )
+    if not isinstance(result, dict):
+        raise MarketDataError("bitstamp_invalid_response")
+    data = result.get("data")
+    candles = data.get("ohlc") if isinstance(data, dict) else None
+    if not isinstance(candles, list):
+        raise MarketDataError("bitstamp_missing_ohlc")
+    rows = []
+    for candle in candles:
+        if not isinstance(candle, dict):
+            raise MarketDataError("bitstamp_invalid_candle_shape")
+        try:
+            stamp = int(candle["timestamp"])
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            raise MarketDataError("bitstamp_invalid_candle_time") from exc
+        rows.append([
+            stamp,
+            candle.get("low"),
+            candle.get("high"),
+            candle.get("open"),
+            candle.get("close"),
+            candle.get("volume"),
+        ])
+    return rows
 
 
 def _fetch_binance_candles(product: str) -> list:
@@ -204,7 +238,7 @@ def _signal(product: str, rows: list, now: datetime, data_source: str = SOURCE) 
 
 def _observed_signal(product: str, now: datetime) -> dict:
     failures = []
-    for source, fetcher in ((SOURCE, _fetch_candles), (BINANCE_SOURCE, _fetch_binance_candles), (KRAKEN_SOURCE, _fetch_kraken_candles), (BITFINEX_SOURCE, _fetch_bitfinex_candles)):
+    for source, fetcher in ((SOURCE, _fetch_candles), (BITSTAMP_SOURCE, _fetch_bitstamp_candles), (BINANCE_SOURCE, _fetch_binance_candles), (KRAKEN_SOURCE, _fetch_kraken_candles), (BITFINEX_SOURCE, _fetch_bitfinex_candles)):
         try:
             return _signal(product, fetcher(product), now, source)
         except MarketDataError as exc:
