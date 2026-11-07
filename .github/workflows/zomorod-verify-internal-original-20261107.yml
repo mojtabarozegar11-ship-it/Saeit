@@ -269,6 +269,43 @@ jobs:
           print('HOME_AND_ALL_RESTORED_RESEARCH_URLS_VERIFIED=yes')
           PY
 
+      - name: Inventory old theme archives for exact-scope cleanup without deleting anything
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/zm-theme-origin-audit/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import hashlib,os,stat
+          h=Path('/home/zomorod2');w=h/'public_html'
+          assert os.geteuid()==w.stat().st_uid
+          expected='0c8a0a26780645281da8d19cbc9e5926886922dcd37d56d0a06952a627a76585'
+          assert hashlib.sha256((w/'index.html').read_bytes()).hexdigest()==expected
+          wanted=('zomorod-v7-unify','zomorod-v7-static-rescue','zomorod-v9-real-pages','zomorod-v10-content-restore','zomorod-v11','zomorod-v12-contact','zomorod-nova-six-pages','zomorod-live-inpage')
+          for name in wanted:
+              root=h/'.backups'/name
+              if not root.is_dir() or root.is_symlink():
+                  print('THEME_ARCHIVE_MISSING_OR_UNSAFE',name);continue
+              total=0;files=0;symlinks=0;types=Counter();sample=[]
+              for base,dirs,names in os.walk(root,followlinks=False):
+                  for d in list(dirs):
+                      p=Path(base)/d
+                      if p.is_symlink():symlinks+=1;dirs.remove(d)
+                  for n in names:
+                      p=Path(base)/n
+                      if p.is_symlink():symlinks+=1;continue
+                      info=p.lstat()
+                      if not stat.S_ISREG(info.st_mode):continue
+                      total+=info.st_size;files+=1;types[p.suffix.lower() or '[none]']+=1
+                      if len(sample)<9:sample.append(str(p.relative_to(root)))
+              print('THEME_ARCHIVE_INVENTORY',name,'bytes',total,'files',files,'symlinks',symlinks,'types',dict(types.most_common(8)),'example',sample)
+          print('PROTECTED_ACTIVE_THEME','index.html',expected)
+          for rel in ('static/site/zomorod-v7/inner-v7.css','static/site/zomorod-v10/inner-v10.css','assets/zm-nova-detail-v1.css','agriculture/assets/zm-nova-agriculture-v1.css'):
+              p=w/rel
+              print('ACTIVE_THEME_ASSET',rel,p.is_file(),p.stat().st_size if p.is_file() else 0)
+          print('OLD_THEME_INVENTORY_READ_ONLY=yes')
+          PY
+
       - name: Remove ephemeral SSH identity files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zm-theme-origin-audit"
