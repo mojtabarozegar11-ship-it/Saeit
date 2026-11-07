@@ -1,0 +1,113 @@
+name: Update Zomorod business dashboard safely
+on:
+  push:
+    branches: [main]
+    paths:
+      - "content/zomorod-business/app.php"
+      - ".github/workflows/zomorod-business-update.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-business-safe-update
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate PHP source
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/app.php
+          test -s content/zomorod-business/app.php
+      - name: Prepare pinned relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zomorod-business-update"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d"/*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -T -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "PINNED_RELAY=verified"
+          echo "RELAY_CONFIG=$d" >> "$GITHUB_ENV"
+      - name: Atomically update only the business app with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RELAY_CONFIG"
+          scp -q -F "$d/config" content/zomorod-business/app.php saeit-cpanel:"/home/zomorod2/.private/zomorod-business/.incoming-app-$GITHUB_SHA.php"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          private="$HOME/.private/zomorod-business"
+          live="$private/app.php"
+          incoming="$private/.incoming-app-$sha.php"
+          backup="$HOME/.backups/zomorod-business-update/$sha"
+          web="$HOME/public_html/business"
+          test "$(id -un)" = zomorod2
+          test -d "$private" && test -f "$live" && test ! -L "$live"
+          test -d "$web" && test -f "$web/index.php" && test ! -L "$web/index.php"
+          test -f "$incoming" && test ! -L "$incoming"
+          phpbin="$(command -v php || true)"; test -n "$phpbin"
+          "$phpbin" -l "$incoming" >/dev/null
+          mkdir -p "$backup"; chmod 700 "$backup"
+          cp -p "$live" "$backup/app.php"
+          cp -p "$web/index.php" "$backup/index.php"
+          sha256sum "$live" "$web/index.php" > "$backup/before.sha256"
+          install -m 600 "$incoming" "$live.new"
+          mv -f "$live.new" "$live"
+          rm -f "$incoming"
+          rollback(){ set +e; cp -p "$backup/app.php" "$live"; echo BUSINESS_UPDATE_ROLLBACK=restored; }
+          trap 'rc=$?; if test "$rc" != 0; then rollback; fi; exit "$rc"' EXIT
+          code="$(curl -sS -L --max-time 30 -o "$backup/response.html" -w '%{http_code}' "https://zomorodmelal.ir/bus?release=$sha" || true)"
+          echo BUSINESS_HTTP="$code"
+          test "$code" = 200
+          grep -Fq 'میز مدیریت و حسابداری زمرد ملل' "$backup/response.html"
+          test "$(stat -c %a "$live")" = 600
+          sha256sum "$live" "$web/index.php" > "$backup/after.sha256"
+          trap - EXIT
+          echo BUSINESS_UPDATE=success
+          echo BUSINESS_DB_MUTATION=no
+          REMOTE
+      - name: Remove temporary SSH keys
+        if: always()
+        run: rm -rf "${RUNNER_TEMP}/zomorod-business-update"
