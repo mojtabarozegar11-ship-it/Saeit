@@ -23,9 +23,23 @@
   "cycles": {
     "01": {
       "automation_id": "6adcb348d5388191b11dfcde9edb8ee3",
-      "sequence": 2,
+      "sequence": 3,
       "legacy_report_last_verified": null,
-      "primary_output": "validated manuscript"
+      "primary_output": "validated manuscript",
+      "zm50": {
+        "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
+        "counter": 1,
+        "runs": [
+          {
+            "slot": "C01",
+            "run_id": "R01-20261107T081023+0330-turn11",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "/ZM-50/R01/",
+            "note": "Dimensional reproducibility paragraph added to full private manuscript; no independent scientific acceptance"
+          }
+        ]
+      }
     },
     "02": {
       "automation_id": "6adde91161708191b6e89b01870a092b",
@@ -268,6 +282,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
       "acceptance_result": "C113 DOCX/PDF revised to prevent internal-transfer double counting; 609 PDF pages, zero text-empty pages; private Library upload confirmed; author/scientific/legal gates remain open",
       "impact": "One accounting-method ambiguity corrected in private review manuscript; no accepted book, live SKU, or revenue"
+    },
+    {
+      "registry_id": "R01-0003",
+      "cycle_id": "01",
+      "run_id": "R01-20261107T081023+0330-turn11",
+      "deliverable_key": "mr-c144-dimensional-audit-private-package",
+      "stage": "code",
+      "evidence_url": "https://docs.google.com/document/d/1ixKL_FH1DUzJi406t-GKTIk9gYJ6qpVjcZ_vFeQYuPc/edit",
+      "acceptance_result": "Private Library /ZM-50/R01 holds revised 270-paragraph 5-table DOCX and 25-page PDF; displayed-cell F7 dimensional arithmetic independently recalculated; DOCX SHA256 34d54ed5b97dece84558ebc28ff10cea252d983fde850d844f48cda1fe354619; PDF SHA256 dbb4c14b921bc90674a043a532d90012356142e2738a00855b2ab7888d324872; no source-level discrepancy resolved",
+      "impact": "Full private author-review files persist; reproducibility improved; no journal submission, acceptance, publication or revenue"
     }
   ],
   "report_reservations": [],
