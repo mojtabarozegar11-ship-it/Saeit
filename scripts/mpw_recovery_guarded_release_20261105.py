@@ -506,7 +506,17 @@ import os
 os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
 import django; django.setup()
 from django.urls import get_resolver
+import inspect, importlib
 target = "/commerce/trx-easy/recover/"
+try:
+    mod = importlib.import_module("services.mpw_trx_public_pages")
+    src = inspect.getsource(mod).splitlines()
+    selected = [line for line in src if any(token in line.lower()
+                for token in ("trx-easy", "urlpattern", "pattern", "start_order",
+                              "invoice", "download", "def "))]
+    print("MPW_PUBLIC_PAGES_SOURCE_HINT=" + repr(selected[:120]))
+except Exception as exc:
+    print("MPW_PUBLIC_PAGES_SOURCE_HINT_ERROR=" + type(exc).__name__)
 hits = []
 def walk(patterns, prefix=""):
     for p in patterns:
