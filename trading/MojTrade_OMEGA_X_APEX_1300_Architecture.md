@@ -16,7 +16,7 @@
 
 این نسخه، **مقیاس طراحی را از ۱۰۰۰ به ۱۳۰۰** توسعه می‌دهد؛ سه محور جدید عبارت‌اند از «تصمیم معاملاتی دارای سند اثبات»، «قانون اساسی ریسک مشترک» و «دوقلوی واقعیت اجرای سفارش». عدد ۱۳۰۰ **هدف طراحی و پذیرش** است، نه نمره‌ای که ربات فعلی کسب کرده باشد.
 
-- ۱۲ موتور مستقل باید علت ورود، علت خروج، شرایط ممنوعیت و اثر واقعی و غیرتکراری داشته باشند؛ افزایش تعداد اندیکاتورها ملاک برتری نیست.
+- ۱۲ موتور مستقل اولیه فقط **بذر پژوهش** هستند؛ موتور «اختراع راهبرد» باید بتواند بدون فهرست‌کردن دستی هر استراتژی، فرضیه و منطق معاملاتی جدید و واقعاً متفاوت تولید کند. افزایش تعداد اندیکاتورها ملاک برتری نیست.
 - هر تصمیم، از جمله «معامله نکن»، باید با زمان دقیق، کیفیت داده، وضعیت حساب، هزینه پیش‌بینی‌شده، نسخه الگوریتم و امضای قابل‌بازپخش ثبت شود.
 - چند معامله هم‌زمان در یک نماد مجاز است فقط وقتی که سقف مشترک ریسک، ماهیت حساب Hedging/Netting و وضعیت واقعی کارگزار تأیید شده باشد.
 - معاملات کوتاه‌مدت در افق‌های ۱، ۳، ۵ و ۱۰ دقیقه طراحی می‌شوند؛ زمان خروج تضمین‌شده نیست و احتمال قطعی و گپ قیمت در ریسک لحاظ می‌شود.
@@ -56,7 +56,7 @@ No blanket ranking of “world’s best bot” is scientifically meaningful with
 |---|---|
 | P01 Market data integrity | Multi-source lineage, latency, timestamps, staleness and quarantine |
 | P02 Macro and event intelligence | Event calendar, surprise/impact, blackout and delayed reaction |
-| P03 Strategy alpha factory | Distinct economic hypotheses, independent entry/exit contracts and de-duplication |
+| P03 Strategy alpha factory | Autonomous typed hypothesis/program synthesis, distinct entry/exit contracts, semantic novelty and de-duplication |
 | P04 Portfolio and capital | Cross-instance reservations, correlated exposures, drawdown and CVaR |
 | P05 Execution engineering | Broker adapters, idempotence, partial fills, slippage, reconciliation |
 | P06 Controlled evolution | Versioned genomes, locked validation, Champion/Challenger, rollback |
@@ -142,6 +142,33 @@ Strategy units emit at most one candidate per unique closed-bar/timeframe/event 
 
 Separate *sleeve* budgets may run concurrent strategies and multiple positions per symbol only where the account supports hedging. Under netting, maintain virtual strategy attribution but recognize a single broker position. The portfolio risk coordinator reconciles net economic exposure regardless of label.
 
+### 6A. Autonomous Strategy Invention Foundry — mandatory core, not a parameter optimizer
+
+**Requirement (FA):** «ربات باید خودش استراتژی خلق کند» یعنی کشف یک فرضیه معاملاتی تازه، ساخت منطق ورود/خروج مستقل، ایجاد کد قابل‌اعتبارسنجی، اثبات تفاوت با آرشیو قبلی، و انجام خودکار پژوهش. فقط تغییر دوره EMA، ترکیب اندیکاتورهای موجود یا تولید متن توسط مدل زبانی، «خلق استراتژی» محسوب نمی‌شود.
+
+**Autonomous invention pipeline:**
+
+1. **Market anomaly scout:** find falsifiable, timestamp-safe hypotheses from regime transitions, volatility, order/quote microstructure where genuine data exist, session behavior, cross-asset conditional response and execution cost asymmetries. All anomalies are *candidates* until independently tested.
+2. **Scientific hypothesis writer:** create `hypothesis_id`, economic/behavioral rationale, causal caveats, observable trigger, expected direction, target horizon, preconditions, ways the hypothesis can fail, and a pre-registered evaluation plan. If a plausible mechanism is unavailable, label the idea exploratory rather than causal.
+3. **Typed strategy grammar / program synthesis:** generate an abstract syntax tree (AST) from approved, unit-typed operators. Example grammar: `WHEN(regime AND entry_event AND quality_gate) -> INTENT(side, size_rule, stop_rule, exit_rule, max_hold)`. Operators include event order, comparisons, normalized spread, volatility compression, mean reversion, conditional cross-asset divergence, trend persistence and timeout. Every AST has bounded depth and complexity.
+4. **Originality gate:** canonicalize ASTs, hash equivalent expressions, compare temporal trigger overlap, position-path similarity, rolling return correlation and explanatory hypotheses against the registry. Reject renamed or parameter-tweaked copies as `DUPLICATE`; genuinely distinct economic effects earn a novelty certificate only after behavioral checks. Novelty is necessary but never sufficient for profitability.
+5. **Deterministic compiler:** compile validated AST into a common, reviewable strategy bytecode/IR or generated C# through a sandboxed, fixed code generator. Never execute model-authored arbitrary code, imports, shell commands or new network permissions. Generated code can only emit `StrategyCandidate`, not broker orders.
+6. **Safety type checker:** prove bounded loss intent, valid stop/target geometry, finite arithmetic, available data at signal time, valid symbol precision, explicit no-trade states, no future bars and termination/resource limits. Any proof failure rejects the candidate before backtesting.
+7. **Research competition:** test candidate on train/validation/OOS with purging and embargo, walk-forward splits, realistic execution costs, crisis simulation, multiple-testing adjustments and uncertainty intervals; compare to simple baselines and existing champion with the same data, budget and exposure. Record **all failed trials**.
+8. **Counterfactual attribution:** require that gains not merely replicate an existing strategy or arise from one lucky regime, stale quotes, execution omissions, selection leakage or unrealistic fills. Test ablation of each proposed new feature.
+9. **Shadow candidacy:** successful candidates become `CHALLENGER_SHADOW` with zero broker order privilege. Only after signed release gates and sustained DEMO results may a future owner-approved release consider `CHAMPION_DEMO`; never automatic real-money promotion.
+10. **Autonomous re-invention:** when a strategy decays, the foundry proposes *new hypotheses*, not unbounded risk increases. Rejected/retired ideas remain searchable to prevent rediscovery and performance cherry-picking.
+
+**Creation modes:** `DETERMINISTIC_SYNTHESIS` (must function without LLM fees); `NOVELTY_EVOLUTION` (crossover/mutation across *different structural hypotheses*, not just numeric weights); optional `LOCAL_LLM_IDEA_PROPOSAL` (untrusted text → typed DSL parser; proposals only, never code authority). API quotas and computational/disk budgets are fixed and hard-enforced. If VPS disk/backup gates remain failed, no research batch is scheduled on that VPS.
+
+**StrategyBirthCertificate v1** must contain: `strategy_id`, `birth_time`, `generator_version`, `grammar_version`, `hypothesis_text`, `economic_mechanism`, `feature_lineage_hashes[]`, `ast_hash`, `semantic_signature`, `novelty_metrics`, `candidate_lineage[]`, `trial_count_total`, `split_manifest_hash`, `risk_contract_hash`, `compiled_artifact_hash`, `validation_report_hash`, `discovery_mode`, `state`, `rejection_reason?`, `signer`. Store it in a tamper-evident append-only strategy registry, separate from financial revenue.
+
+**Lifecycle:** `IDEA → HYPOTHESIS → GENERATED → TYPE_CHECKED → NOVELTY_CHECKED → BACKTESTED → OOS_CHECKED → SHADOW → DEMO_ELIGIBLE`, or `REJECTED/RETIRED` from any gate. `LIVE` is not in the autonomous state machine. Every transition is signed, bounded and replayable. A candidate does not inherit another strategy's test evidence.
+
+**Proof that invention actually works:** with operator grammar pre-registered and no human-provided entry templates for the evaluation batch, the generator must independently create at least **three structurally and behaviorally distinct** candidate strategies; show complete birth certificates, readable formula/AST, novelty comparisons, rejected candidates and reproducible OOS results. Passing this **creation-function** test is not proof the strategies make money. No invented strategy may place even a demo order without separately passing the risk and release controls.
+
+**Autonomy budget and anti-spam:** enforce maximum daily candidate count, maximum CPU minutes, maximum retained artifacts and an adaptive stopping criterion when novelty/quality falls. Duplicates and failed tests are not counted as useful innovations. Prune only individually identified, reproducibly backed-up temporary research artifacts; never auto-delete active releases, audit logs or broker evidence.
+
 ## 7. Multi-horizon trading contract: 1–10 minutes
 
 - Supported execution horizons: nominal 60, 180, 300, 600 seconds, with data resolution and broker capability verified for each instrument.
@@ -211,6 +238,7 @@ The evidence object is append-only and cryptographically linked to previous even
 Pipeline: candidate registration → data eligibility → train → purged/embargoed OOS → walk-forward → cost stress → multiple-testing correction → Monte Carlo → shadow demo → independent demo → signed champion decision.
 
 - Genome parameters: data selection, regime, risk, entry/exit, time horizon, signal threshold, execution style and activity budget. Mutations constrained by schema and existing safety policy.
+- Distinguish **invention** (new falsifiable mechanism and structural AST) from **optimization** (parameter tuning of an existing mechanism). The engine must report counts, novelty and validated outcomes separately; synthetic agent counts do not equal discoveries.
 - Champion remains active until Challenger passes *all* comparable preregistered tests with uncertainty and costs. Rolling back is a versioned state transition, never self-modifying production code.
 - Explicitly track every trial and hypothesis to penalize selection bias; deflated/probabilistic Sharpe alone does not prove future edge.
 - Hold out untouched periods and venues where feasible; test sensitivity to different volatility regimes, commission, spread, gaps and outages.
@@ -231,6 +259,7 @@ Pipeline: candidate registration → data eligibility → train → purged/embar
 4. All 12 strategy contracts pass unit and property tests, including no-trade, bad timestamp, invalid price, negative/NaN risk and duplicate event.
 5. Exact expected branch for mutually contradictory signals, stale market data and unavailable macro proxy.
 6. A replay yields the same outcome within declared tolerance; intentionally corrupt evidence hash must fail.
+6A. Invention test suite: three independent auto-generated ASTs with no handwritten entry templates; reject algebraic duplicates, overlapping behavior, unavailable inputs, future data, division by zero and forbidden API calls; verify birth-certificate and complete trial-history integrity.
 
 ### Gate G2 — execution and portfolio failure injection
 
