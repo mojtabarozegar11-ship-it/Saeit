@@ -8,8 +8,9 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from django.db import IntegrityError, transaction
+from django.db.models import Q, Sum
 from .models import CycleReport, CycleIssue, ApprovalDecision, WorkItem, InternalMessage, PrivateAuction, LedgerAuditEvent, CommandRequest
-from accounting.models import JournalEntry
+from accounting.models import JournalEntry, Account
 from core.models import ApprovalRequest, ResearchProject
 from .zomorod_status import read_zomorod_health
 
@@ -58,6 +59,20 @@ def _command(row):
             "command": row.command, "status": row.status, "read_only": row.read_only,
             "result": row.result, "requested_by": row.requested_by.get_username(),
             "created_at": row.created_at.isoformat()}
+
+def _finance_snapshot():
+    posted = JournalEntry.objects.filter(status=JournalEntry.Status.POSTED)
+    rows = Account.objects.filter(kind__in=(Account.Kind.REVENUE, Account.Kind.EXPENSE)).annotate(
+        debit_total=Sum("journal_lines__debit", filter=Q(journal_lines__entry__in=posted)),
+        credit_total=Sum("journal_lines__credit", filter=Q(journal_lines__entry__in=posted)),
+    )
+    return [{"name": row.name, "kind": row.kind, "debit": str(row.debit_total or 0), "credit": str(row.credit_total or 0)} for row in rows]
+
+def _no_output_rows():
+    return [{"id": row.id, "title": row.title, "status": row.status, "priority": row.priority,
+             "due_at": row.due_at.isoformat() if row.due_at else None, "reason": "مرجع نتیجه یا رفع کامل ثبت نشده است."}
+            for row in WorkItem.objects.filter(status__in=("open", "in_progress", "blocked")).filter(
+                Q(resolution_reference="") | Q(resolution_reference__isnull=True))[:100]]
 
 def _auto_execute_command(request, domain, command_text):
     text = command_text.lower()
@@ -116,6 +131,12 @@ def integrated_ledger_api(request):
             "audit": [_audit_row(x) for x in LedgerAuditEvent.objects.select_related("actor")[:100]],
             "commands": [_command(x) for x in CommandRequest.objects.select_related("requested_by")[:100]],
             "systems": _system_status(request),
+            "finance": _finance_snapshot(),
+            "no_output": _no_output_rows(),
+            "release_readiness": {"open_issues": CycleIssue.objects.filter(status="open").count(),
+                                  "blocked_work": WorkItem.objects.filter(status="blocked").count(),
+                                  "pending_approvals": ApprovalRequest.objects.filter(status="pending").count(),
+                                  "unknown_connections": sum(1 for item in _system_status(request) if item["state"] == "unknown")},
             "live_summary": {
                 "accounting": {"posted": JournalEntry.objects.filter(status=JournalEntry.Status.POSTED).count(),
                                "draft": JournalEntry.objects.filter(status=JournalEntry.Status.DRAFT).count()},
