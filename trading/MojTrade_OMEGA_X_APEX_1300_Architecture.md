@@ -12,6 +12,20 @@
 - Core architecture shall not depend on GitHub Actions at runtime. Source control and CI are release-time aids, not market-data clocks or strategy services.
 - All financial or legal commitments require individual owner approval. Prefer free/open-source components without weakening security, data quality or legal compliance.
 
+## خلاصه مدیریتی فارسی
+
+این نسخه، **مقیاس طراحی را از ۱۰۰۰ به ۱۳۰۰** توسعه می‌دهد؛ سه محور جدید عبارت‌اند از «تصمیم معاملاتی دارای سند اثبات»، «قانون اساسی ریسک مشترک» و «دوقلوی واقعیت اجرای سفارش». عدد ۱۳۰۰ **هدف طراحی و پذیرش** است، نه نمره‌ای که ربات فعلی کسب کرده باشد.
+
+- ۱۲ موتور مستقل باید علت ورود، علت خروج، شرایط ممنوعیت و اثر واقعی و غیرتکراری داشته باشند؛ افزایش تعداد اندیکاتورها ملاک برتری نیست.
+- هر تصمیم، از جمله «معامله نکن»، باید با زمان دقیق، کیفیت داده، وضعیت حساب، هزینه پیش‌بینی‌شده، نسخه الگوریتم و امضای قابل‌بازپخش ثبت شود.
+- چند معامله هم‌زمان در یک نماد مجاز است فقط وقتی که سقف مشترک ریسک، ماهیت حساب Hedging/Netting و وضعیت واقعی کارگزار تأیید شده باشد.
+- معاملات کوتاه‌مدت در افق‌های ۱، ۳، ۵ و ۱۰ دقیقه طراحی می‌شوند؛ زمان خروج تضمین‌شده نیست و احتمال قطعی و گپ قیمت در ریسک لحاظ می‌شود.
+- پژوهش و خودتکامل حق سفارش مستقیم ندارند؛ نسخه جدید باید در آزمون خارج از نمونه و فوروارد دمو از نسخه قبلی بهتر باشد.
+- بهره‌برداری مستقل از اجرای مداوم GitHub Actions است؛ GitHub فقط ابزار مدیریت نسخه و آزمون انتشار خواهد بود.
+- فارسی و انگلیسیِ سیگنال‌ها فقط در مقصد تخصصی همان زبان و پس از مجوز مجزا منتشر می‌شوند؛ اتصال کیف پول، هزینه، ایمیل و معامله واقعی از این سند مجوز نمی‌گیرند.
+
+**حکم:** طراحی پیشرفته و قابل آزمون آماده می‌شود، اما تا ساخت کد، کامپایل cTrader، دفتر معاملات دمو و پذیرش عملیاتی، ادعای برتری جهانی یا سوددهی ممنوع است.
+
 ## Executive design outcome
 
 The goal is an adaptive, multi-strategy, multi-asset **risk-first decision system** with three independent differentiators:
@@ -73,6 +87,8 @@ No blanket ranking of “world’s best bot” is scientifically meaningful with
 Trust boundaries: Research → signed `StrategyRelease` → policy validator → demo execution; execution events → immutable audit → research. The research process cannot write broker commands or modify live-risk limits. The adapter does not accept model text as an executable instruction. Untrusted market/news data cannot carry tool commands.
 
 Bridge compatibility must be proven against official cTrader and the named broker API. If a secure verified transport from VPS to cTrader is unavailable, independent cTrader-only demo mode remains allowed and the bridge is **blocked**, not simulated as working. Do not weaken `AccessRights` or publish private data to solve connectivity.
+
+**Market scope policy:** Phase A instruments are XAUUSD, BTCUSD and ETHUSD only when cTrader demo contract specifications and usable quotes are independently verified. Phase B research may include liquid FX and indices; Phase C may consider stocks, listed futures, bonds or additional assets only with venue support, licensing, appropriate margin/corporate-action models and owner approval. “Multi-asset architecture” never implies those external markets are currently connected or legally accessible.
 
 ## 4. Required data contracts
 
