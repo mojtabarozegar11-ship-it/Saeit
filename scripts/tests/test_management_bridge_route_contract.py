@@ -29,6 +29,14 @@ class ManagementBridgeRouteContractTests(unittest.TestCase):
         source = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("MANAGEMENT_RUNTIME_RECEIPT_MISSING_OR_INVALID", source)
         self.assertIn("grep -qx 'RECEIPT_CLASS=MANAGEMENT_RUNTIME_READONLY_V1'", source)
+        self.assertIn("PASSENGER_PYTHON_[A-Z_]+", source)
+
+    def test_identity_probe_never_executes_configured_python(self):
+        probe = (BRIDGE.parents[1] / "scripts/cpanel_management_runtime_probe.sh").read_text(encoding="utf-8")
+        self.assertIn("PASSENGER_PYTHON_RESOLVED_VERSION_HINT_", probe)
+        self.assertIn("PASSENGER_PYTHON_BINARY_MATCH_", probe)
+        self.assertIn("readlink -f --", probe)
+        self.assertIn("stat -Lc '%d:%i'", probe)
 
 
 if __name__ == "__main__":

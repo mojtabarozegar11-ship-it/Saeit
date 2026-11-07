@@ -52,6 +52,8 @@ for site in "$app_root/.htaccess" /home/zomorod2/public_html/.htaccess; do
   count=0
   hint=none
   executable=unknown
+  resolved_version=unverified
+  binary_match=unverified
   while read -r directive value _ || [[ -n "${directive:-}" ]]; do
     if [[ "${directive:-}" != PassengerPython ]]; then continue; fi
     count=$((count + 1))
@@ -71,11 +73,56 @@ for site in "$app_root/.htaccess" /home/zomorod2/public_html/.htaccess; do
       /usr/bin/python*) hint=system_python ;;
       *) hint=other_unverified ;;
     esac
-    if [[ "${value:-}" == /* && -x "$value" ]]; then executable=yes; else executable=no; fi
+    if [[ "${value:-}" == /* && -x "$value" ]]; then
+      executable=yes
+      # Resolving a symlink and comparing device/inode never invokes Python.
+      # This identifies an executable binary, NOT sys.prefix or a live worker.
+      resolved=$(readlink -f -- "$value" 2>/dev/null || true)
+      case "${resolved##*/}" in
+        python3.9) resolved_version=3.9 ;;
+        python3.10) resolved_version=3.10 ;;
+        python3.11) resolved_version=3.11 ;;
+        python3.12) resolved_version=3.12 ;;
+        python3.13) resolved_version=3.13 ;;
+        *) resolved_version=unverified ;;
+      esac
+      configured_inode=$(stat -Lc '%d:%i' -- "$value" 2>/dev/null || true)
+      matches=''
+      for candidate in \
+        /home/zomorod2/virtualenv/Saeit/3.10/bin/python \
+        /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python \
+        /home/zomorod2/Saeit/.venv/bin/python; do
+        [[ -x "$candidate" ]] || continue
+        candidate_inode=$(stat -Lc '%d:%i' -- "$candidate" 2>/dev/null || true)
+        [[ -n "$configured_inode" && "$candidate_inode" == "$configured_inode" ]] || continue
+        case "$candidate" in
+          */virtualenv/Saeit/3.10/bin/python) label_match=prod_3_10_binary ;;
+          */virtualenv/Saeit-staging/3.11/bin/python) label_match=staging_3_11_binary ;;
+          *) label_match=project_venv_binary ;;
+        esac
+        matches=${matches:+$matches,}$label_match
+      done
+      if [[ "$matches" == *','* ]]; then
+        binary_match=multiple_binary_matches
+      elif [[ -n "$matches" ]]; then
+        binary_match="$matches"
+      else
+        binary_match=none_of_three_candidates
+      fi
+    else
+      executable=no
+    fi
   done < "$site"
-  if (( count > 1 )); then hint=multiple_ambiguous; executable=ambiguous; fi
+  if (( count > 1 )); then
+    hint=multiple_ambiguous
+    executable=ambiguous
+    resolved_version=unverified
+    binary_match=unverified
+  fi
   printf 'PASSENGER_PYTHON_HINT_%s=%s\n' "$label" "$hint"
   printf 'PASSENGER_PYTHON_HINT_EXECUTABLE_%s=%s\n' "$label" "$executable"
+  printf 'PASSENGER_PYTHON_RESOLVED_VERSION_HINT_%s=%s\n' "$label" "$resolved_version"
+  printf 'PASSENGER_PYTHON_BINARY_MATCH_%s=%s\n' "$label" "$binary_match"
 done
 
 # Bind a process to this app only if its process title explicitly names this
