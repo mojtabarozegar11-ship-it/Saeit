@@ -1,6 +1,11 @@
 name: MPW recovery additive release (guarded)
 
 on:
+  push:
+    branches:
+      - feature/mpw-recovery-01-20261105
+    paths:
+      - .github/workflows/mpw-recovery-additive-release-20261105.yml
   workflow_dispatch:
     inputs:
       operation:
@@ -14,6 +19,7 @@ on:
           - verify
           - chain_audit
           - activate
+          - rollback
 
 permissions:
   contents: read
@@ -94,7 +100,7 @@ jobs:
 
       - name: Transfer reviewed release bundle to private temporary staging
         env:
-          OPERATION: ${{ inputs.operation }}
+          OPERATION: ${{ inputs.operation || 'rollback' }}
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-recovery-release-ssh"
@@ -126,6 +132,9 @@ jobs:
               ;;
             activate)
               timeout 180s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' activate '$GITHUB_RUN_ID'"
+              ;;
+            rollback)
+              timeout 180s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B '$stage/scripts/mpw_recovery_guarded_release_20261105.py' rollback '42346897461'"
               ;;
           esac
 
