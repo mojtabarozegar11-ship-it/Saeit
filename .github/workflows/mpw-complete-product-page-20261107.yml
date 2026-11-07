@@ -1,0 +1,89 @@
+name: MojPlayWin complete product page
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-complete-product-page-20261107.yml"]
+permissions: {contents: read}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Establish pinned relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail; umask 077; d="$RUNNER_TEMP/r"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/v"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/h"
+          chmod 600 "$d/"*; ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vk" 2>/dev/null
+          cat > "$d/c" <<EOF
+          Host v
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/v
+            UserKnownHostsFile $d/vk
+          Host h
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/h
+            UserKnownHostsFile $d/hk
+            ProxyJump v
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            RequestTTY no
+          EOF
+          timeout 30s ssh -F "$d/c" v 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/hk" 2>/dev/null
+      - name: Install and verify
+        env:
+          TEMPLATE_B64: "PCFkb2N0eXBlIGh0bWw+PGh0bWwgbGFuZz0iZW4iPjxoZWFkPjxtZXRhIGNoYXJzZXQ9InV0Zi04Ij48bWV0YSBuYW1lPSJ2aWV3cG9ydCIgY29udGVudD0id2lkdGg9ZGV2aWNlLXdpZHRoLGluaXRpYWwtc2NhbGU9MSI+PHRpdGxlPnt7IHByb2R1Y3QudGl0bGUgfX0gundefinedCBNb2pQbGF5V2luPC90aXRsZT48bWV0YSBuYW1lPSJkZXNjcmlwdGlvbiIgY29udGVudD0iQnV5IHt7IHByb2R1Y3QudGl0bGUgfX0gd2l0aCBzZWN1cmUgbmF0aXZlIFRSWCBjaGVja291dCBhbmQgcHJpdmF0ZSBkZWxpdmVyeS4iPjxsaW5rIHJlbD0iY2Fub25pY2FsIiBocmVmPSJodHRwczovL21vanBsYXl3aW4uY29tL3N0b3JlL3Byb2R1Y3Qve3sgcHJvZHVjdC5wayB9fS8iPjxzdHlsZT5ib2R5e21hcmdpbjowO2JhY2tncm91bmQ6IzA4MTExZjtjb2xvcjojZjVmOGZjO2ZvbnQ6MTZweC8xLjY1IHN5c3RlbS11aSxzYW5zLXNlcmlmfW1haW57bWF4LXdpZHRoOjg2MHB4O21hcmdpbjphdXRvO3BhZGRpbmc6MjhweCAxOHB4IDYwcHh9LmNhcmR7YmFja2dyb3VuZDojMTAxZDMwO2JvcmRlcjoxcHggc29saWQgIzI4NDE1ZDtib3JkZXItcmFkaXVzOjIwcHg7cGFkZGluZzozMHB4fWF7Y29sb3I6IzdjYzdmZn0uYnJhbmR7Y29sb3I6IzYzZTZiZTtmb250LXdlaWdodDo4MDA7dGV4dC1kZWNvcmF0aW9uOm5vbmV9Lm11dGVke2NvbG9yOiNhOWJkZDN9LnByaWNle2NvbG9yOiM2M2U2YmU7Zm9udC1zaXplOjEuNXJlbTtmb250LXdlaWdodDo4MDB9LmN0YXtkaXNwbGF5OmlubGluZS1ibG9jaztiYWNrZ3JvdW5kOiM2M2U2YmU7Y29sb3I6IzA2MjUxZTtmb250LXdlaWdodDo4MDA7cGFkZGluZzoxMnB4IDE4cHg7Ym9yZGVyLXJhZGl1czoxMHB4O3RleHQtZGVjb3JhdGlvbjpub25lO21hcmdpbjo4cHggOHB4IDhweCAwfS5zZWNvbmRhcnl7YmFja2dyb3VuZDp0cmFuc3BhcmVudDtjb2xvcjojZjVmOGZjO2JvcmRlcjoxcHggc29saWQgIzI4NDE1ZH0ubm90ZXtib3JkZXItbGVmdDozcHggc29saWQgIzdjYzdmZjtwYWRkaW5nOjEwcHggMTRweDtjb2xvcjojYTliZGQzfTwvc3R5bGU+PC9oZWFkPjxib2R5PjxtYWluPjxwPjxhIGNsYXNzPSJicmFuZCIgaHJlZj0iL3N0b3JlLyI+TU9KUExBWVdJTjwvYT4gtyA8YSBocmVmPSIvY29tbWVyY2UvdHJ4LWVhc3kvIj5BbGwgcHJvZHVjdHM8L2E+ILcgPGEgaHJlZj0iL3N1cHBvcnQvIj5TdXBwb3J0PC9hPjwvcD48YXJ0aWNsZSBjbGFzcz0iY2FyZCI+PHAgY2xhc3M9Im11dGVkIj5ESUdJVEFMIFBST0RVQ1QgtyBTRUNVUkUgREVMSVZFUlk8L3A+PGgxPnt7IHByb2R1Y3QudGl0bGUgfX08L2gxPjxwIGNsYXNzPSJtdXRlZCI+e3sgcHJvZHVjdC5kZXNjcmlwdGlvbnxkZWZhdWx0OiJBIHByYWN0aWNhbCBkaWdpdGFsIHByb2R1Y3QgZnJvbSBNb2pQbGF5V2luLiIgfX08L3A+eyUgaWYgcHJvZHVjdC5wayA9PSA3NzkgJX08cD5UaGlzIGludHJvZHVjdG9yeSBQREYgdHJpYWwgaXMgcmV0YWluZWQgZm9yIGV4aXN0aW5nIG9yZGVyIHJlY29yZHMgYW5kIGlzIG5vdCBsaXN0ZWQgaW4gdGhlIHB1YmxpYyBjYXRhbG9nLjwvcD48cCBjbGFzcz0icHJpY2UiPlVTICQwLjAzPC9wPnslIGVsaWYgcHJvZHVjdC5wayA9PSA4NzkgJX08cD5FZGl0YWJsZSBIVE1ML0NTUy9KYXZhU2NyaXB0IHdlYnNpdGUga2l0IHdpdGggZml2ZSBvcmlnaW5hbCBTVkcgaW50ZXJpb3IgaWxsdXN0cmF0aW9ucywgc2V0dXAgZ3VpZGUgYW5kIG9uZS1zaXRlL2NsaWVudCB1c2FnZSBsaWNlbnNlLiBEZW1vIHBob3RvZ3JhcGhzIGFyZSBub3QgaW5jbHVkZWQuPC9wPjxwIGNsYXNzPSJwcmljZSI+VVMgJDYuODA8L3A+eyUgZWxpZiBwcm9kdWN0LnBrID09IDcyICV9PHA+RGlnaXRhbCBib29rIGZvciBzdHJ1Y3R1cmVkIGNoZXNzIGltcHJvdmVtZW50LCBkZWxpdmVyZWQgcHJpdmF0ZWx5IGFmdGVyIGNvbmZpcm1lZCBwYXltZW50LjwvcD48cCBjbGFzcz0icHJpY2UiPlVTICQ3LjUwPC9wPnslIGVsaWYgcHJvZHVjdC5wayA9PSAyMjUgJX08cD5EaWdpdGFsIHN0b3J5IHByb2R1Y3QgZm9yIGZhbWlseSByZWFkaW5nIGFuZCBjcmVhdGl2ZSBsZWFybmluZywgZGVsaXZlcmVkIHByaXZhdGVseSBhZnRlciBjb25maXJtZWQgcGF5bWVudC48L3A+PHAgY2xhc3M9InByaWNlIj5VUyAkNC4wMDwvcD57JSBlbHNlICV9PHA+RGlnaXRhbCBkZWxpdmVyeSBpcyBwcm92aWRlZCBwcml2YXRlbHkgYWZ0ZXIgcGF5bWVudCBpcyBpbmRlcGVuZGVudGx5IGNvbmZpcm1lZCBvbiBUUk9OLjwvcD57JSBlbmRpZiAlfTxwPjxhIGNsYXNzPSJjdGEiIGhyZWY9Ii9jb21tZXJjZS9ib29rL3t7IHByb2R1Y3QucGsgfX0vIj5CdXkgc2VjdXJlbHkgd2l0aCBuYXRpdmUgVFJYPC9hPjxhIGNsYXNzPSJjdGEgc2Vjb25kYXJ5IiBocmVmPSIvY29tbWVyY2UvdHJ4LWVhc3kvIj5SZXR1cm4gdG8gc3RvcmU8L2E+PC9wPjxwIGNsYXNzPSJub3RlIj48c3Ryb25nPkRlbGl2ZXJ5Ojwvc3Ryb25nPiBlbnRlciB5b3VyIGVtYWlsLCByZWNlaXZlIGFuIG9yZGVyLXNwZWNpZmljIFRSWCBpbnZvaWNlLCBwYXkgdGhlIGV4YWN0IGFtb3VudCwgYW5kIHdhaXQgZm9yIHNlcnZlci1zaWRlIGJsb2NrY2hhaW4gY29uZmlybWF0aW9uLiBObyB3YWxsZXQgY29ubmVjdGlvbiBpcyByZXF1aXJlZC48L3A+PGgyPkJlZm9yZSB5b3UgYnV5PC9oMj48cD5UUlggaXMgdGhlIG9ubHkgc3VwcG9ydGVkIGFzc2V0IG9uIHRoaXMgY2hlY2tvdXQuIENhcmRzLCBVU0RUIGFuZCBvdGhlciBjaGFpbnMgYXJlIG5vdCBhY2NlcHRlZC4gS2VlcCB5b3VyIGludm9pY2UgcmVmZXJlbmNlIGFuZCB0cmFuc2FjdGlvbiBoYXNoIGZvciBzdXBwb3J0LjwvcD48cCBjbGFzcz0ibXV0ZWQiPlJlYWQgPGEgaHJlZj0iL3Rlcm1zLyI+dGVybXM8L2E+LCA8YSBocmVmPSIvcHJpdmFjeS8iPnByaXZhY3k8L2E+LCBvciA8YSBocmVmPSIvY29tbWVyY2UvdHJ4LWVhc3kvcHVyY2hhc2VzLyI+cHVyY2hhc2UgcmVjb3Zlcnk8L2E+LjwvcD48L2FydGljbGU+PC9tYWluPjwvYm9keT48L2h0bWw+"
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/r/c" h "TEMPLATE_B64='$TEMPLATE_B64' /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys,base64,hashlib,stat
+          from pathlib import Path
+          A=Path('/home/zomorod2/Saeit-staging');W=Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py');T=A/'core/templates/brands/mojplaywin/product.html'
+          if A.is_symlink() or W.is_symlink() or not W.is_file() or T.is_symlink() or not T.is_file() or "APP='/home/zomorod2/Saeit-staging'" not in W.read_text(errors='replace'): raise RuntimeError('UNTRUSTED_TARGET')
+          old=T.read_text('utf8');T.with_name('product.html.mpw-pre-full-'+hashlib.sha256(old.encode()).hexdigest()[:12]).write_text(old,'utf8')
+          new=base64.b64decode(os.environ['TEMPLATE_B64']).decode('utf8');tmp=T.with_name('.mpw-full-product-template');fd=os.open(str(tmp),os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o640)
+          try:
+              with os.fdopen(fd,'w',encoding='utf8') as f:f.write(new);f.flush();os.fsync(f.fileno())
+              os.replace(tmp,T)
+          finally:
+              if tmp.exists():tmp.unlink()
+          for folder in (A/'tmp',W.parent/'tmp'):
+              folder.mkdir(mode=0o700,exist_ok=True);flag=folder/'restart.txt';fd=os.open(str(flag),os.O_CREAT|os.O_APPEND|os.O_WRONLY|os.O_NOFOLLOW,0o600);os.close(fd);os.utime(flag,None)
+          os.chdir(A);sys.path.insert(0,str(A));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.template.loader import get_template
+          get_template('brands/mojplaywin/product.html');print('MPW_FULL_TEMPLATE=PASS')
+          PY
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json
+          ps=('/store/','/store/product/72/','/store/product/225/','/store/product/879/','/commerce/trx-easy/','/commerce/book/72/','/commerce/book/225/','/commerce/book/879/','/commerce/trx-easy/purchases/','/sitemap.xml');o={}
+          for p in ps:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'}),timeout=30) as r:o[p]=r.status
+              except urllib.error.HTTPError as e:o[p]=e.code
+          print('MPW_ROUTES='+json.dumps(o,sort_keys=True))
+          if any(v!=200 for v in o.values()):raise RuntimeError('ROUTE_QA_FAILED')
+          PY
+          timeout 90s ssh -T -F "$RUNNER_TEMP/r/c" h "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,sys
+          from pathlib import Path
+          A=Path('/home/zomorod2/Saeit-staging');os.chdir(A);sys.path.insert(0,str(A));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product,OrderItem
+          p=Product.objects.get(pk=779);n=OrderItem.objects.filter(product_id=779).count()
+          print('MPW_ORDERS_PRESERVED',p.active,n)
+          if not p.active or n<1:raise RuntimeError('ORDER_PRESERVATION_FAILED')
+          PY
+      - name: Clean relay
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/r"
