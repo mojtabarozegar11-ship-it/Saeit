@@ -26,6 +26,42 @@ class CommerceFunnelTests(TestCase):
         self.assertFalse(hasattr(event, "ip_address"))
         self.assertFalse(hasattr(event, "wallet_address"))
 
+    def test_store_page_does_not_depend_on_optional_funnel_module(self):
+        """Missing live analytics must not turn the product store into HTTP 500."""
+        from unittest.mock import patch
+        from django.http import HttpResponse
+        from django.test import RequestFactory
+        from core.mojplaywin_views import store
+
+        req = RequestFactory().get("/store/", HTTP_HOST="mojplaywin.com")
+        with patch.dict("sys.modules", {"core.commerce_funnel": None}):
+            with patch(
+                "core.mojplaywin_views.render",
+                return_value=HttpResponse("store available", status=200),
+            ) as render_view:
+                response = store(req)
+        self.assertEqual(response.status_code, 200)
+        render_view.assert_called_once()
+
+    def test_store_page_survives_noncritical_telemetry_error(self):
+        from unittest.mock import patch
+        from django.http import HttpResponse
+        from django.test import RequestFactory
+        from core.mojplaywin_views import store
+
+        req = RequestFactory().get("/store/", HTTP_HOST="mojplaywin.com")
+        with patch(
+            "core.commerce_funnel.record_funnel_event",
+            side_effect=RuntimeError("optional metrics unavailable"),
+        ):
+            with patch(
+                "core.mojplaywin_views.render",
+                return_value=HttpResponse("store available", status=200),
+            ) as render_view:
+                response = store(req)
+        self.assertEqual(response.status_code, 200)
+        render_view.assert_called_once()
+
     def test_staff_summary_is_read_only_and_requires_staff(self):
         record_funnel_event(self.client.get("/", HTTP_HOST="mojplaywin.com").wsgi_request, "view_item", self.product)
         self.assertNotEqual(self.client.get("/staff/command-center/api/commerce-funnel/").status_code, 200)
