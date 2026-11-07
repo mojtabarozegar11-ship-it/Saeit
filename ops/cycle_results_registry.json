@@ -23,12 +23,12 @@
   "cycles": {
     "01": {
       "automation_id": "6adcb348d5388191b11dfcde9edb8ee3",
-      "sequence": 9,
+      "sequence": 10,
       "legacy_report_last_verified": null,
       "primary_output": "validated manuscript",
       "zm50": {
         "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
-        "counter": 5,
+        "counter": 6,
         "runs": [
           {
             "slot": "C01",
@@ -69,6 +69,14 @@
             "accepted_deliverables": 0,
             "private_artifact_path": "none",
             "note": "Source-gated WUE calculator committed; execution and scientific acceptance unverified"
+          },
+          {
+            "slot": "C06",
+            "run_id": "ZM50-R01-20261108T011349+0330-auto11",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "none",
+            "note": "Calculator rejects silently ignored expected_wue and whitespace-equivalent duplicate row IDs; independent execution test blocked by container DNS; manuscript source gates open"
           }
         ]
       },
@@ -80,7 +88,7 @@
         "previous_progress_percent": 0,
         "change_percentage_points": 0,
         "minimum_2pp_met": false,
-        "reason": "New utility not independently accepted as WBS deliverable"
+        "reason": "Input validation repair committed, but independent runtime acceptance and manuscript gates not satisfied"
       }
     },
     "02": {
@@ -562,6 +570,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/4aeaeec07faf36763267385b247986a4539f3a72",
       "acceptance_result": "Code committed; tests and primary-source acceptance not independently verified",
       "impact": "Reusable WUE computation; no manuscript acceptance or revenue"
+    },
+    {
+      "registry_id": "R01-0010",
+      "cycle_id": "01",
+      "run_id": "ZM50-R01-20261108T011349+0330-auto11",
+      "deliverable_key": "irrigation-source-gate-fail-closed-input-contract-v2",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/commit/c00b89e6e5d876a1bd975d6b5f670ca6fe030852",
+      "acceptance_result": "Fail-closed input validation patch committed; independent execution tests not verified due to container DNS failure; WBS acceptance 0",
+      "impact": "Eliminates two input integrity hazards; no manuscript acceptance, publishing or revenue"
     }
   ],
   "report_reservations": [],
