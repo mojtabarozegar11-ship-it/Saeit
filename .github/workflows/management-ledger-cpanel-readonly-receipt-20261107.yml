@@ -39,3 +39,12 @@ jobs:
           test -n "$VPS_KEY"
           test -n "$HOST_KEY"
           bash deploy/cpanel_direct_command.sh management_passenger_binding
+
+      - name: Collect redacted Passenger process and source fingerprints
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash -n scripts/cpanel_management_runtime_probe.sh
+          bash deploy/cpanel_direct_command.sh management_runtime_fingerprint

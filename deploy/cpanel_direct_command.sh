@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|management_passenger_binding|cpanel_preflight|django_check|django_migrations|runtime_path_diagnostics|runtime_python_candidates) ;;
+  relay_preflight|cpanel_version|passenger_inventory|management_passenger_binding|cpanel_preflight|django_check|django_migrations|runtime_path_diagnostics|runtime_python_candidates|management_runtime_fingerprint) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -85,6 +85,11 @@ case "$operation" in
     ;;
   django_migrations)
     timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; else root=/home/zomorodm/repositories/Saeit; python=/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; fi; test -x "$python"; cd "$root"; "$python" manage.py showmigrations --plan'
+    ;;
+  management_runtime_fingerprint)
+    # Bounded, local source fingerprints + sanitized Passenger process hints.
+    # The host receives a one-time read-only script via stdin; no installation.
+    timeout 90s ssh -T -F "$work/config" saeit-cpanel 'bash -s' < scripts/cpanel_management_runtime_probe.sh
     ;;
   runtime_path_diagnostics)
     # Exact-path booleans only. No file contents, directory traversal, app
