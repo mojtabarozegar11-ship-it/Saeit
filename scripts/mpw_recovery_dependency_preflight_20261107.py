@@ -44,29 +44,69 @@ REQUIRED = (
 )
 
 
+MAX_SOURCE_BYTES = 800_000
+
+
+def _read_bounded_source(root: Path, relative: str):
+    """Fixed relative paths only; reject symlink components and large files.
+
+    The verified root itself must be trusted. This is a source metadata gate,
+    not a substitute for process identity, migration or runtime attestation.
+    """
+    current = root
+    if current.is_symlink():
+        return None, "symlink"
+    for part in Path(relative).parts:
+        if part in (".", "..") or not part:
+            return None, "invalid_path"
+        current = current / part
+        if current.is_symlink():
+            return None, "symlink"
+    try:
+        if not current.is_file():
+            return None, "missing"
+        if current.stat().st_size > MAX_SOURCE_BYTES:
+            return None, "too_large"
+        with current.open("rb") as source:
+            data = source.read(MAX_SOURCE_BYTES + 1)
+        if len(data) > MAX_SOURCE_BYTES:
+            return None, "too_large"
+        return data, None
+    except OSError:
+        return None, "unreadable"
+
+
 def _app_registered(settings_source: str) -> bool:
-    """Recognize only unconditional top-level INSTALLED_APPS declarations."""
+    """Accept only literal unconditional INSTALLED_APPS membership.
+
+    Dynamic expressions and conditional branches are unproven, not enabled.
+    """
     try:
         tree = ast.parse(settings_source, filename="config/settings.py")
     except SyntaxError:
         return False
 
-    def contains_app(node: ast.AST) -> bool:
-        return any(isinstance(child, ast.Constant) and child.value in (
-            "mpw_commerce", "mpw_commerce.apps.MpwCommerceConfig"
-        ) for child in ast.walk(node))
+    app_names = ("mpw_commerce", "mpw_commerce.apps.MpwCommerceConfig")
 
-    # A conditional append is not evidence that the app is installed now.
+    def is_app(node):
+        return isinstance(node, ast.Constant) and node.value in app_names
+
     for node in tree.body:
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             if any(isinstance(t, ast.Name) and t.id == "INSTALLED_APPS" for t in targets):
-                if node.value is not None and contains_app(node.value):
+                value = node.value
+                if isinstance(value, (ast.List, ast.Tuple)) and any(
+                    is_app(entry) for entry in value.elts
+                ):
                     return True
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            if (node.func.attr == "append" and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "INSTALLED_APPS" and node.args
-                    and contains_app(node.args[0])):
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            call = node.value
+            if (isinstance(call.func, ast.Attribute) and call.func.attr == "append"
+                    and isinstance(call.func.value, ast.Name)
+                    and call.func.value.id == "INSTALLED_APPS"
+                    and len(call.args) == 1 and not call.keywords
+                    and is_app(call.args[0])):
                 return True
     return False
 
@@ -75,20 +115,20 @@ def inspect(root: Path) -> dict:
     """Return source-only evidence. No actual release approval is computed."""
     inventory = []
     for relative in REQUIRED:
-        path = root / relative
-        exists = path.is_file() and not path.is_symlink()
-        item = {"path": relative, "present": exists}
-        if exists:
-            item["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        payload, issue = _read_bounded_source(root, relative)
+        item = {"path": relative, "present": payload is not None}
+        if payload is not None:
+            item["sha256"] = hashlib.sha256(payload).hexdigest()
+        elif issue != "missing":
+            item["issue"] = issue
         inventory.append(item)
 
-    settings_path = root / "config/settings.py"
-    settings_present = settings_path.is_file() and not settings_path.is_symlink()
+    settings_payload, settings_issue = _read_bounded_source(root, "config/settings.py")
     registered = False
-    if settings_present:
+    if settings_payload is not None:
         try:
-            registered = _app_registered(settings_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError):
+            registered = _app_registered(settings_payload.decode("utf-8"))
+        except UnicodeError:
             registered = False
 
     found = sum(item["present"] for item in inventory)
@@ -98,6 +138,7 @@ def inspect(root: Path) -> dict:
         "present_count": found,
         "missing": [item["path"] for item in inventory if not item["present"]],
         "mpw_commerce_registered_in_settings_source": registered,
+        "settings_source_issue": settings_issue if settings_issue != "missing" else None,
         "source_floor_pass": found == len(inventory) and registered,
         "inventory": inventory,
         "database_schema_verified": False,
