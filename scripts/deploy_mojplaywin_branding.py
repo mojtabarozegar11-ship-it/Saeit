@@ -137,9 +137,12 @@ def ensure_indexnow_route(urlconf):
         raise RuntimeError("Unable to locate SEO import for IndexNow route")
     if "mojplaywin_indexnow_key" not in line:
         urlconf = urlconf.replace(line, line.rstrip() + ", mojplaywin_indexnow_key", 1)
-    import re
-    route_pattern = r'    path\("<str:key>\.txt", [^,]+, name="indexnow_key"\),\n'
-    urlconf = re.sub(route_pattern, "", urlconf)
+    # Remove any legacy public key route regardless of indentation or handler name.
+    # The dedicated MojPlayWin route must be the only route for this filename.
+    urlconf = "".join(
+        line for line in urlconf.splitlines(keepends=True)
+        if not ('path("<str:key>.txt"' in line and 'name="indexnow_key"' in line)
+    )
     marker = "urlpatterns = [\n"
     if marker not in urlconf:
         raise RuntimeError("Unable to anchor IndexNow URL route")
