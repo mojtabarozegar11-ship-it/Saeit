@@ -323,7 +323,12 @@ jobs:
             for kind in market-signals digital-products; do
               for url in "https://zomorodmelal.ir/$slug/$kind/" "https://mojplaywin.com/$slug/$kind/" "https://mojplaywin.com/ar/$slug/$kind/"; do
                 body="$RUNNER_TEMP/finance-page.html"
-                status="$(curl --retry 2 --retry-delay 2 -sS -o "$body" -w '%{http_code}' "$url")"
+                status="000"
+                for attempt in {1..8}; do
+                  status="$(curl --retry 1 --retry-delay 1 -sS -o "$body" -w '%{http_code}' "$url" || true)"
+                  [[ "$status" == "200" ]] && break
+                  sleep 2
+                done
                 [[ "$status" == "200" ]] || { echo "Finance page failed: $url HTTP $status"; exit 1; }
                 grep -Eq '<title>.*</title>' "$body" || { echo "Missing page title: $url"; exit 1; }
                 grep -Eq '© .* · MojPlayWin / Zomorod Melal' "$body" || { echo "Missing branded footer: $url"; exit 1; }
@@ -337,7 +342,12 @@ jobs:
           for slug in "${slugs[@]}"; do
             for url in "https://zomorodmelal.ir/$slug/game/" "https://mojplaywin.com/$slug/game/"; do
               body="$RUNNER_TEMP/game-page.html"
-              status="$(curl --retry 2 --retry-delay 2 -sS -o "$body" -w '%{http_code}' "$url")"
+              status="000"
+              for attempt in {1..8}; do
+                status="$(curl --retry 1 --retry-delay 1 -sS -o "$body" -w '%{http_code}' "$url" || true)"
+                [[ "$status" == "200" ]] && break
+                sleep 2
+              done
               [[ "$status" == "200" ]] || { echo "Game page failed: $url HTTP $status"; exit 1; }
               grep -Eq '<title>.*</title>' "$body" || { echo "Missing game page title: $url"; exit 1; }
               grep -Eq '© .* · MojPlayWin / Zomorod Melal' "$body" || { echo "Missing game footer: $url"; exit 1; }
