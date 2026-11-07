@@ -18,7 +18,7 @@ Safety invariants: no network, no API keys, no broker imports, no orders, no pub
 6. Evaluate delayed-next-closed-bar approximate outcomes with spread, commission and adverse ordering when stop and target both hit in one bar.
 7. Count 96 tested primitive hypotheses plus all generated strategy trials in a **multiple-testing gate**. This gate remains `NOT_STATISTICALLY_VALIDATED`; the holdout is descriptive and never licenses an order or a public signal.
 8. Save a ledger and SHA-256 evidence digests; every candidate remains RESEARCH_ONLY_UNPROVEN, broker eligibility false, orders zero.
-9. Append full reports to an exclusive-locked, permission-restricted, bounded, hash-chained registry across runs. A duplicate report does not create a second entry; corrupted registry data fails closed.
+9. Append full reports to an exclusive-locked, permission-restricted, bounded, hash-chained registry across runs. An identical parameter/data run reuses its existing report, even when repeated. On a new run, signatures already seen for the same symbol and candle interval are rejected. The append itself atomically refuses conflicting historical structures if two runs race. Corrupted registry data fails closed.
 
 Optional LLM services are excluded: Python standard library only. The engine composes typed mechanisms from a bounded grammar; **it does not claim unlimited invention of genuinely novel mathematical finance theories**.
 
@@ -48,6 +48,7 @@ Output fields:
 - trial_ledger: every attempted program, including duplicate/inactive rejections.
 - birth_certificates: AST, semantic fingerprint, behavioral novelty, source hash, approximate train/holdout metrics and SHA-256 integrity digest (not an authenticated digital signature).
 - multiple_testing_gate: primitive plus candidate trial counts, observed holdout candidate count, explicit non-validation, and independent-evidence requirements. This is **not** a statistical p-value correction.
+- historical_novelty: number of prior fingerprints considered and newly generated attempts rejected as already seen in the private registry.
 - execution disabled, orders 0, public_signals 0.
 
 ## Local CLI
@@ -65,13 +66,13 @@ These paths are illustrative; they do not imply files exist. The cost estimate i
 
     python3 -m unittest -v tests/test_mojtrade_strategy_foundry.py
 
-Regression checks cover fixed-seed reproducibility, three or more distinct candidates on a **synthetic fixture only**, holdout isolation, no future-bar signal input, flat-market refusal, structural novelty, simulated fee monotonicity, private output, invalid-data rejection, hash-chain integrity, idempotency, concurrent duplicate append, file permissions, and record budgets. Synthetic success is never market profitability evidence.
+Regression checks cover fixed-seed reproducibility, three or more distinct candidates on a **synthetic fixture only**, holdout isolation, no future-bar signal input, flat-market refusal, within-run and cross-run structural novelty, simulated fee monotonicity, private output, invalid-data rejection, hash-chain integrity, idempotency, concurrent duplicate append, file permissions, record budgets and repeated/new-seed CLI runs. Synthetic success is never market profitability evidence.
 
 ## Known limitations and release blockers
 
 - Four feature families; can combine and order them, but cannot invent arbitrary unseen operators.
 - Primitive discovery uses conditional means without multiple-testing correction. The new explicit `multiple_testing_gate` accounts for search attempts but **does not perform statistical adjustment**. A favorable holdout reading across many candidate reports is vulnerable to selection/peeking. Do not promote to demo without a new independent untouched data period, embargoed purged walk-forward, dependency-aware trial statistics and adequate holdout evidence.
-- The registry is **not yet cross-run strategy novelty enforcement**; it saves prior full reports to support a future historical uniqueness check. Its chain is tamper-*evident* relative to a known trusted checkpoint, not cryptographically authenticated against a writer able to rewrite the entire file. An independently held off-host chain-head checkpoint is needed.
+- Cross-run novelty is enforced on **structure signatures for the same symbol and candle interval**, but it cannot prove economically distinct alpha; cross-symbol/cross-timeframe mechanism reuse, higher-level semantic equivalence and dependence between strategies are still not fully solved. The chain is tamper-*evident* relative to a known trusted checkpoint, not cryptographically authenticated against a writer able to rewrite the entire file. An independently held off-host chain-head checkpoint is needed.
 - No cross-asset dataset, book depth, cTrader C# generator, signed StrategyRelease, risk coordinator or broker reconciliation yet.
 - Approximate bar fills omit live slippage, swap, fee tiers, partial fills, rejects and most gap behavior.
 - A report-producing CLI is **not** a continuously running autonomous service. Independent runtime installation requires separate disk/backup/resource authorization.
