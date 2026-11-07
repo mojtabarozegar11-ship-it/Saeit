@@ -104,6 +104,41 @@ jobs:
                   if find.returncode:print("FIND_INCOMPLETE="+relative)
           print("BACKUP_TRANSFER_CANDIDATES_AUDITED=yes")
           PY
+      - name: Fingerprint duplicate cPanel backup files read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import hashlib,os,stat,time
+          from pathlib import Path
+          root=Path("/home/zomorod2/.backups")
+          uid=os.geteuid(); total=0; count=0; old=0; groups={}; largest=[]
+          cutoff=time.time()-30*86400
+          for p in root.rglob("*"):
+              try:
+                  s=p.lstat()
+                  if not stat.S_ISREG(s.st_mode) or s.st_uid!=uid: continue
+                  count+=1; total+=s.st_size
+                  if s.st_mtime<cutoff: old+=1
+                  largest.append((s.st_size,p))
+                  if s.st_size<1024*1024: continue
+                  h=hashlib.sha256()
+                  with p.open("rb") as f:
+                      for chunk in iter(lambda:f.read(1024*1024),b""): h.update(chunk)
+                  groups.setdefault((s.st_size,h.hexdigest()),[]).append(p)
+              except (OSError,FileNotFoundError): pass
+          print("BACKUP_DEDUP_FILES="+str(count)+":BYTES="+str(total)+":OLDER_30D="+str(old),flush=True)
+          largest.sort(reverse=True,key=lambda x:x[0])
+          for size,p in largest[:20]:
+              print("BACKUP_LARGEST_BYTES="+str(size)+":AGE_DAYS="+str(max(0,int((time.time()-p.stat().st_mtime)/86400))),flush=True)
+          dup_groups=[(size,digest,paths) for (size,digest),paths in groups.items() if len(paths)>1]
+          dup_groups.sort(reverse=True,key=lambda x:x[0]*len(x[2]))
+          print("BACKUP_DUPLICATE_GROUPS="+str(len(dup_groups)),flush=True)
+          print("BACKUP_DUPLICATE_BYTES_EXCESS="+str(sum(size*(len(paths)-1) for size,digest,paths in dup_groups)),flush=True)
+          for size,digest,paths in dup_groups[:20]:
+              print("BACKUP_DUPLICATE=size:"+str(size)+":count:"+str(len(paths))+":sha256_prefix:"+digest[:16],flush=True)
+          PY
       - name: Remove runner-only SSH files
         if: always()
         run: |
