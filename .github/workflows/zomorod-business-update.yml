@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - "content/zomorod-business/app.php"
+      - "content/zomorod-business/notification-sw.js"
       - ".github/workflows/zomorod-business-update.yml"
 permissions:
   contents: read
@@ -74,35 +75,42 @@ jobs:
           set -euo pipefail
           d="$RELAY_CONFIG"
           ssh -F "$d/config" saeit-cpanel "cat > /home/zomorod2/.private/zomorod-business/.incoming-app-$GITHUB_SHA.php" < content/zomorod-business/app.php
+          ssh -F "$d/config" saeit-cpanel "cat > /home/zomorod2/public_html/business/.incoming-notification-sw-$GITHUB_SHA.js" < content/zomorod-business/notification-sw.js
           ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
           sha="$1"
           private="$HOME/.private/zomorod-business"
           live="$private/app.php"
           incoming="$private/.incoming-app-$sha.php"
+          sw="$web/notification-sw.js"
+          incoming_sw="$web/.incoming-notification-sw-$sha.js"
           backup="$HOME/.backups/zomorod-business-update/$sha"
           web="$HOME/public_html/business"
           test "$(id -un)" = zomorod2
           test -d "$private" && test -f "$live" && test ! -L "$live"
           test -d "$web" && test -f "$web/index.php" && test ! -L "$web/index.php"
           test -f "$incoming" && test ! -L "$incoming"
+          test -f "$incoming_sw" && test ! -L "$incoming_sw"
           phpbin="$(command -v php || true)"; test -n "$phpbin"
           "$phpbin" -l "$incoming" >/dev/null
           mkdir -p "$backup"; chmod 700 "$backup"
           cp -p "$live" "$backup/app.php"
           cp -p "$web/index.php" "$backup/index.php"
-          sha256sum "$live" "$web/index.php" > "$backup/before.sha256"
+          test ! -e "$sw" || cp -p "$sw" "$backup/notification-sw.js"
+          sha256sum "$live" "$web/index.php" ${sw:+\"$sw\"} > "$backup/before.sha256"
           install -m 600 "$incoming" "$live.new"
+          install -m 644 "$incoming_sw" "$web/notification-sw.js.new"
           mv -f "$live.new" "$live"
-          rm -f "$incoming"
-          rollback(){ set +e; cp -p "$backup/app.php" "$live"; echo BUSINESS_UPDATE_ROLLBACK=restored; }
+          mv -f "$web/notification-sw.js.new" "$sw"
+          rm -f "$incoming" "$incoming_sw"
+          rollback(){ set +e; cp -p "$backup/app.php" "$live"; if test -f "$backup/notification-sw.js"; then cp -p "$backup/notification-sw.js" "$sw"; else rm -f "$sw"; fi; echo BUSINESS_UPDATE_ROLLBACK=restored; }
           trap 'rc=$?; if test "$rc" != 0; then rollback; fi; exit "$rc"' EXIT
           code="$(curl -sS -L --max-time 30 -o "$backup/response.html" -w '%{http_code}' "https://zomorodmelal.ir/business/?release=$sha" || true)"
           echo BUSINESS_HTTP="$code"
           test "$code" = 200
           grep -Eq 'ورود مدیر و حسابدار|میز مدیریت و حسابداری' "$backup/response.html"
           test "$(stat -c %a "$live")" = 600
-          sha256sum "$live" "$web/index.php" > "$backup/after.sha256"
+          sha256sum "$live" "$web/index.php" "$sw" > "$backup/after.sha256"
           trap - EXIT
           echo BUSINESS_UPDATE=success
           echo BUSINESS_DB_MUTATION=no
