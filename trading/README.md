@@ -1,36 +1,46 @@
-# MojTrade Demo cBot
+# MojTrade QuantumScalp v2 — Demo Only
 
-This cBot is intentionally demo-only. It stops immediately when attached to a live account.
+This is a short-term multi-strategy cBot for cTrader Cloud. It is locked to demo accounts and stops immediately if Account.IsLive is true.
 
-Short-term strategies:
-- EMA 9/21 crossover
-- RSI pullback with EMA trend filter
-- Donchian-style breakout
-- ATR-based stop-loss and reward/risk take-profit
+## Major engine
+
+- EMA 9/21 signal module
+- RSI pullback module
+- Donchian-style breakout module
+- 15-minute higher-timeframe EMA trend confirmation
+- ATR-adaptive stop-loss and reward/risk take-profit
+- Equity-based risk sizing instead of blind fixed volume
+- Maximum volume cap
+- Maximum three independent positions per symbol by default
+- Per-entry cooldown
 - Maximum spread filter
-- Multiple independent positions per symbol, capped by Max Open Trades / Symbol (default 3)
+- Daily loss circuit breaker
+- Consecutive-loss circuit breaker
+- Automatic break-even protection
+- Automatic trailing stop
+- Separate labels and accounting for each strategy
+- No external HTTP calls, plugins or file dependencies; designed for cTrader Cloud
 
-Recommended demo setup:
+## Recommended demo deployment
+
 - Account: LiteFinance cTrader demo
-- Symbols: BTCUSD and ETHUSD, one cBot instance per symbol
-- Timeframes: 1 minute, 5 minutes or 10 minutes
-- Volume: 1,000 units initially
-- Keep all three strategies enabled for the first comparison
-- No live account activation
+- Symbols: BTCUSD and ETHUSD
+- One Cloud instance per symbol
+- Chart timeframe: 1 minute, 5 minutes or 10 minutes
+- Risk per trade: 0.25% of equity
+- Maximum open trades per symbol: 3
+- Maximum daily loss: 2%
+- Maximum consecutive losses: 3
 
-Important:
-- The cBot opens trades only when a completed candle produces a signal.
-- On hedging accounts, independent strategy positions can remain separate.
-- On netting accounts, the broker may aggregate positions for the same symbol.
-- The bot does not close existing positions when stopped.
-- This is a demo testing bot; profitability is not guaranteed.
+The bot can attempt several independent entries on the same completed candle when different modules agree. The broker account mode controls whether positions remain separate (hedging) or are aggregated (netting).
 
-Before starting:
-1. Compile the cBot in cTrader Algo.
+## Required validation
+
+1. Compile the source in cTrader Algo.
 2. Attach it only to the demo account.
 3. Start one cloud instance per symbol.
-4. Confirm the journal reports DEMO account.
-5. Verify the first orders, stop-loss and take-profit.
-6. Stop the instance if unexpected behaviour occurs.
+4. Confirm the journal reports DEMO ONLY.
+5. Verify spread, risk sizing, stop-loss, take-profit and position count.
+6. Stop the instance if any unexpected behaviour occurs.
 
-The bot uses no external HTTP calls or file access and is designed for cTrader Cloud.
+The bot does not close existing positions when stopped. Profitability is not guaranteed; this is a guarded demo-testing engine.
