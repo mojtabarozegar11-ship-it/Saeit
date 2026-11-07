@@ -193,7 +193,9 @@ class StrategyFoundryTests(unittest.TestCase):
 
     def test_registry_append_persists_reports_across_runs_and_is_idempotent(self):
         first = foundry.invent(market_data(), seed=9, max_trials=12)
-        second = foundry.invent(market_data(), seed=10, max_trials=12)
+        other_market = market_data()
+        other_market["symbol"] = "ETH/USD"
+        second = foundry.invent(other_market, seed=10, max_trials=12)
         with tempfile.TemporaryDirectory() as td:
             private = Path(td) / "private"
             private.mkdir(mode=0o700)
@@ -214,7 +216,9 @@ class StrategyFoundryTests(unittest.TestCase):
 
     def test_registry_rejects_tampering_permissions_and_record_budget(self):
         first = foundry.invent(market_data(), seed=9, max_trials=12)
-        second = foundry.invent(market_data(), seed=10, max_trials=12)
+        other_market = market_data()
+        other_market["symbol"] = "ETH/USD"
+        second = foundry.invent(other_market, seed=10, max_trials=12)
         with tempfile.TemporaryDirectory() as td:
             private = Path(td) / "private"
             private.mkdir(mode=0o700)
@@ -247,6 +251,44 @@ class StrategyFoundryTests(unittest.TestCase):
                                          range(12)))
             self.assertEqual(sum(int(x["written"]) for x in receipts), 1)
             self.assertEqual(foundry.verify_private_registry(registry)["records"], 1)
+
+    def test_cross_run_duplicate_structure_rejected_and_new_run_filters_history(self):
+        dataset = market_data()
+        first = foundry.invent(dataset, seed=9, max_trials=12)
+        unfiltered = foundry.invent(dataset, seed=10, max_trials=12)
+        old = {b["structure_signature"] for b in first["birth_certificates"]}
+        self.assertTrue(any(b["structure_signature"] in old
+                            for b in unfiltered["birth_certificates"]))
+        with tempfile.TemporaryDirectory() as td:
+            private = Path(td) / "private"
+            private.mkdir(mode=0o700)
+            registry = private / "registry.jsonl"
+            foundry.append_private_registry(first, registry)
+            with self.assertRaisesRegex(foundry.FoundryError, "prior_structure_collision"):
+                foundry.append_private_registry(unfiltered, registry)
+            filtered = foundry.invent(dataset, seed=10, max_trials=12,
+                                      existing_signatures=old)
+            self.assertGreater(filtered["historical_novelty"]["prior_run_structures_rejected"], 0)
+            self.assertTrue(all(b["structure_signature"] not in old
+                                for b in filtered["birth_certificates"]))
+            foundry.append_private_registry(filtered, registry)
+            self.assertEqual(foundry.verify_private_registry(registry)["records"], 2)
+
+    def test_cli_new_seed_observes_prior_structures(self):
+        with tempfile.TemporaryDirectory() as td:
+            private = Path(td) / "private"
+            private.mkdir(mode=0o700)
+            source = private / "input.json"
+            source.write_text(json.dumps(market_data()), encoding="utf-8")
+            args = ["--input", str(source), "--output", str(private / "result.json"),
+                    "--trials", "12"]
+            with redirect_stdout(io.StringIO()):
+                foundry.main(args + ["--seed", "9"])
+                foundry.main(args + ["--seed", "10"])
+            self.assertEqual(foundry.verify_private_registry(
+                private / "foundry-registry.jsonl")["records"], 2)
+            self.assertGreater(json.loads((private / "result.json").read_text())
+                               ["historical_novelty"]["prior_run_structures_rejected"], 0)
 
     def test_registry_rejects_missing_private_directory_and_symlink(self):
         report = foundry.invent(market_data(), seed=9, max_trials=12)
