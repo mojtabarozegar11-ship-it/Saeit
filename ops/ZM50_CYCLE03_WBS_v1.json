@@ -1,0 +1,115 @@
+{
+  "schema": "ZM50-WBS-v1",
+  "cycle_id": "03",
+  "version": "v1",
+  "baseline_date": "2026-11-07",
+  "status": "fixed-baseline-only",
+  "scope": "ZomorodMelal and MojPlayWin sites, checkout, digital products, SEO, single-product factory, delivery and commercial verification",
+  "weight_total": 100,
+  "progress_percent": 0,
+  "accepted_items": [],
+  "items": [
+    {
+      "id": "C03-01",
+      "weight": 12,
+      "title": "MojPlayWin guest checkout and native TRX invoice",
+      "owner": "cycle-03",
+      "acceptance": "Verified guest flow, immutable order, correct native TRX quote and expiry; independent source and live GET evidence",
+      "evidence": "Independent verifiable artifact and acceptance record; distinguish code, deployment, live service and revenue"
+    },
+    {
+      "id": "C03-02",
+      "weight": 14,
+      "title": "Server-side blockchain finality and transaction uniqueness",
+      "owner": "cycle-03",
+      "acceptance": "Verified finality, amount/address/order match, replay and double-spend prevention; audited code plus non-sensitive production log",
+      "evidence": "Independent verifiable artifact and acceptance record; distinguish code, deployment, live service and revenue"
+    },
+    {
+      "id": "C03-03",
+      "weight": 12,
+      "title": "Ledger and entitlement atomicity",
+      "owner": "cycle-03",
+      "acceptance": "One-to-one paid order ledger and entitlement with concurrency protection; accepted code and read-only production evidence",
+      "evidence": "Independent verifiable artifact and acceptance record; distinguish code, deployment, live service and revenue"
+    },
+    {
+      "id": "C03-04",
+      "weight": 10,
+      "title": "Private download and receipt delivery",
+      "owner": "cycle-03",
+      "acceptance": "Access-controlled download and receipt issuance evidenced end-to-end without exposing customer data",
+      "evidence": "Independent verifiable artifact and acceptance record; distinguish code, deployment, live service and revenue"
+    },
+    {
+      "id": "C03-05",
+      "weight": 8,
+      "title": "Email-only order recovery",
+      "owner": "cycle-03",
+      "acceptance": "Guest recovery secured against enumeration and takeover, proven live with authorized acceptance evidence",
+      "evidence": "Independent verifiable artifact and acceptance record; distinguish code, deployment, live service and revenue"
+    },
+    {
+      "id": "C03-06",
+      "weight": 8,
+      "title": "MojPlayWin catalog pricing and product integrity",
+      "owner": "cycle-03",
+      "acceptance": "Accurate active products, URLs, stock and price representation with live HTTP evidence",
+      "evidence": "Independent verifiable artifact and acceptance record; distinguish code, deployment, live service and revenue"
+    },
+    {
+      "id": "C03-07",
+      "weight": 8,
+      "title": "ZomorodMelal site functionality and security",
+      "owner": "cycle-03",
+      "acceptance": "Core public routes, security checks and independent accepted deployment evidence",
+      "evidence": "Independent verifiable artifact and acceptance record; distinguish code, deployment, live service and revenue"
+    },
+    {
+      "id": "C03-08",
+      "weight": 6,
+      "title": "SEO technical and content acceptance",
+      "owner": "cycle-03",
+      "acceptance": "Validated metadata, indexability, canonical/sitemap and published relevant content",
+      "evidence": "Independent verifiable artifact and acceptance record; distinguish code, deployment, live service and revenue"
+    },
+    {
+      "id": "C03-09",
+      "weight": 8,
+      "title": "Single active digital product production and QA",
+      "owner": "cycle-03",
+      "acceptance": "Complete original product, rights and quality acceptance, packaging and price",
+      "evidence": "Independent verifiable artifact and acceptance record; distinguish code, deployment, live service and revenue"
+    },
+    {
+      "id": "C03-10",
+      "weight": 5,
+      "title": "Product sales page and fulfillment integration",
+      "owner": "cycle-03",
+      "acceptance": "Accepted live sales page and secure deliverable binding",
+      "evidence": "Independent verifiable artifact and acceptance record; distinguish code, deployment, live service and revenue"
+    },
+    {
+      "id": "C03-11",
+      "weight": 5,
+      "title": "Production release, backup and rollback",
+      "owner": "cycle-03",
+      "acceptance": "Recoverable backup restore proof, versioned release, independent rollback readiness",
+      "evidence": "Independent verifiable artifact and acceptance record; distinguish code, deployment, live service and revenue"
+    },
+    {
+      "id": "C03-12",
+      "weight": 4,
+      "title": "Real commercial acceptance and reconciliation",
+      "owner": "cycle-03",
+      "acceptance": "Evidence of genuine authorized order, confirmed payment, private delivery and independently reconciled collected revenue",
+      "evidence": "Independent verifiable artifact and acceptance record; distinguish code, deployment, live service and revenue"
+    }
+  ],
+  "guardrails": [
+    "No item is accepted by plan, test-only result, or unmerged code alone",
+    "No production mutations or transaction tests without owner approval",
+    "No inferred revenue from HTTP GET",
+    "Any change to weights requires explicit version and audit trail"
+  ]
+}
