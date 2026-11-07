@@ -175,7 +175,8 @@ class RecoveryIsolationTests(TransactionTestCase):
     def _verification_request(self, code):
         req = self.rf.post(module.ROOT + "verify/", {"code": code},
                            secure=True, HTTP_HOST="mojplaywin.com",
-                           REMOTE_ADDR="192.0.2.88")
+                           REMOTE_ADDR="192.0.2.88",
+                           HTTP_REFERER="https://mojplaywin.com" + module.ROOT + "verify/")
         from django.middleware.csrf import get_token
         req.META["CSRF_COOKIE"] = "C" * 32
         req.COOKIES["csrftoken"] = "C" * 32
@@ -213,7 +214,8 @@ class RecoveryIsolationTests(TransactionTestCase):
                        MPW_GUEST_RECOVERY_EMAIL_APPROVED=True)
     def test_disabled_feature_prevents_recovery_request_activity(self):
         req = self.rf.post(module.ROOT, {"email": "buyer@example.com"},
-                           secure=True, HTTP_HOST="mojplaywin.com")
+                           secure=True, HTTP_HOST="mojplaywin.com",
+                           HTTP_REFERER="https://mojplaywin.com" + module.ROOT)
         from django.middleware.csrf import get_token
         req.META["CSRF_COOKIE"] = "D" * 32
         req.COOKIES["csrftoken"] = "D" * 32
