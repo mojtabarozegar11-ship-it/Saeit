@@ -29,7 +29,7 @@ jobs:
 
       - name: Validate SAMAN page and installer
         run: |
-          python3 -m py_compile scripts/deploy_mojplaywin_saman.py scripts/financial_brand_patch.py core/financial_brand_pages.py
+          python3 -m py_compile scripts/deploy_mojplaywin_saman.py scripts/financial_brand_patch.py scripts/install_game_static_pages.py core/financial_brand_pages.py
           python3 - <<'PY'
           from pathlib import Path
           html = Path("templates/saman/index.html").read_text(encoding="utf-8")
@@ -159,6 +159,14 @@ jobs:
           WORK="$RUNNER_TEMP/mojplaywin-ssh"
           timeout 60s ssh -F "$WORK/config" saeit-host \
             "python3 /home/zomorod2/.mojplaywin-saman-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_saman.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
+
+      - name: Install static MojPlayWin game entry pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 45s ssh -F "$WORK/config" saeit-host \
+            "python3 /home/zomorod2/.mojplaywin-saman-$GITHUB_RUN_ID/scripts/install_game_static_pages.py install"
 
       - name: Restart active Passenger application
         shell: bash
@@ -363,6 +371,8 @@ jobs:
         run: |
           WORK="$RUNNER_TEMP/mojplaywin-ssh"
           timeout 60s ssh -F "$WORK/config" saeit-host \
+          timeout 45s ssh -F "$WORK/config" saeit-host \
+            "python3 /home/zomorod2/.mojplaywin-saman-$GITHUB_RUN_ID/scripts/install_game_static_pages.py remove" || true
             "python3 /home/zomorod2/.mojplaywin-saman-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_saman.py rollback $GITHUB_RUN_ID"
 
       - name: Remove remote staging and temporary credentials
