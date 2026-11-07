@@ -80,12 +80,12 @@ jobs:
           set -euo pipefail
           sha="$1"
           private="$HOME/.private/zomorod-business"
+          web="$HOME/public_html/business"
           live="$private/app.php"
           incoming="$private/.incoming-app-$sha.php"
           sw="$web/notification-sw.js"
           incoming_sw="$web/.incoming-notification-sw-$sha.js"
           backup="$HOME/.backups/zomorod-business-update/$sha"
-          web="$HOME/public_html/business"
           test "$(id -un)" = zomorod2
           test -d "$private" && test -f "$live" && test ! -L "$live"
           test -d "$web" && test -f "$web/index.php" && test ! -L "$web/index.php"
