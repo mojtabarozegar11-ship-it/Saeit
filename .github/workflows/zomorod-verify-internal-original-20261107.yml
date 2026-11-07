@@ -188,6 +188,46 @@ jobs:
           print('RESCUE_COMPARE_READ_ONLY=yes')
           PY
 
+      - name: Verify all recovered research URLs and protect homepage read only
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 200s ssh -T -F "$RUNNER_TEMP/zm-theme-origin-audit/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import concurrent.futures,hashlib,os,time,urllib.request
+          home=Path('/home/zomorod2');web=home/'public_html'
+          source=home/'.private/zm-internal-pre-seo-restore-20261107/42325682473/original-static-pages/research'
+          assert os.geteuid()==web.stat().st_uid
+          sha=lambda data:hashlib.sha256(data).hexdigest()
+          assert sha((web/'index.html').read_bytes())=='0c8a0a26780645281da8d19cbc9e5926886922dcd37d56d0a06952a627a76585'
+          pages=[]
+          for f in source.rglob('index.html'):
+              if f==source/'index.html':continue
+              rel=f.relative_to(home/'.private/zm-internal-pre-seo-restore-20261107/42325682473/original-static-pages')
+              assert (web/rel).is_file() and sha((web/rel).read_bytes())==sha(f.read_bytes()),('NOT_EXACTLY_RESTORED',str(rel))
+              pages.append((rel,f))
+          def check(item):
+              rel,f=item
+              url='https://zomorodmelal.ir/'+str(rel.parent)+'/?inner_integrity='+str(time.monotonic_ns())
+              try:
+                  req=urllib.request.Request(url,headers={'Cache-Control':'no-cache'})
+                  with urllib.request.urlopen(req,timeout=20) as response:
+                      data=response.read(700000)
+                      if response.status!=200 or sha(data)!=sha(f.read_bytes()):
+                          return (str(rel),'ERROR',response.status,len(data))
+                      return (str(rel),'OK',200,len(data))
+              except Exception as exc:
+                  return (str(rel),'ERROR',type(exc).__name__,str(exc)[:130])
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+              outcomes=list(pool.map(check,pages))
+          for result in outcomes:
+              print('RESEARCH_DESCENDANT_PUBLIC_CHECK',*result)
+          failed=[r for r in outcomes if r[1]!='OK']
+          print('RESEARCH_DESCENDANT_COUNT',len(outcomes),'HTTP_OK',len(outcomes)-len(failed),'HTTP_FAILED',len(failed))
+          assert not failed,('RESEARCH_DESCENDANT_PUBLIC_FAILURE',failed[:5])
+          print('HOME_AND_ALL_RESTORED_RESEARCH_URLS_VERIFIED=yes')
+          PY
+
       - name: Remove ephemeral SSH identity files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zm-theme-origin-audit"
