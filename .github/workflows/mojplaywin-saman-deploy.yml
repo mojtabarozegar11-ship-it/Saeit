@@ -140,7 +140,7 @@ jobs:
           timeout 20s ssh -F "$WORK/config" saeit-host "grep -nE 'RewriteCond|RewriteRule|Passenger' /home/zomorod2/mojplaywin.com/.htaccess || true"
 
       - name: Package SAMAN deployment files
-        run: tar -cf "$RUNNER_TEMP/saman.tar" scripts/deploy_mojplaywin_saman.py scripts/saman_patch.py scripts/financial_brand_patch.py core/financial_brand_pages.py core/templates/core/financial_brand_page.html templates/saman/index.html templates/saman/learn.html templates/saman/play.html templates/saman/products.html templates/saman/membership.html templates/saman/partners.html templates/saman/about.html
+        run: tar -cf "$RUNNER_TEMP/saman.tar" scripts/deploy_mojplaywin_saman.py scripts/saman_patch.py scripts/financial_brand_patch.py scripts/install_game_static_pages.py core/financial_brand_pages.py core/templates/core/financial_brand_page.html templates/saman/index.html templates/saman/learn.html templates/saman/play.html templates/saman/products.html templates/saman/membership.html templates/saman/partners.html templates/saman/about.html
 
       - name: Upload and unpack deployment package
         shell: bash
