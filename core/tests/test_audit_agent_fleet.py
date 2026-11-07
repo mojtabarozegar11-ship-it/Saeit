@@ -25,6 +25,10 @@ def test_fleet_audit_is_read_only_and_reports_known_executor_gaps():
     AgentTask.objects.create(
         agent=master, action_type="income_nonexistent_publish",
         capability_code="income_nonexistent_publish", status="queued",
+        attempt_count=3, max_attempts=3,
+    )
+    AgentTask.objects.filter(status="queued", agent=master).update(
+        created_at=timezone.now() - timedelta(days=2)
     )
     AgentTask.objects.create(
         agent=master, action_type="income_market_research",
@@ -51,6 +55,8 @@ def test_fleet_audit_is_read_only_and_reports_known_executor_gaps():
     assert report["verified_revenue_attested"] is False
     assert report["summary"]["unsupported_known_queue_tasks"] == 1
     assert report["summary"]["stale_running_tasks"] == 1
+    assert report["summary"]["queued_older_than_24h"] == 1
+    assert report["summary"]["queued_retry_budget_exhausted"] == 1
     assert report["summary"]["exact_duplicate_role_groups"] == 1
     rows = {row["code"]: row for row in report["agents"]}
     assert rows["economic-master-agent"]["known_registered_handlers"] == ["income_market_research"]
@@ -66,3 +72,47 @@ def test_fleet_audit_is_read_only_and_reports_known_executor_gaps():
 def test_fleet_audit_rejects_unbounded_options(kwargs):
     with pytest.raises(CommandError):
         call_command("audit_agent_fleet", **kwargs)
+
+
+@pytest.mark.django_db
+def test_fleet_audit_identifies_repeated_internal_baselines_without_claiming_sales():
+    agent = Agent.objects.create(
+        code="economic-master-agent", name="Master", mission="Revenue", active=True,
+    )
+    AgentTask.objects.bulk_create([
+        AgentTask(agent=agent, action_type="income_profit_optimize",
+                  capability_code="income_profit_optimize", status="completed",
+                  output_data={"verified_effect": True})
+        for _ in range(35)
+    ])
+    output = StringIO()
+    call_command("audit_agent_fleet", days=30, stdout=output)
+    report = json.loads(output.getvalue())
+    assert report["summary"]["internal_profit_baselines_recent"] == 35
+    master = next(row for row in report["agents"] if row["code"] == "economic-master-agent")
+    assert "repeated_internal_profit_baselines_not_revenue" in master["findings"]
+    assert report["verified_revenue_attested"] is False
+
+
+@pytest.mark.django_db
+def test_factory_native_identity_is_not_misdiagnosed_using_economic_registry():
+    factory = Agent.objects.create(
+        code="moj_1ro_1", name="F41 factory", mission="Private factory", active=True,
+    )
+    capability = AgentCapability.objects.create(
+        code="factory_native_review", name="Factory native review", active=True,
+    )
+    capability.agents.add(factory)
+    AgentTask.objects.create(
+        agent=factory, action_type="factory_native_review",
+        capability_code="factory_native_review", status="queued",
+    )
+    output = StringIO()
+    call_command("audit_agent_fleet", stdout=output)
+    report = json.loads(output.getvalue())
+    row = next(item for item in report["agents"] if item["code"] == "moj_1ro_1")
+    assert row["handler_coverage"] == "separate_factory_runtime_not_attested"
+    assert row["tasks"]["queued_without_known_handler"] is None
+    assert "no_registered_handler_for_known_executor" not in row["findings"]
+    assert "queued_task_not_supported_by_known_executor" not in row["findings"]
+    assert report["summary"]["unsupported_known_queue_tasks"] == 0
