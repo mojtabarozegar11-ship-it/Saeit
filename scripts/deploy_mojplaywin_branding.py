@@ -137,9 +137,12 @@ def ensure_indexnow_route(urlconf):
         replacement = line.rstrip() + ", indexnow_key"
         urlconf = urlconf.replace(line, replacement, 1)
     anchor = '    path("robots.txt", robots_txt, name="robots_txt"),\n'
-    if anchor not in urlconf:
+    if anchor in urlconf:
+        return urlconf.replace(anchor, anchor + '    path("<str:key>.txt", indexnow_key, name="indexnow_key"),\n', 1)
+    marker = "urlpatterns = [\n"
+    if marker not in urlconf:
         raise RuntimeError("Unable to anchor IndexNow URL route")
-    return urlconf.replace(anchor, anchor + '    path("<str:key>.txt", indexnow_key, name="indexnow_key"),\n', 1)
+    return urlconf.replace(marker, marker + '    path("<str:key>.txt", indexnow_key, name="indexnow_key"),\n', 1)
 
 def route_mojplaywin_brand_home(urlconf):
     old_route = 'path("", branded_home, name="home"),'
