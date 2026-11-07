@@ -304,4 +304,5 @@ jobs:
           print("FACTORY_STORAGE_INVENTORY="+json.dumps(status, sort_keys=True))
           PY
 
+# Live deep storage audit continuation 2026-11-07
 # Read-only storage and preservation recheck authorized 2026-10-28.
