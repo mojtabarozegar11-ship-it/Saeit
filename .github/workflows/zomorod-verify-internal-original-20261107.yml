@@ -117,6 +117,38 @@ jobs:
           print('NO_LIVE_WRITES_PERFORMED=yes')
           PY
 
+      - name: Locate exact pre-rollback copies of affected inner pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 150s ssh -T -F "$RUNNER_TEMP/zm-theme-origin-audit/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime,timezone
+          import hashlib,os,re
+          home=Path('/home/zomorod2');web=home/'public_html'
+          assert os.geteuid()==web.stat().st_uid
+          paths=[]
+          for base in (home/'.private',home/'.backups'):
+              if not base.is_dir():continue
+              for pattern in ('*/moved-*/index.html','*/*/moved-*/index.html','*/*/static-pages/about/index.html','*/*/candidate/about/index.html','*/*/staging/about/index.html','*/*/about/index.html','*/*/topics/index.html'):
+                  paths.extend(base.glob(pattern))
+          wanted={'about','company','services','industry','research','knowledge','agriculture','topics'}
+          candidates=[]
+          for f in set(paths):
+              if not f.is_file() or f.stat().st_size>700000:continue
+              if not any(x in wanted or x.startswith('moved-') for x in f.parts[-3:-1]):continue
+              candidates.append(f)
+          candidates.sort(key=lambda f:f.stat().st_mtime,reverse=True)
+          print('PRE_ROLLBACK_CANDIDATES',len(candidates))
+          for f in candidates[:110]:
+              b=f.read_bytes()
+              marks=[v for v in ('zm-nova-subpage-v1','zm-unified-v7-20261018','zm-v7-header','zm-v10','zm-agri-design-v3') if v.encode() in b]
+              print('PRE_ROLLBACK_FILE',f.relative_to(home),'date',datetime.fromtimestamp(f.stat().st_mtime,timezone.utc).strftime('%Y-%m-%dT%H:%MZ'),'bytes',len(b),'sha',hashlib.sha256(b).hexdigest()[:14],'marks',','.join(marks))
+          for d in sorted((home/'.private/zm-internal-pre-seo-restore-20261107').glob('*')):
+              print('FIRST_RESTORE_STASH',d.relative_to(home),'contents',sorted(p.name for p in d.iterdir())[:35])
+          print('PRE_ROLLBACK_AUDIT_READ_ONLY=yes')
+          PY
+
       - name: Remove ephemeral SSH identity files
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zm-theme-origin-audit"
