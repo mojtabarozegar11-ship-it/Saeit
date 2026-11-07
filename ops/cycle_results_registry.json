@@ -29,7 +29,7 @@
     },
     "02": {
       "automation_id": "6adde91161708191b6e89b01870a092b",
-      "sequence": 3,
+      "sequence": 4,
       "legacy_report_last_verified": null,
       "primary_output": "accepted publication-ready book"
     },
@@ -228,6 +228,16 @@
       "evidence_url": "/B01-Private-Editorial/B01_C113_lot_balance_corrected_PRIVATE_REVIEW.docx",
       "acceptance_result": "Full 609-page PDF and DOCX saved privately; downloaded and SHA-256 verified; scientific/legal/author acceptance pending",
       "impact": "Clarified physical inflow versus status reclassification; no publication or revenue"
+    },
+    {
+      "registry_id": "R02-0004",
+      "cycle_id": "02",
+      "run_id": "B01-20261107T054454+0330-waterbudget",
+      "deliverable_key": "C113-reproducible-water-budget",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/issues/1514",
+      "acceptance_result": "Private C113 DOCX/PDF with worked 9800L water balance uploaded to Library; 608 PDF pages, zero blank; author/science/legal approval pending",
+      "impact": "Replaced non-reproducible example gap with calculated instructional answer; no publication or revenue"
     }
   ],
   "report_reservations": [],
