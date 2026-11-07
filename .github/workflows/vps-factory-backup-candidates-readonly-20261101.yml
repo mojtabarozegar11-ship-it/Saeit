@@ -35,7 +35,7 @@ jobs:
     # Live continuation audit: push runs are read-only and receive pinned VPS credentials.
     # New workflow must be reviewed and merged, then explicitly dispatched.
     # PR runs never receive VPS credentials. No delete/apply mode exists.
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.repository == 'mojtabarozegar11-ship-it/Saeit'
     needs: synthetic-regressions
     runs-on: ubuntu-24.04
     timeout-minutes: 12
