@@ -1021,6 +1021,10 @@ print("AGENT_FLEET_PROCESS_MATCH_COUNTS=" + json.dumps(counts, sort_keys=True, s
 operations = Path.home() / "factory-runtime/operations/mojtrade"
 private = Path.home() / "factory-runtime/private/mojtrade"
 tagged = sum(bool(entry["route_flags"]["mojtrade_observer"]) for entry in entries)
+scheduled_hourly = any(
+    entry["route_flags"]["mojtrade_observer"] and entry["schedule"] == "13 * * * *"
+    for entry in entries
+)
 
 def private_file(path, limit=96000):
     try:
@@ -1061,6 +1065,7 @@ if safe_private:
 
 source_matches = bool(
     isinstance(receipt, dict) and source is not None
+    and receipt.get("schema") == "mojtrade.vps-observer-activation-receipt.v1"
     and receipt.get("source_sha256") == hashlib.sha256(source).hexdigest()
     and receipt.get("execution") == "disabled"
     and receipt.get("orders") == 0
@@ -1081,10 +1086,13 @@ payload_fresh = bool(
 print("AGENT_FLEET_MOJTRADE_RUNTIME=" + json.dumps({
     "read_only": True,
     "cron_entries": tagged,
+    "hourly_schedule_valid": scheduled_hourly,
     "private_directory_secure": safe_private,
     "source_matches_receipt": source_matches,
     "payload_fresh": payload_fresh,
-    "observer_operational_evidence": tagged == 1 and source_matches and payload_fresh,
+    "observer_operational_evidence": (
+        tagged == 1 and scheduled_hourly and source_matches and payload_fresh
+    ),
     "orders_executed_by_audit": 0,
     "real_trading_supported_by_observer": False,
 }, sort_keys=True, separators=(",", ":")))
