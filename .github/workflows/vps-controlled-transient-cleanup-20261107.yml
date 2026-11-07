@@ -87,51 +87,6 @@ jobs:
                   item.unlink()
                   old_log_bytes+=s.st_size
                   print("VPS_OLD_LOG_REMOVED="+item.name+":BYTES="+str(s.st_size),flush=True)
-              # One-time exact cleanup of two verified obsolete native-master snapshots.
-              # Guarded by an on-host marker so later workflow edits cannot repeat deletion.
-              native_marker = ops / ".native-master-retention-20261107.done"
-              native_targets = [
-                  ops / "backups" / "native-master-20261027T123903Z-72038",
-                  ops / "backups" / "native-master-20261028T194214Z-622692",
-              ]
-              native_removed = []
-              if not native_marker.exists():
-                  source_suffixes = {".py",".sh",".yml",".yaml",".toml",".ini",".conf",".service"}
-                  for target in native_targets:
-                      if target.is_symlink() or not target.is_dir():
-                          raise SystemExit("NATIVE_MASTER_ABORT_TARGET_MISSING_OR_UNSAFE="+str(target))
-                      info = target.stat()
-                      if info.st_uid != os.getuid() or info.st_mtime >= time.time()-7*86400:
-                          raise SystemExit("NATIVE_MASTER_ABORT_AGE_OR_OWNER="+target.name)
-                      if target.name in cron or str(target) in cron or target.name in proc or str(target) in proc:
-                          raise SystemExit("NATIVE_MASTER_ABORT_REFERENCED="+target.name)
-                      for ent in Path("/proc").glob("[0-9]*"):
-                          for fd in (ent/"fd").glob("*"):
-                              try:
-                                  if str(target) in os.readlink(fd):
-                                      raise SystemExit("NATIVE_MASTER_ABORT_OPEN="+target.name)
-                              except (OSError,FileNotFoundError):
-                                  pass
-                      for base, dirs, names in os.walk(target, followlinks=False):
-                          base_path = Path(base)
-                          dirs[:] = [name for name in dirs if not (base_path/name).is_symlink()]
-                          for name in names:
-                              path = base_path/name
-                              if path.is_symlink():
-                                  raise SystemExit("NATIVE_MASTER_ABORT_SYMLINK="+str(path))
-                              if path.suffix.lower() in source_suffixes:
-                                  raise SystemExit("NATIVE_MASTER_ABORT_SOURCE_FILE="+str(path))
-                      size = int(subprocess.run(["du","-s","-B1","--",str(target)],
-                                                capture_output=True,text=True,check=True).stdout.split()[0])
-                      shutil.rmtree(target)
-                      native_removed.append({"name":target.name,"bytes":size})
-                      print("VPS_NATIVE_MASTER_REMOVED="+target.name+":BYTES="+str(size),flush=True)
-                  native_marker.write_text("verified exact native-master cleanup 2026-11-07\\n")
-                  os.chmod(native_marker,0o600)
-              else:
-                  print("VPS_NATIVE_MASTER_ALREADY_APPLIED=1",flush=True)
-              print("VPS_NATIVE_MASTER_REMOVED_COUNT="+str(len(native_removed)),flush=True)
-              print("VPS_NATIVE_MASTER_REMOVED_BYTES="+str(sum(row["bytes"] for row in native_removed)),flush=True)
               print("VPS_TRANSIENT_REMOVED_COUNT="+str(len(candidates)),flush=True)
               print("VPS_TRANSIENT_REMOVED_BYTES="+str(removed_bytes),flush=True)
               print("VPS_OLD_LOG_REMOVED_BYTES="+str(old_log_bytes),flush=True)
