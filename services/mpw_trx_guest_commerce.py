@@ -316,22 +316,16 @@ def patch_public(namespace):
     from collections.abc import Mapping
 
     def _register_recovery_patterns(patterns):
-        """Register relative recovery routes in the live public URL registry."""
+        """Place recovery routes before the public commerce catch-all."""
+        recovery_routes = {str(route) for route, _ in recovery_extra}
         if isinstance(patterns, Mapping):
-            items = list(patterns.items())
-            existing = {str(route) for route, _ in items}
-            if any(str(route) in existing for route, _ in recovery_extra):
-                raise RuntimeError("Recovery URL collision")
-            updated = dict(items)
-            updated.update(dict(recovery_extra))
-            return updated
+            items = [(route, view) for route, view in patterns.items()
+                     if str(route) not in recovery_routes]
+            return dict(list(recovery_extra) + items)
         if isinstance(patterns, (tuple, list)):
-            items = list(patterns)
-            existing = {str(route) for route, _ in items}
-            if any(str(route) in existing for route, _ in recovery_extra):
-                raise RuntimeError("Recovery URL collision")
-            items.extend(recovery_extra)
-            return type(patterns)(items)
+            items = [(route, view) for route, view in patterns
+                     if str(route) not in recovery_routes]
+            return type(patterns)(list(recovery_extra) + items)
         return None
 
     registered = False
