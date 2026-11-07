@@ -30,6 +30,29 @@ class EducationPlatformTests(TestCase):
             quality_status="published",
         )
 
+    def test_authenticated_course_detail_does_not_reference_unbound_lesson(self):
+        user = get_user_model().objects.create_user(username="course-viewer", password="pass")
+        self.client.force_login(user)
+        response = self.client.get("/education/course/test-course/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_anonymous_free_preview_is_accessible_without_account(self):
+        preview = EducationLesson.objects.create(course=self.course, title="درس نمونه", active=True, is_free_preview=True)
+        response = self.client.get(f"/education/course/test-course/lesson/{preview.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "درس نمونه")
+        private = EducationLesson.objects.create(course=self.course, title="درس غیررایگان", active=True, is_free_preview=False)
+        response = self.client.get(f"/education/course/test-course/lesson/{private.pk}/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_mojplaywin_education_title_uses_its_own_brand(self):
+        response = self.client.get("/academy/", HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "آموزش — MojPlayWin")
+        self.assertNotContains(response, "آموزش — Zomorodmelal")
+        company = self.client.get("/academy/", HTTP_HOST="zomorodmelal.ir")
+        self.assertContains(company, "آموزش — Zomorodmelal")
+
     def test_quality_gate_blocks_incomplete_course(self):
         result = audit_course(self.course)
         self.assertFalse(result.ready)
