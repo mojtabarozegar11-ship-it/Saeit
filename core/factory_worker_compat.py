@@ -51,6 +51,17 @@ class FactoryWorkerCompatibility:
         self.factory_executor = factory_executor
         self.runtime = TaskRuntime()
 
+    @staticmethod
+    def _require_runtime_schema():
+        # Validate before select_related(), which otherwise raises a raw
+        # FieldError if the source AgentTask lacks VPS-only factory relations.
+        fields = {field.name for field in AgentTask._meta.get_fields()}
+        if not {"factory_run", "product", "environment"}.issubset(fields):
+            raise FactoryWorkerCompatibilityError(
+                "Factory AgentTask model lacks run/product/environment relations; "
+                "reconcile source and runtime before execution"
+            )
+
     @classmethod
     def _verify_native_product_binding(cls, task):
         # The Django FactoryRun table has hundreds of historical "active" rows.
@@ -171,6 +182,7 @@ class FactoryWorkerCompatibility:
     def run(self, task_id):
         # Preflight is outside claim and never consumes an attempt for an
         # orphaned task. The same checks are repeated while holding locks.
+        self._require_runtime_schema()
         task = AgentTask.objects.select_related("factory_run", "product").get(pk=task_id)
         self._preflight(task)
         with transaction.atomic():
