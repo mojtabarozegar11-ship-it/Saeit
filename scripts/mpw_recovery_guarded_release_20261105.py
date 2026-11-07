@@ -485,10 +485,20 @@ def activate(run):
         report = db_state()
         if not (report["enabled"] and report["mail"]):
             fail("RECOVERY_FLAGS_NOT_ACTIVE")
-        import urllib.request
-        with urllib.request.urlopen("https://mojplaywin.com/commerce/trx-easy/recover/", timeout=25) as response:
-            if response.status != 200:
-                fail("RECOVERY_ROUTE_NOT_READY:" + str(response.status))
+        import time, urllib.request
+        last_status = None
+        for attempt in range(1, 7):
+            try:
+                with urllib.request.urlopen("https://mojplaywin.com/commerce/trx-easy/recover/", timeout=25) as response:
+                    last_status = response.status
+            except urllib.error.HTTPError as exc:
+                last_status = exc.code
+            if last_status == 200:
+                break
+            if attempt < 6:
+                time.sleep(5)
+        if last_status != 200:
+            fail("RECOVERY_ROUTE_NOT_READY:" + str(last_status))
     except BaseException:
         restore(folder, manifest, changed=["settings"])
         restart()
