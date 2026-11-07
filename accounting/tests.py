@@ -2,7 +2,11 @@ from datetime import date
 from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.contrib import admin
+from django.core.exceptions import ValidationError
+from django.test import RequestFactory
 from .models import Account, JournalEntry, JournalLine
+from .admin import JournalEntryAdmin
 from .services import ledger_summary
 
 
@@ -33,3 +37,13 @@ class AccountingDashboardTests(TestCase):
     def test_unbalanced_posted_entry_is_reported_not_crashed(self):
         JournalEntry.objects.create(reference="JV-BAD", occurred_on=date(2026, 11, 4), memo="نامتوازن", status=JournalEntry.Status.POSTED)
         self.assertFalse(ledger_summary()["integrity"]["balanced_posted_entries"])
+
+    def test_posted_entry_cannot_be_changed_or_deleted_from_admin(self):
+        entry = JournalEntry.objects.get(reference="JV-1")
+        request = RequestFactory().get("/admin/accounting/journalentry/")
+        request.user = self.user
+        model_admin = JournalEntryAdmin(JournalEntry, admin.site)
+        self.assertFalse(model_admin.has_change_permission(request, entry))
+        self.assertFalse(model_admin.has_delete_permission(request, entry))
+        with self.assertRaises(ValidationError):
+            model_admin.delete_queryset(request, JournalEntry.objects.filter(pk=entry.pk))
