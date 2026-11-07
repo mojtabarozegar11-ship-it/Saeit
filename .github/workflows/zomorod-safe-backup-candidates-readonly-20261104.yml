@@ -344,7 +344,7 @@ jobs:
           from pathlib import Path
           root=Path.home()
           backup=root/".backups"
-          targets=[backup/"zomorod-v6-preview", backup/"zomorod-v8-root-26"]
+          targets=[backup/"zomorod-six-20261027-release", backup/"zomorod-six-20261027", backup/"zomorod-605-topic-pages", backup/"zomorod-repeat-605-seo", backup/"zomorodmelal-mohammad", backup/"zomorod-v8-root-26"]
           forbidden={".py",".pyc",".sqlite",".sqlite3",".db",".db3",".env",".zip",".tar",".gz",".bz2",".7z",".pdf",".docx",".xlsx",".xls",".json",".yaml",".yml",".txt",".csv",".html",".htm",".css",".js",".png",".jpg",".jpeg",".webp",".svg"}
           if root != Path("/home/zomorod2") or not backup.is_dir() or backup.is_symlink():
               raise SystemExit("CPANEL_PREVIEW_AUDIT_ABORT_UNSAFE_ROOT")
