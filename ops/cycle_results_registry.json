@@ -23,12 +23,12 @@
   "cycles": {
     "01": {
       "automation_id": "6adcb348d5388191b11dfcde9edb8ee3",
-      "sequence": 4,
+      "sequence": 5,
       "legacy_report_last_verified": null,
       "primary_output": "validated manuscript",
       "zm50": {
         "mission_id": "ZM-50CYCLE-DELIVERY-20261106",
-        "counter": 2,
+        "counter": 3,
         "runs": [
           {
             "slot": "C01",
@@ -45,6 +45,14 @@
             "accepted_deliverables": 0,
             "private_artifact_path": "/ZM-50/R01/",
             "note": "F7 rounding extrema independently computed; public-safe reproducibility note committed; private DOCX/PDF generated locally but persistent upload failed (container session unavailable)"
+          },
+          {
+            "slot": "C03",
+            "run_id": "R01-20261107T110930+0330-integrity-manifest",
+            "stage": "code",
+            "accepted_deliverables": 0,
+            "private_artifact_path": "local conversation attachment only",
+            "note": "Eight existing manuscript artifacts inventoried with independently computed SHA-256 and structure; private JSON manifest generated locally; no persistent private upload or scientific acceptance"
           }
         ]
       }
@@ -390,6 +398,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
       "acceptance_result": "Full DOCX/PDF saved privately; 609 PDF pages, 0 text-empty pages; SHA256 DOCX 31e2ca03aabd4a3754a37b898bc682cd5902efa7804e0fd0da826ba89c901c5e PDF 23444141174d95c24d2fa1f5c21a4dec4cc0250d817cf7c8101804566bc7330c; review only",
       "impact": "One technical teaching correction, no approved book, deployment, order or revenue"
+    },
+    {
+      "registry_id": "R01-0005",
+      "cycle_id": "01",
+      "run_id": "R01-20261107T110930+0330-integrity-manifest",
+      "deliverable_key": "c144-eight-artifact-sha256-inventory",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
+      "acceptance_result": "8/8 mounted DOCX/PDF files read and SHA-256 inventoried; local manifest hash ec300eb36c87efdd4891e519a9b022cf09245143a18da24a6c25dbadcb3b85e2; private artifact not uploaded; manuscript not accepted",
+      "impact": "Provenance and file integrity baseline for four existing manuscript versions; no publication, sale, or revenue"
     }
   ],
   "report_reservations": [],
