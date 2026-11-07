@@ -1,6 +1,7 @@
 """No-dependency regression for the isolated VPS Factory worker repair."""
 
 import ast
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import json
 from pathlib import Path
@@ -20,7 +21,7 @@ def extract_class():
     namespace = {
         "FactoryWorkerCompatibilityError": type("FactoryWorkerCompatibilityError", (ValueError,), {}),
         "Decimal": Decimal, "InvalidOperation": InvalidOperation,
-        "timezone": SimpleNamespace(now=lambda: None),
+        "timezone": SimpleNamespace(now=lambda: datetime.now(timezone.utc)),
         "os": SimpleNamespace(environ={"MOJ_FACTORY_SINGLE_ACTIVE_RUN_ID": "run-3"}),
         "json": json, "Path": Path,
     }
@@ -81,6 +82,33 @@ class FactoryWorkerCompatibilityTests(unittest.TestCase):
             worker._preflight(task)
         task.product.metadata = {"factory": {"recipe": "farm_enterprise_economics"}}
         worker._preflight(task)
+
+    def test_optional_retry_column_can_be_missing_from_legacy_task(self):
+        worker, error = extract_class()
+        self._native_slot(worker)
+        # Source AgentTask lacks next_retry_at; its absence must not produce
+        # AttributeError or weaken the mandatory product/run binding.
+        task = SimpleNamespace(
+            status="queued", action_type="product_validation",
+            capability_code="product_validation", attempt_count=0,
+            max_attempts=3, factory_run_id=2, product_id=3,
+            environment="production", factory_run=SimpleNamespace(
+                status="active", product_id=3, environment="production", run_id="run-3"
+            ), product=SimpleNamespace(metadata={"recipe": "farm_enterprise_economics"}),
+        )
+        worker._preflight(task)
+        task.next_retry_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+        with self.assertRaisesRegex(error, "retry backoff is not due"):
+            worker._preflight(task)
+
+    def test_missing_runtime_binding_fails_closed_before_claim(self):
+        worker, error = extract_class()
+        task = SimpleNamespace(
+            status="queued", action_type="product_validation",
+            capability_code="product_validation", attempt_count=0, max_attempts=3,
+        )
+        with self.assertRaisesRegex(error, "schema lacks required run/product binding"):
+            worker._preflight(task)
 
     def test_binding_rejects_unsafe_or_multiple_native_slots(self):
         worker, error = extract_class()
