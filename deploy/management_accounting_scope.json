@@ -1,0 +1,41 @@
+{
+  "schema": "saeit-management-accounting-runtime-scope-v1",
+  "production_release_permitted": false,
+  "runtime_files": [
+    {
+      "path": "accounting/admin.py",
+      "git_blob_sha1": "0da3f77c95ca4cbacea520adcd6c405408a76599",
+      "sha256": "b34fde0a0968b3d2e57cd48c88695bc93f4578294b75b9f32929f8f36f25dfd4"
+    },
+    {
+      "path": "accounting/services.py",
+      "git_blob_sha1": "bb0f3567da7516f93bea719f6c187b336e338cbf",
+      "sha256": "4d71dd8806af0196a723c19746ce04366ba1b7e85af2486fe1417077afb3b7a6"
+    },
+    {
+      "path": "command_center/integrated_ledger_api.py",
+      "git_blob_sha1": "9c864bacde3e6dff727a4434aaec7d2a26e1acd2",
+      "sha256": "45edad710c1dc298b1459143f4c4d8fc40b0abf4e02801fe13359083659ed506"
+    },
+    {
+      "path": "command_center/management/__init__.py",
+      "git_blob_sha1": "8b137891791fe96927ad78e64b0aad7bded08bdc",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "command_center/management/commands/__init__.py",
+      "git_blob_sha1": "8b137891791fe96927ad78e64b0aad7bded08bdc",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "command_center/management/commands/audit_management_cycles.py",
+      "git_blob_sha1": "dbb54a564e96638c9499e108c042b88d11fa792f",
+      "sha256": "4031003988147d5630a0e723d2eadfa9c90293979e0fc95816d1b5e122a3634c"
+    },
+    {
+      "path": "command_center/templates/command_center/integrated_dashboard.html",
+      "git_blob_sha1": "e89dc7d62f865c665b706c3926755d27e3a9cf24",
+      "sha256": "75e4097977084ebf66b455b6465ff8ed65de42f55bf0e8f2e4577b67f007a41b"
+    }
+  ]
+}
