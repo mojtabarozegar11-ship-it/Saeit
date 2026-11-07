@@ -1,5 +1,6 @@
 """No production access: redacted MojPlayWin Passenger probe synthetic tests."""
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -62,6 +63,46 @@ class PassengerDiagnosticTests(unittest.TestCase):
             self.assertFalse(info["files_modified"])
             self.assertNotIn("confidential marker", json.dumps(info))
             self.assertNotIn(str(app), json.dumps(info))
+
+    def test_guest_recovery_inventory_is_metadata_only_and_exact_hash(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_store_sources
+        with tempfile.TemporaryDirectory() as td:
+            public = Path(td) / "public"
+            app = Path(td) / "staging"
+            public.mkdir()
+            (app / "services").mkdir(parents=True)
+            source = app / "services/mpw_trx_email_recovery.py"
+            payload = (
+                "private synthetic payload\n"
+                "def _recovery_enabled(): pass\n"
+                "MPW_GUEST_RECOVERY_EMAIL_APPROVED = False\n"
+                "def recovery_verify(): pass\n"
+                "def recovery_download(): pass\n"
+            )
+            source.write_text(payload)
+            info = inspect_store_sources(public=public, app=app)
+            recovery = info["roots"]["staging"]["guest_recovery"]
+            self.assertEqual(recovery["sha256"], hashlib.sha256(payload.encode()).hexdigest())
+            self.assertEqual(recovery["marker_presence"], [True] * 4)
+            self.assertFalse(info["roots"]["public"]["guest_recovery"]["present"])
+            self.assertFalse(info["roots"]["staging"]["commerce_downloads"]["present"])
+            self.assertNotIn("private synthetic payload", json.dumps(info))
+            self.assertNotIn(str(app), json.dumps(info))
+            self.assertFalse(info["database_read"])
+            self.assertFalse(info["files_modified"])
+
+    def test_guest_recovery_inventory_refuses_symlink_ancestor(self):
+        from scripts.mpw_public_passenger_runtime_readonly_20261102 import inspect_store_sources
+        with tempfile.TemporaryDirectory() as td:
+            public = Path(td) / "public"
+            app = Path(td) / "staging"
+            separate = Path(td) / "separate"
+            public.mkdir()
+            app.mkdir()
+            separate.mkdir()
+            (app / "services").symlink_to(separate, target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, "STORE_SOURCE_SYMLINK_REFUSED"):
+                inspect_store_sources(public=public, app=app)
 
     def test_synthetic_public_app_contract_and_no_mutation(self):
         with tempfile.TemporaryDirectory() as td:
