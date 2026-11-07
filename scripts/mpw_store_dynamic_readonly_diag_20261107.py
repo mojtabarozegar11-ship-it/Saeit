@@ -64,6 +64,8 @@ def manifest_summary(app):
     """Read bounded static metadata only; no Django calls or manifest mutation."""
     root = Path(app) / "staticfiles"
     manifest = root / "staticfiles.json"
+    source_dir = Path(app) / "core/static/site"
+    source = source_dir / "mojplaywin-header-emblem.jpg"
     if root.is_symlink() or manifest.is_symlink():
         return {"state": "symlink_refused"}
     if not manifest.is_file():
@@ -77,6 +79,11 @@ def manifest_summary(app):
             return {"state": "invalid_shape"}
         return {
             "state": "readable",
+            "header_image_source_present": (
+                source.is_file() and not source.is_symlink() and
+                not source_dir.is_symlink() and not source_dir.parent.is_symlink()
+            ),
+            "free_space_above_512mib": os.statvfs(app).f_bavail * os.statvfs(app).f_frsize >= 512 * 1024 * 1024,
             "css_recorded": STATIC_KEYS["css"] in mapping,
             "header_image_recorded": STATIC_KEYS["header_image"] in mapping,
             "css_collected": (root / STATIC_KEYS["css"]).is_file(),
