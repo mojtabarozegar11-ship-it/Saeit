@@ -306,6 +306,44 @@ jobs:
           print('OLD_THEME_INVENTORY_READ_ONLY=yes')
           PY
 
+      - name: Classify remaining mixed archives and private rollback stashes without deletion
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 120s ssh -T -F "$RUNNER_TEMP/zm-theme-origin-audit/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import hashlib,os,stat
+          h=Path('/home/zomorod2');web=h/'public_html'
+          assert os.geteuid()==web.stat().st_uid
+          assert hashlib.sha256((web/'index.html').read_bytes()).hexdigest()=='0c8a0a26780645281da8d19cbc9e5926886922dcd37d56d0a06952a627a76585'
+          roots={
+              'mixed-v11':h/'.backups/zomorod-v11',
+              'mixed-v12':h/'.backups/zomorod-v12-contact',
+              'mixed-live-inpage':h/'.backups/zomorod-live-inpage',
+              'historic-stash':h/'.private/zm-internal-pre-seo-restore-20261107',
+              'about-recovery-stash':h/'.private/zm-about-v12-recovery-20261107',
+              'current-preserved':h/'.private/zm-current-theme-snapshot-20261107',
+          }
+          for label,root in roots.items():
+              if not root.is_dir() or root.is_symlink():
+                  print('MIXED_ROOT_ABSENT',label);continue
+              count=size=0;types=Counter();groups=Counter();records=[]
+              for base,dirs,files in os.walk(root,followlinks=False):
+                  assert all(not (Path(base)/x).is_symlink() for x in dirs)
+                  for name in files:
+                      f=Path(base)/name;info=f.lstat()
+                      assert stat.S_ISREG(info.st_mode)
+                      count+=1;size+=info.st_size;types[f.suffix or '[none]']+=1
+                      rel=f.relative_to(root);groups[rel.parts[0]]+=1
+                      if label in ('mixed-v11','mixed-v12'):
+                          records.append((str(rel),info.st_size,hashlib.sha256(f.read_bytes()).hexdigest()[:14]))
+              print('MIXED_ARCHIVE_SUMMARY',label,'files',count,'bytes',size,'types',dict(types),'top_groups',dict(groups.most_common(20)))
+              for record in records:print('MIXED_ARCHIVE_FILE',label,*record)
+          print('MIXED_ARCHIVE_SCOPE_AUDIT_READ_ONLY=yes')
+          PY
+
       - name: Remove ephemeral SSH identity files
+        # Historical audit jobs remain read-only; no previous theme is restored by this file.
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zm-theme-origin-audit"
