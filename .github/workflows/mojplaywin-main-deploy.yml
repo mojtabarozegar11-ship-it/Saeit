@@ -6,6 +6,7 @@ on:
       - ".github/workflows/mojplaywin-main-deploy.yml"
       - "scripts/deploy_mojplaywin_branding.py"
       - "config/urls.py"
+      - "core/seo_views.py"
       - "core/services_views.py"
       - "core/commerce_views.py"
       - "core/views.py"
@@ -19,10 +20,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy-main:
-    # Emergency hard stop: shared Django/Passenger serves protected child sites.
-    # No production SSH, template writes, rollback or Passenger restart allowed.
-    # Maintain until complete subsite inventory and isolated deployment proof.
-    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -33,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile config/urls.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py scripts/deploy_mojplaywin_branding.py
+          python3 -m py_compile config/urls.py core/seo_views.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py scripts/deploy_mojplaywin_branding.py
           python3 - <<'PY'
           from pathlib import Path
           required = {
@@ -249,11 +246,11 @@ jobs:
           baseline_ref="6abd8817b24e6484c880ce4f596027618775487d"
           source_root="$RUNNER_TEMP/mojplaywin-main"
           mkdir -p "$source_root/deploy_baseline"
-          files=(scripts/deploy_mojplaywin_branding.py config/urls.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html core/templates/mojplaywin/footer.html)
-          merged=(config/urls.py core/services_views.py core/commerce_views.py core/views.py core/templates/base.html)
+          files=(scripts/deploy_mojplaywin_branding.py config/urls.py core/seo_views.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html core/templates/mojplaywin/footer.html)
+          merged=(config/urls.py core/seo_views.py core/services_views.py core/commerce_views.py core/views.py core/templates/base.html)
           for file in "${files[@]}"; do
             mkdir -p "$source_root/$(dirname "$file")"
-            if [[ "$file" == "scripts/deploy_mojplaywin_branding.py" || "$file" == "core/mojplaywin_views.py" || "$file" == core/templates/mojplaywin/* ]]; then
+            if [[ "$file" == "scripts/deploy_mojplaywin_branding.py" || "$file" == "core/mojplaywin_views.py" || "$file" == "core/seo_views.py" || "$file" == core/templates/mojplaywin/* ]]; then
               git show "$GITHUB_SHA:$file" > "$source_root/$file"
             else
               git show "$source_ref:$file" > "$source_root/$file"
@@ -263,20 +260,20 @@ jobs:
             mkdir -p "$source_root/deploy_baseline/$(dirname "$file")"
             git show "$baseline_ref:$file" > "$source_root/deploy_baseline/$file"
           done
-          python3 -m py_compile "$source_root/scripts/deploy_mojplaywin_branding.py" "$source_root/config/urls.py" "$source_root/core/services_views.py" "$source_root/core/commerce_views.py" "$source_root/core/views.py" "$source_root/core/mojplaywin_views.py"
+          python3 -m py_compile "$source_root/scripts/deploy_mojplaywin_branding.py" "$source_root/config/urls.py" "$source_root/core/seo_views.py" "$source_root/core/services_views.py" "$source_root/core/commerce_views.py" "$source_root/core/views.py" "$source_root/core/mojplaywin_views.py"
           python3 - "$source_root" <<'PY'
           import sys
           from pathlib import Path
           root = Path(sys.argv[1])
           sys.path.insert(0, str(root / "scripts"))
           from deploy_mojplaywin_branding import apply_three_way
-          for relative in ("config/urls.py", "core/services_views.py", "core/commerce_views.py", "core/views.py", "core/templates/base.html"):
+          for relative in ("config/urls.py", "core/seo_views.py", "core/services_views.py", "core/commerce_views.py", "core/views.py", "core/templates/base.html"):
               baseline = (root / "deploy_baseline" / relative).read_text(encoding="utf-8")
               desired = (root / relative).read_text(encoding="utf-8")
               assert apply_three_way(baseline, desired, baseline, relative) == desired, relative
           print("MOJPLAYWIN_SAFE_MERGE_CHECK=passed")
           PY
-          tar -czf "$RUNNER_TEMP/mojplaywin-main.tar.gz" -C "$source_root" scripts/deploy_mojplaywin_branding.py config/urls.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html core/templates/mojplaywin/footer.html deploy_baseline
+          tar -czf "$RUNNER_TEMP/mojplaywin-main.tar.gz" -C "$source_root" scripts/deploy_mojplaywin_branding.py config/urls.py core/seo_views.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html core/templates/mojplaywin/footer.html deploy_baseline
       - name: Stage and install on the verified cPanel app
         if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') }}
         id: deploy
@@ -292,13 +289,14 @@ jobs:
           from pathlib import PurePosixPath
           archive, destination = sys.argv[1:]
           allowed = {
-              'scripts/deploy_mojplaywin_branding.py','config/urls.py','core/services_views.py',
+              'scripts/deploy_mojplaywin_branding.py','config/urls.py','core/seo_views.py','core/services_views.py',
               'core/commerce_views.py','core/views.py','core/mojplaywin_views.py',
               'core/templates/base.html','core/templates/mojplaywin/home.html',
               'core/templates/mojplaywin/store.html','core/templates/mojplaywin/section.html',
               'core/templates/mojplaywin/theme.html',
               'core/templates/mojplaywin/footer.html',
               'deploy_baseline/config/urls.py','deploy_baseline/core/services_views.py',
+              'deploy_baseline/core/seo_views.py',
               'deploy_baseline/core/commerce_views.py','deploy_baseline/core/views.py',
               'deploy_baseline/core/templates/base.html'
           }
@@ -381,6 +379,10 @@ jobs:
           check https://mojplaywin.com/ventures/ecommerce/ "E-commerce"
           check https://mojplaywin.com/games/ "Games built around meaningful choices."
           check https://mojplaywin.com/studio/ "Digital media produced as commercial assets."
+          key_url="https://mojplaywin.com/f5e9e3dccc5c2511c452f26b011ec43e.txt"
+          key_body="$(curl --silent --show-error --fail --connect-timeout 10 --max-time 25 -H 'Cache-Control: no-cache, no-store' "$key_url")"
+          test "$key_body" = "f5e9e3dccc5c2511c452f26b011ec43e"
+          echo "INDEXNOW_KEY_LIVE=yes"
       - name: Inspect installed source before rollback
         if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'
         shell: bash

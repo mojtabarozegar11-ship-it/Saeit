@@ -18,6 +18,7 @@ BACKUP_ROOT = HOME / ".mojplaywin-backups"
 BASELINE_ROOT = Path("deploy_baseline")
 MERGED_FILES = (
     Path("config/urls.py"),
+    Path("core/seo_views.py"),
     Path("core/services_views.py"),
     Path("core/commerce_views.py"),
     Path("core/views.py"),
