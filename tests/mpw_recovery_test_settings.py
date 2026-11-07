@@ -1,0 +1,12 @@
+SECRET_KEY = "mpw-recovery-20261105-isolation-only-secret"
+DEBUG = True
+ALLOWED_HOSTS = ["mojplaywin.com", "www.mojplaywin.com", "testserver"]
+INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "core"]
+DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
+MIGRATION_MODULES = {"core": None}
+USE_TZ = True
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+DEFAULT_FROM_EMAIL = "test@example.invalid"
+MPW_GUEST_RECOVERY_ENABLED = True
+MPW_GUEST_RECOVERY_EMAIL_APPROVED = False

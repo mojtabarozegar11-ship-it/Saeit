@@ -130,3 +130,8 @@ SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 # the separately verified cPanel TLS termination layer.
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+
+# Email recovery remains disabled until owner-approved activation.
+MPW_GUEST_RECOVERY_ENABLED = env.bool("MPW_GUEST_RECOVERY_ENABLED", default=False)
+MPW_GUEST_RECOVERY_EMAIL_APPROVED = env.bool("MPW_GUEST_RECOVERY_EMAIL_APPROVED", default=False)
