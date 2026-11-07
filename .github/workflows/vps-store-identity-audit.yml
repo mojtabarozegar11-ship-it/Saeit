@@ -210,7 +210,7 @@ jobs:
           trap 'rm -f "$tmp"' EXIT
           cat "$HT" > "$tmp"
           cat >> "$tmp" <<'BLOCK'
-          
+
           # ZM-COMPRESSION-V1
           <IfModule mod_deflate.c>
               AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript
@@ -226,13 +226,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSIL --compressed -H 'Accept-Encoding: gzip' https://zomorodmelal.ir/ | tr -d '\r' | grep -Ei '^(HTTP/|content-encoding:|content-length:|vary:)' || true
-          headers="$(curl -fsSI -H 'Accept-Encoding: gzip' https://zomorodmelal.ir/)"
-          printf '%s\n' "$headers" | tr -d '\r' | grep -iq '^content-encoding: gzip
-        if: always()
-        run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
-
-          echo LIVE_ROOT_GZIP=PASS
+          curl -fsSI -H 'Accept-Encoding: gzip' https://zomorodmelal.ir/ | tr -d '\r' | grep -Eiq 'content-encoding: gzip'
+          echo LIVE_ROOT_GZIP_PASS
       - name: Clean temporary SSH keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
