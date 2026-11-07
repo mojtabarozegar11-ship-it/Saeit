@@ -22,15 +22,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
-      - name: Checkout existing trusted read-only bridge (pinned main commit)
+      - name: Checkout reviewed diagnostic bridge from this exact source revision
         uses: actions/checkout@v4
         with:
-          ref: 79338d3657abf9a64ac20a5c08e64f24cec657c7
+          ref: ${{ github.sha }}
           fetch-depth: 1
 
-      # The live host has no scripts/cpanel_preflight.sh in its assumed source
-      # root (run 42394297435). These two operations do not depend on that file.
-      - name: Read Django and migration state without production mutation
+      # Scope is exactly known path-existence booleans, not recursive inventory.
+      - name: Diagnose expected runtime paths without production mutation
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
@@ -38,5 +37,4 @@ jobs:
           set -euo pipefail
           test -n "$VPS_KEY"
           test -n "$HOST_KEY"
-          bash deploy/cpanel_direct_command.sh django_check
-          bash deploy/cpanel_direct_command.sh django_migrations
+          bash deploy/cpanel_direct_command.sh runtime_path_diagnostics

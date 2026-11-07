@@ -5,7 +5,7 @@ set -euo pipefail
 # The runner reaches cPanel through the pinned VPS jump host.
 operation="${1:-}"
 case "$operation" in
-  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations) ;;
+  relay_preflight|cpanel_version|passenger_inventory|cpanel_preflight|django_check|django_migrations|runtime_path_diagnostics) ;;
   *) echo "CPANEL_DIRECT_OPERATION_DENIED" >&2; exit 64 ;;
 esac
 
@@ -26,9 +26,11 @@ normalize_key() {
 normalize_key "$VPS_KEY" "$work/vps.key"
 normalize_key "$HOST_KEY" "$work/host.key"
 
+echo "BRIDGE_STAGE=VPS_HOST_KEY" >&2
 ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/vps.known" 2>/dev/null
 test "$(ssh-keygen -lf "$work/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
 
+echo "BRIDGE_STAGE=CPANEL_HOST_KEY" >&2
 ssh -T -i "$work/vps.key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/vps.known" -o BatchMode=yes githubops@178.239.147.150   'ssh-keyscan -T 10 -p 1396 -t ed25519 178.239.147.125' > "$work/host.known" 2>/dev/null
 test "$(ssh-keygen -lf "$work/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
 
@@ -57,6 +59,7 @@ Host *
   RequestTTY no
 EOF
 chmod 600 "$work/config"
+echo "BRIDGE_STAGE=AUTHENTICATED_OPERATION" >&2
 
 case "$operation" in
   relay_preflight)
@@ -78,5 +81,27 @@ case "$operation" in
     ;;
   django_migrations)
     timeout 90s ssh -T -F "$work/config" saeit-cpanel 'set -e; if test -d /home/zomorod2/Saeit; then root=/home/zomorod2/Saeit; python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python; else root=/home/zomorodm/repositories/Saeit; python=/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; fi; test -x "$python"; cd "$root"; "$python" manage.py showmigrations --plan'
+    ;;
+  runtime_path_diagnostics)
+    # Exact-path booleans only. No file contents, directory traversal, app
+    # imports, Django commands, environment values or production mutations.
+    timeout 60s ssh -T -F "$work/config" saeit-cpanel '
+      set -eu
+      for root in /home/zomorod2/Saeit /home/zomorodm/repositories/Saeit; do
+        if test -d "$root"; then
+          printf "PROJECT_ROOT=%s|present\n" "$root"
+          for file in manage.py passenger_wsgi.py scripts/cpanel_preflight.sh; do
+            if test -f "$root/$file"; then value=present; else value=missing; fi
+            printf "PROJECT_FILE=%s/%s|%s\n" "$root" "$file" "$value"
+          done
+        else
+          printf "PROJECT_ROOT=%s|missing\n" "$root"
+        fi
+      done
+      for interpreter in /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python; do
+        if test -x "$interpreter"; then value=executable; else value=missing_or_not_executable; fi
+        printf "PYTHON_EXECUTABLE=%s|%s\n" "$interpreter" "$value"
+      done
+    '
     ;;
 esac
