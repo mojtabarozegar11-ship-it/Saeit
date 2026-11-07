@@ -41,7 +41,7 @@
     },
     "04": {
       "automation_id": "6ade4fc089588191ad08b8a8f03bbab7",
-      "sequence": 2,
+      "sequence": 3,
       "legacy_report_last_verified": null,
       "primary_output": "accepted playable game build"
     },
@@ -248,6 +248,16 @@
       "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/blob/ops/zm-cycle-outcome-ledger/ops/cycle_results_registry.json",
       "acceptance_result": "اصلاح واقعی موازنه آب با تغییر موجودی مخزن؛ DOCX/PDF خصوصی ۶۰۸ صفحه؛ بازیابی مستقل و تطبیق SHA256؛ داوری و مجوز نشر باز",
       "impact": "کاهش ابهام محاسبه تراز آب از اختلاف خام ۱۰۰۰ لیتر به مانده مشروط ۷۰۰ لیتر؛ بدون فروش یا نشر"
+    },
+    {
+      "registry_id": "R04-0003",
+      "cycle_id": "04",
+      "run_id": "mojcoin-20261107T072154+0330-guard-fc361ece",
+      "deliverable_key": "ambiguous-receipt-settlement-guard",
+      "stage": "code",
+      "evidence_url": "https://github.com/mojtabarozegar11-ship-it/Bazei/commit/fc361ece22d104c9cd826929b997fa08093db84d",
+      "acceptance_result": "Source guard and Django regression test committed and read back; Django/MariaDB execution not verified",
+      "impact": "Ambiguous duplicate receipt or tx identifiers are rejected before entitlement capture; no deployment or revenue"
     }
   ],
   "report_reservations": [],
