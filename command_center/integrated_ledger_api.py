@@ -11,6 +11,7 @@ from django.db import IntegrityError, transaction
 from .models import CycleReport, CycleIssue, ApprovalDecision, WorkItem, InternalMessage, PrivateAuction, LedgerAuditEvent
 from accounting.models import JournalEntry
 from core.models import ApprovalRequest, ResearchProject
+from .zomorod_status import read_zomorod_health
 
 PROJECTS = {
     "management": "مدیریت یکپارچه زمرد ملل", "zomorod-web": "وب‌سایت و فروشگاه‌های زمرد ملل",
@@ -51,6 +52,26 @@ def _decision(row):
     return {"id": row.id, "kind": row.kind, "status": row.status, "approver": row.approver,
             "evidence": row.evidence, "created_at": row.created_at.isoformat()}
 
+def _system_status(request):
+    names = {
+        "iran_site": "سایت زمرد ملل", "cpanel": "هاست و cPanel", "factory": "کارخانه",
+        "mojplaywin": "فروشگاه MojPlayWin", "mojcoin": "بازی Moj Coin",
+        "research": "مقاله و پژوهش", "books": "کتاب و محصولات نوشتاری",
+        "trade": "تجارت و ارزها", "accounting": "حسابداری",
+    }
+    rows = {key: {"id": key, "name": label, "state": "unknown", "detail": "آداپتور زنده برای این بخش ثبت نشده است.", "observed_at": None}
+            for key, label in names.items()}
+    host = request.get_host().split(":")[0].lower()
+    if host in ("zomorodmelal.ir", "www.zomorodmelal.ir"):
+        observations, _ = read_zomorod_health()
+        for item in observations:
+            if item.get("component") in rows:
+                rows[item["component"]].update(state=item.get("state", "unknown"),
+                    detail=item.get("detail", "پایش read-only"), observed_at=item.get("observed_at"))
+    rows["accounting"].update(state="connected", detail="اتصال مستقیم به دفتر مالی داخلی")
+    return list(rows.values())
+
+
 @staff_member_required
 @require_http_methods(["GET", "POST"])
 @transaction.atomic
@@ -61,6 +82,7 @@ def integrated_ledger_api(request):
             "issues": [_issue(x) for x in CycleIssue.objects.all()],
             "decisions": [_decision(x) for x in ApprovalDecision.objects.all()],
             "audit": [_audit_row(x) for x in LedgerAuditEvent.objects.select_related("actor")[:100]],
+            "systems": _system_status(request),
             "live_summary": {
                 "accounting": {"posted": JournalEntry.objects.filter(status=JournalEntry.Status.POSTED).count(),
                                "draft": JournalEntry.objects.filter(status=JournalEntry.Status.DRAFT).count()},
