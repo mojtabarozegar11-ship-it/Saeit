@@ -1,0 +1,122 @@
+name: Read-only compare internal theme against original
+
+on:
+  push:
+    branches: [restore-zomorod-pre-seo-20261107]
+    paths: [.github/workflows/zomorod-verify-internal-original-20261107.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare strictly pinned host connection
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-theme-origin-audit"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),chr(10)).replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+
+      - name: Inspect only static pages and relevant backup files
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 180s ssh -T -F "$RUNNER_TEMP/zm-theme-origin-audit/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          from datetime import datetime,timezone
+          import hashlib,os,re,tarfile
+          home=Path('/home/zomorod2'); web=home/'public_html'
+          assert os.geteuid()==web.stat().st_uid
+          root=web/'index.html'
+          homepage=root.read_bytes()
+          print('APPROVED_HOME_SHA',hashlib.sha256(homepage).hexdigest(),'bytes',len(homepage))
+          print('APPROVED_HOME_CSS',re.findall(rb'<link[^>]+stylesheet[^>]*>',homepage,re.I)[:12])
+          print('APPROVED_HOME_LINKS',sorted(set(x.decode(errors='replace') for x in re.findall(rb'href=["\'](/[^"\'#?]*)',homepage)))[:130])
+          ignore={'ghanadi','amozeshgah','mohammad','.well-known','cgi-bin','site-heritage','static','assets','media','images','css','js','fonts','uploads'}
+          files=[root]
+          for d in sorted(web.iterdir()):
+              if d.is_dir() and d.name not in ignore:
+                  f=d/'index.html'
+                  if f.is_file():files.append(f)
+          counts=Counter()
+          for f in files:
+              b=f.read_bytes(); rel=f.relative_to(web)
+              tags=[t for t in ('zm-unified-v7-20261018','zm-nova','zm-v7-header','zm-v10','zm-agri-design-v3') if t.encode() in b]
+              css=[c.decode(errors='replace') for c in re.findall(rb'<link[^>]+stylesheet[^>]*>',b,re.I)[:8]]
+              counts['v7' if 'zm-unified-v7-20261018' in tags else 'not-v7']+=1
+              print('LIVE_PAGE',str(rel),'bytes',len(b),'sha',hashlib.sha256(b).hexdigest()[:14],'markers',','.join(tags),'css',css)
+          print('LIVE_COUNTER',dict(counts))
+          versions=[('v7-unify',home/'.backups/zomorod-v7-unify'),('v10-content',home/'.backups/zomorod-v10-content-restore'),('v9-real',home/'.backups/zomorod-v9-real-pages'),('v7-rescue',home/'.backups/zomorod-v7-static-rescue'),('v11',home/'.backups/zomorod-v11'),('recent-live',home/'.backups/zomorod-live-inpage'),('before-seo',home/'.private/zm-home-services-seo-backups'),('nova-six',home/'.backups/zomorod-nova-six-pages')]
+          slugs=('company','about','services','industry','research','knowledge','agriculture','topics','apps','news','contact','business','agents','blog','economy','market','weather')
+          for key,base in versions:
+              if not base.is_dir():continue
+              for v in sorted((d for d in base.iterdir() if d.is_dir()),key=lambda d:d.stat().st_mtime,reverse=True)[:3]:
+                  print('BACKUP_VERSION',key,v.name,datetime.fromtimestamp(v.stat().st_mtime,timezone.utc).isoformat())
+                  for pattern in ('candidate','staging','static-pages','pages'):
+                      for sub in (v/pattern,):
+                          if not sub.is_dir():continue
+                          for slug in slugs:
+                              f=sub/slug/'index.html'
+                              if f.is_file() and f.stat().st_size<700000:
+                                  b=f.read_bytes()
+                                  flags=','.join(t for t in ('zm-unified-v7-20261018','zm-nova-subpage-v1','zm-v7-header','zm-v10') if t.encode() in b)
+                                  css=[c.decode(errors='replace') for c in re.findall(rb'<link[^>]+stylesheet[^>]*>',b,re.I)[:4]]
+                                  print('BACKUP_PAGE',key,v.name,pattern,slug,'size',len(b),'sha',hashlib.sha256(b).hexdigest()[:14],'flags',flags,'css',css)
+                  tar=v/'original-pages.tar'
+                  if tar.is_file():
+                      with tarfile.open(tar) as a:
+                          members=set(a.getnames())
+                          present=[s for s in slugs if s+'/index.html' in members]
+                          print('BACKUP_TAR_COVERAGE',key,v.name,len(members),present)
+              print('BACKUP_ROOT_DONE',key)
+          print('NO_LIVE_WRITES_PERFORMED=yes')
+          PY
+
+      - name: Remove ephemeral SSH identity files
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zm-theme-origin-audit"
